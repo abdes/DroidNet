@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
-using Microsoft.UI.Xaml.Media;
-using Windows.UI;
 
 namespace DroidNet.Controls.Demo.InPlaceEdit;
 
@@ -14,169 +12,84 @@ namespace DroidNet.Controls.Demo.InPlaceEdit;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "ViewModel must be public")]
 public partial class VectorBoxDemoViewModel : ObservableObject
 {
-    // ============ Basic 3D Vector ============
     [ObservableProperty]
-    public partial float Position3DX { get; set; } = 1.5f;
-
-    [ObservableProperty]
-    public partial float Position3DY { get; set; } = 2.3f;
+    public partial double PositionX { get; set; } = 1.5;
 
     [ObservableProperty]
-    public partial float Position3DZ { get; set; } = 3.7f;
+    public partial double PositionY { get; set; } = 2.3;
 
     [ObservableProperty]
-    public partial float TransformScaleX { get; set; } = 1.0f;
+    public partial double PositionZ { get; set; } = 3.7;
 
     [ObservableProperty]
-    public partial float TransformScaleY { get; set; } = 1.0f;
+    public partial double RotationX { get; set; }
 
     [ObservableProperty]
-    public partial float TransformScaleZ { get; set; } = 1.0f;
+    public partial double RotationY { get; set; } = 45.5;
 
     [ObservableProperty]
-    public partial float ColorRed { get; set; } = 1.0f;
+    public partial double RotationZ { get; set; } = 90;
 
     [ObservableProperty]
-    public partial float ColorGreen { get; set; } = 1.0f;
+    public partial double ScaleX { get; set; } = 1;
 
     [ObservableProperty]
-    public partial float ColorBlue { get; set; } = 1.0f;
-
-    /// <summary>Gets the display-encoded color preview from the linear RGB values.</summary>
-    public SolidColorBrush ColorPreviewBrush
-    {
-        get
-        {
-            static byte ToSrgbByte(float linear)
-            {
-                if (!float.IsFinite(linear))
-                {
-                    return 0;
-                }
-
-                var clamped = Math.Clamp(linear, 0.0f, 1.0f);
-                var srgb = clamped <= 0.0031308f
-                    ? 12.92f * clamped
-                    : (1.055f * MathF.Pow(clamped, 1.0f / 2.4f)) - 0.055f;
-                return (byte)MathF.Round(srgb * byte.MaxValue);
-            }
-
-            return new SolidColorBrush(Color.FromArgb(
-                255,
-                ToSrgbByte(this.ColorRed),
-                ToSrgbByte(this.ColorGreen),
-                ToSrgbByte(this.ColorBlue)));
-        }
-    }
-
-    // ============ 2D Vector ============
-    [ObservableProperty]
-    public partial float Scale2DX { get; set; } = 1.0f;
+    public partial double ScaleY { get; set; } = 1;
 
     [ObservableProperty]
-    public partial float Scale2DY { get; set; } = 1.0f;
-
-    // ============ Rotation Vector (with mask) ============
-    [ObservableProperty]
-    public partial float RotationX { get; set; } = 0.0f;
+    public partial double ScaleZ { get; set; } = 1;
 
     [ObservableProperty]
-    public partial float RotationY { get; set; } = 45.5f;
+    public partial double OrientationX { get; set; }
 
     [ObservableProperty]
-    public partial float RotationZ { get; set; } = 90.0f;
-
-    // ============ Mixed Mask Vector ============
-    [ObservableProperty]
-    public partial float MixedMaskX { get; set; } = -15.7f;
+    public partial double OrientationY { get; set; } = 0.383;
 
     [ObservableProperty]
-    public partial float MixedMaskY { get; set; } = 23.45f;
+    public partial double OrientationZ { get; set; }
 
     [ObservableProperty]
-    public partial float MixedMaskZ { get; set; } = 0.123f;
-
-    // ============ Fast Adjust Vector (with Multiplier) ============
-    [ObservableProperty]
-    public partial float SensitivityX { get; set; } = 0.5f;
+    public partial double OrientationW { get; set; } = 0.924;
 
     [ObservableProperty]
-    public partial float SensitivityY { get; set; } = 1.25f;
+    public partial double TilingU { get; set; } = 2;
 
     [ObservableProperty]
-    public partial float SensitivityZ { get; set; } = 0.75f;
-
-    // ============ Constrained Vector (with validation) ============
-    [ObservableProperty]
-    public partial float ConstrainedX { get; set; } = -45.0f;
+    public partial double TilingV { get; set; } = 1;
 
     [ObservableProperty]
-    public partial float ConstrainedY { get; set; } = 0.0f;
+    public partial double MixedMaskX { get; set; } = -15.7;
 
     [ObservableProperty]
-    public partial float ConstrainedZ { get; set; } = 120.0f;
-
-    // ============ Indeterminate Vector ============
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IndeterminateStatusText))]
-    public partial float IndeterminateX { get; set; } = 10.0f;
+    public partial double MixedMaskY { get; set; } = 23.45;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IndeterminateStatusText))]
-    public partial float IndeterminateY { get; set; } = 20.0f;
+    public partial double MixedMaskZ { get; set; } = 0.123;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IndeterminateStatusText))]
-    public partial float IndeterminateZ { get; set; } = 30.0f;
+    public partial double ConstrainedX { get; set; } = -45;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IndeterminateStatusText))]
-    public partial bool IsIndeterminateX { get; set; } = false;
+    public partial double ConstrainedY { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IndeterminateStatusText))]
-    public partial bool IsIndeterminateY { get; set; } = false;
+    public partial double ConstrainedZ { get; set; } = 120;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IndeterminateStatusText))]
-    public partial bool IsIndeterminateZ { get; set; } = false;
+    public partial double MixedX { get; set; } = 10;
 
-    /// <summary>
-    /// Gets a formatted status string describing which components are indeterminate.
-    /// Useful for displaying state in multi-selection scenarios.
-    /// </summary>
-    public string IndeterminateStatusText
-    {
-        get
-        {
-            var indeterminate = new List<string>();
-            if (this.IsIndeterminateX)
-            {
-                indeterminate.Add("X");
-            }
+    [ObservableProperty]
+    public partial double MixedY { get; set; } = 20;
 
-            if (this.IsIndeterminateY)
-            {
-                indeterminate.Add("Y");
-            }
+    [ObservableProperty]
+    public partial double MixedZ { get; set; } = 30;
 
-            if (this.IsIndeterminateZ)
-            {
-                indeterminate.Add("Z");
-            }
+    [ObservableProperty]
+    public partial bool IsMixedX { get; set; }
 
-            if (indeterminate.Count == 0)
-            {
-                return "All components have definite values.";
-            }
+    [ObservableProperty]
+    public partial bool IsMixedY { get; set; } = true;
 
-            return $"Component(s) {string.Join(", ", indeterminate)} showing indeterminate '-.-' (mixed values in multi-selection).";
-        }
-    }
-
-    partial void OnColorRedChanged(float value) => this.OnPropertyChanged(nameof(ColorPreviewBrush));
-
-    partial void OnColorGreenChanged(float value) => this.OnPropertyChanged(nameof(ColorPreviewBrush));
-
-    partial void OnColorBlueChanged(float value) => this.OnPropertyChanged(nameof(ColorPreviewBrush));
+    [ObservableProperty]
+    public partial bool IsMixedZ { get; set; }
 }

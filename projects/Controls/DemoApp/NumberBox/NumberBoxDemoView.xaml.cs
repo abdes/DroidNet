@@ -28,7 +28,7 @@ public sealed partial class NumberBoxDemoView
             // Initialize control panel defaults
             this.MaskComboBox?.SetValue(ComboBox.SelectedIndexProperty, 1); // ~.##
             this.ConfigurableNumberBox?.SetValue(NumberBox.LabelProperty, "Configurable");
-            this.ConfigurableNumberBox?.SetValue(NumberBox.NumberValueProperty, 42.5f);
+            this.ConfigurableNumberBox?.SetValue(NumberBox.NumberValueProperty, 42.5d);
         };
     }
 
@@ -54,6 +54,15 @@ public sealed partial class NumberBoxDemoView
         if (sender is RadioButton rb && rb.Tag is string tag)
         {
             this.ConfigurableNumberBox.LabelPosition = Enum.Parse<LabelPosition>(tag);
+        }
+    }
+
+    private void CompactSide_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        _ = sender;
+        if (e.AddedItems is [string side])
+        {
+            this.CompactNumberBox.LabelPosition = Enum.Parse<LabelPosition>(side);
         }
     }
 

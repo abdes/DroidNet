@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Menus;
@@ -503,7 +504,7 @@ public partial class MenuBarDemoViewModel : ObservableObject
             if (string.Equals(e.PropertyName, nameof(SliderMenuItemModel.Value), StringComparison.Ordinal))
             {
                 this.EditorZoom = model.Value;
-                this.LastActionMessage = $"Editor Zoom: {this.EditorZoom:0}%";
+                this.LastActionMessage = string.Create(CultureInfo.InvariantCulture, $"Editor Zoom: {this.EditorZoom:0}%");
             }
         };
 
@@ -520,7 +521,7 @@ public partial class MenuBarDemoViewModel : ObservableObject
     {
         var model = new NumberBoxMenuItemModel
         {
-            NumberValue = (float)this.TabSize,
+            NumberValue = this.TabSize,
             Width = 88,
         };
         model.PropertyChanged += (_, e) =>
@@ -528,7 +529,7 @@ public partial class MenuBarDemoViewModel : ObservableObject
             if (string.Equals(e.PropertyName, nameof(NumberBoxMenuItemModel.NumberValue), StringComparison.Ordinal))
             {
                 this.TabSize = model.NumberValue;
-                this.LastActionMessage = $"Tab Size: {this.TabSize:0}";
+                this.LastActionMessage = string.Create(CultureInfo.InvariantCulture, $"Tab Size: {this.TabSize:0}");
             }
         };
 

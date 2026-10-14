@@ -14,16 +14,16 @@ public partial class NumberBoxDemoViewModel : ObservableObject
 {
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DemoNullableValue))]
-    public partial float NumberValue { get; set; } = -20.0f;
+    public partial double NumberValue { get; set; } = -20.0;
 
     [ObservableProperty]
-    public partial float RotationX { get; set; } = 0.0f;
+    public partial double RotationX { get; set; } = 0.0;
 
     [ObservableProperty]
-    public partial float RotationY { get; set; } = 0.0f;
+    public partial double RotationY { get; set; } = 0.0;
 
     [ObservableProperty]
-    public partial float RotationZ { get; set; } = 0.0f;
+    public partial double RotationZ { get; set; } = 0.0;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DemoNullableValue))]
@@ -33,7 +33,7 @@ public partial class NumberBoxDemoViewModel : ObservableObject
     /// Gets or sets derived nullable value: null when indeterminate, otherwise the numeric value.
     /// Setting this keeps the other mapped properties in sync.
     /// </summary>
-    public float? DemoNullableValue
+    public double? DemoNullableValue
     {
         get => this.DemoIsIndeterminate ? null : this.NumberValue;
         set

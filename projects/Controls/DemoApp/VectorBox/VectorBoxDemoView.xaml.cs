@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
@@ -11,10 +12,11 @@ using Microsoft.UI.Xaml.Media;
 namespace DroidNet.Controls.Demo.InPlaceEdit;
 
 /// <summary>
-/// A demo page for the <see cref="VectorBox" /> control, showcasing various use cases and features.
+/// A demo page for the <see cref="VectorBox" /> control: two to four components, labels, masks, validation, mixed
+/// values and every presentation option.
 /// </summary>
 [ViewModel(typeof(VectorBoxDemoViewModel))]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "Views wityh injectable ViewModel must be public")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "Views with injectable ViewModel must be public")]
 public sealed partial class VectorBoxDemoView
 {
     /// <summary>
@@ -24,175 +26,75 @@ public sealed partial class VectorBoxDemoView
     {
         this.InitializeComponent();
 
-        ConfigureAxisLabels(this.PositionVector);
-        ConfigureAxisLabels(this.RotationVector);
-        ConfigureAxisLabels(this.TransformScaleVector);
-        this.LinearColorVector.ComponentLabels["X"] = "R";
-        this.LinearColorVector.ComponentLabels["Y"] = "G";
-        this.LinearColorVector.ComponentLabels["Z"] = "B";
-        ConfigureAxisLabels(this.LinearColorVector);
-
-        this.Loaded += (_, _) =>
+        foreach (var vector in (ReadOnlySpan<VectorBox>)[this.PositionVector, this.RotationVector, this.ScaleVector, this.OrientationVector])
         {
-            // Validation for constrained vector (must be between -180 and 180)
-            this.ValidatedVector.Validate += (_, e) =>
-            {
-                if (e.Target is Component component)
-                {
-                    e.IsValid = e.NewValue is <= 180.0f and >= -180.0f;
-                }
-            };
+            vector.ComponentLabelForegrounds[Component.X] = new SolidColorBrush(Colors.Red);
+            vector.ComponentLabelForegrounds[Component.Y] = new SolidColorBrush(Colors.Green);
+            vector.ComponentLabelForegrounds[Component.Z] = new SolidColorBrush(Colors.Blue);
+        }
 
-            this.LinearColorVector.Validate += (_, e) =>
-                e.IsValid = float.IsFinite(e.NewValue) && e.NewValue is >= 0.0f and <= 1.0f;
-
-            // Custom masks for mixed mask vector
-            this.MixedMaskVector.ComponentMasks["X"] = "±###.#";
-            this.MixedMaskVector.ComponentMasks["Y"] = "##.##";
-            this.MixedMaskVector.ComponentMasks["Z"] = "~.###";
-
-            // Initialize control panel defaults
-            this.VectorMaskComboBox?.SetValue(ComboBox.SelectedIndexProperty, 1); // ~.##
-            this.ConfigurableVectorBox?.SetValue(VectorBox.XValueProperty, 1.0f);
-            this.ConfigurableVectorBox?.SetValue(VectorBox.YValueProperty, 2.0f);
-            this.ConfigurableVectorBox?.SetValue(VectorBox.ZValueProperty, 3.0f);
-        };
+        this.TilingVector.ComponentLabels[Component.X] = "U";
+        this.TilingVector.ComponentLabels[Component.Y] = "V";
+        this.MixedMaskVector.ComponentMasks[Component.X] = "~.# m";
+        this.MixedMaskVector.ComponentMasks[Component.Y] = "##.##";
+        this.MixedMaskVector.ComponentMasks[Component.Z] = "~.###";
     }
 
-    private static void ConfigureAxisLabels(VectorBox vector)
+    // A RadioButtons group also reports the moment it has nothing selected; only a newly selected item applies.
+    private static bool TrySelectedText(SelectionChangedEventArgs args, out string text)
     {
-        vector.ComponentLabelForegrounds["X"] = new SolidColorBrush(Colors.Red);
-        vector.ComponentLabelForegrounds["Y"] = new SolidColorBrush(Colors.Green);
-        vector.ComponentLabelForegrounds["Z"] = new SolidColorBrush(Colors.Blue);
+        text = args.AddedItems is [string selected] ? selected : string.Empty;
+        return text.Length != 0;
     }
 
-    private void ToggleXIndeterminate_Click(object sender, RoutedEventArgs args)
-    {
-        _ = sender;
-        _ = args;
+    private void OnConstrainedValidate(object? sender, ValidationEventArgs<double> args)
+        => args.IsValid = args.NewValue is >= -180d and <= 180d;
 
-        if (this.ViewModel is VectorBoxDemoViewModel vm)
+    private void OnDimensionChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (TrySelectedText(args, out var text))
         {
-            vm.IsIndeterminateX = !vm.IsIndeterminateX;
+            this.ConfigurableVector.Dimension = int.Parse(text, CultureInfo.InvariantCulture);
         }
     }
 
-    private void ToggleYIndeterminate_Click(object sender, RoutedEventArgs args)
+    private void OnLabelPositionChanged(object sender, SelectionChangedEventArgs args)
     {
-        _ = sender;
-        _ = args;
-
-        if (this.ViewModel is VectorBoxDemoViewModel vm)
+        if (TrySelectedText(args, out var text))
         {
-            vm.IsIndeterminateY = !vm.IsIndeterminateY;
+            this.ConfigurableVector.LabelPosition = Enum.Parse<LabelPosition>(text);
         }
     }
 
-    private void ToggleZIndeterminate_Click(object sender, RoutedEventArgs args)
+    private void OnComponentLabelPositionChanged(object sender, SelectionChangedEventArgs args)
     {
-        _ = sender;
-        _ = args;
-
-        if (this.ViewModel is VectorBoxDemoViewModel vm)
+        if (TrySelectedText(args, out var text))
         {
-            vm.IsIndeterminateZ = !vm.IsIndeterminateZ;
+            this.ConfigurableVector.ComponentLabelPosition = Enum.Parse<LabelPosition>(text);
         }
     }
 
-    private void Dimension_Changed(object sender, RoutedEventArgs e)
+    private void OnMaskChanged(object sender, SelectionChangedEventArgs args)
     {
-        _ = e;
-        if (this.ConfigurableVectorBox is null)
+        if (TrySelectedText(args, out var text))
         {
-            return;
-        }
-
-        if (sender is RadioButton rb && rb.Tag is "2")
-        {
-            this.ConfigurableVectorBox.Dimension = 2;
-        }
-        else if (sender is RadioButton rb2 && rb2.Tag is "3")
-        {
-            this.ConfigurableVectorBox.Dimension = 3;
+            this.ConfigurableVector.ComponentMask = text;
         }
     }
 
-    private void LabelPosition_Changed(object sender, RoutedEventArgs e)
+    private void OnMultiplierChanged(object sender, SelectionChangedEventArgs args)
     {
-        _ = e;
-        if (this.ConfigurableVectorBox is null)
+        if (TrySelectedText(args, out var text))
         {
-            return;
-        }
-
-        if (sender is RadioButton rb && rb.Tag is string tag)
-        {
-            if (Enum.TryParse<LabelPosition>(tag, out var position))
-            {
-                this.ConfigurableVectorBox.LabelPosition = position;
-            }
+            this.ConfigurableVector.Multiplier = int.Parse(text, CultureInfo.InvariantCulture);
         }
     }
 
-    private void ComponentLabelPosition_Changed(object sender, RoutedEventArgs e)
+    private void OnValueAlignmentChanged(object sender, SelectionChangedEventArgs args)
     {
-        _ = e;
-        if (this.ConfigurableVectorBox is null)
+        if (TrySelectedText(args, out var text))
         {
-            return;
-        }
-
-        if (sender is RadioButton rb && rb.Tag is string tag)
-        {
-            if (Enum.TryParse<LabelPosition>(tag, out var position))
-            {
-                this.ConfigurableVectorBox.ComponentLabelPosition = position;
-            }
-        }
-    }
-
-    private void VectorMask_Changed(object sender, RoutedEventArgs e)
-    {
-        _ = e;
-        if (this.ConfigurableVectorBox is null)
-        {
-            return;
-        }
-
-        if (sender is ComboBox cb && cb.SelectedItem is ComboBoxItem item)
-        {
-            if (item.Content is string mask)
-            {
-                this.ConfigurableVectorBox.ComponentMask = mask;
-            }
-        }
-    }
-
-    private void VectorMultiplier_Changed(object sender, RoutedEventArgs e)
-    {
-        _ = e;
-        if (this.ConfigurableVectorBox is null)
-        {
-            return;
-        }
-
-        if (sender is RadioButton rb && rb.Tag is string tag && int.TryParse(tag, provider: null, out var multiplier))
-        {
-            this.ConfigurableVectorBox.Multiplier = multiplier;
-        }
-    }
-
-    private void VectorValueAlignment_Changed(object sender, RoutedEventArgs e)
-    {
-        _ = e;
-        if (this.ConfigurableVectorBox is null)
-        {
-            return;
-        }
-
-        if (sender is RadioButton rb && rb.Tag is string tag)
-        {
-            this.ConfigurableVectorBox.HorizontalValueAlignment = Enum.Parse<TextAlignment>(tag);
+            this.ConfigurableVector.HorizontalValueAlignment = Enum.Parse<TextAlignment>(text);
         }
     }
 }

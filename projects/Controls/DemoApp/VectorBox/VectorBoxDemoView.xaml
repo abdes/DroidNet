@@ -5,401 +5,252 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DroidNet.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="using:DroidNet.Controls.Demo.InPlaceEdit"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
     <Page.Resources>
-        <!--  Reusable panel style for demo borders  -->
         <Style x:Key="DemoPanelBorderStyle" TargetType="Border">
-            <!--  Padding changed to 16 to align with 4‑epx guideline  -->
             <Setter Property="Padding" Value="16" />
             <Setter Property="Background" Value="{ThemeResource LayerOnMicaBaseAltFillColorDefaultBrush}" />
             <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="4" />
         </Style>
+        <!--  A property row: caption on the left, vector filling the rest, component labels inside the fields.  -->
+        <Style x:Key="RowVectorStyle" TargetType="controls:VectorBox">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="CompactComponentLabels" Value="True" />
+            <Setter Property="ComponentLabelPosition" Value="Left" />
+            <Setter Property="HorizontalValueAlignment" Value="Right" />
+            <Setter Property="LabelPosition" Value="None" />
+        </Style>
     </Page.Resources>
 
-    <Grid>
-        <ScrollViewer>
-            <StackPanel
-                Margin="20"
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Top"
-                Spacing="20">
+    <ScrollViewer>
+        <StackPanel Margin="20" Spacing="20">
 
-                <!--  Transform vectors use compact, axis-colored component labels.  -->
-                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Transform vectors" />
-                <Border Style="{StaticResource DemoPanelBorderStyle}">
-                    <Grid ColumnSpacing="12" RowSpacing="8">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock VerticalAlignment="Center" Text="Position" />
-                        <controls:VectorBox
-                            x:Name="PositionVector"
-                            Grid.Row="0"
-                            Grid.Column="1"
-                            HorizontalAlignment="Stretch"
-                            ComponentLabelPosition="Left"
-                            Dimension="3"
-                            HorizontalValueAlignment="Right"
-                            LabelPosition="None"
-                            XValue="{x:Bind ViewModel.Position3DX, Mode=TwoWay}"
-                            YValue="{x:Bind ViewModel.Position3DY, Mode=TwoWay}"
-                            ZValue="{x:Bind ViewModel.Position3DZ, Mode=TwoWay}" />
-                        <TextBlock
-                            Grid.Row="1"
-                            VerticalAlignment="Center"
-                            Text="Rotation" />
-                        <controls:VectorBox
-                            x:Name="RotationVector"
-                            Grid.Row="1"
-                            Grid.Column="1"
-                            HorizontalAlignment="Stretch"
-                            ComponentLabelPosition="Left"
-                            ComponentMask="###.##°"
-                            Dimension="3"
-                            HorizontalValueAlignment="Right"
-                            LabelPosition="None"
-                            XValue="{x:Bind ViewModel.RotationX, Mode=TwoWay}"
-                            YValue="{x:Bind ViewModel.RotationY, Mode=TwoWay}"
-                            ZValue="{x:Bind ViewModel.RotationZ, Mode=TwoWay}" />
-                        <TextBlock
-                            Grid.Row="2"
-                            VerticalAlignment="Center"
-                            Text="Scale" />
-                        <controls:VectorBox
-                            x:Name="TransformScaleVector"
-                            Grid.Row="2"
-                            Grid.Column="1"
-                            HorizontalAlignment="Stretch"
-                            ComponentLabelPosition="Left"
-                            Dimension="3"
-                            HorizontalValueAlignment="Right"
-                            LabelPosition="None"
-                            XValue="{x:Bind ViewModel.TransformScaleX, Mode=TwoWay}"
-                            YValue="{x:Bind ViewModel.TransformScaleY, Mode=TwoWay}"
-                            ZValue="{x:Bind ViewModel.TransformScaleZ, Mode=TwoWay}" />
-                    </Grid>
-                </Border>
-
-                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Color vector" />
-                <Border Style="{StaticResource DemoPanelBorderStyle}">
-                    <StackPanel Spacing="8">
-                        <Grid>
-                            <TextBlock FontSize="16" Text="Color" />
-                            <TextBlock
-                                HorizontalAlignment="Right"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Linear RGB" />
-                        </Grid>
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Border
-                                Width="36"
-                                Height="36"
-                                VerticalAlignment="Center"
-                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                BorderThickness="1">
-                                <Rectangle Fill="{x:Bind ViewModel.ColorPreviewBrush, Mode=OneWay}" />
-                            </Border>
-                            <controls:VectorBox
-                                x:Name="LinearColorVector"
-                                Grid.Column="1"
-                                HorizontalAlignment="Stretch"
-                                ComponentLabelPosition="Left"
-                                ComponentMask="~.###"
-                                Dimension="3"
-                                HorizontalValueAlignment="Right"
-                                XValue="{x:Bind ViewModel.ColorRed, Mode=TwoWay}"
-                                YValue="{x:Bind ViewModel.ColorGreen, Mode=TwoWay}"
-                                ZValue="{x:Bind ViewModel.ColorBlue, Mode=TwoWay}" />
-                        </Grid>
-                    </StackPanel>
-                </Border>
-
-                <!--  Vector with Per-Component Masks  -->
-                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Vector with Per-Component Masks (X: ±###.#, Y: ##.##, Z: ~.###)" />
-                <Border Style="{StaticResource DemoPanelBorderStyle}">
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Two, three and four components" />
+            <Border Style="{StaticResource DemoPanelBorderStyle}">
+                <Grid ColumnSpacing="12" RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center" Text="Position" />
                     <controls:VectorBox
-                        x:Name="MixedMaskVector"
-                        ComponentLabelPosition="Top"
-                        Dimension="3"
-                        Label="Custom Masks"
-                        LabelPosition="Top"
-                        XValue="{x:Bind ViewModel.MixedMaskX, Mode=TwoWay}"
-                        YValue="{x:Bind ViewModel.MixedMaskY, Mode=TwoWay}"
-                        ZValue="{x:Bind ViewModel.MixedMaskZ, Mode=TwoWay}" />
-                </Border>
-
-                <!--  Validation Demo  -->
-                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Vector with Validation (Range: -180 to 180)" />
-                <Border Style="{StaticResource DemoPanelBorderStyle}">
-                    <controls:VectorBox
-                        x:Name="ValidatedVector"
-                        ComponentLabelPosition="Left"
-                        ComponentMask="###.##°"
-                        Dimension="3"
-                        Label="Constrained"
-                        LabelPosition="Left"
-                        XValue="{x:Bind ViewModel.ConstrainedX, Mode=TwoWay}"
-                        YValue="{x:Bind ViewModel.ConstrainedY, Mode=TwoWay}"
-                        ZValue="{x:Bind ViewModel.ConstrainedZ, Mode=TwoWay}" />
-                </Border>
-
-                <!--  Indeterminate Demo  -->
-                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Indeterminate Presentation (Multi-Selection Scenario)" />
-                <Border Style="{StaticResource DemoPanelBorderStyle}">
-                    <StackPanel
-                        HorizontalAlignment="Left"
+                        x:Name="PositionVector"
+                        Grid.Column="1"
+                        Style="{StaticResource RowVectorStyle}"
+                        XValue="{x:Bind ViewModel.PositionX, Mode=TwoWay}"
+                        YValue="{x:Bind ViewModel.PositionY, Mode=TwoWay}"
+                        ZValue="{x:Bind ViewModel.PositionZ, Mode=TwoWay}" />
+                    <TextBlock
+                        Grid.Row="1"
                         VerticalAlignment="Center"
-                        Orientation="Vertical"
-                        Spacing="10">
-                        <controls:VectorBox
-                            x:Name="IndeterminateVector"
-                            ComponentLabelPosition="Left"
-                            ComponentMask="~.##"
-                            Dimension="3"
-                            IndeterminateDisplayText="-.-"
-                            Label="Mixed Values"
-                            LabelPosition="Left"
-                            XIsIndeterminate="{x:Bind ViewModel.IsIndeterminateX, Mode=TwoWay}"
-                            XValue="{x:Bind ViewModel.IndeterminateX, Mode=TwoWay}"
-                            YIsIndeterminate="{x:Bind ViewModel.IsIndeterminateY, Mode=TwoWay}"
-                            YValue="{x:Bind ViewModel.IndeterminateY, Mode=TwoWay}"
-                            ZIsIndeterminate="{x:Bind ViewModel.IsIndeterminateZ, Mode=TwoWay}"
-                            ZValue="{x:Bind ViewModel.IndeterminateZ, Mode=TwoWay}" />
+                        Text="Rotation" />
+                    <controls:VectorBox
+                        x:Name="RotationVector"
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        ComponentMask="###.##°"
+                        Style="{StaticResource RowVectorStyle}"
+                        XValue="{x:Bind ViewModel.RotationX, Mode=TwoWay}"
+                        YValue="{x:Bind ViewModel.RotationY, Mode=TwoWay}"
+                        ZValue="{x:Bind ViewModel.RotationZ, Mode=TwoWay}" />
+                    <TextBlock
+                        Grid.Row="2"
+                        VerticalAlignment="Center"
+                        Text="Scale" />
+                    <controls:VectorBox
+                        x:Name="ScaleVector"
+                        Grid.Row="2"
+                        Grid.Column="1"
+                        Style="{StaticResource RowVectorStyle}"
+                        XValue="{x:Bind ViewModel.ScaleX, Mode=TwoWay}"
+                        YValue="{x:Bind ViewModel.ScaleY, Mode=TwoWay}"
+                        ZValue="{x:Bind ViewModel.ScaleZ, Mode=TwoWay}" />
+                    <TextBlock
+                        Grid.Row="3"
+                        VerticalAlignment="Center"
+                        Text="Orientation" />
+                    <controls:VectorBox
+                        x:Name="OrientationVector"
+                        Grid.Row="3"
+                        Grid.Column="1"
+                        ComponentMask="~.###"
+                        Dimension="4"
+                        Style="{StaticResource RowVectorStyle}"
+                        WValue="{x:Bind ViewModel.OrientationW, Mode=TwoWay}"
+                        XValue="{x:Bind ViewModel.OrientationX, Mode=TwoWay}"
+                        YValue="{x:Bind ViewModel.OrientationY, Mode=TwoWay}"
+                        ZValue="{x:Bind ViewModel.OrientationZ, Mode=TwoWay}" />
+                    <TextBlock
+                        Grid.Row="4"
+                        VerticalAlignment="Center"
+                        Text="Tiling" />
+                    <controls:VectorBox
+                        x:Name="TilingVector"
+                        Grid.Row="4"
+                        Grid.Column="1"
+                        Dimension="2"
+                        Style="{StaticResource RowVectorStyle}"
+                        XValue="{x:Bind ViewModel.TilingU, Mode=TwoWay}"
+                        YValue="{x:Bind ViewModel.TilingV, Mode=TwoWay}" />
+                </Grid>
+            </Border>
 
-                        <StackPanel
-                            Margin="0,10,0,0"
-                            Orientation="Horizontal"
-                            Spacing="10">
-                            <Button Click="ToggleXIndeterminate_Click" Content="Toggle X Indeterminate" />
-                            <Button Click="ToggleYIndeterminate_Click" Content="Toggle Y Indeterminate" />
-                            <Button Click="ToggleZIndeterminate_Click" Content="Toggle Z Indeterminate" />
-                        </StackPanel>
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Per-component masks (X ~.# m, Y ##.##, Z ~.###)" />
+            <Border Style="{StaticResource DemoPanelBorderStyle}">
+                <controls:VectorBox
+                    x:Name="MixedMaskVector"
+                    ComponentLabelPosition="Top"
+                    Label="Custom masks"
+                    LabelPosition="Top"
+                    XValue="{x:Bind ViewModel.MixedMaskX, Mode=TwoWay}"
+                    YValue="{x:Bind ViewModel.MixedMaskY, Mode=TwoWay}"
+                    ZValue="{x:Bind ViewModel.MixedMaskZ, Mode=TwoWay}" />
+            </Border>
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Validation (each component from -180 to 180)" />
+            <Border Style="{StaticResource DemoPanelBorderStyle}">
+                <controls:VectorBox
+                    CompactComponentLabels="True"
+                    ComponentLabelPosition="Right"
+                    ComponentMask="###.##°"
+                    Label="Constrained"
+                    LabelPosition="Left"
+                    Validate="OnConstrainedValidate"
+                    XValue="{x:Bind ViewModel.ConstrainedX, Mode=TwoWay}"
+                    YValue="{x:Bind ViewModel.ConstrainedY, Mode=TwoWay}"
+                    ZValue="{x:Bind ViewModel.ConstrainedZ, Mode=TwoWay}" />
+            </Border>
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Mixed values (multi-selection)" />
+            <Border Style="{StaticResource DemoPanelBorderStyle}">
+                <StackPanel Spacing="12">
+                    <controls:VectorBox
+                        CompactComponentLabels="True"
+                        ComponentLabelPosition="Left"
+                        ComponentMask="~.##"
+                        Label="Mixed values"
+                        LabelPosition="Left"
+                        XIsIndeterminate="{x:Bind ViewModel.IsMixedX, Mode=OneWay}"
+                        XValue="{x:Bind ViewModel.MixedX, Mode=TwoWay}"
+                        YIsIndeterminate="{x:Bind ViewModel.IsMixedY, Mode=OneWay}"
+                        YValue="{x:Bind ViewModel.MixedY, Mode=TwoWay}"
+                        ZIsIndeterminate="{x:Bind ViewModel.IsMixedZ, Mode=OneWay}"
+                        ZValue="{x:Bind ViewModel.MixedZ, Mode=TwoWay}" />
+                    <StackPanel Orientation="Horizontal" Spacing="24">
+                        <ToggleSwitch Header="X mixed" IsOn="{x:Bind ViewModel.IsMixedX, Mode=TwoWay}" />
+                        <ToggleSwitch Header="Y mixed" IsOn="{x:Bind ViewModel.IsMixedY, Mode=TwoWay}" />
+                        <ToggleSwitch Header="Z mixed" IsOn="{x:Bind ViewModel.IsMixedZ, Mode=TwoWay}" />
                     </StackPanel>
-                </Border>
+                </StackPanel>
+            </Border>
 
-                <!--  Comprehensive VectorBox Control Panel  -->
-                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="VectorBox Control Panel (All Configuration Options)" />
-                <Border Style="{StaticResource DemoPanelBorderStyle}">
-                    <StackPanel Spacing="15">
-                        <!--  Dimension Selection  -->
-                        <StackPanel Spacing="8">
-                            <TextBlock FontWeight="Bold" Text="Dimension:" />
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <RadioButton
-                                    Checked="Dimension_Changed"
-                                    Content="2D"
-                                    GroupName="Dimension"
-                                    Tag="2" />
-                                <RadioButton
-                                    Checked="Dimension_Changed"
-                                    Content="3D"
-                                    GroupName="Dimension"
-                                    IsChecked="True"
-                                    Tag="3" />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!--  Label Position Selection  -->
-                        <StackPanel Spacing="8">
-                            <TextBlock FontWeight="Bold" Text="Label Position:" />
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <RadioButton
-                                    Checked="LabelPosition_Changed"
-                                    Content="Left"
-                                    GroupName="LabelPos"
-                                    IsChecked="True"
-                                    Tag="Left" />
-                                <RadioButton
-                                    Checked="LabelPosition_Changed"
-                                    Content="Right"
-                                    GroupName="LabelPos"
-                                    Tag="Right" />
-                                <RadioButton
-                                    Checked="LabelPosition_Changed"
-                                    Content="Top"
-                                    GroupName="LabelPos"
-                                    Tag="Top" />
-                                <RadioButton
-                                    Checked="LabelPosition_Changed"
-                                    Content="Bottom"
-                                    GroupName="LabelPos"
-                                    Tag="Bottom" />
-                                <RadioButton
-                                    Checked="LabelPosition_Changed"
-                                    Content="None"
-                                    GroupName="LabelPos"
-                                    Tag="None" />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!--  Component Label Position  -->
-                        <StackPanel Spacing="8">
-                            <TextBlock FontWeight="Bold" Text="Component Label Position:" />
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <RadioButton
-                                    Checked="ComponentLabelPosition_Changed"
-                                    Content="Left"
-                                    GroupName="CompLabelPos"
-                                    Tag="Left" />
-                                <RadioButton
-                                    Checked="ComponentLabelPosition_Changed"
-                                    Content="Right"
-                                    GroupName="CompLabelPos"
-                                    Tag="Right" />
-                                <RadioButton
-                                    Checked="ComponentLabelPosition_Changed"
-                                    Content="Top"
-                                    GroupName="CompLabelPos"
-                                    Tag="Top" />
-                                <RadioButton
-                                    Checked="ComponentLabelPosition_Changed"
-                                    Content="Bottom"
-                                    GroupName="CompLabelPos"
-                                    Tag="Bottom" />
-                                <RadioButton
-                                    Checked="ComponentLabelPosition_Changed"
-                                    Content="None"
-                                    GroupName="CompLabelPos"
-                                    IsChecked="True"
-                                    Tag="None" />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!--  Mask Selection  -->
-                        <StackPanel Spacing="8">
-                            <TextBlock FontWeight="Bold" Text="Component Mask:" />
-                            <ComboBox x:Name="VectorMaskComboBox" SelectionChanged="VectorMask_Changed">
-                                <ComboBoxItem>~.#</ComboBoxItem>
-                                <ComboBoxItem>~.##</ComboBoxItem>
-                                <ComboBoxItem>###.##</ComboBoxItem>
-                                <ComboBoxItem>###.#°</ComboBoxItem>
-                                <ComboBoxItem>-###.##</ComboBoxItem>
-                                <ComboBoxItem>±###.#</ComboBoxItem>
-                            </ComboBox>
-                        </StackPanel>
-
-                        <!--  Multiplier  -->
-                        <StackPanel Spacing="8">
-                            <TextBlock FontWeight="Bold" Text="Multiplier:" />
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <RadioButton
-                                    Checked="VectorMultiplier_Changed"
-                                    Content="1"
-                                    GroupName="VectorMultiplier"
-                                    IsChecked="True"
-                                    Tag="1" />
-                                <RadioButton
-                                    Checked="VectorMultiplier_Changed"
-                                    Content="5"
-                                    GroupName="VectorMultiplier"
-                                    Tag="5" />
-                                <RadioButton
-                                    Checked="VectorMultiplier_Changed"
-                                    Content="10"
-                                    GroupName="VectorMultiplier"
-                                    Tag="10" />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!--  Value Alignment  -->
-                        <StackPanel Spacing="8">
-                            <TextBlock FontWeight="Bold" Text="Value Alignment:" />
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <RadioButton
-                                    Checked="VectorValueAlignment_Changed"
-                                    Content="Left"
-                                    GroupName="VectorValueAlign"
-                                    Tag="Left" />
-                                <RadioButton
-                                    Checked="VectorValueAlignment_Changed"
-                                    Content="Center"
-                                    GroupName="VectorValueAlign"
-                                    IsChecked="True"
-                                    Tag="Center" />
-                                <RadioButton
-                                    Checked="VectorValueAlignment_Changed"
-                                    Content="Right"
-                                    GroupName="VectorValueAlign"
-                                    Tag="Right" />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!--  The VectorBox  -->
-                        <StackPanel Spacing="8">
-                            <TextBlock FontWeight="Bold" Text="Preview:" />
-                            <controls:VectorBox
-                                x:Name="ConfigurableVectorBox"
-                                ComponentLabelPosition="None"
-                                ComponentMask="~.##"
-                                Dimension="3"
-                                Label="Configurable"
-                                LabelPosition="Left"
-                                Multiplier="1" />
-                        </StackPanel>
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Presentation options" />
+            <Border Style="{StaticResource DemoPanelBorderStyle}">
+                <StackPanel Spacing="16">
+                    <controls:VectorBox
+                        x:Name="ConfigurableVector"
+                        ComponentLabelPosition="None"
+                        ComponentMask="~.##"
+                        HorizontalValueAlignment="Center"
+                        Label="Configurable"
+                        LabelPosition="Left"
+                        WValue="4"
+                        XValue="1"
+                        YValue="2"
+                        ZValue="3" />
+                    <StackPanel Orientation="Horizontal" Spacing="24">
+                        <RadioButtons
+                            Header="Dimension"
+                            SelectedIndex="1"
+                            SelectionChanged="OnDimensionChanged">
+                            <x:String>2</x:String>
+                            <x:String>3</x:String>
+                            <x:String>4</x:String>
+                        </RadioButtons>
+                        <RadioButtons
+                            Header="Label position"
+                            SelectedIndex="0"
+                            SelectionChanged="OnLabelPositionChanged">
+                            <x:String>Left</x:String>
+                            <x:String>Right</x:String>
+                            <x:String>Top</x:String>
+                            <x:String>Bottom</x:String>
+                            <x:String>None</x:String>
+                        </RadioButtons>
+                        <RadioButtons
+                            Header="Component label position"
+                            SelectedIndex="4"
+                            SelectionChanged="OnComponentLabelPositionChanged">
+                            <x:String>Left</x:String>
+                            <x:String>Right</x:String>
+                            <x:String>Top</x:String>
+                            <x:String>Bottom</x:String>
+                            <x:String>None</x:String>
+                        </RadioButtons>
+                        <ToggleSwitch Header="Compact component labels (left or right)" IsOn="{x:Bind ConfigurableVector.CompactComponentLabels, Mode=TwoWay}" />
+                        <RadioButtons
+                            Header="Value alignment"
+                            SelectedIndex="1"
+                            SelectionChanged="OnValueAlignmentChanged">
+                            <x:String>Left</x:String>
+                            <x:String>Center</x:String>
+                            <x:String>Right</x:String>
+                        </RadioButtons>
+                        <RadioButtons
+                            Header="Drag multiplier"
+                            SelectedIndex="0"
+                            SelectionChanged="OnMultiplierChanged">
+                            <x:String>1</x:String>
+                            <x:String>5</x:String>
+                            <x:String>10</x:String>
+                        </RadioButtons>
+                        <ComboBox
+                            Header="Component mask"
+                            SelectedIndex="1"
+                            SelectionChanged="OnMaskChanged">
+                            <x:String>~.#</x:String>
+                            <x:String>~.##</x:String>
+                            <x:String>###.##</x:String>
+                            <x:String>###.#°</x:String>
+                            <x:String>~.## m</x:String>
+                        </ComboBox>
                     </StackPanel>
-                </Border>
+                </StackPanel>
+            </Border>
 
-                <!--  Display Current Values  -->
-                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Current Values" />
-                <Border Margin="0,0,0,0" Style="{StaticResource DemoPanelBorderStyle}">
-                    <StackPanel Spacing="8">
-                        <TextBlock
-                            FontSize="16"
-                            FontWeight="Bold"
-                            Text="Current Values" />
-                        <TextBlock>
-                            <Run FontWeight="Bold" Text="Basic 3D:" />
-                            <Run Text="{x:Bind ViewModel.Position3DX, Mode=OneWay}" />
-                            <Run Text="," />
-                            <Run Text="{x:Bind ViewModel.Position3DY, Mode=OneWay}" />
-                            <Run Text="," />
-                            <Run Text="{x:Bind ViewModel.Position3DZ, Mode=OneWay}" />
-                        </TextBlock>
-                        <TextBlock>
-                            <Run FontWeight="Bold" Text="Scale 2D:" />
-                            <Run Text="{x:Bind ViewModel.Scale2DX, Mode=OneWay}" />
-                            <Run Text="," />
-                            <Run Text="{x:Bind ViewModel.Scale2DY, Mode=OneWay}" />
-                        </TextBlock>
-                        <TextBlock>
-                            <Run FontWeight="Bold" Text="Rotation:" />
-                            <Run Text="{x:Bind ViewModel.RotationX, Mode=OneWay}" />
-                            <Run Text="," />
-                            <Run Text="{x:Bind ViewModel.RotationY, Mode=OneWay}" />
-                            <Run Text="," />
-                            <Run Text="{x:Bind ViewModel.RotationZ, Mode=OneWay}" />
-                        </TextBlock>
-                        <TextBlock>
-                            <Run FontWeight="Bold" Text="Constrained (must be -180 to 180):" />
-                            <Run Text="{x:Bind ViewModel.ConstrainedX, Mode=OneWay}" />
-                            <Run Text="," />
-                            <Run Text="{x:Bind ViewModel.ConstrainedY, Mode=OneWay}" />
-                            <Run Text="," />
-                            <Run Text="{x:Bind ViewModel.ConstrainedZ, Mode=OneWay}" />
-                        </TextBlock>
-                        <StackPanel Margin="0,10,0,0" Spacing="4">
-                            <TextBlock FontWeight="Bold" Text="Indeterminate State:" />
-                            <TextBlock Text="{x:Bind ViewModel.IndeterminateStatusText, Mode=OneWay}" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Bound values" />
+            <Border Style="{StaticResource DemoPanelBorderStyle}">
+                <StackPanel Spacing="8">
+                    <TextBlock>
+                        <Run FontWeight="Bold" Text="Position:" />
+                        <Run Text="{x:Bind ViewModel.PositionX, Mode=OneWay}" /><Run Text=", " /><Run Text="{x:Bind ViewModel.PositionY, Mode=OneWay}" /><Run Text=", " /><Run Text="{x:Bind ViewModel.PositionZ, Mode=OneWay}" />
+                    </TextBlock>
+                    <TextBlock>
+                        <Run FontWeight="Bold" Text="Orientation:" />
+                        <Run Text="{x:Bind ViewModel.OrientationX, Mode=OneWay}" /><Run Text=", " /><Run Text="{x:Bind ViewModel.OrientationY, Mode=OneWay}" /><Run Text=", " /><Run Text="{x:Bind ViewModel.OrientationZ, Mode=OneWay}" /><Run Text=", " /><Run Text="{x:Bind ViewModel.OrientationW, Mode=OneWay}" />
+                    </TextBlock>
+                    <TextBlock>
+                        <Run FontWeight="Bold" Text="Tiling:" />
+                        <Run Text="{x:Bind ViewModel.TilingU, Mode=OneWay}" /><Run Text=", " /><Run Text="{x:Bind ViewModel.TilingV, Mode=OneWay}" />
+                    </TextBlock>
+                    <TextBlock>
+                        <Run FontWeight="Bold" Text="Constrained:" />
+                        <Run Text="{x:Bind ViewModel.ConstrainedX, Mode=OneWay}" /><Run Text=", " /><Run Text="{x:Bind ViewModel.ConstrainedY, Mode=OneWay}" /><Run Text=", " /><Run Text="{x:Bind ViewModel.ConstrainedZ, Mode=OneWay}" />
+                    </TextBlock>
+                </StackPanel>
+            </Border>
 
-            </StackPanel>
-        </ScrollViewer>
-    </Grid>
+        </StackPanel>
+    </ScrollViewer>
 </Page>

@@ -178,6 +178,8 @@ public static partial class Program
         container.Register<NumberBoxDemoViewModel>(Reuse.Transient);
         container.Register<VectorBoxDemoView>(Reuse.Transient);
         container.Register<VectorBoxDemoViewModel>(Reuse.Transient);
+        container.Register<ColorBoxDemoView>(Reuse.Transient);
+        container.Register<ColorBoxDemoViewModel>(Reuse.Transient);
         container.Register<MenuBarDemoView>(Reuse.Transient);
         container.Register<MenuBarDemoViewModel>(Reuse.Transient);
         container.Register<MenuFlyoutDemoView>(Reuse.Transient);
@@ -234,6 +236,11 @@ public static partial class Program
                         {
                             Path = "vectorbox",
                             ViewModelType = typeof(VectorBoxDemoViewModel),
+                        },
+                        new Route()
+                        {
+                            Path = "colorbox",
+                            ViewModelType = typeof(ColorBoxDemoViewModel),
                         },
                         new Route()
                         {

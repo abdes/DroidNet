@@ -38,6 +38,7 @@
                 <Border Style="{StaticResource DemoPanelBorderStyle}">
                     <StackPanel Spacing="8">
                         <controls:NumberBox
+                            x:Name="CompactNumberBox"
                             HorizontalAlignment="Stretch"
                             HorizontalValueAlignment="Right"
                             IsCompact="True"
@@ -46,12 +47,45 @@
                             LabelPosition="Left"
                             Mask="~.##"
                             NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
-                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Drag the label to adjust; click the value to type. The wheel scrolls the page." />
+                        <RadioButtons
+                            Header="Compact label side"
+                            MaxColumns="2"
+                            SelectedIndex="0"
+                            SelectionChanged="CompactSide_Changed">
+                            <x:String>Left</x:String>
+                            <x:String>Right</x:String>
+                        </RadioButtons>
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Drag the label or the value sideways to adjust (Shift for fine steps); click the value to type. The wheel scrolls the page." />
                         <controls:NumberBox
                             Label=""
                             LabelPosition="None"
                             Mask="~.##"
                             NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Units" />
+                <Border Style="{StaticResource DemoPanelBorderStyle}">
+                    <StackPanel Spacing="8">
+                        <controls:NumberBox
+                            HorizontalAlignment="Stretch"
+                            Label="Unit (outside the field)"
+                            LabelPosition="Left"
+                            LabelWidth="180"
+                            Mask="~.##"
+                            NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}"
+                            Unit="m" />
+                        <controls:NumberBox
+                            HorizontalAlignment="Stretch"
+                            Label="Unit in the mask (~.## m)"
+                            LabelPosition="Left"
+                            LabelWidth="180"
+                            Mask="~.## m"
+                            NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Unit is a read-only annotation after the field. A unit written in the mask is part of the formatted value text."
+                            TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
 
@@ -100,6 +134,8 @@
                             </StackPanel>
                         </StackPanel>
 
+                        <ToggleSwitch Header="Compact (label inside the field, Left or Right only)" IsOn="{x:Bind ConfigurableNumberBox.IsCompact, Mode=TwoWay}" />
+
                         <!--  Mask Selection  -->
                         <StackPanel Spacing="8">
                             <TextBlock FontWeight="Bold" Text="Mask:" />
@@ -108,8 +144,7 @@
                                 <ComboBoxItem>~.##</ComboBoxItem>
                                 <ComboBoxItem>###.##</ComboBoxItem>
                                 <ComboBoxItem>###.#°</ComboBoxItem>
-                                <ComboBoxItem>-###.##</ComboBoxItem>
-                                <ComboBoxItem>±###.#</ComboBoxItem>
+                                <ComboBoxItem>~.## m</ComboBoxItem>
                             </ComboBox>
                         </StackPanel>
 

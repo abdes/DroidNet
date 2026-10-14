@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Menus;
@@ -150,7 +151,7 @@ public partial class MenuFlyoutDemoViewModel : ObservableObject
     {
         var model = new NumberBoxMenuItemModel
         {
-            NumberValue = (float)this.FontSize,
+            NumberValue = this.FontSize,
             Width = 96,
         };
         model.PropertyChanged += (_, e) =>
@@ -158,7 +159,7 @@ public partial class MenuFlyoutDemoViewModel : ObservableObject
             if (string.Equals(e.PropertyName, nameof(NumberBoxMenuItemModel.NumberValue), StringComparison.Ordinal))
             {
                 this.FontSize = model.NumberValue;
-                this.LastActionMessage = $"Font Size: {this.FontSize:0}";
+                this.LastActionMessage = string.Create(CultureInfo.InvariantCulture, $"Font Size: {this.FontSize:0}");
             }
         };
 
@@ -186,7 +187,7 @@ public partial class MenuFlyoutDemoViewModel : ObservableObject
             if (string.Equals(e.PropertyName, nameof(SliderMenuItemModel.Value), StringComparison.Ordinal))
             {
                 this.LineSpacing = model.Value;
-                this.LastActionMessage = $"Line Spacing: {this.LineSpacing:0.0}";
+                this.LastActionMessage = string.Create(CultureInfo.InvariantCulture, $"Line Spacing: {this.LineSpacing:0.0}");
             }
         };
 
