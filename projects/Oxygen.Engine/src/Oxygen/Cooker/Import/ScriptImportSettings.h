@@ -7,6 +7,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace oxygen::content::import {
 
@@ -81,6 +82,9 @@ struct ScriptingSidecarImportSettings final {
 
   //! Canonical scene virtual path this sidecar targets.
   std::string target_scene_virtual_path;
+  //! Absolute published roots that resolve scripts and asset parameters the
+  //! sidecar's own cooked root does not contain.
+  std::vector<std::string> cooked_context_roots;
   //! Content hashing request (normalized by `EffectiveContentHashingEnabled`).
   bool with_content_hashing { true };
 };

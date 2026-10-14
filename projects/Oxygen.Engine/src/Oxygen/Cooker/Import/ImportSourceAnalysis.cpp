@@ -46,6 +46,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptImportPipelineCommon.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
@@ -339,11 +340,29 @@ namespace {
     co_return true;
   }
 
+  //! Analyzes a script job: the script file is the only input, and the
+  //! script asset, named after the file, is the output in the job's layout.
+  auto PrepareScriptJob(const ImportManifestJob& job, AnalysisContext& context)
+    -> void
+  {
+    auto& report = *context.report;
+    report.source_path = job.script.source_path;
+    context.AddFile(report.source_path);
+    context.Output(
+      job.loose_cooked_layout.ScriptVirtualPath(
+        detail::script_import::DeriveScriptName(report.source_path)),
+      Kind::kScript);
+  }
+
   auto PrepareJob(const ImportManifestJob& job, AnalysisContext& context)
     -> co::Co<bool>
   {
     if (job.job_type == "input") {
       co_return co_await PrepareInputJob(job, context);
+    }
+    if (job.job_type == "script") {
+      PrepareScriptJob(job, context);
+      co_return true;
     }
     auto& report = *context.report;
     const auto& layout = job.loose_cooked_layout;

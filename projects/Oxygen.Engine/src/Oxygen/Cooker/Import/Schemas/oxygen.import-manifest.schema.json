@@ -724,6 +724,9 @@
         },
         "target_scene_virtual_path": {
           "type": "string"
+        },
+        "cooked_context_roots": {
+          "$ref": "#/definitions/cooked_context_roots"
         }
       },
       "additionalProperties": false

@@ -237,6 +237,8 @@ namespace {
       manifest_dir, defaults.scene_descriptor.cooked_context_roots);
     ResolveContextRootsRelativeToManifest(
       manifest_dir, defaults.geometry_descriptor.cooked_context_roots);
+    ResolveContextRootsRelativeToManifest(
+      manifest_dir, defaults.scripting_sidecar.cooked_context_roots);
   }
 
   auto ResolveCookedRootsRelativeToManifest(
@@ -261,6 +263,8 @@ namespace {
       manifest_dir, job.scene_descriptor.cooked_context_roots);
     ResolveContextRootsRelativeToManifest(
       manifest_dir, job.geometry_descriptor.cooked_context_roots);
+    ResolveContextRootsRelativeToManifest(
+      manifest_dir, job.scripting_sidecar.cooked_context_roots);
   }
 
   auto ReadStringField(const json& obj, const char* name, std::string& target,
@@ -718,7 +722,9 @@ namespace {
     ScriptingSidecarImportSettings& settings, std::ostream& errors) -> bool
   {
     return ReadStringField(obj, "target_scene_virtual_path",
-      settings.target_scene_virtual_path, errors);
+             settings.target_scene_virtual_path, errors)
+      && ReadStringArrayField(
+        obj, "cooked_context_roots", settings.cooked_context_roots, errors);
   }
 
   auto ApplyPhysicsSidecarOverrides(const json& obj,

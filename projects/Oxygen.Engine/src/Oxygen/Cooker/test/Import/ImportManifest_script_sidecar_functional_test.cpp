@@ -74,6 +74,48 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, AcceptsInlineBindingsForSidecarJob)
   EXPECT_FALSE(request->options.scripting.inline_bindings_json.empty());
 }
 
+//! Published roots resolve scripts and asset parameters cooked earlier.
+NOLINT_TEST(ImportManifestScriptSidecarTest,
+  SidecarCookedContextRootsResolveFromManifestDirectory)
+{
+  const ScopedTempDir temp;
+  const auto manifest_path
+    = temp.Path() / "sidecar_context_roots" / "import_manifest.json";
+  const auto output = manifest_path.parent_path() / "staging";
+  WriteText(manifest_path,
+    R"({
+      "version": 1,
+      "output": ")"
+      + JsonPath(output) + R"(",
+      "jobs": [
+        {
+          "type": "script-sidecar",
+          "target_scene_virtual_path": "/Content/Scenes/Main.oscene",
+          "cooked_context_roots": ["published"],
+          "bindings": [
+            {
+              "node_index": 0,
+              "slot_id": "main",
+              "script_virtual_path": "/Content/move.oscript"
+            }
+          ]
+        }
+      ]
+    })");
+
+  std::ostringstream errors;
+  const auto manifest
+    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  ASSERT_HAS_VALUE(manifest) << errors.str();
+  std::ostringstream request_errors;
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+
+  ASSERT_HAS_VALUE(request) << request_errors.str();
+  EXPECT_THAT(request->cooked_context_roots,
+    ::testing::ElementsAre(
+      (manifest_path.parent_path() / "published").lexically_normal()));
+}
+
 NOLINT_TEST(ImportManifestScriptSidecarTest,
   ScriptAuthoringRootsResolveDefaultsAndOverridesFromManifestDirectory)
 {

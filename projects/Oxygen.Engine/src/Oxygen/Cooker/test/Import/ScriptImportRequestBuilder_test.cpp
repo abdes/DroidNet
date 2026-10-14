@@ -97,19 +97,24 @@ NOLINT_TEST(ScriptImportRequestBuilderTest, BuildScriptAssetRequestValidInput)
   EXPECT_TRUE(request->cooked_root->is_absolute());
 }
 
+//! Compiled scripts may record their source path for development reload.
 NOLINT_TEST(ScriptImportRequestBuilderTest,
-  BuildScriptAssetRequestRejectsCompileWithExternalStorage)
+  BuildScriptAssetRequestAcceptsCompileWithExternalStorage)
 {
   auto settings = MakeValidScriptAssetSettings();
   settings.script_storage = "external";
+  const auto authoring_root
+    = std::filesystem::temp_directory_path() / "script_authoring";
+  settings.source_root = authoring_root.string();
+  settings.source_path = (authoring_root / "scripts" / "main.lua").string();
   std::ostringstream errors;
 
   const auto request = BuildScriptAssetRequest(settings, errors);
 
-  EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr(
-      "compile_scripts=true is invalid with script_storage=external"));
+  ASSERT_HAS_VALUE(request) << errors.str();
+  EXPECT_TRUE(request->options.scripting.compile_scripts);
+  EXPECT_EQ(
+    request->options.scripting.script_storage, ScriptStorageMode::kExternal);
 }
 
 NOLINT_TEST(

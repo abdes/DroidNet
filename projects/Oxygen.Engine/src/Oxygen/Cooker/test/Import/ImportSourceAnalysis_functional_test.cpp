@@ -289,6 +289,35 @@ namespace {
     ASSERT_EQ(result.observations.size(), 1U);
   }
 
+  //! A script file is the only input of its job; the script asset named after
+  //! the file is the output in the job's layout.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, ScriptFileIsTheInputOfItsScriptAsset)
+  {
+    const auto script = Write("move.lua", "return {}");
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.id = "script:Player/move.lua";
+    job.job_type = "script";
+    job.script.source_path = script.string();
+    job.loose_cooked_layout.virtual_mount_root = "/Content";
+    job.loose_cooked_layout.descriptors_dir = "";
+    job.loose_cooked_layout.scripts_subdir = "Player";
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    ASSERT_TRUE(report.complete) << report.ToJson();
+    const auto& result = report.jobs.front();
+    ASSERT_EQ(result.outputs.size(), 1U);
+    EXPECT_EQ(
+      result.outputs.front().virtual_path, "/Content/Player/move.oscript");
+    EXPECT_EQ(result.outputs.front().kind, ImportDependencyKind::kScript);
+    EXPECT_TRUE(result.references.empty());
+    ASSERT_EQ(result.files.size(), 1U);
+    EXPECT_EQ(result.files.front().path,
+      std::filesystem::absolute(script).lexically_normal());
+  }
+
   NOLINT_TEST_F(
     ImportSourceAnalysisTest, TextureDescriptorUsesNativeRecipeWithoutDecoding)
   {

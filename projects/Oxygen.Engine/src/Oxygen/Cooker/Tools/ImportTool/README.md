@@ -224,7 +224,9 @@ Options:
 
 Rules:
 
-- `compile=true` with `script-storage=external` is rejected.
+- `compile=true` with `script-storage=external` embeds the bytecode and records
+  the source path: the runtime prefers the source when a script source root
+  contains it and runs the bytecode otherwise.
 - External source paths are stored relative to `--script-source-root`; the source file
   must be inside that directory. In batch manifests, set `source_root` on the
   script job or `defaults.script`. Relative roots resolve from the manifest
@@ -561,6 +563,8 @@ Job rules:
   - `source`
   - `bindings` (inline array)
 - `script-sidecar` always requires `target_scene_virtual_path`
+- `script-sidecar` accepts `cooked_context_roots`: published roots that resolve
+  scripts and asset parameters cooked before this manifest
 - `physics-sidecar` requires exactly one of:
   - `source`
   - `bindings` (inline object)

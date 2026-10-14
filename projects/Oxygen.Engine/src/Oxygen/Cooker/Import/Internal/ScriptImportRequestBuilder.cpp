@@ -56,7 +56,7 @@ namespace {
   auto NormalizeInlineSidecarPayload(const std::string_view payload_text,
     std::string& normalized_payload, std::ostream& error_stream) -> bool
   {
-    using json = nlohmann::json;
+    using nlohmann::json;
     json parsed;
     try {
       parsed = json::parse(payload_text);
@@ -86,28 +86,34 @@ namespace {
     return true;
   }
 
-  auto BuildBaseImportRequest(const std::string& source_path,
-    const std::string& cooked_root, const std::string& job_name,
-    const bool with_content_hashing, std::ostream& error_stream)
-    -> std::optional<ImportRequest>
+  //! Settings every script request shares, named so callers cannot swap them.
+  struct BaseRequestSettings final {
+    std::string_view source_path;
+    std::string_view cooked_root;
+    std::string_view job_name;
+    bool with_content_hashing { true };
+  };
+
+  auto BuildBaseImportRequest(const BaseRequestSettings& settings,
+    std::ostream& error_stream) -> std::optional<ImportRequest>
   {
     ImportRequest request {};
-    request.source_path = source_path;
+    request.source_path = settings.source_path;
 
-    if (cooked_root.empty()) {
+    if (settings.cooked_root.empty()) {
       error_stream << "ERROR: --output or --cooked-root is required\n";
       return std::nullopt;
     }
 
-    std::filesystem::path root(cooked_root);
+    std::filesystem::path root(settings.cooked_root);
     if (!root.is_absolute()) {
       error_stream << "ERROR: cooked root must be an absolute path\n";
       return std::nullopt;
     }
     request.cooked_root = root;
 
-    if (!job_name.empty()) {
-      request.job_name = job_name;
+    if (!settings.job_name.empty()) {
+      request.job_name = std::string(settings.job_name);
     } else {
       const auto stem = request.source_path.stem().string();
       if (!stem.empty()) {
@@ -116,7 +122,7 @@ namespace {
     }
 
     request.options.with_content_hashing
-      = EffectiveContentHashingEnabled(with_content_hashing);
+      = EffectiveContentHashingEnabled(settings.with_content_hashing);
     return request;
   }
 
@@ -142,9 +148,14 @@ auto BuildScriptAssetRequest(const ScriptAssetImportSettings& settings,
     return std::nullopt;
   }
 
-  auto request
-    = BuildBaseImportRequest(settings.source_path, settings.cooked_root,
-      settings.job_name, settings.with_content_hashing, error_stream);
+  auto request = BuildBaseImportRequest(
+    {
+      .source_path = settings.source_path,
+      .cooked_root = settings.cooked_root,
+      .job_name = settings.job_name,
+      .with_content_hashing = settings.with_content_hashing,
+    },
+    error_stream);
   if (!request.has_value()) {
     return std::nullopt;
   }
@@ -160,13 +171,6 @@ auto BuildScriptAssetRequest(const ScriptAssetImportSettings& settings,
   if (!storage_mode.has_value()) {
     error_stream << "ERROR: invalid script storage mode; expected "
                     "'embedded' or 'external'\n";
-    return std::nullopt;
-  }
-
-  if (settings.compile_scripts
-    && *storage_mode == ScriptStorageMode::kExternal) {
-    error_stream << "ERROR: compile_scripts=true is invalid with "
-                    "script_storage=external\n";
     return std::nullopt;
   }
 
@@ -222,9 +226,14 @@ auto BuildScriptingSidecarRequest(
     ? settings.source_path
     : std::string("inline://script-sidecar");
 
-  auto request
-    = BuildBaseImportRequest(source_path_for_request, settings.cooked_root,
-      settings.job_name, settings.with_content_hashing, error_stream);
+  auto request = BuildBaseImportRequest(
+    {
+      .source_path = source_path_for_request,
+      .cooked_root = settings.cooked_root,
+      .job_name = settings.job_name,
+      .with_content_hashing = settings.with_content_hashing,
+    },
+    error_stream);
   if (!request.has_value()) {
     return std::nullopt;
   }
@@ -239,6 +248,15 @@ auto BuildScriptingSidecarRequest(
     error_stream << "ERROR: target_scene_virtual_path must be a canonical "
                     "virtual path\n";
     return std::nullopt;
+  }
+
+  for (const auto& root : settings.cooked_context_roots) {
+    const auto path = std::filesystem::path(root);
+    if (!path.is_absolute()) {
+      error_stream << "ERROR: cooked context roots must be absolute paths\n";
+      return std::nullopt;
+    }
+    request->cooked_context_roots.push_back(path.lexically_normal());
   }
 
   request->options.scripting.import_kind
