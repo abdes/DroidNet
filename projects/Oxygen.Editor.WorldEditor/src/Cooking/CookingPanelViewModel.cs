@@ -297,6 +297,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     {
         if (this.SelectedRun is { Snapshot.State: CookRunState.NeedsSave } selected)
         {
+            this.ActionError = string.Empty;
             var displayed = selected.Snapshot;
             if (await this.workspace.SaveListedAsync(displayed).ConfigureAwait(true))
             {
