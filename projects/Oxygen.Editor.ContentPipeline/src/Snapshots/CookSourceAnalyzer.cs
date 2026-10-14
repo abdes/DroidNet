@@ -154,7 +154,7 @@ internal sealed partial class CookSourceAnalyzer(
             analyzed.Add(new(
                 source.Input,
                 facts.Outputs,
-                facts.References,
+                [.. facts.References, .. ScriptReferences(source.Scene)],
                 [.. source.ManagedFiles, .. files.Select(file => string.Equals(file.SourcePath, source.Input.SourceAbsolutePath, StringComparison.OrdinalIgnoreCase)
                     ? file with { AssetUri = source.Input.AssetUri } : file)])
             { Job = source.Job, Scene = source.Scene });
@@ -368,6 +368,16 @@ internal sealed partial class CookSourceAnalyzer(
             AffectedPath = affectedPath,
             AffectedVirtualPath = input.AssetUri.AbsolutePath,
         };
+
+    // The scripts and assets a scene's slots use are cooked by its sidecar job, which native analysis does not see.
+    private static IEnumerable<NativeLogicalDependency> ScriptReferences(SceneDescriptorGenerationResult? scene)
+        => scene?.ScriptReferences.Select(static uri =>
+        {
+            var path = Uri.UnescapeDataString(uri.AbsolutePath);
+            path = path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? path[..^".json".Length] : path;
+            var kind = path.EndsWith(".oscript", StringComparison.OrdinalIgnoreCase) ? "script" : "asset";
+            return new NativeLogicalDependency(path, kind, ObjectPath: "scripting", Required: true);
+        }) ?? [];
 
     private ContentCookInput Rebase(ContentCookInput input)
         => input with { SourceRelativePath = Path.GetRelativePath(operation.Project.ProjectRoot, input.SourceAbsolutePath).Replace('\\', '/') };

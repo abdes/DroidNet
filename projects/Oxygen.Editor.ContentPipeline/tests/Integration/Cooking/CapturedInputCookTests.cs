@@ -43,7 +43,7 @@ public sealed class CapturedInputCookTests
 
                 foreach (var job in execution.Manifest.Jobs)
                 {
-                    using var document = JsonDocument.Parse(await File.ReadAllBytesAsync(CapturedPath(execution, job.Source), token).ConfigureAwait(false));
+                    using var document = JsonDocument.Parse(await File.ReadAllBytesAsync(CapturedPath(execution, job.AttributedSource), token).ConfigureAwait(false));
                     names.Add(document.RootElement.GetProperty("name").GetString()!);
                 }
             },
@@ -90,8 +90,8 @@ public sealed class CapturedInputCookTests
             {
                 workspace.WriteText("Content/Geometry/mesh.bin", "changed live buffer");
                 var job = execution.Manifest.Jobs.Single(static job => string.Equals(job.Type, "geometry-descriptor", StringComparison.Ordinal));
-                var logicalDescriptor = Path.GetFullPath(job.Source, execution.InputRoot);
-                var descriptorPath = CapturedPath(execution, job.Source);
+                var logicalDescriptor = Path.GetFullPath(job.AttributedSource, execution.InputRoot);
+                var descriptorPath = CapturedPath(execution, job.AttributedSource);
                 using var descriptor = JsonDocument.Parse(await File.ReadAllBytesAsync(descriptorPath, token).ConfigureAwait(false));
                 var relative = descriptor.RootElement.GetProperty("buffers")[0].GetProperty("uri").GetString()!;
                 var capturedBuffer = CapturedPath(execution, Path.GetFullPath(relative, Path.GetDirectoryName(logicalDescriptor)!));
@@ -135,8 +135,8 @@ public sealed class CapturedInputCookTests
             {
                 workspace.WriteText(image, "changed live image");
                 var job = execution.Manifest.Jobs.Single(static job => string.Equals(job.Type, "texture-descriptor", StringComparison.Ordinal));
-                var logicalDescriptor = Path.GetFullPath(job.Source, execution.InputRoot);
-                var descriptorPath = CapturedPath(execution, job.Source);
+                var logicalDescriptor = Path.GetFullPath(job.AttributedSource, execution.InputRoot);
+                var descriptorPath = CapturedPath(execution, job.AttributedSource);
                 using var descriptor = JsonDocument.Parse(await File.ReadAllBytesAsync(descriptorPath, token).ConfigureAwait(false));
                 var capturedImage = CapturedPath(execution, Path.GetFullPath(descriptor.RootElement.GetProperty("source").GetString()!, Path.GetDirectoryName(logicalDescriptor)!));
                 _ = capturedImage.Should().NotBe(Path.Combine(execution.InputRoot, image));

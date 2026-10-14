@@ -59,7 +59,8 @@ public sealed partial class SceneDocumentCommandService
     private static IEnumerable<Uri?> ReferencedUris(SceneNode node)
         => node.Components.OfType<GeometryComponent>().SelectMany(static geometry => new[] { geometry.Geometry?.Uri }
             .Concat(geometry.OverrideSlots.Concat(geometry.TargetedOverrides.SelectMany(static target => target.OverrideSlots))
-                .OfType<World.Slots.MaterialsSlot>().Select(static slot => (Uri?)slot.Material.Uri)));
+                .OfType<World.Slots.MaterialsSlot>().Select(static slot => (Uri?)slot.Material.Uri)))
+            .Concat(SceneReferenceRetargeting.ScriptReferences(node));
 
     /// <summary>Resolves a reference captured before a relocation to the asset's current identity.</summary>
     /// <param name="uri">The captured reference.</param>
@@ -156,7 +157,8 @@ public sealed partial class SceneDocumentCommandService
                 return;
             }
 
-            foreach (var node in nodes.Where(node => ReferenceEquals(FindNode(context.Scene, node.Id), node)))
+            // Script slots have no runtime projection; only geometry is re-attached.
+            foreach (var node in nodes.Where(node => node.Components.OfType<GeometryComponent>().Any() && ReferenceEquals(FindNode(context.Scene, node.Id), node)))
             {
                 _ = await this.sceneEngineSync.AttachGeometryAsync(context.Scene, node).ConfigureAwait(true);
             }

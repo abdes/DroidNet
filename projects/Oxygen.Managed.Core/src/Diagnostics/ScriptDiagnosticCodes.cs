@@ -43,4 +43,19 @@ public static class ScriptDiagnosticCodes
     /// The project's script tooling files (<c>.luaurc</c>, type definitions, VS Code settings) could not be updated.
     /// </summary>
     public const string ToolingUpdateFailed = DiagnosticCodes.ScriptPrefix + "TOOLING_UPDATE_FAILED";
+
+    /// <summary>
+    /// A script slot refers to a script whose source no longer exists; the scene does not cook.
+    /// </summary>
+    public const string SlotScriptMissing = DiagnosticCodes.ScriptPrefix + "SLOT_SCRIPT_MISSING";
+
+    /// <summary>
+    /// A node parameter refers to a node the scene no longer has; the scene does not cook.
+    /// </summary>
+    public const string SlotNodeMissing = DiagnosticCodes.ScriptPrefix + "SLOT_NODE_MISSING";
+
+    /// <summary>
+    /// A script slot has no script yet; it is left out of the cooked scene.
+    /// </summary>
+    public const string SlotWithoutScript = DiagnosticCodes.ScriptPrefix + "SLOT_WITHOUT_SCRIPT";
 }

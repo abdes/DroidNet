@@ -57,7 +57,7 @@ public sealed class SourceAnalysisReuseTests
         var repaired = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertCookSucceeded(repaired);
-        _ = api.Analyzed.SelectMany(static execution => execution.Jobs).Should().NotContain(job => job.Source.Contains("Second", StringComparison.Ordinal));
+        _ = api.Analyzed.SelectMany(static execution => execution.Jobs).Should().NotContain(job => job.AttributedSource.Contains("Second", StringComparison.Ordinal));
         _ = api.Imported.SelectMany(static execution => execution.Manifest.Jobs).Where(static job => string.Equals(job.Type, "geometry-descriptor", StringComparison.Ordinal))
             .Should().ContainSingle();
     }

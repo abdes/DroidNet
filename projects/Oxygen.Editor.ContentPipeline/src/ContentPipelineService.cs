@@ -298,7 +298,7 @@ public sealed partial class ContentPipelineService(
 
         return rejected.Count == 0
             ? (manifest, diagnostics)
-            : (manifest with { Jobs = [.. manifest.Jobs.Where(job => !(job.Type == "input" && rejected.Contains(job.Source)))] }, diagnostics);
+            : (manifest with { Jobs = [.. manifest.Jobs.Where(job => !(job.Type == "input" && rejected.Contains(job.AttributedSource)))] }, diagnostics);
     }
 
     private static string GetMountName(string virtualPath)
@@ -390,7 +390,11 @@ public sealed partial class ContentPipelineService(
         var skippedSources = scope.Inputs.GroupBy(static input => input.SourceRelativePath, StringComparer.Ordinal)
             .Where(group => group.All(input => scope.ReusableSources.Contains(input.AssetUri)))
             .Select(static group => group.Key).ToHashSet(StringComparer.Ordinal);
-        var keptJobs = manifest.Jobs.Where(job => !skippedSources.Contains(job.Source)).ToArray();
+        var keptJobs = manifest.Jobs.Where(job => !skippedSources.Contains(job.AttributedSource)).ToArray();
+
+        // A script sidecar patches its scene, so it runs only with its scene's job.
+        keptJobs = [.. keptJobs.Where(job => job.Source is not null
+            || keptJobs.Any(owner => owner.Source is not null && string.Equals(owner.Source, job.OwnerSource, StringComparison.Ordinal)))];
         var keptIds = keptJobs.Select(static job => job.Id).ToHashSet(StringComparer.Ordinal);
         return manifest with
         {
@@ -398,7 +402,7 @@ public sealed partial class ContentPipelineService(
             Jobs = keptJobs.Select(job => job with
             {
                 DependsOn = job.DependsOn.Where(keptIds.Contains).ToArray(),
-                CookedContextRoots = job.Type is "scene-descriptor" or "geometry-descriptor" && scope.CookedContextRoots.Count > 0 ? scope.CookedContextRoots : null,
+                CookedContextRoots = job.Type is "scene-descriptor" or "geometry-descriptor" or "script-sidecar" && scope.CookedContextRoots.Count > 0 ? scope.CookedContextRoots : null,
             }).ToArray(),
         };
     }
@@ -482,7 +486,7 @@ public sealed partial class ContentPipelineService(
             ? this.CookSceneInputsAsync(operationId, scope, cancellationToken)
             : this.CookResolvedInputsAsync(operationId, scope, diagnostics: [], cancellationToken);
 
-    private Task<ContentCookResult> CookSceneInputsAsync(Guid operationId, ContentCookScope scope, CancellationToken cancellationToken)
+    private async Task<ContentCookResult> CookSceneInputsAsync(Guid operationId, ContentCookScope scope, CancellationToken cancellationToken)
     {
         var descriptors = scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.Scene)
             .Select(input => scope.SceneDescriptors.TryGetValue(input.AssetUri, out var descriptor)
@@ -491,13 +495,16 @@ public sealed partial class ContentPipelineService(
             .DistinctBy(static input => input.AssetUri).ToArray();
         var prepared = scope with { Inputs = inputs };
         var manifest = this.manifestBuilder.BuildSceneManifests(prepared, descriptors);
-        return this.ExecuteManifestAsync(
+        var result = await this.ExecuteManifestAsync(
             operationId,
             scope.TargetKind,
             prepared,
             manifest,
             descriptors.SelectMany(static descriptor => descriptor.Diagnostics).ToArray(),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        return descriptors.Any(static descriptor => descriptor.ScriptBindings.Count > 0)
+            ? result with { Diagnostics = [.. result.Diagnostics.Select(issue => MapScriptSidecarDiagnostic(scope, descriptors, issue))] }
+            : result;
     }
 
     private Task<ContentCookResult> CookResolvedInputsAsync(

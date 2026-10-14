@@ -21,6 +21,8 @@ public sealed class ContentImportManifestValidator : IContentImportManifestValid
         "gltf",
         "fbx",
         "input",
+        "script",
+        "script-sidecar",
     ];
 
     /// <inheritdoc />
@@ -95,7 +97,14 @@ public sealed class ContentImportManifestValidator : IContentImportManifestValid
             diagnostics.Add(CreateDiagnostic(operationId, $"Import manifest job '{job.Id}' has unsupported type '{job.Type}'."));
         }
 
-        if (string.IsNullOrWhiteSpace(job.Source))
+        if (string.Equals(job.Type, "script-sidecar", StringComparison.Ordinal))
+        {
+            if (job.Source is not null || job.Bindings is not { Count: > 0 } || string.IsNullOrWhiteSpace(job.TargetSceneVirtualPath))
+            {
+                diagnostics.Add(CreateDiagnostic(operationId, $"Import manifest script sidecar '{job.Id}' needs inline bindings and a target scene, and no source."));
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(job.Source))
         {
             diagnostics.Add(CreateDiagnostic(operationId, $"Import manifest job '{job.Id}' source is required."));
         }

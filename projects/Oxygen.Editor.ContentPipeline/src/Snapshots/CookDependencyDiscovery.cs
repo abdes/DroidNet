@@ -288,6 +288,13 @@ internal sealed class CookDependencyDiscovery(
                 return nativeUri;
             }
 
+            // A script with its source in the project cooks with the scene that uses it.
+            if (CookInputResolver.IsAuthoringUri(project, uri) && CookInputResolver.TryResolveScript(project, uri, ContentCookInputRole.Dependency) is { } script)
+            {
+                this.AddAsset(script);
+                return this.assets[Path.GetFullPath(script.SourceAbsolutePath)].AssetUri;
+            }
+
             if (Path.GetExtension(uri.AbsolutePath).ToUpperInvariant() is ".OSCRIPT" or ".OIACT" or ".OIMAP" or ".OPSCENE")
             {
                 _ = this.published.Add(uri);

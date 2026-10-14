@@ -30,4 +30,15 @@ internal static class ScriptSourceNames
             .Select(other => stem + other)
             .FirstOrDefault(other => File.Exists(other) && !string.Equals(other, ignored, StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>Gets the identity that references to a script source use: the script it cooks to.</summary>
+    /// <param name="virtualPath">A virtual path such as <c>/Content/Player/move.lua</c>.</param>
+    /// <returns>The script identity, such as <c>/Content/Player/move.oscript</c>, or <see langword="null"/> when the
+    /// path is not a script source.</returns>
+    public static string? ToScriptIdentity(string virtualPath)
+    {
+        ArgumentNullException.ThrowIfNull(virtualPath);
+        var extension = Extensions.FirstOrDefault(candidate => virtualPath.EndsWith(candidate, StringComparison.OrdinalIgnoreCase));
+        return extension is null ? null : virtualPath[..^extension.Length] + ".oscript";
+    }
 }

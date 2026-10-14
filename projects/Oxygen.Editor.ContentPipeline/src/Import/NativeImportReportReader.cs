@@ -60,7 +60,13 @@ internal static class NativeImportReportReader
             AddOutputs(job, emitted);
 
             var requested = execution.Manifest.Jobs[index];
-            outputsBySource.Add(requested.Source, [.. emitted.Order(StringComparer.Ordinal)]);
+
+            // A job without its own source, such as a script sidecar, re-emits its owner's outputs.
+            if (requested.Source is { } source)
+            {
+                outputsBySource.Add(source, [.. emitted.Order(StringComparer.Ordinal)]);
+            }
+
             if (requested.MaterialSlotProvenance is { } previous
                 && string.Equals(job.GetProperty("status").GetString(), "succeeded", StringComparison.Ordinal))
             {
@@ -70,7 +76,7 @@ internal static class NativeImportReportReader
                 }
 
                 var retained = NativeMaterialSlotProvenance.Parse(candidate);
-                if (retained.SourceIdentity != previous.SourceIdentity || provenance.ContainsKey(requested.Source))
+                if (requested.Source is null || retained.SourceIdentity != previous.SourceIdentity || provenance.ContainsKey(requested.Source))
                 {
                     throw new InvalidDataException("Native slot provenance does not identify the requested source uniquely.");
                 }
@@ -87,7 +93,7 @@ internal static class NativeImportReportReader
                     Severity = issue.GetProperty("severity").GetString() switch { "info" => DiagnosticSeverity.Info, "warning" => DiagnosticSeverity.Warning, _ => DiagnosticSeverity.Error },
                     Code = issue.GetProperty("code").GetString()!,
                     Message = issue.GetProperty("message").GetString()!,
-                    AffectedPath = Path.GetFullPath(Path.Combine(execution.InputRoot, execution.Manifest.Jobs[index].Source)),
+                    AffectedPath = Path.GetFullPath(Path.Combine(execution.InputRoot, execution.Manifest.Jobs[index].AttributedSource)),
                     TechnicalMessage = issue.TryGetProperty("object_path", out var location) ? location.GetString() : null,
                 });
             }

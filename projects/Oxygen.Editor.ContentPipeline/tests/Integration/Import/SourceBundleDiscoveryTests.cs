@@ -118,7 +118,7 @@ public sealed class SourceBundleDiscoveryTests
         _ = workspace.Write("Shared/data.bin", "new buffer");
         var inspector = new DelegateSourceAnalyzer(async (execution, token) =>
         {
-            var observed = await File.ReadAllTextAsync(execution.Jobs.Single().Source, token).ConfigureAwait(false);
+            var observed = await File.ReadAllTextAsync(execution.Jobs.Single().AttributedSource, token).ConfigureAwait(false);
             if (string.Equals(observed, "old source", StringComparison.Ordinal))
             {
                 var facts = await SourceFactsAsync(execution, token, "data.bin").ConfigureAwait(false);
@@ -172,7 +172,7 @@ public sealed class SourceBundleDiscoveryTests
                     Diagnostics = [new()
                     {
                         OperationId = Guid.Empty, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error,
-                        Code = "import.unsupported", Message = "Unsupported source feature.", AffectedPath = execution.Jobs.Single().Source,
+                        Code = "import.unsupported", Message = "Unsupported source feature.", AffectedPath = execution.Jobs.Single().AttributedSource,
                     }
                     ],
                 }],
@@ -281,7 +281,7 @@ public sealed class SourceBundleDiscoveryTests
     private static async Task<NativeSourceAnalysisReport> SourceFactsAsync(ContentSourceAnalysisExecution execution, CancellationToken token, params string[] dependencies)
     {
         var job = execution.Jobs.Single();
-        var paths = dependencies.Select(path => Path.GetFullPath(Path.Combine(execution.InputRoot, path))).Prepend(job.Source).ToArray();
+        var paths = dependencies.Select(path => Path.GetFullPath(Path.Combine(execution.InputRoot, path))).Prepend(job.AttributedSource).ToArray();
         var observations = ImmutableArray.CreateBuilder<NativeSourceObservation>();
         var diagnostics = ImmutableArray.CreateBuilder<DiagnosticRecord>();
         foreach (var path in paths)
@@ -308,7 +308,7 @@ public sealed class SourceBundleDiscoveryTests
         return new("native-source-test", diagnostics.Count == 0, [new(
             job.Id,
             job.Type,
-            job.Source,
+            job.AttributedSource,
             diagnostics.Count == 0,
             [],
             [],

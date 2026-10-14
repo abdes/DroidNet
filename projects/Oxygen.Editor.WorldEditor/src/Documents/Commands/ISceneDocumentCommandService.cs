@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
@@ -262,6 +263,16 @@ public interface ISceneDocumentCommandService
     public Task<SceneCommandResult> EditSceneReferencesAsync(
         SceneDocumentCommandContext context,
         SceneReferencesData references);
+
+    /// <summary>Replaces a node's script slots as one undoable edit.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeId">The node that owns the scripting component.</param>
+    /// <param name="slots">The complete replacement slots, in order.</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> EditScriptSlotsAsync(
+        SceneDocumentCommandContext context,
+        Guid nodeId,
+        ImmutableArray<ScriptSlot> slots);
 
     /// <summary>
     /// Edits descriptor-addressed scene environment properties.

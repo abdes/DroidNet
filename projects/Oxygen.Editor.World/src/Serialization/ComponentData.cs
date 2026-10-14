@@ -18,6 +18,7 @@ namespace Oxygen.Editor.World.Serialization;
 [JsonDerivedType(typeof(PointLightData), "PointLight")]
 [JsonDerivedType(typeof(SpotLightData), "SpotLight")]
 [JsonDerivedType(typeof(LocalFogVolumeData), "LocalFogVolume")]
+[JsonDerivedType(typeof(ScriptingData), "Scripting")]
 public abstract record ComponentData : NamedData
 {
     /// <summary>

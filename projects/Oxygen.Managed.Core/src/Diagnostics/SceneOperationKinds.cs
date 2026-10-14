@@ -157,6 +157,11 @@ public static class SceneOperationKinds
     public const string ExplorerLayoutMoveNode = "Scene.ExplorerLayout.MoveNode";
 
     /// <summary>
+    /// Script slot edit on a node's scripting component.
+    /// </summary>
+    public const string EditScriptSlots = "Scene.ScriptSlots.Edit";
+
+    /// <summary>
     /// Scene document save.
     /// </summary>
     public const string Save = "Scene.Save";

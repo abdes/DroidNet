@@ -199,6 +199,26 @@ public sealed class AssetRelocationTests
         _ = copies.Should().ContainSingle().Which.Should().EndWith("move (2).lua");
     }
 
+    /// <summary>Renaming a script rewrites the slots and parameters that refer to the script it cooks to.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task RenamingScriptRewritesSlotsAndParametersThatUseIt()
+    {
+        using var workspace = CreateContent();
+        _ = workspace.Write("Content/Scripts/move.lua", "return {}");
+        _ = workspace.Write("Content/Scenes/Scripted.oscene.json", """
+            { "Name": "Scripted", "RootNodes": [ { "Name": "Player", "Components": [ { "$type": "Scripting", "Name": "Scripting",
+              "Slots": [ { "Id": "0f8fad5b-d9cb-469f-a165-70867728950e", "Script": "asset:///Content/Scripts/move.oscript",
+                "Overrides": { "follow": { "Type": "asset", "Value": "asset:///Content/Scripts/move.oscript" } } } ] } ] } ] }
+            """);
+
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Scripts/move.lua", "/Content/Scripts/walk.lua"), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var slot = workspace.ReadJson("Content/Scenes/Scripted.oscene.json")["RootNodes"]![0]!["Components"]![0]!["Slots"]![0]!;
+        _ = slot["Script"]!.GetValue<string>().Should().Be("asset:///Content/Scripts/walk.oscript");
+        _ = slot["Overrides"]!["follow"]!["Value"]!.GetValue<string>().Should().Be("asset:///Content/Scripts/walk.oscript");
+    }
+
     /// <summary>An output group cannot overlap another import's group.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]

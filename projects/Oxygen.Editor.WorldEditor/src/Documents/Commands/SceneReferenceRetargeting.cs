@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -14,7 +15,7 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 
 /// <summary>
 /// Re-points a scene's asset references through an identity mapping, in place: geometry, material slots (component
-/// and targeted), slot targets, scene references and the environment's metering mask. Used when an open scene follows
+/// and targeted), slot targets, script slots, scene references and the environment's metering mask. Used when an open scene follows
 /// a relocation, and when undo, redo or paste restores references captured before a relocation.
 /// </summary>
 internal static class SceneReferenceRetargeting
@@ -52,7 +53,52 @@ internal static class SceneReferenceRetargeting
             }
         }
 
+        foreach (var scripting in node.Components.OfType<ScriptingComponent>())
+        {
+            if (Retarget(scripting.Slots, map) is { } slots)
+            {
+                scripting.Slots = slots;
+                changed = true;
+            }
+        }
+
         return changed;
+    }
+
+    /// <summary>Re-points script slots: their scripts and their asset parameter values.</summary>
+    /// <param name="slots">The slots.</param>
+    /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
+    /// <returns>The re-pointed slots, or null when nothing changed.</returns>
+    public static ImmutableArray<ScriptSlot>? Retarget(ImmutableArray<ScriptSlot> slots, Func<Uri, Uri?> map)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        var changed = false;
+        var result = slots.Select(slot =>
+        {
+            var updated = slot.Script is { } script && map(script) is { } moved ? slot with { Script = moved } : slot;
+            foreach (var (name, value) in slot.Overrides)
+            {
+                if (value.AssetUri is { } asset && map(asset) is { } target)
+                {
+                    updated = updated.WithOverride(name, ScriptValue.FromAsset(target));
+                }
+            }
+
+            changed |= !ReferenceEquals(updated, slot);
+            return updated;
+        }).ToImmutableArray();
+        return changed ? result : null;
+    }
+
+    /// <summary>Gets the asset references a node's script slots hold.</summary>
+    /// <param name="node">The node.</param>
+    /// <returns>The scripts and asset parameter values.</returns>
+    public static IEnumerable<Uri> ScriptReferences(SceneNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        return node.Components.OfType<ScriptingComponent>().SelectMany(static scripting => scripting.Slots)
+            .SelectMany(static slot => new[] { slot.Script }.Concat(slot.Overrides.Values.Select(static value => value.AssetUri)))
+            .OfType<Uri>();
     }
 
     /// <summary>Re-points a node and every node below it.</summary>

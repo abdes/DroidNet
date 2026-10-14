@@ -168,9 +168,16 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             }
         }
 
+        var nodeIndices = new Dictionary<Guid, int>();
         foreach (var root in scene.RootNodes)
         {
             AddNode(root, parentIndex: null);
+        }
+
+        var (scriptBindings, scriptSites, scriptReferences) = CreateScriptBindings(scene, scope, sceneInput, nodeIndices, operationId, diagnostics);
+        if (diagnostics.Any(static issue => issue.Severity >= DiagnosticSeverity.Error))
+        {
+            return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
         }
 
         var lights = directionalLights.Count == 0 && pointLights.Count == 0 && spotLights.Count == 0
@@ -245,11 +252,19 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             descriptorPath,
             descriptorVirtualPath,
             dependencyInputs,
-            diagnostics);
+            diagnostics)
+        {
+            SceneId = scene.Id,
+            SceneName = scene.Name,
+            ScriptBindings = scriptBindings,
+            ScriptBindingSites = scriptSites,
+            ScriptReferences = scriptReferences,
+        };
 
         void AddNode(SceneNode node, int? parentIndex)
         {
             var nodeIndex = nodes.Count;
+            nodeIndices[node.Id] = nodeIndex;
             var transform = node.Components.OfType<TransformComponent>().First();
 
             // Boolean authoring fields are explicit local choices, including on children.

@@ -158,17 +158,19 @@ overwriting a value. Each change is logged to Output.
 
 ### Data
 
-| Field                       | Type                           | Notes                                              |
-| --------------------------- | ------------------------------ | -------------------------------------------------- |
-| `Slots`                     | ordered list of `ScriptSlot`   | List order is the slot position.                   |
-| `ScriptSlot.Id`             | GUID                           | Stable identity for commands and cook `slot_id`.   |
-| `ScriptSlot.Script`         | typed asset reference (Script) | Missing references stay visible.                   |
-| `ScriptSlot.ExecutionOrder` | int32, default 0               | Lower runs earlier, across all nodes.              |
-| `ScriptSlot.Overrides`      | map key → typed value          | Only values that differ from the declared default. |
+| Field                       | Type                         | Notes                                              |
+| --------------------------- | ---------------------------- | -------------------------------------------------- |
+| `Slots`                     | ordered list of `ScriptSlot` | List order is the slot position.                   |
+| `ScriptSlot.Id`             | GUID                         | Stable identity for commands and cook `slot_id`.   |
+| `ScriptSlot.Script`         | script identity (`.oscript`) | Missing references stay visible.                   |
+| `ScriptSlot.ExecutionOrder` | int32, default 0             | Lower runs earlier, across all nodes.              |
+| `ScriptSlot.Overrides`      | map key → typed value        | Only values that differ from the declared default. |
 
-Override values are `bool`, `int`, `float`, `string`, `vec2`–`vec4`, an asset
-reference (typed URI, retargeted like every other asset reference) or a node
-reference (node identity in the document, converted to a node index at cook).
+Override values are `bool`, `int32`, `float`, `string`, `vec2`–`vec4`, an
+asset reference (asset URI, retargeted like every other asset reference) or a
+node reference (node identity in the document, converted to a node index at
+cook). A slot refers to a script by the asset it cooks to, so renaming or
+moving the `.lua` file rewrites the slots and asset values that use it.
 
 ### Inspector
 
@@ -176,9 +178,12 @@ A **Scripting** section, added through Add Component, shown for a single
 selected node (multi-selection shows a message to select one node).
 
 - One card per slot, in order: a script picker (filtered to Script assets,
-  with New Script), the execution order field, move up and down, and remove.
-  The card header shows the script name and an error or warning badge with
-  the first diagnostic message; clicking it opens Problems at that entry.
+  with New Script, which runs the Content Browser's New Script and picks the
+  new script), Edit in the code editor, the execution order field, move up
+  and down, and remove. Add Component starts the section with one empty
+  slot. The card header shows the script name and an error or warning badge
+  with the first diagnostic message; clicking it opens Problems at that
+  entry.
 - Below the picker, one field per declared parameter, using the declaration
   hints: number fields with min, max, step and unit; vector fields; a color
   field for `color = true`; a choice list for `options`; a text box with the
@@ -188,6 +193,9 @@ selected node (multi-selection shows a message to select one node).
   from the Scene Explorer. Labels come from the parameter name, with the
   description as tooltip.
 - An overridden value shows the override marker and a reset to the default.
+  Setting a value equal to the declared default removes the override, so a
+  later change of the default applies. Numbers are clamped to the declared
+  range, and strings hold at most 59 UTF-8 bytes, the cooked record's limit.
 - Overrides whose key the script no longer declares, or whose type changed,
   are listed as stale with one Remove stale action. They are kept until
   removed, and the cook reports them (section 7).
@@ -200,27 +208,37 @@ viewports.
 
 ### Persistence
 
-The component serializes with the scene (scene format version increases).
-Save and reopen keep slot identity, order, execution order and overrides.
+The component serializes with the scene as `$type: Scripting`; each value is
+stored with its type, as `{ "Type": "float", "Value": 2.5 }`. Scene files carry
+no format version, and an editor without the component refuses to load a
+scene that has one. Save and reopen keep slot identity, order, execution order
+and overrides.
 
 ## 7. Cooking
 
 - Every script referenced by a slot or by the scene references gets a
   `script` job with its output at the source folder (section 4): compiled
-  bytecode (debug mode) embedded, with the source path recorded so the
-  player can reload it. This needs the cooker to accept
-  compile plus external source together
+  bytecode (debug mode) embedded, with the source path recorded relative to
+  its authoring mount folder so the player can reload it
   ([hosting §6](../../../projects/Oxygen.Engine/design/scripting/scene-script-hosting.md#6-source-reload)).
+  The scene depends on the scripts and asset values of its slots, so a scene
+  cook includes them.
 - Every input file under an authoring mount gets an `input` job with its
   outputs at the source folder (section 4); scenes and sidecars that
   reference its actions or contexts depend on it.
 - Every scene with scripted nodes gets one `script-sidecar` job generated
-  from the scene model: node index from the descriptor generator, `slot_id`
-  from the slot GUID, execution order, and typed overrides (asset as virtual
-  path, node as index). It depends on the scene and script jobs.
+  from the scene model, with inline bindings: node index from the descriptor
+  generator, `slot_id` from the slot GUID, execution order, and typed
+  overrides (asset as virtual path, node as index). It depends on the scene
+  and script jobs, cooks only with its scene, and resolves scripts and asset
+  values reused from earlier cooks through the published roots.
+- A slot without a script is left out of the cooked scene with a warning. A
+  slot whose script no longer exists and a node value whose node the scene no
+  longer has fail the scene before the cooker runs.
 - Compile errors, stale overrides, missing nodes and wrong asset kinds fail
   the cook with diagnostics in the cooking panel, rendered with their spans,
-  with Go To Property for slot and override errors.
+  with Go To Property for slot and override errors: it opens the scene and
+  selects the node, whose inspector shows the slot.
 
 ## 8. Play
 
@@ -316,9 +334,11 @@ the code editor; runtime errors during Play do (SD-10).
 
 Editor-side codes: `OXE.SCRIPT.*` (create, launch the code editor, analysis
 unavailable, identity collision, input file referencing another file's
-action, project tooling not updated) and `OXE.PLAY.*` (cook failed, player missing from the SDK,
-launch failed, session ended unexpectedly). Engine diagnostic codes (`S0xxx`)
-stay as reported.
+action, project tooling not updated, slot script missing, slot node missing,
+slot without script) and `OXE.PLAY.*` (cook failed, player missing from the
+SDK, launch failed, session ended unexpectedly). Engine diagnostic codes
+(`S0xxx`, and the cooker's `script.sidecar.*`) stay as reported; sidecar
+diagnostics name the node, slot and parameter they are about.
 
 ## 11. Exit gates
 

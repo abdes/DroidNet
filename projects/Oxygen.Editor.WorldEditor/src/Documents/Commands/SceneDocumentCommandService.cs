@@ -1246,6 +1246,12 @@ public sealed partial class SceneDocumentCommandService(
             return !node.Components.OfType<LocalFogVolumeComponent>().Any();
         }
 
+        if (componentType == typeof(ScriptingComponent))
+        {
+            reason = "This node already has a Scripting component; add a script slot to it instead.";
+            return !node.Components.OfType<ScriptingComponent>().Any();
+        }
+
         reason = $"Component type '{componentType.Name}' is not supported by ED-M04.";
         return false;
     }
@@ -1274,6 +1280,7 @@ public sealed partial class SceneDocumentCommandService(
                 Range = 15f,
             },
             _ when componentType == typeof(LocalFogVolumeComponent) => new LocalFogVolumeComponent { Name = "Local Fog Volume" },
+            _ when componentType == typeof(ScriptingComponent) => new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [new ScriptSlot()] },
             _ => throw new NotSupportedException($"Component type '{componentType.Name}' is not supported."),
         };
 

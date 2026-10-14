@@ -29,7 +29,7 @@ public sealed class ImportExecutionPathTests
         var operationRoot = Path.Combine(workspace.Root, ".build", "cook", operationId.ToString("N"));
         var inputRoot = Path.Combine(operationRoot, "inputs with spaces");
         var manifest = CreateManifest(workspace) with { Output = Path.Combine(operationRoot, "output", "Content") };
-        var source = manifest.Jobs.Single().Source;
+        var source = manifest.Jobs.Single().AttributedSource;
         var capturedPath = Path.Combine(inputRoot, source);
         Directory.CreateDirectory(Path.GetDirectoryName(capturedPath)!);
         var catalog = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "BuiltinGeometryCatalog.json"), this.TestContext.CancellationToken).ConfigureAwait(false))!;

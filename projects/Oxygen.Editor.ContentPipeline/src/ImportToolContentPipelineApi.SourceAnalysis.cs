@@ -82,7 +82,7 @@ public sealed partial class ImportToolContentPipelineApi
             if (!string.Equals(observed.Id, submitted.Id, StringComparison.Ordinal)
                 || !string.Equals(observed.JobType, submitted.Type, StringComparison.Ordinal)
                 || !Path.IsPathFullyQualified(observed.SourcePath)
-                || !string.Equals(Path.GetFullPath(observed.SourcePath), Path.GetFullPath(submitted.Source, execution.InputRoot), StringComparison.OrdinalIgnoreCase))
+                || !string.Equals(Path.GetFullPath(observed.SourcePath), Path.GetFullPath(submitted.AttributedSource, execution.InputRoot), StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidDataException("The native source-analysis report does not match the submitted job identities.");
             }

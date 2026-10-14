@@ -31,7 +31,7 @@ public sealed class CapturedImportTests
         var schemas = EditorSchemaCatalog.LoadFromDirectory(Path.Combine(AppContext.BaseDirectory, "Schemas"));
         var capture = JsonNode.Parse(runner.CaptureJson!)!;
         _ = schemas.ValidateAgainstEngine("oxygen.captured-inputs.schema.json", capture).Should().BeTrue();
-        _ = capture["inputs"]![0]!["logical_path"]!.GetValue<string>().Should().Be(Path.Combine(workspace.Root, execution.Manifest.Jobs[0].Source));
+        _ = capture["inputs"]![0]!["logical_path"]!.GetValue<string>().Should().Be(Path.Combine(workspace.Root, execution.Manifest.Jobs[0].AttributedSource));
         _ = capture["inputs"]![0]!["file"]!["path"]!.GetValue<string>().Should().StartWith(execution.OperationRoot);
         _ = capture["inputs"]![1]!["exists"]!.GetValue<bool>().Should().BeFalse();
         _ = capture["inputs"]![1]!["metadata"].Should().BeNull();
@@ -65,7 +65,7 @@ public sealed class CapturedImportTests
             CapturedInputs = new(
             [
                 new(
-                    Path.Combine(workspace.Root, execution.Manifest.Jobs[0].Source),
+                    Path.Combine(workspace.Root, execution.Manifest.Jobs[0].AttributedSource),
                     true,
                     new(2, false, false, 0, 0),
                     new(Path.Combine(execution.OperationRoot, "captured.json"), 2, new string('a', 64))),

@@ -43,4 +43,9 @@ public enum ContentCookAssetKind
     /// Hand-written input file whose actions and mapping contexts cook next to it.
     /// </summary>
     Input,
+
+    /// <summary>
+    /// Luau script source, cooked to the script asset next to it.
+    /// </summary>
+    Script,
 }

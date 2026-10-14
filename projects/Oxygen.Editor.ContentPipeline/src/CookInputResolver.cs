@@ -10,6 +10,12 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Maps source and native identities to the same authored descriptor without changing scene references.</summary>
 internal static class CookInputResolver
 {
+    /// <summary>The cooked script extension.</summary>
+    private const string ScriptExtension = ".oscript";
+
+    /// <summary>The script source extensions, in the order a source is looked for.</summary>
+    private static readonly string[] ScriptSourceExtensions = [".lua", ".luau"];
+
     /// <summary>Maps a project-owned physical source to its declared authoring identity.</summary>
     /// <param name="project">The owning project and mount declarations.</param>
     /// <param name="source">The absolute source path.</param>
@@ -49,6 +55,11 @@ internal static class CookInputResolver
             return ResolveInputFile(project, uri, path, role);
         }
 
+        if (TryResolveScript(project, uri, role) is { } script)
+        {
+            return script;
+        }
+
         var extension = Path.GetExtension(path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? path[..^5] : path).ToUpperInvariant();
         var kind = extension switch
         {
@@ -76,6 +87,39 @@ internal static class CookInputResolver
             || relative.Split('/')[0].ToUpperInvariant() is ".COOKED" or ".BUILD" or ".PIPELINE" or ".IMPORTED"
             ? throw new InvalidDataException($"Cook dependency '{uri}' does not resolve to a retained authoring file in this project.")
             : new(kind == ContentCookAssetKind.ForeignSource ? uri : new Uri($"{AssetUris.Scheme}://{nativePath}.json"), kind, mount.Name, relative, absolute, kind == ContentCookAssetKind.ForeignSource ? null : outputPath, role);
+    }
+
+    /// <summary>Resolves a script to its source: <c>/Content/Player/move.oscript</c> cooks from
+    /// <c>Content/Player/move.lua</c> or <c>move.luau</c>.</summary>
+    /// <param name="project">The owning project and mount declarations.</param>
+    /// <param name="uri">The script identity, or its source.</param>
+    /// <param name="role">The input's role in the requested closure.</param>
+    /// <returns>The script input, or null when the URI is not a script with a source in an authoring mount.</returns>
+    public static ContentCookInput? TryResolveScript(ProjectContext project, Uri uri, ContentCookInputRole role)
+    {
+        var path = Uri.UnescapeDataString(uri.AbsolutePath);
+        var stem = path.EndsWith(ScriptExtension, StringComparison.OrdinalIgnoreCase) ? path[..^ScriptExtension.Length]
+            : ScriptSourceExtensions.FirstOrDefault(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) is { } source ? path[..^source.Length]
+            : null;
+        var slash = stem is null || !ContentPipelinePaths.IsCanonicalVirtualPath(path) ? -1 : stem.IndexOf('/', 1);
+        var mount = slash <= 1 ? null : project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, stem![1..slash], StringComparison.OrdinalIgnoreCase));
+        if (mount is null)
+        {
+            return null;
+        }
+
+        var mountRoot = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath));
+        var absolute = ScriptSourceExtensions
+            .Select(extension => Path.GetFullPath(Path.Combine(mountRoot, stem![(slash + 1)..] + extension)))
+            .FirstOrDefault(File.Exists);
+        if (absolute is null || !absolute.StartsWith(mountRoot.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var output = stem + ScriptExtension;
+        var relative = Path.GetRelativePath(project.ProjectRoot, absolute).Replace('\\', '/');
+        return new(new Uri($"{AssetUris.Scheme}://{string.Join('/', output.Split('/').Select(Uri.EscapeDataString))}"), ContentCookAssetKind.Script, mount.Name, relative, absolute, output, role);
     }
 
     // An input file keeps its own identity; its output path is the file itself, whose folder receives its actions

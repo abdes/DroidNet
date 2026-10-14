@@ -85,6 +85,10 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
                 ContentCookInputRole.GeneratedDescriptor);
             var sceneJob = scope.NativeJobs.GetValueOrDefault(descriptor.SceneAssetUri) ?? this.BuildJob(sceneDescriptorInput, dependencyIds);
             jobs.Add(sceneJob with { DependsOn = dependencyIds });
+            if (descriptor.ScriptBindings.Count > 0)
+            {
+                jobs.Add(BuildScriptSidecarJob(sceneJob, descriptor, jobIdsBySource));
+            }
         }
 
         return new ContentImportManifest(
@@ -113,7 +117,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             };
         }
 
-        return new(
+        var job = new ContentImportJob(
             BuildJobId(input),
             GetJobType(input.Kind),
             NormalizeSource(input.SourceRelativePath),
@@ -124,6 +128,18 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             Layout = CreateJobLayout(input),
             VirtualPath = input.Kind == ContentCookAssetKind.Texture ? input.OutputVirtualPath : null,
         };
+
+        // Scripts cook to debug bytecode that records their source, so the player runs the bytecode and reloads
+        // the source when a script source root has it.
+        return input.Kind == ContentCookAssetKind.Script
+            ? job with
+            {
+                Compile = true,
+                CompileMode = "debug",
+                ScriptStorage = "external",
+                SourceRoot = GetScriptSourceRoot(input),
+            }
+            : job;
     }
 
     /// <inheritdoc />
@@ -165,6 +181,28 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         return jobs;
     }
 
+    /// <summary>Builds the job that attaches a scene's script slots to its cooked scene.</summary>
+    /// <param name="sceneJob">The scene's job, which the sidecar patches.</param>
+    /// <param name="descriptor">The scene's projection, with its bindings.</param>
+    /// <param name="jobIdsBySource">The job of each input in the manifest.</param>
+    /// <returns>The sidecar job; it runs after the scene and the scripts it uses.</returns>
+    private static ContentImportJob BuildScriptSidecarJob(
+        ContentImportJob sceneJob,
+        SceneDescriptorGenerationResult descriptor,
+        IReadOnlyDictionary<Uri, string> jobIdsBySource)
+        => new(
+            "script-sidecar:" + NormalizeSource(sceneJob.AttributedSource),
+            "script-sidecar",
+            Source: null,
+            [sceneJob.Id, .. descriptor.ScriptReferences.Where(jobIdsBySource.ContainsKey).Select(uri => jobIdsBySource[uri]).Distinct(StringComparer.Ordinal)],
+            Output: null,
+            Name: null)
+        {
+            TargetSceneVirtualPath = descriptor.DescriptorVirtualPath,
+            Bindings = descriptor.ScriptBindings,
+            OwnerSource = sceneJob.Source,
+        };
+
     private static string GetSingleMountName(ContentCookScope scope)
     {
         if (scope.Inputs.Count == 0)
@@ -202,8 +240,25 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.Scene => layout with { ScenesDirectory = folder },
             ContentCookAssetKind.Texture => layout,
             ContentCookAssetKind.Input => layout with { InputDirectory = folder },
+            ContentCookAssetKind.Script => layout with { ScriptsDirectory = folder },
             _ => null,
         };
+    }
+
+    // The authoring mount's folder: the player resolves a script's recorded source path against the project's
+    // authoring roots, so the path is recorded relative to the mount.
+    private static string GetScriptSourceRoot(ContentCookInput input)
+    {
+        var mount = ContentPipelinePaths.GetVirtualMountRoot(input.MountName);
+        var output = input.OutputVirtualPath ?? throw new ArgumentException("A script needs its output path.", nameof(input));
+        var depth = output[(mount.Length + 1)..].Count(static character => character == '/');
+        var root = Path.GetDirectoryName(Path.GetFullPath(input.SourceAbsolutePath))!;
+        for (var level = 0; level < depth; level++)
+        {
+            root = Path.GetDirectoryName(root)!;
+        }
+
+        return root.Replace('\\', '/');
     }
 
     private static string GetJobType(ContentCookAssetKind kind)
@@ -214,6 +269,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.Scene => "scene-descriptor",
             ContentCookAssetKind.Texture => "texture-descriptor",
             ContentCookAssetKind.Input => "input",
+            ContentCookAssetKind.Script => "script",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported manifest job asset kind."),
         };
 
@@ -229,6 +285,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.Texture => "texture",
             ContentCookAssetKind.ForeignSource => "model",
             ContentCookAssetKind.Input => "input",
+            ContentCookAssetKind.Script => "script",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported manifest job asset kind."),
         };
 

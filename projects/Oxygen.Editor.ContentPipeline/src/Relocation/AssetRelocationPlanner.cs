@@ -60,6 +60,12 @@ internal static class AssetRelocationPlanner
             var source = RelocationPaths.ToVirtual(project, move.Source)!;
             var target = RelocationPaths.ToVirtual(project, move.Target)!;
             map.AddIdentity(move.IsDirectory ? source : RelocationPaths.ToIdentity(source), move.IsDirectory ? target : RelocationPaths.ToIdentity(target), move.IsDirectory);
+
+            // Slots and parameters refer to a script by the asset it cooks to.
+            if (!move.IsDirectory && ScriptSourceNames.ToScriptIdentity(source) is { } script && ScriptSourceNames.ToScriptIdentity(target) is { } moved)
+            {
+                map.AddIdentity(script, moved, isFolder: false);
+            }
         }
 
         var edits = await PlanEditsAsync(project, index, map, files, cancellationToken).ConfigureAwait(false);

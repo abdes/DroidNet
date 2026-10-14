@@ -27,7 +27,7 @@ internal static class ControlledSourceAnalysis
             "scene-descriptor" => ("scene", ".oscene", job.Layout!.ScenesDirectory),
             _ => throw new InvalidOperationException($"Provide explicit dependency facts for '{job.Type}'."),
         };
-        var source = Path.GetFullPath(job.Source, root);
+        var source = Path.GetFullPath(job.AttributedSource, root);
         var metadata = CookSavedSourceReader.ReadMetadata(source);
         var digest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source)));
         var output = string.Join('/', new[] { job.Layout!.VirtualMountRoot.TrimEnd('/'), folder?.Trim('/'), job.Name + extension }.Where(static part => !string.IsNullOrEmpty(part)));
