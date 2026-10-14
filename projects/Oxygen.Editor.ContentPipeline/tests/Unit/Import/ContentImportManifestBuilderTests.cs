@@ -22,8 +22,14 @@ public sealed class ContentImportManifestBuilderTests
         var paths = new[] { "Content/a-b.omat.json", "Content/a_b.omat.json", "Content/日.omat.json", "Content/本.omat.json" };
         var ids = paths.Select(path => builder.BuildJob(
             new ContentCookInput(
-            new Uri("asset:///" + path), ContentCookAssetKind.Material, "Content", path,
-            Path.GetFullPath(path), "/Content/Materials/Value.omat", ContentCookInputRole.Primary), []).Id).ToArray();
+                new Uri("asset:///" + path),
+                ContentCookAssetKind.Material,
+                "Content",
+                path,
+                Path.GetFullPath(path),
+                "/Content/Materials/Value.omat",
+                ContentCookInputRole.Primary),
+            []).Id).ToArray();
         _ = ids.Distinct(StringComparer.Ordinal).Should().HaveCount(paths.Length);
     }
 
@@ -35,9 +41,12 @@ public sealed class ContentImportManifestBuilderTests
         var builder = new ContentImportManifestBuilder();
         var input = new ContentCookInput(
             new Uri("asset:///Content/Materials/Red.omat.json"),
-            ContentCookAssetKind.Material, "Content", "Content/Materials/Red.omat.json",
+            ContentCookAssetKind.Material,
+            "Content",
+            "Content/Materials/Red.omat.json",
             Path.Combine(workspace.Root, "Content", "Materials", "Red.omat.json"),
-            "/Content/Materials/Red.omat", ContentCookInputRole.Primary);
+            "/Content/Materials/Red.omat",
+            ContentCookInputRole.Primary);
         var material = builder.BuildJob(input, []);
         _ = material.Name.Should().Be("Red");
         _ = material.Layout!.MaterialsDirectory.Should().Be("Materials");
@@ -48,7 +57,8 @@ public sealed class ContentImportManifestBuilderTests
                 Kind = ContentCookAssetKind.Texture,
                 SourceRelativePath = "Content/Textures/Red.otex.json",
                 OutputVirtualPath = "/Content/Textures/Red.otex",
-            }, []);
+            },
+            []);
         _ = texture.VirtualPath.Should().Be("/Content/Textures/Red.otex");
         _ = texture.Output.Should().BeNull();
     }
@@ -59,8 +69,12 @@ public sealed class ContentImportManifestBuilderTests
     {
         var input = new ContentCookInput(
             new Uri("asset:///Content/SourceMedia/model.gltf"),
-            ContentCookAssetKind.ForeignSource, "Content", "Content/SourceMedia/model.gltf",
-            Path.GetFullPath("model.gltf"), null, ContentCookInputRole.Primary);
+            ContentCookAssetKind.ForeignSource,
+            "Content",
+            "Content/SourceMedia/model.gltf",
+            Path.GetFullPath("model.gltf"),
+            null,
+            ContentCookInputRole.Primary);
         var settings = new global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings(4, global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.ImporterIdentity, "Content", "RetainedName", "Content/SourceMedia", "model.gltf", new string('a', 64), ["model.gltf"], "Models/Retained")
         {
             MaterialSlotProvenance = global::Oxygen.Editor.ContentPipeline.Import.NativeMaterialSlotProvenance.Create(),
@@ -87,13 +101,18 @@ public sealed class ContentImportManifestBuilderTests
         var scope = CreateScope(workspace);
         var texture = new ContentCookInput(
             new Uri("asset:///Content/Textures/Meter.otex.json"),
-            ContentCookAssetKind.Texture, "Content", "Content/Textures/Meter.otex.json",
+            ContentCookAssetKind.Texture,
+            "Content",
+            "Content/Textures/Meter.otex.json",
             Path.Combine(workspace.Root, "Content", "Textures", "Meter.otex.json"),
-            "/Content/Textures/Meter.otex", ContentCookInputRole.Dependency);
+            "/Content/Textures/Meter.otex",
+            ContentCookInputRole.Dependency);
         var scene = new SceneDescriptorGenerationResult(
             new Uri("asset:///Content/Scenes/Main.oscene.json"),
             Path.Combine(workspace.Root, ".pipeline", "Scenes", "Main.oscene.json"),
-            "/Content/Scenes/Main.oscene", [texture], Diagnostics: []);
+            "/Content/Scenes/Main.oscene",
+            [texture],
+            Diagnostics: []);
         var manifest = new ContentImportManifestBuilder().BuildSceneManifest(scope, scene);
         _ = manifest.Jobs.Select(static job => job.Type).Should().Equal("texture-descriptor", "scene-descriptor");
         _ = manifest.Jobs[0].Layout!.VirtualMountRoot.Should().Be("/Content");
@@ -102,7 +121,7 @@ public sealed class ContentImportManifestBuilderTests
     }
 
     [TestMethod]
-    public void BuildSceneManifest_ShouldOrderDependenciesBeforeSceneAndUseNativeJobTypes()
+    public void BuildSceneManifestOrdersDependenciesBeforeSceneAndUsesNativeJobTypes()
     {
         using var workspace = new ManifestWorkspace();
         var scope = CreateScope(workspace) with
@@ -136,7 +155,7 @@ public sealed class ContentImportManifestBuilderTests
     }
 
     [TestMethod]
-    public void BuildSceneManifest_ShouldNormalizeBackslashSourcePaths()
+    public void BuildSceneManifestNormalizesBackslashSourcePaths()
     {
         using var workspace = new ManifestWorkspace();
         var scope = CreateScope(workspace);
@@ -154,7 +173,7 @@ public sealed class ContentImportManifestBuilderTests
     }
 
     [TestMethod]
-    public void BuildManifest_ShouldUseDescriptorInputsForAssetCook()
+    public void BuildManifestUsesDescriptorInputsForAssetCook()
     {
         using var workspace = new ManifestWorkspace();
         var projectContext = ProjectContext.FromProject(workspace.Project);
@@ -175,7 +194,7 @@ public sealed class ContentImportManifestBuilderTests
     }
 
     [TestMethod]
-    public void BuildSceneManifests_ShouldCookStandaloneFolderInputsAlongsideSceneDependencies()
+    public void BuildSceneManifestsCookStandaloneFolderInputsAlongsideSceneDependencies()
     {
         using var workspace = new ManifestWorkspace();
         var scope = CreateScope(workspace) with
@@ -199,6 +218,36 @@ public sealed class ContentImportManifestBuilderTests
             "Content/Materials/Red.omat.json",
             "Content/Materials/Unreferenced.omat.json",
             ".pipeline/Scenes/Main.oscene.json");
+    }
+
+    /// <summary>
+    /// The default material staged both by the scene's analysis and by the cook's builtins is one input, cooked from
+    /// the cook's copy.
+    /// </summary>
+    [TestMethod]
+    public void BuildSceneManifestsCookAGeneratedInputStagedTwiceOnce()
+    {
+        using var workspace = new ManifestWorkspace();
+        var material = new ContentCookInput(
+            AssetUris.BuildGeneratedUri("Materials/Default"),
+            ContentCookAssetKind.Material,
+            "Content",
+            ".build/cook/op/builtins/.pipeline/Materials/OxygenEditor_Default.omat.json",
+            Path.Combine(workspace.Root, "builtins", "OxygenEditor_Default.omat.json"),
+            "/Content/Materials/OxygenEditor_Default.omat",
+            ContentCookInputRole.GeneratedDescriptor);
+        var scope = CreateScope(workspace) with { Inputs = [.. CreateScope(workspace).Inputs, material] };
+        var sceneDescriptor = new SceneDescriptorGenerationResult(
+            new Uri("asset:///Content/Scenes/Main.oscene.json"),
+            Path.Combine(workspace.Root, ".pipeline", "Scenes", "Main.oscene.json"),
+            "/Content/Scenes/Main.oscene",
+            [material with { SourceRelativePath = ".build/cook/op/analysis/scene/.pipeline/Materials/OxygenEditor_Default.omat.json" }],
+            Diagnostics: []);
+
+        var manifest = new ContentImportManifestBuilder().BuildSceneManifests(scope, [sceneDescriptor]);
+
+        _ = manifest.Jobs.Where(static job => string.Equals(job.Type, "material-descriptor", StringComparison.Ordinal)).Should().ContainSingle()
+            .Which.Source.Should().Be(material.SourceRelativePath);
     }
 
     private static ContentCookInput CreateMaterialInput(ManifestWorkspace workspace, string sourceRelativePath)

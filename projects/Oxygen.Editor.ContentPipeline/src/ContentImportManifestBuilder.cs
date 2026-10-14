@@ -58,8 +58,12 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
 
         var mountName = GetSingleMountName(scope);
         var output = scope.Output ?? throw new InvalidOperationException("A manifest requires an owned candidate generation.");
-        var inputs = sceneDescriptors.SelectMany(static descriptor => descriptor.Dependencies)
-            .Concat(scope.Inputs.Where(static input => input.Kind != ContentCookAssetKind.Scene))
+
+        // A generated input, such as the default material, can be staged both by the scene's analysis and by the
+        // cook's builtins; it is one input. The scope's copy wins, as in the cook's own input list.
+        var inputs = scope.Inputs.Where(static input => input.Kind != ContentCookAssetKind.Scene)
+            .Concat(sceneDescriptors.SelectMany(static descriptor => descriptor.Dependencies))
+            .DistinctBy(static input => input.AssetUri)
             .DistinctBy(static input => input.SourceRelativePath, StringComparer.Ordinal).ToArray();
         var jobs = this.CreateDependencyJobs(scope, inputs);
         var jobIdsBySource = inputs.ToDictionary(
@@ -162,25 +166,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             MaterialSlotProvenance = provenance,
         };
 
-    private List<ContentImportJob> CreateDependencyJobs(ContentCookScope scope, IReadOnlyList<ContentCookInput> inputs)
-    {
-        var jobs = new List<ContentImportJob>();
-        var jobIds = inputs.ToDictionary(
-            static input => input.AssetUri,
-            input => scope.NativeJobs.TryGetValue(input.AssetUri, out var job) ? job.Id : BuildJobId(input));
-        foreach (var input in inputs
-                     .OrderBy(static item => item.Kind)
-                     .ThenBy(static item => item.SourceRelativePath, StringComparer.Ordinal))
-        {
-            var dependencies = scope.InputDependencies.TryGetValue(input.AssetUri, out var declared)
-                ? declared.Where(jobIds.ContainsKey).Select(uri => jobIds[uri]).Distinct(StringComparer.Ordinal).ToArray() : [];
-            var job = (scope.NativeJobs.GetValueOrDefault(input.AssetUri) ?? this.BuildJob(input, dependencies)) with { DependsOn = dependencies };
-            jobs.Add(job);
-        }
-
-        return jobs;
-    }
-
     /// <summary>Builds the job that attaches a scene's script slots to its cooked scene.</summary>
     /// <param name="sceneJob">The scene's job, which the sidecar patches.</param>
     /// <param name="descriptor">The scene's projection, with its bindings.</param>
@@ -189,7 +174,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
     private static ContentImportJob BuildScriptSidecarJob(
         ContentImportJob sceneJob,
         SceneDescriptorGenerationResult descriptor,
-        IReadOnlyDictionary<Uri, string> jobIdsBySource)
+        Dictionary<Uri, string> jobIdsBySource)
         => new(
             "script-sidecar:" + NormalizeSource(sceneJob.AttributedSource),
             "script-sidecar",
@@ -294,4 +279,23 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
 
     private static string NormalizeSource(string source)
         => source.Replace('\\', '/').TrimStart('/');
+
+    private List<ContentImportJob> CreateDependencyJobs(ContentCookScope scope, IReadOnlyList<ContentCookInput> inputs)
+    {
+        var jobs = new List<ContentImportJob>();
+        var jobIds = inputs.ToDictionary(
+            static input => input.AssetUri,
+            input => scope.NativeJobs.TryGetValue(input.AssetUri, out var job) ? job.Id : BuildJobId(input));
+        foreach (var input in inputs
+                     .OrderBy(static item => item.Kind)
+                     .ThenBy(static item => item.SourceRelativePath, StringComparer.Ordinal))
+        {
+            var dependencies = scope.InputDependencies.TryGetValue(input.AssetUri, out var declared)
+                ? declared.Where(jobIds.ContainsKey).Select(uri => jobIds[uri]).Distinct(StringComparer.Ordinal).ToArray() : [];
+            var job = (scope.NativeJobs.GetValueOrDefault(input.AssetUri) ?? this.BuildJob(input, dependencies)) with { DependsOn = dependencies };
+            jobs.Add(job);
+        }
+
+        return jobs;
+    }
 }
