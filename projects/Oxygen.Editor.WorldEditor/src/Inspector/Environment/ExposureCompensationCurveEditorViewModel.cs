@@ -158,7 +158,7 @@ public sealed partial class ExposureCompensationCurveEditorViewModel : Observabl
             return;
         }
 
-        var meteredEv = this.Keys.Count == 0 ? 0 : this.Keys[^1].MeteredEv + 1;
+        var meteredEv = this.Keys.Count == 0 ? 0f : this.Keys[^1].ToData().MeteredEv + 1;
         var key = new ExposureCompensationKeyViewModel(new(meteredEv, 0));
         key.Changed += this.OnKeyChanged;
         this.Keys.Add(key);

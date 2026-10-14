@@ -29,14 +29,23 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>The transform inspector realizes its controls without a generated XAML connection-ID cast failure.</summary>
+    /// <summary>The transform inspector realizes its three rows, each with its unit and its accessible name.</summary>
     /// <returns>The XAML realization task.</returns>
     [TestMethod]
     public Task TransformInspectorXamlRealizesItsNumericControls() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Transform", fixture),
         static model => new TransformView { ViewModel = (TransformViewModel)model },
         prepareFixture: null,
-        assertRealizedAsync: null);
+        assertRealizedAsync: static view =>
+        {
+            var rows = view.FindDescendants().OfType<Oxygen.Editor.Controls.PropertyCard>().ToArray();
+            _ = rows.Select(row => (row.PropertyName, row.Qualifier, row.QualifierGroup)).Should().Equal(
+                ("Position", "m", "Transform"),
+                ("Rotation", "°", "Transform"),
+                ("Scale", "x", "Transform"));
+            _ = rows.Select(row => AutomationProperties.GetName((VectorBox)row.Content)).Should().Equal("Position, metres", "Rotation, degrees", "Scale, multiplier");
+            return Task.CompletedTask;
+        });
 
     /// <summary>The camera inspector realizes its controls without a generated XAML connection-ID cast failure.</summary>
     /// <returns>The XAML realization task.</returns>
@@ -158,188 +167,10 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             _ = view.KeyboardAccelerators.Should().OnlyContain(accelerator => ReferenceEquals(accelerator.ScopeOwner, view));
         });
 
-    /// <summary>Sky luminance keeps its single-line header and full-width RGB multiplier vector at both dock widths.</summary>
-    /// <param name="width">The available inspector width.</param>
-    /// <returns>The native layout regression task.</returns>
+    /// <summary>The atmosphere source disclosures start collapsed.</summary>
+    /// <returns>The source-disclosure task.</returns>
     [TestMethod]
-    [DataRow(350d)]
-    [DataRow(260d)]
-    public Task SkyLuminanceCardUsesSingleLineHeaderAndFullWidthVector(double width) => EnqueueAsync(async () =>
-    {
-        using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width).ConfigureAwait(true);
-        await scenario.SearchAsync("sky_luminance_factor_rgb").ConfigureAwait(true);
-        var sky = scenario.Section("SkyAtmosphereSection");
-        var card = SceneCards(sky).Single(property => string.Equals(property.PropertyName, "Sky Luminance", StringComparison.Ordinal));
-        _ = sky.BringItemIntoView(card);
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var label = card.FindDescendant<TextBlock>(text => string.Equals(text.Text, card.PropertyName, StringComparison.Ordinal))!;
-        var unit = card.FindDescendant<TextBlock>(text => string.Equals(text.Text, "RGB ×", StringComparison.Ordinal))!;
-        var channels = card.FindDescendant<VectorBox>()!;
-        _ = label.TextWrapping.Should().Be(TextWrapping.NoWrap);
-        _ = label.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
-        _ = channels.ActualWidth.Should().BeApproximately(card.ActualWidth, 1);
-        _ = channels.TransformToVisual(card).TransformPoint(default).Y.Should().BeGreaterThanOrEqualTo(
-            label.TransformToVisual(card).TransformPoint(default).Y + label.ActualHeight);
-        _ = unit.TransformToVisual(card).TransformPoint(default).X.Should().BeGreaterThan(
-            label.TransformToVisual(card).TransformPoint(default).X);
-        _ = channels.ComponentLabels.Values.Should().Equal("R", "G", "B");
-        var inputs = channels.FindDescendants().OfType<NumberBox>().ToArray();
-        _ = inputs.Should().HaveCount(3);
-        _ = inputs.Should().OnlyContain(input => input.ActualWidth > 50);
-        _ = card.FindDescendants().OfType<ColorPicker>().Should().BeEmpty();
-        scenario.AssertCleanHistory();
-        await InspectorCapture.SaveIfRequestedAsync(card, $"sky-luminance-{width}").ConfigureAwait(true);
-    });
-
-    /// <summary>Sky luminance channels keep the compact contract and their geometry while an edit session is open.</summary>
-    /// <param name="width">The available inspector width.</param>
-    /// <returns>The native edit-session regression task.</returns>
-    [TestMethod]
-    [DataRow(350d)]
-    public Task SkyLuminanceChannelsKeepCompactContractAndGeometryDuringEdit(double width) => EnqueueAsync(async () =>
-    {
-        using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width).ConfigureAwait(true);
-        await scenario.SearchAsync("sky_luminance_factor_rgb").ConfigureAwait(true);
-        var sky = scenario.Section("SkyAtmosphereSection");
-        var card = SceneCards(sky).Single(property => string.Equals(property.PropertyName, "Sky Luminance", StringComparison.Ordinal));
-        _ = sky.BringItemIntoView(card);
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var channels = card.FindDescendant<VectorBox>()!;
-        var inputs = channels.FindDescendants().OfType<NumberBox>().ToArray();
-        foreach (var (part, letter, label, color) in RgbChannels)
-        {
-            var input = inputs.Single(number => string.Equals(number.Name, part, StringComparison.Ordinal));
-            _ = input.IsCompact.Should().BeTrue();
-            AssertRgbChannelBasics(input, label, color);
-            await AssertEditSessionPreservesGeometryAsync(
-                input,
-                channels,
-                whileEditing: async editor =>
-                {
-
-                    // debug capture hold
-                    if (string.Equals(letter, "R", StringComparison.Ordinal))
-                    {
-                        await InspectorCapture.HoldIfRequestedAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-                    }
-                }).ConfigureAwait(true);
-        }
-    });
-
-    /// <summary>Background color uses a full-width two-row editor with visible colored channels.</summary>
-    /// <param name="width">The available inspector width.</param>
-    /// <returns>The native color layout regression task.</returns>
-    [TestMethod]
-    [DataRow(350d)]
-    [DataRow(260d)]
-    public Task BackgroundColorCardUsesTwoRowLayoutWithSwatch(double width) => EnqueueAsync(async () =>
-    {
-        // Theme matrix dropped — no assertion is theme-dependent; Dark is the editor default.
-        using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width, theme: ElementTheme.Dark, prepareFixture: ShowSolidColorBackdrop).ConfigureAwait(true);
-        await scenario.SearchAsync("background").ConfigureAwait(true);
-        var section = scenario.Section("BackdropSection");
-        _ = section.Description.Should().Be("What shows behind the scene: the atmosphere, a cubemap or a solid color.");
-        var card = SceneCards(section).Single(property => string.Equals(property.PropertyName, "Color", StringComparison.Ordinal));
-        _ = section.BringItemIntoView(scenario.Named("SolidColorCard"));
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var label = card.FindDescendant<TextBlock>(text => string.Equals(text.Text, "Color", StringComparison.Ordinal))!;
-        var unit = card.FindDescendant<TextBlock>(text => string.Equals(text.Text, "Linear RGB", StringComparison.Ordinal))!;
-        var swatch = (Button)card.LeadingContent!;
-        var channels = card.FindDescendant<VectorBox>()!;
-        var channelsPosition = channels.TransformToVisual(card).TransformPoint(default);
-        var swatchPosition = swatch.TransformToVisual(card).TransformPoint(default);
-        _ = label.TransformToVisual(card).TransformPoint(default).X.Should().BeApproximately(0, 1);
-        _ = (unit.TransformToVisual(card).TransformPoint(default).X + unit.ActualWidth).Should().BeApproximately(card.ActualWidth, 1);
-        _ = channelsPosition.Y.Should().BeGreaterThanOrEqualTo(label.TransformToVisual(card).TransformPoint(default).Y + label.ActualHeight);
-        _ = swatchPosition.X.Should().BeApproximately(0, 1);
-        _ = (channelsPosition.X - swatchPosition.X - swatch.ActualWidth).Should().BeApproximately(4, 1);
-        _ = channelsPosition.Y.Should().BeApproximately(swatchPosition.Y, 1);
-        _ = (channelsPosition.X + channels.ActualWidth).Should().BeApproximately(card.ActualWidth, 1);
-        _ = swatch.ActualHeight.Should().BeApproximately(32, 1);
-        var inputs = channels.FindDescendants().OfType<NumberBox>().ToArray();
-        _ = inputs.Should().HaveCount(3);
-        foreach (var row in RgbChannels)
-        {
-            var input = inputs.Single(number => string.Equals(number.Name, row.part, StringComparison.Ordinal));
-            var value = input.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PartValueTextBlock", StringComparison.Ordinal))!;
-            _ = input.ActualWidth.Should().BeGreaterThan(50);
-            _ = input.ActualHeight.Should().BeApproximately(32, 1);
-            AssertRgbChannelBasics(input, row.label, row.color);
-            _ = value.Text.Should().Be("0");
-            _ = value.Visibility.Should().Be(Visibility.Visible);
-            _ = value.Opacity.Should().Be(1);
-            _ = value.ActualWidth.Should().BeGreaterThan(value.Padding.Left + value.Padding.Right);
-            _ = value.ActualWidth.Should().BeGreaterThanOrEqualTo(value.DesiredSize.Width - 1);
-            _ = (value.TransformToVisual(input).TransformPoint(default).X + value.ActualWidth).Should().BeLessThanOrEqualTo(input.ActualWidth + 1);
-        }
-
-        scenario.AssertCleanHistory();
-        await InspectorCapture.SaveIfRequestedAsync(section, $"background-{width}").ConfigureAwait(true);
-    });
-
-    /// <summary>Background color channel edit sessions preserve their geometry and seeded display value.</summary>
-    /// <param name="width">The available inspector width.</param>
-    /// <returns>The native color edit-session regression task.</returns>
-    [TestMethod]
-    [DataRow(350d)]
-    public Task BackgroundColorChannelEditSessionsKeepGeometry(double width) => EnqueueAsync(async () =>
-    {
-        // Theme matrix dropped — no assertion is theme-dependent; Dark is the editor default.
-        using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width, theme: ElementTheme.Dark, prepareFixture: ShowSolidColorBackdrop).ConfigureAwait(true);
-        await scenario.SearchAsync("background").ConfigureAwait(true);
-        var section = scenario.Section("BackdropSection");
-        var card = SceneCards(section).Single(property => string.Equals(property.PropertyName, "Color", StringComparison.Ordinal));
-        _ = section.BringItemIntoView(scenario.Named("SolidColorCard"));
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var channels = card.FindDescendant<VectorBox>()!;
-        var inputs = channels.FindDescendants().OfType<NumberBox>().ToArray();
-        foreach (var (part, letter, label, color) in RgbChannels)
-        {
-            var input = inputs.Single(number => string.Equals(number.Name, part, StringComparison.Ordinal));
-            await AssertEditSessionPreservesGeometryAsync(
-                input,
-                channels,
-                whileEditing: editor =>
-                {
-                    _ = editor.Text.Should().Be("0");
-                    return Task.CompletedTask;
-                }).ConfigureAwait(true);
-        }
-
-        await InspectorCapture.HoldIfRequestedAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-        scenario.AssertCleanHistory();
-    });
-
-    /// <summary>Compact scalar fields keep their 30px height and the four-pixel qualifier gap through an edit session.</summary>
-    /// <returns>The compact-metric regression task.</returns>
-    [TestMethod]
-    public Task AtmosphereScalarUnitsUseCompactFieldsAndFourPixelGaps() => EnqueueAsync(async () =>
-    {
-        using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, 350).ConfigureAwait(true);
-        await scenario.SearchAsync("planet_radius").ConfigureAwait(true);
-        var number = scenario.View.FindDescendant<NumberBox>(input => Equals(input.Tag, "PlanetRadiusKm"))!;
-        var suffix = number.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PartValueQualifier", StringComparison.Ordinal))!;
-        var field = number.FindDescendant<Border>(border => string.Equals(border.Name, "PartBackgroundBorder", StringComparison.Ordinal))!;
-        _ = number.Label.Should().NotBeNullOrEmpty();
-        _ = field.ActualHeight.Should().BeApproximately(30, 1);
-        _ = number.ActualWidth.Should().BeGreaterThan(100);
-        _ = number.CornerRadius.Should().Be(new CornerRadius(4));
-        var gap = suffix.TransformToVisual(scenario.View).TransformPoint(default).X
-            - field.TransformToVisual(scenario.View).TransformPoint(default).X - field.ActualWidth - field.Margin.Right;
-        _ = gap.Should().BeApproximately(4, 1);
-        var beforeHeight = number.ActualHeight;
-        var beforeWidth = number.ActualWidth;
-        number.StartEdit();
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        _ = number.ActualHeight.Should().BeApproximately(beforeHeight, 1);
-        _ = number.ActualWidth.Should().BeApproximately(beforeWidth, 1);
-        number.CancelEdit();
-    });
-
-    /// <summary>The atmosphere source disclosures start collapsed and occupy only their header height.</summary>
-    /// <returns>The source-disclosure layout task.</returns>
-    [TestMethod]
-    public Task AtmosphereSourceDisclosuresStartCollapsedWithHeaderOnlyHeight() => EnqueueAsync(async () =>
+    public Task AtmosphereSourceDisclosuresStartCollapsed() => EnqueueAsync(async () =>
     {
         var (fixture, model, view) = await LoadAtmosphereLightsSectionAsync(LoadTestContentAsync).ConfigureAwait(true);
         var atmosphereSection = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("AtmosphereLightsSection");
@@ -352,143 +183,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var secondary = sourceDisclosures[1];
         _ = primary.IsExpanded.Should().BeFalse();
         _ = secondary.IsExpanded.Should().BeFalse();
-        var collapsedHeader = primary.FindDescendant<ToggleButton>(toggle => string.Equals(toggle.Name, "ExpanderHeader", StringComparison.Ordinal))!;
-        _ = primary.ActualHeight.Should().BeApproximately(collapsedHeader.ActualHeight, 1);
-        var separator = ((StackPanel)sourceCard.Content).Children.OfType<Grid>().Single().Children.OfType<Border>().Single();
-        var separatorGap = separator.TransformToVisual(view).TransformPoint(default).Y
-            - collapsedHeader.TransformToVisual(view).TransformPoint(default).Y - collapsedHeader.ActualHeight;
-        _ = separatorGap.Should().BeApproximately(8, 1);
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-    });
-
-    /// <summary>Atmosphere source fields use left labels, the design ratio gaps and the four-pixel row pitch.</summary>
-    /// <returns>The source-field metrics task.</returns>
-    [TestMethod]
-    public Task AtmosphereSourceFieldsUseLeftLabelsAndDesignRatioGaps() => EnqueueAsync(async () =>
-    {
-        // design-spec label column ratio and field padding
-        const double LabelColumnRatio = 0.4;
-        const double FieldHorizontalPadding = 12;
-
-        var (fixture, model, view) = await LoadAtmosphereLightsSectionAsync(LoadTestContentAsync).ConfigureAwait(true);
-        var atmosphereSection = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("AtmosphereLightsSection");
-        var sourceCard = atmosphereSection.Items.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
-        _ = atmosphereSection.BringItemIntoView(sourceCard).Should().BeTrue();
-        await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var primary = sourceCard.FindDescendants().OfType<Expander>().First();
-        primary.IsExpanded = true;
-        view.UpdateLayout();
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var source = (AtmosphereSourceView)primary.Content;
-        _ = source.ActualWidth.Should().BeGreaterThan(340);
-        var azimuth = source.FindDescendant<NumberBox>(number => Equals(number.Tag, "SunAzimuth"))!;
-        _ = azimuth.ActualWidth.Should().BeGreaterThan(140);
-        _ = source.FindDescendant<TextBlock>(text => string.Equals(text.Text, "Azimuth", StringComparison.Ordinal))!.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
-        _ = azimuth.LabelPosition.Should().Be(LabelPosition.Left);
-        _ = azimuth.Label.Should().Be("Azimuth");
-        var valueBorder = azimuth.FindDescendant<Border>(border => string.Equals(border.Name, "PartBackgroundBorder", StringComparison.Ordinal))!;
-        _ = valueBorder.ActualWidth.Should().BeGreaterThanOrEqualTo(126);
-        _ = (valueBorder.TransformToVisual(azimuth).TransformPoint(default).X - valueBorder.Margin.Left)
-            .Should().BeApproximately(((azimuth.ActualWidth - FieldHorizontalPadding) * LabelColumnRatio) + FieldHorizontalPadding, 1);
-        var elevation = source.FindDescendant<NumberBox>(number => Equals(number.Tag, "SunElevation"))!;
-        var rowPitch = elevation.TransformToVisual(source).TransformPoint(default).Y - azimuth.TransformToVisual(source).TransformPoint(default).Y;
-        _ = rowPitch.Should().BeApproximately(azimuth.ActualHeight + 4, 1);
-        foreach (var card in source.FindDescendants().OfType<Oxygen.Editor.Controls.PropertyCard>())
-        {
-            _ = card.Margin.Should().Be(new Thickness(0));
-            _ = card.Padding.Should().Be(new Thickness(0));
-        }
-
-        var collapsedHeader = primary.FindDescendant<ToggleButton>(toggle => string.Equals(toggle.Name, "ExpanderHeader", StringComparison.Ordinal))!;
-        var disclosureGap = source.TransformToVisual(primary).TransformPoint(default).Y
-            - collapsedHeader.TransformToVisual(primary).TransformPoint(default).Y - collapsedHeader.ActualHeight;
-        _ = disclosureGap.Should().BeApproximately(0, 1);
-        await InspectorCapture.HoldIfRequestedAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-    });
-
-    /// <summary>Atmosphere reference rows center the picker and its two actions on one line.</summary>
-    /// <returns>The reference-row alignment task.</returns>
-    [TestMethod]
-    public Task AtmosphereReferenceRowsAlignPickerAndActionsOnCenterLine() => EnqueueAsync(async () =>
-    {
-        var (fixture, model, view) = await LoadAtmosphereLightsSectionAsync(LoadTestContentAsync).ConfigureAwait(true);
-        var atmosphereSection = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("AtmosphereLightsSection");
-        var sourceCard = atmosphereSection.Items.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
-        _ = atmosphereSection.BringItemIntoView(sourceCard).Should().BeTrue();
-        await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var primary = sourceCard.FindDescendants().OfType<Expander>().First();
-        primary.IsExpanded = true;
-        view.UpdateLayout();
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var references = atmosphereSection.FindDescendants().OfType<ComboBox>().ToArray();
-        _ = references.Should().HaveCount(2);
-        foreach (var reference in references)
-        {
-            var row = Grid.GetRow(reference);
-            var rowActions = atmosphereSection.FindDescendants().OfType<Button>().Where(button => Grid.GetRow(button) == row && Grid.GetColumn(button) > 0).ToArray();
-            _ = rowActions.Should().HaveCount(2);
-            var referenceCenter = reference.TransformToVisual(atmosphereSection).TransformPoint(default).Y + (reference.ActualHeight / 2);
-            _ = reference.ActualHeight.Should().BeGreaterThanOrEqualTo(32);
-            _ = reference.FontSize.Should().Be(14);
-            foreach (var action in rowActions)
-            {
-                var actionCenter = action.TransformToVisual(atmosphereSection).TransformPoint(default).Y + (action.ActualHeight / 2);
-                _ = actionCenter.Should().BeApproximately(referenceCenter, 1);
-                _ = action.ActualWidth.Should().BeGreaterThanOrEqualTo(32);
-                _ = action.ActualHeight.Should().BeGreaterThanOrEqualTo(32);
-                var icon = (FontIcon)action.Content;
-                var iconCenter = icon.TransformToVisual(atmosphereSection).TransformPoint(default).Y + (icon.ActualHeight / 2);
-                _ = iconCenter.Should().BeApproximately(referenceCenter, 1);
-            }
-        }
-
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-    });
-
-    /// <summary>Quiet inspector toggles keep a fully transparent background.</summary>
-    /// <returns>The toggle styling task.</returns>
-    [TestMethod]
-    public Task QuietInspectorTogglesUseTransparentBackground() => EnqueueAsync(async () =>
-    {
-        var (fixture, model, view) = await LoadAtmosphereLightsSectionAsync(LoadTestContentAsync).ConfigureAwait(true);
-        var atmosphereSection = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("AtmosphereLightsSection");
-        var sourceCard = atmosphereSection.Items.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
-        _ = atmosphereSection.BringItemIntoView(sourceCard).Should().BeTrue();
-        await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var sectionResources = view.Resources;
-        var headerToggles = atmosphereSection.FindDescendants().OfType<ToggleButton>().Where(toggle => ReferenceEquals(toggle.Style, sectionResources["QuietInspectorToggle"])).ToArray();
-        _ = headerToggles.Should().NotBeEmpty();
-        foreach (var toggle in headerToggles)
-        {
-            _ = ((Microsoft.UI.Xaml.Media.SolidColorBrush)toggle.Background).Color.A.Should().Be(0);
-        }
-
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-    });
-
-    /// <summary>A section header is one full-width disclosure target with a decorative chevron outside its content.</summary>
-    /// <returns>The design-contract regression task.</returns>
-    [TestMethod]
-    public Task SceneSectionHeaderProvidesSingleFullWidthDisclosureTarget() => EnqueueAsync(async () =>
-    {
-        using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync).ConfigureAwait(true);
-        var atmosphere = scenario.Section("AtmosphereLightsSection");
-        var header = atmosphere.FindDescendant<ToggleButton>(button => string.Equals(button.Name, "ExpanderHeader", StringComparison.Ordinal))!;
-        var icon = header.FindDescendant<Viewbox>(element => string.Equals(element.Name, "PartHeaderIconPresenterHolder", StringComparison.Ordinal));
-        _ = icon.Should().NotBeNull();
-        var chevron = header.FindDescendant<AnimatedIcon>(element => string.Equals(element.Name, "ExpandCollapseChevron", StringComparison.Ordinal))!;
-        _ = Microsoft.UI.Xaml.Automation.AutomationProperties.GetAccessibilityView(chevron).Should().Be(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
-        _ = chevron.FindAscendant<ContentControl>()!.IsTabStop.Should().BeFalse();
-        _ = header.ActualWidth.Should().BeApproximately(atmosphere.ActualWidth, 1);
-        var provider = (Microsoft.UI.Xaml.Automation.Provider.IToggleProvider)new Microsoft.UI.Xaml.Automation.Peers.ToggleButtonAutomationPeer(header)
-            .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Toggle);
-        provider.Toggle();
-        _ = atmosphere.IsExpanded.Should().BeFalse();
-        provider.Toggle();
-        _ = atmosphere.IsExpanded.Should().BeTrue();
-        _ = header.FindDescendants().Should().NotContain((FrameworkElement)atmosphere.Content);
-        scenario.AssertCleanHistory();
     });
 
     /// <summary>The sky section retains the sun disk switch and its four design field labels.</summary>
@@ -517,66 +212,24 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         await scenario.SearchAsync("Ground Albedo").ConfigureAwait(true);
         var planet = sky.Items.OfType<Expander>().Single(group => Equals(group.Header, "Planet & ground"));
         _ = await scenario.BringIntoViewAsync(sky, planet).ConfigureAwait(true);
-        var albedoField = (Oxygen.Editor.World.Inspector.Controls.InspectorRgbField)await FindInspectorControlAsync(
+        var albedoField = (Oxygen.Editor.Controls.InspectorColorField)await FindInspectorControlAsync(
             (ScrollViewer)scenario.View.FindName("ScenePropertyScroll"),
-            () => scenario.View.FindDescendant<Oxygen.Editor.World.Inspector.Controls.InspectorRgbField>(field =>
-                field.IsLoaded && Equals(field.Tag, "GroundAlbedo") && ((Oxygen.Editor.Controls.PropertyCard)field.Content).LeadingContent is Button),
+            () => scenario.View.FindDescendant<Oxygen.Editor.Controls.InspectorColorField>(field =>
+                field.IsLoaded && Equals(field.Tag, "GroundAlbedo") && SwatchOf(field) is not null),
             "GroundAlbedo",
             this.TestContext.CancellationToken).ConfigureAwait(true);
-        var albedo = (Oxygen.Editor.Controls.PropertyCard)albedoField.Content;
-        var swatch = (Button)albedo.LeadingContent!;
+        var swatch = SwatchOf(albedoField);
         _ = swatch.Flyout.Should().BeOfType<Flyout>();
         scenario.Model.SkyAtmosphere.GroundAlbedoR = AlbedoRedLinear;
         await scenario.Model.PendingEdits.ConfigureAwait(true);
-        _ = InspectorRgbPresentation.ToDisplayColor(scenario.Model.SkyAtmosphere.GroundAlbedoColor).R.Should().Be(128);
-        _ = ((Microsoft.UI.Xaml.Media.SolidColorBrush)((Border)swatch.Content).Background).Color.R.Should().Be(128);
+        _ = SwatchColor(albedoField).R.Should().Be(128);
         var historyCount = scenario.Fixture.Context.History.UndoStack.Count;
         await PickDisplayColorAsync(swatch, Windows.UI.Color.FromArgb(255, 128, 64, 32)).ConfigureAwait(true);
         await scenario.Model.PendingEdits.ConfigureAwait(true);
         _ = scenario.Fixture.Scene.Environment.SkyAtmosphere.GroundAlbedoRgb.Y.Should().BeApproximately(AlbedoGreenLinearPicked, 0.000001f);
         _ = scenario.Fixture.Context.History.UndoStack.Should().HaveCount(historyCount + 1);
         await scenario.Fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
-        _ = InspectorRgbPresentation.ToDisplayColor(scenario.Model.SkyAtmosphere.GroundAlbedoColor).R.Should().Be(128);
-    });
-
-    /// <summary>Read-only numeric text is compact while the editor retains its authored value and mask.</summary>
-    /// <param name="value">The numeric value.</param>
-    /// <param name="expected">The compact read-only text.</param>
-    /// <returns>The native formatting regression task.</returns>
-    [TestMethod]
-    [DataRow(0f, "0")]
-    [DataRow(45f, "45")]
-    [DataRow(0.536f, "0.536")]
-    [DataRow(-0.536f, "-0.536")]
-    public Task SceneNumericDisplayUsesCompactFormatting(float value, string expected) => EnqueueAsync(async () =>
-    {
-        var view = new EnvironmentView();
-        var number = new NumberBox { Mask = "~.###", NumberValue = value, Style = (Style)view.Resources["SceneNumberBoxStyle"] };
-        await LoadTestContentAsync(number).ConfigureAwait(true);
-        _ = number.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PartValueTextBlock", StringComparison.Ordinal))!.Text.Should().Be(expected);
-        _ = number.NumberValue.Should().Be(value);
-        _ = number.Mask.Should().Be("~.###");
-    });
-
-    /// <summary>The scene number box style is the single owner of the compact input and editor metrics, so layout tests need not re-assert them.</summary>
-    /// <returns>The design-metric contract task.</returns>
-    [TestMethod]
-    public Task SceneNumberBoxCompactStyleFollowsDesignMetrics() => EnqueueAsync(async () =>
-    {
-        var view = new EnvironmentView();
-        var number = new NumberBox { Mask = "~.###", NumberValue = 0.536f, Style = (Style)view.Resources["SceneNumberBoxStyle"] };
-        await LoadTestContentAsync(number).ConfigureAwait(true);
-        _ = number.CornerRadius.Should().Be(new CornerRadius(4));
-        _ = number.BorderThickness.Should().Be(new Thickness(1));
-        number.StartEdit();
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var editor = number.FindDescendant<TextBox>(text => string.Equals(text.Name, "PartEditBox", StringComparison.Ordinal))!;
-        _ = editor.MinHeight.Should().Be(28);
-        _ = editor.Padding.Should().Be(new Thickness(6, 4, 6, 4));
-        _ = editor.CornerRadius.Should().Be(new CornerRadius(4));
-        _ = editor.FontSize.Should().Be(14);
-        _ = editor.TextWrapping.Should().Be(TextWrapping.Wrap);
-        number.CancelEdit();
+        _ = SwatchColor(albedoField).R.Should().Be(128);
     });
 
     /// <summary>Scene search reveals the inactive auto exposure minimum with its applicability note.</summary>
@@ -587,7 +240,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width: null, height: null, host: ScenarioHost.Scroll).ConfigureAwait(true);
         var exposure = scenario.Section("ExposureSection");
         exposure.IsExpanded = false;
-        var autoMinimum = (Oxygen.Editor.Controls.PropertyCard)scenario.Element<Oxygen.Editor.Controls.InspectorNumberField>("AutoExposureMinEvCard").Content;
+        var autoMinimum = scenario.Element<Oxygen.Editor.Controls.InspectorNumberField>("AutoExposureMinEvCard");
 
         // precondition (was asserted mid-test): manual exposure keeps the auto minimum inactive
         _ = scenario.Model.Exposure.ExposureMode.Should().Be(Oxygen.Editor.World.Serialization.ExposureMode.Manual);
@@ -595,7 +248,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
 
         await scenario.SearchAsync("auto_exposure_min_ev").ConfigureAwait(true);
         _ = scenario.Named("AutoExposureMinEvCard").Visibility.Should().Be(Visibility.Visible);
-        _ = ((StackPanel)autoMinimum.Content).Children.OfType<TextBlock>().Should().Contain(element => element.Text.Contains(AppliesInAutoExposureModeCopy, StringComparison.Ordinal));
+        _ = autoMinimum.ApplicabilityText.Should().Contain(AppliesInAutoExposureModeCopy);
         _ = exposure.IsExpanded.Should().BeTrue();
     });
 
@@ -734,66 +387,6 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         scenario.AssertCleanHistory();
     });
 
-    /// <summary>A disclosure header toggles through three cycles, keeps its chevron and content in step, and restores its original state.</summary>
-    /// <param name="automationId">The disclosure's automation identity.</param>
-    /// <param name="query">A search query that reveals a field inside the disclosure.</param>
-    /// <param name="sectionName">The section namescope identity owning the disclosure.</param>
-    /// <returns>The disclosure-toggle regression task.</returns>
-    [TestMethod]
-    [DataRow("Scene.Sky.PlanetGround", "PlanetRadiusKm", "SkyAtmosphereSection")]
-    [DataRow("Scene.Sky.Scattering", "RayleighScaleHeightKm", "SkyAtmosphereSection")]
-    [DataRow("Scene.Sky.AerialPerspective", "AerialPerspectiveDistanceScale", "SkyAtmosphereSection")]
-    [DataRow("Scene.Exposure.MeteringLimits", "AutoExposureMinEv", "ExposureSection")]
-    [DataRow("Scene.Exposure.Adaptation", "AutoExposureSpeedUp", "ExposureSection")]
-    [DataRow("Scene.Exposure.HistogramCalibration", "ExposureKey", "ExposureSection")]
-    [DataRow("Scene.Exposure.ExposureShaping", "AutoExposureCompensationCurve", "ExposureSection")]
-    public Task SceneDisclosureHeaderTogglesThroughThreeCyclesAndRestores(string automationId, string query, string sectionName) => EnqueueAsync(async () =>
-    {
-        using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync).ConfigureAwait(true);
-        await WaitForRenderAsync().ConfigureAwait(true);
-        var owner = scenario.Section(sectionName);
-        var item = owner.Items.OfType<Expander>().Single(expander => string.Equals(AutomationProperties.GetAutomationId(expander), automationId, StringComparison.Ordinal));
-        await scenario.SearchAsync(query).ConfigureAwait(true);
-        owner.StartBringIntoView();
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(owner.UpdateLayout).ConfigureAwait(true);
-        _ = owner.BringItemIntoView(item).Should().BeTrue();
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(owner.UpdateLayout).ConfigureAwait(true);
-        var scroller = (ScrollViewer)scenario.View.FindName("ScenePropertyScroll");
-        var group = (Expander)await FindInspectorControlAsync(
-            scroller,
-            () => owner.FindDescendant<Expander>(candidate => candidate.ActualHeight > 0 && string.Equals(AutomationProperties.GetAutomationId(candidate), automationId, StringComparison.Ordinal)),
-            automationId,
-            this.TestContext.CancellationToken).ConfigureAwait(true);
-        _ = group.ApplyTemplate();
-        var header = group.FindDescendant<ToggleButton>(toggle => string.Equals(toggle.Name, "ExpanderHeader", StringComparison.Ordinal))!;
-        _ = header.ApplyTemplate();
-
-        // the QuietDisclosure template names its header chevron
-        var chevron = header.FindDescendant<FontIcon>(icon => string.Equals(icon.Name, "DisclosureChevron", StringComparison.Ordinal))!;
-        var content = group.FindDescendant<Border>(border => string.Equals(border.Name, "ExpanderContent", StringComparison.Ordinal))!;
-        var originallyExpanded = group.IsExpanded;
-        _ = header.IsTabStop.Should().BeTrue();
-        _ = header.UseSystemFocusVisuals.Should().BeTrue();
-
-        for (var cycle = 0; cycle < 3; cycle++)
-        {
-            var expectedExpanded = !group.IsExpanded;
-            Toggle(header);
-            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-            _ = group.IsExpanded.Should().Be(expectedExpanded);
-            _ = chevron.Glyph.Should().Be(expectedExpanded ? ChevronExpandedGlyph : ChevronCollapsedGlyph);
-            _ = content.Visibility.Should().Be(expectedExpanded ? Visibility.Visible : Visibility.Collapsed);
-        }
-
-        if (group.IsExpanded != originallyExpanded)
-        {
-            Toggle(header);
-            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        }
-
-        scenario.AssertCleanHistory();
-    });
-
     /// <summary>Scene search expands the nested planet disclosure to reveal its card and restores it collapsed when cleared.</summary>
     /// <returns>The nested-disclosure restore regression task.</returns>
     [TestMethod]
@@ -811,19 +404,20 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         scenario.AssertCleanHistory();
     });
 
+    /// <summary>Applicability changes rewrite only the field's note: its editor and the stored value survive.</summary>
+    /// <returns>The applicability regression task.</returns>
     [TestMethod]
     public Task SceneSearchKeepsFieldContentAndStoredValuesWhileApplicabilityChanges() => EnqueueAsync(async () =>
     {
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, host: ScenarioHost.None).ConfigureAwait(true);
         var exposure = scenario.Section("ExposureSection");
-        var spot = (Oxygen.Editor.Controls.PropertyCard)scenario.Element<Oxygen.Editor.Controls.InspectorNumberField>("AutoExposureSpotMeterRadiusCard").Content;
-        var originalContent = spot.Content;
+        var spot = scenario.Element<Oxygen.Editor.Controls.InspectorNumberField>("AutoExposureSpotMeterRadiusCard");
+        var originalContent = CardOf(spot).Content;
         var storedRadius = scenario.Fixture.Scene.Environment.PostProcess.AutoExposureSpotMeterRadius;
         await scenario.SearchAsync("spot radius").ConfigureAwait(true);
         _ = scenario.Named("AutoExposureSpotMeterRadiusCard").Visibility.Should().Be(Visibility.Visible);
-        _ = ((StackPanel)spot.Content).Children.OfType<TextBlock>().Should().Contain(note =>
-            note.Text.Contains(AppliesInAutoExposureSpotMeteringCopy, StringComparison.Ordinal));
-        _ = spot.Content.Should().BeSameAs(originalContent);
+        _ = spot.ApplicabilityText.Should().Contain(AppliesInAutoExposureSpotMeteringCopy);
+        _ = CardOf(spot).Content.Should().BeSameAs(originalContent);
         _ = scenario.Fixture.Context.Metadata.IsDirty.Should().BeFalse();
         _ = scenario.Fixture.Context.History.UndoStack.Should().BeEmpty();
 
@@ -831,12 +425,11 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         scenario.Model.Exposure.AutoExposureMeteringMode = Oxygen.Editor.World.Serialization.MeteringMode.Spot;
         await scenario.Model.PendingEdits.ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = ((StackPanel)spot.Content).Children.OfType<TextBlock>().Should().NotContain(note =>
-            note.Visibility == Visibility.Visible && note.Text.StartsWith(StoredValueNotePrefixCopy, StringComparison.Ordinal));
+        _ = spot.ApplicabilityText.Should().NotStartWith(StoredValueNotePrefixCopy);
         await scenario.SearchAsync("spot radius missing-field").ConfigureAwait(true);
         _ = ((TextBlock)scenario.View.FindName("NoScenePropertyMatches")).Visibility.Should().Be(Visibility.Visible);
         await scenario.SearchAsync(string.Empty).ConfigureAwait(true);
-        _ = spot.Content.Should().BeSameAs(originalContent);
+        _ = CardOf(spot).Content.Should().BeSameAs(originalContent);
         _ = scenario.Fixture.Scene.Environment.PostProcess.AutoExposureSpotMeterRadius.Should().Be(storedRadius);
     });
 
@@ -857,17 +450,11 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         search.Text = "auto_exposure_min_ev";
         await WaitForRenderAsync().ConfigureAwait(true);
         var field = (Oxygen.Editor.Controls.InspectorNumberField)FindInspectorElement(view, "AutoExposureMinEvCard");
-        var minimum = (Oxygen.Editor.Controls.PropertyCard)field.Content;
 
         // The replacement model is still Manual: the stored-value note names that mode explicitly,
         // so a stale observer applying the first model's switch to Auto would visibly rewrite it.
-        _ = ((StackPanel)minimum.Content).Children.OfType<TextBlock>().Should().Contain(note =>
-            note.Visibility == Visibility.Visible
-            && note.Text.StartsWith(StoredValueNotePrefixCopy, StringComparison.Ordinal)
-            && note.Text.Contains("Current mode: Manual", StringComparison.Ordinal));
-        string[] ObservedState() => new[] { field.Visibility.ToString() }
-            .Concat(((StackPanel)minimum.Content).Children.OfType<TextBlock>().Select(note => note.Text + "|" + note.Visibility))
-            .ToArray();
+        _ = field.ApplicabilityText.Should().StartWith(StoredValueNotePrefixCopy).And.Contain("Current mode: Manual");
+        string[] ObservedState() => [field.Visibility.ToString(), field.ApplicabilityText];
         var observedBefore = ObservedState();
 
         // A stale observer on the previous model would push this applicability change into the view.
@@ -939,15 +526,13 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         {
         }).ConfigureAwait(true);
         var number = card.FindDescendant<NumberBox>(element => string.Equals(element.Name, "PartNumberBoxX", StringComparison.Ordinal))!;
-        var diagnostic = (TextBlock)view.FindName("ScaleXDiagnosticText")!;
         await EnterTextAsync(number, "0").ConfigureAwait(true);
 
         // Live validation: the diagnostic surfaces while typing, before any commit.
         _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalScale.X.Should().Be(1);
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
         _ = model.ScaleXDiagnostic.Message.Should().NotBeEmpty();
-        _ = diagnostic.Visibility.Should().Be(Visibility.Visible);
-        _ = diagnostic.Text.Should().Be(model.ScaleXDiagnostic.Message);
+        _ = VisibleFeedback(view).Should().ContainSingle().Which.Should().Be("X: " + model.ScaleXDiagnostic.Message);
         number.CompletePendingTextEdit();
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
         {
@@ -964,6 +549,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         }).ConfigureAwait(true);
         _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalScale.X.Should().Be(2);
         _ = model.ScaleXDiagnostic.Message.Should().BeEmpty();
+        _ = VisibleFeedback(view).Should().BeEmpty();
         _ = fixture.Context.History.UndoStack.Should().ContainSingle();
     });
 
@@ -1014,6 +600,12 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         await loadContent(host).ConfigureAwait(true);
         return (fixture, model, view);
     }
+
+    // The axis errors the Transform rows announce.
+    private static string[] VisibleFeedback(TransformView view)
+        => [.. view.FindDescendants().OfType<TextBlock>()
+            .Where(text => text.Visibility == Visibility.Visible && AutomationProperties.GetLiveSetting(text) == Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite)
+            .Select(text => string.Concat(text.Inlines.OfType<Microsoft.UI.Xaml.Documents.Run>().Select(run => run.Text)))];
 
     private static async Task AssertInspectorRealizesAsync(
         Func<SceneAuthoringFixture, IDisposable> createModel,

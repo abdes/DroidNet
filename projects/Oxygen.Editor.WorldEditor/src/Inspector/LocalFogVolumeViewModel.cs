@@ -48,29 +48,29 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
 
     /// <summary>Gets or sets the albedo red channel.</summary>
     [ObservableProperty]
-    public partial float AlbedoR { get; set; } = 1f;
+    public partial double AlbedoR { get; set; } = 1f;
 
     /// <summary>Gets or sets the albedo green channel.</summary>
     [ObservableProperty]
-    public partial float AlbedoG { get; set; } = 1f;
+    public partial double AlbedoG { get; set; } = 1f;
 
     /// <summary>Gets or sets the albedo blue channel.</summary>
     [ObservableProperty]
-    public partial float AlbedoB { get; set; } = 1f;
+    public partial double AlbedoB { get; set; } = 1f;
 
     /// <summary>Gets or sets the emissive red channel.</summary>
     [ObservableProperty]
-    public partial float EmissiveR { get; set; }
+    public partial double EmissiveR { get; set; }
 
     /// <summary>Gets or sets the emissive green channel.</summary>
     [ObservableProperty]
-    public partial float EmissiveG { get; set; }
+    public partial double EmissiveG { get; set; }
 
     /// <summary>Gets or sets the emissive blue channel.</summary>
     [ObservableProperty]
-    public partial float EmissiveB { get; set; }
+    public partial double EmissiveB { get; set; }
 
-    /// <summary>Gets or sets volume enablement through its guarded binding.</summary>
+    /// <summary>Gets or sets a value indicating whether the volume is enabled, through its guarded binding.</summary>
     public bool Enabled
     {
         get => this.enabledBinding.Value;
@@ -78,26 +78,26 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
     }
 
     /// <summary>Gets or sets the composition order through its guarded binding.</summary>
-    public float SortPriority
+    public double SortPriority
     {
         get => this.sortPriorityBinding.Value;
-        set => InspectorBindingRequests.Request(this.sortPriorityBinding, (int)MathF.Round(value));
+        set => InspectorBindingRequests.Request(this.sortPriorityBinding, (int)Math.Round(value));
     }
 
     /// <summary>Gets the radial extinction binding and its mixed state.</summary>
-    public PropertyBinding<float> RadialFogExtinction { get; } = new(SceneDocumentCommandService.LocalFogVolume.RadialFogExtinctionDescriptor);
+    public NumberBinding<float> RadialFogExtinction { get; } = new(SceneDocumentCommandService.LocalFogVolume.RadialFogExtinctionDescriptor);
 
     /// <summary>Gets the height extinction binding and its mixed state.</summary>
-    public PropertyBinding<float> HeightFogExtinction { get; } = new(SceneDocumentCommandService.LocalFogVolume.HeightFogExtinctionDescriptor);
+    public NumberBinding<float> HeightFogExtinction { get; } = new(SceneDocumentCommandService.LocalFogVolume.HeightFogExtinctionDescriptor);
 
     /// <summary>Gets the height falloff binding and its mixed state.</summary>
-    public PropertyBinding<float> HeightFogFalloff { get; } = new(SceneDocumentCommandService.LocalFogVolume.HeightFogFalloffDescriptor);
+    public NumberBinding<float> HeightFogFalloff { get; } = new(SceneDocumentCommandService.LocalFogVolume.HeightFogFalloffDescriptor);
 
     /// <summary>Gets the height offset binding and its mixed state.</summary>
-    public PropertyBinding<float> HeightFogOffset { get; } = new(SceneDocumentCommandService.LocalFogVolume.HeightFogOffsetDescriptor);
+    public NumberBinding<float> HeightFogOffset { get; } = new(SceneDocumentCommandService.LocalFogVolume.HeightFogOffsetDescriptor);
 
     /// <summary>Gets the phase anisotropy binding and its mixed state.</summary>
-    public PropertyBinding<float> FogPhaseG { get; } = new(SceneDocumentCommandService.LocalFogVolume.FogPhaseGDescriptor);
+    public NumberBinding<float> FogPhaseG { get; } = new(SceneDocumentCommandService.LocalFogVolume.FogPhaseGDescriptor);
 
     /// <summary>Gets radial extinction feedback.</summary>
     public InspectorFieldDiagnostic RadialFogExtinctionDiagnostic => this.Diagnostic(this.RadialFogExtinction.Id.Id);
@@ -151,7 +151,7 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
     /// <param name="color">The linear albedo.</param>
     public void SetAlbedo(Vector3 color)
     {
-        this.SetDisplayColors(color, new(this.EmissiveR, this.EmissiveG, this.EmissiveB));
+        this.SetDisplayColors(color, InspectorValues.ToVector3(this.EmissiveR, this.EmissiveG, this.EmissiveB));
         this.SubmitPerTarget(this.albedoBinding.Id, _ => color);
     }
 
@@ -159,7 +159,7 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
     /// <param name="color">The emitted luminance.</param>
     public void SetEmissive(Vector3 color)
     {
-        this.SetDisplayColors(new(this.AlbedoR, this.AlbedoG, this.AlbedoB), color);
+        this.SetDisplayColors(InspectorValues.ToVector3(this.AlbedoR, this.AlbedoG, this.AlbedoB), color);
         this.SubmitPerTarget(this.emissiveBinding.Id, _ => color);
     }
 
@@ -203,25 +203,25 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
     /// <inheritdoc />
     protected override void OnInputEnabledChanged(bool enabled) => this.edits?.SetInputEnabled(enabled);
 
-    private static Vector3 WithChannel(Vector3 color, int channel, float value)
+    private static Vector3 WithChannel(Vector3 color, int channel, double value)
     {
-        color[channel] = value;
+        color[channel] = (float)value;
         return color;
     }
 
-    partial void OnAlbedoRChanged(float value) => this.ApplyChannel(this.albedoBinding.Id, static v => v.FogAlbedo, 0, value);
+    partial void OnAlbedoRChanged(double value) => this.ApplyChannel(this.albedoBinding.Id, static v => v.FogAlbedo, 0, value);
 
-    partial void OnAlbedoGChanged(float value) => this.ApplyChannel(this.albedoBinding.Id, static v => v.FogAlbedo, 1, value);
+    partial void OnAlbedoGChanged(double value) => this.ApplyChannel(this.albedoBinding.Id, static v => v.FogAlbedo, 1, value);
 
-    partial void OnAlbedoBChanged(float value) => this.ApplyChannel(this.albedoBinding.Id, static v => v.FogAlbedo, 2, value);
+    partial void OnAlbedoBChanged(double value) => this.ApplyChannel(this.albedoBinding.Id, static v => v.FogAlbedo, 2, value);
 
-    partial void OnEmissiveRChanged(float value) => this.ApplyChannel(this.emissiveBinding.Id, static v => v.FogEmissive, 0, value);
+    partial void OnEmissiveRChanged(double value) => this.ApplyChannel(this.emissiveBinding.Id, static v => v.FogEmissive, 0, value);
 
-    partial void OnEmissiveGChanged(float value) => this.ApplyChannel(this.emissiveBinding.Id, static v => v.FogEmissive, 1, value);
+    partial void OnEmissiveGChanged(double value) => this.ApplyChannel(this.emissiveBinding.Id, static v => v.FogEmissive, 1, value);
 
-    partial void OnEmissiveBChanged(float value) => this.ApplyChannel(this.emissiveBinding.Id, static v => v.FogEmissive, 2, value);
+    partial void OnEmissiveBChanged(double value) => this.ApplyChannel(this.emissiveBinding.Id, static v => v.FogEmissive, 2, value);
 
-    private void ApplyChannel(PropertyId<Vector3> id, Func<LocalFogVolumeComponent, Vector3> read, int channel, float value)
+    private void ApplyChannel(PropertyId<Vector3> id, Func<LocalFogVolumeComponent, Vector3> read, int channel, double value)
     {
         if (!this.isApplyingEditorValues)
         {

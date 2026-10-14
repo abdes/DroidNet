@@ -387,10 +387,10 @@
                                     HorizontalAlignment="Stretch"
                                     HorizontalValueAlignment="Right"
                                     Mask="{x:Bind ViewModel.MovementSpeedField.Mask}"
+                                    Maximum="{x:Bind ViewModel.MovementSpeedField.Maximum}"
+                                    Minimum="{x:Bind ViewModel.MovementSpeedField.Minimum}"
                                     Multiplier="{x:Bind ViewModel.MovementSpeedField.Multiplier}"
                                     NumberValue="{x:Bind ViewModel.MovementSpeedField.NumberValue, Mode=TwoWay}"
-                                    Tag="{x:Bind ViewModel.MovementSpeedField}"
-                                    Validate="OnCameraNumberBoxValidate"
                                     WithPadding="False" />
                                 <TextBlock
                                     Grid.Column="2"
@@ -413,10 +413,10 @@
                                         HorizontalAlignment="Stretch"
                                         HorizontalValueAlignment="Right"
                                         Mask="{x:Bind ViewModel.FieldOfViewField.Mask}"
+                                        Maximum="{x:Bind ViewModel.FieldOfViewField.Maximum}"
+                                        Minimum="{x:Bind ViewModel.FieldOfViewField.Minimum}"
                                         Multiplier="{x:Bind ViewModel.FieldOfViewField.Multiplier}"
                                         NumberValue="{x:Bind ViewModel.FieldOfViewField.NumberValue, Mode=TwoWay}"
-                                        Tag="{x:Bind ViewModel.FieldOfViewField}"
-                                        Validate="OnCameraNumberBoxValidate"
                                         WithPadding="False" />
                                     <TextBlock
                                         Grid.Column="2"
@@ -455,10 +455,10 @@
                                         HorizontalAlignment="Stretch"
                                         HorizontalValueAlignment="Right"
                                         Mask="{x:Bind ViewModel.NearViewPlaneField.Mask}"
+                                        Maximum="{x:Bind ViewModel.NearViewPlaneField.Maximum}"
+                                        Minimum="{x:Bind ViewModel.NearViewPlaneField.Minimum}"
                                         Multiplier="{x:Bind ViewModel.NearViewPlaneField.Multiplier}"
                                         NumberValue="{x:Bind ViewModel.NearViewPlaneField.NumberValue, Mode=TwoWay}"
-                                        Tag="{x:Bind ViewModel.NearViewPlaneField}"
-                                        Validate="OnCameraNumberBoxValidate"
                                         WithPadding="False" />
                                     <TextBlock
                                         Grid.Column="2"
@@ -474,10 +474,10 @@
                                         HorizontalAlignment="Stretch"
                                         HorizontalValueAlignment="Right"
                                         Mask="{x:Bind ViewModel.FarViewPlaneField.Mask}"
+                                        Maximum="{x:Bind ViewModel.FarViewPlaneField.Maximum}"
+                                        Minimum="{x:Bind ViewModel.FarViewPlaneField.Minimum}"
                                         Multiplier="{x:Bind ViewModel.FarViewPlaneField.Multiplier}"
                                         NumberValue="{x:Bind ViewModel.FarViewPlaneField.NumberValue, Mode=TwoWay}"
-                                        Tag="{x:Bind ViewModel.FarViewPlaneField}"
-                                        Validate="OnCameraNumberBoxValidate"
                                         WithPadding="False" />
                                     <TextBlock
                                         Grid.Row="1"
@@ -650,9 +650,9 @@
                                         HorizontalAlignment="Stretch"
                                         HorizontalValueAlignment="Right"
                                         Mask="{x:Bind ViewModel.TransformTools.TranslationField.Mask, Mode=OneWay}"
+                                        Maximum="{x:Bind ViewModel.TransformTools.TranslationField.Maximum}"
+                                        Minimum="{x:Bind ViewModel.TransformTools.TranslationField.Minimum}"
                                         NumberValue="{x:Bind ViewModel.TransformTools.TranslationField.NumberValue, Mode=TwoWay}"
-                                        Tag="{x:Bind ViewModel.TransformTools.TranslationField, Mode=OneWay}"
-                                        Validate="OnCameraNumberBoxValidate"
                                         WithPadding="False" />
                                     <TextBlock
                                         Grid.Column="2"
@@ -701,9 +701,9 @@
                                         HorizontalAlignment="Stretch"
                                         HorizontalValueAlignment="Right"
                                         Mask="{x:Bind ViewModel.TransformTools.RotationField.Mask, Mode=OneWay}"
+                                        Maximum="{x:Bind ViewModel.TransformTools.RotationField.Maximum}"
+                                        Minimum="{x:Bind ViewModel.TransformTools.RotationField.Minimum}"
                                         NumberValue="{x:Bind ViewModel.TransformTools.RotationField.NumberValue, Mode=TwoWay}"
-                                        Tag="{x:Bind ViewModel.TransformTools.RotationField, Mode=OneWay}"
-                                        Validate="OnCameraNumberBoxValidate"
                                         WithPadding="False" />
                                     <TextBlock
                                         Grid.Column="2"
@@ -751,9 +751,9 @@
                                         HorizontalAlignment="Stretch"
                                         HorizontalValueAlignment="Right"
                                         Mask="{x:Bind ViewModel.TransformTools.ScaleField.Mask, Mode=OneWay}"
+                                        Maximum="{x:Bind ViewModel.TransformTools.ScaleField.Maximum}"
+                                        Minimum="{x:Bind ViewModel.TransformTools.ScaleField.Minimum}"
                                         NumberValue="{x:Bind ViewModel.TransformTools.ScaleField.NumberValue, Mode=TwoWay}"
-                                        Tag="{x:Bind ViewModel.TransformTools.ScaleField, Mode=OneWay}"
-                                        Validate="OnCameraNumberBoxValidate"
                                         WithPadding="False" />
                                 </Grid>
                             </StackPanel>

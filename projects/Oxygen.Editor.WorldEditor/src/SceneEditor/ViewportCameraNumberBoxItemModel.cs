@@ -11,36 +11,36 @@ namespace Oxygen.Editor.LevelEditor;
 /// </summary>
 public sealed class ViewportCameraNumberBoxItemModel : ObservableObject
 {
-    private readonly Action<float>? onNumberValueChanged;
-    private float numberValue;
+    private readonly Action<double>? onNumberValueChanged;
+    private double numberValue;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ViewportCameraNumberBoxItemModel"/> class.
     /// </summary>
     /// <param name="value">Initial numeric value.</param>
     /// <param name="minimum">Inclusive minimum accepted value.</param>
-    /// <param name="maximum">Inclusive maximum accepted value, or <see cref="float.PositiveInfinity"/> for no upper bound.</param>
+    /// <param name="maximum">Inclusive maximum accepted value, or <see cref="double.PositiveInfinity"/> for no upper bound.</param>
     /// <param name="unit">Unit label displayed next to the editor.</param>
     /// <param name="mask">DroidNet NumberBox display mask.</param>
     /// <param name="multiplier">DroidNet NumberBox adjustment multiplier.</param>
     /// <param name="width">Preferred NumberBox width inside the flyout.</param>
     /// <param name="onNumberValueChanged">Optional callback used by the owning view model.</param>
     public ViewportCameraNumberBoxItemModel(
-        float value,
-        float minimum,
-        float maximum,
+        double value,
+        double minimum,
+        double maximum,
         string unit,
         string mask = "~.##",
-        int multiplier = 1,
+        double multiplier = 1d,
         double width = 84,
-        Action<float>? onNumberValueChanged = null)
+        Action<double>? onNumberValueChanged = null)
     {
-        if (float.IsNaN(minimum))
+        if (double.IsNaN(minimum))
         {
             throw new ArgumentOutOfRangeException(nameof(minimum), "Minimum must be a number.");
         }
 
-        if (float.IsNaN(maximum) || maximum < minimum)
+        if (double.IsNaN(maximum) || maximum < minimum)
         {
             throw new ArgumentOutOfRangeException(nameof(maximum), "Maximum must be a number greater than or equal to minimum.");
         }
@@ -58,12 +58,12 @@ public sealed class ViewportCameraNumberBoxItemModel : ObservableObject
     /// <summary>
     /// Gets the inclusive minimum accepted value.
     /// </summary>
-    public float Minimum { get; }
+    public double Minimum { get; }
 
     /// <summary>
-    /// Gets the inclusive maximum accepted value, or <see cref="float.PositiveInfinity"/> for no upper bound.
+    /// Gets the inclusive maximum accepted value, or <see cref="double.PositiveInfinity"/> for no upper bound.
     /// </summary>
-    public float Maximum { get; }
+    public double Maximum { get; }
 
     /// <summary>
     /// Gets the unit label displayed next to the number box.
@@ -78,7 +78,7 @@ public sealed class ViewportCameraNumberBoxItemModel : ObservableObject
     /// <summary>
     /// Gets the DroidNet NumberBox adjustment multiplier.
     /// </summary>
-    public int Multiplier { get; }
+    public double Multiplier { get; }
 
     /// <summary>
     /// Gets the preferred NumberBox width inside the flyout.
@@ -88,7 +88,7 @@ public sealed class ViewportCameraNumberBoxItemModel : ObservableObject
     /// <summary>
     /// Gets or sets the edited numeric value.
     /// </summary>
-    public float NumberValue
+    public double NumberValue
     {
         get => this.numberValue;
         set
@@ -99,11 +99,4 @@ public sealed class ViewportCameraNumberBoxItemModel : ObservableObject
             }
         }
     }
-
-    /// <summary>
-    /// Determines whether a candidate value is within the range accepted by the camera setting.
-    /// </summary>
-    /// <param name="value">The candidate value.</param>
-    /// <returns><see langword="true"/> when the value is numeric and within range; otherwise, <see langword="false"/>.</returns>
-    public bool IsInRange(float value) => !float.IsNaN(value) && value >= this.Minimum && value <= this.Maximum;
 }

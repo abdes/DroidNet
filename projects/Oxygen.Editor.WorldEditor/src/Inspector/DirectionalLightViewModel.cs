@@ -25,28 +25,28 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly PropertyBinding<Vector3> colorBinding = new(SceneDocumentCommandService.DirectionalLight.ColorDescriptor);
-    private readonly PropertyBinding<float> intensityLuxBinding = new(SceneDocumentCommandService.DirectionalLight.IntensityLuxDescriptor);
+    private readonly NumberBinding<float> intensityLuxBinding = new(SceneDocumentCommandService.DirectionalLight.IntensityLuxDescriptor);
     private readonly PropertyBinding<AtmosphereLightSlot> atmosphereSlotBinding = new(SceneDocumentCommandService.DirectionalLight.AtmosphereSlotDescriptor);
     private readonly PropertyBinding<bool> usePerPixelAtmosphereTransmittanceBinding = new(SceneDocumentCommandService.DirectionalLight.UsePerPixelAtmosphereTransmittanceDescriptor);
     private readonly PropertyBinding<bool> castsShadowsBinding = new(SceneDocumentCommandService.DirectionalLight.CastsShadowsDescriptor);
     private readonly PropertyBinding<bool> affectsWorldBinding = new(SceneDocumentCommandService.DirectionalLight.AffectsWorldDescriptor);
-    private readonly PropertyBinding<float> angularSizeRadiansBinding = new(SceneDocumentCommandService.DirectionalLight.AngularSizeRadiansDescriptor);
-    private readonly PropertyBinding<float> exposureCompensationBinding = new(SceneDocumentCommandService.DirectionalLight.ExposureCompensationDescriptor);
+    private readonly NumberBinding<float> angularSizeRadiansBinding = new(SceneDocumentCommandService.DirectionalLight.AngularSizeRadiansDescriptor);
+    private readonly NumberBinding<float> exposureCompensationBinding = new(SceneDocumentCommandService.DirectionalLight.ExposureCompensationDescriptor);
     private readonly PropertyBinding<Vector3> atmosphereDiskLuminanceScaleRgbBinding = new(SceneDocumentCommandService.DirectionalLight.AtmosphereDiskLuminanceScaleRgbDescriptor);
-    private readonly PropertyBinding<float> shadowBiasBinding = new(SceneDocumentCommandService.DirectionalLight.ShadowBiasDescriptor);
-    private readonly PropertyBinding<float> shadowNormalBiasBinding = new(SceneDocumentCommandService.DirectionalLight.ShadowNormalBiasDescriptor);
+    private readonly NumberBinding<float> shadowBiasBinding = new(SceneDocumentCommandService.DirectionalLight.ShadowBiasDescriptor);
+    private readonly NumberBinding<float> shadowNormalBiasBinding = new(SceneDocumentCommandService.DirectionalLight.ShadowNormalBiasDescriptor);
     private readonly PropertyBinding<bool> contactShadowsBinding = new(SceneDocumentCommandService.DirectionalLight.ContactShadowsDescriptor);
     private readonly PropertyBinding<ShadowResolutionHint> shadowResolutionHintBinding = new(SceneDocumentCommandService.DirectionalLight.ShadowResolutionHintDescriptor);
     private readonly PropertyBinding<int> cascadeCountBinding = new(SceneDocumentCommandService.DirectionalLight.CascadeCountDescriptor);
     private readonly PropertyBinding<DirectionalCsmSplitMode> splitModeBinding = new(SceneDocumentCommandService.DirectionalLight.SplitModeDescriptor);
-    private readonly PropertyBinding<float> maxShadowDistanceBinding = new(SceneDocumentCommandService.DirectionalLight.MaxShadowDistanceDescriptor);
-    private readonly PropertyBinding<float> cascadeDistance0Binding = new(SceneDocumentCommandService.DirectionalLight.CascadeDistance0Descriptor);
-    private readonly PropertyBinding<float> cascadeDistance1Binding = new(SceneDocumentCommandService.DirectionalLight.CascadeDistance1Descriptor);
-    private readonly PropertyBinding<float> cascadeDistance2Binding = new(SceneDocumentCommandService.DirectionalLight.CascadeDistance2Descriptor);
-    private readonly PropertyBinding<float> cascadeDistance3Binding = new(SceneDocumentCommandService.DirectionalLight.CascadeDistance3Descriptor);
-    private readonly PropertyBinding<float> distributionExponentBinding = new(SceneDocumentCommandService.DirectionalLight.DistributionExponentDescriptor);
-    private readonly PropertyBinding<float> transitionFractionBinding = new(SceneDocumentCommandService.DirectionalLight.TransitionFractionDescriptor);
-    private readonly PropertyBinding<float> distanceFadeoutFractionBinding = new(SceneDocumentCommandService.DirectionalLight.DistanceFadeoutFractionDescriptor);
+    private readonly NumberBinding<float> maxShadowDistanceBinding = new(SceneDocumentCommandService.DirectionalLight.MaxShadowDistanceDescriptor);
+    private readonly NumberBinding<float> cascadeDistance0Binding = new(SceneDocumentCommandService.DirectionalLight.CascadeDistance0Descriptor);
+    private readonly NumberBinding<float> cascadeDistance1Binding = new(SceneDocumentCommandService.DirectionalLight.CascadeDistance1Descriptor);
+    private readonly NumberBinding<float> cascadeDistance2Binding = new(SceneDocumentCommandService.DirectionalLight.CascadeDistance2Descriptor);
+    private readonly NumberBinding<float> cascadeDistance3Binding = new(SceneDocumentCommandService.DirectionalLight.CascadeDistance3Descriptor);
+    private readonly NumberBinding<float> distributionExponentBinding = new(SceneDocumentCommandService.DirectionalLight.DistributionExponentDescriptor);
+    private readonly NumberBinding<float> transitionFractionBinding = new(SceneDocumentCommandService.DirectionalLight.TransitionFractionDescriptor);
+    private readonly NumberBinding<float> distanceFadeoutFractionBinding = new(SceneDocumentCommandService.DirectionalLight.DistanceFadeoutFractionDescriptor);
     private readonly List<IDisposable> registrations = [];
     private ICollection<SceneNode>? selectedItems;
     private bool isApplyingEditorValues;
@@ -92,16 +92,16 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     }
 
     [ObservableProperty]
-    public partial float ColorR { get; set; } = 1f;
+    public partial double ColorR { get; set; } = 1f;
 
     [ObservableProperty]
-    public partial float ColorG { get; set; } = 1f;
+    public partial double ColorG { get; set; } = 1f;
 
     [ObservableProperty]
-    public partial float ColorB { get; set; } = 1f;
+    public partial double ColorB { get; set; } = 1f;
 
     /// <summary>Gets or sets the authored illuminance through its sole binding state.</summary>
-    public float IntensityLux { get => this.intensityLuxBinding.Value; set => this.RequestLightValue(this.intensityLuxBinding, value); }
+    public double IntensityLux { get => this.intensityLuxBinding.Value; set => this.RequestLightNumber(this.intensityLuxBinding, value); }
 
     /// <summary>Gets or sets the source role through its sole binding state.</summary>
     public AtmosphereLightSlot AtmosphereSlot { get => this.atmosphereSlotBinding.Value; set => this.RequestLightValue(this.atmosphereSlotBinding, value); }
@@ -119,32 +119,32 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     public float AngularSizeRadians { get => this.angularSizeRadiansBinding.Value; set => this.RequestLightValue(this.angularSizeRadiansBinding, value); }
 
     /// <summary>Gets or sets the source angular diameter in display degrees.</summary>
-    public float AngularDiameterDegrees
+    public double AngularDiameterDegrees
     {
         get => this.AngularSizeRadians * RadToDeg;
-        set => this.AngularSizeRadians = value * DegToRad;
+        set => this.AngularSizeRadians = (float)(value * DegToRad);
     }
 
     /// <summary>Gets or sets authored exposure compensation.</summary>
-    public float ExposureCompensation { get => this.exposureCompensationBinding.Value; set => this.RequestLightValue(this.exposureCompensationBinding, value); }
+    public double ExposureCompensation { get => this.exposureCompensationBinding.Value; set => this.RequestLightNumber(this.exposureCompensationBinding, value); }
 
     [ObservableProperty]
     public partial Vector3 AtmosphereDiskLuminanceScaleRgb { get; set; } = Vector3.One;
 
     [ObservableProperty]
-    public partial float DiskScaleR { get; set; } = 1f;
+    public partial double DiskScaleR { get; set; } = 1f;
 
     [ObservableProperty]
-    public partial float DiskScaleG { get; set; } = 1f;
+    public partial double DiskScaleG { get; set; } = 1f;
 
     [ObservableProperty]
-    public partial float DiskScaleB { get; set; } = 1f;
+    public partial double DiskScaleB { get; set; } = 1f;
 
     /// <summary>Gets or sets depth bias.</summary>
-    public float ShadowBias { get => this.shadowBiasBinding.Value; set => this.RequestLightValue(this.shadowBiasBinding, value); }
+    public double ShadowBias { get => this.shadowBiasBinding.Value; set => this.RequestLightNumber(this.shadowBiasBinding, value); }
 
     /// <summary>Gets or sets normal bias.</summary>
-    public float ShadowNormalBias { get => this.shadowNormalBiasBinding.Value; set => this.RequestLightValue(this.shadowNormalBiasBinding, value); }
+    public double ShadowNormalBias { get => this.shadowNormalBiasBinding.Value; set => this.RequestLightNumber(this.shadowNormalBiasBinding, value); }
 
     /// <summary>Gets or sets a value indicating whether contact shadows are authored.</summary>
     public bool ContactShadows { get => this.contactShadowsBinding.Value; set => this.RequestLightValue(this.contactShadowsBinding, value); }
@@ -153,40 +153,40 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     public ShadowResolutionHint ShadowResolutionHint { get => this.shadowResolutionHintBinding.Value; set => this.RequestLightValue(this.shadowResolutionHintBinding, value); }
 
     /// <summary>Gets or sets the numeric display adapter for the authored integer count.</summary>
-    public float CascadeCount { get => this.cascadeCountBinding.Value; set => this.RequestLightValue(this.cascadeCountBinding, Math.Clamp((int)MathF.Round(value), 1, 4)); }
+    public double CascadeCount { get => this.cascadeCountBinding.Value; set => this.RequestLightValue(this.cascadeCountBinding, Math.Clamp((int)Math.Round(value), 1, 4)); }
 
     /// <summary>Gets or sets the cascade split mode.</summary>
     public DirectionalCsmSplitMode SplitMode { get => this.splitModeBinding.Value; set => this.RequestLightValue(this.splitModeBinding, value); }
 
     /// <summary>Gets or sets maximum shadow distance.</summary>
-    public float MaxShadowDistance { get => this.maxShadowDistanceBinding.Value; set => this.RequestLightValue(this.maxShadowDistanceBinding, value); }
+    public double MaxShadowDistance { get => this.maxShadowDistanceBinding.Value; set => this.RequestLightNumber(this.maxShadowDistanceBinding, value); }
 
     /// <summary>Gets or sets the first cascade distance.</summary>
-    public float CascadeDistance1 { get => this.cascadeDistance0Binding.Value; set => this.RequestLightValue(this.cascadeDistance0Binding, value); }
+    public double CascadeDistance1 { get => this.cascadeDistance0Binding.Value; set => this.RequestLightNumber(this.cascadeDistance0Binding, value); }
 
     /// <summary>Gets or sets the second cascade distance.</summary>
-    public float CascadeDistance2 { get => this.cascadeDistance1Binding.Value; set => this.RequestLightValue(this.cascadeDistance1Binding, value); }
+    public double CascadeDistance2 { get => this.cascadeDistance1Binding.Value; set => this.RequestLightNumber(this.cascadeDistance1Binding, value); }
 
     /// <summary>Gets or sets the third cascade distance.</summary>
-    public float CascadeDistance3 { get => this.cascadeDistance2Binding.Value; set => this.RequestLightValue(this.cascadeDistance2Binding, value); }
+    public double CascadeDistance3 { get => this.cascadeDistance2Binding.Value; set => this.RequestLightNumber(this.cascadeDistance2Binding, value); }
 
     /// <summary>Gets or sets the fourth cascade distance.</summary>
-    public float CascadeDistance4 { get => this.cascadeDistance3Binding.Value; set => this.RequestLightValue(this.cascadeDistance3Binding, value); }
+    public double CascadeDistance4 { get => this.cascadeDistance3Binding.Value; set => this.RequestLightNumber(this.cascadeDistance3Binding, value); }
 
     /// <summary>Gets or sets distribution exponent.</summary>
-    public float DistributionExponent { get => this.distributionExponentBinding.Value; set => this.RequestLightValue(this.distributionExponentBinding, value); }
+    public double DistributionExponent { get => this.distributionExponentBinding.Value; set => this.RequestLightNumber(this.distributionExponentBinding, value); }
 
     /// <summary>Gets or sets transition fraction.</summary>
-    public float TransitionFraction { get => this.transitionFractionBinding.Value; set => this.RequestLightValue(this.transitionFractionBinding, value); }
+    public double TransitionFraction { get => this.transitionFractionBinding.Value; set => this.RequestLightNumber(this.transitionFractionBinding, value); }
 
     /// <summary>Gets or sets fade-out fraction.</summary>
-    public float DistanceFadeoutFraction { get => this.distanceFadeoutFractionBinding.Value; set => this.RequestLightValue(this.distanceFadeoutFractionBinding, value); }
+    public double DistanceFadeoutFraction { get => this.distanceFadeoutFractionBinding.Value; set => this.RequestLightNumber(this.distanceFadeoutFractionBinding, value); }
 
     [ObservableProperty]
-    public partial float SunAzimuth { get; set; }
+    public partial double SunAzimuth { get; set; }
 
     [ObservableProperty]
-    public partial float SunElevation { get; set; } = 45f;
+    public partial double SunElevation { get; set; } = 45f;
 
     /// <summary>
     /// Gets explicit atmosphere assignment options.
@@ -206,7 +206,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     /// <summary>
     /// Gets the authored linear RGB light color.
     /// </summary>
-    public Vector3 ColorValue => new(this.ColorR, this.ColorG, this.ColorB);
+    public Vector3 ColorValue => InspectorValues.ToVector3(this.ColorR, this.ColorG, this.ColorB);
 
     /// <summary>Gets current diagnostics for ColorR.</summary>
     public InspectorFieldDiagnostic ColorRDiagnostic => this.edits?.Diagnostics.Get(this.colorBinding.Id.Id) ?? this.unboundDiagnostic;
@@ -418,8 +418,8 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         this.colorBinding.Value = new Vector3(r, g, b);
     }
 
-    private static bool NearlyEqual(float left, float right)
-        => MathF.Abs(left - right) <= 0.0001f;
+    private static bool NearlyEqual(double left, double right)
+        => Math.Abs(left - right) <= 0.0001;
 
     private void RefreshValues()
     {
@@ -446,19 +446,19 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         setValue(binding.HasValue ? binding.Value : default!);
     }
 
-    partial void OnColorRChanged(float value) => this.ApplyColorAxisEdit(0, value);
+    partial void OnColorRChanged(double value) => this.ApplyColorAxisEdit(0, value);
 
-    partial void OnColorGChanged(float value) => this.ApplyColorAxisEdit(1, value);
+    partial void OnColorGChanged(double value) => this.ApplyColorAxisEdit(1, value);
 
-    partial void OnColorBChanged(float value) => this.ApplyColorAxisEdit(2, value);
+    partial void OnColorBChanged(double value) => this.ApplyColorAxisEdit(2, value);
 
     partial void OnAtmosphereDiskLuminanceScaleRgbChanged(Vector3 value) => this.RequestLightValue(this.atmosphereDiskLuminanceScaleRgbBinding, value);
 
-    partial void OnSunAzimuthChanged(float value) => this.ApplySunDirectionEdit(value, this.SunElevation);
+    partial void OnSunAzimuthChanged(double value) => this.ApplySunDirectionEdit(value, this.SunElevation);
 
-    partial void OnSunElevationChanged(float value) => this.ApplySunDirectionEdit(this.SunAzimuth, value);
+    partial void OnSunElevationChanged(double value) => this.ApplySunDirectionEdit(this.SunAzimuth, value);
 
-    private void ApplyColorAxisEdit(int axis, float value)
+    private void ApplyColorAxisEdit(int axis, double value)
     {
         this.NotifyColorChanged();
         if (this.isApplyingEditorValues || this.selectedItems is null)
@@ -475,12 +475,15 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
             }
 
             var color = light.Color;
-            color[axis] = value;
+            color[axis] = (float)value;
             perTarget[node.Id] = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.Color, color);
         }
 
         this.edits?.Submit(perTarget);
     }
+
+    // The view edits doubles; the light stores single precision.
+    private void RequestLightNumber(NumberBinding<float> binding, double value) => this.RequestLightValue(binding, (float)value);
 
     private void RequestLightValue<T>(PropertyBinding<T> binding, T value)
     {
@@ -511,13 +514,13 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         }
     }
 
-    partial void OnDiskScaleRChanged(float value) => this.ApplyDiskScaleAxisEdit(0, value);
+    partial void OnDiskScaleRChanged(double value) => this.ApplyDiskScaleAxisEdit(0, value);
 
-    partial void OnDiskScaleGChanged(float value) => this.ApplyDiskScaleAxisEdit(1, value);
+    partial void OnDiskScaleGChanged(double value) => this.ApplyDiskScaleAxisEdit(1, value);
 
-    partial void OnDiskScaleBChanged(float value) => this.ApplyDiskScaleAxisEdit(2, value);
+    partial void OnDiskScaleBChanged(double value) => this.ApplyDiskScaleAxisEdit(2, value);
 
-    private void ApplyDiskScaleAxisEdit(int axis, float value)
+    private void ApplyDiskScaleAxisEdit(int axis, double value)
     {
         if (this.isApplyingEditorValues || this.selectedItems is null)
         {
@@ -533,7 +536,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
             }
 
             var scale = light.AtmosphereDiskLuminanceScaleRgb;
-            scale[axis] = value;
+            scale[axis] = (float)value;
             perTarget[node.Id] = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, scale);
         }
 
@@ -572,9 +575,9 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         }
     }
 
-    private void ApplySunDirectionEdit(float azimuth, float elevation)
+    private void ApplySunDirectionEdit(double azimuth, double elevation)
     {
-        if (this.isApplyingEditorValues || this.selectedItems is null || !float.IsFinite(azimuth) || !float.IsFinite(elevation))
+        if (this.isApplyingEditorValues || this.selectedItems is null || !double.IsFinite(azimuth) || !double.IsFinite(elevation))
         {
             return;
         }
@@ -582,7 +585,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         var perTarget = new Dictionary<Guid, PropertyEdit>();
         foreach (var node in this.selectedItems.Where(node => node.Components.Any(component => component is DirectionalLightComponent)))
         {
-            var angles = TransformConverter.QuaternionToEulerDegrees(DirectionalLightOrientation.LocalRotation(node, azimuth, elevation));
+            var angles = TransformConverter.QuaternionToEulerDegrees(DirectionalLightOrientation.LocalRotation(node, (float)azimuth, (float)elevation));
             var edit = PropertyEdit.SingleEdit(SceneDocumentCommandService.Transform.RotationX, angles.X);
             edit.Set(SceneDocumentCommandService.Transform.RotationY, angles.Y);
             edit.Set(SceneDocumentCommandService.Transform.RotationZ, angles.Z);

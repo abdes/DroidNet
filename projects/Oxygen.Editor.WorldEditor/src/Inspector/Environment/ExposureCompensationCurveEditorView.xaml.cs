@@ -24,9 +24,9 @@ public sealed partial class ExposureCompensationCurveEditorView
     private void OnEditCompleted(object? sender, NumberBoxEditSessionEventArgs args)
         => this.ViewModel?.Complete(args);
 
-    private void OnKeyValidate(object? sender, ValidationEventArgs<float> args)
+    private void OnKeyValidate(object? sender, ValidationEventArgs<double> args)
         => args.IsValid = sender is FrameworkElement { DataContext: ExposureCompensationKeyViewModel key, Tag: string coordinate }
-            && this.ViewModel?.Validate(key, string.Equals(coordinate, "MeteredEv", StringComparison.Ordinal), args.NewValue) == true;
+            && this.ViewModel?.Validate(key, string.Equals(coordinate, "MeteredEv", StringComparison.Ordinal), (float)args.NewValue) == true;
 
     private void OnRemoveKey(object sender, RoutedEventArgs args)
     {

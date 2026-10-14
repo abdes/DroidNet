@@ -32,10 +32,10 @@ public sealed partial class GroundGridPreferences : ObservableObject
     }
 
     /// <summary>Gets or sets the distance between adjacent grid lines, in world units.</summary>
-    public float Spacing
+    public double Spacing
     {
         get => this.Value.Spacing;
-        set => this.Request(this.Value with { Spacing = value });
+        set => this.Request(this.Value with { Spacing = (float)value });
     }
 
     /// <summary>Gets or sets how many minor cells lie between major lines.</summary>
@@ -46,59 +46,59 @@ public sealed partial class GroundGridPreferences : ObservableObject
     }
 
     /// <summary>Gets or sets the minor line thickness, as a fraction of a cell.</summary>
-    public float LineThickness
+    public double LineThickness
     {
         get => this.Value.LineThickness;
-        set => this.Request(this.Value with { LineThickness = value });
+        set => this.Request(this.Value with { LineThickness = (float)value });
     }
 
     /// <summary>Gets or sets the major line thickness, as a fraction of a cell.</summary>
-    public float MajorThickness
+    public double MajorThickness
     {
         get => this.Value.MajorThickness;
-        set => this.Request(this.Value with { MajorThickness = value });
+        set => this.Request(this.Value with { MajorThickness = (float)value });
     }
 
     /// <summary>Gets or sets the axis line thickness, as a fraction of a cell.</summary>
-    public float AxisThickness
+    public double AxisThickness
     {
         get => this.Value.AxisThickness;
-        set => this.Request(this.Value with { AxisThickness = value });
+        set => this.Request(this.Value with { AxisThickness = (float)value });
     }
 
     /// <summary>Gets or sets the distance from the camera at which the grid starts to fade.</summary>
-    public float FadeStart
+    public double FadeStart
     {
         get => this.Value.FadeStart;
-        set => this.Request(this.Value with { FadeStart = value });
+        set => this.Request(this.Value with { FadeStart = (float)value });
     }
 
     /// <summary>Gets or sets the exponent of the fade with distance.</summary>
-    public float FadePower
+    public double FadePower
     {
         get => this.Value.FadePower;
-        set => this.Request(this.Value with { FadePower = value });
+        set => this.Request(this.Value with { FadePower = (float)value });
     }
 
     /// <summary>Gets or sets how much the lines brighten toward the horizon.</summary>
-    public float HorizonBoost
+    public double HorizonBoost
     {
         get => this.Value.HorizonBoost;
-        set => this.Request(this.Value with { HorizonBoost = value });
+        set => this.Request(this.Value with { HorizonBoost = (float)value });
     }
 
     /// <summary>Gets or sets the X coordinate of the grid origin on the ground plane.</summary>
-    public float OriginX
+    public double OriginX
     {
         get => this.Value.OriginX;
-        set => this.Request(this.Value with { OriginX = value });
+        set => this.Request(this.Value with { OriginX = (float)value });
     }
 
     /// <summary>Gets or sets the Y coordinate of the grid origin on the ground plane.</summary>
-    public float OriginY
+    public double OriginY
     {
         get => this.Value.OriginY;
-        set => this.Request(this.Value with { OriginY = value });
+        set => this.Request(this.Value with { OriginY = (float)value });
     }
 
     /// <summary>Gets or sets a value indicating whether the grid eases after the camera.</summary>
@@ -109,10 +109,10 @@ public sealed partial class GroundGridPreferences : ObservableObject
     }
 
     /// <summary>Gets or sets the easing time of smooth motion, in seconds.</summary>
-    public float SmoothTime
+    public double SmoothTime
     {
         get => this.Value.SmoothTime;
-        set => this.Request(this.Value with { SmoothTime = value });
+        set => this.Request(this.Value with { SmoothTime = (float)value });
     }
 
     /// <summary>Gets or sets the minor line color.</summary>

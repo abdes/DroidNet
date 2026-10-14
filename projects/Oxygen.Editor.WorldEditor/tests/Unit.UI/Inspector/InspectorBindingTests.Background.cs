@@ -98,8 +98,8 @@ public sealed partial class InspectorBindingTests
                 return model.PendingEdits;
             }).ConfigureAwait(true);
         await scenario.SearchAsync("background").ConfigureAwait(true);
-        var field = scenario.Element<Oxygen.Editor.World.Inspector.Controls.InspectorRgbField>("SolidColorCard");
-        var swatch = (Button)((Oxygen.Editor.Controls.PropertyCard)field.Content).LeadingContent!;
+        var field = scenario.Element<Oxygen.Editor.Controls.InspectorColorField>("SolidColorCard");
+        var swatch = SwatchOf(field);
         var displayColor = Windows.UI.Color.FromArgb(255, 128, 64, 32);
         await PickDisplayColorAsync(swatch, displayColor).ConfigureAwait(true);
         await scenario.Model.PendingEdits.ConfigureAwait(true);
@@ -108,13 +108,13 @@ public sealed partial class InspectorBindingTests
         _ = scenario.Model.Backdrop.SolidColorG.Should().BeApproximately(0.05127f, 0.00001f);
         _ = scenario.Model.Backdrop.SolidColorB.Should().BeApproximately(0.01444f, 0.00001f);
         _ = scenario.Model.Backdrop.SolidColor.Should().Be(SceneSkyFields.SolidColorOf(scenario.Fixture.Scene.Environment));
-        _ = ((Microsoft.UI.Xaml.Media.SolidColorBrush)((Border)swatch.Content).Background).Color.Should().Be(displayColor);
+        _ = SwatchColor(field).Should().Be(displayColor);
         scenario.Model.Backdrop.SolidColorR = 1;
         await scenario.Model.PendingEdits.ConfigureAwait(true);
-        var display = ((Microsoft.UI.Xaml.Media.SolidColorBrush)((Border)swatch.Content).Background).Color;
+        var display = SwatchColor(field);
         _ = display.R.Should().Be(255);
         _ = display.G.Should().Be(64);
         _ = display.B.Should().Be(32);
-        _ = SceneSkyFields.SolidColorOf(scenario.Fixture.Scene.Environment).Should().Be(new Vector3(1, scenario.Model.Backdrop.SolidColorG, scenario.Model.Backdrop.SolidColorB));
+        _ = SceneSkyFields.SolidColorOf(scenario.Fixture.Scene.Environment).Should().Be(InspectorValues.ToVector3(1, scenario.Model.Backdrop.SolidColorG, scenario.Model.Backdrop.SolidColorB));
     });
 }

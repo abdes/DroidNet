@@ -17,15 +17,15 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
 {
     private readonly InspectorFieldDiagnostics diagnostics = new();
     private readonly TransformEditController controller;
-    private readonly PropertyBinding<float> positionXBinding = new(SceneDocumentCommandService.Transform.PositionXDescriptor);
-    private readonly PropertyBinding<float> positionYBinding = new(SceneDocumentCommandService.Transform.PositionYDescriptor);
-    private readonly PropertyBinding<float> positionZBinding = new(SceneDocumentCommandService.Transform.PositionZDescriptor);
-    private readonly PropertyBinding<float> rotationXBinding = new(SceneDocumentCommandService.Transform.RotationXDescriptor);
-    private readonly PropertyBinding<float> rotationYBinding = new(SceneDocumentCommandService.Transform.RotationYDescriptor);
-    private readonly PropertyBinding<float> rotationZBinding = new(SceneDocumentCommandService.Transform.RotationZDescriptor);
-    private readonly PropertyBinding<float> scaleXBinding = new(SceneDocumentCommandService.Transform.ScaleXDescriptor);
-    private readonly PropertyBinding<float> scaleYBinding = new(SceneDocumentCommandService.Transform.ScaleYDescriptor);
-    private readonly PropertyBinding<float> scaleZBinding = new(SceneDocumentCommandService.Transform.ScaleZDescriptor);
+    private readonly NumberBinding<float> positionXBinding = new(SceneDocumentCommandService.Transform.PositionXDescriptor);
+    private readonly NumberBinding<float> positionYBinding = new(SceneDocumentCommandService.Transform.PositionYDescriptor);
+    private readonly NumberBinding<float> positionZBinding = new(SceneDocumentCommandService.Transform.PositionZDescriptor);
+    private readonly NumberBinding<float> rotationXBinding = new(SceneDocumentCommandService.Transform.RotationXDescriptor);
+    private readonly NumberBinding<float> rotationYBinding = new(SceneDocumentCommandService.Transform.RotationYDescriptor);
+    private readonly NumberBinding<float> rotationZBinding = new(SceneDocumentCommandService.Transform.RotationZDescriptor);
+    private readonly NumberBinding<float> scaleXBinding = new(SceneDocumentCommandService.Transform.ScaleXDescriptor);
+    private readonly NumberBinding<float> scaleYBinding = new(SceneDocumentCommandService.Transform.ScaleYDescriptor);
+    private readonly NumberBinding<float> scaleZBinding = new(SceneDocumentCommandService.Transform.ScaleZDescriptor);
     private bool isApplyingEditorChanges;
     private bool disposed;
 
@@ -43,55 +43,55 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
     }
 
     [ObservableProperty]
-    public partial float PositionX { get; set; }
+    public partial double PositionX { get; set; }
 
     [ObservableProperty]
     public partial bool PositionXIsIndeterminate { get; set; }
 
     [ObservableProperty]
-    public partial float PositionY { get; set; }
+    public partial double PositionY { get; set; }
 
     [ObservableProperty]
     public partial bool PositionYIsIndeterminate { get; set; }
 
     [ObservableProperty]
-    public partial float PositionZ { get; set; }
+    public partial double PositionZ { get; set; }
 
     [ObservableProperty]
     public partial bool PositionZIsIndeterminate { get; set; }
 
     [ObservableProperty]
-    public partial float RotationX { get; set; }
+    public partial double RotationX { get; set; }
 
     [ObservableProperty]
     public partial bool RotationXIsIndeterminate { get; set; }
 
     [ObservableProperty]
-    public partial float RotationY { get; set; }
+    public partial double RotationY { get; set; }
 
     [ObservableProperty]
     public partial bool RotationYIsIndeterminate { get; set; }
 
     [ObservableProperty]
-    public partial float RotationZ { get; set; }
+    public partial double RotationZ { get; set; }
 
     [ObservableProperty]
     public partial bool RotationZIsIndeterminate { get; set; }
 
     [ObservableProperty]
-    public partial float ScaleX { get; set; }
+    public partial double ScaleX { get; set; }
 
     [ObservableProperty]
     public partial bool ScaleXIsIndeterminate { get; set; }
 
     [ObservableProperty]
-    public partial float ScaleY { get; set; }
+    public partial double ScaleY { get; set; }
 
     [ObservableProperty]
     public partial bool ScaleYIsIndeterminate { get; set; }
 
     [ObservableProperty]
-    public partial float ScaleZ { get; set; }
+    public partial double ScaleZ { get; set; }
 
     [ObservableProperty]
     public partial bool ScaleZIsIndeterminate { get; set; }
@@ -187,7 +187,7 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
     /// <summary>Publishes authoring feedback only for active edits, not model/template refreshes.</summary>
     /// <param name="group">The vector group.</param>
     /// <param name="args">The original control validation.</param>
-    public void ReportControlValidation(TransformEditFieldGroup group, ValidationEventArgs<float> args)
+    public void ReportControlValidation(TransformEditFieldGroup group, ValidationEventArgs<double> args)
     {
         if (!this.isApplyingEditorChanges)
         {
@@ -195,23 +195,23 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
         }
     }
 
-    partial void OnPositionXChanged(float value) => this.Apply("PositionX", TransformEditController.NewEdit(positionX: value));
+    partial void OnPositionXChanged(double value) => this.Apply("PositionX", TransformEditController.NewEdit(positionX: value));
 
-    partial void OnPositionYChanged(float value) => this.Apply("PositionY", TransformEditController.NewEdit(positionY: value));
+    partial void OnPositionYChanged(double value) => this.Apply("PositionY", TransformEditController.NewEdit(positionY: value));
 
-    partial void OnPositionZChanged(float value) => this.Apply("PositionZ", TransformEditController.NewEdit(positionZ: value));
+    partial void OnPositionZChanged(double value) => this.Apply("PositionZ", TransformEditController.NewEdit(positionZ: value));
 
-    partial void OnRotationXChanged(float value) => this.Apply("RotationX", TransformEditController.NewEdit(rotationX: value));
+    partial void OnRotationXChanged(double value) => this.Apply("RotationX", TransformEditController.NewEdit(rotationX: value));
 
-    partial void OnRotationYChanged(float value) => this.Apply("RotationY", TransformEditController.NewEdit(rotationY: value));
+    partial void OnRotationYChanged(double value) => this.Apply("RotationY", TransformEditController.NewEdit(rotationY: value));
 
-    partial void OnRotationZChanged(float value) => this.Apply("RotationZ", TransformEditController.NewEdit(rotationZ: value));
+    partial void OnRotationZChanged(double value) => this.Apply("RotationZ", TransformEditController.NewEdit(rotationZ: value));
 
-    partial void OnScaleXChanged(float value) => this.Apply("ScaleX", TransformEditController.NewEdit(scaleX: value));
+    partial void OnScaleXChanged(double value) => this.Apply("ScaleX", TransformEditController.NewEdit(scaleX: value));
 
-    partial void OnScaleYChanged(float value) => this.Apply("ScaleY", TransformEditController.NewEdit(scaleY: value));
+    partial void OnScaleYChanged(double value) => this.Apply("ScaleY", TransformEditController.NewEdit(scaleY: value));
 
-    partial void OnScaleZChanged(float value) => this.Apply("ScaleZ", TransformEditController.NewEdit(scaleZ: value));
+    partial void OnScaleZChanged(double value) => this.Apply("ScaleZ", TransformEditController.NewEdit(scaleZ: value));
 
     private void Apply(string property, TransformEdit edit)
     {
@@ -221,7 +221,7 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
         }
     }
 
-    private void UpdateBindingValue(PropertyBinding<float> binding, ICollection<SceneNode> items, Action<float> setValue, Action<bool> setMixed)
+    private void UpdateBindingValue(NumberBinding<float> binding, ICollection<SceneNode> items, Action<float> setValue, Action<bool> setMixed)
     {
         var nodes = items.Select(static node => node.Id).ToArray();
         var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Components.OfType<TransformComponent>().FirstOrDefault());

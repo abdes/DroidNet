@@ -73,44 +73,32 @@ internal static class InspectorControls
             if (control is { IsLoaded: true })
             {
                 everLoaded = true;
-                if (control is NumberBox number)
+                if (control is not NumberBox number)
                 {
-                    _ = number.ApplyTemplate();
-                    var label = number.FindDescendant<TextBlock>(element => string.Equals(element.Name, numberPartName, StringComparison.Ordinal));
-                    if (label is { IsLoaded: true })
+                    return control;
+                }
+
+                _ = number.ApplyTemplate();
+                var label = number.FindDescendant<TextBlock>(element => string.Equals(element.Name, numberPartName, StringComparison.Ordinal));
+                captionEverLoaded |= label is { IsLoaded: true };
+                if (label is { IsLoaded: true } && IsCaptionHitTestable(label, scroller, numberPartName))
+                {
+                    stableFrames = ReferenceEquals(previous, number) ? stableFrames + 1 : 0;
+                    previous = number;
+                    if (stableFrames >= 3)
                     {
-                        captionEverLoaded = true;
-                        var center = label.TransformToVisual(scroller).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
-                        var hostCenter = label.TransformToVisual(visual: null).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
-                        var captionIsFullyVisible = !string.Equals(numberPartName, "PartLabelTextBlock", StringComparison.Ordinal)
-                            || (center.Y >= label.ActualHeight && center.Y <= scroller.ViewportHeight - label.ActualHeight);
-                        if (label.ActualWidth > 0 && label.ActualHeight > 0
-                            && captionIsFullyVisible && VisualTreeHelper.FindElementsInHostCoordinates(hostCenter, scroller).Contains(label))
-                        {
-                            stableFrames = ReferenceEquals(previous, number) ? stableFrames + 1 : 0;
-                            previous = number;
-                            if (stableFrames >= 3)
-                            {
-                                return number;
-                            }
-                        }
-                        else
-                        {
-                            stableFrames = 0;
-                            previous = null;
-                            offset = Math.Clamp(scroller.VerticalOffset + center.Y - (scroller.ViewportHeight / 2), 0, scroller.ScrollableHeight);
-                            await ScrollInspectorAsync(scroller, offset, cancellationToken).ConfigureAwait(true);
-                        }
-                    }
-                    else
-                    {
-                        stableFrames = 0;
-                        previous = null;
+                        return number;
                     }
                 }
                 else
                 {
-                    return control;
+                    stableFrames = 0;
+                    previous = null;
+                    if (label is { IsLoaded: true })
+                    {
+                        offset = CenteredOffset(label, scroller);
+                        await ScrollInspectorAsync(scroller, offset, cancellationToken).ConfigureAwait(true);
+                    }
                 }
             }
             else
@@ -121,22 +109,10 @@ internal static class InspectorControls
                 await ScrollInspectorAsync(scroller, offset, cancellationToken).ConfigureAwait(true);
             }
 
-            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
-            {
-            }).ConfigureAwait(true);
+            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         }
 
-        var state = lastResolved switch
-        {
-            null => "was never found in the inspector tree (check that its section is realized)",
-            _ when !everLoaded => "was found but never loaded",
-            Control { IsEnabled: false } => "was found but IsEnabled=false; a disabled control cannot be typed into, so seed the precondition that enables it",
-            NumberBox => captionEverLoaded
-                ? $"was realized but its caption never became hit-testable within the ScrollViewer (viewport {scroller.ViewportWidth:0}x{scroller.ViewportHeight:0}, scrollable height {scroller.ScrollableHeight:0})"
-                : "was realized but its caption part was never loaded",
-            _ => "was realized but its control kind is not returned by this helper",
-        };
-        throw new InvalidOperationException($"Environment field {fieldName} was not editable: {state}.");
+        throw new InvalidOperationException($"Environment field {fieldName} was not editable: {NotEditableReason(lastResolved, everLoaded, captionEverLoaded, scroller)}.");
     }
 
     internal static async Task EnterTextAsync(NumberBox number, string value)
@@ -174,7 +150,7 @@ internal static class InspectorControls
     {
         for (var step = 0; step <= 100; step++)
         {
-            if (view.FindDescendant<VectorBox>(element => Equals(element.Tag, field)) is { } vector)
+            if (view.FindDescendant<Oxygen.Editor.Controls.InspectorColorField>(element => Equals(element.Tag, field))?.FindDescendant<VectorBox>() is { } vector)
             {
                 return vector;
             }
@@ -280,6 +256,16 @@ internal static class InspectorControls
         }
     }
 
+    // A field's row card; its feedback text sits beside the card, below it.
+    internal static Oxygen.Editor.Controls.PropertyCard CardOf(UserControl field)
+        => ((Panel)field.Content).Children.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
+
+    internal static Button SwatchOf(Oxygen.Editor.Controls.InspectorColorField field)
+        => field.FindDescendant<Button>(button => string.Equals(button.Name, "PartSwatchButton", StringComparison.Ordinal))!;
+
+    internal static Windows.UI.Color SwatchColor(Oxygen.Editor.Controls.InspectorColorField field)
+        => ((SolidColorBrush)field.FindDescendant<Border>(border => string.Equals(border.Name, "PartSwatchFill", StringComparison.Ordinal))!.Background).Color;
+
     internal static async Task PickDisplayColorAsync(Button swatch, Windows.UI.Color color)
     {
         var flyout = (Flyout)swatch.Flyout;
@@ -381,6 +367,35 @@ internal static class InspectorControls
 
         throw new InvalidOperationException("The sun picker was not realized in the environment inspector.");
     }
+
+    // A caption counts only when it is laid out, inside the viewport (fully, for an outside label) and on top.
+    private static bool IsCaptionHitTestable(TextBlock label, ScrollViewer scroller, string numberPartName)
+    {
+        var center = label.TransformToVisual(scroller).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
+        var hostCenter = label.TransformToVisual(visual: null).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
+        var captionIsFullyVisible = !string.Equals(numberPartName, "PartLabelTextBlock", StringComparison.Ordinal)
+            || (center.Y >= label.ActualHeight && center.Y <= scroller.ViewportHeight - label.ActualHeight);
+        return label.ActualWidth > 0 && label.ActualHeight > 0
+            && captionIsFullyVisible && VisualTreeHelper.FindElementsInHostCoordinates(hostCenter, scroller).Contains(label);
+    }
+
+    // The scroll offset that brings the caption to the middle of the viewport.
+    private static double CenteredOffset(TextBlock label, ScrollViewer scroller)
+    {
+        var center = label.TransformToVisual(scroller).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
+        return Math.Clamp(scroller.VerticalOffset + center.Y - (scroller.ViewportHeight / 2), 0, scroller.ScrollableHeight);
+    }
+
+    private static string NotEditableReason(FrameworkElement? lastResolved, bool everLoaded, bool captionEverLoaded, ScrollViewer scroller) => lastResolved switch
+    {
+        null => "was never found in the inspector tree (check that its section is realized)",
+        _ when !everLoaded => "was found but never loaded",
+        Control { IsEnabled: false } => "was found but IsEnabled=false; a disabled control cannot be typed into, so seed the precondition that enables it",
+        NumberBox => captionEverLoaded
+            ? $"was realized but its caption never became hit-testable within the ScrollViewer (viewport {scroller.ViewportWidth:0}x{scroller.ViewportHeight:0}, scrollable height {scroller.ScrollableHeight:0})"
+            : "was realized but its caption part was never loaded",
+        _ => "was realized but its control kind is not returned by this helper",
+    };
 
     private static async Task ScrollInspectorAsync(ScrollViewer scroller, double offset, CancellationToken cancellationToken)
     {

@@ -45,48 +45,48 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
 
     /// <summary>Gets or sets the cubemap rotation, in degrees.</summary>
     [ObservableProperty]
-    public partial float CubemapAngleDegrees { get; set; }
+    public partial double CubemapAngleDegrees { get; set; }
 
     /// <summary>Gets or sets the sky light brightness, in exposure stops over the sky's radiance.</summary>
     [ObservableProperty]
-    public partial float IntensityEv { get; set; }
+    public partial double IntensityEv { get; set; }
 
     /// <summary>Gets or sets the illuminance, in lux, the specified cubemap is calibrated to deliver; 0 keeps it raw.</summary>
     [ObservableProperty]
-    public partial float CubemapIlluminanceLux { get; set; }
+    public partial double CubemapIlluminanceLux { get; set; }
 
     [ObservableProperty]
-    public partial float TintR { get; set; }
+    public partial double TintR { get; set; }
 
     [ObservableProperty]
-    public partial float TintG { get; set; }
+    public partial double TintG { get; set; }
 
     [ObservableProperty]
-    public partial float TintB { get; set; }
+    public partial double TintB { get; set; }
 
     [ObservableProperty]
-    public partial float DiffuseIntensity { get; set; }
+    public partial double DiffuseIntensity { get; set; }
 
     [ObservableProperty]
-    public partial float SpecularIntensity { get; set; }
+    public partial double SpecularIntensity { get; set; }
 
     [ObservableProperty]
     public partial bool LowerHemisphereIsSolidColor { get; set; }
 
     [ObservableProperty]
-    public partial float LowerHemisphereR { get; set; }
+    public partial double LowerHemisphereR { get; set; }
 
     [ObservableProperty]
-    public partial float LowerHemisphereG { get; set; }
+    public partial double LowerHemisphereG { get; set; }
 
     [ObservableProperty]
-    public partial float LowerHemisphereB { get; set; }
+    public partial double LowerHemisphereB { get; set; }
 
     [ObservableProperty]
-    public partial float LowerHemisphereBlendAlpha { get; set; }
+    public partial double LowerHemisphereBlendAlpha { get; set; }
 
     [ObservableProperty]
-    public partial float VolumetricScatteringIntensity { get; set; }
+    public partial double VolumetricScatteringIntensity { get; set; }
 
     [ObservableProperty]
     public partial bool AffectReflections { get; set; }
@@ -104,10 +104,10 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
     public string CubemapDisplayName => this.Cubemaps.DisplayName(this.Cubemap);
 
     /// <summary>Gets the tint in linear RGB.</summary>
-    public Vector3 Tint => new(this.TintR, this.TintG, this.TintB);
+    public Vector3 Tint => InspectorValues.ToVector3(this.TintR, this.TintG, this.TintB);
 
     /// <summary>Gets the lower hemisphere color in linear RGB.</summary>
-    public Vector3 LowerHemisphereColor => new(this.LowerHemisphereR, this.LowerHemisphereG, this.LowerHemisphereB);
+    public Vector3 LowerHemisphereColor => InspectorValues.ToVector3(this.LowerHemisphereR, this.LowerHemisphereG, this.LowerHemisphereB);
 
     /// <summary>Gets cubemap feedback.</summary>
     public InspectorFieldDiagnostic CubemapDiagnostic => this.Diagnostic(SceneSkyFields.SkyLightCubemap.Id);
@@ -200,33 +200,33 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
         this.EditOwner.Apply(SceneSkyFields.SkyLightCubemap, value);
     }
 
-    partial void OnCubemapAngleDegreesChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkyLightCubemapAngleRadians, float.DegreesToRadians(value));
+    partial void OnCubemapAngleDegreesChanged(double value) => this.EditOwner.Apply(SceneSkyFields.SkyLightCubemapAngleRadians, double.DegreesToRadians(value));
 
-    partial void OnIntensityEvChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkyLightIntensity, RadianceExposure.ToScale(value));
+    partial void OnIntensityEvChanged(double value) => this.EditOwner.Apply(SceneSkyFields.SkyLightIntensity, RadianceExposure.ToScale((float)value));
 
-    partial void OnCubemapIlluminanceLuxChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkyLightCubemapIlluminanceLux, value);
+    partial void OnCubemapIlluminanceLuxChanged(double value) => this.EditOwner.Apply(SceneSkyFields.SkyLightCubemapIlluminanceLux, value);
 
-    partial void OnTintRChanged(float value) => this.ApplyTint(new(value, this.TintG, this.TintB));
+    partial void OnTintRChanged(double value) => this.ApplyTint(InspectorValues.ToVector3(value, this.TintG, this.TintB));
 
-    partial void OnTintGChanged(float value) => this.ApplyTint(new(this.TintR, value, this.TintB));
+    partial void OnTintGChanged(double value) => this.ApplyTint(InspectorValues.ToVector3(this.TintR, value, this.TintB));
 
-    partial void OnTintBChanged(float value) => this.ApplyTint(new(this.TintR, this.TintG, value));
+    partial void OnTintBChanged(double value) => this.ApplyTint(InspectorValues.ToVector3(this.TintR, this.TintG, value));
 
-    partial void OnDiffuseIntensityChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkyLightDiffuseIntensity, value);
+    partial void OnDiffuseIntensityChanged(double value) => this.EditOwner.Apply(SceneSkyFields.SkyLightDiffuseIntensity, value);
 
-    partial void OnSpecularIntensityChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkyLightSpecularIntensity, value);
+    partial void OnSpecularIntensityChanged(double value) => this.EditOwner.Apply(SceneSkyFields.SkyLightSpecularIntensity, value);
 
     partial void OnLowerHemisphereIsSolidColorChanged(bool value) => this.EditOwner.Apply(SceneSkyFields.SkyLightLowerHemisphereIsSolidColor, value);
 
-    partial void OnLowerHemisphereRChanged(float value) => this.ApplyLowerHemisphere(new(value, this.LowerHemisphereG, this.LowerHemisphereB));
+    partial void OnLowerHemisphereRChanged(double value) => this.ApplyLowerHemisphere(InspectorValues.ToVector3(value, this.LowerHemisphereG, this.LowerHemisphereB));
 
-    partial void OnLowerHemisphereGChanged(float value) => this.ApplyLowerHemisphere(new(this.LowerHemisphereR, value, this.LowerHemisphereB));
+    partial void OnLowerHemisphereGChanged(double value) => this.ApplyLowerHemisphere(InspectorValues.ToVector3(this.LowerHemisphereR, value, this.LowerHemisphereB));
 
-    partial void OnLowerHemisphereBChanged(float value) => this.ApplyLowerHemisphere(new(this.LowerHemisphereR, this.LowerHemisphereG, value));
+    partial void OnLowerHemisphereBChanged(double value) => this.ApplyLowerHemisphere(InspectorValues.ToVector3(this.LowerHemisphereR, this.LowerHemisphereG, value));
 
-    partial void OnLowerHemisphereBlendAlphaChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkyLightLowerHemisphereBlendAlpha, value);
+    partial void OnLowerHemisphereBlendAlphaChanged(double value) => this.EditOwner.Apply(SceneSkyFields.SkyLightLowerHemisphereBlendAlpha, value);
 
-    partial void OnVolumetricScatteringIntensityChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkyLightVolumetricScatteringIntensity, value);
+    partial void OnVolumetricScatteringIntensityChanged(double value) => this.EditOwner.Apply(SceneSkyFields.SkyLightVolumetricScatteringIntensity, value);
 
     partial void OnAffectReflectionsChanged(bool value) => this.EditOwner.Apply(SceneSkyFields.SkyLightAffectReflections, value);
 

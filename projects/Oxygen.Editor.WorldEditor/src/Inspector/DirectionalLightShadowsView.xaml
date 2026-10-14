@@ -81,8 +81,8 @@
                     Label="Maximum distance"
                     NumberStyle="{StaticResource SceneNumberBoxStyle}"
                     NumberValue="{x:Bind ViewModel.MaxShadowDistance, Mode=TwoWay}"
-                    Qualifier="m"
-                    Tag="MaxShadowDistance" />
+                    Tag="MaxShadowDistance"
+                    Unit="m" />
                 <editorcontrols:InspectorNumberField
                     CardStyle="{StaticResource ScenePropertyCardStyle}"
                     EditSessionCompleted="NumberEditCompleted"
@@ -106,8 +106,8 @@
                     Label="Cascade 1 distance"
                     NumberStyle="{StaticResource SceneNumberBoxStyle}"
                     NumberValue="{x:Bind ViewModel.CascadeDistance1, Mode=TwoWay}"
-                    Qualifier="m"
-                    Tag="CascadeDistance1" />
+                    Tag="CascadeDistance1"
+                    Unit="m" />
                 <editorcontrols:InspectorNumberField
                     CardStyle="{StaticResource ScenePropertyCardStyle}"
                     EditSessionCompleted="NumberEditCompleted"
@@ -119,8 +119,8 @@
                     Label="Cascade 2 distance"
                     NumberStyle="{StaticResource SceneNumberBoxStyle}"
                     NumberValue="{x:Bind ViewModel.CascadeDistance2, Mode=TwoWay}"
-                    Qualifier="m"
-                    Tag="CascadeDistance2" />
+                    Tag="CascadeDistance2"
+                    Unit="m" />
                 <editorcontrols:InspectorNumberField
                     CardStyle="{StaticResource ScenePropertyCardStyle}"
                     EditSessionCompleted="NumberEditCompleted"
@@ -132,8 +132,8 @@
                     Label="Cascade 3 distance"
                     NumberStyle="{StaticResource SceneNumberBoxStyle}"
                     NumberValue="{x:Bind ViewModel.CascadeDistance3, Mode=TwoWay}"
-                    Qualifier="m"
-                    Tag="CascadeDistance3" />
+                    Tag="CascadeDistance3"
+                    Unit="m" />
                 <editorcontrols:InspectorNumberField
                     CardStyle="{StaticResource ScenePropertyCardStyle}"
                     EditSessionCompleted="NumberEditCompleted"
@@ -145,8 +145,8 @@
                     Label="Cascade 4 distance"
                     NumberStyle="{StaticResource SceneNumberBoxStyle}"
                     NumberValue="{x:Bind ViewModel.CascadeDistance4, Mode=TwoWay}"
-                    Qualifier="m"
-                    Tag="CascadeDistance4" />
+                    Tag="CascadeDistance4"
+                    Unit="m" />
             </StackPanel>
         </Expander>
         <Expander Header="Cascade blending" Style="{StaticResource QuietDisclosure}">

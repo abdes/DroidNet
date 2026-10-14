@@ -39,14 +39,10 @@ public sealed partial class ViewportCameraControlModeTests
     {
         using var sut = CreateViewportViewModel(new Mock<IEngineService>(MockBehavior.Strict).Object);
 
-        _ = sut.MovementSpeedField.Minimum.Should().Be(1.0f);
-        _ = sut.MovementSpeedField.Maximum.Should().Be(float.PositiveInfinity);
-        _ = sut.MovementSpeedField.IsInRange(1.0f).Should().BeTrue();
-        _ = sut.MovementSpeedField.IsInRange(0.99f).Should().BeFalse();
+        _ = sut.MovementSpeedField.Minimum.Should().Be(1);
+        _ = sut.MovementSpeedField.Maximum.Should().Be(double.PositiveInfinity);
         _ = sut.FieldOfViewField.Unit.Should().Be("°");
-        _ = sut.FieldOfViewField.IsInRange(180.0f).Should().BeTrue();
-        _ = sut.FieldOfViewField.IsInRange(181.0f).Should().BeFalse();
-        _ = sut.FieldOfViewField.IsInRange(float.NaN).Should().BeFalse();
+        _ = sut.FieldOfViewField.Maximum.Should().Be(180);
         _ = sut.NearViewPlaneField.Unit.Should().Be("m");
         _ = sut.FarViewPlaneField.Unit.Should().Be("m");
         _ = sut.ClippingSummary.Should().Contain("0.1").And.Contain("1000").And.EndWith(" m");

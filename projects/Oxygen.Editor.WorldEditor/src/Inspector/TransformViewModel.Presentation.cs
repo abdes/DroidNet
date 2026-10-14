@@ -21,7 +21,7 @@ public sealed partial class TransformViewModel
         this.controller.SetInputEnabled(enabled);
     }
 
-    private void RefreshSourceFeedback(PropertyBinding<float> binding, Dictionary<Guid, object?> targets)
+    private void RefreshSourceFeedback(NumberBinding<float> binding, Dictionary<Guid, object?> targets)
     {
         var current = targets.Where(static item => item.Value is not null)
             .ToDictionary(static item => item.Key, item => binding.Descriptor.Read(item.Value!));

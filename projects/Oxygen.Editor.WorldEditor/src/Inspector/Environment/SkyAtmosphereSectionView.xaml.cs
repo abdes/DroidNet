@@ -5,7 +5,6 @@
 using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
-using Oxygen.Editor.World.Inspector.Controls;
 using Oxygen.Editor.World.Inspector.Presentation;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 
@@ -74,13 +73,8 @@ public sealed partial class SkyAtmosphereSectionView
         }
     }
 
-    private void OnRgbColorPicked(object? sender, InspectorRgbColorPickedEventArgs args)
-    {
-        if (args.Owner is SceneEnvironmentEditOwner owner)
-        {
-            owner.Apply(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, args.Color);
-        }
-    }
+    private void OnRgbColorPicked(object? sender, ColorBoxColorPickedEventArgs args)
+        => InspectorColorEdits.Apply<SceneEnvironmentEditOwner>(sender, args, static (owner, color) => owner.Apply(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, color.ToVector3()));
 
     private void NumberEditStarted(object? sender, NumberBoxEditSessionEventArgs args)
     {
@@ -92,15 +86,11 @@ public sealed partial class SkyAtmosphereSectionView
 
     private void NumberEditCompleted(object? sender, NumberBoxEditSessionEventArgs args) => this.ViewModel?.EditOwner.CompleteEditSession(args);
 
-    private void AerialStartValidate(object? sender, ValidationEventArgs<float> args) => args.IsValid = this.ViewModel?.ValidateAerialStart(args.NewValue) == true;
+    private void AerialStartValidate(object? sender, ValidationEventArgs<double> args) => args.IsValid = this.ViewModel?.ValidateAerialStart((float)args.NewValue) == true;
 
-    private void VectorEditStarted(object? sender, VectorBoxEditSessionEventArgs args)
-    {
-        if (sender is FrameworkElement { Tag: string field })
-        {
-            this.ViewModel?.EditOwner.BeginEditSession($"{field}.{args.Component}", args.InteractionKind);
-        }
-    }
+    private void ColorEditStarted(object? sender, ColorBoxEditSessionEventArgs args)
+        => InspectorColorEdits.Begin(this.ViewModel?.EditOwner, sender, args);
 
-    private void VectorEditCompleted(object? sender, VectorBoxEditSessionEventArgs args) => this.ViewModel?.EditOwner.CompleteEditSession(new(args.InteractionKind, args.CompletionKind));
+    private void ColorEditCompleted(object? sender, ColorBoxEditSessionEventArgs args)
+        => InspectorColorEdits.Complete(this.ViewModel?.EditOwner, sender, args);
 }

@@ -29,7 +29,7 @@ namespace Oxygen.Editor.Schemas.Bindings;
 /// fields. The view can render a placeholder by checking <see cref="IsMixed"/>.
 /// </para>
 /// </remarks>
-public sealed class PropertyBinding<T> : INotifyPropertyChanged
+public class PropertyBinding<T> : INotifyPropertyChanged
 {
     private readonly PropertyDescriptor<T> descriptor;
     private readonly List<Guid> nodes;
@@ -127,7 +127,7 @@ public sealed class PropertyBinding<T> : INotifyPropertyChanged
             var previous = this.value;
             this.value = value;
             this.IsMixed = false;
-            this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.Value)));
+            this.OnValueChanged();
             this.ValueRequested?.Invoke(
                 this,
                 new PropertyBindingChangedEventArgs<T>(previous, value));
@@ -155,7 +155,7 @@ public sealed class PropertyBinding<T> : INotifyPropertyChanged
             this.HasValue = false;
             this.IsMixed = false;
             this.value = default!;
-            this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.Value)));
+            this.OnValueChanged();
             return;
         }
 
@@ -165,9 +165,18 @@ public sealed class PropertyBinding<T> : INotifyPropertyChanged
         if (!Equals(this.value, folded.Value))
         {
             this.value = folded.Value;
-            this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.Value)));
+            this.OnValueChanged();
         }
     }
+
+    /// <summary>Raises <see cref="PropertyChanged"/> for <see cref="Value"/> and the properties derived from it.</summary>
+    protected virtual void OnValueChanged()
+        => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.Value)));
+
+    /// <summary>Raises <see cref="PropertyChanged"/> for a property.</summary>
+    /// <param name="propertyName">The changed property.</param>
+    protected void OnPropertyChanged(string propertyName)
+        => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
     private static IEnumerable<T> EnumerateValues(
         IReadOnlyList<Guid> nodeIds,
@@ -189,8 +198,14 @@ public sealed class PropertyBinding<T> : INotifyPropertyChanged
 /// Event payload for <see cref="PropertyBinding{T}.ValueRequested"/>.
 /// </summary>
 /// <typeparam name="T">The value type.</typeparam>
-/// <param name="OldValue">The value before the assignment.</param>
-/// <param name="NewValue">The requested new value.</param>
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "tightly linked types")]
+/// <param name="oldValue">The value before the assignment.</param>
+/// <param name="newValue">The requested new value.</param>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "tightly linked types")]
-public sealed record PropertyBindingChangedEventArgs<T>(T OldValue, T NewValue);
+public sealed class PropertyBindingChangedEventArgs<T>(T oldValue, T newValue) : EventArgs
+{
+    /// <summary>Gets the value before the assignment.</summary>
+    public T OldValue { get; } = oldValue;
+
+    /// <summary>Gets the requested new value.</summary>
+    public T NewValue { get; } = newValue;
+}

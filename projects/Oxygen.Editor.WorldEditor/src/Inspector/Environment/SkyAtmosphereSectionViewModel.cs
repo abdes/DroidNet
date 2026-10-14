@@ -21,55 +21,55 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
     public partial bool SunDiskEnabled { get; set; }
 
     [ObservableProperty]
-    public partial float PlanetRadiusKm { get; set; }
+    public partial double PlanetRadiusKm { get; set; }
 
     [ObservableProperty]
-    public partial float AtmosphereHeightKm { get; set; }
+    public partial double AtmosphereHeightKm { get; set; }
 
     [ObservableProperty]
-    public partial float GroundAlbedoR { get; set; }
+    public partial double GroundAlbedoR { get; set; }
 
     [ObservableProperty]
-    public partial float GroundAlbedoG { get; set; }
+    public partial double GroundAlbedoG { get; set; }
 
     [ObservableProperty]
-    public partial float GroundAlbedoB { get; set; }
+    public partial double GroundAlbedoB { get; set; }
 
     [ObservableProperty]
-    public partial float RayleighScaleHeightKm { get; set; }
+    public partial double RayleighScaleHeightKm { get; set; }
 
     [ObservableProperty]
-    public partial float MieScaleHeightKm { get; set; }
+    public partial double MieScaleHeightKm { get; set; }
 
     [ObservableProperty]
-    public partial float MieAnisotropy { get; set; }
+    public partial double MieAnisotropy { get; set; }
 
     [ObservableProperty]
-    public partial float SkyLuminanceR { get; set; }
+    public partial double SkyLuminanceR { get; set; }
 
     [ObservableProperty]
-    public partial float SkyLuminanceG { get; set; }
+    public partial double SkyLuminanceG { get; set; }
 
     [ObservableProperty]
-    public partial float SkyLuminanceB { get; set; }
+    public partial double SkyLuminanceB { get; set; }
 
     [ObservableProperty]
-    public partial float AerialPerspectiveDistanceScale { get; set; }
+    public partial double AerialPerspectiveDistanceScale { get; set; }
 
     [ObservableProperty]
-    public partial float AerialScatteringStrength { get; set; }
+    public partial double AerialScatteringStrength { get; set; }
 
     [ObservableProperty]
-    public partial float AerialPerspectiveStartDepthMeters { get; set; }
+    public partial double AerialPerspectiveStartDepthMeters { get; set; }
 
     [ObservableProperty]
-    public partial float HeightFogContribution { get; set; }
+    public partial double HeightFogContribution { get; set; }
 
     /// <summary>Gets the borrowed scene edit owner.</summary>
     public SceneEnvironmentEditOwner EditOwner { get; }
 
     /// <summary>Gets authored linear albedo.</summary>
-    public Vector3 GroundAlbedoColor => new(this.GroundAlbedoR, this.GroundAlbedoG, this.GroundAlbedoB);
+    public Vector3 GroundAlbedoColor => InspectorValues.ToVector3(this.GroundAlbedoR, this.GroundAlbedoG, this.GroundAlbedoB);
 
     /// <summary>Gets canonical sun-disk feedback.</summary>
     public InspectorFieldDiagnostic SunDiskEnabledDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.SunDiskEnabled.Id);
@@ -160,35 +160,35 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
 
     partial void OnSunDiskEnabledChanged(bool value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.SunDiskEnabled, value);
 
-    partial void OnPlanetRadiusKmChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.PlanetRadiusMeters, value * 1000f);
+    partial void OnPlanetRadiusKmChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.PlanetRadiusMeters, value * 1000f);
 
-    partial void OnAtmosphereHeightKmChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AtmosphereHeightMeters, value * 1000f);
+    partial void OnAtmosphereHeightKmChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AtmosphereHeightMeters, value * 1000f);
 
-    partial void OnRayleighScaleHeightKmChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.RayleighScaleHeightMeters, value * 1000f);
+    partial void OnRayleighScaleHeightKmChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.RayleighScaleHeightMeters, value * 1000f);
 
-    partial void OnMieScaleHeightKmChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.MieScaleHeightMeters, value * 1000f);
+    partial void OnMieScaleHeightKmChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.MieScaleHeightMeters, value * 1000f);
 
-    partial void OnMieAnisotropyChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.MieAnisotropy, value);
+    partial void OnMieAnisotropyChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.MieAnisotropy, value);
 
-    partial void OnGroundAlbedoRChanged(float value) => this.ApplyAlbedo(new(value, this.GroundAlbedoG, this.GroundAlbedoB));
+    partial void OnGroundAlbedoRChanged(double value) => this.ApplyAlbedo(InspectorValues.ToVector3(value, this.GroundAlbedoG, this.GroundAlbedoB));
 
-    partial void OnGroundAlbedoGChanged(float value) => this.ApplyAlbedo(new(this.GroundAlbedoR, value, this.GroundAlbedoB));
+    partial void OnGroundAlbedoGChanged(double value) => this.ApplyAlbedo(InspectorValues.ToVector3(this.GroundAlbedoR, value, this.GroundAlbedoB));
 
-    partial void OnGroundAlbedoBChanged(float value) => this.ApplyAlbedo(new(this.GroundAlbedoR, this.GroundAlbedoG, value));
+    partial void OnGroundAlbedoBChanged(double value) => this.ApplyAlbedo(InspectorValues.ToVector3(this.GroundAlbedoR, this.GroundAlbedoG, value));
 
-    partial void OnSkyLuminanceRChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.SkyLuminance, new Vector3(value, this.SkyLuminanceG, this.SkyLuminanceB));
+    partial void OnSkyLuminanceRChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.SkyLuminance, InspectorValues.ToVector3(value, this.SkyLuminanceG, this.SkyLuminanceB));
 
-    partial void OnSkyLuminanceGChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.SkyLuminance, new Vector3(this.SkyLuminanceR, value, this.SkyLuminanceB));
+    partial void OnSkyLuminanceGChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.SkyLuminance, InspectorValues.ToVector3(this.SkyLuminanceR, value, this.SkyLuminanceB));
 
-    partial void OnSkyLuminanceBChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.SkyLuminance, new Vector3(this.SkyLuminanceR, this.SkyLuminanceG, value));
+    partial void OnSkyLuminanceBChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.SkyLuminance, InspectorValues.ToVector3(this.SkyLuminanceR, this.SkyLuminanceG, value));
 
-    partial void OnAerialPerspectiveDistanceScaleChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveDistanceScale, value);
+    partial void OnAerialPerspectiveDistanceScaleChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveDistanceScale, value);
 
-    partial void OnAerialScatteringStrengthChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AerialScatteringStrength, value);
+    partial void OnAerialScatteringStrengthChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AerialScatteringStrength, value);
 
-    partial void OnAerialPerspectiveStartDepthMetersChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveStartDepthMeters, value);
+    partial void OnAerialPerspectiveStartDepthMetersChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveStartDepthMeters, value);
 
-    partial void OnHeightFogContributionChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.HeightFogContribution, value);
+    partial void OnHeightFogContributionChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.HeightFogContribution, value);
 
     private InspectorFieldDiagnostic Diagnostic(PropertyId property) => this.EditOwner.Diagnostics.Get(property);
 

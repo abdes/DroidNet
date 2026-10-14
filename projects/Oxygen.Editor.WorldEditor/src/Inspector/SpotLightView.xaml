@@ -36,8 +36,8 @@
                 Mask="~.#"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.InnerConeAngleDegrees, Mode=TwoWay}"
-                Qualifier="°"
-                Tag="InnerConeAngleRadians" />
+                Tag="InnerConeAngleRadians"
+                Unit="°" />
             <editorcontrols:InspectorNumberField
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
                 EditSessionCompleted="NumberEditCompleted"
@@ -50,8 +50,8 @@
                 Mask="~.#"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.OuterConeAngleDegrees, Mode=TwoWay}"
-                Qualifier="°"
-                Tag="OuterConeAngleRadians" />
+                Tag="OuterConeAngleRadians"
+                Unit="°" />
         </editorcontrols:PropertiesExpander.Items>
     </editorcontrols:PropertiesExpander>
 </UserControl>

@@ -24,7 +24,7 @@
 
     <UserControl.Resources>
         <local:LoggingVerbositySegmentIndexConverter x:Key="VerbosityIndexConverter" />
-        <local:IntFloatConverter x:Key="IntFloatConverter" />
+        <local:IntDoubleConverter x:Key="IntDoubleConverter" />
     </UserControl.Resources>
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
@@ -176,7 +176,7 @@
                                         HorizontalValueAlignment="Right"
                                         Mask="#.#"
                                         Multiplier="1"
-                                        NumberValue="{x:Bind ViewModel.PreviewSettings.LoggingVerbosity, Mode=TwoWay, Converter={StaticResource IntFloatConverter}}"
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.LoggingVerbosity, Mode=TwoWay, Converter={StaticResource IntDoubleConverter}}"
                                         WithPadding="False" />
                                 </Grid>
                                 <TextBlock
@@ -233,7 +233,7 @@
                                         AutomationProperties.Name="Major lines every"
                                         HorizontalValueAlignment="Right"
                                         Mask="~."
-                                        NumberValue="{x:Bind ViewModel.PreviewSettings.GroundGrid.MajorEvery, Mode=TwoWay, Converter={StaticResource IntFloatConverter}}"
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.GroundGrid.MajorEvery, Mode=TwoWay, Converter={StaticResource IntDoubleConverter}}"
                                         WithPadding="False" />
                                     <TextBlock
                                         Grid.Row="2"

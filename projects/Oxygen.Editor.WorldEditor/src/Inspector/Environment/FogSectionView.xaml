@@ -4,7 +4,6 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
-    xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls"
     xmlns:ui="using:CommunityToolkit.WinUI">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -47,8 +46,8 @@
                 Mask="~.#####"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.Density, Mode=TwoWay}"
-                Qualifier="1/m"
-                Tag="Density" />
+                Tag="Density"
+                Unit="1/m" />
             <editorcontrols:InspectorNumberField
                 x:Name="HeightFalloffCard"
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -61,8 +60,8 @@
                 Mask="~.#####"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.HeightFalloff, Mode=TwoWay}"
-                Qualifier="1/m"
-                Tag="HeightFalloff" />
+                Tag="HeightFalloff"
+                Unit="1/m" />
             <editorcontrols:InspectorNumberField
                 x:Name="HeightOffsetMetersCard"
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -74,8 +73,8 @@
                 Label="Height Offset"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.HeightOffsetMeters, Mode=TwoWay}"
-                Qualifier="m"
-                Tag="HeightOffsetMeters" />
+                Tag="HeightOffsetMeters"
+                Unit="m" />
             <editorcontrols:InspectorNumberField
                 x:Name="MaxOpacityCard"
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -88,39 +87,33 @@
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.MaxOpacity, Mode=TwoWay}"
                 Tag="MaxOpacity" />
-            <fields:InspectorRgbField
+            <editorcontrols:InspectorColorField
                 x:Name="InscatteringLuminanceRgbCard"
                 Blue="{x:Bind ViewModel.InscatteringLuminanceB, Mode=TwoWay}"
-                ChannelAutomationName="Inscattering, Luminance RGB"
                 ColorPicked="OnRgbColorPicked"
-                EditOwner="{x:Bind ViewModel.EditOwner, Mode=OneWay}"
-                EditSessionCompleted="VectorEditCompleted"
-                EditSessionStarted="VectorEditStarted"
+                EditSessionCompleted="ColorEditCompleted"
+                EditSessionStarted="ColorEditStarted"
                 ErrorText="{x:Bind ViewModel.InscatteringLuminanceDiagnostic.Message, Mode=OneWay}"
                 FontSize="14"
                 Green="{x:Bind ViewModel.InscatteringLuminanceG, Mode=TwoWay}"
                 HasError="{x:Bind ViewModel.InscatteringLuminanceDiagnostic.HasError, Mode=OneWay}"
+                Kind="Luminance"
                 Label="Inscattering"
                 PickerAutomationName="Pick inscattering color"
-                Qualifier="Luminance RGB"
                 Red="{x:Bind ViewModel.InscatteringLuminanceR, Mode=TwoWay}"
-                SwatchBorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                SwatchCornerRadius="3"
                 Tag="InscatteringLuminanceRgb" />
-            <fields:InspectorRgbField
+            <editorcontrols:InspectorColorField
                 x:Name="SkyAmbientScaleRgbCard"
                 Blue="{x:Bind ViewModel.SkyAmbientScaleB, Mode=TwoWay}"
-                ChannelAutomationName="Sky Ambient, RGB ×"
                 DiagnosticSpacing="2"
-                EditSessionCompleted="VectorEditCompleted"
-                EditSessionStarted="VectorEditStarted"
+                EditSessionCompleted="ColorEditCompleted"
+                EditSessionStarted="ColorEditStarted"
                 ErrorText="{x:Bind ViewModel.SkyAmbientScaleDiagnostic.Message, Mode=OneWay}"
                 FontSize="14"
                 Green="{x:Bind ViewModel.SkyAmbientScaleG, Mode=TwoWay}"
                 HasError="{x:Bind ViewModel.SkyAmbientScaleDiagnostic.HasError, Mode=OneWay}"
-                IsMultiplier="True"
+                Kind="Multiplier"
                 Label="Sky Ambient"
-                Qualifier="RGB ×"
                 Red="{x:Bind ViewModel.SkyAmbientScaleR, Mode=TwoWay}"
                 Tag="SkyAmbientScaleRgb" />
             <Expander
@@ -144,8 +137,8 @@
                         Mask="~.#####"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.SecondDensity, Mode=TwoWay}"
-                        Qualifier="1/m"
-                        Tag="SecondDensity" />
+                        Tag="SecondDensity"
+                        Unit="1/m" />
                     <editorcontrols:InspectorNumberField
                         x:Name="SecondHeightFalloffCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -158,8 +151,8 @@
                         Mask="~.#####"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.SecondHeightFalloff, Mode=TwoWay}"
-                        Qualifier="1/m"
-                        Tag="SecondHeightFalloff" />
+                        Tag="SecondHeightFalloff"
+                        Unit="1/m" />
                     <editorcontrols:InspectorNumberField
                         x:Name="SecondHeightOffsetMetersCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -171,8 +164,8 @@
                         Label="Height Offset"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.SecondHeightOffsetMeters, Mode=TwoWay}"
-                        Qualifier="m"
-                        Tag="SecondHeightOffsetMeters" />
+                        Tag="SecondHeightOffsetMeters"
+                        Unit="m" />
                 </StackPanel>
             </Expander>
             <Expander
@@ -195,8 +188,8 @@
                         Label="Start"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.StartDistanceMeters, Mode=TwoWay}"
-                        Qualifier="m"
-                        Tag="StartDistanceMeters" />
+                        Tag="StartDistanceMeters"
+                        Unit="m" />
                     <editorcontrols:InspectorNumberField
                         x:Name="EndDistanceMetersCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -208,8 +201,8 @@
                         Label="End"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.EndDistanceMeters, Mode=TwoWay}"
-                        Qualifier="m"
-                        Tag="EndDistanceMeters" />
+                        Tag="EndDistanceMeters"
+                        Unit="m" />
                     <editorcontrols:InspectorNumberField
                         x:Name="CutoffDistanceMetersCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -221,8 +214,8 @@
                         Label="Cutoff"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.CutoffDistanceMeters, Mode=TwoWay}"
-                        Qualifier="m"
-                        Tag="CutoffDistanceMeters" />
+                        Tag="CutoffDistanceMeters"
+                        Unit="m" />
                 </StackPanel>
             </Expander>
             <Expander
@@ -234,24 +227,20 @@
                 IsExpanded="False"
                 Style="{StaticResource QuietDisclosure}">
                 <StackPanel Spacing="4">
-                    <fields:InspectorRgbField
+                    <editorcontrols:InspectorColorField
                         x:Name="DirectionalInscatteringLuminanceRgbCard"
                         Blue="{x:Bind ViewModel.DirectionalInscatteringLuminanceB, Mode=TwoWay}"
-                        ChannelAutomationName="Luminance, Luminance RGB"
                         ColorPicked="OnRgbColorPicked"
-                        EditOwner="{x:Bind ViewModel.EditOwner, Mode=OneWay}"
-                        EditSessionCompleted="VectorEditCompleted"
-                        EditSessionStarted="VectorEditStarted"
+                        EditSessionCompleted="ColorEditCompleted"
+                        EditSessionStarted="ColorEditStarted"
                         ErrorText="{x:Bind ViewModel.DirectionalInscatteringLuminanceDiagnostic.Message, Mode=OneWay}"
                         FontSize="14"
                         Green="{x:Bind ViewModel.DirectionalInscatteringLuminanceG, Mode=TwoWay}"
                         HasError="{x:Bind ViewModel.DirectionalInscatteringLuminanceDiagnostic.HasError, Mode=OneWay}"
+                        Kind="Luminance"
                         Label="Luminance"
                         PickerAutomationName="Pick luminance color"
-                        Qualifier="Luminance RGB"
                         Red="{x:Bind ViewModel.DirectionalInscatteringLuminanceR, Mode=TwoWay}"
-                        SwatchBorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                        SwatchCornerRadius="3"
                         Tag="DirectionalInscatteringLuminanceRgb" />
                     <editorcontrols:InspectorNumberField
                         x:Name="DirectionalInscatteringExponentCard"
@@ -276,8 +265,8 @@
                         Label="Start"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.DirectionalInscatteringStartDistanceMeters, Mode=TwoWay}"
-                        Qualifier="m"
-                        Tag="DirectionalInscatteringStartDistanceMeters" />
+                        Tag="DirectionalInscatteringStartDistanceMeters"
+                        Unit="m" />
                 </StackPanel>
             </Expander>
             <Expander
@@ -307,44 +296,35 @@
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.VolumetricScatteringDistribution, Mode=TwoWay}"
                         Tag="VolumetricScatteringDistribution" />
-                    <fields:InspectorRgbField
+                    <editorcontrols:InspectorColorField
                         x:Name="VolumetricAlbedoRgbCard"
                         Blue="{x:Bind ViewModel.VolumetricAlbedoB, Mode=TwoWay}"
-                        ChannelAutomationName="Albedo, Linear RGB"
                         ColorPicked="OnRgbColorPicked"
                         ComponentMask="~.#"
-                        EditOwner="{x:Bind ViewModel.EditOwner, Mode=OneWay}"
-                        EditSessionCompleted="VectorEditCompleted"
-                        EditSessionStarted="VectorEditStarted"
+                        EditSessionCompleted="ColorEditCompleted"
+                        EditSessionStarted="ColorEditStarted"
                         ErrorText="{x:Bind ViewModel.VolumetricAlbedoDiagnostic.Message, Mode=OneWay}"
                         FontSize="14"
                         Green="{x:Bind ViewModel.VolumetricAlbedoG, Mode=TwoWay}"
                         HasError="{x:Bind ViewModel.VolumetricAlbedoDiagnostic.HasError, Mode=OneWay}"
                         Label="Albedo"
                         PickerAutomationName="Pick albedo color"
-                        Qualifier="Linear RGB"
                         Red="{x:Bind ViewModel.VolumetricAlbedoR, Mode=TwoWay}"
-                        SwatchBorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                        SwatchCornerRadius="3"
                         Tag="VolumetricAlbedoRgb" />
-                    <fields:InspectorRgbField
+                    <editorcontrols:InspectorColorField
                         x:Name="VolumetricEmissiveRgbCard"
                         Blue="{x:Bind ViewModel.VolumetricEmissiveB, Mode=TwoWay}"
-                        ChannelAutomationName="Emissive, Luminance RGB"
                         ColorPicked="OnRgbColorPicked"
-                        EditOwner="{x:Bind ViewModel.EditOwner, Mode=OneWay}"
-                        EditSessionCompleted="VectorEditCompleted"
-                        EditSessionStarted="VectorEditStarted"
+                        EditSessionCompleted="ColorEditCompleted"
+                        EditSessionStarted="ColorEditStarted"
                         ErrorText="{x:Bind ViewModel.VolumetricEmissiveDiagnostic.Message, Mode=OneWay}"
                         FontSize="14"
                         Green="{x:Bind ViewModel.VolumetricEmissiveG, Mode=TwoWay}"
                         HasError="{x:Bind ViewModel.VolumetricEmissiveDiagnostic.HasError, Mode=OneWay}"
+                        Kind="Luminance"
                         Label="Emissive"
                         PickerAutomationName="Pick emissive color"
-                        Qualifier="Luminance RGB"
                         Red="{x:Bind ViewModel.VolumetricEmissiveR, Mode=TwoWay}"
-                        SwatchBorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                        SwatchCornerRadius="3"
                         Tag="VolumetricEmissiveRgb" />
                     <editorcontrols:InspectorNumberField
                         x:Name="VolumetricExtinctionScaleCard"
@@ -357,8 +337,8 @@
                         Label="Extinction Scale"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.VolumetricExtinctionScale, Mode=TwoWay}"
-                        Qualifier="×"
-                        Tag="VolumetricExtinctionScale" />
+                        Tag="VolumetricExtinctionScale"
+                        Unit="×" />
                     <editorcontrols:InspectorNumberField
                         x:Name="VolumetricDistanceMetersCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -370,8 +350,8 @@
                         Label="Distance"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.VolumetricDistanceMeters, Mode=TwoWay}"
-                        Qualifier="m"
-                        Tag="VolumetricDistanceMeters" />
+                        Tag="VolumetricDistanceMeters"
+                        Unit="m" />
                     <editorcontrols:InspectorNumberField
                         x:Name="VolumetricStartDistanceMetersCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -383,8 +363,8 @@
                         Label="Start"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.VolumetricStartDistanceMeters, Mode=TwoWay}"
-                        Qualifier="m"
-                        Tag="VolumetricStartDistanceMeters" />
+                        Tag="VolumetricStartDistanceMeters"
+                        Unit="m" />
                     <editorcontrols:InspectorNumberField
                         x:Name="VolumetricNearFadeInDistanceMetersCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -396,8 +376,8 @@
                         Label="Near Fade-in"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.VolumetricNearFadeInDistanceMeters, Mode=TwoWay}"
-                        Qualifier="m"
-                        Tag="VolumetricNearFadeInDistanceMeters" />
+                        Tag="VolumetricNearFadeInDistanceMeters"
+                        Unit="m" />
                     <editorcontrols:InspectorNumberField
                         x:Name="VolumetricStaticLightingScatteringIntensityCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -409,8 +389,8 @@
                         Label="Sky Light Scattering"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.VolumetricStaticLightingScatteringIntensity, Mode=TwoWay}"
-                        Qualifier="×"
-                        Tag="VolumetricStaticLightingScatteringIntensity" />
+                        Tag="VolumetricStaticLightingScatteringIntensity"
+                        Unit="×" />
                     <editorcontrols:PropertyCard
                         x:Name="OverrideLightColorsWithFogInscatteringCard"
                         HorizontalContentAlignment="Stretch"

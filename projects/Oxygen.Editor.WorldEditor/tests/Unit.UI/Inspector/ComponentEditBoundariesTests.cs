@@ -10,6 +10,7 @@ using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.Controls;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
@@ -55,7 +56,7 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
         _ = number.IsLoaded.Should().BeTrue();
         var completions = new List<NumberBoxEditSessionEventArgs>();
         number.EditSessionCompleted += (_, args) => completions.Add(args);
-        var before = number.NumberValue;
+        var before = (float)number.NumberValue;
         var edited = before + 1;
         if (text)
         {
@@ -151,39 +152,45 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
         _ = host.ComponentFilters.Single(option => option.ComponentType == typeof(TransformComponent)).ValidationMessage.Should().Be(otherError);
     });
 
-    /// <summary>A picker from an old filter lifetime cannot finish the new picker's gesture.</summary>
+    /// <summary>A pick from an old filter lifetime cannot finish the new pick's gesture.</summary>
     /// <returns>The asynchronous color-lifetime regression.</returns>
     [TestMethod]
-    public Task OldColorPickerUnloadingCannotFinishReactivatedComponentEdit() => EnqueueAsync(async () =>
+    public Task OldColorPickFinishingLateCannotFinishReactivatedComponentEdit() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Light");
         host.SelectComponentFilter(typeof(DirectionalLightComponent));
         var light = host.PropertyEditors.OfType<DirectionalLightViewModel>().Single();
         var original = ReadSceneColor(fixture, "Light");
-        var oldPicker = new ColorPicker();
-        var currentPicker = new ColorPicker();
+        var oldField = new InspectorColorField { Tag = "Color" };
+        var currentField = new InspectorColorField { Tag = "Color" };
         var panel = new StackPanel();
-        panel.Children.Add(oldPicker);
-        panel.Children.Add(currentPicker);
+        panel.Children.Add(oldField);
+        panel.Children.Add(currentField);
         await LoadTestContentAsync(panel).ConfigureAwait(true);
-        InspectorColorGestures.Attach(oldPicker, light, "Color");
-        InspectorColorGestures.Apply(oldPicker, owner => ((DirectionalLightViewModel)owner).SetColor(InspectorRgbPresentation.ToLinearRgb(Colors.Red)));
+        InspectorColorEdits.Begin(light, oldField, Pick());
+        Apply(oldField, new ColorChannels(1, 0, 0, 1));
         host.SelectComponentFilter(typeof(TransformComponent));
         await light.PendingEdits.ConfigureAwait(true);
         _ = ReadSceneColor(fixture, "Light").Should().Be(original);
         host.SelectComponentFilter(typeof(DirectionalLightComponent));
-        InspectorColorGestures.Attach(currentPicker, light, "Color");
-        InspectorColorGestures.Apply(currentPicker, owner => ((DirectionalLightViewModel)owner).SetColor(InspectorRgbPresentation.ToLinearRgb(Colors.Lime)));
-        _ = panel.Children.Remove(oldPicker);
+        InspectorColorEdits.Begin(light, currentField, Pick());
+        Apply(currentField, new ColorChannels(0, 1, 0, 1));
+        InspectorColorEdits.Complete(light, oldField, Pick(NumberBoxEditCompletionKind.Commit));
         await WaitForRenderAsync().ConfigureAwait(true);
         await light.PendingEdits.ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty("unloading the old picker must not commit the current gesture");
+        _ = fixture.Context.History.UndoStack.Should().BeEmpty("the old pick finishing late must not commit the current gesture");
         _ = ReadSceneColor(fixture, "Light").Should().Be(new Vector3(0, 1, 0));
-        light.EndEditSession(NumberBoxEditCompletionKind.Commit);
+        InspectorColorEdits.Complete(light, currentField, Pick(NumberBoxEditCompletionKind.Commit));
         await light.PendingEdits.ConfigureAwait(true);
         _ = fixture.Context.History.UndoStack.Should().ContainSingle();
         await fixture.Context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = ReadSceneColor(fixture, "Light").Should().Be(original);
+
+        static ColorBoxEditSessionEventArgs Pick(NumberBoxEditCompletionKind? completion = null)
+            => new(channel: null, NumberBoxEditInteractionKind.PointerDrag, completion);
+
+        static void Apply(InspectorColorField field, ColorChannels color)
+            => InspectorColorEdits.Apply<DirectionalLightViewModel>(field, new ColorBoxColorPickedEventArgs(color), static (owner, picked) => owner.SetColor(picked.ToVector3()));
     });
 }

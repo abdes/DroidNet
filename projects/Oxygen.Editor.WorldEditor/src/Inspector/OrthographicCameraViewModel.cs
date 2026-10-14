@@ -43,7 +43,7 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
     }
 
     /// <summary>Gets the half-height binding and its mixed state.</summary>
-    public PropertyBinding<float> OrthographicSize { get; } = new(SceneDocumentCommandService.OrthographicCamera.OrthographicSizeDescriptor);
+    public NumberBinding<float> OrthographicSize { get; } = new(SceneDocumentCommandService.OrthographicCamera.OrthographicSizeDescriptor);
 
     /// <summary>Gets or sets the framing policy through its guarded binding.</summary>
     public CameraAspectMode AspectMode
@@ -53,22 +53,22 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
     }
 
     /// <summary>Gets the retained Fixed aspect-ratio binding and its mixed state.</summary>
-    public PropertyBinding<float> AspectRatio { get; } = new(SceneDocumentCommandService.OrthographicCamera.AspectRatioDescriptor);
+    public NumberBinding<float> AspectRatio { get; } = new(SceneDocumentCommandService.OrthographicCamera.AspectRatioDescriptor);
 
     /// <summary>Gets the near-plane binding and its mixed state.</summary>
-    public PropertyBinding<float> NearPlane { get; } = new(SceneDocumentCommandService.OrthographicCamera.NearPlaneDescriptor);
+    public NumberBinding<float> NearPlane { get; } = new(SceneDocumentCommandService.OrthographicCamera.NearPlaneDescriptor);
 
     /// <summary>Gets the far-plane binding and its mixed state.</summary>
-    public PropertyBinding<float> FarPlane { get; } = new(SceneDocumentCommandService.OrthographicCamera.FarPlaneDescriptor);
+    public NumberBinding<float> FarPlane { get; } = new(SceneDocumentCommandService.OrthographicCamera.FarPlaneDescriptor);
 
     /// <summary>Gets the aperture f-number binding and its mixed state.</summary>
-    public PropertyBinding<float> ApertureF { get; } = new(SceneDocumentCommandService.OrthographicCamera.ApertureFDescriptor);
+    public NumberBinding<float> ApertureF { get; } = new(SceneDocumentCommandService.OrthographicCamera.ApertureFDescriptor);
 
     /// <summary>Gets the shutter-rate binding and its mixed state.</summary>
-    public PropertyBinding<float> ShutterRate { get; } = new(SceneDocumentCommandService.OrthographicCamera.ShutterRateDescriptor);
+    public NumberBinding<float> ShutterRate { get; } = new(SceneDocumentCommandService.OrthographicCamera.ShutterRateDescriptor);
 
     /// <summary>Gets the ISO binding and its mixed state.</summary>
-    public PropertyBinding<float> Iso { get; } = new(SceneDocumentCommandService.OrthographicCamera.IsoDescriptor);
+    public NumberBinding<float> Iso { get; } = new(SceneDocumentCommandService.OrthographicCamera.IsoDescriptor);
 
     /// <summary>Gets the framing policies offered by the inspector.</summary>
     public IReadOnlyList<CameraAspectMode> AspectModeOptions { get; } = Enum.GetValues<CameraAspectMode>();

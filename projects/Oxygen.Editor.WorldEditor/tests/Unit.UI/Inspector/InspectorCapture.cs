@@ -23,7 +23,8 @@ internal static class InspectorCapture
         var bitmap = new RenderTargetBitmap();
         await bitmap.RenderAsync(element);
         var pixels = await bitmap.GetPixelsAsync();
-        await using var stream = File.Create(Path.Combine(directory, $"{name}.png"));
+        var stream = File.Create(Path.Combine(directory, $"{name}.png"));
+        await using var streamLifetime = stream.ConfigureAwait(true);
         var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream.AsRandomAccessStream());
         encoder.SetPixelData(
             BitmapPixelFormat.Bgra8,
@@ -34,13 +35,5 @@ internal static class InspectorCapture
             96,
             pixels.ToArray());
         await encoder.FlushAsync();
-    }
-
-    internal static async Task HoldIfRequestedAsync(CancellationToken cancellationToken)
-    {
-        if (int.TryParse(Environment.GetEnvironmentVariable("OXYGEN_UI_CAPTURE_HOLD_SECONDS"), System.Globalization.CultureInfo.InvariantCulture, out var holdSeconds) && holdSeconds > 0)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(holdSeconds), cancellationToken);
-        }
     }
 }

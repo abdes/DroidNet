@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Reactive.Subjects;
 using System.Runtime.InteropServices.WindowsRuntime;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
@@ -11,18 +12,21 @@ using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
+using static Oxygen.Editor.WorldEditor.TestSupport.InspectorModels;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
-using NumberBox = DroidNet.Controls.NumberBox;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
-[TestClass]
-internal sealed class ComponentLayoutTests : DroidNet.Tests.VisualUserInterfaceTests
+/// <summary>The panels around the property rows: the node editor dock and the material document header.</summary>
+internal sealed partial class ResponsiveLayoutTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -90,7 +94,6 @@ internal sealed class ComponentLayoutTests : DroidNet.Tests.VisualUserInterfaceT
         _ = components.ExtentHeight.Should().BeApproximately(64, 1);
         _ = properties.ActualHeight.Should().BePositive("even a short dock must retain a scrollable property viewport");
         AssertAllToggle(view, multiple);
-        await AssertPropertyEditorRowsAsync(view, properties, this.TestContext.CancellationToken).ConfigureAwait(true);
         await AssertScaledComponentSelectionAsync(view, multiple).ConfigureAwait(true);
         _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
@@ -146,6 +149,42 @@ internal sealed class ComponentLayoutTests : DroidNet.Tests.VisualUserInterfaceT
         _ = model.ComponentFilters.Single(option => option.ComponentType == typeof(GeometryComponent)).IsAvailable.Should().BeTrue();
     });
 
+    /// <summary>The material document keeps its cook status beside the title and every header action inside the document.</summary>
+    /// <param name="width">The document width in logical pixels.</param>
+    /// <param name="rasterizationScale">The effective XAML scale.</param>
+    /// <returns>The asynchronous header layout regression.</returns>
+    [TestMethod]
+    [DataRow(920d, 1d)]
+    [DataRow(920d, 2d)]
+    [DataRow(560d, 1.5d)]
+    [DataRow(360d, 1d)]
+    [DataRow(360d, 2d)]
+    public Task MaterialHeaderKeepsStatusBesideTheTitleAndActionsInside(double width, double rasterizationScale) => EnqueueAsync(async () =>
+    {
+        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([CreateStatusAsset(0) with { IdentityUri = new("asset:///Content/Materials/UI.omat.json") }]);
+        using var model = CreateMaterialEditor(MaterialStatusTests.StatusProvider(updates));
+        var view = new MaterialEditorView { ViewModel = model, Width = width, Height = 600 };
+        using var scaledHost = new ScaledXamlHost();
+        await scaledHost.LoadAsync(view, rasterizationScale, this.TestContext.CancellationToken).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var chip = (Border)view.FindName("CookStatusChip");
+        _ = chip.ActualHeight.Should().BeLessThanOrEqualTo(26, "routine status uses one compact line");
+        var chipPoint = chip.TransformToVisual(view).TransformPoint(default);
+        _ = chipPoint.Y.Should().BeLessThan(40, "status belongs beside the title");
+        var buttons = view.FindDescendants().OfType<Button>().Where(button => button.Content is "Undo" or "Redo" or "Save" or "Cook").ToArray();
+        _ = buttons.Should().HaveCount(4);
+        foreach (var button in buttons)
+        {
+            var point = button.TransformToVisual(view).TransformPoint(default);
+            _ = point.X.Should().BeGreaterThanOrEqualTo(0);
+            _ = (point.X + button.ActualWidth).Should().BeLessThanOrEqualTo(view.ActualWidth);
+            if (Math.Abs(point.Y - chipPoint.Y) < 26)
+            {
+                _ = (chipPoint.X + chip.ActualWidth).Should().BeLessThanOrEqualTo(point.X);
+            }
+        }
+    });
+
     private static async Task AssertExtraHeightGoesToPropertiesAsync(SceneNodeEditorView view, Border captureHost, Border header, ScrollViewer properties)
     {
         if (view.Height > 300)
@@ -182,26 +221,5 @@ internal sealed class ComponentLayoutTests : DroidNet.Tests.VisualUserInterfaceT
         _ = all.IsTabStop.Should().BeTrue();
         _ = all.ToolBarLabelPosition.Should().Be(ToolBarLabelPosition.Collapsed);
         _ = ToolTipService.GetToolTip(all).Should().Be("Show all component properties");
-    }
-
-    private static async Task AssertPropertyEditorRowsAsync(SceneNodeEditorView view, ScrollViewer properties, CancellationToken cancellationToken)
-    {
-        var number = await FindInspectorControlAsync(properties, () => view.FindDescendant<VectorBox>()?.FindDescendant<NumberBox>(), "Position", cancellationToken).ConfigureAwait(true);
-        var card = number.FindAscendant<Oxygen.Editor.Controls.PropertyCard>()!;
-        var label = card.FindDescendant<TextBlock>(element => string.Equals(element.Name, "PropertyName", StringComparison.Ordinal))!;
-        var vector = card.FindDescendant<VectorBox>()!;
-        var labelPoint = label.TransformToVisual(card).TransformPoint(default);
-        var editorPoint = vector.TransformToVisual(card).TransformPoint(default);
-        if (card.ActualLayout == Oxygen.Editor.Controls.PropertyLayout.Stacked)
-        {
-            _ = editorPoint.Y.Should().BeGreaterThanOrEqualTo(labelPoint.Y + label.ActualHeight);
-        }
-        else
-        {
-            var rowWidth = card.ActualWidth - card.Padding.Left - card.Padding.Right;
-            _ = editorPoint.X.Should().BeApproximately(card.Padding.Left + ((rowWidth - 12) * 0.4) + 12, 1);
-        }
-
-        _ = ToolTipService.GetToolTip(label).Should().Be(card.PropertyName);
     }
 }

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Media;
 
@@ -67,7 +68,7 @@ internal static class CompositionTargetHelper
                 sender.Stop();
                 CompositionTarget.Rendering -= Callback;
                 _ = taskCompletionSource.TrySetException(new TimeoutException(
-                    $"No frame was rendered within {FrameTimeout.TotalSeconds:0} s; the test window is not rendering (minimized or occluded). Wait on layout or the dispatcher instead of a frame."));
+                    string.Create(CultureInfo.InvariantCulture, $"No frame was rendered within {FrameTimeout.TotalSeconds:0} s; the test window is not rendering (minimized or occluded). Wait on layout or the dispatcher instead of a frame.")));
             }
 
             timer.Tick += OnTimeout;

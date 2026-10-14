@@ -51,8 +51,8 @@
                 Label="Manual EV"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.ManualExposureEv, Mode=TwoWay}"
-                Qualifier="EV100"
-                Tag="ManualExposureEv" />
+                Tag="ManualExposureEv"
+                Unit="EV100" />
             <editorcontrols:InspectorNumberField
                 x:Name="ExposureCompensationCard"
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -64,8 +64,8 @@
                 Label="Compensation"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.ExposureCompensation, Mode=TwoWay}"
-                Qualifier="EV"
-                Tag="ExposureCompensation" />
+                Tag="ExposureCompensation"
+                Unit="EV" />
             <Expander
                 x:Name="MeteringLimitsDisclosure"
                 HorizontalAlignment="Stretch"
@@ -103,8 +103,8 @@
                         Label="Auto Min EV"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.AutoExposureMinEv, Mode=TwoWay}"
-                        Qualifier="EV100"
-                        Tag="AutoExposureMinEv" />
+                        Tag="AutoExposureMinEv"
+                        Unit="EV100" />
                     <editorcontrols:InspectorNumberField
                         x:Name="AutoExposureMaxEvCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -116,8 +116,8 @@
                         Label="Auto Max EV"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.AutoExposureMaxEv, Mode=TwoWay}"
-                        Qualifier="EV100"
-                        Tag="AutoExposureMaxEv" />
+                        Tag="AutoExposureMaxEv"
+                        Unit="EV100" />
                     <editorcontrols:InspectorNumberField
                         x:Name="AutoExposureTargetLuminanceCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -164,8 +164,8 @@
                         Label="Adapt Up"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.AutoExposureSpeedUp, Mode=TwoWay}"
-                        Qualifier="EV/s"
-                        Tag="AutoExposureSpeedUp" />
+                        Tag="AutoExposureSpeedUp"
+                        Unit="EV/s" />
                     <editorcontrols:InspectorNumberField
                         x:Name="AutoExposureSpeedDownCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -177,8 +177,8 @@
                         Label="Adapt Down"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.AutoExposureSpeedDown, Mode=TwoWay}"
-                        Qualifier="EV/s"
-                        Tag="AutoExposureSpeedDown" />
+                        Tag="AutoExposureSpeedDown"
+                        Unit="EV/s" />
                     <editorcontrols:InspectorNumberField
                         x:Name="AutoExposureTransitionDistanceEvCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -190,8 +190,8 @@
                         Label="Adaptation transition distance"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.AutoExposureTransitionDistanceEv, Mode=TwoWay}"
-                        Qualifier="EV"
-                        Tag="AutoExposureTransitionDistanceEv" />
+                        Tag="AutoExposureTransitionDistanceEv"
+                        Unit="EV" />
                 </StackPanel>
             </Expander>
             <Expander
@@ -274,8 +274,8 @@
                         Label="Dark-sample influence"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.AutoExposureBlackInfluence, Mode=TwoWay}"
-                        Qualifier="0–1"
-                        Tag="AutoExposureBlackInfluence" />
+                        Tag="AutoExposureBlackInfluence"
+                        Unit="0–1" />
                 </StackPanel>
             </Expander>
             <Expander

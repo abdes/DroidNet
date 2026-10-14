@@ -46,52 +46,52 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
     public partial bool ExposureEnabled { get; set; }
 
     [ObservableProperty]
-    public partial float ManualExposureEv { get; set; }
+    public partial double ManualExposureEv { get; set; }
 
     [ObservableProperty]
-    public partial float ExposureCompensation { get; set; }
+    public partial double ExposureCompensation { get; set; }
 
     [ObservableProperty]
-    public partial float ExposureKey { get; set; }
+    public partial double ExposureKey { get; set; }
 
     [ObservableProperty]
     public partial MeteringMode AutoExposureMeteringMode { get; set; }
 
     [ObservableProperty]
-    public partial float AutoExposureMinEv { get; set; }
+    public partial double AutoExposureMinEv { get; set; }
 
     [ObservableProperty]
-    public partial float AutoExposureMaxEv { get; set; }
+    public partial double AutoExposureMaxEv { get; set; }
 
     [ObservableProperty]
-    public partial float AutoExposureSpeedUp { get; set; }
+    public partial double AutoExposureSpeedUp { get; set; }
 
     [ObservableProperty]
-    public partial float AutoExposureSpeedDown { get; set; }
+    public partial double AutoExposureSpeedDown { get; set; }
 
     [ObservableProperty]
-    public partial float AutoExposureLowPercentile { get; set; }
+    public partial double AutoExposureLowPercentile { get; set; }
 
     [ObservableProperty]
-    public partial float AutoExposureHighPercentile { get; set; }
+    public partial double AutoExposureHighPercentile { get; set; }
 
     [ObservableProperty]
-    public partial float AutoExposureMinLogLuminance { get; set; }
+    public partial double AutoExposureMinLogLuminance { get; set; }
 
     [ObservableProperty]
-    public partial float AutoExposureLogLuminanceRange { get; set; }
+    public partial double AutoExposureLogLuminanceRange { get; set; }
 
     [ObservableProperty]
-    public partial float AutoExposureTargetLuminance { get; set; }
+    public partial double AutoExposureTargetLuminance { get; set; }
 
     [ObservableProperty]
-    public partial float AutoExposureSpotMeterRadius { get; set; }
+    public partial double AutoExposureSpotMeterRadius { get; set; }
 
     [ObservableProperty]
-    public partial float AutoExposureBlackInfluence { get; set; }
+    public partial double AutoExposureBlackInfluence { get; set; }
 
     [ObservableProperty]
-    public partial float AutoExposureTransitionDistanceEv { get; set; } = 1.5f;
+    public partial double AutoExposureTransitionDistanceEv { get; set; } = 1.5f;
 
     [ObservableProperty]
     public partial Uri? AutoExposureMeteringMask { get; set; }
@@ -257,37 +257,37 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
 
     partial void OnExposureEnabledChanged(bool value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.ExposureEnabled, value);
 
-    partial void OnManualExposureEvChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.ManualExposureEv, value);
+    partial void OnManualExposureEvChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.ManualExposureEv, value);
 
-    partial void OnExposureCompensationChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.ExposureCompensation, value);
+    partial void OnExposureCompensationChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.ExposureCompensation, value);
 
-    partial void OnExposureKeyChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.ExposureKey, value);
+    partial void OnExposureKeyChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.ExposureKey, value);
 
     partial void OnAutoExposureMeteringModeChanged(MeteringMode value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureMeteringMode, value);
 
-    partial void OnAutoExposureMinEvChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinEv, value);
+    partial void OnAutoExposureMinEvChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinEv, value);
 
-    partial void OnAutoExposureMaxEvChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureMaxEv, value);
+    partial void OnAutoExposureMaxEvChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureMaxEv, value);
 
-    partial void OnAutoExposureSpeedUpChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedUp, value);
+    partial void OnAutoExposureSpeedUpChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedUp, value);
 
-    partial void OnAutoExposureSpeedDownChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedDown, value);
+    partial void OnAutoExposureSpeedDownChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedDown, value);
 
-    partial void OnAutoExposureLowPercentileChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureLowPercentile, value);
+    partial void OnAutoExposureLowPercentileChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureLowPercentile, value);
 
-    partial void OnAutoExposureHighPercentileChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureHighPercentile, value);
+    partial void OnAutoExposureHighPercentileChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureHighPercentile, value);
 
-    partial void OnAutoExposureMinLogLuminanceChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinLogLuminance, value);
+    partial void OnAutoExposureMinLogLuminanceChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinLogLuminance, value);
 
-    partial void OnAutoExposureLogLuminanceRangeChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureLogLuminanceRange, value);
+    partial void OnAutoExposureLogLuminanceRangeChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureLogLuminanceRange, value);
 
-    partial void OnAutoExposureTargetLuminanceChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureTargetLuminance, value);
+    partial void OnAutoExposureTargetLuminanceChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureTargetLuminance, value);
 
-    partial void OnAutoExposureSpotMeterRadiusChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpotMeterRadius, value);
+    partial void OnAutoExposureSpotMeterRadiusChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpotMeterRadius, value);
 
-    partial void OnAutoExposureBlackInfluenceChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureBlackInfluence, value);
+    partial void OnAutoExposureBlackInfluenceChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureBlackInfluence, value);
 
-    partial void OnAutoExposureTransitionDistanceEvChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureTransitionDistanceEv, value);
+    partial void OnAutoExposureTransitionDistanceEvChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureTransitionDistanceEv, value);
 
     partial void OnAutoExposureMeteringMaskChanged(Uri? value)
     {

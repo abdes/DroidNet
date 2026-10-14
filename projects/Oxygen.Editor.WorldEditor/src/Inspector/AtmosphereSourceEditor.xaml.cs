@@ -28,9 +28,9 @@ public sealed partial class AtmosphereSourceView : UserControl
     private void NumberEditCompleted(object? sender, NumberBoxEditSessionEventArgs args)
         => (this.DataContext as DirectionalLightViewModel)?.CompleteEditSession(args);
 
-    private void VectorEditStarted(object? sender, VectorBoxEditSessionEventArgs args)
-        => (this.DataContext as DirectionalLightViewModel)?.BeginEditSession($"DiskScale{args.Component}", args.InteractionKind);
+    private void ColorEditStarted(object? sender, ColorBoxEditSessionEventArgs args)
+        => InspectorColorEdits.Begin(this.DataContext as DirectionalLightViewModel, sender, args);
 
-    private void VectorEditCompleted(object? sender, VectorBoxEditSessionEventArgs args)
-        => (this.DataContext as DirectionalLightViewModel)?.CompleteEditSession(new(args.InteractionKind, args.CompletionKind));
+    private void ColorEditCompleted(object? sender, ColorBoxEditSessionEventArgs args)
+        => InspectorColorEdits.Complete(this.DataContext as DirectionalLightViewModel, sender, args);
 }

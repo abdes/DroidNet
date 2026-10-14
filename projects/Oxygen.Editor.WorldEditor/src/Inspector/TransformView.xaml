@@ -41,15 +41,16 @@
         HeaderIcon="{ui:FontIcon Glyph='&#xE7AD;'}"
         IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
         <editorcontrols:PropertiesExpander.Items>
-            <editorcontrols:PropertyCard
-                HorizontalContentAlignment="Stretch"
-                EditorMinimumWidth="248"
-                IsCompound="True"
-                IsEnabled="{x:Bind ViewModel.PositionProperty.IsEnabled, Mode=OneWay}"
-                PropertyName="Position"
-                Qualifier="m"
-                Visibility="{x:Bind ViewModel.PositionProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <StackPanel Spacing="2">
+            <!--  Errors sit below the card, so their wrapping text never decides whether the row stacks.  -->
+            <StackPanel Spacing="2">
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    IsCompound="True"
+                    IsEnabled="{x:Bind ViewModel.PositionProperty.IsEnabled, Mode=OneWay}"
+                    PropertyName="Position"
+                    Qualifier="m"
+                    QualifierGroup="Transform"
+                    Visibility="{x:Bind ViewModel.PositionProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:VectorBox
                         x:Name="PositionBox"
                         AutomationProperties.Name="Position, metres"
@@ -65,45 +66,39 @@
                         YValue="{x:Bind ViewModel.PositionY, Mode=TwoWay}"
                         ZIsIndeterminate="{x:Bind ViewModel.PositionZIsIndeterminate, Mode=TwoWay}"
                         ZValue="{x:Bind ViewModel.PositionZ, Mode=TwoWay}" />
-                    <Grid ColumnSpacing="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock
-                            Grid.Column="0"
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.PositionXDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.PositionXDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        <TextBlock
-                            Grid.Column="1"
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.PositionYDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.PositionYDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        <TextBlock
-                            Grid.Column="2"
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.PositionZDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.PositionZDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                    </Grid>
-                </StackPanel>
-            </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard
-                HorizontalContentAlignment="Stretch"
-                EditorMinimumWidth="248"
-                IsCompound="True"
-                IsEnabled="{x:Bind ViewModel.RotationProperty.IsEnabled, Mode=OneWay}"
-                PropertyName="Rotation"
-                Qualifier="°"
-                Visibility="{x:Bind ViewModel.RotationProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <StackPanel Spacing="2">
+                </editorcontrols:PropertyCard>
+                <TextBlock
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.PositionXDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}">
+                    <Run Text="X: " /><Run Text="{x:Bind ViewModel.PositionXDiagnostic.Message, Mode=OneWay}" />
+                </TextBlock>
+                <TextBlock
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.PositionYDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}">
+                    <Run Text="Y: " /><Run Text="{x:Bind ViewModel.PositionYDiagnostic.Message, Mode=OneWay}" />
+                </TextBlock>
+                <TextBlock
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.PositionZDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}">
+                    <Run Text="Z: " /><Run Text="{x:Bind ViewModel.PositionZDiagnostic.Message, Mode=OneWay}" />
+                </TextBlock>
+            </StackPanel>
+            <!--  Errors sit below the card, so their wrapping text never decides whether the row stacks.  -->
+            <StackPanel Spacing="2">
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    IsCompound="True"
+                    IsEnabled="{x:Bind ViewModel.RotationProperty.IsEnabled, Mode=OneWay}"
+                    PropertyName="Rotation"
+                    Qualifier="°"
+                    QualifierGroup="Transform"
+                    Visibility="{x:Bind ViewModel.RotationProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:VectorBox
                         x:Name="RotationBox"
                         AutomationProperties.Name="Rotation, degrees"
@@ -119,45 +114,39 @@
                         YValue="{x:Bind ViewModel.RotationY, Mode=TwoWay}"
                         ZIsIndeterminate="{x:Bind ViewModel.RotationZIsIndeterminate, Mode=TwoWay}"
                         ZValue="{x:Bind ViewModel.RotationZ, Mode=TwoWay}" />
-                    <Grid ColumnSpacing="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock
-                            Grid.Column="0"
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.RotationXDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.RotationXDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        <TextBlock
-                            Grid.Column="1"
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.RotationYDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.RotationYDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        <TextBlock
-                            Grid.Column="2"
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.RotationZDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.RotationZDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                    </Grid>
-                </StackPanel>
-            </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard
-                HorizontalContentAlignment="Stretch"
-                EditorMinimumWidth="248"
-                IsCompound="True"
-                IsEnabled="{x:Bind ViewModel.ScaleProperty.IsEnabled, Mode=OneWay}"
-                PropertyName="Scale"
-                Qualifier="x"
-                Visibility="{x:Bind ViewModel.ScaleProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <StackPanel Spacing="2">
+                </editorcontrols:PropertyCard>
+                <TextBlock
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.RotationXDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}">
+                    <Run Text="X: " /><Run Text="{x:Bind ViewModel.RotationXDiagnostic.Message, Mode=OneWay}" />
+                </TextBlock>
+                <TextBlock
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.RotationYDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}">
+                    <Run Text="Y: " /><Run Text="{x:Bind ViewModel.RotationYDiagnostic.Message, Mode=OneWay}" />
+                </TextBlock>
+                <TextBlock
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.RotationZDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}">
+                    <Run Text="Z: " /><Run Text="{x:Bind ViewModel.RotationZDiagnostic.Message, Mode=OneWay}" />
+                </TextBlock>
+            </StackPanel>
+            <!--  Errors sit below the card, so their wrapping text never decides whether the row stacks.  -->
+            <StackPanel Spacing="2">
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    IsCompound="True"
+                    IsEnabled="{x:Bind ViewModel.ScaleProperty.IsEnabled, Mode=OneWay}"
+                    PropertyName="Scale"
+                    Qualifier="x"
+                    QualifierGroup="Transform"
+                    Visibility="{x:Bind ViewModel.ScaleProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:VectorBox
                         x:Name="ScaleBox"
                         AutomationProperties.Name="Scale, multiplier"
@@ -173,37 +162,29 @@
                         YValue="{x:Bind ViewModel.ScaleY, Mode=TwoWay}"
                         ZIsIndeterminate="{x:Bind ViewModel.ScaleZIsIndeterminate, Mode=TwoWay}"
                         ZValue="{x:Bind ViewModel.ScaleZ, Mode=TwoWay}" />
-                    <Grid ColumnSpacing="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock
-                            x:Name="ScaleXDiagnosticText"
-                            Grid.Column="0"
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.ScaleXDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.ScaleXDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        <TextBlock
-                            Grid.Column="1"
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.ScaleYDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.ScaleYDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        <TextBlock
-                            Grid.Column="2"
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.ScaleZDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.ScaleZDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                    </Grid>
-                </StackPanel>
-            </editorcontrols:PropertyCard>
+                </editorcontrols:PropertyCard>
+                <TextBlock
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.ScaleXDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}">
+                    <Run Text="X: " /><Run Text="{x:Bind ViewModel.ScaleXDiagnostic.Message, Mode=OneWay}" />
+                </TextBlock>
+                <TextBlock
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.ScaleYDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}">
+                    <Run Text="Y: " /><Run Text="{x:Bind ViewModel.ScaleYDiagnostic.Message, Mode=OneWay}" />
+                </TextBlock>
+                <TextBlock
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.ScaleZDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}">
+                    <Run Text="Z: " /><Run Text="{x:Bind ViewModel.ScaleZDiagnostic.Message, Mode=OneWay}" />
+                </TextBlock>
+            </StackPanel>
         </editorcontrols:PropertiesExpander.Items>
     </editorcontrols:PropertiesExpander>
 </UserControl>

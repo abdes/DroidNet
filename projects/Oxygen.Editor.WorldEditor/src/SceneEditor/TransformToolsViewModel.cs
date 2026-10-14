@@ -33,11 +33,11 @@ public sealed partial class TransformToolsViewModel : ObservableObject, IDisposa
         this.RotationOptions = [.. TransformToolSettingsService.RotationPresets.Select(value => CreateOption(FormatRotation(value), () => settings.RotationIncrement = value))];
         this.ScaleOptions = [.. TransformToolSettingsService.ScalePresets.Select(value => CreateOption(FormatScale(value), () => settings.ScaleIncrement = value))];
         this.TranslationField = new ViewportCameraNumberBoxItemModel(
-            settings.TranslationIncrement, 0.001F, TransformToolSettingsService.MaximumIncrement, "m", "~.###", onNumberValueChanged: value => settings.TranslationIncrement = value);
+            settings.TranslationIncrement, 0.001F, TransformToolSettingsService.MaximumIncrement, "m", "~.###", onNumberValueChanged: value => settings.TranslationIncrement = (float)value);
         this.RotationField = new ViewportCameraNumberBoxItemModel(
-            settings.RotationIncrement, 0.01F, 360.0F, "°", "~.##", onNumberValueChanged: value => settings.RotationIncrement = value);
+            settings.RotationIncrement, 0.01F, 360.0F, "°", "~.##", onNumberValueChanged: value => settings.RotationIncrement = (float)value);
         this.ScaleField = new ViewportCameraNumberBoxItemModel(
-            settings.ScaleIncrement, 0.001F, TransformToolSettingsService.MaximumIncrement, string.Empty, "~.###", onNumberValueChanged: value => settings.ScaleIncrement = value);
+            settings.ScaleIncrement, 0.001F, TransformToolSettingsService.MaximumIncrement, string.Empty, "~.###", onNumberValueChanged: value => settings.ScaleIncrement = (float)value);
         settings.PropertyChanged += this.OnSettingsChanged;
         this.UpdateOptions();
     }

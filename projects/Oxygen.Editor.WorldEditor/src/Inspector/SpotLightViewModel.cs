@@ -21,25 +21,25 @@ public sealed partial class SpotLightViewModel : LocalLightViewModel
         Func<SceneDocumentCommandContext?>? commandContextProvider = null)
         : base(SceneDocumentCommandService.SpotLight, "Edit Spot Light", commandService, commandContextProvider)
     {
-        this.InnerConeAngleRadians = this.Register(new PropertyBinding<float>(SceneDocumentCommandService.SpotLight.InnerConeAngleRadiansDescriptor!), nameof(this.InnerConeAngleDegrees));
-        this.OuterConeAngleRadians = this.Register(new PropertyBinding<float>(SceneDocumentCommandService.SpotLight.OuterConeAngleRadiansDescriptor!), nameof(this.OuterConeAngleDegrees));
+        this.InnerConeAngleRadians = this.Register(new NumberBinding<float>(SceneDocumentCommandService.SpotLight.InnerConeAngleRadiansDescriptor!), nameof(this.InnerConeAngleDegrees));
+        this.OuterConeAngleRadians = this.Register(new NumberBinding<float>(SceneDocumentCommandService.SpotLight.OuterConeAngleRadiansDescriptor!), nameof(this.OuterConeAngleDegrees));
     }
 
     /// <summary>Gets the inner cone half-angle binding, in radians.</summary>
-    public PropertyBinding<float> InnerConeAngleRadians { get; }
+    public NumberBinding<float> InnerConeAngleRadians { get; }
 
     /// <summary>Gets the outer cone half-angle binding, in radians.</summary>
-    public PropertyBinding<float> OuterConeAngleRadians { get; }
+    public NumberBinding<float> OuterConeAngleRadians { get; }
 
     /// <summary>Gets or sets the inner cone half-angle in display degrees.</summary>
-    public float InnerConeAngleDegrees
+    public double InnerConeAngleDegrees
     {
         get => this.InnerConeAngleRadians.Value * RadToDeg;
         set => RequestDegrees(this.InnerConeAngleRadians, value);
     }
 
     /// <summary>Gets or sets the outer cone half-angle in display degrees.</summary>
-    public float OuterConeAngleDegrees
+    public double OuterConeAngleDegrees
     {
         get => this.OuterConeAngleRadians.Value * RadToDeg;
         set => RequestDegrees(this.OuterConeAngleRadians, value);
@@ -62,9 +62,9 @@ public sealed partial class SpotLightViewModel : LocalLightViewModel
         => node.Components.OfType<SpotLightComponent>().FirstOrDefault();
 
     /// <summary>Requests a display-degree angle, ignoring the echo of its own radian round trip.</summary>
-    private static void RequestDegrees(PropertyBinding<float> binding, float degrees)
+    private static void RequestDegrees(NumberBinding<float> binding, double degrees)
     {
-        var radians = degrees * DegToRad;
+        var radians = (float)(degrees * DegToRad);
         if (binding.IsMixed || MathF.Abs(binding.Value - radians) > 1e-6f)
         {
             binding.Value = radians;

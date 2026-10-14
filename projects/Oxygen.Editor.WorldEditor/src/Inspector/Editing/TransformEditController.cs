@@ -36,12 +36,12 @@ internal sealed partial class TransformEditController(
 
     private readonly ILogger logger = loggerFactory?.CreateLogger<TransformEditController>() ?? NullLoggerFactory.Instance.CreateLogger<TransformEditController>();
     private readonly InspectorFieldDiagnostics diagnostics = diagnostics;
-    private readonly HashSet<string> supersededFields = [];
+    private readonly HashSet<string> supersededFields = [with(StringComparer.Ordinal)];
 
     private readonly SemaphoreSlim editGate = new(initialCount: 1, maxCount: 1);
-    private readonly Dictionary<string, TransformEditSession> activeSessions = [];
-    private readonly Dictionary<string, NumericInputExpression> pendingRelativeEdits = [];
-    private readonly Dictionary<string, CancellationTokenSource> wheelIdleCommits = [];
+    private readonly Dictionary<string, TransformEditSession> activeSessions = [with(StringComparer.Ordinal)];
+    private readonly Dictionary<string, NumericInputExpression> pendingRelativeEdits = [with(StringComparer.Ordinal)];
+    private readonly Dictionary<string, CancellationTokenSource> wheelIdleCommits = [with(StringComparer.Ordinal)];
     private readonly DispatcherQueue? dispatcher = DispatcherQueue.GetForCurrentThread();
 
     // Keep track of the current selection so property-change handlers can apply edits back
@@ -110,28 +110,28 @@ internal sealed partial class TransformEditController(
     /// <param name="scaleZ">Optional Z scale.</param>
     /// <returns>The partial authored edit.</returns>
     internal static TransformEdit NewEdit(
-        float? positionX = null,
-        float? positionY = null,
-        float? positionZ = null,
-        float? rotationX = null,
-        float? rotationY = null,
-        float? rotationZ = null,
-        float? scaleX = null,
-        float? scaleY = null,
-        float? scaleZ = null)
+        double? positionX = null,
+        double? positionY = null,
+        double? positionZ = null,
+        double? rotationX = null,
+        double? rotationY = null,
+        double? rotationZ = null,
+        double? scaleX = null,
+        double? scaleY = null,
+        double? scaleZ = null)
         => new(
             OptionalEditValues.Unspecified<Vector3>(),
             OptionalEditValues.Unspecified<Vector3>(),
             OptionalEditValues.Unspecified<Vector3>(),
-            PositionX: positionX.HasValue ? OptionalEditValues.Supplied<float>(positionX.Value) : OptionalEditValues.Unspecified<float>(),
-            PositionY: positionY.HasValue ? OptionalEditValues.Supplied<float>(positionY.Value) : OptionalEditValues.Unspecified<float>(),
-            PositionZ: positionZ.HasValue ? OptionalEditValues.Supplied<float>(positionZ.Value) : OptionalEditValues.Unspecified<float>(),
-            RotationXDegrees: rotationX.HasValue ? OptionalEditValues.Supplied<float>(rotationX.Value) : OptionalEditValues.Unspecified<float>(),
-            RotationYDegrees: rotationY.HasValue ? OptionalEditValues.Supplied<float>(rotationY.Value) : OptionalEditValues.Unspecified<float>(),
-            RotationZDegrees: rotationZ.HasValue ? OptionalEditValues.Supplied<float>(rotationZ.Value) : OptionalEditValues.Unspecified<float>(),
-            ScaleX: scaleX.HasValue ? OptionalEditValues.Supplied<float>(scaleX.Value) : OptionalEditValues.Unspecified<float>(),
-            ScaleY: scaleY.HasValue ? OptionalEditValues.Supplied<float>(scaleY.Value) : OptionalEditValues.Unspecified<float>(),
-            ScaleZ: scaleZ.HasValue ? OptionalEditValues.Supplied<float>(scaleZ.Value) : OptionalEditValues.Unspecified<float>());
+            PositionX: positionX.HasValue ? OptionalEditValues.Supplied((float)positionX.Value) : OptionalEditValues.Unspecified<float>(),
+            PositionY: positionY.HasValue ? OptionalEditValues.Supplied((float)positionY.Value) : OptionalEditValues.Unspecified<float>(),
+            PositionZ: positionZ.HasValue ? OptionalEditValues.Supplied((float)positionZ.Value) : OptionalEditValues.Unspecified<float>(),
+            RotationXDegrees: rotationX.HasValue ? OptionalEditValues.Supplied((float)rotationX.Value) : OptionalEditValues.Unspecified<float>(),
+            RotationYDegrees: rotationY.HasValue ? OptionalEditValues.Supplied((float)rotationY.Value) : OptionalEditValues.Unspecified<float>(),
+            RotationZDegrees: rotationZ.HasValue ? OptionalEditValues.Supplied((float)rotationZ.Value) : OptionalEditValues.Unspecified<float>(),
+            ScaleX: scaleX.HasValue ? OptionalEditValues.Supplied((float)scaleX.Value) : OptionalEditValues.Unspecified<float>(),
+            ScaleY: scaleY.HasValue ? OptionalEditValues.Supplied((float)scaleY.Value) : OptionalEditValues.Unspecified<float>(),
+            ScaleZ: scaleZ.HasValue ? OptionalEditValues.Supplied((float)scaleZ.Value) : OptionalEditValues.Unspecified<float>());
 
     /// <summary>Rebinds selection, cancelling captured old-target gestures before accepting later input.</summary>
     /// <param name="items">The new selection.</param>
@@ -236,7 +236,7 @@ internal sealed partial class TransformEditController(
     /// <summary>Publishes field-specific feedback from VectorBox validation.</summary>
     /// <param name="group">The edited transform group.</param>
     /// <param name="args">The component and validation outcome.</param>
-    internal void ReportControlValidation(TransformEditFieldGroup group, ValidationEventArgs<float> args)
+    internal void ReportControlValidation(TransformEditFieldGroup group, ValidationEventArgs<double> args)
     {
         if (!inputEnabled() || this.isApplyingEditorChanges)
         {
@@ -545,7 +545,7 @@ internal sealed partial class TransformEditController(
             static node => node.Id,
             node => PropertyEdit.SingleEdit(
                 descriptor.TypedId,
-                expression.Apply(session.OriginalValues[node.Id])));
+                (float)expression.Apply(session.OriginalValues[node.Id])));
         var empty = EmptyEdit();
         await this.ApplyTransformEditAsync(property, empty, session.Token, session.Nodes, session.Context, edits).ConfigureAwait(true);
         session.Token.Commit();

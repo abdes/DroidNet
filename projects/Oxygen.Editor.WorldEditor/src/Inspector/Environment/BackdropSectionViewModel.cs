@@ -45,13 +45,13 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
     public partial bool SolidColorLightsScene { get; set; }
 
     [ObservableProperty]
-    public partial float SolidColorR { get; set; }
+    public partial double SolidColorR { get; set; }
 
     [ObservableProperty]
-    public partial float SolidColorG { get; set; }
+    public partial double SolidColorG { get; set; }
 
     [ObservableProperty]
-    public partial float SolidColorB { get; set; }
+    public partial double SolidColorB { get; set; }
 
     /// <summary>Gets or sets the sky sphere cubemap.</summary>
     [ObservableProperty]
@@ -59,24 +59,24 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
 
     /// <summary>Gets or sets the sky sphere rotation, in degrees.</summary>
     [ObservableProperty]
-    public partial float RotationDegrees { get; set; }
+    public partial double RotationDegrees { get; set; }
 
     /// <summary>Gets or sets the illuminance, in lux, the sky is calibrated to deliver; 0 keeps it raw.</summary>
     [ObservableProperty]
-    public partial float IlluminanceLux { get; set; }
+    public partial double IlluminanceLux { get; set; }
 
     /// <summary>Gets or sets the sky sphere display brightness, in exposure stops over its calibrated radiance.</summary>
     [ObservableProperty]
-    public partial float IntensityEv { get; set; }
+    public partial double IntensityEv { get; set; }
 
     [ObservableProperty]
-    public partial float TintR { get; set; }
+    public partial double TintR { get; set; }
 
     [ObservableProperty]
-    public partial float TintG { get; set; }
+    public partial double TintG { get; set; }
 
     [ObservableProperty]
-    public partial float TintB { get; set; }
+    public partial double TintB { get; set; }
 
     /// <summary>Gets the borrowed scene edit owner.</summary>
     public SceneEnvironmentEditOwner EditOwner { get; }
@@ -100,10 +100,10 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
     public string CubemapDisplayName => this.Cubemaps.DisplayName(this.Cubemap);
 
     /// <summary>Gets the solid color in linear RGB.</summary>
-    public Vector3 SolidColor => new(this.SolidColorR, this.SolidColorG, this.SolidColorB);
+    public Vector3 SolidColor => InspectorValues.ToVector3(this.SolidColorR, this.SolidColorG, this.SolidColorB);
 
     /// <summary>Gets the sky sphere tint in linear RGB.</summary>
-    public Vector3 Tint => new(this.TintR, this.TintG, this.TintB);
+    public Vector3 Tint => InspectorValues.ToVector3(this.TintR, this.TintG, this.TintB);
 
     /// <summary>Gets backdrop choice feedback.</summary>
     public InspectorFieldDiagnostic BackdropDiagnostic => this.Diagnostic(SceneSkyFields.Backdrop.Id);
@@ -192,11 +192,11 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
 
     partial void OnSolidColorLightsSceneChanged(bool value) => this.EditOwner.Apply(SceneSkyFields.SolidColorLightsScene, value);
 
-    partial void OnSolidColorRChanged(float value) => this.ApplySolidColor(new(value, this.SolidColorG, this.SolidColorB));
+    partial void OnSolidColorRChanged(double value) => this.ApplySolidColor(InspectorValues.ToVector3(value, this.SolidColorG, this.SolidColorB));
 
-    partial void OnSolidColorGChanged(float value) => this.ApplySolidColor(new(this.SolidColorR, value, this.SolidColorB));
+    partial void OnSolidColorGChanged(double value) => this.ApplySolidColor(InspectorValues.ToVector3(this.SolidColorR, value, this.SolidColorB));
 
-    partial void OnSolidColorBChanged(float value) => this.ApplySolidColor(new(this.SolidColorR, this.SolidColorG, value));
+    partial void OnSolidColorBChanged(double value) => this.ApplySolidColor(InspectorValues.ToVector3(this.SolidColorR, this.SolidColorG, value));
 
     partial void OnCubemapChanged(Uri? value)
     {
@@ -204,17 +204,17 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
         this.EditOwner.Apply(SceneSkyFields.SkySphereCubemap, value);
     }
 
-    partial void OnRotationDegreesChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkySphereRotationRadians, float.DegreesToRadians(value));
+    partial void OnRotationDegreesChanged(double value) => this.EditOwner.Apply(SceneSkyFields.SkySphereRotationRadians, double.DegreesToRadians(value));
 
-    partial void OnIlluminanceLuxChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkySphereIlluminanceLux, value);
+    partial void OnIlluminanceLuxChanged(double value) => this.EditOwner.Apply(SceneSkyFields.SkySphereIlluminanceLux, value);
 
-    partial void OnIntensityEvChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkySphereIntensity, RadianceExposure.ToScale(value));
+    partial void OnIntensityEvChanged(double value) => this.EditOwner.Apply(SceneSkyFields.SkySphereIntensity, RadianceExposure.ToScale((float)value));
 
-    partial void OnTintRChanged(float value) => this.ApplyTint(new(value, this.TintG, this.TintB));
+    partial void OnTintRChanged(double value) => this.ApplyTint(InspectorValues.ToVector3(value, this.TintG, this.TintB));
 
-    partial void OnTintGChanged(float value) => this.ApplyTint(new(this.TintR, value, this.TintB));
+    partial void OnTintGChanged(double value) => this.ApplyTint(InspectorValues.ToVector3(this.TintR, value, this.TintB));
 
-    partial void OnTintBChanged(float value) => this.ApplyTint(new(this.TintR, this.TintG, value));
+    partial void OnTintBChanged(double value) => this.ApplyTint(InspectorValues.ToVector3(this.TintR, this.TintG, value));
 
     private void ApplySolidColor(Vector3 color)
     {

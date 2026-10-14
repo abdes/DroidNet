@@ -4,8 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DroidNet.Controls"
-    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
-    xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls">
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -24,8 +23,8 @@
             Label="Azimuth"
             NumberStyle="{StaticResource SceneNumberBoxStyle}"
             NumberValue="{Binding SunAzimuth, Mode=TwoWay}"
-            Qualifier="°"
-            Tag="SunAzimuth" />
+            Tag="SunAzimuth"
+            Unit="°" />
         <editorcontrols:InspectorNumberField
             CardStyle="{StaticResource ScenePropertyCardStyle}"
             EditSessionCompleted="NumberEditCompleted"
@@ -36,8 +35,8 @@
             Label="Elevation"
             NumberStyle="{StaticResource SceneNumberBoxStyle}"
             NumberValue="{Binding SunElevation, Mode=TwoWay}"
-            Qualifier="°"
-            Tag="SunElevation" />
+            Tag="SunElevation"
+            Unit="°" />
         <editorcontrols:InspectorNumberField
             CardStyle="{StaticResource ScenePropertyCardStyle}"
             EditSessionCompleted="NumberEditCompleted"
@@ -48,22 +47,20 @@
             Label="Angular diameter"
             NumberStyle="{StaticResource SceneNumberBoxStyle}"
             NumberValue="{Binding AngularDiameterDegrees, Mode=TwoWay}"
-            Qualifier="°"
-            Tag="AngularSizeRadians" />
-        <fields:InspectorRgbField
+            Tag="AngularSizeRadians"
+            Unit="°" />
+        <editorcontrols:InspectorColorField
             Blue="{Binding DiskScaleB, Mode=TwoWay}"
-            ChannelAutomationName="Disk luminance scale, RGB multiplier"
             ComponentMask="~.#"
             DiagnosticSpacing="2"
-            EditSessionCompleted="VectorEditCompleted"
-            EditSessionStarted="VectorEditStarted"
+            EditSessionCompleted="ColorEditCompleted"
+            EditSessionStarted="ColorEditStarted"
             ErrorText="{Binding AtmosphereDiskLuminanceScaleRgbDiagnostic.Message}"
             FontSize="14"
             Green="{Binding DiskScaleG, Mode=TwoWay}"
             HasError="{Binding AtmosphereDiskLuminanceScaleRgbDiagnostic.HasError}"
-            IsMultiplier="True"
+            Kind="Multiplier"
             Label="Disk luminance scale"
-            Qualifier="RGB ×"
             Red="{Binding DiskScaleR, Mode=TwoWay}"
             Tag="DiskScale" />
         <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Per-pixel transmittance">

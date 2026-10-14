@@ -7,6 +7,7 @@ using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
 using NumberBox = DroidNet.Controls.NumberBox;
 
@@ -16,18 +17,9 @@ public sealed partial class InspectorBindingTests
 {
     private const float AlbedoRedLinear = 0.21404114f; // sRGB 128/255
     private const float AlbedoGreenLinearPicked = 0.05126946f; // sRGB 64/255
-    private const string ChevronExpandedGlyph = "\uE70D"; // Segoe MDL2 chevron pointing down
-    private const string ChevronCollapsedGlyph = "\uE76C"; // Segoe MDL2 chevron pointing right
     private const string AppliesInAutoExposureModeCopy = "applies in Auto exposure mode";
     private const string AppliesInAutoExposureSpotMeteringCopy = "applies in Auto exposure mode with Spot metering";
     private const string StoredValueNotePrefixCopy = "Stored value";
-
-    private static readonly (string part, string letter, string label, Windows.UI.Color color)[] RgbChannels =
-    [
-        ("PartNumberBoxX", "X", "R", Microsoft.UI.Colors.Red),
-        ("PartNumberBoxY", "Y", "G", Microsoft.UI.Colors.Green),
-        ("PartNumberBoxZ", "Z", "B", Microsoft.UI.Colors.Blue),
-    ];
 
     private static readonly Dictionary<string, Func<Oxygen.Editor.WorldEditor.TestSupport.EnvironmentInspectorScenario, Task>> VectorFieldPreparations = new(StringComparer.Ordinal)
     {
@@ -55,8 +47,8 @@ public sealed partial class InspectorBindingTests
         => item switch
         {
             Oxygen.Editor.Controls.PropertyCard card => [card],
-            Oxygen.Editor.Controls.InspectorNumberField { Content: Oxygen.Editor.Controls.PropertyCard card } => [card],
-            Oxygen.Editor.World.Inspector.Controls.InspectorRgbField { Content: Oxygen.Editor.Controls.PropertyCard card } => [card],
+            Oxygen.Editor.Controls.InspectorNumberField number => [CardOf(number)],
+            Oxygen.Editor.Controls.InspectorColorField color => [CardOf(color)],
             Expander { Content: StackPanel content } => content.Children.SelectMany(SceneCardsOf),
             StackPanel panel => panel.Children.SelectMany(SceneCardsOf),
             _ => [],
@@ -67,20 +59,20 @@ public sealed partial class InspectorBindingTests
         {
             Expander { Content: StackPanel content } => content.Children.Cast<object>(),
             _ => [item],
-        }).Select(item => item switch
+        }).Where(item => item is not TextBlock).Select(item => item switch
         {
             Oxygen.Editor.Controls.InspectorNumberField number => number.Label,
-            Oxygen.Editor.World.Inspector.Controls.InspectorRgbField rgb => rgb.Label,
+            Oxygen.Editor.Controls.InspectorColorField color => color.Label,
             Oxygen.Editor.Controls.PropertyCard card => card.PropertyName,
             _ => throw new InvalidOperationException($"Unexpected field composition {item.GetType().Name}."),
         });
 
     private static void AssertDisclosureCardOrder(Expander disclosure, params string[] propertyIdentities)
     {
-        var identities = ((StackPanel)disclosure.Content).Children.Select(child => child switch
+        var identities = ((StackPanel)disclosure.Content).Children.Where(child => child is not TextBlock).Select(child => child switch
         {
             Oxygen.Editor.Controls.InspectorNumberField numeric => (string)numeric.Tag,
-            Oxygen.Editor.World.Inspector.Controls.InspectorRgbField rgb => (string)rgb.Tag,
+            Oxygen.Editor.Controls.InspectorColorField color => (string)color.Tag,
             Oxygen.Editor.Controls.PropertyCard card => GetCardPropertyIdentity(card),
             _ => throw new InvalidOperationException($"Unexpected field composition {child.GetType().Name}."),
         }).ToArray();
@@ -101,40 +93,5 @@ public sealed partial class InspectorBindingTests
         }
 
         throw new InvalidOperationException($"Card '{card.PropertyName}' has no stable tagged editor identity.");
-    }
-
-    private static void AssertRgbChannelBasics(NumberBox input, string expectedLabel, Windows.UI.Color expectedColor)
-    {
-        var compactLabel = input.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PartCompactLabelTextBlock", StringComparison.Ordinal))!;
-        _ = compactLabel.Visibility.Should().Be(Visibility.Visible);
-        _ = compactLabel.Text.Should().Be(expectedLabel);
-        _ = ((Microsoft.UI.Xaml.Media.SolidColorBrush)compactLabel.Foreground).Color.Should().Be(expectedColor);
-    }
-
-    private static async Task AssertEditSessionPreservesGeometryAsync(NumberBox input, FrameworkElement container, Func<TextBox, Task>? whileEditing = null)
-    {
-        var beforeWidth = input.ActualWidth;
-        var beforeHeight = input.ActualHeight;
-        var beforePosition = input.TransformToVisual(container).TransformPoint(default);
-        var beforeContainerWidth = container.ActualWidth;
-        var beforeContainerHeight = container.ActualHeight;
-        input.StartEdit();
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var editor = input.FindDescendant<TextBox>(text => string.Equals(text.Name, "PartEditBox", StringComparison.Ordinal))!;
-        _ = editor.Visibility.Should().Be(Visibility.Visible);
-        if (whileEditing is { } hook)
-        {
-            await hook(editor).ConfigureAwait(true);
-        }
-
-        _ = editor.FindDescendants().OfType<Button>().Should().NotContain(button => button.Visibility == Visibility.Visible && button.ActualWidth > 0);
-        _ = input.ActualWidth.Should().BeApproximately(beforeWidth, 1);
-        _ = input.ActualHeight.Should().BeApproximately(beforeHeight, 1);
-        _ = input.TransformToVisual(container).TransformPoint(default).X.Should().BeApproximately(beforePosition.X, 1);
-        _ = input.TransformToVisual(container).TransformPoint(default).Y.Should().BeApproximately(beforePosition.Y, 1);
-        _ = container.ActualWidth.Should().BeApproximately(beforeContainerWidth, 1);
-        _ = container.ActualHeight.Should().BeApproximately(beforeContainerHeight, 1);
-        input.CancelEdit();
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
     }
 }

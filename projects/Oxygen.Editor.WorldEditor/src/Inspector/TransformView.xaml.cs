@@ -28,23 +28,23 @@ public partial class TransformView
 
     private static void ConfigureAxisLabels(VectorBox vector)
     {
-        vector.ComponentLabelForegrounds["X"] = new SolidColorBrush(Colors.Red);
-        vector.ComponentLabelForegrounds["Y"] = new SolidColorBrush(Colors.Green);
-        vector.ComponentLabelForegrounds["Z"] = new SolidColorBrush(Colors.Blue);
+        vector.ComponentLabelForegrounds[Component.X] = new SolidColorBrush(Colors.Red);
+        vector.ComponentLabelForegrounds[Component.Y] = new SolidColorBrush(Colors.Green);
+        vector.ComponentLabelForegrounds[Component.Z] = new SolidColorBrush(Colors.Blue);
     }
 
-    private void PositionBox_Validate(object? sender, ValidationEventArgs<float> e)
+    private void PositionBox_Validate(object? sender, ValidationEventArgs<double> e)
     {
-        e.IsValid = float.IsFinite(e.NewValue);
+        e.IsValid = double.IsFinite(e.NewValue);
         this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Position, e);
     }
 
-    private void RotationBox_Validate(object? sender, ValidationEventArgs<float> e)
+    private void RotationBox_Validate(object? sender, ValidationEventArgs<double> e)
     {
         var v = e.NewValue;
 
         // Reject non-finite values
-        if (float.IsNaN(v) || float.IsInfinity(v))
+        if (!double.IsFinite(v))
         {
             e.IsValid = false;
             this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Rotation, e);
@@ -52,18 +52,18 @@ public partial class TransformView
         }
 
         // Enforce editor-expected range: rotation must be between -180 and 180 degrees (inclusive)
-        const float min = -180f;
-        const float max = 180f;
+        const double min = -180;
+        const double max = 180;
         e.IsValid = v is >= min and <= max;
         this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Rotation, e);
     }
 
-    private void ScaleBox_Validate(object? sender, ValidationEventArgs<float> e)
+    private void ScaleBox_Validate(object? sender, ValidationEventArgs<double> e)
     {
         var v = e.NewValue;
 
         // Reject non-finite values
-        if (float.IsNaN(v) || float.IsInfinity(v))
+        if (!double.IsFinite(v))
         {
             e.IsValid = false;
             this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Scale, e);
@@ -71,8 +71,8 @@ public partial class TransformView
         }
 
         // Disallow near-zero scale which degenerates geometry; allow negatives.
-        const float minMagnitude = 1e-3f; // tweakable threshold
-        e.IsValid = MathF.Abs(v) >= minMagnitude;
+        const double minMagnitude = 1e-3; // tweakable threshold
+        e.IsValid = Math.Abs(v) >= minMagnitude;
         this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Scale, e);
     }
 

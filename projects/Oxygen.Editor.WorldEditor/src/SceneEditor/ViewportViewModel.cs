@@ -22,8 +22,6 @@ namespace Oxygen.Editor.LevelEditor;
 /// </summary>
 public partial class ViewportViewModel : ObservableObject, IDisposable
 {
-    private const string DegreeUnit = "°";
-    private const string LockedCameraText = "Unlock the camera to move it.";
     /// <summary>The default fly speed, in meters per second; also the slowest.</summary>
     internal const float DefaultMovementSpeed = 1.0f;
 
@@ -35,6 +33,9 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
     /// <summary>The default far view plane, in meters.</summary>
     internal const float DefaultFarViewPlane = 1000.0f;
+
+    private const string DegreeUnit = "°";
+    private const string LockedCameraText = "Unlock the camera to move it.";
 
     private static readonly CameraControlMode[] PerspectiveModeValues =
     [
@@ -332,7 +333,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     public float MovementSpeed
     {
-        get => this.MovementSpeedField.NumberValue;
+        get => (float)this.MovementSpeedField.NumberValue;
         set => this.MovementSpeedField.NumberValue = value;
     }
 
@@ -348,7 +349,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     public float FieldOfViewDegrees
     {
-        get => this.FieldOfViewField.NumberValue;
+        get => (float)this.FieldOfViewField.NumberValue;
         set => this.FieldOfViewField.NumberValue = value;
     }
 
@@ -357,7 +358,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     public float NearViewPlane
     {
-        get => this.NearViewPlaneField.NumberValue;
+        get => (float)this.NearViewPlaneField.NumberValue;
         set => this.NearViewPlaneField.NumberValue = value;
     }
 
@@ -366,7 +367,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     public float FarViewPlane
     {
-        get => this.FarViewPlaneField.NumberValue;
+        get => (float)this.FarViewPlaneField.NumberValue;
         set => this.FarViewPlaneField.NumberValue = value;
     }
 
@@ -612,14 +613,15 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// <param name="ticks">The wheel ticks, positive away from the user.</param>
     internal void StepFlySpeed(float ticks)
     {
-        const float StepFactor = 1.25f;
+        const double StepFactor = 1.25;
 
         // The speed field itself is unbounded; the wheel stops at a speed that stays finite.
-        const float MaximumWheelSpeed = 10000.0f;
-        this.MovementSpeed = Math.Clamp(
-            this.MovementSpeed * MathF.Pow(StepFactor, ticks),
-            this.MovementSpeedField.Minimum,
-            Math.Min(this.MovementSpeedField.Maximum, MaximumWheelSpeed));
+        const double MaximumWheelSpeed = 10000.0;
+        var field = this.MovementSpeedField;
+        field.NumberValue = Math.Clamp(
+            field.NumberValue * Math.Pow(StepFactor, ticks),
+            field.Minimum,
+            Math.Min(field.Maximum, MaximumWheelSpeed));
         this.ShowNotice(string.Create(CultureInfo.InvariantCulture, $"Fly speed {this.MovementSpeed:0.#} m/s"));
     }
 
@@ -1048,7 +1050,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void OnCameraNumberBoxValueChanged(string propertyName, float value)
+    private void OnCameraNumberBoxValueChanged(string propertyName, double value)
     {
         this.OnPropertyChanged(propertyName);
 
@@ -1058,7 +1060,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         if (string.Equals(propertyName, nameof(this.MovementSpeed), StringComparison.Ordinal))
         {
             this.OnPropertyChanged(nameof(this.FlySpeed));
-            _ = this.ApplyCameraMovementSpeedAsync(value);
+            _ = this.ApplyCameraMovementSpeedAsync((float)value);
             return;
         }
 

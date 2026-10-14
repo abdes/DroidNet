@@ -46,19 +46,6 @@
         <Setter Property="CornerRadius" Value="4" />
     </Style>
     <Style
-        x:Key="InspectorColorSwatchStyle"
-        BasedOn="{StaticResource DefaultButtonStyle}"
-        TargetType="Button">
-        <Setter Property="MinWidth" Value="28" />
-        <Setter Property="MinHeight" Value="32" />
-        <Setter Property="Padding" Value="3" />
-        <Setter Property="CornerRadius" Value="4" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="VerticalAlignment" Value="Top" />
-    </Style>
-    <Style
         x:Key="SceneNumberBoxStyle"
         BasedOn="{StaticResource DefaultNumberBoxStyle}"
         TargetType="controls:NumberBox">
@@ -80,6 +67,7 @@
         <Setter Property="Padding" Value="0" />
         <Setter Property="ComponentStyle" Value="{StaticResource SceneNumberBoxStyle}" />
         <Setter Property="AutoStackComponents" Value="True" />
+        <Setter Property="CompactComponentLabels" Value="True" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="HorizontalValueAlignment" Value="Right" />
     </Style>
@@ -91,7 +79,6 @@
         <Setter Property="FontSize" Value="14" />
         <Setter Property="Margin" Value="0" />
         <Setter Property="Padding" Value="0" />
-        <Setter Property="UseEditorLabel" Value="True" />
     </Style>
     <Style BasedOn="{StaticResource ScenePropertyCardStyle}" TargetType="editorcontrols:PropertyCard" />
     <Style

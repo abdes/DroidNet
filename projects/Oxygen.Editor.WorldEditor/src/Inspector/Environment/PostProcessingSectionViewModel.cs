@@ -19,22 +19,22 @@ public sealed partial class PostProcessingSectionViewModel : ObservableObject
     public partial ToneMappingMode ToneMapping { get; set; }
 
     [ObservableProperty]
-    public partial float DisplayGamma { get; set; }
+    public partial double DisplayGamma { get; set; }
 
     [ObservableProperty]
-    public partial float Saturation { get; set; }
+    public partial double Saturation { get; set; }
 
     [ObservableProperty]
-    public partial float Contrast { get; set; }
+    public partial double Contrast { get; set; }
 
     [ObservableProperty]
-    public partial float VignetteIntensity { get; set; }
+    public partial double VignetteIntensity { get; set; }
 
     [ObservableProperty]
-    public partial float BloomIntensity { get; set; }
+    public partial double BloomIntensity { get; set; }
 
     [ObservableProperty]
-    public partial float BloomThreshold { get; set; }
+    public partial double BloomThreshold { get; set; }
 
     /// <summary>Gets the borrowed scene edit owner.</summary>
     public SceneEnvironmentEditOwner EditOwner { get; }
@@ -82,15 +82,15 @@ public sealed partial class PostProcessingSectionViewModel : ObservableObject
         this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.ToneMapping, value);
     }
 
-    partial void OnDisplayGammaChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.DisplayGamma, value);
+    partial void OnDisplayGammaChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.DisplayGamma, value);
 
-    partial void OnSaturationChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.Saturation, value);
+    partial void OnSaturationChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.Saturation, value);
 
-    partial void OnContrastChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.Contrast, value);
+    partial void OnContrastChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.Contrast, value);
 
-    partial void OnVignetteIntensityChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.VignetteIntensity, value);
+    partial void OnVignetteIntensityChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.VignetteIntensity, value);
 
-    partial void OnBloomIntensityChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.BloomIntensity, value);
+    partial void OnBloomIntensityChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.BloomIntensity, value);
 
-    partial void OnBloomThresholdChanged(float value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.BloomThreshold, value);
+    partial void OnBloomThresholdChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.BloomThreshold, value);
 }

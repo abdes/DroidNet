@@ -337,11 +337,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         this.RefreshLogger(current);
         this.LogViewModelChanged(GetViewportId(previous), GetViewportId(current));
-        if (previous is not null)
-        {
-            previous.PropertyChanged -= this.OnViewModelPropertyChanged;
-        }
-
+        previous?.PropertyChanged -= this.OnViewModelPropertyChanged;
         if (current is not null)
         {
             current.PropertyChanged += this.OnViewModelPropertyChanged;
@@ -417,14 +413,6 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         if (this.ViewModel is { } viewModel)
         {
             _ = viewModel.FrameSelectionAsync();
-        }
-    }
-
-    private void OnCameraNumberBoxValidate(object? sender, ValidationEventArgs<float> e)
-    {
-        if (sender is FrameworkElement { Tag: ViewportCameraNumberBoxItemModel model } && e.NewValue is { } value)
-        {
-            e.IsValid = model.IsInRange(value);
         }
     }
 
@@ -956,7 +944,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             return;
         }
 
-        var isMarquee = this.isMarquee;
+        var wasMarquee = this.isMarquee;
         var mode = this.selectionMode;
         var gizmoTookGesture = this.GizmoTookGesture();
         this.CancelSelectionGesture();
@@ -968,7 +956,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         // Picks address the surface in physical pixels.
         var scale = this.XamlRoot?.RasterizationScale ?? 1.0;
         RuntimePickRect rect;
-        if (isMarquee)
+        if (wasMarquee)
         {
             var left = Math.Max(0.0, Math.Min(start.X, point.Position.X) * scale);
             var top = Math.Max(0.0, Math.Min(start.Y, point.Position.Y) * scale);
@@ -988,7 +976,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             rect = new RuntimePickRect((uint)Math.Max(0, x), (uint)Math.Max(0, y), ClickPickExtent, ClickPickExtent);
         }
 
-        _ = viewModel.PickAsync(rect, mode, isMarquee);
+        _ = viewModel.PickAsync(rect, mode, wasMarquee);
     }
 
     /// <summary>Whether a gizmo drag started after the selection gesture did.</summary>
@@ -1246,7 +1234,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.isRightButtonDown = point.Properties.IsRightButtonPressed;
         this.UpdateSelectionGesture(point);
         var pos = new Vector2((float)point.Position.X, (float)point.Position.Y) * (float)(this.XamlRoot?.RasterizationScale ?? 1.0);
-        var delta =this.hasPointerPosition ? (pos - this.lastPointerPosition) : Vector2.Zero;
+        var delta = this.hasPointerPosition ? (pos - this.lastPointerPosition) : Vector2.Zero;
 
         this.lastPointerPosition = pos;
         this.hasPointerPosition = true;

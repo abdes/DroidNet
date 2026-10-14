@@ -63,12 +63,12 @@ public sealed partial class SceneDocumentCommandServiceTests
         var boundDiagnostic = editor.Exposure.ManualExposureEvDiagnostic;
         editor.SetScene(scene);
 
-        editor.Exposure.ManualExposureEv = float.NaN;
+        editor.Exposure.ManualExposureEv = double.NaN;
         await editor.PendingEdits.ConfigureAwait(false);
 
         _ = editor.Exposure.ManualExposureEvDiagnostic.Should().BeSameAs(boundDiagnostic);
         _ = boundDiagnostic.Message.Should().NotBeEmpty();
-        _ = float.IsFinite(editor.Exposure.ManualExposureEv).Should().BeTrue();
+        _ = double.IsFinite(editor.Exposure.ManualExposureEv).Should().BeTrue();
         _ = context.History.UndoStack.Should().BeEmpty();
     }
 

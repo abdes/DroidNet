@@ -13,14 +13,14 @@ internal sealed partial class ExposureCompensationKeyViewModel(ExposureCompensat
     public event EventHandler? Changed;
 
     [ObservableProperty]
-    public partial float MeteredEv { get; set; } = key.MeteredEv;
+    public partial double MeteredEv { get; set; } = key.MeteredEv;
 
     [ObservableProperty]
-    public partial float CompensationEv { get; set; } = key.CompensationEv;
+    public partial double CompensationEv { get; set; } = key.CompensationEv;
 
-    public ExposureCompensationKeyData ToData() => new(this.MeteredEv, this.CompensationEv);
+    public ExposureCompensationKeyData ToData() => new((float)this.MeteredEv, (float)this.CompensationEv);
 
-    partial void OnMeteredEvChanged(float value) => this.Changed?.Invoke(this, EventArgs.Empty);
+    partial void OnMeteredEvChanged(double value) => this.Changed?.Invoke(this, EventArgs.Empty);
 
-    partial void OnCompensationEvChanged(float value) => this.Changed?.Invoke(this, EventArgs.Empty);
+    partial void OnCompensationEvChanged(double value) => this.Changed?.Invoke(this, EventArgs.Empty);
 }

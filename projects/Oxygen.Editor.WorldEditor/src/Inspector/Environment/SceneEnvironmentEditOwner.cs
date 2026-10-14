@@ -109,6 +109,11 @@ public sealed class SceneEnvironmentEditOwner : ObservableObject, IInspectorEdit
         }
     }
 
+    /// <summary>Routes a number edited in the inspector, which edits doubles, to a single-precision scene property.</summary>
+    /// <param name="property">The canonical property identity.</param>
+    /// <param name="value">The edited value; the scene stores it in single precision.</param>
+    internal void Apply(PropertyId<float> property, double value) => this.Apply(property, (float)value);
+
     /// <summary>Routes a section value to canonical model-change or authoring semantics.</summary>
     /// <typeparam name="T">The authored value type.</typeparam>
     /// <param name="property">The canonical property identity.</param>

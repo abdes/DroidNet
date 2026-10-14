@@ -5,7 +5,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DroidNet.Controls"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
-    xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls"
     xmlns:ui="using:CommunityToolkit.WinUI">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -33,20 +32,18 @@
                     IsOn="{x:Bind ViewModel.SunDiskEnabled, Mode=TwoWay}"
                     Tag="SunDiskEnabled" />
             </editorcontrols:PropertyCard>
-            <fields:InspectorRgbField
+            <editorcontrols:InspectorColorField
                 x:Name="SkyLuminanceCard"
                 Blue="{x:Bind ViewModel.SkyLuminanceB, Mode=TwoWay}"
-                ChannelAutomationName="Sky luminance, RGB multiplier"
                 DiagnosticSpacing="2"
-                EditSessionCompleted="VectorEditCompleted"
-                EditSessionStarted="VectorEditStarted"
+                EditSessionCompleted="ColorEditCompleted"
+                EditSessionStarted="ColorEditStarted"
                 ErrorText="{x:Bind ViewModel.SkyLuminanceRDiagnostic.Message, Mode=OneWay}"
                 FontSize="14"
                 Green="{x:Bind ViewModel.SkyLuminanceG, Mode=TwoWay}"
                 HasError="{x:Bind ViewModel.SkyLuminanceRDiagnostic.HasError, Mode=OneWay}"
-                IsMultiplier="True"
+                Kind="Multiplier"
                 Label="Sky Luminance"
-                Qualifier="RGB ×"
                 Red="{x:Bind ViewModel.SkyLuminanceR, Mode=TwoWay}"
                 Tag="SkyLuminance" />
             <Expander
@@ -69,8 +66,8 @@
                         Label="Planet Radius"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.PlanetRadiusKm, Mode=TwoWay}"
-                        Qualifier="km"
-                        Tag="PlanetRadiusKm" />
+                        Tag="PlanetRadiusKm"
+                        Unit="km" />
                     <editorcontrols:InspectorNumberField
                         x:Name="AtmosphereHeightKmCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -82,27 +79,22 @@
                         Label="Atmosphere Height"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.AtmosphereHeightKm, Mode=TwoWay}"
-                        Qualifier="km"
-                        Tag="AtmosphereHeightKm" />
-                    <fields:InspectorRgbField
+                        Tag="AtmosphereHeightKm"
+                        Unit="km" />
+                    <editorcontrols:InspectorColorField
                         x:Name="GroundAlbedoCard"
                         Blue="{x:Bind ViewModel.GroundAlbedoB, Mode=TwoWay}"
-                        ChannelAutomationName="Ground Albedo, linear RGB"
                         ColorPicked="OnRgbColorPicked"
                         ComponentMask="~.#"
-                        EditOwner="{x:Bind ViewModel.EditOwner, Mode=OneWay}"
-                        EditSessionCompleted="VectorEditCompleted"
-                        EditSessionStarted="VectorEditStarted"
+                        EditSessionCompleted="ColorEditCompleted"
+                        EditSessionStarted="ColorEditStarted"
                         ErrorText="{x:Bind ViewModel.GroundAlbedoRDiagnostic.Message, Mode=OneWay}"
                         FontSize="14"
                         Green="{x:Bind ViewModel.GroundAlbedoG, Mode=TwoWay}"
                         HasError="{x:Bind ViewModel.GroundAlbedoRDiagnostic.HasError, Mode=OneWay}"
                         Label="Ground Albedo"
                         PickerAutomationName="Pick ground albedo color"
-                        Qualifier="Linear RGB"
                         Red="{x:Bind ViewModel.GroundAlbedoR, Mode=TwoWay}"
-                        SwatchBorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                        SwatchCornerRadius="3"
                         Tag="GroundAlbedo" />
                 </StackPanel>
             </Expander>
@@ -126,8 +118,8 @@
                         Label="Rayleigh Height"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.RayleighScaleHeightKm, Mode=TwoWay}"
-                        Qualifier="km"
-                        Tag="RayleighScaleHeightKm" />
+                        Tag="RayleighScaleHeightKm"
+                        Unit="km" />
                     <editorcontrols:InspectorNumberField
                         x:Name="MieScaleHeightKmCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -139,8 +131,8 @@
                         Label="Mie Height"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.MieScaleHeightKm, Mode=TwoWay}"
-                        Qualifier="km"
-                        Tag="MieScaleHeightKm" />
+                        Tag="MieScaleHeightKm"
+                        Unit="km" />
                     <editorcontrols:InspectorNumberField
                         x:Name="MieAnisotropyCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -192,26 +184,25 @@
                         x:Name="AerialStartCard"
                         HorizontalContentAlignment="Stretch"
                         PropertyName="Start distance"
-                        Qualifier="m"
                         Tag="Aerial Start aerial_perspective_start_depth_meters">
-                        <StackPanel Spacing="2">
-                            <controls:NumberBox
-                                x:Name="AerialStartInput"
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                LabelPosition="None"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.AerialPerspectiveStartDepthMeters, Mode=TwoWay}"
-                                Tag="AerialPerspectiveStartDepthMeters"
-                                Validate="AerialStartValidate" />
-                            <TextBlock
-                                AutomationProperties.LiveSetting="Polite"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                Text="{x:Bind ViewModel.AerialPerspectiveStartDepthMetersDiagnostic.Message, Mode=OneWay}"
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind ViewModel.AerialPerspectiveStartDepthMetersDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        </StackPanel>
+                        <controls:NumberBox
+                            x:Name="AerialStartInput"
+                            AutomationProperties.Name="Start distance"
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            LabelPosition="None"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.AerialPerspectiveStartDepthMeters, Mode=TwoWay}"
+                            Tag="AerialPerspectiveStartDepthMeters"
+                            Unit="m"
+                            Validate="AerialStartValidate" />
                     </editorcontrols:PropertyCard>
+                    <TextBlock
+                        AutomationProperties.LiveSetting="Polite"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Text="{x:Bind ViewModel.AerialPerspectiveStartDepthMetersDiagnostic.Message, Mode=OneWay}"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind ViewModel.AerialPerspectiveStartDepthMetersDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
                     <editorcontrols:InspectorNumberField
                         x:Name="HeightFogContributionCard"
                         CardStyle="{StaticResource ScenePropertyCardStyle}"

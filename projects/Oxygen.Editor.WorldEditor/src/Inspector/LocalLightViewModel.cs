@@ -44,38 +44,38 @@ public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDi
         }
 
         this.colorBinding = new(descriptors.ColorDescriptor);
-        this.LuminousFluxLumens = this.Register(new PropertyBinding<float>(descriptors.LuminousFluxLumensDescriptor));
-        this.Range = this.Register(new PropertyBinding<float>(descriptors.RangeDescriptor));
-        this.SourceRadius = this.Register(new PropertyBinding<float>(descriptors.SourceRadiusDescriptor));
+        this.LuminousFluxLumens = this.Register(new NumberBinding<float>(descriptors.LuminousFluxLumensDescriptor));
+        this.Range = this.Register(new NumberBinding<float>(descriptors.RangeDescriptor));
+        this.SourceRadius = this.Register(new NumberBinding<float>(descriptors.SourceRadiusDescriptor));
         this.affectsWorldBinding = this.Register(new PropertyBinding<bool>(descriptors.AffectsWorldDescriptor), nameof(this.AffectsWorld));
-        this.ExposureCompensation = this.Register(new PropertyBinding<float>(descriptors.ExposureCompensationDescriptor));
+        this.ExposureCompensation = this.Register(new NumberBinding<float>(descriptors.ExposureCompensationDescriptor));
         this.castsShadowsBinding = this.Register(new PropertyBinding<bool>(descriptors.CastsShadowsDescriptor), nameof(this.CastsShadows));
         this.contactShadowsBinding = this.Register(new PropertyBinding<bool>(descriptors.ContactShadowsDescriptor), nameof(this.ContactShadows));
         this.shadowResolutionHintBinding = this.Register(new PropertyBinding<ShadowResolutionHint>(descriptors.ShadowResolutionHintDescriptor), nameof(this.ShadowResolutionHint));
-        this.ShadowBias = this.Register(new PropertyBinding<float>(descriptors.ShadowBiasDescriptor));
-        this.ShadowNormalBias = this.Register(new PropertyBinding<float>(descriptors.ShadowNormalBiasDescriptor));
+        this.ShadowBias = this.Register(new NumberBinding<float>(descriptors.ShadowBiasDescriptor));
+        this.ShadowNormalBias = this.Register(new NumberBinding<float>(descriptors.ShadowNormalBiasDescriptor));
     }
 
     /// <summary>Gets or sets the linear red color channel.</summary>
     [ObservableProperty]
-    public partial float ColorR { get; set; } = 1f;
+    public partial double ColorR { get; set; } = 1f;
 
     /// <summary>Gets or sets the linear green color channel.</summary>
     [ObservableProperty]
-    public partial float ColorG { get; set; } = 1f;
+    public partial double ColorG { get; set; } = 1f;
 
     /// <summary>Gets or sets the linear blue color channel.</summary>
     [ObservableProperty]
-    public partial float ColorB { get; set; } = 1f;
+    public partial double ColorB { get; set; } = 1f;
 
     /// <summary>Gets the luminous flux binding, in lumens.</summary>
-    public PropertyBinding<float> LuminousFluxLumens { get; }
+    public NumberBinding<float> LuminousFluxLumens { get; }
 
     /// <summary>Gets the influence range binding, in meters.</summary>
-    public PropertyBinding<float> Range { get; }
+    public NumberBinding<float> Range { get; }
 
     /// <summary>Gets the source radius binding, in meters.</summary>
-    public PropertyBinding<float> SourceRadius { get; }
+    public NumberBinding<float> SourceRadius { get; }
 
     /// <summary>Gets or sets a value indicating whether the light contributes to scene lighting.</summary>
     public bool AffectsWorld
@@ -85,7 +85,7 @@ public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDi
     }
 
     /// <summary>Gets the exposure compensation binding, in EV.</summary>
-    public PropertyBinding<float> ExposureCompensation { get; }
+    public NumberBinding<float> ExposureCompensation { get; }
 
     /// <summary>Gets or sets a value indicating whether the light casts shadows.</summary>
     public bool CastsShadows
@@ -109,10 +109,10 @@ public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDi
     }
 
     /// <summary>Gets the shadow depth bias binding.</summary>
-    public PropertyBinding<float> ShadowBias { get; }
+    public NumberBinding<float> ShadowBias { get; }
 
     /// <summary>Gets the shadow normal bias binding.</summary>
-    public PropertyBinding<float> ShadowNormalBias { get; }
+    public NumberBinding<float> ShadowNormalBias { get; }
 
     /// <summary>Gets the shadow resolution options offered by the inspector.</summary>
     public IReadOnlyList<ShadowResolutionHint> ShadowResolutionOptions { get; } = Enum.GetValues<ShadowResolutionHint>();
@@ -254,19 +254,31 @@ public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDi
         return binding;
     }
 
+    /// <summary>Registers one numeric binding with the shared edit coordinator.</summary>
+    /// <typeparam name="T">The stored numeric type.</typeparam>
+    /// <param name="binding">The binding to register.</param>
+    /// <param name="property">The presented property that mirrors the binding, if any.</param>
+    /// <returns>The registered binding.</returns>
+    private protected NumberBinding<T> Register<T>(NumberBinding<T> binding, string? property = null)
+        where T : INumber<T>
+    {
+        _ = this.Register((PropertyBinding<T>)binding, property);
+        return binding;
+    }
+
     /// <summary>Gets the diagnostic for one property.</summary>
     /// <param name="id">The property id.</param>
     /// <returns>The current diagnostic.</returns>
     private protected InspectorFieldDiagnostic Diagnostic(PropertyId id)
         => this.edits?.Diagnostics.Get(id) ?? this.unboundDiagnostic;
 
-    partial void OnColorRChanged(float value) => this.ApplyColorAxisEdit(0, value);
+    partial void OnColorRChanged(double value) => this.ApplyColorAxisEdit(0, value);
 
-    partial void OnColorGChanged(float value) => this.ApplyColorAxisEdit(1, value);
+    partial void OnColorGChanged(double value) => this.ApplyColorAxisEdit(1, value);
 
-    partial void OnColorBChanged(float value) => this.ApplyColorAxisEdit(2, value);
+    partial void OnColorBChanged(double value) => this.ApplyColorAxisEdit(2, value);
 
-    private void ApplyColorAxisEdit(int axis, float value)
+    private void ApplyColorAxisEdit(int axis, double value)
     {
         if (this.isApplyingEditorValues)
         {
@@ -276,7 +288,7 @@ public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDi
         this.SubmitPerTarget(light =>
         {
             var color = light.Color;
-            color[axis] = value;
+            color[axis] = (float)value;
             return color;
         });
     }

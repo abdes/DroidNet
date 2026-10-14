@@ -31,9 +31,9 @@
                 IsMixed="{x:Bind ViewModel.OrthographicSize.IsMixed, Mode=OneWay}"
                 Label="Orthographic size"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
-                NumberValue="{x:Bind ViewModel.OrthographicSize.Value, Mode=TwoWay}"
-                Qualifier="m"
-                Tag="OrthographicSize" />
+                NumberValue="{x:Bind ViewModel.OrthographicSize.Number, Mode=TwoWay}"
+                Tag="OrthographicSize"
+                Unit="m" />
             <editorcontrols:PropertyCard PropertyName="Aspect mode">
                 <ComboBox
                     HorizontalAlignment="Stretch"
@@ -51,7 +51,7 @@
                 IsMixed="{x:Bind ViewModel.AspectRatio.IsMixed, Mode=OneWay}"
                 Label="Fixed aspect ratio"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
-                NumberValue="{x:Bind ViewModel.AspectRatio.Value, Mode=TwoWay}"
+                NumberValue="{x:Bind ViewModel.AspectRatio.Number, Mode=TwoWay}"
                 Tag="AspectRatio" />
             <editorcontrols:InspectorNumberField
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -63,9 +63,9 @@
                 IsMixed="{x:Bind ViewModel.NearPlane.IsMixed, Mode=OneWay}"
                 Label="Near plane"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
-                NumberValue="{x:Bind ViewModel.NearPlane.Value, Mode=TwoWay}"
-                Qualifier="m"
-                Tag="NearPlane" />
+                NumberValue="{x:Bind ViewModel.NearPlane.Number, Mode=TwoWay}"
+                Tag="NearPlane"
+                Unit="m" />
             <editorcontrols:InspectorNumberField
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
                 EditSessionCompleted="NumberEditCompleted"
@@ -76,9 +76,9 @@
                 IsMixed="{x:Bind ViewModel.FarPlane.IsMixed, Mode=OneWay}"
                 Label="Far plane"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
-                NumberValue="{x:Bind ViewModel.FarPlane.Value, Mode=TwoWay}"
-                Qualifier="m"
-                Tag="FarPlane" />
+                NumberValue="{x:Bind ViewModel.FarPlane.Number, Mode=TwoWay}"
+                Tag="FarPlane"
+                Unit="m" />
             <editorcontrols:InspectorNumberField
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
                 EditSessionCompleted="NumberEditCompleted"
@@ -89,9 +89,9 @@
                 IsMixed="{x:Bind ViewModel.ApertureF.IsMixed, Mode=OneWay}"
                 Label="Aperture"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
-                NumberValue="{x:Bind ViewModel.ApertureF.Value, Mode=TwoWay}"
-                Qualifier="f"
-                Tag="ApertureF" />
+                NumberValue="{x:Bind ViewModel.ApertureF.Number, Mode=TwoWay}"
+                Tag="ApertureF"
+                Unit="f" />
             <editorcontrols:InspectorNumberField
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
                 EditSessionCompleted="NumberEditCompleted"
@@ -102,9 +102,9 @@
                 IsMixed="{x:Bind ViewModel.ShutterRate.IsMixed, Mode=OneWay}"
                 Label="Shutter rate"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
-                NumberValue="{x:Bind ViewModel.ShutterRate.Value, Mode=TwoWay}"
-                Qualifier="1/s"
-                Tag="ShutterRate" />
+                NumberValue="{x:Bind ViewModel.ShutterRate.Number, Mode=TwoWay}"
+                Tag="ShutterRate"
+                Unit="1/s" />
             <editorcontrols:InspectorNumberField
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
                 EditSessionCompleted="NumberEditCompleted"
@@ -115,7 +115,7 @@
                 IsMixed="{x:Bind ViewModel.Iso.IsMixed, Mode=OneWay}"
                 Label="ISO"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
-                NumberValue="{x:Bind ViewModel.Iso.Value, Mode=TwoWay}"
+                NumberValue="{x:Bind ViewModel.Iso.Number, Mode=TwoWay}"
                 Tag="Iso" />
         </editorcontrols:PropertiesExpander.Items>
     </editorcontrols:PropertiesExpander>

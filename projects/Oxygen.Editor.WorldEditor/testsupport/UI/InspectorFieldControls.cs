@@ -53,20 +53,24 @@ internal static class InspectorFieldControls
     }
 
     internal static Task<FrameworkElement> FindNodeFieldControlAsync(UserControl view, ScrollViewer scroller, IPropertyEditor<SceneNode> model, NodeFieldCase field, CancellationToken cancellationToken)
-        => FindInspectorControlAsync(scroller, () =>
-        {
-            foreach (var disclosure in view.FindDescendants().OfType<Expander>())
+        => FindInspectorControlAsync(
+            scroller,
+            () =>
             {
-                disclosure.IsExpanded = true;
-            }
+                foreach (var disclosure in view.FindDescendants().OfType<Expander>())
+                {
+                    disclosure.IsExpanded = true;
+                }
 
-            return FindNodeControl(view, model, field);
-        }, field.Field, cancellationToken);
+                return FindNodeControl(view, model, field);
+            },
+            field.Field,
+            cancellationToken);
 
     private static NumberBox? FindRgbChannel(UserControl view, string field)
     {
         var component = field[^1] switch { 'R' => 'X', 'G' => 'Y', _ => 'Z' };
-        return view.FindDescendant<VectorBox>(vector => Equals(vector.Tag, field[..^1]))?
+        return view.FindDescendant<Oxygen.Editor.Controls.InspectorColorField>(color => Equals(color.Tag, field[..^1]))?
             .FindDescendant<NumberBox>(number => string.Equals(number.Name, $"PartNumberBox{component}", StringComparison.Ordinal));
     }
 

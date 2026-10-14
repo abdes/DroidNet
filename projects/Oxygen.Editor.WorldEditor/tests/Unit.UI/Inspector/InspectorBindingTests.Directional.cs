@@ -34,13 +34,12 @@ public sealed partial class InspectorBindingTests
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var display = Windows.UI.Color.FromArgb(255, 128, 64, 32);
         var section = view.FindDescendant<PropertiesExpander>()!;
-        var field = (Oxygen.Editor.World.Inspector.Controls.InspectorRgbField)view.FindName("ColorField");
+        var field = (Oxygen.Editor.Controls.InspectorColorField)view.FindName("ColorField");
         _ = section.BringItemIntoView(field);
         await WaitForRenderAsync().ConfigureAwait(true);
-        var card = (PropertyCard)field.Content;
-        var swatch = (Button)card.LeadingContent!;
+        var swatch = SwatchOf(field);
         _ = model.ColorValue.Should().Be(authored);
-        _ = ((Microsoft.UI.Xaml.Media.SolidColorBrush)((Border)swatch.Content).Background).Color.Should().Be(display);
+        _ = SwatchColor(field).Should().Be(display);
         _ = light.Color.Should().Be(authored);
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
         _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
@@ -55,7 +54,7 @@ public sealed partial class InspectorBindingTests
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         _ = light.Color.Should().Be(authored);
         _ = model.ColorValue.Should().Be(authored);
-        _ = ((Microsoft.UI.Xaml.Media.SolidColorBrush)((Border)swatch.Content).Background).Color.Should().Be(display);
+        _ = SwatchColor(field).Should().Be(display);
     });
 
     [TestMethod]
@@ -76,15 +75,14 @@ public sealed partial class InspectorBindingTests
         // The expander's ItemsRepeater virtualizes: an unrealized item is not in the namescope, so
         // view.FindName returns null for it and BringItemIntoView cannot index it. Resolve the
         // declared instance from Items and realize it before walking its card.
-        var item = section.Items.OfType<Oxygen.Editor.World.Inspector.Controls.InspectorRgbField>()
+        var item = section.Items.OfType<Oxygen.Editor.Controls.InspectorColorField>()
             .Single(candidate => string.Equals(
                 candidate.Name,
                 string.Equals(field, "Color", StringComparison.Ordinal) ? "ColorField" : "DiskScaleField",
                 StringComparison.Ordinal));
         _ = section.BringItemIntoView(item).Should().BeTrue("the declared field must realize in its expander");
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var card = (PropertyCard)item.Content;
-        var vector = card.FindDescendant<VectorBox>()!;
+        var vector = CardOf(item).FindDescendant<VectorBox>()!;
         var red = (NumberBox)await FindInspectorControlAsync(
             scroller,
             () => vector.FindDescendant<NumberBox>(input => string.Equals(input.Name, "PartNumberBoxX", StringComparison.Ordinal)),

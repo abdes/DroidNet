@@ -43,7 +43,7 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     }
 
     /// <summary>Gets the degree-valued FOV binding and its mixed state.</summary>
-    public PropertyBinding<float> FieldOfView { get; } = new(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegreesDescriptor);
+    public NumberBinding<float> FieldOfView { get; } = new(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegreesDescriptor);
 
     /// <summary>Gets or sets the framing policy through its guarded binding.</summary>
     public CameraAspectMode AspectMode
@@ -56,22 +56,22 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     public IReadOnlyList<CameraAspectMode> AspectModeOptions { get; } = Enum.GetValues<CameraAspectMode>();
 
     /// <summary>Gets the aspect-ratio binding and its mixed state.</summary>
-    public PropertyBinding<float> AspectRatio { get; } = new(SceneDocumentCommandService.PerspectiveCamera.AspectRatioDescriptor);
+    public NumberBinding<float> AspectRatio { get; } = new(SceneDocumentCommandService.PerspectiveCamera.AspectRatioDescriptor);
 
     /// <summary>Gets the near-plane binding and its mixed state.</summary>
-    public PropertyBinding<float> NearPlane { get; } = new(SceneDocumentCommandService.PerspectiveCamera.NearPlaneDescriptor);
+    public NumberBinding<float> NearPlane { get; } = new(SceneDocumentCommandService.PerspectiveCamera.NearPlaneDescriptor);
 
     /// <summary>Gets the far-plane binding and its mixed state.</summary>
-    public PropertyBinding<float> FarPlane { get; } = new(SceneDocumentCommandService.PerspectiveCamera.FarPlaneDescriptor);
+    public NumberBinding<float> FarPlane { get; } = new(SceneDocumentCommandService.PerspectiveCamera.FarPlaneDescriptor);
 
     /// <summary>Gets the aperture f-number binding and its mixed state.</summary>
-    public PropertyBinding<float> ApertureF { get; } = new(SceneDocumentCommandService.PerspectiveCamera.ApertureFDescriptor);
+    public NumberBinding<float> ApertureF { get; } = new(SceneDocumentCommandService.PerspectiveCamera.ApertureFDescriptor);
 
     /// <summary>Gets the shutter-rate binding and its mixed state.</summary>
-    public PropertyBinding<float> ShutterRate { get; } = new(SceneDocumentCommandService.PerspectiveCamera.ShutterRateDescriptor);
+    public NumberBinding<float> ShutterRate { get; } = new(SceneDocumentCommandService.PerspectiveCamera.ShutterRateDescriptor);
 
     /// <summary>Gets the ISO binding and its mixed state.</summary>
-    public PropertyBinding<float> Iso { get; } = new(SceneDocumentCommandService.PerspectiveCamera.IsoDescriptor);
+    public NumberBinding<float> Iso { get; } = new(SceneDocumentCommandService.PerspectiveCamera.IsoDescriptor);
 
     /// <summary>Gets FOV feedback.</summary>
     public InspectorFieldDiagnostic FieldOfViewDiagnostic => this.edits?.Diagnostics.Get(this.FieldOfView.Id.Id) ?? this.unboundDiagnostic;
