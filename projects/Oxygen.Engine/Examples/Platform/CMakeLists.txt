@@ -23,6 +23,9 @@ asap_push_module("${META_MODULE_NAME}")
 # Dependencies
 # ------------------------------------------------------------------------------
 
+# The sample reads native SDL events, which Platform keeps private.
+find_package(SDL3 CONFIG REQUIRED)
+
 # ==============================================================================
 # Build instructions
 # ==============================================================================
@@ -53,6 +56,7 @@ target_link_libraries(
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>
     oxygen::oxco
     oxygen::platform
+    SDL3::SDL3
 )
 
 # ==============================================================================
