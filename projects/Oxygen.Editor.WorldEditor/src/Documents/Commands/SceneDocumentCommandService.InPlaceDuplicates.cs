@@ -29,60 +29,36 @@ public sealed partial class SceneDocumentCommandService
                 context);
         }
 
-        // Resolve every source first, so a stale id duplicates nothing. A node whose ancestor is
-        // also listed is copied with that ancestor.
-        var requested = nodeIds.ToHashSet();
-        var sources = new List<SceneNode>(nodeIds.Count);
-        foreach (var nodeId in nodeIds.Distinct())
+        // Resolve every source first, so a stale id duplicates nothing.
+        if (ResolveInPlaceSources(context.Scene, nodeIds) is not { } sources)
         {
-            if (FindNode(context.Scene, nodeId) is not { } node)
-            {
-                return this.DuplicateFailure(
-                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                    "One or more selected nodes no longer exist.",
-                    context);
-            }
-
-            if (!node.Ancestors().Any(ancestor => requested.Contains(ancestor.Id)))
-            {
-                sources.Add(node);
-            }
+            return this.DuplicateStaleTarget("One or more selected nodes no longer exist.", context);
         }
 
         if (sources.Count == 0)
         {
-            return this.DuplicateFailure(
-                DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                "There is nothing to duplicate.",
-                context);
+            return this.DuplicateStaleTarget("There is nothing to duplicate.", context);
         }
 
+        // Map every copy before creating any, so references between the duplicated nodes follow the copies.
+        var copies = new Dictionary<Guid, Guid>();
+        var copiesData = sources.Select(source => RemapNodeIds(WithTransform(source, transforms), copies)).ToList();
         var created = new List<SceneNode>(sources.Count);
         context.History.BeginChangeSet($"Duplicate {sources.Count} node(s)");
         try
         {
-            foreach (var source in sources)
+            for (var index = 0; index < sources.Count; index++)
             {
-                var data = source.Dehydrate();
-                if (transforms?.TryGetValue(source.Id, out var transform) == true)
-                {
-                    data = data with
-                    {
-                        Components = [.. data.Components.Select(component => component is TransformData current
-                            ? current with { Position = transform.Position, Rotation = transform.Rotation, Scale = transform.Scale }
-                            : component)],
-                    };
-                }
-
                 // Each copy lands right after its source: same scene parent, same Explorer folder.
-                var folderId = FindNodeFolderId(context.Scene.ExplorerLayout, source.Id).FolderId;
-                var duplicated = await this.DuplicateNodesFromDataAsync(context, [data], newParentNodeId: null, folderId, source.Id).ConfigureAwait(true);
-                if (!duplicated.Succeeded || duplicated.Value is not { } copies)
+                var source = sources[index];
+                var folderId = FindNodeFolderId(context.Scene.ExplorerLayout, source.Id).folderId;
+                var duplicated = await this.InsertCopiesAsync(context, [copiesData[index]], copies, newParentNodeId: null, folderId, source.Id).ConfigureAwait(true);
+                if (!duplicated.Succeeded || duplicated.Value is not { } inserted)
                 {
                     return duplicated;
                 }
 
-                created.AddRange(copies);
+                created.AddRange(inserted);
             }
         }
         finally
@@ -93,9 +69,50 @@ public sealed partial class SceneDocumentCommandService
         return SceneCommandResults.Success<IReadOnlyList<SceneNode>>(created);
     }
 
+    /// <summary>Resolves the nodes to duplicate; a node whose ancestor is also listed is copied with that ancestor.</summary>
+    /// <param name="scene">The scene that holds the nodes.</param>
+    /// <param name="nodeIds">The requested node identities.</param>
+    /// <returns>The nodes to copy, or <see langword="null"/> when any identity is stale.</returns>
+    private static List<SceneNode>? ResolveInPlaceSources(Scene scene, IReadOnlyList<Guid> nodeIds)
+    {
+        var requested = nodeIds.ToHashSet();
+        var sources = new List<SceneNode>(nodeIds.Count);
+        foreach (var nodeId in nodeIds.Distinct())
+        {
+            if (FindNode(scene, nodeId) is not { } node)
+            {
+                return null;
+            }
+
+            if (!node.Ancestors().Any(ancestor => requested.Contains(ancestor.Id)))
+            {
+                sources.Add(node);
+            }
+        }
+
+        return sources;
+    }
+
+    /// <summary>Captures a node for duplication, with the copy's requested pose, if any.</summary>
+    /// <param name="source">The node to duplicate.</param>
+    /// <param name="transforms">The requested poses of the copies, by source node identity.</param>
+    /// <returns>The node's data.</returns>
+    private static SceneNodeData WithTransform(SceneNode source, IReadOnlyDictionary<Guid, TransformData>? transforms)
+    {
+        var data = source.Dehydrate();
+        return transforms?.TryGetValue(source.Id, out var transform) == true
+            ? data with
+            {
+                Components = [.. data.Components.Select(component => component is TransformData current
+                    ? current with { Position = transform.Position, Rotation = transform.Rotation, Scale = transform.Scale }
+                    : component)],
+            }
+            : data;
+    }
+
     /// <summary>Finds the Explorer folder that directly groups a node.</summary>
     /// <returns>Whether the node has a layout entry, and its folder, if any.</returns>
-    private static (bool Found, Guid? FolderId) FindNodeFolderId(IList<ExplorerEntryData>? entries, Guid nodeId, Guid? enclosingFolderId = null)
+    private static (bool found, Guid? folderId) FindNodeFolderId(IList<ExplorerEntryData>? entries, Guid nodeId, Guid? enclosingFolderId = null)
     {
         if (entries is null)
         {
@@ -114,7 +131,7 @@ public sealed partial class SceneDocumentCommandService
             {
                 // Folders group the entries inside them; a node's own children start a new scope.
                 var result = FindNodeFolderId(children, nodeId, isFolder ? entry.FolderId : null);
-                if (result.Found)
+                if (result.found)
                 {
                     return result;
                 }

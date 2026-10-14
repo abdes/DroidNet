@@ -63,12 +63,15 @@ public sealed partial class SceneDocumentCommandService
             sources.Add(source);
         }
 
+        // One identity map across every copied root lets references between them follow the copies.
+        var copies = new Dictionary<Guid, Guid>();
+        var data = sources.Select(source => RemapNodeIds(source.Dehydrate(), copies)).ToList();
         return await this.InsertDuplicatesAsync(
             context,
             destination,
             newParentFolderId,
-            sources.Count,
-            index => SceneNode.CreateAndHydrate(context.Scene, RemapNodeIds(sources[index].Dehydrate()))).ConfigureAwait(true);
+            data.Count,
+            index => HydrateCopy(context.Scene, data[index], copies)).ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -93,31 +96,38 @@ public sealed partial class SceneDocumentCommandService
             return this.DuplicateStaleTarget("The clipboard no longer contains any node data.", context);
         }
 
-        if (this.ResolveDuplicateDestination(context, newParentNodeId, newParentFolderId, insertAfterNodeId, out var destination) is { } destinationFailure)
-        {
-            return destinationFailure;
-        }
-
-        return await this.InsertDuplicatesAsync(
-            context,
-            destination,
-            newParentFolderId,
-            rootData.Count,
-            index =>
-            {
-                var clone = SceneNode.CreateAndHydrate(context.Scene, RemapNodeIds(rootData[index]));
-                this.RedirectCapturedSubtree(context, clone);
-                return clone;
-            }).ConfigureAwait(true);
+        var copies = new Dictionary<Guid, Guid>();
+        var data = rootData.Select(root => RemapNodeIds(root, copies)).ToList();
+        return await this.InsertCopiesAsync(context, data, copies, newParentNodeId, newParentFolderId, insertAfterNodeId).ConfigureAwait(true);
     }
 
-    private static SceneNodeData RemapNodeIds(SceneNodeData data)
-        => data with
+    /// <summary>Gives a node hierarchy fresh node and component identities.</summary>
+    /// <param name="data">The hierarchy to copy.</param>
+    /// <param name="copies">Receives each original node identity mapped to its copy's.</param>
+    /// <returns>The copy's data.</returns>
+    private static SceneNodeData RemapNodeIds(SceneNodeData data, Dictionary<Guid, Guid> copies)
+    {
+        var id = Guid.NewGuid();
+        copies.Add(data.Id, id);
+        return data with
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             Components = [.. data.Components.Select(RemapComponentId)],
-            Children = data.Children?.Select(RemapNodeIds).ToList(),
+            Children = data.Children?.Select(child => RemapNodeIds(child, copies)).ToList(),
         };
+    }
+
+    /// <summary>Creates a copied node whose node references follow the other copies of the same operation.</summary>
+    /// <param name="scene">The destination scene.</param>
+    /// <param name="data">The copy's data, with its fresh identities.</param>
+    /// <param name="copies">Every original node identity of the operation mapped to its copy's.</param>
+    /// <returns>The copied node.</returns>
+    private static SceneNode HydrateCopy(Scene scene, SceneNodeData data, IReadOnlyDictionary<Guid, Guid> copies)
+    {
+        var clone = SceneNode.CreateAndHydrate(scene, data);
+        CopiedNodeReferences.RemapSubtree(clone, copies);
+        return clone;
+    }
 
     private static ComponentData RemapComponentId(ComponentData data)
         => data switch
@@ -188,6 +198,40 @@ public sealed partial class SceneDocumentCommandService
 
         destination = new(parentNode, folderSceneParentNodeId, insertIndex);
         return null;
+    }
+
+    /// <summary>Inserts copies whose identities were already remapped, re-pointing their references.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="data">The copied roots, with fresh identities.</param>
+    /// <param name="copies">Every original node identity of the operation mapped to its copy's.</param>
+    /// <param name="newParentNodeId">The destination parent node, or <see langword="null"/> for root/folder scope.</param>
+    /// <param name="newParentFolderId">The destination folder, or <see langword="null"/> when not grouping.</param>
+    /// <param name="insertAfterNodeId">The sibling to insert after, or <see langword="null"/> to append.</param>
+    /// <returns>The created node roots.</returns>
+    private async Task<SceneValueCommandResult<IReadOnlyList<SceneNode>>> InsertCopiesAsync(
+        SceneDocumentCommandContext context,
+        List<SceneNodeData> data,
+        IReadOnlyDictionary<Guid, Guid> copies,
+        Guid? newParentNodeId,
+        Guid? newParentFolderId,
+        Guid? insertAfterNodeId)
+    {
+        if (this.ResolveDuplicateDestination(context, newParentNodeId, newParentFolderId, insertAfterNodeId, out var destination) is { } destinationFailure)
+        {
+            return destinationFailure;
+        }
+
+        return await this.InsertDuplicatesAsync(
+            context,
+            destination,
+            newParentFolderId,
+            data.Count,
+            index =>
+            {
+                var clone = HydrateCopy(context.Scene, data[index], copies);
+                this.RedirectCapturedSubtree(context, clone);
+                return clone;
+            }).ConfigureAwait(true);
     }
 
     private async Task<SceneValueCommandResult<IReadOnlyList<SceneNode>>> InsertDuplicatesAsync(

@@ -468,6 +468,8 @@ public static partial class Program
             Reuse.Singleton);
         container.RegisterDelegate(
             resolver => (ContentPipeline.Inspection.IGeometryMaterialSlotProvider)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
+        container.RegisterDelegate(
+            resolver => (ContentPipeline.Inspection.IScriptDeclarationProvider)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
         container.Register<ContentPipeline.Publication.CookPublicationService>(Reuse.Singleton);
         container.Register<ContentPipeline.Mounting.CookedContentMountService>(Reuse.Singleton);
         container.Register<ContentPipeline.Cooking.IAutomaticCookService, ContentPipeline.Cooking.AutomaticCookService>(Reuse.Singleton);

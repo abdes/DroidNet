@@ -31,9 +31,14 @@ public sealed partial class SceneExplorerView
         this.Loaded += this.SceneExplorerView_Loaded;
         this.Unloaded += this.SceneExplorerView_Unloaded;
         this.ExplorerTree.ItemContextRequested += this.ExplorerTree_ItemContextRequested;
+        this.ExplorerTree.ItemsDragStarting += ExplorerTree_ItemsDragStarting;
         this.ExplorerTree.ContextRequested += this.ExplorerTree_ContextRequested;
         this.contextValidationTimer.Tick += this.ContextValidationTimer_Tick;
     }
+
+    // Node fields elsewhere, such as script parameters in the inspector, accept nodes dragged from here.
+    private static void ExplorerTree_ItemsDragStarting(object? sender, TreeItemsDragStartingEventArgs args)
+        => SceneNodeDragData.Write(args.Data, args.Items.OfType<SceneNodeAdapter>().Select(static adapter => adapter.AttachedObject.Id));
 
     private static bool IsTextContext(DependencyObject? source)
     {

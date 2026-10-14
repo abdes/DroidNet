@@ -347,6 +347,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<SpotLightView>(Reuse.Transient);
         childContainer.Register<LocalFogVolumeViewModel>(Reuse.Transient);
         childContainer.Register<LocalFogVolumeView>(Reuse.Transient);
+        childContainer.Register<Inspector.Scripting.ScriptingViewModel>(Reuse.Transient);
+        childContainer.Register<Inspector.Scripting.ScriptingView>(Reuse.Transient);
         childContainer.Register<NodeRenderingViewModel>(Reuse.Transient);
         childContainer.Register<NodeRenderingView>(Reuse.Transient);
         childContainer.Register<EnvironmentViewModel>(Reuse.Transient);
@@ -477,7 +479,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
     /// <summary>Publishes from the current libraries and admits that selection, republishing once when a library is re-cooked in between.</summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The admitted reader transfers to the caller; every rejected reader is disposed here.")]
-    private async Task<(Oxygen.Editor.ContentPipeline.Publication.CookPublicationReadLease Reader, Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountSet Mounts)> AdmitCookedContentAsync(
+    private async Task<(Oxygen.Editor.ContentPipeline.Publication.CookPublicationReadLease reader, Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountSet mounts)> AdmitCookedContentAsync(
         Oxygen.Editor.ContentPipeline.Publication.CookPublicationService publication,
         Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService mountService,
         ProjectContext project)

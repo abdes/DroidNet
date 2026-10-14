@@ -18,8 +18,36 @@ namespace Oxygen.Editor.ContentBrowser.AssetIdentity;
 /// </summary>
 public sealed class AssetIdentityReducer : IAssetIdentityReducer
 {
+    // Each cooked or authored descriptor extension, upper case; authored descriptors add ".JSON".
+    private static readonly (string extension, AssetKind kind)[] DescriptorKinds =
+    [
+        (".OMAT", AssetKind.Material),
+        (".OGEO", AssetKind.Geometry),
+        (".OSCENE", AssetKind.Scene),
+        (".OSCRIPT", AssetKind.Script),
+        (".OIACT", AssetKind.InputAction),
+        (".OIMAP", AssetKind.InputMappingContext),
+        (".OPSCENE", AssetKind.PhysicsScene),
+        (".OTEX", AssetKind.Texture),
+    ];
+
     private readonly Lock descriptorValidationSync = new();
     private readonly Dictionary<string, DescriptorValidationEntry> descriptorValidationCache = [with(StringComparer.OrdinalIgnoreCase)];
+
+    /// <summary>Maps native asset types to browser types.</summary>
+    /// <param name="assetType">The native type identifier.</param>
+    /// <returns>The browser type, or Unknown for unsupported types.</returns>
+    public static AssetKind GetCookedKind(byte assetType) => assetType switch
+    {
+        1 => AssetKind.Material,
+        2 => AssetKind.Geometry,
+        3 => AssetKind.Scene,
+        4 => AssetKind.Script,
+        5 => AssetKind.InputAction,
+        6 => AssetKind.InputMappingContext,
+        9 => AssetKind.PhysicsScene,
+        _ => AssetKind.Unknown,
+    };
 
     /// <inheritdoc />
     public IReadOnlyList<ContentBrowserAssetItem> Reduce(
@@ -36,7 +64,7 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         return records
             .Where(record => IsBrowsableRecord(record.Uri, project))
             .GroupBy(static record => record.Cooked is null ? GetLogicalKey(record.Uri) : AssetUriHelper.GetVirtualPath(record.Uri), StringComparer.OrdinalIgnoreCase)
-            .Select(group => this.CreateItem(group.ToList(), project, cookScope))
+            .Select(group => this.CreateItem(group.ToList(), project))
             .OfType<ContentBrowserAssetItem>()
             .Where(item => IsIncluded(item, filter) && MatchesSearch(item, filter.SearchText))
             .OrderBy(static item => item.DisplayPath, StringComparer.OrdinalIgnoreCase)
@@ -78,21 +106,6 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             return null;
         }
     }
-
-    /// <summary>Maps native asset types to browser types.</summary>
-    /// <param name="assetType">The native type identifier.</param>
-    /// <returns>The browser type, or Unknown for unsupported types.</returns>
-    internal static AssetKind GetCookedKind(byte assetType) => assetType switch
-    {
-        1 => AssetKind.Material,
-        2 => AssetKind.Geometry,
-        3 => AssetKind.Scene,
-        4 => AssetKind.Script,
-        5 => AssetKind.InputAction,
-        6 => AssetKind.InputMappingContext,
-        9 => AssetKind.PhysicsScene,
-        _ => AssetKind.Unknown,
-    };
 
     /// <summary>Formats an asset name without descriptor suffixes.</summary>
     /// <param name="uri">The source or cooked identity.</param>
@@ -279,44 +292,12 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
     {
         var path = AssetUriHelper.GetRelativePath(uri);
         var upper = path.ToUpperInvariant();
-        if (upper.EndsWith(".OMAT.JSON", StringComparison.Ordinal) || upper.EndsWith(".OMAT", StringComparison.Ordinal))
+        foreach (var (extension, kind) in DescriptorKinds)
         {
-            return AssetKind.Material;
-        }
-
-        if (upper.EndsWith(".OGEO.JSON", StringComparison.Ordinal) || upper.EndsWith(".OGEO", StringComparison.Ordinal))
-        {
-            return AssetKind.Geometry;
-        }
-
-        if (upper.EndsWith(".OSCENE.JSON", StringComparison.Ordinal) || upper.EndsWith(".OSCENE", StringComparison.Ordinal))
-        {
-            return AssetKind.Scene;
-        }
-
-        if (upper.EndsWith(".OSCRIPT.JSON", StringComparison.Ordinal) || upper.EndsWith(".OSCRIPT", StringComparison.Ordinal))
-        {
-            return AssetKind.Script;
-        }
-
-        if (upper.EndsWith(".OIACT.JSON", StringComparison.Ordinal) || upper.EndsWith(".OIACT", StringComparison.Ordinal))
-        {
-            return AssetKind.InputAction;
-        }
-
-        if (upper.EndsWith(".OIMAP.JSON", StringComparison.Ordinal) || upper.EndsWith(".OIMAP", StringComparison.Ordinal))
-        {
-            return AssetKind.InputMappingContext;
-        }
-
-        if (upper.EndsWith(".OPSCENE.JSON", StringComparison.Ordinal) || upper.EndsWith(".OPSCENE", StringComparison.Ordinal))
-        {
-            return AssetKind.PhysicsScene;
-        }
-
-        if (upper.EndsWith(".OTEX.JSON", StringComparison.Ordinal) || upper.EndsWith(".OTEX", StringComparison.Ordinal))
-        {
-            return AssetKind.Texture;
+            if (upper.EndsWith(extension + ".JSON", StringComparison.Ordinal) || upper.EndsWith(extension, StringComparison.Ordinal))
+            {
+                return kind;
+            }
         }
 
         if (ScriptSources.IsScriptSource(path))
@@ -343,10 +324,7 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
 
     private static AssetKind GetKind(AssetRecord record) => record.Cooked is { } cooked ? GetCookedKind(cooked.AssetType) : GetKind(record.Uri);
 
-    private ContentBrowserAssetItem? CreateItem(
-        List<AssetRecord> records,
-        ProjectContext project,
-        ProjectCookScope cookScope)
+    private ContentBrowserAssetItem? CreateItem(List<AssetRecord> records, ProjectContext project)
     {
         var descriptor = records.FirstOrDefault(static record => record.Cooked is null && IsDescriptorUri(record.Uri));
         var cooked = records.FirstOrDefault(static record => record.Cooked is not null) ?? records.FirstOrDefault(static record => IsCookedUri(record.Uri));

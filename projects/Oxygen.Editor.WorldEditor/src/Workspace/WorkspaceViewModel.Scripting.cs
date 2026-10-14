@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.World.Problems;
@@ -17,6 +18,7 @@ public partial class WorkspaceViewModel
     /// <summary>The dock and route identity of the Problems panel.</summary>
     internal const string ProblemsDockId = "problems";
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "A singleton of the workspace's child container, which disposes it.")]
     private ProblemsViewModel? problems;
     private IContainer? scriptContainer;
 
@@ -33,6 +35,17 @@ public partial class WorkspaceViewModel
         // Analysis starts with the workspace so Problems and script badges are populated before the panel is opened.
         this.problems = childContainer.Resolve<ProblemsViewModel>();
         this.problems.PropertyChanged += this.OnProblemsPropertyChanged;
+        this.messenger?.Register<ShowScriptProblemMessage>(this, (_, message) => this.ShowProblem(message.Problem));
+    }
+
+    // A script slot's badge brings Problems forward at its problem; saves do not, so the code editor keeps focus.
+    private void ShowProblem(ContentBrowser.Scripts.ScriptProblem problem)
+    {
+        _ = this.problems?.Select(problem);
+        if (DroidNet.Docking.Dockable.FromId(ProblemsDockId) is { } dock)
+        {
+            this.RevealTool(dock);
+        }
     }
 
     private void OnScriptingNavigated()

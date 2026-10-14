@@ -14,6 +14,7 @@ using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
@@ -75,6 +76,9 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="materialSlots">The current native geometry slot inventories.</param>
     /// <param name="projectContexts">The active project lifetime.</param>
     /// <param name="interaction">The shared editor lock owner.</param>
+    /// <param name="scriptAnalysis">The script analysis, for script slot parameters and problems.</param>
+    /// <param name="codeEditor">The code editor, for editing a slot's script.</param>
+    /// <param name="scriptDeclarations">The declarations of library scripts, which have no source to analyze.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
@@ -95,7 +99,10 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         IGeometryMaterialSlotProvider materialSlots,
         IProjectContextService projectContexts,
         ILoggerFactory? loggerFactory = null,
-        WorkspaceInteractionService? interaction = null)
+        WorkspaceInteractionService? interaction = null,
+        IScriptAnalysisService? scriptAnalysis = null,
+        ICodeEditorService? codeEditor = null,
+        IScriptDeclarationProvider? scriptDeclarations = null)
         : base(loggerFactory)
     {
         this.logger = loggerFactory?.CreateLogger<SceneNodeEditorViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<SceneNodeEditorViewModel>();
@@ -123,7 +130,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             projectContexts,
             loggerFactory,
             commandService,
-            this.CreateCommandContext);
+            this.CreateCommandContext,
+            new InspectorScriptServices(scriptAnalysis, codeEditor, scriptDeclarations));
         this.environmentEditor = new EnvironmentViewModel(commandService, this.CreateCommandContext, assetProvider, this.InspectAtmosphereSource, hosting.DispatcherScheduler, sceneEngineSync.ObserveEnvironmentAsync);
         this.renderingEditor = new NodeRenderingViewModel(commandService, this.CreateCommandContext);
 

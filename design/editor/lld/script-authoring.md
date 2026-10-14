@@ -158,19 +158,31 @@ overwriting a value. Each change is logged to Output.
 
 ### Data
 
-| Field                       | Type                         | Notes                                              |
-| --------------------------- | ---------------------------- | -------------------------------------------------- |
-| `Slots`                     | ordered list of `ScriptSlot` | List order is the slot position.                   |
-| `ScriptSlot.Id`             | GUID                         | Stable identity for commands and cook `slot_id`.   |
-| `ScriptSlot.Script`         | script identity (`.oscript`) | Missing references stay visible.                   |
-| `ScriptSlot.ExecutionOrder` | int32, default 0             | Lower runs earlier, across all nodes.              |
-| `ScriptSlot.Overrides`      | map key → typed value        | Only values that differ from the declared default. |
+| Field                       | Type                         | Notes                                                |
+| --------------------------- | ---------------------------- | ---------------------------------------------------- |
+| `Slots`                     | ordered list of `ScriptSlot` | List order is the slot position.                     |
+| `ScriptSlot.Id`             | GUID                         | Unique within its node; commands and cook `slot_id`. |
+| `ScriptSlot.Script`         | script identity (`.oscript`) | Missing references stay visible.                     |
+| `ScriptSlot.ExecutionOrder` | int32, default 0             | Lower runs earlier, across all nodes.                |
+| `ScriptSlot.Overrides`      | map key → typed value        | Only values that differ from the declared default.   |
 
 Override values are `bool`, `int32`, `float`, `string`, `vec2`–`vec4`, an
 asset reference (asset URI, retargeted like every other asset reference) or a
 node reference (node identity in the document, converted to a node index at
 cook). A slot refers to a script by the asset it cooks to, so renaming or
 moving the `.lua` file rewrites the slots and asset values that use it.
+
+### Copies
+
+Duplicate and paste copy slots with their identities, scripts, execution
+order and values; a slot identity is unique within its node, as in the
+engine and the cooked `node_index`/`slot_id` pair. Each operation maps every
+copied node to its copy, so a node value that refers to a node copied in the
+same operation (a turret's own barrel, or another copied root) refers to that
+copy. Other node values are kept: in the same scene they still name the
+original node; pasted into another scene they show as missing and the cook
+reports them until a node is picked. Cut and paste moves nodes without new
+identities, so their references are unchanged.
 
 ### Inspector
 
@@ -181,9 +193,11 @@ selected node (multi-selection shows a message to select one node).
   with New Script, which runs the Content Browser's New Script and picks the
   new script), Edit in the code editor, the execution order field, move up
   and down, and remove. Add Component starts the section with one empty
-  slot. The card header shows the script name and an error or warning badge
-  with the first diagnostic message; clicking it opens Problems at that
-  entry.
+  slot. The card header shows the script name and, when the script has
+  problems, a badge with the error and warning counts; its tooltip lists the
+  problems, and clicking it opens Problems at the first one. Edit is
+  unavailable, with the reason as its tooltip, while the script has no known
+  source.
 - Below the picker, one field per declared parameter, using the declaration
   hints: number fields with min, max, step and unit; vector fields; a color
   field for `color = true`; a choice list for `options`; a text box with the
@@ -191,16 +205,25 @@ selected node (multi-selection shows a message to select one node).
   and mapping contexts included, offering New action and New context once
   ED-M09.9 delivers them); and a node picker with search that also accepts a node dragged
   from the Scene Explorer. Labels come from the parameter name, with the
-  description as tooltip.
+  description as tooltip; dragging a number's label, or a vector component's
+  label, scrubs the value.
 - An overridden value shows the override marker and a reset to the default.
   Setting a value equal to the declared default removes the override, so a
   later change of the default applies. Numbers are clamped to the declared
   range, and strings hold at most 59 UTF-8 bytes, the cooked record's limit.
 - Overrides whose key the script no longer declares, or whose type changed,
-  are listed as stale with one Remove stale action. They are kept until
-  removed, and the cook reports them (section 7).
+  are listed under "Not declared by the script": one row per value with its
+  name, type and stored value, and its own remove button; Remove all appears
+  for two or more. They are kept until removed, and the cook reports them
+  (section 7). With no declared parameters the card says so, and the group
+  still lists the values.
 - While the script has errors, its last valid declarations stay on screen,
   marked as out of date.
+- A script from a mounted cooked library has no source in the project. Its
+  parameters come from its cooked descriptor, read by the native Inspector's
+  `scripts` command; the descriptor keeps names, types, defaults and asset
+  kinds but no range, unit, description, options or color, so the card says
+  so and those fields have no limits or hints.
 
 All edits are commands with undo/redo and dirty state through the property
 pipeline. The component has no live projection: scripts do not run in editor

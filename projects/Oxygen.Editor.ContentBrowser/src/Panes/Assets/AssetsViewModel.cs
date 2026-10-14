@@ -150,6 +150,7 @@ public partial class AssetsViewModel(
             contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
 
             messenger.Register<AssetsChangedMessage>(this, (_, _) => this.OnAssetsChanged());
+            messenger.Register<CreateScriptRequestMessage>(this, (_, message) => message.Reply(scripts?.CreateScriptAsync() ?? Task.FromResult<string?>(null)));
             relocation?.Completed += this.OnRelocationCompleted;
 
             // Indexing is started by ContentBrowserViewModel - no need to start here

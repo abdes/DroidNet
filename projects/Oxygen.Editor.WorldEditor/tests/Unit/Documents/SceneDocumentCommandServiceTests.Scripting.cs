@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using AwesomeAssertions;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Scripting;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
@@ -100,6 +101,71 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task DuplicateNodesInPlaceAsync_NodeValuesFollowTheCopiesAndKeepOtherNodes()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var (turret, barrel, player, enemy) = AddScriptedTurret(scene);
+        var source = turret.Components.OfType<ScriptingComponent>().Single().Slots[0];
+        var context = CreateContext(scene);
+
+        var result = await fixture.Sut.DuplicateNodesInPlaceAsync(context, [turret.Id, enemy.Id]).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        var (turretCopy, enemyCopy) = (result.Value![0], result.Value[1]);
+        var slot = turretCopy.Components.OfType<ScriptingComponent>().Single().Slots.Should().ContainSingle().Subject;
+        _ = slot.Overrides["muzzle"].NodeId.Should().Be(turretCopy.Children.Single().Id, "the barrel was copied with its turret");
+        _ = slot.Overrides["buddy"].NodeId.Should().Be(enemyCopy.Id, "the enemy was copied in the same duplication");
+        _ = slot.Overrides["target"].NodeId.Should().Be(player.Id, "the player was not copied");
+        _ = slot.Id.Should().Be(source.Id, "slot identities are scoped to their node");
+        _ = turret.Components.OfType<ScriptingComponent>().Single().Slots[0].Should().Be(source);
+        _ = barrel.Parent.Should().BeSameAs(turret);
+        _ = context.History.UndoStack.Should().ContainSingle();
+    }
+
+    [TestMethod]
+    public async Task DuplicateNodesAsync_NodeValuesFollowCopiesAcrossTheCopiedRoots()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var (turret, _, player, enemy) = AddScriptedTurret(scene);
+        var context = CreateContext(scene);
+
+        var result = await fixture.Sut.DuplicateNodesAsync(context, [turret.Id, enemy.Id], newParentNodeId: null, newParentFolderId: null).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        var copy = result.Value!.Single(static node => string.Equals(node.Name, "Turret", StringComparison.Ordinal));
+        var slot = copy.Components.OfType<ScriptingComponent>().Single().Slots[0];
+        _ = slot.Overrides["muzzle"].NodeId.Should().Be(copy.Children.Single().Id);
+        _ = slot.Overrides["buddy"].NodeId.Should().Be(result.Value!.Single(static node => string.Equals(node.Name, "Enemy", StringComparison.Ordinal)).Id);
+        _ = slot.Overrides["target"].NodeId.Should().Be(player.Id);
+    }
+
+    [TestMethod]
+    public async Task PasteExplorerItemsAsync_IntoAnotherSceneKeepsUncopiedNodeValuesAsMissing()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var origin = CreateScene();
+        var (turret, _, player, _) = AddScriptedTurret(origin);
+        origin.SetExplorerLayout([.. origin.RootNodes.Select(static node => new ExplorerEntryData { NodeId = node.Id })]);
+        var payload = fixture.Sut.CaptureExplorerClipboard(CreateContext(origin), [turret.Id], []).Value!;
+        var destination = CreateScene();
+        destination.SetExplorerLayout([]);
+        var context = CreateContext(destination);
+
+        var result = await fixture.Sut.PasteExplorerItemsAsync(context, payload, false, null, null, false).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        var copy = destination.RootNodes.Should().ContainSingle().Subject;
+        var slot = copy.Components.OfType<ScriptingComponent>().Single().Slots[0];
+        _ = slot.Overrides["muzzle"].NodeId.Should().Be(copy.Children.Single().Id);
+        _ = slot.Overrides["target"].NodeId.Should().Be(player.Id, "a node outside the copy stays visible as missing");
+    }
+
+    [TestMethod]
     public async Task EditScriptSlotsAsync_RejectsDuplicateSlotsAndNonScriptReferences()
     {
         var fixture = CreateFixture();
@@ -118,5 +184,24 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = material.Succeeded.Should().BeFalse();
         _ = scripting.Slots.Should().Equal(duplicate);
         _ = context.History.UndoStack.Should().BeEmpty();
+    }
+
+    /// <summary>Adds a turret whose script points at its own barrel, a player and an enemy.</summary>
+    private static (SceneNode turret, SceneNode barrel, SceneNode player, SceneNode enemy) AddScriptedTurret(Scene scene)
+    {
+        var turret = new SceneNode(scene) { Name = "Turret" };
+        var barrel = new SceneNode(scene) { Name = "Barrel" };
+        var player = new SceneNode(scene) { Name = "Player" };
+        var enemy = new SceneNode(scene) { Name = "Enemy" };
+        turret.AddChild(barrel);
+        scene.RootNodes.Add(turret);
+        scene.RootNodes.Add(player);
+        scene.RootNodes.Add(enemy);
+        var slot = new ScriptSlot { Script = MoveScript }
+            .WithOverride("muzzle", ScriptValue.FromNode(barrel.Id))
+            .WithOverride("target", ScriptValue.FromNode(player.Id))
+            .WithOverride("buddy", ScriptValue.FromNode(enemy.Id));
+        _ = turret.AddComponent(new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [slot] });
+        return (turret, barrel, player, enemy);
     }
 }

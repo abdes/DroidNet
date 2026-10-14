@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Inspector.Geometry;
+using Oxygen.Editor.World.Inspector.Scripting;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 
@@ -30,6 +31,7 @@ internal static class InspectorEditorFactory
     /// <param name="logger">The scoped logging factory.</param>
     /// <param name="commands">The existing authoring service.</param>
     /// <param name="context">The current document context provider.</param>
+    /// <param name="scripts">The scripting services, when the host provides them.</param>
     /// <returns>The component construction operations.</returns>
     internal static Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> Create(
         HostingContext hosting,
@@ -41,7 +43,8 @@ internal static class InspectorEditorFactory
         IProjectContextService projects,
         ILoggerFactory? logger,
         ISceneDocumentCommandService commands,
-        Func<SceneDocumentCommandContext?> context)
+        Func<SceneDocumentCommandContext?> context,
+        InspectorScriptServices? scripts = null)
         => new()
         {
             [typeof(TransformComponent)] = _ => new TransformViewModel(logger, commands, context),
@@ -52,5 +55,6 @@ internal static class InspectorEditorFactory
             [typeof(PointLightComponent)] = _ => new PointLightViewModel(commands, context),
             [typeof(SpotLightComponent)] = _ => new SpotLightViewModel(commands, context),
             [typeof(LocalFogVolumeComponent)] = _ => new LocalFogVolumeViewModel(commands, context),
+            [typeof(ScriptingComponent)] = messenger => new ScriptingViewModel(commands, context, assets, scripts?.Analysis, scripts?.CodeEditor, messenger, projects, hosting.DispatcherScheduler, scripts?.Declarations),
         };
 }

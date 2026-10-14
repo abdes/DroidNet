@@ -387,18 +387,6 @@ public sealed partial class SceneDocumentCommandService
         List<SceneNode> roots)
     {
         var map = new Dictionary<Guid, Guid>();
-        SceneNodeData Remap(SceneNodeData data)
-        {
-            var newId = Guid.NewGuid();
-            map.Add(data.Id, newId);
-            return data with
-            {
-                Id = newId,
-                Components = data.Components.Select(RemapComponentId).ToList(),
-                Children = data.Children?.Select(Remap).ToList(),
-            };
-        }
-
         ExplorerEntryData RemapEntry(ExplorerEntryData entry) => entry with
         {
             NodeId = entry.NodeId is { } node ? map[node] : null,
@@ -406,9 +394,8 @@ public sealed partial class SceneDocumentCommandService
             Children = entry.Children?.Select(RemapEntry).ToList(),
         };
 
-        foreach (var data in preserveWorld ? payload.WorldNodes ?? [] : payload.Nodes)
+        SceneNodeData Stage(SceneNodeData snapshot)
         {
-            var snapshot = data;
             if (preserveWorld)
             {
                 var original = SceneNode.CreateAndHydrate(context.Scene, snapshot);
@@ -420,7 +407,14 @@ public sealed partial class SceneDocumentCommandService
                 };
             }
 
-            var root = SceneNode.CreateAndHydrate(context.Scene, Remap(snapshot));
+            return RemapNodeIds(snapshot, map);
+        }
+
+        // Map every copy before creating any, so references between the pasted nodes follow the copies.
+        var staged = (preserveWorld ? payload.WorldNodes ?? [] : payload.Nodes).Select(Stage).ToList();
+        foreach (var data in staged)
+        {
+            var root = HydrateCopy(context.Scene, data, map);
             this.RedirectCapturedSubtree(context, root);
             roots.Add(root);
         }

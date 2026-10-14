@@ -115,6 +115,16 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>Selects a problem, when Problems lists it.</summary>
+    /// <param name="problem">The problem.</param>
+    /// <returns>Whether the problem was found and selected.</returns>
+    public bool Select(ScriptProblem problem)
+    {
+        ArgumentNullException.ThrowIfNull(problem);
+        this.Selected = this.Groups.SelectMany(static group => group.Entries).FirstOrDefault(entry => entry.Problem == problem) ?? this.Selected;
+        return this.Selected?.Problem == problem;
+    }
+
     private bool CanCheckScripts() => !this.IsChecking;
 
     [RelayCommand(CanExecute = nameof(CanCheckScripts))]

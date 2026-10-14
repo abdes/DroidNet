@@ -42,7 +42,7 @@ public partial class WorkspaceViewModel
             || issue.AffectedEntity?.SceneId is not { } sceneId
             || issue.SuggestedAction?.Payload.TryGetValue("PropertyPath", out var property) != true
             || property is null
-            || !string.Equals(property, SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal)
+            || (FindScriptSlotNode(issue, property) is null && !string.Equals(property, SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal))
             || this.projectManager.CurrentProject?.Scenes.FirstOrDefault(scene => scene.Id == sceneId) is not { } scene
             || this.documentManager is null
             || issue.AffectedPath is not { } sourcePath || !File.Exists(sourcePath))
@@ -50,7 +50,8 @@ public partial class WorkspaceViewModel
             return false;
         }
 
-        if (Dockable.FromId("se")?.ViewModel is SceneExplorerViewModel explorer)
+        var slotNode = FindScriptSlotNode(issue, property);
+        if (slotNode is null && Dockable.FromId("se")?.ViewModel is SceneExplorerViewModel explorer)
         {
             explorer.SelectEnvironment(sceneId);
         }
@@ -61,33 +62,33 @@ public partial class WorkspaceViewModel
             return false;
         }
 
-        var cooking = Dockable.FromId("cook");
-        if (properties.Owner is { } shared && ReferenceEquals(shared, cooking?.Owner) && this.Docker is { } docker)
+        // A script slot problem selects its node, whose inspector shows the slot.
+        if (slotNode is { } node && Dockable.FromId("se")?.ViewModel is SceneExplorerViewModel nodes)
         {
-            shared.DisownDockable(properties);
-            var dock = ToolDock.New();
-            dock.AdoptDockable(properties);
-            var anchor = new Anchor(AnchorPosition.Right);
-            try
-            {
-                docker.Dock(dock, anchor);
-                anchor = null;
-            }
-            finally
-            {
-                anchor?.Dispose();
-            }
+            _ = await nodes.SetSelectedNodes([node]).ConfigureAwait(true);
         }
 
+        var cooking = Dockable.FromId("cook");
+        this.SeparateFromCooking(properties, cooking);
         this.RevealTool(properties);
         if (cooking is not null)
         {
             this.RevealTool(cooking);
         }
 
-        inspector.FocusEnvironmentField(sceneId, property);
+        if (slotNode is null)
+        {
+            inspector.FocusEnvironmentField(sceneId, property);
+        }
+
         return true;
     }
+
+    private static Guid? FindScriptSlotNode(DiagnosticRecord issue, string property)
+        => Oxygen.Editor.ContentPipeline.ScriptSlotDiagnostics.TryParsePropertyPath(property, out _, out _)
+            && issue.SuggestedAction?.Payload.TryGetValue("NodeId", out var text) == true
+            && Guid.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, out var node)
+                ? node : null;
 
     private Task<ICookPublicationPreview?> CreatePublicationPreviewAsync(Oxygen.Editor.Projects.ProjectContext project)
         => this.cookHosting!.Dispatcher.DispatchAsync(() => Task.FromResult<ICookPublicationPreview?>(
@@ -129,6 +130,29 @@ public partial class WorkspaceViewModel
         catch (Exception exception)
         {
             this.LogValidatedMountFailed(exception, string.Empty);
+        }
+    }
+
+    // Properties shares a dock with Cooking by default; it moves to its own dock so both stay visible.
+    private void SeparateFromCooking(Dockable properties, Dockable? cooking)
+    {
+        if (properties.Owner is not { } shared || !ReferenceEquals(shared, cooking?.Owner) || this.Docker is not { } docker)
+        {
+            return;
+        }
+
+        shared.DisownDockable(properties);
+        var dock = ToolDock.New();
+        dock.AdoptDockable(properties);
+        var anchor = new Anchor(AnchorPosition.Right);
+        try
+        {
+            docker.Dock(dock, anchor);
+            anchor = null;
+        }
+        finally
+        {
+            anchor?.Dispose();
         }
     }
 }
