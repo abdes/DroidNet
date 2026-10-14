@@ -64,6 +64,12 @@ public sealed partial class MenuButton : Button, IRootMenuSurface
     }
 
     /// <summary>
+    ///     Occurs when the menu is about to open, before <see cref="MenuSource"/> is read, so a
+    ///     handler can replace the source with up-to-date items.
+    /// </summary>
+    public event EventHandler? Opening;
+
+    /// <summary>
     ///     Gets a value indicating whether the menu is currently open.
     /// </summary>
     public bool IsMenuOpen
@@ -99,12 +105,6 @@ public sealed partial class MenuButton : Button, IRootMenuSurface
             return this.buttonItemData ?? new MenuItemData { Id = "MenuButton", Text = "Menu" };
         }
     }
-
-    /// <summary>
-    ///     Occurs when the menu is about to open, before <see cref="MenuSource"/> is read, so a
-    ///     handler can replace the source with up-to-date items.
-    /// </summary>
-    public event EventHandler? Opening;
 
     /// <inheritdoc />
     public bool Show(MenuNavigationMode navigationMode)
