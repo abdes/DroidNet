@@ -86,7 +86,7 @@ public sealed partial class DynamicTreeDemoView
     private void TreeDensityToggle_OnClick(object sender, RoutedEventArgs args)
     {
         _ = args;
-        if (sender is not ToggleButton densityToggle || this.SceneTree is not { } sceneTree)
+        if (sender is not ToggleButton || this.SceneTree is not { })
         {
             return;
         }
@@ -114,20 +114,20 @@ public sealed partial class DynamicTreeDemoView
             var isNarrow = this.LayoutRootGrid.ActualWidth < 760;
             var isCompact = this.TreeDensityToggle.IsChecked == true;
             TreePresentation.ApplyDensity(sceneTree, isCompact, isNarrow);
-            var compactFilterStyles = this.compactFilterStyles ??= new ResourceDictionary
+            var compactStyles = this.compactFilterStyles ??= new ResourceDictionary
             {
                 Source = new Uri("ms-appx:///DroidNet.Controls.DynamicTree/DynamicTree/CompactFilterBarStyles.xaml"),
             };
-            if (isCompact && !sceneTree.Resources.MergedDictionaries.Contains(compactFilterStyles))
+            if (isCompact && !sceneTree.Resources.MergedDictionaries.Contains(compactStyles))
             {
-                sceneTree.Resources.MergedDictionaries.Add(compactFilterStyles);
+                sceneTree.Resources.MergedDictionaries.Add(compactStyles);
             }
             else if (!isCompact)
             {
-                _ = sceneTree.Resources.MergedDictionaries.Remove(compactFilterStyles);
+                _ = sceneTree.Resources.MergedDictionaries.Remove(compactStyles);
             }
 
-            var filterStyles = isCompact ? compactFilterStyles : this.Resources;
+            var filterStyles = isCompact ? compactStyles : this.Resources;
             sceneTree.FilterBarInputStyle = (Style)filterStyles["FilterBarInputStyle"];
             this.FilterMenuButton.Style = (Style)filterStyles["FilterBarButtonStyle"];
         }

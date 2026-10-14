@@ -9,7 +9,7 @@ namespace DroidNet.Controls.Demo.Menus;
 /// <summary>
 ///     View model for a toggle hosted inside a menu item template.
 /// </summary>
-public sealed partial class ToggleMenuItemModel : ObservableObject
+internal sealed partial class ToggleMenuItemModel : ObservableObject
 {
     /// <summary>
     ///     Gets the content shown when the toggle is off.

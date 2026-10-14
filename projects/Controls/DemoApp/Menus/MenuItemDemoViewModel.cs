@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Menus;
@@ -61,7 +62,7 @@ public partial class MenuItemDemoViewModel : ObservableObject
     /// <param name="loggerFactory">The factory used to create loggers for menu operations.</param>
     public MenuItemDemoViewModel(ILoggerFactory loggerFactory)
     {
-        this.AvailableIcons = new ObservableCollection<KeyValuePair<string, string>>(this.iconMapping);
+        this.AvailableIcons = [with(this.iconMapping)];
 
         // Create a command with dynamic CanExecute that we can control
         this.menuItemCommand = new RelayCommand(this.OnMenuItemExecuted, () => this.CommandCanExecute);
@@ -338,7 +339,7 @@ public partial class MenuItemDemoViewModel : ObservableObject
             slider.ValueChanged += (_, e) =>
             {
                 this.EmbeddedSliderValue = e.NewValue;
-                this.LastActionMessage = $"Embedded slider value changed to {this.EmbeddedSliderValue:0}. The menu item was not invoked.";
+                this.LastActionMessage = string.Create(CultureInfo.InvariantCulture, $"Embedded slider value changed to {this.EmbeddedSliderValue:0}. The menu item was not invoked.");
             };
             return slider;
         };

@@ -42,8 +42,11 @@ internal sealed partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot
     /// <inheritdoc/>
     public Scene AttachedObject => scene;
 
+    [GeneratedRegex(ValidNamePattern, RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ValidNameMatcher { get; }
+
     /// <inheritdoc/>
-    public override bool ValidateItemName(string name) => ValidNameMatcher().IsMatch(name);
+    public override bool ValidateItemName(string name) => ValidNameMatcher.IsMatch(name);
 
     /// <inheritdoc/>
     protected override int DoGetChildrenCount() => this.AttachedObject.Entities.Count;
@@ -64,7 +67,4 @@ internal sealed partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot
 
         await Task.CompletedTask.ConfigureAwait(false);
     }
-
-    [GeneratedRegex(ValidNamePattern, RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex ValidNameMatcher();
 }

@@ -76,8 +76,8 @@ public partial class App
     {
         Current.Resources[VmToViewConverterResourceKey] = this.vmToViewConverter;
 
-        // We just want to exit if navigation fails for some reason
-        _ = this.router.Events.OfType<NavigationError>().Subscribe(_ => this.lifetime.StopApplication());
+        // We just want to exit if navigation fails for some reason; the subscription ends with the application.
+        this.router.Events.OfType<NavigationError>().Subscribe(_ => this.lifetime.StopApplication(), this.lifetime.ApplicationStopping);
 
         try
         {
