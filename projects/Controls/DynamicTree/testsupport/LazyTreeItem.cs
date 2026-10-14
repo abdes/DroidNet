@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using System.Globalization;
 
 namespace DroidNet.Controls.Tests;
 
@@ -45,7 +46,7 @@ internal sealed partial class LazyTreeItem(string label, int childCount, bool is
         this.LoadCount++;
         for (var index = 0; index < childCount; index++)
         {
-            this.AddChildInternal(new LazyTreeItem($"{this.Label}/{index:D4}", this.IsRoot ? 1 : 0));
+            this.AddChildInternal(new LazyTreeItem(string.Create(CultureInfo.InvariantCulture, $"{this.Label}/{index:D4}"), this.IsRoot ? 1 : 0));
         }
 
         return Task.CompletedTask;

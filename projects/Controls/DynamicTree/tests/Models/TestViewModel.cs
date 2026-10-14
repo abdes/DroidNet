@@ -12,7 +12,7 @@ namespace DroidNet.Controls.Tests;
 /// A derived class from DynamicTreeViewModel to expose the InitializeRootAsync method for testing.
 /// </summary>
 [ExcludeFromCodeCoverage]
-internal partial class TestViewModel(bool skipRoot, ILoggerFactory? loggerFactory = null) :
+internal sealed partial class TestViewModel(bool skipRoot, ILoggerFactory? loggerFactory = null) :
     DynamicTreeViewModel(
         loggerFactory ?? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
 {

@@ -4,6 +4,7 @@
 
 using System.Collections.Specialized;
 using System.Diagnostics;
+using System.Globalization;
 using AwesomeAssertions;
 
 namespace DroidNet.Controls.Tests;
@@ -41,7 +42,7 @@ public sealed class ViewModelLazyWorkloadTests : ViewModelTestBase
         elapsed.Restart();
         for (var index = 1; index <= 50; index++)
         {
-            rows[index].Label = $"Row {index:D4}";
+            rows[index].Label = string.Create(CultureInfo.InvariantCulture, $"Row {index:D4}");
         }
 
         _ = evaluations.Should().Be(0, "value changes are debounced instead of rebuilding per edit");
@@ -59,9 +60,9 @@ public sealed class ViewModelLazyWorkloadTests : ViewModelTestBase
         _ = rows.Should().OnlyContain(item => item.PropertyObservers == 0);
         _ = root.LoadCount.Should().Be(1);
         this.TestContext.WriteLine(
-            $"1000 rows: initialize {initializeMilliseconds:F2} ms, filter {filteringMilliseconds:F2} ms, "
-            + $"50 edits + refresh {editMilliseconds:F2} ms; source changes {sourceChanges}; "
-            + $"branch loads {rows.Skip(1).Sum(item => item.LoadCount)}; batch evaluations 1000.");
+            string.Create(CultureInfo.InvariantCulture, $"1000 rows: initialize {initializeMilliseconds:F2} ms, filter {filteringMilliseconds:F2} ms, ")
+            + string.Create(CultureInfo.InvariantCulture, $"50 edits + refresh {editMilliseconds:F2} ms; source changes {sourceChanges}; ")
+            + string.Create(CultureInfo.InvariantCulture, $"branch loads {rows.Skip(1).Sum(item => item.LoadCount)}; batch evaluations 1000."));
     }
 
     private static void AssertFilterSubscriptionCycles(TestViewModel viewModel, LazyTreeItem[] rows, int[] baselineObservers)

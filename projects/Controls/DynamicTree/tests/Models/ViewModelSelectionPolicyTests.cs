@@ -17,7 +17,7 @@ namespace DroidNet.Controls.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory($"{nameof(DynamicTree)} / ViewModel / SelectionPolicy")]
-public sealed class ViewModelSelectionPolicyTests : ViewModelTestBase
+public sealed partial class ViewModelSelectionPolicyTests : ViewModelTestBase
 {
     [TestMethod]
     public async Task ActiveItem_TracksLastExplicitSelectionNotRowOrder()
@@ -254,7 +254,7 @@ public sealed class ViewModelSelectionPolicyTests : ViewModelTestBase
     /// normalized away by bulk operations — the generic seam C19 uses for the scene root
     /// row without the control knowing any scene concept.
     /// </summary>
-    private sealed class ExclusiveItemViewModel(ILoggerFactory? loggerFactory, ITreeItem excluded)
+    private sealed partial class ExclusiveItemViewModel(ILoggerFactory? loggerFactory, ITreeItem excluded)
         : DynamicTreeViewModel(loggerFactory)
     {
         protected override bool AllowsCoSelection(ITreeItem candidate, IReadOnlyList<ITreeItem> currentlySelected)
