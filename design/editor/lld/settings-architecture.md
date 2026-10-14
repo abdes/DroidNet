@@ -15,6 +15,7 @@ policy remains in the project and content-pipeline contracts.
 | `GOAL-002`, `REQ-007`, `REQ-009`, `REQ-037` | Scene/environment values are real scene authoring data. |
 | `GOAL-003`, `REQ-008`, `REQ-026`            | Runtime-facing settings apply through runtime services. |
 | `GOAL-006`, `REQ-022`, `REQ-024`            | Rejected/invalid settings produce `OperationResult`.    |
+| `REQ-046`                                   | Appearance preferences apply to every window at once.   |
 
 ## 3. Architecture Links
 
@@ -55,6 +56,7 @@ storing a setting outside its row.
 | Preview FPS                                                   | User/project                    | `PreviewSettingsService` → `IEngineService`       | project-scoped SQLite setting                    | preview preference                       | no               | yes (immediate)                                                  |
 | Native log verbosity                                          | User/project                    | `PreviewSettingsService` → `IEngineService`       | project-scoped SQLite setting                    | preview preference                       | no               | yes (immediate)                                                  |
 | `IEngineSettings` (startup)                                   | Editor preference               | `ISettingsService<IEngineSettings>`               | DroidNet user-local settings                     | `ISettingsService.Save`                  | no               | only on next engine init                                         |
+| Appearance (theme, density)                                   | Editor preference               | `ISettingsService<IAppearanceSettings>`           | DroidNet user-local settings                     | `ISettingsService`                       | no               | yes (immediate, every open window)                               |
 | Workspace docking, recent docs                                | Workspace                       | existing editor data services                     | user-local                                       | workspace services                       | no               | n/a                                                              |
 | Viewport layout and per-pane camera state                     | Workspace per project and scene | WorldEditor viewport-state service                | `IEditorSettingsManager`, project-scoped setting | viewport UI, not authoring command       | no               | restored when the scene's panes are created                      |
 | Editor Hide / Show All                                        | Workspace per project and scene | WorldEditor workspace-visibility service          | `IEditorSettingsManager`, project-scoped setting | workspace command, not authoring command | no               | all editing viewports of the active scene; drops draw and shadow |
@@ -247,6 +249,8 @@ Settings reach the user through these surfaces:
   grid (§5.4), with a reset to the engine defaults.
 - Output/log panel + inline error placement — for `Settings`-domain
   diagnostics.
+- Shell Settings menu — Themes and Density radio submenus for the Appearance
+  setting (§5; [application density](./application-density.md)).
 
 V0.1 does not introduce a generic Settings panel.
 
@@ -264,6 +268,7 @@ V0.1 does not introduce a generic Settings panel.
 | Viewport layout and camera state      | yes        | through the project-scoped typed setting in §5.2 |
 | Transform tool space and snapping     | yes        | through the application-scoped setting in §5.3   |
 | Ground grid                           | yes        | through the application-scoped setting in §5.4   |
+| Appearance (theme, density)           | yes        | on change, through `ISettingsService`            |
 
 Scene round trips preserve typed values, identities and source modes through
 `SceneJsonContext`. Text formatting need not match input bytes. The property
