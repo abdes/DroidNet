@@ -99,6 +99,19 @@ public partial class DynamicTree : Control
     /// <remarks>Owners add formats that identify the items to drop targets outside the tree.</remarks>
     public event EventHandler<TreeItemsDragStartingEventArgs>? ItemsDragStarting;
 
+    /// <summary>Describes the logical position of a drop relative to its target row.</summary>
+    internal enum DropZone
+    {
+        /// <summary>Insert before the target.</summary>
+        Before,
+
+        /// <summary>Insert as a child of the target.</summary>
+        Inside,
+
+        /// <summary>Insert after the target.</summary>
+        After,
+    }
+
     /// <summary>Settles a realized inline rename before another context action changes selection.</summary>
     /// <returns>Whether all realized rename drafts committed successfully.</returns>
     public async Task<bool> SettleRenameAsync()
@@ -118,19 +131,6 @@ public partial class DynamicTree : Control
         }
 
         return true;
-    }
-
-    /// <summary>Describes the logical position of a drop relative to its target row.</summary>
-    internal enum DropZone
-    {
-        /// <summary>Insert before the target.</summary>
-        Before,
-
-        /// <summary>Insert as a child of the target.</summary>
-        Inside,
-
-        /// <summary>Insert after the target.</summary>
-        After,
     }
 
     /// <summary>
@@ -1451,7 +1451,7 @@ public partial class DynamicTree : Control
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
             () =>
             {
-                if (this.itemsRepeater?.ItemsSourceView?.IndexOf(args.TreeItem) is not ({ } index and >= 0))
+                if (this.itemsRepeater?.ItemsSourceView?.IndexOf(args.TreeItem) is not int index || index < 0)
                 {
                     return;
                 }
