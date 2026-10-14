@@ -17,7 +17,7 @@ public partial class NumberBox
     private readonly UISettings layoutSettings = new();
     private FrameworkElement? valueGroup;
     private TextBlock? prefixTextBlock;
-    private TextBlock? qualifierTextBlock;
+    private TextBlock? unitTextBlock;
     private (LabelPosition position, double labelWidth, double valueWidth, bool compact)? appliedLabelLayout;
 
     /// <inheritdoc />
@@ -29,6 +29,17 @@ public partial class NumberBox
 
     private static ColumnDefinition ValueColumn(double minimumWidth)
         => new() { Width = new GridLength(1, GridUnitType.Star), MinWidth = minimumWidth };
+
+    private static double MeasureAnnotation(TextBlock? annotation)
+    {
+        if (annotation is null || annotation.Visibility == Visibility.Collapsed)
+        {
+            return 0;
+        }
+
+        annotation.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        return annotation.DesiredSize.Width;
+    }
 
     private void UpdateLabelPosition()
     {
@@ -52,10 +63,10 @@ public partial class NumberBox
         this.labelTextBlock.TextTrimming = proportional ? TextTrimming.CharacterEllipsis : TextTrimming.None;
         this.UpdateValueAnnotations();
         this.backgroundBorder.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var valueWidth = Math.Max(this.EditorMinimumWidth * scale, this.backgroundBorder.DesiredSize.Width);
+        var valueWidth = this.backgroundBorder.DesiredSize.Width;
         this.labelTextBlock.Measure(new Size(double.IsNaN(labelWidth) ? double.PositiveInfinity : labelWidth, double.PositiveInfinity));
         var labelPosition = this.SelectLabelPosition(availableWidth, labelWidth, valueWidth);
-        var compact = this.IsCompact && labelPosition == LabelPosition.Left;
+        var compact = this.IsCompact && labelPosition is LabelPosition.Left or LabelPosition.Right;
         this.ActualLabelPosition = labelPosition;
         this.rootGrid.ColumnSpacing = this.LabelSpacing;
         this.rootGrid.RowSpacing = this.LabelRowSpacing;
@@ -67,6 +78,11 @@ public partial class NumberBox
 
         this.labelTextBlock.Visibility = !compact && labelPosition != LabelPosition.None ? Visibility.Visible : Visibility.Collapsed;
         this.compactLabelTextBlock.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
+        if (compact)
+        {
+            this.PlaceCompactLabel(labelOnLeft: labelPosition == LabelPosition.Left);
+        }
+
         this.rootGrid.RowDefinitions.Clear();
         this.rootGrid.ColumnDefinitions.Clear();
         Grid.SetRow(this.labelTextBlock, 0);
@@ -89,20 +105,27 @@ public partial class NumberBox
         this.appliedLabelLayout = layout;
     }
 
+    // A compact label sits inside the value field, before or after the value.
+    private void PlaceCompactLabel(bool labelOnLeft)
+    {
+        Grid.SetColumn(this.compactLabelTextBlock!, labelOnLeft ? 0 : 2);
+        this.compactLabelTextBlock!.Margin = labelOnLeft ? new Thickness(8, 0, 4, 0) : new Thickness(4, 0, 8, 0);
+    }
+
     private LabelPosition SelectLabelPosition(double availableWidth, double labelWidth, double valueWidth)
     {
         var position = string.IsNullOrWhiteSpace(this.Label) ? LabelPosition.None : this.LabelPosition;
         if (this.AutoStackLabel && !this.IsCompact && position is LabelPosition.Left or LabelPosition.Right)
         {
-            var prefixWidth = this.MeasureAnnotation(this.prefixTextBlock);
-            var qualifierWidth = this.MeasureAnnotation(this.qualifierTextBlock);
+            var prefixWidth = MeasureAnnotation(this.prefixTextBlock);
+            var unitWidth = MeasureAnnotation(this.unitTextBlock);
             var inlineMinimum = (double.IsNaN(labelWidth) ? this.labelTextBlock!.DesiredSize.Width : labelWidth)
-                + this.LabelSpacing + valueWidth + prefixWidth + qualifierWidth;
+                + this.LabelSpacing + valueWidth + prefixWidth + unitWidth;
             if (this.LabelWidthRatio is > 0 and < 1)
             {
                 inlineMinimum = this.LabelSpacing + Math.Max(
                     (double.IsNaN(labelWidth) ? 0 : labelWidth) / this.LabelWidthRatio,
-                    (valueWidth + prefixWidth + qualifierWidth) / (1 - this.LabelWidthRatio));
+                    (valueWidth + prefixWidth + unitWidth) / (1 - this.LabelWidthRatio));
             }
 
             if (availableWidth < inlineMinimum)
@@ -121,22 +144,10 @@ public partial class NumberBox
             prefix.Visibility = string.IsNullOrEmpty(this.Prefix) ? Visibility.Collapsed : Visibility.Visible;
         }
 
-        if (this.qualifierTextBlock is { } qualifier)
+        if (this.unitTextBlock is { } unit)
         {
-            qualifier.Visibility = string.IsNullOrEmpty(this.Qualifier) ? Visibility.Collapsed : Visibility.Visible;
-            qualifier.MinWidth = string.IsNullOrEmpty(this.Qualifier) ? 0 : this.QualifierMinimumWidth;
+            unit.Visibility = string.IsNullOrEmpty(this.Unit) ? Visibility.Collapsed : Visibility.Visible;
         }
-    }
-
-    private double MeasureAnnotation(TextBlock? annotation)
-    {
-        if (annotation is null || annotation.Visibility == Visibility.Collapsed)
-        {
-            return 0;
-        }
-
-        annotation.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        return annotation.DesiredSize.Width;
     }
 
     private void LayoutLabelHorizontally(LabelPosition position, double labelWidth, double valueWidth)

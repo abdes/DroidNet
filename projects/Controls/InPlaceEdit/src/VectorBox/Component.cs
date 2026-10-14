@@ -5,7 +5,7 @@
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Represents a component of a vector (X, Y, or Z).
+///     Represents a component of a vector (X, Y, Z or W). The value is the component's index in the vector.
 /// </summary>
 public enum Component
 {
@@ -23,4 +23,9 @@ public enum Component
     ///     The Z component.
     /// </summary>
     Z = 2,
+
+    /// <summary>
+    ///     The W component, such as a quaternion's scalar part or a color's alpha.
+    /// </summary>
+    W = 3,
 }

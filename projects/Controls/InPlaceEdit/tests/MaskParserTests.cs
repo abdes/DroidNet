@@ -10,22 +10,22 @@ namespace DroidNet.Controls.Tests;
 public class MaskParserTests
 {
     [TestMethod]
-    [DataRow("~.###", 0f, "0")]
-    [DataRow("~.###", 45f, "45")]
-    [DataRow("~.###", 0.536f, "0.536")]
-    [DataRow("~.###", -0.5f, "-0.5")]
-    [DataRow("~.### EV", 1.2f, "1.2 EV")]
-    public void CompactFormattingPreservesPrecisionUnitsAndLeadingZero(string mask, float value, string expected)
+    [DataRow("~.###", 0d, "0")]
+    [DataRow("~.###", 45d, "45")]
+    [DataRow("~.###", 0.536d, "0.536")]
+    [DataRow("~.###", -0.5d, "-0.5")]
+    [DataRow("~.### EV", 1.2d, "1.2 EV")]
+    public void CompactFormattingPreservesPrecisionUnitsAndLeadingZero(string mask, double value, string expected)
         => _ = new MaskParser(mask).FormatValue(value, trimTrailingZeros: true).Should().Be(expected);
 
     [TestMethod]
-    [DataRow("~.#", 1.0f, "1.0")]
-    [DataRow("~.##", 11.0f, "11.00")]
-    [DataRow("~.#", 11.0f, "11.0")]
-    [DataRow("~.#", 111.0f, "111.0")]
-    [DataRow("~.##", -1111111.0f, "-1111111.00")]
-    [DataRow("~.###", 0.1f, ".100")]
-    public void WhenUnboundedShowsAllDigitsBeforeDecimal(string mask, float value, string expected)
+    [DataRow("~.#", 1.0d, "1.0")]
+    [DataRow("~.##", 11.0d, "11.00")]
+    [DataRow("~.#", 11.0d, "11.0")]
+    [DataRow("~.#", 111.0d, "111.0")]
+    [DataRow("~.##", -1111111.0d, "-1111111.00")]
+    [DataRow("~.###", 0.1d, ".100")]
+    public void WhenUnboundedShowsAllDigitsBeforeDecimal(string mask, double value, string expected)
     {
         // Arrange
         var parser = new MaskParser(mask);
@@ -38,13 +38,13 @@ public class MaskParserTests
     }
 
     [TestMethod]
-    [DataRow("#.#", 123.0f, "9.9")]
-    [DataRow("##.#", 123.0f, "99.9")]
-    [DataRow("###.#", 123.0f, "123.0")]
-    [DataRow("-#.#", -123.0f, "-9.9")]
-    [DataRow("-##.#", -123.0f, "-99.9")]
-    [DataRow("-###.#", -123.0f, "-123.0")]
-    public void WhenMaskHasHashesLimitsMaximumValue(string mask, float value, string expected)
+    [DataRow("#.#", 123.0d, "9.9")]
+    [DataRow("##.#", 123.0d, "99.9")]
+    [DataRow("###.#", 123.0d, "123.0")]
+    [DataRow("-#.#", -123.0d, "-9.9")]
+    [DataRow("-##.#", -123.0d, "-99.9")]
+    [DataRow("-###.#", -123.0d, "-123.0")]
+    public void WhenMaskHasHashesLimitsMaximumValue(string mask, double value, string expected)
     {
         // Arrange
         var parser = new MaskParser(mask);
@@ -57,10 +57,10 @@ public class MaskParserTests
     }
 
     [TestMethod]
-    [DataRow("~.# m", 1.0f, "1.0 m")]
-    [DataRow("~.## km", 1.0f, "1.00 km")]
-    [DataRow("~.### mph", -1.0f, "-1.000 mph")]
-    public void WhenMaskHasUnitAppendsUnitToValue(string mask, float value, string expected)
+    [DataRow("~.# m", 1.0d, "1.0 m")]
+    [DataRow("~.## km", 1.0d, "1.00 km")]
+    [DataRow("~.### mph", -1.0d, "-1.000 mph")]
+    public void WhenMaskHasUnitAppendsUnitToValue(string mask, double value, string expected)
     {
         // Arrange
         var parser = new MaskParser(mask);
@@ -73,11 +73,11 @@ public class MaskParserTests
     }
 
     [TestMethod]
-    [DataRow("~.#m", 1.0f, "1.0m")]
-    [DataRow("~.# m", 1.0f, "1.0 m")]
-    [DataRow("~.## m", 1.0f, "1.00 m")]
-    [DataRow("~.## m", -1.0f, "-1.00 m")]
-    public void WhenMaskHasSpaceAddsSpaceBeforeUnit(string mask, float value, string expected)
+    [DataRow("~.#m", 1.0d, "1.0m")]
+    [DataRow("~.# m", 1.0d, "1.0 m")]
+    [DataRow("~.## m", 1.0d, "1.00 m")]
+    [DataRow("~.## m", -1.0d, "-1.00 m")]
+    public void WhenMaskHasSpaceAddsSpaceBeforeUnit(string mask, double value, string expected)
     {
         // Arrange
         var parser = new MaskParser(mask);
@@ -105,10 +105,10 @@ public class MaskParserTests
     }
 
     [TestMethod]
-    [DataRow("#.#", 1.0f, "1.0")]
-    [DataRow("#.##", 1.234f, "1.23")]
-    [DataRow("#.###", 1.2345f, "1.235")]
-    public void WhenFormattingRoundsToAfterDecimalCount(string mask, float value, string expected)
+    [DataRow("#.#", 1.0d, "1.0")]
+    [DataRow("#.##", 1.234d, "1.23")]
+    [DataRow("#.###", 1.2345d, "1.235")]
+    public void WhenFormattingRoundsToAfterDecimalCount(string mask, double value, string expected)
     {
         // Arrange
         var parser = new MaskParser(mask);
@@ -121,15 +121,15 @@ public class MaskParserTests
     }
 
     [TestMethod]
-    [DataRow(".#", 0.0f, "0.0")]
-    [DataRow(".##", 0.0f, "0.00")]
-    [DataRow("#.#", 0.0f, "0.0")]
-    [DataRow("###.#", 0.0f, "0.0")]
-    [DataRow("#.##", 0.0f, "0.00")]
-    [DataRow("#.###", 0.0f, "0.000")]
-    [DataRow("~.#", 0.0f, "0.0")]
-    [DataRow("~.", 0.0f, "0")]
-    public void WhenFormattingZeroHandlesProperly(string mask, float value, string expected)
+    [DataRow(".#", 0.0d, "0.0")]
+    [DataRow(".##", 0.0d, "0.00")]
+    [DataRow("#.#", 0.0d, "0.0")]
+    [DataRow("###.#", 0.0d, "0.0")]
+    [DataRow("#.##", 0.0d, "0.00")]
+    [DataRow("#.###", 0.0d, "0.000")]
+    [DataRow("~.#", 0.0d, "0.0")]
+    [DataRow("~.", 0.0d, "0")]
+    public void WhenFormattingZeroHandlesProperly(string mask, double value, string expected)
     {
         // Arrange
         var parser = new MaskParser(mask);
@@ -142,10 +142,10 @@ public class MaskParserTests
     }
 
     [TestMethod]
-    [DataRow("##.#", 1.0f, "01.0", true)]
-    [DataRow("##.##", 1.0f, "01.00", true)]
-    [DataRow("##.###", 1.0f, "01.000", true)]
-    public void WhenFormattingWithPaddingAddsZeros(string mask, float value, string expected, bool withPadding)
+    [DataRow("##.#", 1.0d, "01.0", true)]
+    [DataRow("##.##", 1.0d, "01.00", true)]
+    [DataRow("##.###", 1.0d, "01.000", true)]
+    public void WhenFormattingWithPaddingAddsZeros(string mask, double value, string expected, bool withPadding)
     {
         // Arrange
         var parser = new MaskParser(mask);
@@ -158,11 +158,11 @@ public class MaskParserTests
     }
 
     [TestMethod]
-    [DataRow("##.", 1.0f, "1")]
-    [DataRow("#.", 1.234f, "1")]
-    [DataRow("#.", 1.8f, "2")]
-    [DataRow("~.", -128.45f, "-128")]
-    public void WhenMaskHasNoDigitsAfterDecimal(string mask, float value, string expected)
+    [DataRow("##.", 1.0d, "1")]
+    [DataRow("#.", 1.234d, "1")]
+    [DataRow("#.", 1.8d, "2")]
+    [DataRow("~.", -128.45d, "-128")]
+    public void WhenMaskHasNoDigitsAfterDecimal(string mask, double value, string expected)
     {
         // Arrange
         var parser = new MaskParser(mask);

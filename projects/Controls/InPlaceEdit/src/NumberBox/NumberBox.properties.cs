@@ -23,9 +23,6 @@ public partial class NumberBox
     /// <summary>Identifies the label's share of horizontal space, or NaN to use <see cref="LabelWidth"/>.</summary>
     public static readonly DependencyProperty LabelWidthRatioProperty = RegisterLabelLayoutProperty(nameof(LabelWidthRatio), typeof(double), double.NaN);
 
-    /// <summary>Identifies the minimum value-region width, excluding the label and annotations.</summary>
-    public static readonly DependencyProperty EditorMinimumWidthProperty = RegisterLabelLayoutProperty(nameof(EditorMinimumWidth), typeof(double), 0d);
-
     /// <summary>Identifies the horizontal gap between the label and value region.</summary>
     public static readonly DependencyProperty LabelSpacingProperty = RegisterLabelLayoutProperty(nameof(LabelSpacing), typeof(double), 5d);
 
@@ -35,11 +32,8 @@ public partial class NumberBox
     /// <summary>Identifies the read-only annotation preceding the value field.</summary>
     public static readonly DependencyProperty PrefixProperty = RegisterLabelLayoutProperty(nameof(Prefix), typeof(string), string.Empty);
 
-    /// <summary>Identifies the read-only annotation following the value field.</summary>
-    public static readonly DependencyProperty QualifierProperty = RegisterLabelLayoutProperty(nameof(Qualifier), typeof(string), string.Empty);
-
-    /// <summary>Identifies the reserved width of a nonempty qualifier.</summary>
-    public static readonly DependencyProperty QualifierMinimumWidthProperty = RegisterLabelLayoutProperty(nameof(QualifierMinimumWidth), typeof(double), 0d);
+    /// <summary>Identifies the read-only unit following the value field.</summary>
+    public static readonly DependencyProperty UnitProperty = RegisterLabelLayoutProperty(nameof(Unit), typeof(string), string.Empty);
 
     /// <summary>
     ///     Identifies the <see cref="IsIndeterminate" /> dependency property.
@@ -57,9 +51,9 @@ public partial class NumberBox
     public static readonly DependencyProperty NumberValueProperty =
         DependencyProperty.Register(
             nameof(NumberValue),
-            typeof(float),
+            typeof(double),
             typeof(NumberBox),
-            new PropertyMetadata(defaultValue: 0.0f, OnValuePropertyChanged));
+            new PropertyMetadata(defaultValue: 0.0d, OnValuePropertyChanged));
 
     /// <summary>
     ///     Identifies the <see cref="DisplayText" /> dependency property.
@@ -111,9 +105,25 @@ public partial class NumberBox
     public static readonly DependencyProperty MultiplierProperty =
         DependencyProperty.Register(
             nameof(Multiplier),
-            typeof(int),
+            typeof(double),
             typeof(NumberBox),
-            new PropertyMetadata(1));
+            new PropertyMetadata(1d));
+
+    /// <summary>Identifies the <see cref="Minimum" /> dependency property.</summary>
+    public static readonly DependencyProperty MinimumProperty =
+        DependencyProperty.Register(
+            nameof(Minimum),
+            typeof(double),
+            typeof(NumberBox),
+            new PropertyMetadata(double.NegativeInfinity));
+
+    /// <summary>Identifies the <see cref="Maximum" /> dependency property.</summary>
+    public static readonly DependencyProperty MaximumProperty =
+        DependencyProperty.Register(
+            nameof(Maximum),
+            typeof(double),
+            typeof(NumberBox),
+            new PropertyMetadata(double.PositiveInfinity));
 
     /// <summary>
     ///     Identifies the <see cref="Mask" /> dependency property.
@@ -195,9 +205,6 @@ public partial class NumberBox
     /// </summary>
     public double LabelWidthRatio { get => (double)this.GetValue(LabelWidthRatioProperty); set => this.SetValue(LabelWidthRatioProperty, value); }
 
-    /// <summary>Gets or sets the minimum usable value-region width in DIPs.</summary>
-    public double EditorMinimumWidth { get => (double)this.GetValue(EditorMinimumWidthProperty); set => this.SetValue(EditorMinimumWidthProperty, value); }
-
     /// <summary>Gets or sets the horizontal label gap in DIPs.</summary>
     public double LabelSpacing { get => (double)this.GetValue(LabelSpacingProperty); set => this.SetValue(LabelSpacingProperty, value); }
 
@@ -207,11 +214,16 @@ public partial class NumberBox
     /// <summary>Gets or sets the read-only prefix outside the value field.</summary>
     public string Prefix { get => (string)this.GetValue(PrefixProperty); set => this.SetValue(PrefixProperty, value); }
 
-    /// <summary>Gets or sets the read-only qualifier outside the value field.</summary>
-    public string Qualifier { get => (string)this.GetValue(QualifierProperty); set => this.SetValue(QualifierProperty, value); }
+    /// <summary>Gets or sets the read-only unit after the value field, such as m or °.</summary>
+    /// <remarks>
+    ///     The unit is an annotation outside the value border and is never edited. A unit written in the
+    ///     <see cref="Mask"/>, such as <c>~.## m</c>, is part of the formatted value text instead.
+    /// </remarks>
+    public string Unit { get => (string)this.GetValue(UnitProperty); set => this.SetValue(UnitProperty, value); }
 
-    /// <summary>Gets or sets the reserved qualifier width in DIPs.</summary>
-    public double QualifierMinimumWidth { get => (double)this.GetValue(QualifierMinimumWidthProperty); set => this.SetValue(QualifierMinimumWidthProperty, value); }
+    /// <summary>Gets the width the unit takes after the value field, including its gap, as of the last measure.</summary>
+    /// <remarks>Zero without a unit. Containers use it to line up the value fields of rows with different units.</remarks>
+    public double UnitWidth => this.unitTextBlock is { Visibility: Visibility.Visible } unit ? unit.DesiredSize.Width : 0;
 
     /// <summary>Gets the label placement selected during measurement.</summary>
     public LabelPosition ActualLabelPosition { get; private set; }
@@ -226,9 +238,9 @@ public partial class NumberBox
     /// <summary>
     ///     Gets or sets the numeric value of the <see cref="NumberBox" />.
     /// </summary>
-    public float NumberValue
+    public double NumberValue
     {
-        get => (float)this.GetValue(NumberValueProperty);
+        get => (double)this.GetValue(NumberValueProperty);
         set => this.SetValue(NumberValueProperty, value);
     }
 
@@ -257,7 +269,12 @@ public partial class NumberBox
         set => this.SetValue(LabelForegroundProperty, value);
     }
 
-    /// <summary>Gets or sets a value indicating whether the label is compactly joined to the value editor.</summary>
+    /// <summary>Gets or sets a value indicating whether a left or right label shows inside the value field.</summary>
+    /// <remarks>
+    ///     A compact label sits inside the field, before the value for <see cref="LabelPosition.Left"/> and after it for
+    ///     <see cref="LabelPosition.Right"/>, and the value takes the remaining width. A label above or below the value
+    ///     is never compact, so <see cref="LabelPosition.Top"/> and <see cref="LabelPosition.Bottom"/> ignore it.
+    /// </remarks>
     public bool IsCompact
     {
         get => (bool)this.GetValue(IsCompactProperty);
@@ -265,12 +282,33 @@ public partial class NumberBox
     }
 
     /// <summary>
-    ///     Gets or sets the multiplier used for value adjustments.
+    ///     Gets or sets the change one drag step makes; Shift makes it a hundredth for small moves and a tenth for
+    ///     large ones. Use a fraction for values with a small range, such as 0.01 for 0 to 1.
     /// </summary>
-    public int Multiplier
+    public double Multiplier
     {
-        get => (int)this.GetValue(MultiplierProperty);
+        get => (double)this.GetValue(MultiplierProperty);
         set => this.SetValue(MultiplierProperty, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets the smallest value user input may give: a drag stops there and a smaller typed value is invalid.
+    ///     A value set by code beyond it is kept and shows as invalid.
+    /// </summary>
+    public double Minimum
+    {
+        get => (double)this.GetValue(MinimumProperty);
+        set => this.SetValue(MinimumProperty, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets the largest value user input may give: a drag stops there and a larger typed value is invalid.
+    ///     A value set by code beyond it is kept and shows as invalid.
+    /// </summary>
+    public double Maximum
+    {
+        get => (double)this.GetValue(MaximumProperty);
+        set => this.SetValue(MaximumProperty, value);
     }
 
     /// <summary>
@@ -355,8 +393,8 @@ public partial class NumberBox
     {
         if (d is NumberBox numberBox)
         {
-            var oldValue = e.OldValue is float fOld ? fOld : 0f;
-            var newValue = e.NewValue is float fNew ? fNew : 0f;
+            var oldValue = e.OldValue is double previous ? previous : 0d;
+            var newValue = e.NewValue is double current ? current : 0d;
             numberBox.OnValueChanged(oldValue, newValue);
         }
     }

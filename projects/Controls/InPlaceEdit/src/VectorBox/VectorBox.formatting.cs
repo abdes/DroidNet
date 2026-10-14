@@ -17,7 +17,7 @@ public partial class VectorBox
     /// <param name="componentMask">The mask to apply.</param>
     /// <param name="value">The value to validate.</param>
     /// <returns>True if the value is valid according to the mask; otherwise, false.</returns>
-    public static bool IsValidMaskValue(string? componentMask, float value)
+    public static bool IsValidMaskValue(string? componentMask, double value)
     {
         if (string.IsNullOrEmpty(componentMask))
         {
@@ -42,7 +42,7 @@ public partial class VectorBox
     /// <param name="value">The value to format.</param>
     /// <param name="withPadding">Whether to apply padding spaces per the mask.</param>
     /// <returns>The formatted value, or the value as string if mask is not applicable.</returns>
-    public static string FormatMaskValue(string? componentMask, float value, bool withPadding = false)
+    public static string FormatMaskValue(string? componentMask, double value, bool withPadding = false)
     {
         if (string.IsNullOrEmpty(componentMask))
         {
@@ -59,24 +59,4 @@ public partial class VectorBox
             return value.ToString(CultureInfo.InvariantCulture);
         }
     }
-
-    /// <summary>
-    ///     Gets the component masks as a read-only dictionary.
-    /// </summary>
-    /// <remarks>
-    ///     Used internally by <see cref="OnApplyTemplate" /> to apply per-component masks.
-    /// </remarks>
-    /// <returns>A dictionary mapping component names ("X", "Y", "Z") to their masks, or null if not set.</returns>
-    internal IReadOnlyDictionary<string, string>? GetComponentMasks() =>
-        this.componentMasks;
-
-    /// <summary>
-    ///     Gets the component label positions as a read-only dictionary.
-    /// </summary>
-    /// <remarks>
-    ///     Used internally by <see cref="OnApplyTemplate" /> to apply per-component label positioning.
-    /// </remarks>
-    /// <returns>A dictionary mapping component names ("X", "Y", "Z") to their label positions, or null if not set.</returns>
-    internal IReadOnlyDictionary<string, LabelPosition>? GetComponentLabelPositions() =>
-        this.componentLabelPositions;
 }

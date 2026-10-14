@@ -22,7 +22,7 @@ public partial class NumberBox
     /// <summary>
     ///     Occurs when the value is being validated.
     /// </summary>
-    public event EventHandler<ValidationEventArgs<float>>? Validate;
+    public event EventHandler<ValidationEventArgs<double>>? Validate;
 
     /// <summary>Internal so UI test hosts can drive edit-session transitions.</summary>
     /// <param name="interactionKind">The kind of interaction that started the edit session.</param>
@@ -43,7 +43,7 @@ public partial class NumberBox
     ///     Raises the <see cref="Validate" /> event.
     /// </summary>
     /// <param name="e">The <see cref="ValidationEventArgs{T}" /> instance containing the event data.</param>
-    protected virtual void OnValidate(ValidationEventArgs<float> e)
+    protected virtual void OnValidate(ValidationEventArgs<double> e)
     {
         this.Validate?.Invoke(this, e);
         this.valueIsValid = e.IsValid;

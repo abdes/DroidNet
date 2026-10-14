@@ -59,72 +59,36 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <!--  X Component  -->
-                                <Grid
-                                    Grid.Column="0"
-                                    ColumnSpacing="5"
-                                    RowSpacing="5">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock
-                                        x:Name="PartLabelX"
-                                        Grid.Column="0"
-                                        Margin="0,0,8,0"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
-                                        Text="X" />
+                                <Grid Grid.Column="0">
                                     <local:NumberBox
                                         x:Name="PartNumberBoxX"
-                                        Grid.Column="1"
                                         HorizontalAlignment="Stretch"
                                         HorizontalValueAlignment="Center"
                                         LabelPosition="None"
                                         Style="{Binding ComponentStyle, RelativeSource={RelativeSource Mode=TemplatedParent}, TargetNullValue={StaticResource DefaultNumberBoxStyle}}" />
                                 </Grid>
                                 <!--  Y Component  -->
-                                <Grid
-                                    Grid.Column="1"
-                                    ColumnSpacing="5"
-                                    RowSpacing="5">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock
-                                        x:Name="PartLabelY"
-                                        Grid.Column="0"
-                                        Margin="0,0,8,0"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
-                                        Text="Y" />
+                                <Grid Grid.Column="1">
                                     <local:NumberBox
                                         x:Name="PartNumberBoxY"
-                                        Grid.Column="1"
                                         HorizontalAlignment="Stretch"
                                         HorizontalValueAlignment="Center"
                                         LabelPosition="None"
                                         Style="{Binding ComponentStyle, RelativeSource={RelativeSource Mode=TemplatedParent}, TargetNullValue={StaticResource DefaultNumberBoxStyle}}" />
                                 </Grid>
                                 <!--  Z Component  -->
-                                <Grid
-                                    Grid.Column="2"
-                                    ColumnSpacing="5"
-                                    RowSpacing="5">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock
-                                        x:Name="PartLabelZ"
-                                        Grid.Column="0"
-                                        Margin="0,0,8,0"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
-                                        Text="Z" />
+                                <Grid Grid.Column="2">
                                     <local:NumberBox
                                         x:Name="PartNumberBoxZ"
-                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalValueAlignment="Center"
+                                        LabelPosition="None"
+                                        Style="{Binding ComponentStyle, RelativeSource={RelativeSource Mode=TemplatedParent}, TargetNullValue={StaticResource DefaultNumberBoxStyle}}" />
+                                </Grid>
+                                <!--  W Component: shown when Dimension is 4  -->
+                                <Grid Grid.Column="3" Visibility="Collapsed">
+                                    <local:NumberBox
+                                        x:Name="PartNumberBoxW"
                                         HorizontalAlignment="Stretch"
                                         HorizontalValueAlignment="Center"
                                         LabelPosition="None"

@@ -8,33 +8,23 @@ namespace DroidNet.Controls;
 ///     Provides data for validation events, including the old and new values being validated.
 /// </summary>
 /// <typeparam name="T">The type of the values being validated.</typeparam>
-public class ValidationEventArgs<T> : EventArgs
+/// <param name="oldValue">The old value before the change.</param>
+/// <param name="newValue">The new value after the change.</param>
+/// <param name="inputText">The raw text being validated, or <see langword="null"/> for programmatic changes.</param>
+public class ValidationEventArgs<T>(T? oldValue, T? newValue, string? inputText = null) : EventArgs
 {
-    /// <summary>
-    ///     Initializes a new instance of the <see cref="ValidationEventArgs{T}" /> class.
-    /// </summary>
-    /// <param name="oldValue">The old value before the change.</param>
-    /// <param name="newValue">The new value after the change.</param>
-    /// <param name="inputText">The raw text being validated, or <see langword="null"/> for programmatic changes.</param>
-    public ValidationEventArgs(T? oldValue, T? newValue, string? inputText = null)
-    {
-        this.OldValue = oldValue;
-        this.NewValue = newValue;
-        this.InputText = inputText;
-    }
-
     /// <summary>
     ///     Gets the old value before the change.
     /// </summary>
-    public T? OldValue { get; }
+    public T? OldValue { get; } = oldValue;
 
     /// <summary>
     ///     Gets the new value after the change.
     /// </summary>
-    public T? NewValue { get; }
+    public T? NewValue { get; } = newValue;
 
     /// <summary>Gets the raw text being validated, or <see langword="null"/> for programmatic changes.</summary>
-    public string? InputText { get; }
+    public string? InputText { get; } = inputText;
 
     /// <summary>
     ///     Gets or sets a value indicating whether the new value is valid.

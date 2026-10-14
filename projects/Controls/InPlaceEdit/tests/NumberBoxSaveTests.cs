@@ -66,6 +66,30 @@ public sealed class NumberBoxSaveTests : VisualUserInterfaceTests
         _ = completions.Should().Equal(NumberBoxEditCompletionKind.Cancel);
     });
 
+    /// <summary>Text beyond the bounds is invalid like text the mask rejects: it never commits, and a value set by
+    /// code beyond them is kept.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public Task TextBeyondTheBoundsIsInvalidAndCancels() => EnqueueAsync(async () =>
+    {
+        var number = new NumberBox { NumberValue = 0.5d, Mask = "~.###", Minimum = 0, Maximum = 1 };
+        await LoadTestContentAsync(number).ConfigureAwait(true);
+        var completions = new List<NumberBoxEditCompletionKind?>();
+        number.EditSessionCompleted += (_, args) => completions.Add(args.CompletionKind);
+        var input = BeginTextInput(number);
+        input.Text = "1.5";
+        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+
+        number.CompletePendingTextEdit();
+
+        _ = completions.Should().Equal(NumberBoxEditCompletionKind.Cancel);
+        _ = number.NumberValue.Should().Be(0.5d);
+
+        number.NumberValue = 2d;
+
+        _ = number.NumberValue.Should().Be(2d);
+    });
+
     /// <summary>A pointer press on non-focusable content outside the control completes text editing.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
@@ -96,7 +120,7 @@ public sealed class NumberBoxSaveTests : VisualUserInterfaceTests
     [TestMethod]
     public Task UnchangedTextCommitPreservesTheExactNumericValue() => EnqueueAsync(async () =>
     {
-        const float original = 16f / 9f;
+        const double original = 16d / 9d;
         var number = new NumberBox { NumberValue = original, Mask = "~.###" };
         await LoadTestContentAsync(number).ConfigureAwait(true);
         _ = BeginTextInput(number);

@@ -5,7 +5,8 @@
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Represents a control that allows the user to input and display small fixed-size numeric vectors (Vector2/Vector3).
+///     Represents a control that allows the user to input and display small fixed-size numeric vectors of two, three or
+///     four components.
 /// </summary>
 public partial class VectorBox
 {
@@ -22,13 +23,13 @@ public partial class VectorBox
     /// <summary>
     ///     Occurs when a component value is being validated.
     /// </summary>
-    public event EventHandler<ValidationEventArgs<float>>? Validate;
+    public event EventHandler<ValidationEventArgs<double>>? Validate;
 
     /// <summary>
     ///     Raises the <see cref="Validate" /> event.
     /// </summary>
     /// <param name="e">The <see cref="ValidationEventArgs{T}" /> instance containing the event data.</param>
-    protected virtual void OnValidate(ValidationEventArgs<float> e) => this.Validate?.Invoke(this, e);
+    protected virtual void OnValidate(ValidationEventArgs<double> e) => this.Validate?.Invoke(this, e);
 
     private void OnNumberBoxEditSessionStarted(object? sender, NumberBoxEditSessionEventArgs e)
     {
@@ -48,25 +49,8 @@ public partial class VectorBox
 
     private bool TryGetComponent(object? sender, out Component component)
     {
-        if (ReferenceEquals(sender, this.numberBoxX))
-        {
-            component = Component.X;
-            return true;
-        }
-
-        if (ReferenceEquals(sender, this.numberBoxY))
-        {
-            component = Component.Y;
-            return true;
-        }
-
-        if (ReferenceEquals(sender, this.numberBoxZ))
-        {
-            component = Component.Z;
-            return true;
-        }
-
-        component = default;
-        return false;
+        var part = this.FindPart(sender);
+        component = part?.Component ?? default;
+        return part is not null;
     }
 }

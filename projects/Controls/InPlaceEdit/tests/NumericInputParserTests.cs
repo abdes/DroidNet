@@ -10,14 +10,14 @@ namespace DroidNet.Controls.Tests;
 public sealed class NumericInputParserTests
 {
     [TestMethod]
-    [DataRow("90/2", 12f, NumericInputOperation.Absolute, 45f, 45f)]
-    [DataRow("(90 + 10) / 2", 12f, NumericInputOperation.Absolute, 50f, 50f)]
-    [DataRow("+=2", 5f, NumericInputOperation.Add, 2f, 7f)]
-    [DataRow("-=2", 5f, NumericInputOperation.Subtract, 2f, 3f)]
-    [DataRow("*2", 5f, NumericInputOperation.Multiply, 2f, 10f)]
-    [DataRow("/2", 5f, NumericInputOperation.Divide, 2f, 2.5f)]
-    [DataRow("*=2", 5f, NumericInputOperation.Multiply, 2f, 10f)]
-    public void ValidInputParsesWithItsEditMode(string text, float current, NumericInputOperation operation, float operand, float result)
+    [DataRow("90/2", 12d, NumericInputOperation.Absolute, 45d, 45d)]
+    [DataRow("(90 + 10) / 2", 12d, NumericInputOperation.Absolute, 50d, 50d)]
+    [DataRow("+=2", 5d, NumericInputOperation.Add, 2d, 7d)]
+    [DataRow("-=2", 5d, NumericInputOperation.Subtract, 2d, 3d)]
+    [DataRow("*2", 5d, NumericInputOperation.Multiply, 2d, 10d)]
+    [DataRow("/2", 5d, NumericInputOperation.Divide, 2d, 2.5d)]
+    [DataRow("*=2", 5d, NumericInputOperation.Multiply, 2d, 10d)]
+    public void ValidInputParsesWithItsEditMode(string text, double current, NumericInputOperation operation, double operand, double result)
     {
         var parsed = NumericInputParser.TryParse(text, current, out var expression);
 
@@ -36,5 +36,5 @@ public sealed class NumericInputParserTests
     [DataRow("NaN")]
     [DataRow("Infinity")]
     public void InvalidOrNonFiniteInputIsRejected(string text)
-        => _ = NumericInputParser.TryParse(text, 5f, out _).Should().BeFalse();
+        => _ = NumericInputParser.TryParse(text, 5d, out _).Should().BeFalse();
 }

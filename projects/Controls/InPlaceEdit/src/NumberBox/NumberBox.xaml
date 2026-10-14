@@ -55,7 +55,9 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
+                                    <!--  A compact label takes the first column for Left and the last for Right.  -->
                                     <TextBlock
                                         x:Name="PartCompactLabelTextBlock"
                                         Grid.Column="0"
@@ -99,13 +101,13 @@
                                 </Grid>
                             </Border>
                             <TextBlock
-                                x:Name="PartValueQualifier"
+                                x:Name="PartValueUnit"
                                 Grid.Column="2"
                                 Margin="4,0,0,0"
                                 VerticalAlignment="Center"
                                 FontSize="12"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="{TemplateBinding Qualifier}" />
+                                Text="{TemplateBinding Unit}" />
                         </Grid>
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">

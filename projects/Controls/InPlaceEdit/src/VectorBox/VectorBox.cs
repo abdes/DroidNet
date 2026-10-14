@@ -2,26 +2,30 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using Windows.UI.ViewManagement;
 
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Represents a control that allows the user to input and display small fixed-size numeric vectors (Vector2/Vector3).
+///     Represents a control that allows the user to input and display small fixed-size numeric vectors of two, three or
+///     four components, such as positions, quaternions and colors with alpha.
 /// </summary>
 /// <remarks>
-///     The <see cref="VectorBox" /> control provides a clean, XAML-friendly editor for 2D or 3D vectors through coordinated
+///     The <see cref="VectorBox" /> control provides a clean, XAML-friendly editor for vectors through coordinated
 ///     per-component <see cref="NumberBox" /> editors. It matches the behavior and conventions of <see cref="NumberBox" />
 ///     while managing multiple numeric components.
 ///     <para>
-///     Each component (X, Y, Z) is presented through a writable dependency property (<see cref="XValue" />, <see cref="YValue" />,
-///     <see cref="ZValue" />) and has an independent indeterminate presentation flag (<see cref="XIsIndeterminate" />,
-///     <see cref="YIsIndeterminate" />, <see cref="ZIsIndeterminate" />) useful for multi-selection UI scenarios.
+///     Each component (X, Y, Z, W) is presented through a writable dependency property (<see cref="XValue" /> to
+///     <see cref="WValue" />) and has an independent indeterminate presentation flag (<see cref="XIsIndeterminate" /> to
+///     <see cref="WIsIndeterminate" />) useful for multi-selection UI scenarios. <see cref="Dimension"/> selects how many
+///     are shown.
 ///     </para>
 ///     <para>
 ///     The control orchestrates per-component validation through its <see cref="Validate" /> event, which relays component-specific
@@ -35,10 +39,11 @@ namespace DroidNet.Controls;
 ///     <code lang="xaml"><![CDATA[
 ///     <controls:VectorBox
 ///         x:Name="vectorBox"
-///         Dimension="3"
-///         XValue="1.0"
-///         YValue="2.0"
-///         ZValue="3.0"
+///         Dimension="4"
+///         XValue="0"
+///         YValue="0"
+///         ZValue="0"
+///         WValue="1"
 ///         Label="Rotation"
 ///         LabelPosition="Left"
 ///         ComponentLabelPosition="Left"
@@ -50,9 +55,10 @@ namespace DroidNet.Controls;
 [TemplatePart(Name = BackgroundBorderPartName, Type = typeof(Border))]
 [TemplatePart(Name = LabelTextBlockPartName, Type = typeof(TextBlock))]
 [TemplatePart(Name = ComponentPanelPartName, Type = typeof(Panel))]
-[TemplatePart(Name = NumberBoxXPartName, Type = typeof(NumberBox))]
-[TemplatePart(Name = NumberBoxYPartName, Type = typeof(NumberBox))]
-[TemplatePart(Name = NumberBoxZPartName, Type = typeof(NumberBox))]
+[TemplatePart(Name = NumberBoxPartPrefix + "X", Type = typeof(NumberBox))]
+[TemplatePart(Name = NumberBoxPartPrefix + "Y", Type = typeof(NumberBox))]
+[TemplatePart(Name = NumberBoxPartPrefix + "Z", Type = typeof(NumberBox))]
+[TemplatePart(Name = NumberBoxPartPrefix + "W", Type = typeof(NumberBox))]
 [TemplateVisualState(Name = NormalStateName, GroupName = CommonStatesGroupName)]
 [TemplateVisualState(Name = HoverStateName, GroupName = CommonStatesGroupName)]
 [TemplateVisualState(Name = PressedStateName, GroupName = CommonStatesGroupName)]
@@ -62,9 +68,7 @@ public partial class VectorBox : Control
     private const string BackgroundBorderPartName = "PartBackgroundBorder";
     private const string LabelTextBlockPartName = "PartLabelTextBlock";
     private const string ComponentPanelPartName = "PartComponentPanel";
-    private const string NumberBoxXPartName = "PartNumberBoxX";
-    private const string NumberBoxYPartName = "PartNumberBoxY";
-    private const string NumberBoxZPartName = "PartNumberBoxZ";
+    private const string NumberBoxPartPrefix = "PartNumberBox";
 
     private const string CommonStatesGroupName = "CommonStates";
     private const string NormalStateName = "Normal";
@@ -74,28 +78,28 @@ public partial class VectorBox : Control
     private const string DefaultComponentMask = "~.#";
     private const string DefaultIndeterminateDisplayText = "-.-";
 
-    private const string LabelXPartName = "PartLabelX";
-    private const string LabelYPartName = "PartLabelY";
-    private const string LabelZPartName = "PartLabelZ";
-
     private readonly UISettings uiSettings = new();
+    private readonly ComponentPart[] parts =
+    [
+        new(Component.X, XValueProperty, XIsIndeterminateProperty),
+        new(Component.Y, YValueProperty, YIsIndeterminateProperty),
+        new(Component.Z, ZValueProperty, ZIsIndeterminateProperty),
+        new(Component.W, WValueProperty, WIsIndeterminateProperty),
+    ];
+
+    private readonly ComponentMap<string> componentMasks;
+    private readonly ComponentMap<LabelPosition> componentLabelPositions;
+    private readonly ComponentMap<string> componentLabels;
+    private readonly ComponentMap<Brush> componentLabelForegrounds;
+    private readonly Dictionary<Component, (double minimum, double maximum)> componentRanges = [];
+
     private CustomGrid? rootGrid;
     private Border? backgroundBorder;
     private TextBlock? labelTextBlock;
     private Panel? componentPanel;
-    private TextBlock? labelX;
-    private TextBlock? labelY;
-    private TextBlock? labelZ;
-    private NumberBox? numberBoxX;
-    private NumberBox? numberBoxY;
-    private NumberBox? numberBoxZ;
     private ILogger? logger;
 
     private bool isSyncingValues;
-    private Dictionary<string, string>? componentMasks;
-    private Dictionary<string, LabelPosition>? componentLabelPositions;
-    private Dictionary<string, string>? componentLabels;
-    private Dictionary<string, Microsoft.UI.Xaml.Media.Brush>? componentLabelForegrounds;
     private bool? stackedComponents;
 
     /// <summary>
@@ -104,46 +108,66 @@ public partial class VectorBox : Control
     public VectorBox()
     {
         this.DefaultStyleKey = typeof(VectorBox);
+        this.componentMasks = new(this.OnComponentMaskChanged);
+        this.componentLabelPositions = new(this.UpdateComponentLabelPositions);
+        this.componentLabels = new(this.UpdateComponentLabelPositions);
+        this.componentLabelForegrounds = new(this.UpdateComponentLabelPositions);
     }
 
-    /// <summary>Gets a value indicating whether gets whether the current available width requires vertical component editors.</summary>
+    /// <summary>Gets a value indicating whether the current available width requires vertical component editors.</summary>
     public bool AreComponentsStacked => this.stackedComponents == true;
 
-    /// <summary>
-    ///     Atomically updates all component values in a single operation.
-    /// </summary>
-    /// <param name="x">The X component value.</param>
-    /// <param name="y">The Y component value.</param>
-    /// <param name="z">The Z component value.</param>
-    public void SetValues(float x, float y, float z) =>
-        this.SetValues(x, y, z, preserveIndeterminate: false);
+    /// <summary>Gets the number of components shown: <see cref="Dimension"/>, limited to the supported range.</summary>
+    private int ComponentCount => Math.Clamp(this.Dimension, MinimumDimension, MaximumDimension);
+
+    /// <summary>Gets the shown components, in order.</summary>
+    private ReadOnlySpan<ComponentPart> ShownParts => this.parts.AsSpan(0, this.ComponentCount);
+
+    /// <summary>Sets the range user input gives one component, in place of <see cref="Minimum"/> and
+    /// <see cref="Maximum"/>, such as 0 to 1 for the alpha of a color whose other channels are unbounded.</summary>
+    /// <param name="component">The component.</param>
+    /// <param name="minimum">The smallest value.</param>
+    /// <param name="maximum">The largest value.</param>
+    public void SetComponentRange(Component component, double minimum, double maximum)
+    {
+        this.componentRanges[component] = (minimum, maximum);
+        this.UpdateComponentRanges();
+    }
+
+    /// <summary>Makes a component use <see cref="Minimum"/> and <see cref="Maximum"/> again.</summary>
+    /// <param name="component">The component.</param>
+    public void ClearComponentRange(Component component)
+    {
+        _ = this.componentRanges.Remove(component);
+        this.UpdateComponentRanges();
+    }
 
     /// <summary>
-    ///     Atomically updates all component values in a single operation.
+    ///     Atomically updates the shown components in a single operation.
     /// </summary>
-    /// <param name="x">The X component value.</param>
-    /// <param name="y">The Y component value.</param>
-    /// <param name="z">The Z component value.</param>
-    /// <param name="preserveIndeterminate">Whether to preserve indeterminate flags.</param>
-    public void SetValues(float x, float y, float z, bool preserveIndeterminate)
+    /// <param name="values">One value per shown component, in X, Y, Z, W order.</param>
+    /// <param name="preserveIndeterminate">Whether to keep the components' indeterminate flags.</param>
+    /// <exception cref="ArgumentException">The number of values is not <see cref="Dimension"/>.</exception>
+    public void SetValues(ReadOnlySpan<double> values, bool preserveIndeterminate = false)
     {
-        this.LogSetValues(x, y, z, preserveIndeterminate);
+        if (values.Length != this.ComponentCount)
+        {
+            throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Expected {this.ComponentCount} values, one per shown component."), nameof(values));
+        }
+
+        this.LogSetValues(values.Length, preserveIndeterminate);
         try
         {
             this.isSyncingValues = true;
-
-            this.XValue = x;
-            this.YValue = y;
-            this.ZValue = z;
-
-            if (!preserveIndeterminate)
+            for (var index = 0; index < values.Length; index++)
             {
-                this.XIsIndeterminate = false;
-                this.YIsIndeterminate = false;
-                this.ZIsIndeterminate = false;
+                var part = this.parts[index];
+                this.SetValue(part.ValueProperty, values[index]);
+                if (!preserveIndeterminate)
+                {
+                    this.SetValue(part.IndeterminateProperty, value: false);
+                }
             }
-
-            this.UpdateVectorValue();
         }
         catch (Exception ex)
         {
@@ -157,21 +181,19 @@ public partial class VectorBox : Control
     }
 
     /// <summary>
-    ///     Atomically updates X and Y component values (2D variant).
+    ///     Returns the current numeric values of the shown components.
     /// </summary>
-    /// <param name="x">The X component value.</param>
-    /// <param name="y">The Y component value.</param>
-    public void SetValues(float x, float y) =>
-        this.SetValues(x, y, this.ZValue, preserveIndeterminate: false);
+    /// <returns>One value per shown component, in X, Y, Z, W order.</returns>
+    public double[] GetValues()
+    {
+        var values = new double[this.ComponentCount];
+        for (var index = 0; index < values.Length; index++)
+        {
+            values[index] = (double)this.GetValue(this.parts[index].ValueProperty);
+        }
 
-    /// <summary>
-    ///     Returns the current numeric values as an array of floats.
-    /// </summary>
-    /// <returns>An array of length 2 or 3 depending on <see cref="Dimension" />.</returns>
-    public float[] GetValues() =>
-        this.Dimension == 2
-            ? [this.XValue, this.YValue]
-            : [this.XValue, this.YValue, this.ZValue];
+        return values;
+    }
 
     /// <inheritdoc />
     protected override void OnApplyTemplate()
@@ -184,216 +206,184 @@ public partial class VectorBox : Control
         this.componentPanel = this.GetTemplateChild(ComponentPanelPartName) as Panel;
         this.stackedComponents = null;
 
-        this.labelX = this.GetTemplateChild(LabelXPartName) as TextBlock;
-        this.labelY = this.GetTemplateChild(LabelYPartName) as TextBlock;
-        this.labelZ = this.GetTemplateChild(LabelZPartName) as TextBlock;
-
-        this.SetupNumberBoxParts();
+        foreach (var part in this.parts)
+        {
+            this.Detach(part);
+            part.Box = this.GetTemplateChild(NumberBoxPartPrefix + part.Name) as NumberBox;
+            this.Attach(part);
+        }
 
         this.UpdateLabelPosition();
-        this.UpdateComponentLabelPositions();
+        this.UpdateShownComponents();
         this.SyncAllComponentsFromProperties();
         this.UpdateVisualState();
+        this.LogApplyTemplate();
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    ///     Measured without a width limit, the box asks for one row of usable components, so a container probing its
+    ///     natural width learns where the components would have to stack.
+    /// </remarks>
     protected override Size MeasureOverride(Size availableSize)
     {
-        if (this.componentPanel is Grid grid && this.numberBoxX is not null && this.numberBoxY is not null
-            && (this.Dimension == 2 || this.numberBoxZ is not null))
+        var rowWidth = double.NaN;
+        if (this.componentPanel is Grid grid && this.FindShownContainers() is { } containers)
         {
-            var count = this.Dimension == 3 ? 3 : 2;
-            var minimum = this.ComponentMinimumWidth * Math.Max(this.uiSettings.TextScaleFactor, this.FontSize / 14);
-            for (var i = 0; i < count; i++)
-            {
-                var box = this.GetComponentBox(i);
-                minimum = Math.Max(minimum, this.ComponentMinimumWidth * box.FontSize / 14);
-                var container = VectorBoxComponentLayout.GetComponentContainer(grid, this.GetComponentLabel(i), box);
-                if (container is not null)
-                {
-                    container.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                    minimum = Math.Max(minimum, container.DesiredSize.Width);
-                }
-            }
-
-            var labelWidth = 0d;
-            if (!string.IsNullOrEmpty(this.Label) && this.LabelPosition is LabelPosition.Left or LabelPosition.Right && this.labelTextBlock is not null)
-            {
-                this.labelTextBlock.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                labelWidth = this.labelTextBlock.DesiredSize.Width + (this.rootGrid?.ColumnSpacing ?? 0);
-            }
-
-            var stacked = this.AutoStackComponents && availableSize.Width - this.Padding.Left - this.Padding.Right - labelWidth < (minimum * count) + (grid.ColumnSpacing * (count - 1));
-            if (stacked != this.stackedComponents || grid.ColumnDefinitions.Count != (stacked ? 1 : count))
-            {
-                grid.ColumnDefinitions.Clear();
-                grid.RowDefinitions.Clear();
-                for (var i = 0; i < (stacked ? 1 : count); i++)
-                {
-                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                }
-
-                for (var i = 0; i < count; i++)
-                {
-                    var container = VectorBoxComponentLayout.GetComponentContainer(grid, this.GetComponentLabel(i), this.GetComponentBox(i));
-                    if (container is not null)
-                    {
-                        Grid.SetColumn(container, stacked ? 0 : i);
-                        Grid.SetRow(container, stacked ? i : 0);
-                    }
-
-                    if (stacked)
-                    {
-                        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                    }
-                }
-
-                this.stackedComponents = stacked;
-            }
+            rowWidth = this.SingleRowWidth(grid, containers);
+            var stacked = this.AutoStackComponents && availableSize.Width < rowWidth;
+            this.ArrangeComponents(grid, containers, stacked);
         }
 
-        return base.MeasureOverride(availableSize);
+        var size = base.MeasureOverride(availableSize);
+        return double.IsPositiveInfinity(availableSize.Width) && size.Width < rowWidth ? new Size(rowWidth, size.Height) : size;
     }
 
-    private void SetupNumberBoxParts()
+    // The width that keeps every shown component usable on one row, including the label beside them and padding.
+    private double SingleRowWidth(Grid grid, (ComponentPart part, Grid container)[] containers)
     {
-        SetupX();
-        SetupY();
-        SetupZ();
-
-        void SetupZ()
+        var count = containers.Length;
+        var minimum = this.ComponentMinimumWidth * Math.Max(this.uiSettings.TextScaleFactor, this.FontSize / 14);
+        foreach (var (part, container) in containers)
         {
-            if (this.numberBoxZ != null)
-            {
-                this.numberBoxZ.Validate -= this.OnNumberBoxValidate;
-                this.numberBoxZ.EditSessionStarted -= this.OnNumberBoxEditSessionStarted;
-                this.numberBoxZ.EditSessionCompleted -= this.OnNumberBoxEditSessionCompleted;
-            }
-
-            this.numberBoxZ = this.GetTemplateChild(NumberBoxZPartName) as NumberBox;
-
-            // Set up Z component (only if dimension is 3)
-            if (this.numberBoxZ != null)
-            {
-                if (this.Dimension == 3)
-                {
-                    this.numberBoxZ.Validate += this.OnNumberBoxValidate;
-                    this.numberBoxZ.EditSessionStarted += this.OnNumberBoxEditSessionStarted;
-                    this.numberBoxZ.EditSessionCompleted += this.OnNumberBoxEditSessionCompleted;
-
-                    // Propagate logger factory to child NumberBox
-                    this.numberBoxZ.LoggerFactory = this.LoggerFactory;
-                    this.LogNumberBoxAttached("Z");
-                    this.ApplyComponentProperties(this.numberBoxZ, "Z");
-                    this.SetupNumberBoxBinding(this.numberBoxZ, NumberBox.NumberValueProperty, nameof(this.ZValue));
-                    this.SetupNumberBoxBinding(this.numberBoxZ, NumberBox.IsIndeterminateProperty, nameof(this.ZIsIndeterminate));
-                    this.numberBoxZ.Visibility = Visibility.Visible;
-                }
-                else
-                {
-                    this.numberBoxZ.Visibility = Visibility.Collapsed;
-                }
-            }
-
-            // Hide/show Z label based on dimension
-            _ = this.labelZ?.Visibility = this.Dimension == 3 ? Visibility.Visible : Visibility.Collapsed;
+            minimum = Math.Max(minimum, this.ComponentMinimumWidth * part.Box!.FontSize / 14);
+            container.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            minimum = Math.Max(minimum, container.DesiredSize.Width);
         }
 
-        void SetupX()
+        var labelWidth = 0d;
+        if (!string.IsNullOrEmpty(this.Label) && this.LabelPosition is LabelPosition.Left or LabelPosition.Right && this.labelTextBlock is not null)
         {
-            // Disconnect old event handlers
-            if (this.numberBoxX != null)
-            {
-                this.numberBoxX.Validate -= this.OnNumberBoxValidate;
-                this.numberBoxX.EditSessionStarted -= this.OnNumberBoxEditSessionStarted;
-                this.numberBoxX.EditSessionCompleted -= this.OnNumberBoxEditSessionCompleted;
-            }
-
-            // Retrieve new NumberBox instances
-            this.numberBoxX = this.GetTemplateChild(NumberBoxXPartName) as NumberBox;
-
-            // Set up X component
-            if (this.numberBoxX != null)
-            {
-                this.numberBoxX.Validate += this.OnNumberBoxValidate;
-                this.numberBoxX.EditSessionStarted += this.OnNumberBoxEditSessionStarted;
-                this.numberBoxX.EditSessionCompleted += this.OnNumberBoxEditSessionCompleted;
-
-                // Propagate logger factory to child NumberBox
-                this.numberBoxX.LoggerFactory = this.LoggerFactory;
-                this.LogNumberBoxAttached("X");
-                this.ApplyComponentProperties(this.numberBoxX, "X");
-                this.SetupNumberBoxBinding(this.numberBoxX, NumberBox.NumberValueProperty, nameof(this.XValue));
-                this.SetupNumberBoxBinding(this.numberBoxX, NumberBox.IsIndeterminateProperty, nameof(this.XIsIndeterminate));
-            }
+            this.labelTextBlock.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            labelWidth = this.labelTextBlock.DesiredSize.Width + (this.rootGrid?.ColumnSpacing ?? 0);
         }
 
-        void SetupY()
-        {
-            // Disconnect old event handlers
-            if (this.numberBoxY != null)
-            {
-                this.numberBoxY.Validate -= this.OnNumberBoxValidate;
-                this.numberBoxY.EditSessionStarted -= this.OnNumberBoxEditSessionStarted;
-                this.numberBoxY.EditSessionCompleted -= this.OnNumberBoxEditSessionCompleted;
-            }
-
-            // Retrieve new NumberBox instances
-            this.numberBoxY = this.GetTemplateChild(NumberBoxYPartName) as NumberBox;
-
-            // Set up Y component
-            if (this.numberBoxY != null)
-            {
-                this.numberBoxY.Validate += this.OnNumberBoxValidate;
-                this.numberBoxY.EditSessionStarted += this.OnNumberBoxEditSessionStarted;
-                this.numberBoxY.EditSessionCompleted += this.OnNumberBoxEditSessionCompleted;
-
-                // Propagate logger factory to child NumberBox
-                this.numberBoxY.LoggerFactory = this.LoggerFactory;
-                this.LogNumberBoxAttached("Y");
-                this.ApplyComponentProperties(this.numberBoxY, "Y");
-                this.SetupNumberBoxBinding(this.numberBoxY, NumberBox.NumberValueProperty, nameof(this.YValue));
-                this.SetupNumberBoxBinding(this.numberBoxY, NumberBox.IsIndeterminateProperty, nameof(this.YIsIndeterminate));
-            }
-        }
+        return this.Padding.Left + this.Padding.Right + labelWidth + (minimum * count) + (grid.ColumnSpacing * (count - 1));
     }
 
-    private void SetupNumberBoxBinding(NumberBox numberBox, DependencyProperty numberBoxProperty, string vectorBoxPropertyName)
+    private void ArrangeComponents(Grid grid, (ComponentPart part, Grid container)[] containers, bool stacked)
     {
-        var binding = new Microsoft.UI.Xaml.Data.Binding
+        var count = containers.Length;
+        if (stacked == this.stackedComponents && grid.ColumnDefinitions.Count == (stacked ? 1 : count) && grid.RowDefinitions.Count == (stacked ? count : 0))
+        {
+            return;
+        }
+
+        grid.ColumnDefinitions.Clear();
+        grid.RowDefinitions.Clear();
+        for (var i = 0; i < (stacked ? 1 : count); i++)
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        }
+
+        for (var i = 0; i < count; i++)
+        {
+            Grid.SetColumn(containers[i].container, stacked ? 0 : i);
+            Grid.SetRow(containers[i].container, stacked ? i : 0);
+            if (stacked)
+            {
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            }
+        }
+
+        this.stackedComponents = stacked;
+    }
+
+    private (ComponentPart part, Grid container)[]? FindShownContainers()
+    {
+        var shown = this.ShownParts;
+        var containers = new (ComponentPart, Grid)[shown.Length];
+        for (var index = 0; index < shown.Length; index++)
+        {
+            var part = shown[index];
+            if (part.Box?.Parent is not Grid container)
+            {
+                return null;
+            }
+
+            containers[index] = (part, container);
+        }
+
+        return containers;
+    }
+
+    private void Attach(ComponentPart part)
+    {
+        if (part.Box is not { } box)
+        {
+            return;
+        }
+
+        box.Validate += this.OnNumberBoxValidate;
+        box.EditSessionStarted += this.OnNumberBoxEditSessionStarted;
+        box.EditSessionCompleted += this.OnNumberBoxEditSessionCompleted;
+        box.LoggerFactory = this.LoggerFactory;
+        this.LogNumberBoxAttached(part.Name);
+        this.ApplyComponentProperties(box, part.Component);
+        this.BindToEditor(box, NumberBox.NumberValueProperty, part.Name + "Value");
+        this.BindToEditor(box, NumberBox.IsIndeterminateProperty, part.Name + "IsIndeterminate");
+    }
+
+    private void Detach(ComponentPart part)
+    {
+        if (part.Box is not { } box)
+        {
+            return;
+        }
+
+        box.Validate -= this.OnNumberBoxValidate;
+        box.EditSessionStarted -= this.OnNumberBoxEditSessionStarted;
+        box.EditSessionCompleted -= this.OnNumberBoxEditSessionCompleted;
+    }
+
+    // Binds an editor property to this control's property of the given name, such as XValue or WIsIndeterminate.
+    private void BindToEditor(NumberBox numberBox, DependencyProperty numberBoxProperty, string vectorBoxPropertyName)
+        => Microsoft.UI.Xaml.Data.BindingOperations.SetBinding(numberBox, numberBoxProperty, new Microsoft.UI.Xaml.Data.Binding
         {
             Source = this,
             Path = new PropertyPath(vectorBoxPropertyName),
             Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay,
-        };
-        Microsoft.UI.Xaml.Data.BindingOperations.SetBinding(numberBox, numberBoxProperty, binding);
-    }
+        });
 
-    private void ApplyComponentProperties(NumberBox numberBox, string component)
+    private void ApplyComponentProperties(NumberBox numberBox, Component component)
     {
-        // Apply mask
-        var mask = this.componentMasks?.TryGetValue(component, out var componentMask) ?? false
-            ? componentMask
-            : this.ComponentMask;
-        numberBox.Mask = mask;
-
-        // Apply indeterminate display text
+        numberBox.Mask = this.componentMasks.GetValueOrDefault(component, this.ComponentMask);
         numberBox.IndeterminateDisplayText = this.IndeterminateDisplayText;
-
-        numberBox.Label = string.Empty;
-        numberBox.LabelPosition = LabelPosition.None;
-        numberBox.IsCompact = false;
-
-        // Apply other properties
         numberBox.WithPadding = this.WithPadding;
         numberBox.HorizontalValueAlignment = this.HorizontalValueAlignment;
         numberBox.HorizontalLabelAlignment = this.HorizontalLabelAlignment;
         numberBox.Multiplier = this.Multiplier;
+        this.ApplyComponentRange(numberBox, component);
+    }
+
+    private void ApplyComponentRange(NumberBox numberBox, Component component)
+        => (numberBox.Minimum, numberBox.Maximum) = this.componentRanges.GetValueOrDefault(component, (this.Minimum, this.Maximum));
+
+    private void UpdateComponentRanges()
+    {
+        foreach (var part in this.parts)
+        {
+            if (part.Box is { } box)
+            {
+                this.ApplyComponentRange(box, part.Component);
+            }
+        }
+    }
+
+    private void ForEachEditor(Action<VectorBox, NumberBox> apply)
+    {
+        foreach (var part in this.parts)
+        {
+            if (part.Box is { } box)
+            {
+                apply(this, box);
+            }
+        }
     }
 
     private void SyncAllComponentsFromProperties()
     {
-        if (this.isSyncingValues || this.numberBoxX == null || this.numberBoxY == null)
+        if (this.isSyncingValues)
         {
             return;
         }
@@ -402,23 +392,13 @@ public partial class VectorBox : Control
         try
         {
             this.isSyncingValues = true;
-
-            // Sync numeric values
-            this.numberBoxX.NumberValue = this.XValue;
-            this.numberBoxY.NumberValue = this.YValue;
-
-            if (this.Dimension == 3 && this.numberBoxZ != null)
+            foreach (var part in this.parts)
             {
-                this.numberBoxZ.NumberValue = this.ZValue;
-            }
-
-            // Sync indeterminate flags
-            this.numberBoxX.IsIndeterminate = this.XIsIndeterminate;
-            this.numberBoxY.IsIndeterminate = this.YIsIndeterminate;
-
-            if (this.Dimension == 3 && this.numberBoxZ != null)
-            {
-                this.numberBoxZ.IsIndeterminate = this.ZIsIndeterminate;
+                if (part.Box is { } box)
+                {
+                    box.NumberValue = (double)this.GetValue(part.ValueProperty);
+                    box.IsIndeterminate = (bool)this.GetValue(part.IndeterminateProperty);
+                }
             }
         }
         catch (Exception ex)
@@ -433,33 +413,15 @@ public partial class VectorBox : Control
         }
     }
 
-    private void OnNumberBoxValidate(object? sender, ValidationEventArgs<float> e)
+    private void OnNumberBoxValidate(object? sender, ValidationEventArgs<double> e)
     {
-        // Identify which component is being validated
-        Component? target = null;
-        if (ReferenceEquals(sender, this.numberBoxX))
-        {
-            target = Component.X;
-        }
-        else if (ReferenceEquals(sender, this.numberBoxY))
-        {
-            target = Component.Y;
-        }
-        else if (ReferenceEquals(sender, this.numberBoxZ))
-        {
-            target = Component.Z;
-        }
-
-        // Set the target for discrimination
-        e.Target = target;
-
-        // Relay the validation event to consumers
+        e.Target = this.FindPart(sender)?.Component;
         this.OnValidate(e);
-
-        // Log the relayed validation result
-        var comp = target?.ToString() ?? "__NULL__";
-        this.LogValidationRelayed(comp, e.OldValue, e.NewValue, e.IsValid);
+        this.LogValidationRelayed(e.Target?.ToString() ?? "__NULL__", e.OldValue, e.NewValue, e.IsValid);
     }
+
+    private ComponentPart? FindPart(object? editor)
+        => Array.Find(this.parts, part => part.Box is not null && ReferenceEquals(part.Box, editor));
 
     // Short-circuit to the correct state based on pointer hover.
     private void UpdateVisualState(bool useTransitions = true)
@@ -468,28 +430,10 @@ public partial class VectorBox : Control
             this.isPointerOver ? HoverStateName : NormalStateName,
             useTransitions);
 
-    private void UpdateVectorValue()
+    private void OnComponentValueChanged(Component component, double oldValue, double newValue)
     {
-        var currentVector = this.VectorValue;
-        if (this.Dimension == 2)
-        {
-            currentVector.X = this.XValue;
-            currentVector.Y = this.YValue;
-        }
-        else
-        {
-            currentVector.X = this.XValue;
-            currentVector.Y = this.YValue;
-            currentVector.Z = this.ZValue;
-        }
-
-        // Update vector value
-        this.SetValue(VectorValueProperty, currentVector);
-    }
-
-    private void OnVectorValueChanged()
-    {
-        if (this.isSyncingValues)
+        var part = this.parts[(int)component];
+        if (this.isSyncingValues || part.Box is not { } box)
         {
             return;
         }
@@ -497,64 +441,17 @@ public partial class VectorBox : Control
         try
         {
             this.isSyncingValues = true;
-
-            var vector = this.VectorValue;
-            this.SetValue(XValueProperty, vector.X);
-            this.SetValue(YValueProperty, vector.Y);
-
-            if (this.Dimension == 3)
-            {
-                this.SetValue(ZValueProperty, vector.Z);
-            }
-
-            // Clear indeterminate flags by default
-            this.SetValue(XIsIndeterminateProperty, value: false);
-            this.SetValue(YIsIndeterminateProperty, value: false);
-
-            if (this.Dimension == 3)
-            {
-                this.SetValue(ZIsIndeterminateProperty, value: false);
-            }
-        }
-        finally
-        {
-            this.isSyncingValues = false;
-        }
-    }
-
-    private void OnXValueChanged(float oldValue, float newValue)
-    {
-        if (this.isSyncingValues || this.numberBoxX == null)
-        {
-            return;
-        }
-
-        try
-        {
-            this.isSyncingValues = true;
-
-            // Validate the new value
-            var args = new ValidationEventArgs<float>(oldValue, newValue)
-            {
-                Target = Component.X,
-            };
+            var args = new ValidationEventArgs<double>(oldValue, newValue) { Target = component };
             this.OnValidate(args);
             if (!args.IsValid)
             {
-                // Revert on validation failure
-                this.SetValue(XValueProperty, oldValue);
+                this.SetValue(part.ValueProperty, oldValue);
                 return;
             }
 
-            // Update the internal editor
-            this.numberBoxX.NumberValue = newValue;
-
-            // Clear indeterminate flag
-            this.SetValue(XIsIndeterminateProperty, value: false);
-
-            // Update vector
-            this.LogComponentChanged("X", oldValue, newValue);
-            this.UpdateVectorValue();
+            box.NumberValue = newValue;
+            this.SetValue(part.IndeterminateProperty, value: false);
+            this.LogComponentChanged(part.Name, oldValue, newValue);
         }
         finally
         {
@@ -562,250 +459,76 @@ public partial class VectorBox : Control
         }
     }
 
-    private void OnYValueChanged(float oldValue, float newValue)
+    private void OnComponentIndeterminateChanged(Component component)
     {
-        if (this.isSyncingValues || this.numberBoxY == null)
+        var part = this.parts[(int)component];
+        if (!this.isSyncingValues && part.Box is { } box)
         {
-            return;
+            box.IsIndeterminate = (bool)this.GetValue(part.IndeterminateProperty);
         }
-
-        try
-        {
-            this.isSyncingValues = true;
-
-            // Validate the new value
-            var args = new ValidationEventArgs<float>(oldValue, newValue)
-            {
-                Target = Component.Y,
-            };
-            this.OnValidate(args);
-            if (!args.IsValid)
-            {
-                // Revert on validation failure
-                this.SetValue(YValueProperty, oldValue);
-                return;
-            }
-
-            // Update the internal editor
-            this.numberBoxY.NumberValue = newValue;
-
-            // Clear indeterminate flag
-            this.SetValue(YIsIndeterminateProperty, value: false);
-
-            // Update vector
-            this.LogComponentChanged("Y", oldValue, newValue);
-            this.UpdateVectorValue();
-        }
-        finally
-        {
-            this.isSyncingValues = false;
-        }
-    }
-
-    private void OnZValueChanged(float oldValue, float newValue)
-    {
-        if (this.isSyncingValues || this.numberBoxZ == null || this.Dimension != 3)
-        {
-            return;
-        }
-
-        try
-        {
-            this.isSyncingValues = true;
-
-            // Validate the new value
-            var args = new ValidationEventArgs<float>(oldValue, newValue)
-            {
-                Target = Component.Z,
-            };
-            this.OnValidate(args);
-            if (!args.IsValid)
-            {
-                // Revert on validation failure
-                this.SetValue(ZValueProperty, oldValue);
-                return;
-            }
-
-            // Update the internal editor
-            this.numberBoxZ.NumberValue = newValue;
-
-            // Clear indeterminate flag
-            this.SetValue(ZIsIndeterminateProperty, value: false);
-
-            // Update vector
-            this.LogComponentChanged("Z", oldValue, newValue);
-            this.UpdateVectorValue();
-        }
-        finally
-        {
-            this.isSyncingValues = false;
-        }
-    }
-
-    private void OnXIsIndeterminateChanged()
-    {
-        if (this.isSyncingValues || this.numberBoxX == null)
-        {
-            return;
-        }
-
-        this.numberBoxX.IsIndeterminate = this.XIsIndeterminate;
-    }
-
-    private void OnYIsIndeterminateChanged()
-    {
-        if (this.isSyncingValues || this.numberBoxY == null)
-        {
-            return;
-        }
-
-        this.numberBoxY.IsIndeterminate = this.YIsIndeterminate;
-    }
-
-    private void OnZIsIndeterminateChanged()
-    {
-        if (this.isSyncingValues || this.numberBoxZ == null || this.Dimension != 3)
-        {
-            return;
-        }
-
-        this.numberBoxZ.IsIndeterminate = this.ZIsIndeterminate;
     }
 
     private void OnComponentMaskChanged()
     {
-        if (this.numberBoxX != null && this.componentMasks?.ContainsKey("X") == false)
+        foreach (var part in this.parts)
         {
-            this.numberBoxX.Mask = this.ComponentMask;
-        }
-
-        if (this.numberBoxY != null && this.componentMasks?.ContainsKey("Y") == false)
-        {
-            this.numberBoxY.Mask = this.ComponentMask;
-        }
-
-        if (this.numberBoxZ != null && this.Dimension == 3 && this.componentMasks?.ContainsKey("Z") == false)
-        {
-            this.numberBoxZ.Mask = this.ComponentMask;
+            if (part.Box is { } box)
+            {
+                box.Mask = this.componentMasks.GetValueOrDefault(part.Component, this.ComponentMask);
+            }
         }
     }
 
-    private void OnIndeterminateDisplayTextChanged()
+    private void OnDimensionChanged() => this.UpdateShownComponents();
+
+    // Shows the first Dimension components and lays them out again; hidden components keep their values.
+    private void UpdateShownComponents()
     {
-        _ = this.numberBoxX?.IndeterminateDisplayText = this.IndeterminateDisplayText;
-        _ = this.numberBoxY?.IndeterminateDisplayText = this.IndeterminateDisplayText;
-
-        if (this.numberBoxZ is not null && this.Dimension == 3)
+        if (this.componentPanel is not Grid)
         {
-            this.numberBoxZ.IndeterminateDisplayText = this.IndeterminateDisplayText;
+            return;
         }
+
+        var count = this.ComponentCount;
+        for (var index = 0; index < this.parts.Length; index++)
+        {
+            var part = this.parts[index];
+            if (part.Box?.Parent is Grid container)
+            {
+                container.Visibility = index < count ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        this.stackedComponents = null;
+        this.UpdateComponentLabelPositions();
+        this.InvalidateMeasure();
     }
 
-    private void OnComponentLabelPositionChanged() => this.UpdateComponentLabelPositions();
-
+    // Each component's NumberBox shows its label, so every component label scrubs, wherever it is placed.
     private void UpdateComponentLabelPositions()
     {
-        if (this.componentPanel is not Grid grid)
+        foreach (var part in this.ShownParts)
         {
-            return;
-        }
-
-        var componentCount = this.Dimension == 3 ? 3 : 2;
-        for (var componentIndex = 0; componentIndex < componentCount; componentIndex++)
-        {
-            this.UpdateComponentLabelPosition(grid, componentIndex);
+            this.UpdateComponentLabel(part);
         }
     }
 
-    private void UpdateComponentLabelPosition(Grid outerGrid, int componentIndex)
+    private void UpdateComponentLabel(ComponentPart part)
     {
-        var label = this.GetComponentLabel(componentIndex);
-        var box = this.GetComponentBox(componentIndex);
-        var container = VectorBoxComponentLayout.GetComponentContainer(outerGrid, label, box);
-        if (container is null)
+        if (part.Box is not { } box)
         {
             return;
         }
 
-        container.RowDefinitions.Clear();
-        container.ColumnDefinitions.Clear();
-
-        var componentName = VectorBoxComponentLayout.GetComponentName(componentIndex);
-        var labelPosition = this.componentLabelPositions?.TryGetValue(componentName, out var configuredPosition) == true
-            ? configuredPosition
-            : this.ComponentLabelPosition;
-        this.UpdateComponentLabelPresentation(componentName, label, box);
-
-        if (labelPosition == LabelPosition.Left && !string.IsNullOrWhiteSpace(label.Text))
-        {
-            label.Visibility = Visibility.Collapsed;
-            box.Label = label.Text;
-            box.LabelPosition = LabelPosition.Left;
-            box.IsCompact = true;
-            container.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            container.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            Grid.SetRow(box, 0);
-            Grid.SetColumn(box, 0);
-            return;
-        }
-
-        box.Label = string.Empty;
-        box.LabelPosition = LabelPosition.None;
-        box.IsCompact = false;
-        switch (labelPosition)
-        {
-            case LabelPosition.Left:
-                VectorBoxComponentLayout.LayoutHorizontally(container, label, box, labelOnLeft: true);
-                break;
-            case LabelPosition.Right:
-                VectorBoxComponentLayout.LayoutHorizontally(container, label, box, labelOnLeft: false);
-                break;
-            case LabelPosition.Top:
-                VectorBoxComponentLayout.LayoutVertically(container, label, box, labelOnTop: true);
-                break;
-            case LabelPosition.Bottom:
-                VectorBoxComponentLayout.LayoutVertically(container, label, box, labelOnTop: false);
-                break;
-            default:
-                VectorBoxComponentLayout.LayoutWithoutLabel(container, label, box);
-                break;
-        }
-    }
-
-    private void UpdateComponentLabelPresentation(string componentName, TextBlock label, NumberBox box)
-    {
-        var foreground = this.componentLabelForegrounds?.TryGetValue(componentName, out var configuredForeground) == true
-            ? configuredForeground
-            : null;
-        var componentLabel = this.componentLabels?.TryGetValue(componentName, out var configuredLabel) == true
-            ? configuredLabel
-            : componentName;
-        label.Text = componentLabel;
+        var componentLabel = this.componentLabels.GetValueOrDefault(part.Component, part.Name);
         var accessibleName = AutomationProperties.GetName(this);
         AutomationProperties.SetName(box, $"{(string.IsNullOrEmpty(accessibleName) ? this.Label : accessibleName)} {componentLabel}".Trim());
-        label.Foreground = foreground;
-        box.LabelForeground = foreground;
+        var position = this.componentLabelPositions.GetValueOrDefault(part.Component, this.ComponentLabelPosition);
+        box.Label = position == LabelPosition.None ? string.Empty : componentLabel;
+        box.LabelForeground = this.componentLabelForegrounds.TryGetValue(part.Component, out var brush) ? brush : null;
+        box.LabelPosition = position;
+        box.IsCompact = this.CompactComponentLabels;
     }
-
-    private TextBlock GetComponentLabel(int componentIndex)
-        => componentIndex switch
-        {
-            0 => this.labelX!,
-            1 => this.labelY!,
-            2 => this.labelZ!,
-            _ => throw new ArgumentOutOfRangeException(nameof(componentIndex)),
-        };
-
-    private NumberBox GetComponentBox(int componentIndex)
-        => componentIndex switch
-        {
-            0 => this.numberBoxX!,
-            1 => this.numberBoxY!,
-            2 => this.numberBoxZ!,
-            _ => throw new ArgumentOutOfRangeException(nameof(componentIndex)),
-        };
-
-    private void OnLabelPositionChanged() => this.UpdateLabelPosition();
 
     private void UpdateLabelPosition()
     {
@@ -888,36 +611,25 @@ public partial class VectorBox : Control
         }
     }
 
-    private void OnMultiplierChanged()
+    /// <summary>One vector component: its value and indeterminate properties, and its template editor and label.</summary>
+    /// <param name="component">The component.</param>
+    /// <param name="valueProperty">The component's value property.</param>
+    /// <param name="indeterminateProperty">The component's indeterminate presentation property.</param>
+    private sealed class ComponentPart(Component component, DependencyProperty valueProperty, DependencyProperty indeterminateProperty)
     {
-        _ = this.numberBoxX?.Multiplier = this.Multiplier;
-        _ = this.numberBoxY?.Multiplier = this.Multiplier;
+        /// <summary>Gets the component.</summary>
+        public Component Component { get; } = component;
 
-        if (this.Dimension == 3)
-        {
-            _ = this.numberBoxZ?.Multiplier = this.Multiplier;
-        }
-    }
+        /// <summary>Gets the component name, used for template parts and as the default label.</summary>
+        public string Name { get; } = component.ToString();
 
-    private void OnWithPaddingChanged()
-    {
-        _ = this.numberBoxX?.WithPadding = this.WithPadding;
-        _ = this.numberBoxY?.WithPadding = this.WithPadding;
-        _ = this.numberBoxZ?.WithPadding = this.WithPadding;
-    }
+        /// <summary>Gets the component's value property.</summary>
+        public DependencyProperty ValueProperty { get; } = valueProperty;
 
-    private void OnDimensionChanged()
-    {
-        // Update Z component visibility based on dimension
-        _ = this.numberBoxZ?.Visibility = this.Dimension == 3 ? Visibility.Visible : Visibility.Collapsed;
-        _ = this.labelZ?.Visibility = this.Dimension == 3 ? Visibility.Visible : Visibility.Collapsed;
-    }
+        /// <summary>Gets the component's indeterminate presentation property.</summary>
+        public DependencyProperty IndeterminateProperty { get; } = indeterminateProperty;
 
-    private void OnHorizontalValueAlignmentChanged()
-    {
-        // Propagate the change to the internal NumberBox controls
-        _ = this.numberBoxX?.HorizontalValueAlignment = this.HorizontalValueAlignment;
-        _ = this.numberBoxY?.HorizontalValueAlignment = this.HorizontalValueAlignment;
-        _ = this.numberBoxZ?.HorizontalValueAlignment = this.HorizontalValueAlignment;
+        /// <summary>Gets or sets the template editor.</summary>
+        public NumberBox? Box { get; set; }
     }
 }

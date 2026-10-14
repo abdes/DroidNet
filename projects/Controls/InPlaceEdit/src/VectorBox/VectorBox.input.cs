@@ -74,8 +74,8 @@ public partial class VectorBox
     ///     This method delegates keyboard handling to the internal <see cref="NumberBox" /> editors.
     ///     Standard behavior includes:
     ///     <list type="bullet">
-    ///         <item>Tab: Move to the next component (X → Y → Z)</item>
-    ///         <item>Shift+Tab: Move to the previous component (Z → Y → X)</item>
+    ///         <item>Tab: Move to the next component (X → Y → Z → W)</item>
+    ///         <item>Shift+Tab: Move to the previous component (W → Z → Y → X)</item>
     ///         <item>Enter: Commit current value</item>
     ///         <item>Escape: Revert to previous value</item>
     ///         <item>Arrow keys: Delegated to active NumberBox</item>

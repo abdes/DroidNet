@@ -21,10 +21,10 @@ namespace DroidNet.Controls;
 public partial class NumberBox
 {
     [LoggerMessage(EventId = 3601, Level = LogLevel.Trace, Message = "[NumberBox] Value changed from {OldValue} to {NewValue}")]
-    private static partial void LogValueChanged(ILogger logger, float oldValue, float newValue);
+    private static partial void LogValueChanged(ILogger logger, double oldValue, double newValue);
 
     [Conditional("DEBUG")]
-    private void LogValueChanged(float oldValue, float newValue)
+    private void LogValueChanged(double oldValue, double newValue)
     {
         if (this.logger is ILogger logger)
         {
@@ -57,10 +57,10 @@ public partial class NumberBox
     }
 
     [LoggerMessage(EventId = 3604, Level = LogLevel.Trace, Message = "[NumberBox] Edit committed (NewValue={NewValue})")]
-    private static partial void LogEditCommitted(ILogger logger, float newValue);
+    private static partial void LogEditCommitted(ILogger logger, double newValue);
 
     [Conditional("DEBUG")]
-    private void LogEditCommitted(float newValue)
+    private void LogEditCommitted(double newValue)
     {
         if (this.logger is ILogger logger)
         {

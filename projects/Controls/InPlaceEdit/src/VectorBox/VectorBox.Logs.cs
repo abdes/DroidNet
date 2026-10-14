@@ -8,8 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Represents a control that allows the user to input and display small fixed-size numeric
-///     vectors (Vector2/Vector3).
+///     Represents a control that allows the user to input and display small fixed-size numeric vectors of two, three or
+///     four components.
 /// </summary>
 public partial class VectorBox
 {
@@ -47,9 +47,9 @@ public partial class VectorBox
     }
 
     [LoggerMessage(EventId = 3621, Level = LogLevel.Trace, Message = "[VectorBox] Component {Component} value changed from {OldValue} to {NewValue}")]
-    private static partial void LogComponentChanged(ILogger logger, string component, float oldValue, float newValue);
+    private static partial void LogComponentChanged(ILogger logger, string component, double oldValue, double newValue);
 
-    private void LogComponentChanged(string component, float oldValue, float newValue)
+    private void LogComponentChanged(string component, double oldValue, double newValue)
     {
         if (this.logger is ILogger logger)
         {
@@ -69,9 +69,9 @@ public partial class VectorBox
     }
 
     [LoggerMessage(EventId = 3625, Level = LogLevel.Trace, Message = "[VectorBox] Validation relayed for {Component} (Old={OldValue}, New={NewValue}, IsValid={IsValid})")]
-    private static partial void LogValidationRelayed(ILogger logger, string component, float oldValue, float newValue, bool isValid);
+    private static partial void LogValidationRelayed(ILogger logger, string component, double oldValue, double newValue, bool isValid);
 
-    private void LogValidationRelayed(string component, float oldValue, float newValue, bool isValid)
+    private void LogValidationRelayed(string component, double oldValue, double newValue, bool isValid)
     {
         if (this.logger is ILogger logger)
         {
@@ -79,39 +79,15 @@ public partial class VectorBox
         }
     }
 
-    [LoggerMessage(EventId = 3701, Level = LogLevel.Trace, Message = "[VectorBox] SetValues called: X={X}, Y={Y}, Z={Z}, PreserveIndeterminate={Preserve}")]
-    private static partial void LogSetValues(ILogger logger, float x, float y, float z, bool preserve);
+    [LoggerMessage(EventId = 3701, Level = LogLevel.Trace, Message = "[VectorBox] SetValues called: Count={Count}, PreserveIndeterminate={Preserve}")]
+    private static partial void LogSetValues(ILogger logger, int count, bool preserve);
 
     [Conditional("DEBUG")]
-    private void LogSetValues(float x, float y, float z, bool preserve)
+    private void LogSetValues(int count, bool preserve)
     {
         if (this.logger is ILogger logger)
         {
-            LogSetValues(logger, x, y, z, preserve);
-        }
-    }
-
-    [LoggerMessage(EventId = 3704, Level = LogLevel.Trace, Message = "[VectorBox] Component {Component} value change requested: Old={OldValue}, New={NewValue}, Valid={IsValid}")]
-    private static partial void LogComponentValueChanged(ILogger logger, string component, float oldValue, float newValue, bool isValid);
-
-    [Conditional("DEBUG")]
-    private void LogComponentValueChanged(string component, float oldValue, float newValue, bool isValid)
-    {
-        if (this.logger is ILogger logger)
-        {
-            LogComponentValueChanged(logger, component, oldValue, newValue, isValid);
-        }
-    }
-
-    [LoggerMessage(EventId = 3705, Level = LogLevel.Trace, Message = "[VectorBox] Vector updated to X={X}, Y={Y}, Z={Z}")]
-    private static partial void LogVectorUpdated(ILogger logger, float x, float y, float z);
-
-    [Conditional("DEBUG")]
-    private void LogVectorUpdated(float x, float y, float z)
-    {
-        if (this.logger is ILogger logger)
-        {
-            LogVectorUpdated(logger, x, y, z);
+            LogSetValues(logger, count, preserve);
         }
     }
 

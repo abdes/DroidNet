@@ -37,7 +37,7 @@ namespace DroidNet.Controls;
 ///     A suggested model for handling the <see cref="IsIndeterminate" /> is to provide a <see cref="Nullable"/> value
 ///     from the <c>ViewModel</c> (see the demo app for an example): expose a nullable ViewModel property that maps to
 ///     the control's two pieces of state. For example, the demo ViewModel implements:
-///     - A numeric property `NumberValue` (float) and a boolean `DemoIsIndeterminate` (bound to
+///     - A numeric property `NumberValue` (double) and a boolean `DemoIsIndeterminate` (bound to
 ///       <see cref="IsIndeterminate" />).
 ///     - A derived nullable property `DemoNullableValue` that returns `null` when `DemoIsIndeterminate` is
 ///       true, otherwise returns the numeric `NumberValue`. Setting `DemoNullableValue` to a non-null value
@@ -107,6 +107,8 @@ public partial class NumberBox : Control
 
     private const string DefaultIndeterminateDisplayText = "-.-";
 
+    private readonly ScrubGesture scrub = new();
+
     private InputSystemCursor? defaultCursor;
     private InputSystemCursor? dragCursor;
 
@@ -121,8 +123,7 @@ public partial class NumberBox : Control
     private CustomGrid? rootGrid;
     private UIElement? rootInputEventSource;
     private PointerEventHandler? rootPointerPressedHandler;
-    private TextBlock? activeDragLabel;
-    private Point? capturePoint;
+    private UIElement? scrubHandle;
     private bool isPointerOver;
     private bool valueIsValid = true;
     private bool isEditing;
@@ -161,7 +162,10 @@ public partial class NumberBox : Control
         };
     }
 
-    private bool IsMouseCaptured => this.capturePoint is not null;
+    private bool IsMouseCaptured => this.scrub.IsScrubbing;
+
+    private (double minimum, double maximum) Range
+        => (double.IsNaN(this.Minimum) ? double.NegativeInfinity : this.Minimum, double.IsNaN(this.Maximum) ? double.PositiveInfinity : this.Maximum);
 
     /// <summary>Completes pending text input before an owning document saves or closes.</summary>
     /// <remarks>Valid text is committed; invalid text is cancelled using the control's normal validation behavior.</remarks>
@@ -231,7 +235,7 @@ public partial class NumberBox : Control
         this.backgroundBorder = this.GetTemplateChild(BackgroundBorderPartName) as Border;
         this.valueGroup = this.GetTemplateChild("PartValueGroup") as FrameworkElement ?? this.backgroundBorder;
         this.prefixTextBlock = this.GetTemplateChild("PartValuePrefix") as TextBlock;
-        this.qualifierTextBlock = this.GetTemplateChild("PartValueQualifier") as TextBlock;
+        this.unitTextBlock = this.GetTemplateChild("PartValueUnit") as TextBlock;
         this.labelTextBlock = this.GetTemplateChild(LabelTextBlockPartName) as TextBlock;
         this.compactLabelTextBlock = this.GetTemplateChild(CompactLabelTextBlockPartName) as TextBlock;
         this.SetupValueTextBlockPart();
@@ -251,12 +255,7 @@ public partial class NumberBox : Control
     {
         if (e.Key == VirtualKey.Escape && this.IsMouseCaptured)
         {
-            this.capturePoint = null;
-            this.activeDragLabel?.ReleasePointerCaptures();
-            this.activeDragLabel = null;
-            this.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel);
-            this.UpdateInputCursor();
-            this.UpdateVisualState();
+            this.CancelScrub();
             e.Handled = true;
             return;
         }
@@ -271,6 +270,7 @@ public partial class NumberBox : Control
             oldValueTextBlock.PointerEntered -= this.OnValueTextBlockPointerEntered;
             oldValueTextBlock.PointerExited -= this.OnValueTextBlockPointerExited;
             oldValueTextBlock.Tapped -= this.OnValueTextBlockTapped;
+            this.UnhookScrubHandle(oldValueTextBlock);
         }
 
         this.valueTextBlock = this.GetTemplateChild(ValueTextBlockPartName) as TextBlock;
@@ -283,26 +283,21 @@ public partial class NumberBox : Control
         this.valueTextBlock.PointerEntered += this.OnValueTextBlockPointerEntered;
         this.valueTextBlock.PointerExited += this.OnValueTextBlockPointerExited;
         this.valueTextBlock.Tapped += this.OnValueTextBlockTapped;
+        this.HookScrubHandle(this.valueTextBlock);
     }
 
     private void SetupLabelTextBlockPart()
     {
         if (this.labelTextBlock is { } oldLabelTextBlock)
         {
-            oldLabelTextBlock.PointerPressed -= this.OnLabelPointerPressed;
-            oldLabelTextBlock.PointerMoved -= this.OnLabelPointerMoved;
-            oldLabelTextBlock.PointerReleased -= this.OnLabelPointerReleased;
-            oldLabelTextBlock.PointerCaptureLost -= this.OnLabelPointerCaptureLost;
+            this.UnhookScrubHandle(oldLabelTextBlock);
             oldLabelTextBlock.PointerEntered -= this.OnValueTextBlockPointerEntered;
             oldLabelTextBlock.PointerExited -= this.OnValueTextBlockPointerExited;
         }
 
         if (this.compactLabelTextBlock is { } oldCompactLabelTextBlock)
         {
-            oldCompactLabelTextBlock.PointerPressed -= this.OnLabelPointerPressed;
-            oldCompactLabelTextBlock.PointerMoved -= this.OnLabelPointerMoved;
-            oldCompactLabelTextBlock.PointerReleased -= this.OnLabelPointerReleased;
-            oldCompactLabelTextBlock.PointerCaptureLost -= this.OnLabelPointerCaptureLost;
+            this.UnhookScrubHandle(oldCompactLabelTextBlock);
             oldCompactLabelTextBlock.PointerEntered -= this.OnValueTextBlockPointerEntered;
             oldCompactLabelTextBlock.PointerExited -= this.OnValueTextBlockPointerExited;
         }
@@ -317,23 +312,33 @@ public partial class NumberBox : Control
                 return;
             }
 
-            label.PointerPressed += this.OnLabelPointerPressed;
-            label.PointerMoved += this.OnLabelPointerMoved;
-            label.PointerReleased += this.OnLabelPointerReleased;
-            label.PointerCaptureLost += this.OnLabelPointerCaptureLost;
+            this.HookScrubHandle(label);
             label.PointerEntered += this.OnValueTextBlockPointerEntered;
             label.PointerExited += this.OnValueTextBlockPointerExited;
         }
+    }
+
+    private void HookScrubHandle(UIElement handle)
+    {
+        handle.PointerPressed += this.OnScrubPointerPressed;
+        handle.PointerMoved += this.OnScrubPointerMoved;
+        handle.PointerReleased += this.OnScrubPointerReleased;
+        handle.PointerCaptureLost += this.OnScrubPointerCaptureLost;
+    }
+
+    private void UnhookScrubHandle(UIElement handle)
+    {
+        handle.PointerPressed -= this.OnScrubPointerPressed;
+        handle.PointerMoved -= this.OnScrubPointerMoved;
+        handle.PointerReleased -= this.OnScrubPointerReleased;
+        handle.PointerCaptureLost -= this.OnScrubPointerCaptureLost;
     }
 
     private void CompleteActiveEditSessionOnUnload()
     {
         if (this.IsMouseCaptured)
         {
-            this.capturePoint = null;
-            this.activeDragLabel?.ReleasePointerCaptures();
-            this.activeDragLabel = null;
-            this.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel);
+            this.CancelScrub();
         }
 
         if (this.isEditing)
@@ -464,54 +469,129 @@ public partial class NumberBox : Control
         this.UpdateVisualState();
     }
 
-    private void OnLabelPointerPressed(object sender, PointerRoutedEventArgs e)
+    // Labels scrub from the press. The value region waits for horizontal travel, so a plain click still edits text.
+    private void OnScrubPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        this.CompletePendingTextEdit();
-
-        if (sender is not TextBlock label || !label.IsHitTestVisible || !label.CapturePointer(e.Pointer))
+        if (sender is not UIElement { IsHitTestVisible: true } handle)
         {
             return;
         }
 
-        _ = this.Focus(FocusState.Pointer);
-        this.activeDragLabel = label;
-        this.capturePoint = e.GetCurrentPoint(label).Position;
+        var immediate = !ReferenceEquals(handle, this.valueTextBlock);
+        if (immediate)
+        {
+            this.CompletePendingTextEdit();
+        }
+
+        this.scrubHandle = handle;
+        this.scrub.Press(e.GetCurrentPoint(handle).Position.X, immediate);
         this.LogPointerEvent("Pressed");
-        this.OnEditSessionStarted(NumberBoxEditInteractionKind.PointerDrag);
-        this.UpdateInputCursor();
-        this.UpdateVisualState();
+        if (immediate && this.BeginScrub(e.Pointer))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void OnScrubPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        this.LogPointerEvent("Moved");
+        if (this.scrubHandle is not { } handle || !ReferenceEquals(sender, handle))
+        {
+            return;
+        }
+
+        var move = this.scrub.Move(e.GetCurrentPoint(handle).Position.X, e.Pointer.IsInContact);
+        if ((move.Started && !this.BeginScrub(e.Pointer)) || !this.scrub.IsScrubbing)
+        {
+            return;
+        }
+
+        if (move.Steps != 0)
+        {
+            this.ApplyScrubSteps(move.Steps, e.KeyModifiers);
+        }
+
         e.Handled = true;
     }
 
-    private void OnLabelPointerMoved(object sender, PointerRoutedEventArgs e)
+    private void OnScrubPointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        this.LogPointerEvent("Moved");
-        if (this.capturePoint is null || sender is not TextBlock label)
+        this.LogPointerEvent("Released");
+        if (this.scrubHandle is not { } handle || !ReferenceEquals(sender, handle))
         {
             return;
         }
 
-        var currentPoint = e.GetCurrentPoint(label).Position;
-        var delta = currentPoint.X - this.capturePoint.Value.X;
+        this.scrubHandle = null;
+        if (!this.scrub.Release())
+        {
+            return;
+        }
 
-        // Round delta up to the nearest integer
-        delta = Math.Ceiling(delta);
+        handle.ReleasePointerCapture(e.Pointer);
+        this.EndScrub(NumberBoxEditCompletionKind.Commit);
+        e.Handled = true;
+    }
 
-        // If currently indeterminate, leave the stored NumberValue intact but switch presentation to determinate
+    private void OnScrubPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        this.LogPointerEvent("CaptureLost");
+        if (!this.IsMouseCaptured || !ReferenceEquals(sender, this.scrubHandle))
+        {
+            return;
+        }
+
+        this.scrub.Cancel();
+        this.scrubHandle = null;
+        this.EndScrub(NumberBoxEditCompletionKind.Cancel);
+    }
+
+    private bool BeginScrub(Pointer pointer)
+    {
+        if (this.scrubHandle is not { } handle || !handle.CapturePointer(pointer))
+        {
+            this.scrub.Cancel();
+            this.scrubHandle = null;
+            return false;
+        }
+
+        this.CompletePendingTextEdit();
+        _ = this.Focus(FocusState.Pointer);
+        this.OnEditSessionStarted(NumberBoxEditInteractionKind.PointerDrag);
+        this.UpdateInputCursor();
+        this.UpdateVisualState();
+        return true;
+    }
+
+    private void CancelScrub()
+    {
+        this.scrub.Cancel();
+        var handle = this.scrubHandle;
+        this.scrubHandle = null;
+        handle?.ReleasePointerCaptures();
+        this.EndScrub(NumberBoxEditCompletionKind.Cancel);
+    }
+
+    private void EndScrub(NumberBoxEditCompletionKind completion)
+    {
+        this.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, completion);
+        this.UpdateInputCursor();
+        this.UpdateVisualState();
+    }
+
+    // A scrub on an indeterminate value shows the stored value and steps from it.
+    private void ApplyScrubSteps(int steps, VirtualKeyModifiers keyModifiers)
+    {
         if (this.IsIndeterminate)
         {
             this.IsIndeterminate = false;
         }
 
-        // Calculate the increment
-        var increment = this.CalculateIncrement(delta, e.KeyModifiers);
-        var newValue = this.NumberValue + increment;
-
-        this.ApplyNewValueIfValid(newValue);
-        e.Handled = true;
+        var step = keyModifiers.HasFlag(VirtualKeyModifiers.Shift) ? this.Multiplier * 0.1 : this.Multiplier;
+        this.ApplyNewValueIfValid(this.ClampToRange(this.NumberValue + (steps * step)));
     }
 
-    private void ApplyNewValueIfValid(float newValue)
+    private void ApplyNewValueIfValid(double newValue)
     {
         // If our value before change is not valid, we should apply the change to the value anyway.
         // But if our current value is valid, we only apply valid changes.
@@ -527,48 +607,18 @@ public partial class NumberBox : Control
         this.NumberValue = newValue;
     }
 
-    private float CalculateIncrement(double delta, VirtualKeyModifiers keyModifiers)
+    // A drag stops at a bound rather than short of it. A NaN or inverted bound leaves the value as it is.
+    private double ClampToRange(double value)
     {
-        // Check if the Shift modifier is active
-        var shiftMultiplier = 1.0;
-        if (keyModifiers.HasFlag(VirtualKeyModifiers.Shift))
-        {
-            shiftMultiplier = Math.Abs(delta) < 10 ? 0.01 : 0.1;
-        }
-
-        return (float)(Math.Sign(delta) * this.Multiplier * shiftMultiplier);
+        var (minimum, maximum) = this.Range;
+        return minimum <= maximum ? Math.Clamp(value, minimum, maximum) : value;
     }
 
-    private void OnLabelPointerReleased(object sender, PointerRoutedEventArgs e)
+    // Typed values outside the bounds are invalid, like values the mask cannot show.
+    private bool IsInRange(double value)
     {
-        this.LogPointerEvent("Released");
-        if (sender is not TextBlock label || !this.IsMouseCaptured)
-        {
-            return;
-        }
-
-        this.capturePoint = null;
-        label.ReleasePointerCapture(e.Pointer);
-        this.activeDragLabel = null;
-        this.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
-        this.UpdateInputCursor();
-        this.UpdateVisualState();
-        e.Handled = true;
-    }
-
-    private void OnLabelPointerCaptureLost(object sender, PointerRoutedEventArgs e)
-    {
-        this.LogPointerEvent("CaptureLost");
-        if (!this.IsMouseCaptured)
-        {
-            return;
-        }
-
-        this.capturePoint = null;
-        this.activeDragLabel = null;
-        this.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel);
-        this.UpdateInputCursor();
-        this.UpdateVisualState();
+        var (minimum, maximum) = this.Range;
+        return minimum > maximum || (value >= minimum && value <= maximum);
     }
 
     private void UpdateInputCursor()
@@ -679,17 +729,17 @@ public partial class NumberBox : Control
         this.ValidateValue(expression.Apply(this.NumberValue), value);
     }
 
-    private void ValidateValue(float value, string? inputText = null)
+    private void ValidateValue(double value, string? inputText = null)
     {
         var oldIsValid = this.valueIsValid;
-        if (!this.maskParser.IsValidValue(value))
+        if (!this.maskParser.IsValidValue(value) || !this.IsInRange(value))
         {
             this.valueIsValid = false;
             this.LogValidation(oldIsValid, this.valueIsValid);
             return;
         }
 
-        var args = new ValidationEventArgs<float>(this.NumberValue, value, inputText);
+        var args = new ValidationEventArgs<double>(this.NumberValue, value, inputText);
         this.OnValidate(args);
         Debug.Assert(this.valueIsValid == args.IsValid, "should be updated by the OnValidate method");
 
@@ -724,10 +774,13 @@ public partial class NumberBox : Control
     {
         e.Handled = true;
         this.LogPointerEvent("Tapped");
-        this.StartEdit();
+        if (this.scrub.AcceptTap())
+        {
+            this.StartEdit();
+        }
     }
 
-    private void OnValueChanged(float oldValue, float newValue)
+    private void OnValueChanged(double oldValue, double newValue)
     {
         // Log the value change
         this.LogValueChanged(oldValue, newValue);

@@ -29,7 +29,7 @@ public enum NumericInputOperation
 /// <param name="Operation">The operation to apply.</param>
 /// <param name="Operand">The parsed operand.</param>
 [StructLayout(LayoutKind.Auto)]
-public readonly record struct NumericInputExpression(NumericInputOperation Operation, float Operand)
+public readonly record struct NumericInputExpression(NumericInputOperation Operation, double Operand)
 {
     /// <summary>Gets a value indicating whether this expression is relative to the current value.</summary>
     public bool IsRelative => this.Operation != NumericInputOperation.Absolute;
@@ -37,7 +37,7 @@ public readonly record struct NumericInputExpression(NumericInputOperation Opera
     /// <summary>Applies this expression to the specified current value.</summary>
     /// <param name="currentValue">The value before the edit.</param>
     /// <returns>The resulting value.</returns>
-    public float Apply(float currentValue)
+    public double Apply(double currentValue)
         => this.Operation switch
         {
             NumericInputOperation.Absolute => this.Operand,

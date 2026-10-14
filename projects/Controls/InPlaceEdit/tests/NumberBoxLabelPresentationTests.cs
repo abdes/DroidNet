@@ -18,6 +18,9 @@ namespace DroidNet.Controls.Tests;
 [TestCategory("UITest")]
 public sealed class NumberBoxLabelPresentationTests : VisualUserInterfaceTests
 {
+    private static readonly string[] VisualStates = ["Hover", "Pressed", "Normal", "Hover", "Normal"];
+    private static readonly double[] ProportionalWidths = [480d, 760d, 340d, 480d];
+
     [TestMethod]
     [DataRow(340d, 14d, false)]
     [DataRow(260d, 14d, false)]
@@ -36,7 +39,6 @@ public sealed class NumberBoxLabelPresentationTests : VisualUserInterfaceTests
             LabelPosition = LabelPosition.Left,
             LabelForeground = brush,
             LabelWidth = compact ? double.NaN : 124,
-            EditorMinimumWidth = compact ? 0 : 128,
             AutoStackLabel = !compact,
         };
         await LoadTestContentAsync(number).ConfigureAwait(true);
@@ -50,7 +52,7 @@ public sealed class NumberBoxLabelPresentationTests : VisualUserInterfaceTests
         var desiredSize = number.DesiredSize;
         var weight = label.FontWeight;
         var labelFontSize = label.FontSize;
-        foreach (var state in new[] { "Hover", "Pressed", "Normal", "Hover", "Normal" })
+        foreach (var state in VisualStates)
         {
             _ = VisualStateManager.GoToState(number, state, useTransitions: false).Should().BeTrue();
             number.UpdateLayout();
@@ -80,15 +82,14 @@ public sealed class NumberBoxLabelPresentationTests : VisualUserInterfaceTests
             LabelWidth = 124,
             LabelWidthRatio = 0.4,
             LabelSpacing = 12,
-            EditorMinimumWidth = 128,
             Prefix = "f/",
-            Qualifier = "EV",
+            Unit = "EV",
             AutoStackLabel = true,
         };
         await LoadTestContentAsync(number).ConfigureAwait(true);
         var label = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal))!;
         var valueGroup = number.FindDescendant<Grid>(part => string.Equals(part.Name, "PartValueGroup", StringComparison.Ordinal))!;
-        foreach (var width in new[] { 480d, 760d, 340d, 480d })
+        foreach (var width in ProportionalWidths)
         {
             number.Width = width;
             number.UpdateLayout();
@@ -109,6 +110,26 @@ public sealed class NumberBoxLabelPresentationTests : VisualUserInterfaceTests
         number.UpdateLayout();
         _ = label.TextWrapping.Should().Be(TextWrapping.Wrap);
         _ = label.TextTrimming.Should().Be(TextTrimming.None);
+    });
+
+    [TestMethod]
+    public Task UnitSitsOutsideTheValueFieldAndReportsItsWidth() => EnqueueAsync(async () =>
+    {
+        var number = new NumberBox { Mask = "~.##", NumberValue = 1.5, Unit = "lux" };
+        await LoadTestContentAsync(number).ConfigureAwait(true);
+        var unit = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartValueUnit", StringComparison.Ordinal))!;
+        var field = number.FindDescendant<Border>(part => string.Equals(part.Name, "PartBackgroundBorder", StringComparison.Ordinal))!;
+
+        _ = unit.Text.Should().Be("lux");
+        _ = Bounds(unit, number).Left.Should().BeGreaterThanOrEqualTo(Bounds(field, number).Right, "the unit is not part of the edited value");
+        _ = number.UnitWidth.Should().BeApproximately(unit.ActualWidth + unit.Margin.Left, 0.5, "the width includes the unit's gap");
+        _ = number.DisplayText.Should().NotContain("lux");
+
+        number.Unit = string.Empty;
+        number.UpdateLayout();
+
+        _ = unit.Visibility.Should().Be(Visibility.Collapsed);
+        _ = number.UnitWidth.Should().Be(0);
     });
 
     private static Rect Bounds(FrameworkElement element, UIElement relativeTo)

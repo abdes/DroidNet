@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Numerics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
@@ -11,10 +10,17 @@ using Microsoft.UI.Xaml.Media;
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Represents a control that allows the user to input and display small fixed-size numeric vectors (Vector2/Vector3).
+///     Represents a control that allows the user to input and display small fixed-size numeric vectors of two, three or
+///     four components.
 /// </summary>
 public partial class VectorBox
 {
+    /// <summary>The smallest supported <see cref="Dimension"/>.</summary>
+    public const int MinimumDimension = 2;
+
+    /// <summary>The largest supported <see cref="Dimension"/>.</summary>
+    public const int MaximumDimension = 4;
+
     /// <summary>Identifies whether channels stack when their usable width cannot be preserved.</summary>
     public static readonly DependencyProperty AutoStackComponentsProperty = DependencyProperty.Register(
         nameof(AutoStackComponents),
@@ -29,175 +35,120 @@ public partial class VectorBox
         typeof(VectorBox),
         new PropertyMetadata(80d, static (d, _) => ((VectorBox)d).InvalidateMeasure()));
 
-    /// <summary>
-    ///     Identifies the <see cref="VectorValue" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty VectorValueProperty =
-        DependencyProperty.Register(
-            nameof(VectorValue),
-            typeof(Vector3),
-            typeof(VectorBox),
-            new PropertyMetadata(new Vector3(0.0f, 0.0f, 0.0f), OnVectorValuePropertyChanged));
+    /// <summary>Identifies the <see cref="Dimension" /> dependency property.</summary>
+    public static readonly DependencyProperty DimensionProperty = DependencyProperty.Register(
+        nameof(Dimension),
+        typeof(int),
+        typeof(VectorBox),
+        new PropertyMetadata(3, static (d, _) => ((VectorBox)d).OnDimensionChanged()));
 
-    /// <summary>
-    ///     Identifies the <see cref="Dimension" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty DimensionProperty =
-        DependencyProperty.Register(
-            nameof(Dimension),
-            typeof(int),
-            typeof(VectorBox),
-            new PropertyMetadata(3, OnDimensionPropertyChanged));
+    /// <summary>Identifies the <see cref="XValue" /> dependency property.</summary>
+    public static readonly DependencyProperty XValueProperty = RegisterComponentValue(nameof(XValue), Component.X);
 
-    /// <summary>
-    ///     Identifies the <see cref="XValue" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty XValueProperty =
-        DependencyProperty.Register(
-            nameof(XValue),
-            typeof(float),
-            typeof(VectorBox),
-            new PropertyMetadata(0.0f, OnXValuePropertyChanged));
+    /// <summary>Identifies the <see cref="YValue" /> dependency property.</summary>
+    public static readonly DependencyProperty YValueProperty = RegisterComponentValue(nameof(YValue), Component.Y);
 
-    /// <summary>
-    ///     Identifies the <see cref="YValue" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty YValueProperty =
-        DependencyProperty.Register(
-            nameof(YValue),
-            typeof(float),
-            typeof(VectorBox),
-            new PropertyMetadata(0.0f, OnYValuePropertyChanged));
+    /// <summary>Identifies the <see cref="ZValue" /> dependency property.</summary>
+    public static readonly DependencyProperty ZValueProperty = RegisterComponentValue(nameof(ZValue), Component.Z);
 
-    /// <summary>
-    ///     Identifies the <see cref="ZValue" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty ZValueProperty =
-        DependencyProperty.Register(
-            nameof(ZValue),
-            typeof(float),
-            typeof(VectorBox),
-            new PropertyMetadata(0.0f, OnZValuePropertyChanged));
+    /// <summary>Identifies the <see cref="WValue" /> dependency property.</summary>
+    public static readonly DependencyProperty WValueProperty = RegisterComponentValue(nameof(WValue), Component.W);
 
-    /// <summary>
-    ///     Identifies the <see cref="XIsIndeterminate" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty XIsIndeterminateProperty =
-        DependencyProperty.Register(
-            nameof(XIsIndeterminate),
-            typeof(bool),
-            typeof(VectorBox),
-            new PropertyMetadata(defaultValue: false, OnXIsIndeterminatePropertyChanged));
+    /// <summary>Identifies the <see cref="XIsIndeterminate" /> dependency property.</summary>
+    public static readonly DependencyProperty XIsIndeterminateProperty = RegisterComponentIndeterminate(nameof(XIsIndeterminate), Component.X);
 
-    /// <summary>
-    ///     Identifies the <see cref="YIsIndeterminate" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty YIsIndeterminateProperty =
-        DependencyProperty.Register(
-            nameof(YIsIndeterminate),
-            typeof(bool),
-            typeof(VectorBox),
-            new PropertyMetadata(defaultValue: false, OnYIsIndeterminatePropertyChanged));
+    /// <summary>Identifies the <see cref="YIsIndeterminate" /> dependency property.</summary>
+    public static readonly DependencyProperty YIsIndeterminateProperty = RegisterComponentIndeterminate(nameof(YIsIndeterminate), Component.Y);
 
-    /// <summary>
-    ///     Identifies the <see cref="ZIsIndeterminate" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty ZIsIndeterminateProperty =
-        DependencyProperty.Register(
-            nameof(ZIsIndeterminate),
-            typeof(bool),
-            typeof(VectorBox),
-            new PropertyMetadata(defaultValue: false, OnZIsIndeterminatePropertyChanged));
+    /// <summary>Identifies the <see cref="ZIsIndeterminate" /> dependency property.</summary>
+    public static readonly DependencyProperty ZIsIndeterminateProperty = RegisterComponentIndeterminate(nameof(ZIsIndeterminate), Component.Z);
 
-    /// <summary>
-    ///     Identifies the <see cref="ComponentMask" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty ComponentMaskProperty =
-        DependencyProperty.Register(
-            nameof(ComponentMask),
-            typeof(string),
-            typeof(VectorBox),
-            new PropertyMetadata(DefaultComponentMask, OnComponentMaskPropertyChanged));
+    /// <summary>Identifies the <see cref="WIsIndeterminate" /> dependency property.</summary>
+    public static readonly DependencyProperty WIsIndeterminateProperty = RegisterComponentIndeterminate(nameof(WIsIndeterminate), Component.W);
 
-    /// <summary>
-    ///     Identifies the <see cref="IndeterminateDisplayText" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty IndeterminateDisplayTextProperty =
-        DependencyProperty.Register(
-            nameof(IndeterminateDisplayText),
-            typeof(string),
-            typeof(VectorBox),
-            new PropertyMetadata(DefaultIndeterminateDisplayText, OnIndeterminateDisplayTextPropertyChanged));
+    /// <summary>Identifies the <see cref="ComponentMask" /> dependency property.</summary>
+    public static readonly DependencyProperty ComponentMaskProperty = DependencyProperty.Register(
+        nameof(ComponentMask),
+        typeof(string),
+        typeof(VectorBox),
+        new PropertyMetadata(DefaultComponentMask, static (d, _) => ((VectorBox)d).OnComponentMaskChanged()));
 
-    /// <summary>
-    ///     Identifies the <see cref="Label" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty LabelProperty =
-        DependencyProperty.Register(
-            nameof(Label),
-            typeof(string),
-            typeof(VectorBox),
-            new PropertyMetadata(string.Empty, static (d, _) => ((VectorBox)d).UpdateLabelPosition()));
+    /// <summary>Identifies the <see cref="IndeterminateDisplayText" /> dependency property.</summary>
+    public static readonly DependencyProperty IndeterminateDisplayTextProperty = DependencyProperty.Register(
+        nameof(IndeterminateDisplayText),
+        typeof(string),
+        typeof(VectorBox),
+        new PropertyMetadata(DefaultIndeterminateDisplayText, static (d, _) => ((VectorBox)d).ForEachEditor(static (owner, box) => box.IndeterminateDisplayText = owner.IndeterminateDisplayText)));
 
-    /// <summary>
-    ///     Identifies the <see cref="LabelPosition" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty LabelPositionProperty =
-        DependencyProperty.Register(
-            nameof(LabelPosition),
-            typeof(LabelPosition),
-            typeof(VectorBox),
-            new PropertyMetadata(LabelPosition.Left, OnLabelPositionPropertyChanged));
+    /// <summary>Identifies the <see cref="Label" /> dependency property.</summary>
+    public static readonly DependencyProperty LabelProperty = DependencyProperty.Register(
+        nameof(Label),
+        typeof(string),
+        typeof(VectorBox),
+        new PropertyMetadata(string.Empty, static (d, _) => ((VectorBox)d).UpdateLabelPosition()));
 
-    /// <summary>
-    ///     Identifies the <see cref="HorizontalValueAlignment" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty HorizontalValueAlignmentProperty =
-        DependencyProperty.Register(
-            nameof(HorizontalValueAlignment),
-            typeof(TextAlignment),
-            typeof(VectorBox),
-            new PropertyMetadata(TextAlignment.Center, OnHorizontalValueAlignmentChanged));
+    /// <summary>Identifies the <see cref="LabelPosition" /> dependency property.</summary>
+    public static readonly DependencyProperty LabelPositionProperty = DependencyProperty.Register(
+        nameof(LabelPosition),
+        typeof(LabelPosition),
+        typeof(VectorBox),
+        new PropertyMetadata(LabelPosition.Left, static (d, _) => ((VectorBox)d).UpdateLabelPosition()));
 
-    /// <summary>
-    ///     Identifies the <see cref="HorizontalLabelAlignment" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty HorizontalLabelAlignmentProperty =
-        DependencyProperty.Register(
-            nameof(HorizontalLabelAlignment),
-            typeof(HorizontalAlignment),
-            typeof(VectorBox),
-            new PropertyMetadata(HorizontalAlignment.Left));
+    /// <summary>Identifies the <see cref="HorizontalValueAlignment" /> dependency property.</summary>
+    public static readonly DependencyProperty HorizontalValueAlignmentProperty = DependencyProperty.Register(
+        nameof(HorizontalValueAlignment),
+        typeof(TextAlignment),
+        typeof(VectorBox),
+        new PropertyMetadata(TextAlignment.Center, static (d, _) => ((VectorBox)d).ForEachEditor(static (owner, box) => box.HorizontalValueAlignment = owner.HorizontalValueAlignment)));
 
-    /// <summary>
-    ///     Identifies the <see cref="ComponentLabelPosition" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty ComponentLabelPositionProperty =
-        DependencyProperty.Register(
-            nameof(ComponentLabelPosition),
-            typeof(LabelPosition),
-            typeof(VectorBox),
-            new PropertyMetadata(LabelPosition.None, OnComponentLabelPositionPropertyChanged));
+    /// <summary>Identifies the <see cref="HorizontalLabelAlignment" /> dependency property.</summary>
+    public static readonly DependencyProperty HorizontalLabelAlignmentProperty = DependencyProperty.Register(
+        nameof(HorizontalLabelAlignment),
+        typeof(HorizontalAlignment),
+        typeof(VectorBox),
+        new PropertyMetadata(HorizontalAlignment.Left));
 
-    /// <summary>
-    ///     Identifies the <see cref="Multiplier" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty MultiplierProperty =
-        DependencyProperty.Register(
-            nameof(Multiplier),
-            typeof(int),
-            typeof(VectorBox),
-            new PropertyMetadata(1, OnMultiplierPropertyChanged));
+    /// <summary>Identifies the <see cref="ComponentLabelPosition" /> dependency property.</summary>
+    public static readonly DependencyProperty ComponentLabelPositionProperty = DependencyProperty.Register(
+        nameof(ComponentLabelPosition),
+        typeof(LabelPosition),
+        typeof(VectorBox),
+        new PropertyMetadata(LabelPosition.None, static (d, _) => ((VectorBox)d).UpdateComponentLabelPositions()));
 
-    /// <summary>
-    ///     Identifies the <see cref="WithPadding" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty WithPaddingProperty =
-        DependencyProperty.Register(
-            nameof(WithPadding),
-            typeof(bool),
-            typeof(VectorBox),
-            new PropertyMetadata(defaultValue: false, OnWithPaddingPropertyChanged));
+    /// <summary>Identifies the <see cref="CompactComponentLabels" /> dependency property.</summary>
+    public static readonly DependencyProperty CompactComponentLabelsProperty = DependencyProperty.Register(
+        nameof(CompactComponentLabels),
+        typeof(bool),
+        typeof(VectorBox),
+        new PropertyMetadata(defaultValue: false, static (d, _) => ((VectorBox)d).UpdateComponentLabelPositions()));
+
+    /// <summary>Identifies the <see cref="Multiplier" /> dependency property.</summary>
+    public static readonly DependencyProperty MultiplierProperty = DependencyProperty.Register(
+        nameof(Multiplier),
+        typeof(double),
+        typeof(VectorBox),
+        new PropertyMetadata(1d, static (d, _) => ((VectorBox)d).ForEachEditor(static (owner, box) => box.Multiplier = owner.Multiplier)));
+
+    /// <summary>Identifies the <see cref="Minimum" /> dependency property.</summary>
+    public static readonly DependencyProperty MinimumProperty = DependencyProperty.Register(
+        nameof(Minimum),
+        typeof(double),
+        typeof(VectorBox),
+        new PropertyMetadata(double.NegativeInfinity, static (d, _) => ((VectorBox)d).UpdateComponentRanges()));
+
+    /// <summary>Identifies the <see cref="Maximum" /> dependency property.</summary>
+    public static readonly DependencyProperty MaximumProperty = DependencyProperty.Register(
+        nameof(Maximum),
+        typeof(double),
+        typeof(VectorBox),
+        new PropertyMetadata(double.PositiveInfinity, static (d, _) => ((VectorBox)d).UpdateComponentRanges()));
+
+    /// <summary>Identifies the <see cref="WithPadding" /> dependency property.</summary>
+    public static readonly DependencyProperty WithPaddingProperty = DependencyProperty.Register(
+        nameof(WithPadding),
+        typeof(bool),
+        typeof(VectorBox),
+        new PropertyMetadata(defaultValue: false, static (d, _) => ((VectorBox)d).ForEachEditor(static (owner, box) => box.WithPadding = owner.WithPadding)));
 
     /// <summary>Identifies the <see cref="ComponentStyle"/> dependency property.</summary>
     public static readonly DependencyProperty ComponentStyleProperty = DependencyProperty.Register(
@@ -231,16 +182,8 @@ public partial class VectorBox
     }
 
     /// <summary>
-    ///     Gets or sets the aggregate numeric vector value.
-    /// </summary>
-    public Vector3 VectorValue
-    {
-        get => (Vector3)this.GetValue(VectorValueProperty);
-        set => this.SetValue(VectorValueProperty, value);
-    }
-
-    /// <summary>
-    ///     Gets or sets the dimension of the vector (2 or 3).
+    ///     Gets or sets the number of components shown, from <see cref="MinimumDimension"/> to
+    ///     <see cref="MaximumDimension"/>; other values show the nearest supported number. It can change at any time.
     /// </summary>
     public int Dimension
     {
@@ -248,135 +191,143 @@ public partial class VectorBox
         set => this.SetValue(DimensionProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets the X component numeric value (proxy to the internal X editor).
-    /// </summary>
-    public float XValue
+    /// <summary>Gets or sets the X component numeric value.</summary>
+    public double XValue
     {
-        get => (float)this.GetValue(XValueProperty);
+        get => (double)this.GetValue(XValueProperty);
         set => this.SetValue(XValueProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets the Y component numeric value (proxy to the internal Y editor).
-    /// </summary>
-    public float YValue
+    /// <summary>Gets or sets the Y component numeric value.</summary>
+    public double YValue
     {
-        get => (float)this.GetValue(YValueProperty);
+        get => (double)this.GetValue(YValueProperty);
         set => this.SetValue(YValueProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets the Z component numeric value (proxy to the internal Z editor).
-    /// </summary>
-    public float ZValue
+    /// <summary>Gets or sets the Z component numeric value.</summary>
+    public double ZValue
     {
-        get => (float)this.GetValue(ZValueProperty);
+        get => (double)this.GetValue(ZValueProperty);
         set => this.SetValue(ZValueProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets a value indicating whether the X component is in an indeterminate presentation state.
-    /// </summary>
+    /// <summary>Gets or sets the W component numeric value.</summary>
+    public double WValue
+    {
+        get => (double)this.GetValue(WValueProperty);
+        set => this.SetValue(WValueProperty, value);
+    }
+
+    /// <summary>Gets or sets a value indicating whether the X component is in an indeterminate presentation state.</summary>
     public bool XIsIndeterminate
     {
         get => (bool)this.GetValue(XIsIndeterminateProperty);
         set => this.SetValue(XIsIndeterminateProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets a value indicating whether the Y component is in an indeterminate presentation state.
-    /// </summary>
+    /// <summary>Gets or sets a value indicating whether the Y component is in an indeterminate presentation state.</summary>
     public bool YIsIndeterminate
     {
         get => (bool)this.GetValue(YIsIndeterminateProperty);
         set => this.SetValue(YIsIndeterminateProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets a value indicating whether the Z component is in an indeterminate presentation state.
-    /// </summary>
+    /// <summary>Gets or sets a value indicating whether the Z component is in an indeterminate presentation state.</summary>
     public bool ZIsIndeterminate
     {
         get => (bool)this.GetValue(ZIsIndeterminateProperty);
         set => this.SetValue(ZIsIndeterminateProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets the default mask applied to all components.
-    /// </summary>
+    /// <summary>Gets or sets a value indicating whether the W component is in an indeterminate presentation state.</summary>
+    public bool WIsIndeterminate
+    {
+        get => (bool)this.GetValue(WIsIndeterminateProperty);
+        set => this.SetValue(WIsIndeterminateProperty, value);
+    }
+
+    /// <summary>Gets or sets the default mask applied to all components.</summary>
     public string ComponentMask
     {
         get => (string)this.GetValue(ComponentMaskProperty);
         set => this.SetValue(ComponentMaskProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets the text displayed when a component is indeterminate.
-    /// </summary>
+    /// <summary>Gets or sets the text displayed when a component is indeterminate.</summary>
     public string IndeterminateDisplayText
     {
         get => (string)this.GetValue(IndeterminateDisplayTextProperty);
         set => this.SetValue(IndeterminateDisplayTextProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets the control-level label text.
-    /// </summary>
+    /// <summary>Gets or sets the control-level label text.</summary>
     public string Label
     {
         get => (string)this.GetValue(LabelProperty);
         set => this.SetValue(LabelProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets the position of the control-level label.
-    /// </summary>
+    /// <summary>Gets or sets the position of the control-level label.</summary>
     public LabelPosition LabelPosition
     {
         get => (LabelPosition)this.GetValue(LabelPositionProperty);
         set => this.SetValue(LabelPositionProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets the horizontal alignment of numeric values in component editors.
-    /// </summary>
+    /// <summary>Gets or sets the horizontal alignment of numeric values in component editors.</summary>
     public TextAlignment HorizontalValueAlignment
     {
         get => (TextAlignment)this.GetValue(HorizontalValueAlignmentProperty);
         set => this.SetValue(HorizontalValueAlignmentProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets the horizontal alignment of the control-level label.
-    /// </summary>
+    /// <summary>Gets or sets the horizontal alignment of the control-level label.</summary>
     public HorizontalAlignment HorizontalLabelAlignment
     {
         get => (HorizontalAlignment)this.GetValue(HorizontalLabelAlignmentProperty);
         set => this.SetValue(HorizontalLabelAlignmentProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets the default position of per-component labels.
-    /// </summary>
+    /// <summary>Gets or sets the default position of per-component labels.</summary>
     public LabelPosition ComponentLabelPosition
     {
         get => (LabelPosition)this.GetValue(ComponentLabelPositionProperty);
         set => this.SetValue(ComponentLabelPositionProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets the multiplier for value adjustments during keyboard and label-drag operations.
-    /// </summary>
-    public int Multiplier
+    /// <summary>Gets or sets a value indicating whether left or right component labels show inside their fields.</summary>
+    /// <remarks>Each component's <see cref="NumberBox.IsCompact"/>; top and bottom labels are never compact.</remarks>
+    public bool CompactComponentLabels
     {
-        get => (int)this.GetValue(MultiplierProperty);
+        get => (bool)this.GetValue(CompactComponentLabelsProperty);
+        set => this.SetValue(CompactComponentLabelsProperty, value);
+    }
+
+    /// <summary>Gets or sets the change one label-drag step makes to a component; see <see cref="NumberBox.Multiplier"/>.</summary>
+    public double Multiplier
+    {
+        get => (double)this.GetValue(MultiplierProperty);
         set => this.SetValue(MultiplierProperty, value);
     }
 
-    /// <summary>
-    ///     Gets or sets a value indicating whether to pad numeric components with zeros.
-    /// </summary>
+    /// <summary>Gets or sets the smallest value user input gives a component, unless
+    /// <see cref="SetComponentRange"/> sets its own.</summary>
+    public double Minimum
+    {
+        get => (double)this.GetValue(MinimumProperty);
+        set => this.SetValue(MinimumProperty, value);
+    }
+
+    /// <summary>Gets or sets the largest value user input gives a component, unless
+    /// <see cref="SetComponentRange"/> sets its own.</summary>
+    public double Maximum
+    {
+        get => (double)this.GetValue(MaximumProperty);
+        set => this.SetValue(MaximumProperty, value);
+    }
+
+    /// <summary>Gets or sets a value indicating whether to pad numeric components with zeros.</summary>
     public bool WithPadding
     {
         get => (bool)this.GetValue(WithPaddingProperty);
@@ -390,164 +341,44 @@ public partial class VectorBox
         set => this.SetValue(ComponentStyleProperty, value);
     }
 
-    /// <summary>
-    ///     Gets the per-component mask overrides. Keys are "X", "Y", "Z".
-    /// </summary>
-    public IDictionary<string, string> ComponentMasks =>
-        this.componentMasks ??= [with(StringComparer.Ordinal)];
+    /// <summary>Gets the per-component mask overrides.</summary>
+    public IDictionary<Component, string> ComponentMasks => this.componentMasks;
 
-    /// <summary>
-    ///     Gets the per-component label position overrides. Keys are "X", "Y", "Z".
-    /// </summary>
-    public IDictionary<string, LabelPosition> ComponentLabelPositions =>
-        this.componentLabelPositions ??= [with(StringComparer.Ordinal)];
+    /// <summary>Gets the per-component label position overrides.</summary>
+    public IDictionary<Component, LabelPosition> ComponentLabelPositions => this.componentLabelPositions;
 
-    /// <summary>Gets optional per-component label text overrides. Keys are "X", "Y", "Z".</summary>
-    public IDictionary<string, string> ComponentLabels =>
-        this.componentLabels ??= [with(StringComparer.Ordinal)];
+    /// <summary>Gets the per-component label text overrides, such as <c>R</c>, <c>G</c>, <c>B</c> and <c>A</c>.</summary>
+    public IDictionary<Component, string> ComponentLabels => this.componentLabels;
 
-    /// <summary>Gets optional per-component label foreground overrides. Keys are "X", "Y", "Z".</summary>
-    public IDictionary<string, Brush> ComponentLabelForegrounds =>
-        this.componentLabelForegrounds ??= [with(StringComparer.Ordinal)];
+    /// <summary>Gets the per-component label foreground overrides.</summary>
+    public IDictionary<Component, Brush> ComponentLabelForegrounds => this.componentLabelForegrounds;
 
-    /// <summary>
-    ///     Gets or sets the <see cref="ILoggerFactory" /> used to create loggers for this control and children.
-    /// </summary>
+    /// <summary>Gets or sets the <see cref="ILoggerFactory" /> used to create loggers for this control and children.</summary>
     public ILoggerFactory? LoggerFactory
     {
         get => (ILoggerFactory?)this.GetValue(LoggerFactoryProperty);
         set => this.SetValue(LoggerFactoryProperty, value);
     }
 
-    private static void OnVectorValuePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnVectorValueChanged();
-        }
-    }
+    private static DependencyProperty RegisterComponentValue(string name, Component component)
+        => DependencyProperty.Register(
+            name,
+            typeof(double),
+            typeof(VectorBox),
+            new PropertyMetadata(0.0d, (d, e) => ((VectorBox)d).OnComponentValueChanged(component, (double)e.OldValue, (double)e.NewValue)));
 
-    private static void OnXValuePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnXValueChanged((float)e.OldValue, (float)e.NewValue);
-        }
-    }
-
-    private static void OnYValuePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnYValueChanged((float)e.OldValue, (float)e.NewValue);
-        }
-    }
-
-    private static void OnZValuePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnZValueChanged((float)e.OldValue, (float)e.NewValue);
-        }
-    }
-
-    private static void OnXIsIndeterminatePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnXIsIndeterminateChanged();
-        }
-    }
-
-    private static void OnYIsIndeterminatePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnYIsIndeterminateChanged();
-        }
-    }
-
-    private static void OnZIsIndeterminatePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnZIsIndeterminateChanged();
-        }
-    }
-
-    private static void OnComponentMaskPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnComponentMaskChanged();
-        }
-    }
-
-    private static void OnIndeterminateDisplayTextPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnIndeterminateDisplayTextChanged();
-        }
-    }
-
-    private static void OnLabelPositionPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnLabelPositionChanged();
-        }
-    }
-
-    private static void OnComponentLabelPositionPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnComponentLabelPositionChanged();
-        }
-    }
-
-    private static void OnMultiplierPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnMultiplierChanged();
-        }
-    }
-
-    private static void OnWithPaddingPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnWithPaddingChanged();
-        }
-    }
-
-    private static void OnDimensionPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnDimensionChanged();
-        }
-    }
-
-    private static void OnHorizontalValueAlignmentChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is VectorBox vectorBox)
-        {
-            vectorBox.OnHorizontalValueAlignmentChanged();
-        }
-    }
+    private static DependencyProperty RegisterComponentIndeterminate(string name, Component component)
+        => DependencyProperty.Register(
+            name,
+            typeof(bool),
+            typeof(VectorBox),
+            new PropertyMetadata(defaultValue: false, (d, _) => ((VectorBox)d).OnComponentIndeterminateChanged(component)));
 
     private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory)
     {
         // Initialize the logger for this VectorBox and propagate the factory to child NumberBox instances.
         this.logger = loggerFactory?.CreateLogger<VectorBox>() ?? NullLoggerFactory.Instance.CreateLogger<VectorBox>();
         this.LogLoggerFactoryChanged(loggerFactory is not null);
-
-        // Propagate to children if they exist
-        _ = this.numberBoxX?.LoggerFactory = loggerFactory;
-        _ = this.numberBoxY?.LoggerFactory = loggerFactory;
-        _ = this.numberBoxZ?.LoggerFactory = loggerFactory;
+        this.ForEachEditor(static (owner, box) => box.LoggerFactory = owner.LoggerFactory);
     }
 }

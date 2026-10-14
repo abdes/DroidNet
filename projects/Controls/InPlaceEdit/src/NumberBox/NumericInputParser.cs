@@ -14,7 +14,7 @@ public static class NumericInputParser
     /// <param name="currentValue">The current value used to check the result.</param>
     /// <param name="expression">The parsed expression when successful.</param>
     /// <returns><see langword="true"/> when the input has a finite result.</returns>
-    public static bool TryParse(string? text, float currentValue, out NumericInputExpression expression)
+    public static bool TryParse(string? text, double currentValue, out NumericInputExpression expression)
     {
         expression = default;
         if (string.IsNullOrWhiteSpace(text))
@@ -52,7 +52,7 @@ public static class NumericInputParser
 
         var parsed = new NumericInputExpression(operation, operand);
         var result = parsed.Apply(currentValue);
-        if (!float.IsFinite(operand) || !float.IsFinite(result))
+        if (!double.IsFinite(operand) || !double.IsFinite(result))
         {
             return false;
         }
@@ -65,7 +65,7 @@ public static class NumericInputParser
     {
         private int position;
 
-        public bool TryParse(out float value)
+        public bool TryParse(out double value)
         {
             value = 0;
             if (!this.TryExpression(out value))
@@ -77,7 +77,7 @@ public static class NumericInputParser
             return this.position == text.Length;
         }
 
-        private bool TryExpression(out float value)
+        private bool TryExpression(out double value)
         {
             if (!this.TryTerm(out value))
             {
@@ -101,7 +101,7 @@ public static class NumericInputParser
             }
         }
 
-        private bool TryTerm(out float value)
+        private bool TryTerm(out double value)
         {
             if (!this.TryFactor(out value))
             {
@@ -125,10 +125,10 @@ public static class NumericInputParser
             }
         }
 
-        private bool TryFactor(out float value)
+        private bool TryFactor(out double value)
         {
             this.SkipWhitespace();
-            var sign = 1f;
+            var sign = 1d;
             while (this.position < text.Length && text[this.position] is '+' or '-')
             {
                 if (text[this.position++] == '-')
@@ -166,7 +166,7 @@ public static class NumericInputParser
             return true;
         }
 
-        private bool TryNumber(out float value)
+        private bool TryNumber(out double value)
         {
             this.SkipWhitespace();
             var start = this.position;
@@ -216,7 +216,7 @@ public static class NumericInputParser
                 }
             }
 
-            return float.TryParse(text.AsSpan(start, this.position - start), NumberStyles.Float, culture, out value);
+            return double.TryParse(text.AsSpan(start, this.position - start), NumberStyles.Float, culture, out value);
         }
 
         private bool TryReadOperator(char first, char second, out char operation)

@@ -18,7 +18,7 @@ public partial class MaskParser
     private readonly string unit;
     private readonly bool isUnbounded;
     private readonly int signRequirement;
-    private readonly float? maxValue;
+    private readonly double? maxValue;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MaskParser" /> class with the specified mask.
@@ -33,7 +33,7 @@ public partial class MaskParser
             throw new ArgumentException("Invalid mask format", nameof(mask));
         }
 
-        var regex = MaskRegex();
+        var regex = MaskRegex;
         var match = regex.Match(mask);
 
         if (!match.Success)
@@ -59,17 +59,26 @@ public partial class MaskParser
         if (!this.isUnbounded)
         {
             this.maxValue = this.beforeDecimalCount > 0
-                ? (float)Math.Pow(10, this.beforeDecimalCount) - (float)(1.0 / Math.Pow(10, this.afterDecimalCount))
-                : (float)(1.0 - (1.0 / Math.Pow(10, this.afterDecimalCount)));
+                ? Math.Pow(10, this.beforeDecimalCount) - (1.0 / Math.Pow(10, this.afterDecimalCount))
+                : 1.0 - (1.0 / Math.Pow(10, this.afterDecimalCount));
         }
     }
+
+    /// <summary>
+    ///     Gets the regular expression used to parse the mask.
+    /// </summary>
+    [GeneratedRegex(
+        @"^(?<sign>[-\+])?(?:(?<beforeDecimal>~|\#+)?)\.(?<afterDecimal>\#*)(?<space>\s*)(?<unit>\S+)?$",
+        RegexOptions.ExplicitCapture | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000)]
+    private static partial Regex MaskRegex { get; }
 
     /// <summary>
     ///     Determines whether the specified value is valid according to the mask.
     /// </summary>
     /// <param name="value">The value to validate.</param>
     /// <returns><see langword="true" /> if the value is valid; otherwise, <see langword="false" />.</returns>
-    public bool IsValidValue(float value) =>
+    public bool IsValidValue(double value) =>
         (this.signRequirement == 0 || Math.Sign(value) == this.signRequirement)
         && (this.isUnbounded || Math.Abs(value) <= this.maxValue);
 
@@ -80,7 +89,7 @@ public partial class MaskParser
     /// <param name="withPadding">Whether to pad the formatted value with zeros.</param>
     /// <param name="trimTrailingZeros">Whether to omit fractional trailing zeros and retain a leading zero.</param>
     /// <returns>The formatted value as a string.</returns>
-    public string FormatValue(float value, bool withPadding = false, bool trimTrailingZeros = false)
+    public string FormatValue(double value, bool withPadding = false, bool trimTrailingZeros = false)
     {
         // Clamp value to max if not unbounded
         if (!this.isUnbounded && Math.Abs(value) > this.maxValue)
@@ -88,8 +97,7 @@ public partial class MaskParser
             value = Math.Sign(value) * this.maxValue.Value;
         }
 
-        // Round the value to afterDecimalCount digits
-        value = (float)Math.Round(value, this.afterDecimalCount);
+        value = RoundForDisplay(value, this.afterDecimalCount);
 
         // Create format string for exact digit count
         var beforeFormat = new string(withPadding ? '0' : '#', this.beforeDecimalCount);
@@ -122,13 +130,11 @@ public partial class MaskParser
         return result;
     }
 
-    /// <summary>
-    ///     Gets the regular expression used to parse the mask.
-    /// </summary>
-    /// <returns>The regular expression for parsing the mask.</returns>
-    [GeneratedRegex(
-        @"^(?<sign>[-\+])?(?:(?<beforeDecimal>~|\#+)?)\.(?<afterDecimal>\#*)(?<space>\s*)(?<unit>\S+)?$",
-        RegexOptions.ExplicitCapture | RegexOptions.Compiled | RegexOptions.CultureInvariant,
-        matchTimeoutMilliseconds: 1000)]
-    private static partial Regex MaskRegex();
+    // Rounds the decimal value people read, half away from zero: 1.2345 shows as 1.235 although the nearest double
+    // lies just below the midpoint. Decimal keeps the 15 significant digits a double holds; larger values round as
+    // doubles.
+    private static double RoundForDisplay(double value, int decimals)
+        => Math.Abs(value) < 1e15
+            ? (double)Math.Round((decimal)value, decimals, MidpointRounding.AwayFromZero)
+            : Math.Round(value, decimals, MidpointRounding.AwayFromZero);
 }
