@@ -152,6 +152,24 @@ check the exit code before using output. The installed schema is
 Use `--virtual-path /Content/Geometry/example.ogeo` to inspect one selected
 geometry without parsing other descriptors. A missing path yields an empty report.
 
+### Script metadata
+
+```powershell
+Oxygen.Cooker.Inspector.exe scripts <cooked_root> --output <scripts.json>
+```
+
+Writes schema version 1 script declarations using `ScriptAsset::Parameters()`.
+Each script reports its virtual path, asset key and the parameters it declares,
+in declaration order: name, type (`bool`, `int32`, `float`, `string`,
+`vec2`-`vec4`, `asset` or `node`), the default for value types and the asset
+kind for asset parameters. Authoring hints (range, unit, description, options,
+color) are not cooked, so they are not reported.
+
+The native loader reads only the descriptor; bytecode is not loaded. An invalid
+script returns exit code 2 before writing a report. The installed schema is
+`Schemas/oxygen.cooked-scripts.schema.json`. Use
+`--virtual-path /Content/Scripts/example.oscript` to inspect one script.
+
 ### Dependency metadata
 
 ```powershell

@@ -25,5 +25,6 @@ oxygen_cooker_test(
   SOURCES
     "AssetKeyMap_functional_test.cpp"
     "GeometryMetadata_functional_test.cpp"
+    "ScriptMetadata_functional_test.cpp"
     "SceneMetadata_functional_test.cpp"
 )

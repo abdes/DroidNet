@@ -1,0 +1,134 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://oxygen-engine.org/schemas/oxygen.cooked-scripts.schema.json",
+  "title": "Oxygen Cooked Script Declarations",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scripts"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "scripts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["virtual_path", "asset_key", "parameters"],
+        "properties": {
+          "virtual_path": { "type": "string", "pattern": "^/" },
+          "asset_key": { "$ref": "#/definitions/key" },
+          "parameters": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/parameter" }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "key": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "number": { "type": "number" },
+    "parameter": {
+      "type": "object",
+      "required": ["name", "type"],
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "type": { "const": "bool" },
+            "default": { "type": "boolean" }
+          },
+          "required": ["default"]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "type": { "const": "int32" },
+            "default": { "type": "integer" }
+          },
+          "required": ["default"]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "type": { "const": "float" },
+            "default": { "type": "number" }
+          },
+          "required": ["default"]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "type": { "const": "string" },
+            "default": { "type": "string" }
+          },
+          "required": ["default"]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "type": { "const": "vec2" },
+            "default": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/number" },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "required": ["default"]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "type": { "const": "vec3" },
+            "default": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/number" },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "required": ["default"]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "type": { "const": "vec4" },
+            "default": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/number" },
+              "minItems": 4,
+              "maxItems": 4
+            }
+          },
+          "required": ["default"]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "type": { "const": "asset" },
+            "asset_type": { "type": "integer", "minimum": 0, "maximum": 255 }
+          },
+          "required": ["asset_type"]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "type": { "const": "node" }
+          }
+        }
+      ]
+    }
+  }
+}
