@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
@@ -46,7 +47,7 @@ public sealed class ScriptCookTests
     public async Task CookCurrentScenePublishesItsScriptsAndSlots()
     {
         using var workspace = new CookWorkspace();
-        var slot = this.AddScriptedNodes(workspace, out var target)
+        var slot = AddScriptedNodes(workspace, out var target)
             .WithOverride("speed", ScriptValue.FromFloat(2.5f))
             .WithOverride("target", ScriptValue.FromNode(target.Id));
         await this.WriteSceneAsync(workspace, slot).ConfigureAwait(false);
@@ -62,7 +63,7 @@ public sealed class ScriptCookTests
         _ = again.IsUpToDate.Should().BeTrue(string.Join("; ", again.Diagnostics.Select(static issue => issue.Code + ": " + (issue.TechnicalMessage ?? issue.Message))));
 
         // Changing only a value recooks the scene; its sidecar finds the reused script in the published content.
-        var player = workspace.Scene.RootNodes.Single(static node => node.Name == "Player");
+        var player = workspace.Scene.RootNodes.Single(static node => string.Equals(node.Name, "Player", StringComparison.Ordinal));
         var scripting = player.Components.OfType<ScriptingComponent>().Single();
         scripting.Slots = [scripting.Slots[0].WithOverride("speed", ScriptValue.FromFloat(4f))];
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
@@ -79,7 +80,7 @@ public sealed class ScriptCookTests
     public async Task CookCurrentSceneFailsForAStaleValueAndPointsAtIt()
     {
         using var workspace = new CookWorkspace();
-        var slot = this.AddScriptedNodes(workspace, out _).WithOverride("jump_height", ScriptValue.FromFloat(3f));
+        var slot = AddScriptedNodes(workspace, out _).WithOverride("jump_height", ScriptValue.FromFloat(3f));
         await this.WriteSceneAsync(workspace, slot).ConfigureAwait(false);
         var service = CreateNativeService(workspace, out var compatibility);
         using var lifetime = compatibility;
@@ -92,6 +93,38 @@ public sealed class ScriptCookTests
         _ = stale.SuggestedAction!.Payload["PropertyPath"].Should().Be(ScriptSlotDiagnostics.PropertyPath(slot.Id, "jump_height"));
     }
 
+    /// <summary>A script from a mounted cooked library reports the parameters its cooked descriptor records.</summary>
+    /// <returns>The asynchronous cook and inspection.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task ALibraryScriptReportsItsCookedDeclarations()
+    {
+        using var library = new CookWorkspace();
+        using var consumer = new CookWorkspace();
+        await this.WriteSceneAsync(library, AddScriptedNodes(library, out _)).ConfigureAwait(false);
+        var producer = CreateNativeService(library, out var compatibility);
+        using (compatibility)
+        {
+            _ = (await producer.CookCurrentSceneAsync(SceneUri, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
+        }
+
+        var root = await library.ExportRootAsync("Content", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Script library", root)] };
+        consumer.Activate(context);
+        consumer.WriteText("Content/Local/own.lua", Move);
+        IScriptDeclarationProvider service = CreateNativeService(consumer, out var consumerCompatibility);
+        using var lifetime = consumerCompatibility;
+
+        var declarations = await service.ReadAsync(context, MoveScript, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var own = await service.ReadAsync(context, new Uri("asset:///Content/Local/own.oscript"), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = declarations.Should().NotBeNull();
+        _ = declarations!.Parameters.Should().Equal(
+            new CookedScriptParameter("speed", CookedScriptParameterKind.Float, 1f, 0),
+            new CookedScriptParameter("target", CookedScriptParameterKind.Node, null, 0));
+        _ = own.Should().BeNull("a script with its source in the project is analyzed from the source");
+    }
+
     private static ContentPipelineService CreateNativeService(CookWorkspace workspace, out EditorNativeCompatibilityService compatibility)
     {
         compatibility = EditorNativeCompatibilityService.ForCooking();
@@ -99,7 +132,7 @@ public sealed class ScriptCookTests
         return CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
     }
 
-    private ScriptSlot AddScriptedNodes(CookWorkspace workspace, out SceneNode target)
+    private static ScriptSlot AddScriptedNodes(CookWorkspace workspace, out SceneNode target)
     {
         workspace.WriteText("Content/Player/move.lua", Move);
         target = new SceneNode(workspace.Scene) { Name = "Target" };

@@ -42,6 +42,24 @@ internal static class CookInputResolver
     public static bool IsAuthoringUri(ProjectContext project, Uri uri)
         => project.AuthoringMounts.Any(mount => uri.AbsolutePath.StartsWith("/" + Uri.EscapeDataString(mount.Name) + "/", StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>Tests whether the project holds the source a reference cooks from.</summary>
+    /// <param name="project">The declared authoring mounts.</param>
+    /// <param name="uri">The asset identity.</param>
+    /// <returns>Whether the reference is in an authoring mount and its source file exists.</returns>
+    public static bool HasProjectSource(ProjectContext project, Uri uri)
+    {
+        if (!IsAuthoringUri(project, uri))
+        {
+            return false;
+        }
+
+        // A script cooks from a .lua or .luau beside it; without one, the reference names a cooked script only.
+        var path = Uri.UnescapeDataString(uri.AbsolutePath);
+        return IsScriptReference(path)
+            ? TryResolveScript(project, uri, ContentCookInputRole.Dependency) is not null
+            : File.Exists(Resolve(project, uri, ContentCookInputRole.Dependency).SourceAbsolutePath);
+    }
+
     /// <summary>Resolves the authored descriptor corresponding to a source or native identity.</summary>
     /// <param name="project">The owning project and mount declarations.</param>
     /// <param name="uri">The reference to resolve.</param>
@@ -121,6 +139,10 @@ internal static class CookInputResolver
         var relative = Path.GetRelativePath(project.ProjectRoot, absolute).Replace('\\', '/');
         return new(new Uri($"{AssetUris.Scheme}://{string.Join('/', output.Split('/').Select(Uri.EscapeDataString))}"), ContentCookAssetKind.Script, mount.Name, relative, absolute, output, role);
     }
+
+    private static bool IsScriptReference(string path)
+        => path.EndsWith(ScriptExtension, StringComparison.OrdinalIgnoreCase)
+            || ScriptSourceExtensions.Any(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
 
     // An input file keeps its own identity; its output path is the file itself, whose folder receives its actions
     // and mapping contexts.
