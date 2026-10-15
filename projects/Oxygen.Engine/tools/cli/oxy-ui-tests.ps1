@@ -1,6 +1,9 @@
 <#
 .SYNOPSIS
 Run the real demo widget suite in an explicitly instrumented existing build.
+.PARAMETER Demo
+The application to run. DemoShell is the dedicated runner for the DemoShell's own
+widget tests; the others are examples that bring their own tests.
 .PARAMETER SettingsFrom
 Settings file the run starts from. It is copied into the output directory and
 used in isolation, so the original is never modified.
@@ -8,7 +11,7 @@ used in isolation, so the original is never modified.
 Extra command-line arguments for the demo, such as --startup-skybox <path>.
 #>
 param(
-    [ValidateSet('LightBench', 'TexturedCube', 'RenderScene')][string]$Demo = 'LightBench',
+    [ValidateSet('DemoShell', 'LightBench', 'TexturedCube', 'RenderScene')][string]$Demo = 'LightBench',
     [string]$BuildTree = 'build-tracy-ninja',
     [ValidateSet('Debug', 'Release')][string]$Config = 'Release',
     [string]$Filter = '',
@@ -24,7 +27,8 @@ $cache = Get-Content -LiteralPath (Join-Path $selection.BuildRoot 'CMakeCache.tx
 if ($cache -notmatch '(?m)^OXYGEN_BUILD_UI_TESTS:[^=]+=(ON|TRUE|1)\r?$') {
     throw 'This tree is not configured with OXYGEN_BUILD_UI_TESTS. Install Conan with -o ui_tests=True and configure the same tree.'
 }
-$exe = Join-Path $selection.BuildRoot "bin/$Config/Oxygen.Examples.$Demo.exe"
+$application = if ($Demo -eq 'DemoShell') { 'Oxygen.Examples.DemoShell.UiRunner' } else { "Oxygen.Examples.$Demo" }
+$exe = Join-Path $selection.BuildRoot "bin/$Config/$application.exe"
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Build $exe first." }
 if (-not $Output) {
     $Output = Join-Path (Get-OxygenSourceRoot) "out/ui-tests/$(Get-Date -Format yyyyMMdd-HHmmss)-$Demo"

@@ -70,6 +70,9 @@ cmake --build out/build-tracy-ninja --config Release --target oxygen-examples-li
 ./tools/cli/oxy-ui-tests.ps1 -Demo TexturedCube -BuildTree build-tracy-ninja -Config Release
 ```
 
+The DemoShell's own widget tests have a dedicated runner, `-Demo DemoShell`,
+which needs no example (see `Examples/DemoShell/test/README.md`).
+
 Build Debug and use `-Config Debug` for assertion-enabled runs. Select a case
 with `-Filter authored_mask_toggle`; filters match test names or categories.
 Use `-Output <new-directory>` to choose the report location. Each run writes

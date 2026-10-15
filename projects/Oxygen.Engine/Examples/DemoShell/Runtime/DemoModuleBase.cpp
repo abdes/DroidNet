@@ -298,6 +298,8 @@ auto DemoModuleBase::PersistUiPlacement() -> void
 #ifdef OXYGEN_BUILD_UI_TESTS
 auto DemoModuleBase::StopUiTests() -> void { ui_tests_.reset(); }
 
+auto DemoModuleBase::RegisterUiTests(ImGuiTestEngine* /*engine*/) -> void { }
+
 auto DemoModuleBase::UiTestOutputDirectory() const -> std::filesystem::path
 {
   return ui_tests_->OutputDirectory();

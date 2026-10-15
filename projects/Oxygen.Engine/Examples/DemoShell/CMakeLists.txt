@@ -226,7 +226,6 @@ if(OXYGEN_BUILD_UI_TESTS)
     ${META_MODULE_TARGET}
     PRIVATE
       "test/UiTestSession.cpp"
-      "test/RuntimeSmoke.cpp"
       "test/UiTestSession.h"
       "test/UiTestAssets.cpp"
       "test/UiTestAssets.h"
@@ -236,6 +235,47 @@ if(OXYGEN_BUILD_UI_TESTS)
     PRIVATE
       gdi32
       user32
+  )
+
+  # The runner hosts the DemoShell on an empty scene and runs the DemoShell's
+  # own UI tests, so they need no example application.
+  add_executable(
+    ${META_MODULE_TARGET}-ui-runner
+    "test/UiRunnerMain.cpp"
+    "test/UiRunnerModule.cpp"
+    "test/UiRunnerModule.h"
+    "test/FileBrowser_ui.cpp"
+    "test/FileBrowser_ui.h"
+  )
+  set_target_properties(
+    ${META_MODULE_TARGET}-ui-runner
+    PROPERTIES
+      FOLDER
+        "Examples"
+      OUTPUT_NAME
+        "${META_MODULE_NAME}.UiRunner"
+  )
+  target_compile_features(${META_MODULE_TARGET}-ui-runner PRIVATE cxx_std_23)
+  target_include_directories(
+    ${META_MODULE_TARGET}-ui-runner
+    PRIVATE
+      ${OXYGEN_EXAMPLES_SOURCE_DIR}
+  )
+  target_link_libraries(
+    ${META_MODULE_TARGET}-ui-runner
+    PRIVATE
+      oxygen::host-main
+      ${META_MODULE_TARGET}
+      oxygen::platform
+      oxygen::input
+      oxygen::data
+      oxygen::scene
+      oxygen::core
+      oxygen::clap
+      oxygen::engine
+      oxygen::imgui
+      oxygen::graphics-direct3d12
+      oxygen::vortex
   )
 endif()
 
