@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -90,8 +89,8 @@ namespace {
 } // namespace
 
 FileBrowserService::FileBrowserService()
-  : browser_(
-      std::make_unique<ImGui::FileBrowser>(ImGuiFileBrowserFlags_CloseOnEsc))
+  : browser_(std::make_unique<ImGui::FileBrowser>(
+      ImGui::FileBrowserFlags::kCloseOnEsc))
 {
 }
 
@@ -99,17 +98,17 @@ FileBrowserService::~FileBrowserService() = default;
 
 auto FileBrowserService::Open(const FileBrowserConfig& config) -> RequestId
 {
-  ImGuiFileBrowserFlags flags
-    = ImGuiFileBrowserFlags_CloseOnEsc | ImGuiFileBrowserFlags_ConfirmOnEnter;
+  auto flags = ImGui::FileBrowserFlags::kCloseOnEsc
+    | ImGui::FileBrowserFlags::kConfirmOnEnter;
   if (config.select_directory) {
-    flags |= ImGuiFileBrowserFlags_SelectDirectory
-      | ImGuiFileBrowserFlags_HideRegularFiles;
+    flags |= ImGui::FileBrowserFlags::kSelectDirectory
+      | ImGui::FileBrowserFlags::kHideRegularFiles;
   }
   if (config.allow_create_directory) {
-    flags |= ImGuiFileBrowserFlags_CreateNewDir;
+    flags |= ImGui::FileBrowserFlags::kCreateNewDir;
   }
   if (config.allow_multi_select) {
-    flags |= ImGuiFileBrowserFlags_MultipleSelection;
+    flags |= ImGui::FileBrowserFlags::kMultipleSelection;
   }
 
   const auto base_directory = config.initial_directory.empty()
@@ -125,19 +124,19 @@ auto FileBrowserService::Open(const FileBrowserConfig& config) -> RequestId
   const std::string title
     = config.title.empty() ? "file browser" : config.title;
 
-  flags |= ImGuiFileBrowserFlags_SkipItemsCausingError;
+  flags |= ImGui::FileBrowserFlags::kSkipItemsCausingError;
   browser_ = std::make_unique<ImGui::FileBrowser>(flags, base_directory);
   browser_->SetTitle(title);
 
-  open_label_ = title + "##filebrowser_"
-    + std::to_string(reinterpret_cast<size_t>(browser_.get()));
+  open_label_ = browser_->GetWindowName();
 
   const auto settings = ResolveSettings();
   settings_key_ = settings_key_override_.empty() ? MakeSettingsKey(title)
                                                  : settings_key_override_;
   if (settings) {
     if (const auto size = settings->GetVec2i(settings_key_ + ".window_size")) {
-      browser_->SetWindowSize(size->first, size->second);
+      browser_->SetWindowSize(ImVec2 {
+        static_cast<float>(size->first), static_cast<float>(size->second) });
     }
   }
 
