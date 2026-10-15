@@ -206,6 +206,17 @@
     <PackageReference Include="System.Diagnostics.DiagnosticSource" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <!--
+    MSTest.TestAdapter adds its adapter files as None items built from an item list, which the VC
+    project system reports as an unsupported wildcard. Use the package's documented opt-out and copy
+    the adapter next to the test library explicitly, where VSTest discovers it.
+  -->
+  <ItemGroup>
+    <None Remove="@(TestAdapterContent)" />
+  </ItemGroup>
+  <Target Name="CopyMSTestAdapterContent" AfterTargets="Build" Inputs="@(TestAdapterContent)" Outputs="@(TestAdapterContent->'$(OutDir)%(Link)')">
+    <Copy SourceFiles="@(TestAdapterContent)" DestinationFiles="@(TestAdapterContent->'$(OutDir)%(Link)')" SkipUnchangedFiles="true" />
+  </Target>
   <Target Name="GenerateInteropNativeTestRunSettings" BeforeTargets="PrepareForBuild">
     <ItemGroup>
       <_InteropNativeRunSettingsLine Include='&lt;?xml version="1.0" encoding="utf-8"?&gt;' />
