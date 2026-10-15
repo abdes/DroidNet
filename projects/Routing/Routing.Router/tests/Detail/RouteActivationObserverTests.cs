@@ -148,6 +148,5 @@ public class RouteActivationObserverTests
     /// <summary>
     /// Used for mocking. Must be public.
     /// </summary>
-    /
     internal static class MockViewModel;
 }
