@@ -52,6 +52,8 @@ set(
   "Attachment/ScriptOverrideCheck.h"
   "Bindings/BindingRegistry.h"
   "Bindings/BindingTable.h"
+  "Bindings/Contracts/BindingDescription.h"
+  "Bindings/Contracts/IScriptBindingPack.h"
   "Bindings/LuaBindingCommon.h"
   "Bindings/LuauDefinitions.h"
   "Bindings/Packs/Content/ContentAsyncBindings.h"
@@ -93,6 +95,22 @@ set(
   "Resolver/EmbeddedSourceResolver.h"
   "Resolver/ExternalFileResolver.h"
   "Resolver/ScriptSourceResolver.h"
+)
+# Headers of the binding packs only used by this target's own sources; they are
+# not part of the installed header set.
+set(
+  OXYGEN_SCRIPTING_PRIVATE_HEADERS
+  "Bindings/Packs/Core/AppBindings.h"
+  "Bindings/Packs/Core/ConventionsBindings.h"
+  "Bindings/Packs/Core/CoreBindingPack.h"
+  "Bindings/Packs/Core/EventsBindings.h"
+  "Bindings/Packs/Core/IdsBindings.h"
+  "Bindings/Packs/Core/LogBindings.h"
+  "Bindings/Packs/Core/MathBindings.h"
+  "Bindings/Packs/Core/ScriptDeclarationBindings.h"
+  "Bindings/Packs/Core/TimeBindings.h"
+  "Bindings/Packs/Input/InputBindingPack.h"
+  "Bindings/Packs/Input/InputBindings.h"
 )
 set(
   OXYGEN_SCRIPTING_PRIVATE_SOURCES
@@ -155,13 +173,13 @@ set(
   "Resolver/ScriptSourceResolver.cpp"
 )
 
-add_subdirectory("Bindings")
 add_subdirectory("Analysis")
 
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
     ${OXYGEN_SCRIPTING_PRIVATE_SOURCES}
+    ${OXYGEN_SCRIPTING_PRIVATE_HEADERS}
     ${OXYGEN_SCRIPTING_HEADERS}
   PUBLIC
     FILE_SET HEADERS
@@ -173,7 +191,6 @@ target_sources(
 arrange_target_files_for_ide(
   ${META_MODULE_TARGET}
   EXCLUDE_PATTERNS
-    "bindings/"
     "^analysis/"
 )
 
@@ -198,7 +215,6 @@ target_link_libraries(
     oxygen::data
     oxygen::engine
     oxygen::scene
-    oxygen::scripting-bindings-contracts
   PRIVATE
     oxygen::content
     oxygen::input
