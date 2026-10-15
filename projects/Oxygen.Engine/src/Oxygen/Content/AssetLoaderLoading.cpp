@@ -142,7 +142,7 @@ auto AssetLoader::PeekCachedAsset(const uint64_t key) const
 }
 #endif
 
-auto AssetLoader::AcquireCached(const TypeId type, const uint64_t key)
+auto AssetLoader::AcquireCached(const TypeId type, const ContentId key)
   -> std::shared_ptr<void>
 {
   AssertOwningThread();
@@ -151,7 +151,7 @@ auto AssetLoader::AcquireCached(const TypeId type, const uint64_t key)
   }
   return WithContentType(type, [&]<typename T> -> std::shared_ptr<void> {
     auto acquired = internal::ContentAcquisition::FromCache<T>(
-      content_cache_, *releases_, key, CheckoutOwner::kExternal);
+      content_cache_, *releases_, key.get(), CheckoutOwner::kExternal);
     return std::move(acquired.owner);
   });
 }
@@ -669,73 +669,74 @@ auto AssetLoader::BindDependenciesAsync(data::InputActionAsset& /*asset*/,
 }
 
 auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
-  std::optional<data::SourceInstanceId> source, LoadRequest request)
-  -> co::Co<std::shared_ptr<data::MaterialAsset>>
+  std::optional<data::SourceInstanceId> preferred_source_id,
+  LoadRequest request) -> co::Co<std::shared_ptr<data::MaterialAsset>>
 {
   auto acquired = co_await LoadAssetPublicationAsync<data::MaterialAsset>(
-    key, source, request, CheckoutOwner::kExternal);
+    key, preferred_source_id, request, CheckoutOwner::kExternal);
   co_return std::static_pointer_cast<data::MaterialAsset>(
     std::move(acquired.owner));
 }
 
 auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
-  std::optional<data::SourceInstanceId> source, LoadRequest request)
-  -> co::Co<std::shared_ptr<data::GeometryAsset>>
+  std::optional<data::SourceInstanceId> preferred_source_id,
+  LoadRequest request) -> co::Co<std::shared_ptr<data::GeometryAsset>>
 {
   auto acquired = co_await LoadAssetPublicationAsync<data::GeometryAsset>(
-    key, source, request, CheckoutOwner::kExternal);
+    key, preferred_source_id, request, CheckoutOwner::kExternal);
   co_return std::static_pointer_cast<data::GeometryAsset>(
     std::move(acquired.owner));
 }
 
 auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
-  std::optional<data::SourceInstanceId> source, LoadRequest request)
-  -> co::Co<std::shared_ptr<data::SceneAsset>>
+  std::optional<data::SourceInstanceId> preferred_source_id,
+  LoadRequest request) -> co::Co<std::shared_ptr<data::SceneAsset>>
 {
   auto acquired = co_await LoadAssetPublicationAsync<data::SceneAsset>(
-    key, source, request, CheckoutOwner::kExternal);
+    key, preferred_source_id, request, CheckoutOwner::kExternal);
   co_return std::static_pointer_cast<data::SceneAsset>(
     std::move(acquired.owner));
 }
 
 auto AssetLoader::LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
-  std::optional<data::SourceInstanceId> source, LoadRequest request)
-  -> co::Co<std::shared_ptr<data::PhysicsSceneAsset>>
+  std::optional<data::SourceInstanceId> preferred_source_id,
+  LoadRequest request) -> co::Co<std::shared_ptr<data::PhysicsSceneAsset>>
 {
   auto acquired = co_await LoadAssetPublicationAsync<data::PhysicsSceneAsset>(
-    key, source, request, CheckoutOwner::kExternal);
+    key, preferred_source_id, request, CheckoutOwner::kExternal);
   co_return std::static_pointer_cast<data::PhysicsSceneAsset>(
     std::move(acquired.owner));
 }
 
 auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
-  std::optional<data::SourceInstanceId> source, LoadRequest request)
-  -> co::Co<std::shared_ptr<data::ScriptAsset>>
+  std::optional<data::SourceInstanceId> preferred_source_id,
+  LoadRequest request) -> co::Co<std::shared_ptr<data::ScriptAsset>>
 {
   auto acquired = co_await LoadAssetPublicationAsync<data::ScriptAsset>(
-    key, source, request, CheckoutOwner::kExternal);
+    key, preferred_source_id, request, CheckoutOwner::kExternal);
   co_return std::static_pointer_cast<data::ScriptAsset>(
     std::move(acquired.owner));
 }
 
 auto AssetLoader::LoadInputActionAssetAsyncImpl(const data::AssetKey& key,
-  std::optional<data::SourceInstanceId> source, LoadRequest request)
-  -> co::Co<std::shared_ptr<data::InputActionAsset>>
+  std::optional<data::SourceInstanceId> preferred_source_id,
+  LoadRequest request) -> co::Co<std::shared_ptr<data::InputActionAsset>>
 {
   auto acquired = co_await LoadAssetPublicationAsync<data::InputActionAsset>(
-    key, source, request, CheckoutOwner::kExternal);
+    key, preferred_source_id, request, CheckoutOwner::kExternal);
   co_return std::static_pointer_cast<data::InputActionAsset>(
     std::move(acquired.owner));
 }
 
 auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
-  const data::AssetKey& key, std::optional<data::SourceInstanceId> source,
+  const data::AssetKey& key,
+  std::optional<data::SourceInstanceId> preferred_source_id,
   LoadRequest request)
   -> co::Co<std::shared_ptr<data::InputMappingContextAsset>>
 {
   auto acquired
     = co_await LoadAssetPublicationAsync<data::InputMappingContextAsset>(
-      key, source, request, CheckoutOwner::kExternal);
+      key, preferred_source_id, request, CheckoutOwner::kExternal);
   co_return std::static_pointer_cast<data::InputMappingContextAsset>(
     std::move(acquired.owner));
 }

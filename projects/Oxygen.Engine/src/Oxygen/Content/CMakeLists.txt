@@ -51,6 +51,7 @@ set(
   "PakFile.h"
   "AssetLoader.h"
   "AssetValidation.h"
+  "ContentId.h"
   "ContentMounts.h"
   "ContentLoadScope.h"
   "EvictionEvents.h"

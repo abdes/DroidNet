@@ -30,6 +30,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Content/ContentId.h>
 #include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/LoaderFunctions.h>
@@ -399,8 +400,8 @@ public:
   auto GetAsset(const data::AssetKey& key) -> std::shared_ptr<T>
   {
     const auto identity = ResolveAssetIdentityForKey(key);
-    return identity ? std::static_pointer_cast<T>(
-                        AcquireCached(T::ClassTypeId(), identity->cache_key))
+    return identity ? std::static_pointer_cast<T>(AcquireCached(
+                        T::ClassTypeId(), ContentId { identity->cache_key }))
                     : nullptr;
   }
 
@@ -1004,7 +1005,7 @@ public:
   auto GetResource(ResourceKey key) -> std::shared_ptr<T>
   {
     return std::static_pointer_cast<T>(
-      AcquireCached(T::ClassTypeId(), key.get()));
+      AcquireCached(T::ClassTypeId(), ContentId { key.get() }));
   }
 
   //! Borrow until the next loader mutation or suspension; creates no control.
@@ -1284,7 +1285,7 @@ private:
   std::shared_ptr<internal::ContentReleaseQueue> releases_;
 
   //! Find an existing asset ID without allocating locator metadata.
-  OXGN_CNTT_API auto AcquireCached(TypeId type, uint64_t key)
+  OXGN_CNTT_API auto AcquireCached(TypeId type, ContentId key)
     -> std::shared_ptr<void>;
   OXGN_CNTT_API auto AcquireBoundAsset(TypeId type, const data::AssetKey& key,
     const data::Asset& context) -> std::shared_ptr<void>;

@@ -12,13 +12,13 @@
 
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Composition/TypeSystem.h>
+#include <Oxygen/Content/ContentId.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::content::internal {
 
-using ContentId = NamedType<uint64_t, struct ContentIdTag, DefaultInitialized,
-  Comparable, Hashable, Printable>;
+using content::ContentId;
 using BindingViewId = NamedType<uint64_t, struct BindingViewIdTag,
   DefaultInitialized, Comparable, Hashable, Printable>;
 
@@ -27,15 +27,15 @@ enum class ResourceKind : uint8_t { kBuffer, kTexture, kScript, kPhysics };
 [[nodiscard]] auto ResourceTypeId(ResourceKind kind) noexcept -> TypeId;
 
 struct AssetIdentity final {
-  data::SourceInstanceId source {};
-  data::AssetKey asset {};
-  BindingViewId view {};
+  data::SourceInstanceId source;
+  data::AssetKey asset;
+  BindingViewId view;
 
   auto operator==(const AssetIdentity&) const -> bool = default;
 };
 
 struct CookedResourceIdentity final {
-  data::SourceInstanceId source {};
+  data::SourceInstanceId source;
   ResourceKind kind {};
   uint32_t index = 0;
 
