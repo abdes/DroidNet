@@ -2,7 +2,7 @@
 
 Status: `validated`
 
-Completion evidence: [workflow audit](../validation/ED-M07B-closeout-audit.md).
+Completion evidence: all 19 journeys and the original UI findings are reconciled.
 
 ## 1. Purpose
 
@@ -13,8 +13,8 @@ completed delivery record; this milestone owns the additional work and evidence.
 
 Users should be able to import or create content, find it in one consistent
 browser, assign it through typed pickers, understand what the viewport is using,
-and update it without managing generated files or mounts. The
-[UI review](../validation/ED-M07B-ux-review.md) and
+and update it without managing generated files or mounts. The 2026-09-11
+running-editor UI review and the
 [workflow LLD](../lld/content-cooking-workflows.md) define the concrete changes.
 
 ## 2. PRD Traceability
@@ -237,8 +237,8 @@ pass for glTF/FBX, including cooked-only libraries. Combined import/reimport
 command journeys are validated under 07B.5d-f. Native
 numeric loading now covers glTF external buffers, GLB binary chunks and FBX,
 including unit/handedness changes, rotated parents, scalar properties and clean
-source copies. Camera-unit and retained-parent defects were reproduced and fixed;
-[validation evidence](../validation/ED-M07B-import-values.md) records the cases.
+source copies. Camera-unit and retained-parent defects were reproduced and fixed.
+The native numeric-import validation records the cases.
 
 Route Import/Reimport through the same snapshot/publication coordinator. Retain
 source media and settings before derived processing; expose destination and
@@ -416,7 +416,6 @@ The 100%/150%/200% packaged Release layout and control walkthroughs also pass:
 12 inspector cases cover single/multi-node, short/narrow docks, Geometry/All
 selection, dirty/history preservation and scrolling. Six Cooking cases cover
 compact recovery and fully expanded output/assets.
-[Validation evidence](../validation/ED-M07B-scaled-layouts.md).
 
 Pass: selecting Geometry shows only its editor; selecting Transform switches
 sections; clearing selection/All restores all applicable editors. Two components

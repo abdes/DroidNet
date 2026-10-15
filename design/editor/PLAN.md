@@ -368,7 +368,7 @@ Exit gate:
 ### ED-M07A - Authoring Integrity And Runtime Convergence
 
 Status: `validated` (2026-09-11). Automated control/native cases and user-confirmed
-viewport workflows pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md).
+viewport workflows pass.
 
 Purpose: close the source-identified inspector/property and authoring-integrity
 gaps in the [detailed plan](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).

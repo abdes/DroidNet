@@ -69,8 +69,7 @@ producers, readers and installed schema compatibility together; recook affected
 content. Normal readers reject retired formats. Useful pre-V0.1 migration is a
 separate one-time development operation, not a shipping legacy execution path.
 
-Existing integration/evidence is recorded in the milestone ledger and
-[ED-M07B closeout audit](../validation/ED-M07B-closeout-audit.md). That historical
+Existing integration/evidence is recorded in the milestone ledger. That historical
 scope does not establish the newly required material-slot or rendering behavior.
 
 ## 5. Target Design
@@ -1317,10 +1316,9 @@ parity preparation, capture/process orchestration and comparison. Production
 ContentPipeline does not embed qualification schemas, request/result DTOs, command
 registration or capture-reservation state; normal Debug/Release stay clean.
 
-Earlier evidence remains in [ED-M07B closeout](../validation/ED-M07B-closeout-audit.md),
-[typed assets](../validation/ED-M07B-typed-assets.md),
-[import values](../validation/ED-M07B-import-values.md) and
-[workspace publication](../validation/ED-M07B-workspace-publication.md).
+Earlier evidence covers ED-M07B content discovery/use, publication/recovery,
+imported and cooked-only typed assets, numeric import values and workspace
+publication.
 The canonical changes above require their own implementation and evidence in
 ED-M08; this LLD is a contract, not a completion report.
 

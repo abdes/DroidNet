@@ -367,9 +367,8 @@ Production modules have no dependency on development parity schemas or drivers.
 ## 15. Qualification And Historical Evidence
 
 Current requirements are above. Historical validation stays at its recorded
-scope in [ED-M07A field workflows](../validation/ED-M07A-field-workflows.md),
-[ED-M07B closeout](../validation/ED-M07B-closeout-audit.md) and
-[material sidedness/recovery](../validation/material-sidedness-and-recovery.md).
+scope in ED-M07A field/workflow results, ED-M07B content workflows and material
+sidedness/recovery.
 Those reports do not establish emission, all-slot identity or new-format parity.
 Implementation/evidence completion is recorded in the milestone status ledger.
 

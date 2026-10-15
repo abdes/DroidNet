@@ -367,9 +367,9 @@ builds pass; changed managed files have no analyzer or IDE diagnostics.
 
 ### 07A.6 - Complete The Missing Workflow Evidence
 
-The [field/workflow table](../validation/ED-M07A-field-workflows.md) records
-completed cases. All 40 atmosphere/post-process and 38 component fields pass
-source/native comparison, Undo/Redo, Save/reopen and clear inline feedback.
+The field/workflow validation records completed cases. All 40
+atmosphere/post-process and 38 component fields pass source/native comparison,
+Undo/Redo, Save/reopen and clear inline feedback.
 Geometry/material, sun consistency, component transitions, default loading and
 runtime-setting rejection cases also pass. Packaged inspector tests pass 137/137
 and Runtime tests 71/71. On 2026-09-11, the user confirmed composed XYZ rotations,

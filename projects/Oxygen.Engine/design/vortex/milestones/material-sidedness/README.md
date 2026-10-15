@@ -108,9 +108,7 @@ general glTF compliance or complete those workflows.
 - Editor recovery is implemented and validated: 33 native request tests passed,
   the real editor recovered red material overrides after missing geometry was
   reimported in the same scene session, sidedness/mirror editing and Undo/Redo
-  passed, and Save/reopen retained rendering. Detailed evidence is in
-  `design/editor/validation/material-sidedness-and-recovery.md` at repository
-  root.
+  passed, and Save/reopen retained rendering.
 
 ### Separate existing limitations observed during validation
 

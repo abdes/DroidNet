@@ -12,9 +12,8 @@ the reusable content browser identity workflow.
 ED-M07B extends the delivered baseline through
 [content-cooking-workflows.md](content-cooking-workflows.md): correct navigation
 and query lifetime, shared freshness/readiness, plain-language states, working
-filters/details, and authored/built-in/cooked picking. Its
-[running-editor review](../validation/ED-M07B-ux-review.md) identifies concrete
-gaps without changing ED-M06's historical validation scope.
+filters/details, and authored/built-in/cooked picking. The running-editor review
+identified concrete gaps without changing ED-M06's historical validation scope.
 
 The catalog captures records and cooking status from one retained publication.
 The Cooked tree shows logical mount/folder paths; physical generation directories

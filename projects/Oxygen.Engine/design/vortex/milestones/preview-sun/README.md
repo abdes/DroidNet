@@ -220,5 +220,5 @@ equivalently, matching the source.
 Native run `final-library-mount` mounted that generation with hash verification:
 all 3,537 descriptor hashes checked, none missing/skipped, then CubeScene loaded
 and rendered. User settings restored again. That historical evidence alone does not establish the full 16+4 scene visual
-matrix. The later [native scene record](../../../../../../design/editor/validation/ED-M08-native-scene-validation.md)
-owns that coverage and its remaining renderer limits.
+matrix. The later native scene validation owns that coverage and its remaining
+renderer limits.

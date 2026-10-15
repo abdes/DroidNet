@@ -286,9 +286,7 @@ and [section 8.4](standalone-runtime-validation.md#84-saved-revision-embedded-ca
 
 ## 16. Historical Evidence
 
-Earlier request-generation and replay validation remains at its recorded scope
-in [issue 5](../plan/issue-005-asset-request-generations.md),
-[ED-M07A field workflows](../validation/ED-M07A-field-workflows.md),
-[workspace publication](../validation/ED-M07B-workspace-publication.md) and
-[material recovery](../validation/material-sidedness-and-recovery.md).
+Earlier request-generation and replay validation remains at its recorded scope in
+[issue 5](../plan/issue-005-asset-request-generations.md), ED-M07A field/workflow
+results, ED-M07B workspace publication and material sidedness/recovery.
 The milestone ledger owns completion status for the canonical changes above.

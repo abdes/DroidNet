@@ -59,12 +59,12 @@ in PRD sections 8-10.
 Current execution:
 
 1. ED-M02 is validated; its single-viewport resize and launch/discovery evidence
-   is recorded in the ledger. ED-M07B is validated. Its [workflow audit](validation/ED-M07B-closeout-audit.md)
-   records content discovery/use, publication/recovery and native import evidence.
-   The [material-sidedness/recovery correction](validation/material-sidedness-and-recovery.md)
-   is validated: 148 engine and 33 editor request tests pass, native demo and
-   editor rendering are verified, and material recovery survives cooking in the
-   same scene session plus Undo/Redo and Save/reopen.
+   is recorded in the ledger. ED-M07B is validated: all 19 content journeys and the
+   original UI findings are reconciled, covering content discovery/use,
+   publication/recovery and native import. The material-sidedness/
+   recovery correction is validated: 148 engine and 33 editor request tests pass,
+   native demo and editor rendering are verified, and material recovery survives
+   cooking in the same scene session plus Undo/Redo and Save/reopen.
 2. The Vortex milestone [VX-GPU-01](../../projects/Oxygen.Engine/design/vortex/milestones/VX-GPU-01/README.md)
    (CPU→GPU data contract integrity) is validated; M08.10 is closed and
    ED-M08 continues with M08.11, then M08.12.
@@ -545,7 +545,7 @@ Trace: `REQ-013` through `REQ-024`, `REQ-026`, `REQ-036` through `REQ-042`;
 
 Plan: [ED-M07B](plan/ED-M07B-safe-content-publication-and-compatibility.md).
 
-The [2026-09-11 UI/source review](validation/ED-M07B-ux-review.md) is recorded;
+The 2026-09-11 UI/source review is recorded;
 the [workflow contract](lld/content-cooking-workflows.md) adds before/after
 browsing, picking, incremental execution and recovery. The user directed
 implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
@@ -599,7 +599,8 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         and material pickers, native assignments, Undo/Redo and Save/reopen.
         Both glTF and FBX cases then cook the consuming scene with their indexed
         dependencies. Exact native keys match catalog metadata; ready selections
-        submit no extra cook. [Typed-use evidence](validation/ED-M07B-typed-assets.md).
+        submit no extra cook. Imported and cooked-only typed use passes through
+        both import routes.
   - [x] Project-only uncooked dependencies resolve through batched native keys and
         a derived candidate-path cache. First scene cook includes the material
         without mounting its producer library. Background preparation creates no
@@ -647,7 +648,8 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         scopes. Material creation, pre-cook discovery, typed-picker readiness,
         current catalog status and unchanged scene history pass 5/5 packaged
         native integration cases. Automatic publication preserves the unsaved
-        scene. [Workspace publication evidence](validation/ED-M07B-workspace-publication.md).
+        scene. Workspace publication passes all five triggers plus its lifetime
+        and recovery cases.
   - [x] Queued workspace publication respects Undo, cleared material assignments,
         removed geometry and replacement scene lifetimes. Cancellation and source
         conflict retain the prior native material until recovery. Unchanged
@@ -660,7 +662,8 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         material loads, and retry applies the newer saved material. The complete
         publication/lifetime group passes 17/17. Import publication is covered
         by the native typed-use cases; combined dialog/retry journeys remain in
-        07B.5d-f. [Project-closure evidence](validation/ED-M07B-project-closure.md).
+        07B.5d-f. Project closure during cooking passes with published bytes,
+        lease release and reopening verified.
   - [x] The UI Automation exception flood was isolated to the computer-use helper;
         the user confirmed it disappears with the helper stopped.
   - [x] Close the reported native scene-switch shadow-barrier failure. The native
@@ -671,7 +674,6 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         60 and 10 FPS. The latter explicitly enables D3D12 debug/validation and
         conventional shadows, checks retired view IDs and zero/one surface
         ownership at every activation, and reports no engine-loop failure.
-        [Document transition evidence](validation/ED-M07B-document-transitions.md).
 - [x] 07B.3 required PostProcess/Background native descriptor/load mappings.
       Scene v4 carries all 23 post-process fields and display-background RGB through
       saved JSON, descriptors, native cooking/loading and hydration. Debug/Release
@@ -728,7 +730,7 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         values across unit/handedness variations and clean source copies. The
         camera-unit and retained-parent defects are fixed. Related native suites
         pass 23/23 in both configurations; 16 final profiles validate both source
-        copies. [Numeric import evidence](validation/ED-M07B-import-values.md).
+        copies.
   - [x] Source/output catalog and typed-use integration pass for native glTF and
         FBX output, including independent cooked-only libraries. Remaining
         combined import/reimport command journeys are tracked under 07B.5d-f.
@@ -805,12 +807,11 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         Physical folder navigation now resolves through declared mounts and
         reveals collapsed ancestors; authoring, cooked and library aliases pass.
         The final related UI run passes 36/36 and Content Browser passes 134/134.
-        [Navigation evidence](validation/ED-M07B-browser-navigation.md).
   - [x] Measure rendered list/tile response with 1,000 authored inputs and a live
         100-node viewport. Release cold loading is 1.98/1.73 s; search p95 is
         18.42/19.09 ms. The native cook, loaded geometry, current statuses and
-        mount acknowledgment pass. [Fixture, profile and evidence](validation/ED-M07B-browser-workload.md)
-        record the scope of this CPU/UI measurement.
+        mount acknowledgment pass; the recorded fixture and profile scope this
+        CPU/UI measurement.
   - [x] Cooked-only typed-use, picker dismissal, assignment, Undo/Redo and
         Save/reopen pass through actual inspector controls and native bindings.
         Together with the 15 publication/lifetime cases, the combined native
@@ -881,27 +882,24 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         status/actions pass at 100%, 150% and 200% XAML scale in both themes.
         Actual Tab input traverses import fields; UI edits validate in place.
         The narrow material header preserves title/status and all four actions.
-        Packaged Release passes 33/33 with reviewed captures and clean diagnostics;
-        [scale evidence](validation/ED-M07B-scaled-layouts.md).
+        Packaged Release passes 33/33 with reviewed captures and clean diagnostics.
   - [x] Rendered cook feedback meets 100 ms for all four scopes and unchanged
         repeats on the saved 100-node/1,000-input fixture: final samples are
         13-35 ms. Synchronous cook verification runs off the caller thread;
         coalesced UI snapshots preserve full output/assets and avoid repeated
         collection scans. Pipeline 444/444 and Cooking/UI 27/27 pass; the isolated
-        timing run passes 4/4. [Feedback evidence](validation/ED-M07B-cook-feedback.md).
+        timing run passes 4/4.
   - [x] Real Aura import dialogs drive glTF/FBX through native cooking and live
         publication. Cancel starts no work; reviewed replacement preserves source
         and output on Cancel, then updates the existing material on acceptance.
         A controlled importer failure after retention leaves scoped messages in
         Cooking; its Retry button succeeds after the original file is removed.
         The combined native import/typed-use/lifetime run passes 25/25.
-        [Import journey evidence](validation/ED-M07B-import-dialog-journeys.md).
   - [x] Save listed & Cook routes exactly the named material through its real
         document save service. A conflicting external edit preserves source and
         prior output and leaves the cook blocked. Explicit reload and a second
         save action resume the same operation, clear feedback and update native
         bindings; unrelated material edits and the consuming scene remain dirty.
-        [Save-conflict evidence](validation/ED-M07B-save-conflict-recovery.md).
   - [x] Redirected ImportTool output uses complete plain lines without cursor
         controls, spinner padding or terminal-width truncation. Debug/Release
         native CLI checks preserve 217-character lines without escapes; the
@@ -911,20 +909,18 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         position and selected messages across switching and hide/reopen. Buffered
         console events stay scoped to their source; reopened controls resume
         updates without duplicate handlers. The related UI/native group passes
-        32/32. [Reading-state evidence](validation/ED-M07B-cooking-reading.md).
+        32/32.
 - [x] 07B.5f complete before/during/after workflow and user validation journeys.
-  - [x] The [final audit](validation/ED-M07B-closeout-audit.md) maps all 19 journeys,
-        Main repair, additional Cooking gates and the original 12 UI findings to
-        scoped implementation and validation evidence.
+  - [x] All 19 journeys, Main repair, additional Cooking gates and the original 12
+        UI findings map to scoped implementation and validation evidence.
   - [x] The combined Main repair starts from a published value of 0, displays
         saved -1 without clamping, preserves prior output on failure, focuses
         the actual field, rejects -2 and accepts 100. Retry blocks until the
         named scene is saved; publication becomes current and native/source
         values remain 100 after reopening. The old failure retains -1.
-        [Main repair evidence](validation/ED-M07B-main-repair.md).
   - [x] Cooking item automation peers expose readable operation/asset identities
         and changing statuses instead of CLR type names. The related control
-        group passes 22/22. [Automation evidence](validation/ED-M07B-cooking-accessibility.md).
+        group passes 22/22.
 - [x] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.
   - [x] Compact fixed-type selection, the All icon/tooltip, original property rows,
@@ -934,8 +930,7 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         100%, 150% and 200% XAML scale: compact single/multi-node headers,
         Geometry/All selection, unchanged dirty/history state, clipped-text
         tooltips and scrolling. Cooking also retains accessible recovery and
-        expanded Output/Assets. All 18 cases pass;
-        [captures and test scope](validation/ED-M07B-scaled-layouts.md).
+        expanded Output/Assets. All 18 cases pass.
 - [x] 07B.6 owned native worker/descendant termination and I/O drain (#8).
       Cancellation retains ownership until workers and descendants drain, including
       termination failures. Process, stream and manifest cases pass.
@@ -946,10 +941,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       verify geometry attributes, bounds and default material semantics; packaged
       tests verify preview and Save/reopen for every built-in. The implemented fix is linked by its `Fixes #11` commit.
 
-Current validation is summarized in the milestone ledger below and the
-[workflow audit](validation/ED-M07B-closeout-audit.md). Debug editor and both native
-SDK configurations are current. GitHub #8 and #11 retain their closing commit
-references; remote issue closure awaits integration.
+Current validation is summarized in the milestone ledger below. Debug editor and
+both native SDK configurations are current. GitHub #8 and #11 retain their closing
+commit references; remote issue closure awaits integration.
 
 ### ED-M08 - Runtime Parity And Authoring Workspace
 
@@ -970,19 +964,15 @@ readers. Primary/Secondary names remain unchanged.
 
 - [x] Final implementation plan and coherent domain contracts are available.
 - [x] M08.1 native canonical data, producers and primitives.
-      Capsule and canonical Physics capsule/cylinder axes have native tests and
-      protected fixture migration/recooking evidence in the
-      [axial increment record](validation/ED-M08-M08.1-capsule.md).
+      Capsule and canonical Physics capsule/cylinder axes pass native tests;
+      protected fixtures were migrated and recooked.
       Canonical primitive/catalog/Lua cutover, managed catalog consumers and
-      native example rendering are recorded in the
-      [primitive increment record](validation/ED-M08-M08.1-primitives.md).
+      native example rendering pass.
       Scene v5 flag modes, producers, native hydration/Inspector metadata and
-      protected source migration are recorded in the
-      [flag increment record](validation/ED-M08-M08.1-flags.md).
-      [Native scene validation](validation/ED-M08-native-scene-validation.md)
-      records 20/20 RenderScene loads, scoped image review and the SDK/Interop
-      refresh; [loading corrections](validation/ED-M08-runtime-loading.md)
-      record script-cache, instance-lifetime and load-drain regression evidence.
+      protected source migration pass.
+      Native scene validation covers 20/20 RenderScene loads with scoped image
+      review and the SDK/Interop refresh; loading corrections cover script-cache,
+      instance-lifetime and load-drain regressions.
       Sponza's zero-intensity source lights are repaired and recooked. The
       [RenderScene preview/profile workflow](../../projects/Oxygen.Engine/design/vortex/milestones/preview-sun/README.md)
       is accepted after 97 focused tests, native checks and user visual validation.
@@ -1324,8 +1314,8 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M06`    | `validated`   | 2026-04-28 | User manually validated asset identity and Content Browser behavior after ED-M06A: folder navigation refreshes rows, material picker shows one project material entry per material instead of arbitrary files, descriptor/cooked state badges remain user-facing identity facts, new material saves refresh browser/picker state without restart, and authored data remains under the accepted `Content` layout.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `ED-M06A`   | `validated`   | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `ED-M07`    | `validated`   | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `ED-M07A`   | `validated`   | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `ED-M07B`   | `validated`   | 2026-09-15 | [Workflow audit](validation/ED-M07B-closeout-audit.md): all 19 journeys and original UI findings reconciled. ContentPipeline 449/449; final Cooking/reading/Main/import/recovery group 32/32; imported/native inspector group 34/34; browser UI 36/36 and Content Browser 134/134; scaled groups 33/33 and 18/18; isolated feedback 4/4. Native import profiles and copied sources pass in Debug/Release. Document transitions pass 30 cycles each at 60/10 FPS. Current Debug editor builds; both SDKs installed. Relevant executable changes/tests are analyzer/IDE clean. User-confirmed preview, built-in, browser and shutdown behavior is retained above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `ED-M07A`   | `validated`   | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `ED-M07B`   | `validated`   | 2026-09-15 | All 19 journeys and original UI findings reconciled. ContentPipeline 449/449; final Cooking/reading/Main/import/recovery group 32/32; imported/native inspector group 34/34; browser UI 36/36 and Content Browser 134/134; scaled groups 33/33 and 18/18; isolated feedback 4/4. Native import profiles and copied sources pass in Debug/Release. Document transitions pass 30 cycles each at 60/10 FPS. Current Debug editor builds; both SDKs installed. Relevant executable changes/tests are analyzer/IDE clean. User-confirmed preview, built-in, browser and shutdown behavior is retained above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `ED-M08`    | `in_progress` | 2026-10-09 | M08.1, M08.F1, M08.2 and M08.3–M08.10 validated; M08.10 (fog, sky, ground grid, eye adaptation, physical camera, scripting and Play from the editor) closed 2026-10-15; M08.11–M08.12 remain open. Native rendering and editor/standalone qualification retain their later owners.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `ED-M08.F1` | `validated`   | 2026-10-06 | Format cutover, reference tables/scoped bindings and generic packaging delivered. Prior evidence: Release install and 28 native test programs pass; 16 maintained scenes and four models recooked; SDK/Interop consumers compiled; descriptors 40/40, typed-reference discovery/cook 2/2, texture integration 2/2, ContentBrowser 151/151, WorldEditor Unit 405/405, World 77/77, extra-asset interaction 1/1 and InspectorBindingTests 37/37. User confirms editor reference/mount workflows; mount/router regressions pass 7/7. Final package proof: the saved Main/Lantern generation plus Examples produces a PAK with 158 assets/65 resources and zero warnings/errors; Main loads from that PAK alone in installed Release RenderScene with hash checking/debug layer, and the user confirms seeing the scene. Five existing procedural/scalar-material/texture/identity origin/cache cases pass. No new tests or engine build. Five foreground and two Environment caption hit-testing failures, unrun follow-up managed cases and unmeasured load cost remain recorded; final managed/UI qualification and load-cost measurement are non-blocking by user decision. [Final evidence and reproduction](plan/ED-M08.F1-descriptor-local-references.md#closure-verification). |
 | `ED-M09`    | `planned`     | -          | Input authoring; design approved (M09.1); M09.2 next.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |

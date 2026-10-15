@@ -47,8 +47,8 @@ SUCCESS-001/003/004/006.
 M07A/07B now provide complete scene v4 environment/background cooking, all eleven
 built-in choices, typed source/cooked identities, per-product provenance, safe
 publication, ordered library mounts, native Inspector caches and ordinary
-build-compatibility checks. Their [closeout audit](../validation/ED-M07B-closeout-audit.md)
-does not claim standalone rendered parity.
+build-compatibility checks. Their validation does not claim standalone rendered
+parity.
 
 RenderScene loads native assets through DemoShell's scene loader. Its normal
 startup reads persisted demo/render settings, discovers/restores content and
