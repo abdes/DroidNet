@@ -771,7 +771,19 @@ public partial class DynamicTree : Control
 
     private void OnUnloaded(object? sender, RoutedEventArgs args)
     {
+        // A control moved within the tree may be loaded again before this late Unloaded arrives.
+        if (this.IsLoaded)
+        {
+            return;
+        }
+
         this.itemsRepeater?.RemoveHandler(KeyDownEvent, new KeyEventHandler(this.ItemsRepeater_OnKeyDown));
+
+        // The repeater listens to the displayed collection for as long as it is its source. The view
+        // model outlives this control, so a discarded view would keep receiving, and failing on, every
+        // change; one failing listener stops the collection from notifying the live view. Loaded binds
+        // the source again.
+        this.DisplayedItems = null;
 
         // Remove subscriptions to the ViewModel
         this.ViewModel?.PropertyChanged -= this.ViewModel_OnPropertyChanged;
