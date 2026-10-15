@@ -163,6 +163,10 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
     }
   }
 
+  // Each parse starts from an empty value map; values (including defaults)
+  // from a previous parse must not leak into this one.
+  ovm_.Clear();
+
   const parser::Tokenizer tokenizer { args };
   const auto resolved_width
     = ResolveOutputWidth(output_width_, auto_output_width_);

@@ -68,6 +68,9 @@ public:
       option_name, std::vector<OptionValue> { std::move(new_value) });
   }
 
+  //! Remove every stored value, returning the map to its initial state.
+  auto Clear() -> void { ovm_.clear(); }
+
   //! Get all values for a given option name.
   /*!
     Returns a const reference to the vector of all values stored for the
