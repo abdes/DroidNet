@@ -353,7 +353,7 @@ SceneLoaderService::SceneLoaderService(content::IAssetLoader& loader,
   const observer_ptr<engine::InputSystem> input_system,
   observer_ptr<scripting::IScriptCompilationService> compilation_service,
   PathFinder path_finder)
-  : loader_(loader)
+  : loader_(observer_ptr { &loader })
   , extent_(viewport)
   , source_pak_path_(std::move(source_pak_path))
   , path_finder_(std::move(path_finder))
@@ -405,8 +405,8 @@ void SceneLoaderService::StartLoad(const data::AssetKey& key)
   failed_ = false;
   consumed_ = false;
   // Start loading the scene asset
-  const auto scope = loader_.BeginLoadScope();
-  loader_.StartLoadScene(key, content::LoadRequest { .scope = scope },
+  const auto scope = loader_->BeginLoadScope();
+  loader_->StartLoadScene(key, content::LoadRequest { .scope = scope },
     [weak_self = weak_from_this(), scope](
       std::shared_ptr<data::SceneAsset> asset) -> void {
       if (auto self = weak_self.lock()) {
@@ -461,7 +461,7 @@ void SceneLoaderService::OnSceneLoaded(
 
     const auto scene_asset = std::move(asset);
     const auto sidecar_key_opt
-      = loader_.FindPhysicsSidecarAssetKeyForScene(*scene_asset, scope);
+      = loader_->FindPhysicsSidecarAssetKeyForScene(*scene_asset, scope);
 
     if (!sidecar_key_opt.has_value()) {
       LOG_F(INFO,
@@ -476,7 +476,7 @@ void SceneLoaderService::OnSceneLoaded(
     }
 
     const auto sidecar_key = *sidecar_key_opt;
-    loader_.StartLoadPhysicsSceneAsset(sidecar_key,
+    loader_->StartLoadPhysicsSceneAsset(sidecar_key,
       content::LoadRequest { .scope = std::move(scope) },
       [weak_self = weak_from_this(), scene_asset, sidecar_key](
         std::shared_ptr<data::PhysicsSceneAsset> physics_asset) -> void {
@@ -627,7 +627,7 @@ auto SceneLoaderService::ResolveCollisionShapeAsset(
       + std::to_string(node_index)
       + " shape_asset_key=" + data::to_string(shape_asset_key) + ")");
   }
-  const auto shape_desc_opt = loader_.ReadCollisionShapeAssetDescForAsset(
+  const auto shape_desc_opt = loader_->ReadCollisionShapeAssetDescForAsset(
     *current_physics_context_, shape_asset_key);
   if (!shape_desc_opt.has_value()) {
     throw std::runtime_error(std::string(binding_kind)
@@ -655,7 +655,7 @@ auto SceneLoaderService::ResolvePhysicsMaterialAsset(
       + std::to_string(node_index)
       + " material_asset_key=" + data::to_string(material_asset_key) + ")");
   }
-  const auto material_desc_opt = loader_.ReadPhysicsMaterialAssetDescForAsset(
+  const auto material_desc_opt = loader_->ReadPhysicsMaterialAssetDescForAsset(
     *current_physics_context_, material_asset_key);
   if (!material_desc_opt.has_value()) {
     throw std::runtime_error(std::string(binding_kind)
@@ -906,7 +906,7 @@ auto SceneLoaderService::ResolveCookedShapePayload(
       + std::to_string(static_cast<uint32_t>(cooked_ref.payload_type)) + ")");
   }
 
-  const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
+  const auto resource_key_opt = loader_->MakePhysicsResourceKeyForAsset(
     *current_physics_context_, cooked_ref.payload_asset_key);
   if (!resource_key_opt.has_value()) {
     throw std::runtime_error(
@@ -994,7 +994,7 @@ void SceneLoaderService::HydrateJointBindings(
     }
     auto constraint_blob = std::span<const uint8_t> {};
     if (!record.constraint_asset_key.IsNil()) {
-      const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
+      const auto resource_key_opt = loader_->MakePhysicsResourceKeyForAsset(
         *current_physics_context_, record.constraint_asset_key);
       if (!resource_key_opt.has_value()) {
         throw std::runtime_error(
@@ -1452,7 +1452,7 @@ void SceneLoaderService::HydrateSoftBodyBindings(
     validate_non_negative_finite(record.vertex_radius, "vertex_radius");
 
     const auto settings_resource_key_opt
-      = loader_.MakePhysicsResourceKeyForAsset(
+      = loader_->MakePhysicsResourceKeyForAsset(
         *current_physics_context_, selected_settings_asset_key);
     if (!settings_resource_key_opt.has_value()) {
       throw std::runtime_error(
@@ -1636,7 +1636,7 @@ void SceneLoaderService::HydrateVehicleBindings(
         + "node_index=" + std::to_string(record.node_index));
     }
 
-    const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
+    const auto resource_key_opt = loader_->MakePhysicsResourceKeyForAsset(
       *current_physics_context_, record.constraint_asset_key);
     if (!resource_key_opt.has_value()) {
       throw std::runtime_error(
@@ -2175,7 +2175,7 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
 
   LogSceneSummary(*asset);
   const auto scripts = scripting::SceneScriptAttachment(
-    loader_, *source_resolver_, compilation_service_);
+    *loader_, *source_resolver_, compilation_service_);
   auto instance = co_await instantiation::Instantiate(
     instantiation::SceneInstantiationRequest {
       .asset = std::move(asset),
@@ -2183,7 +2183,7 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
       .scripts = observer_ptr { &scripts },
       .input = input_system_,
     },
-    loader_);
+    *loader_);
   // Instantiation has already logged each issue.
   runtime_nodes_ = std::move(instance.nodes);
   if (const auto active = scene.ActiveCamera(); active.has_value()) {
@@ -2264,7 +2264,7 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
   PhysicsPayloads owners;
   owners.reserve(payload_asset_keys.size());
   for (const auto& payload_asset_key : payload_asset_keys) {
-    const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
+    const auto resource_key_opt = loader_->MakePhysicsResourceKeyForAsset(
       physics_asset, payload_asset_key);
     if (!resource_key_opt.has_value()) {
       throw std::runtime_error(
@@ -2272,7 +2272,8 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
           "OXY-SHAPE-007: failed to resolve physics resource key for ")
         + data::to_string(payload_asset_key));
     }
-    auto payload = co_await loader_.LoadPhysicsResourceAsync(*resource_key_opt);
+    auto payload
+      = co_await loader_->LoadPhysicsResourceAsync(*resource_key_opt);
     if (!payload) {
       throw std::runtime_error(
         std::string(

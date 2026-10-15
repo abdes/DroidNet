@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -16,10 +17,14 @@
 #include "DemoShell/UI/CameraRigController.h"
 #include "DemoShell/UI/OrbitCameraController.h"
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::examples::testing {
@@ -212,8 +217,11 @@ NOLINT_TEST(OrbitCameraController, ParentedCameraUsesWorldPivotForZoomAndOrbit)
 {
   for (const auto mode :
     { ui::OrbitMode::kTurntable, ui::OrbitMode::kTrackball }) {
-    for (const auto parent_scale : { glm::vec3(2.0F),
-           glm::vec3(2.0F, 3.0F, 0.75F), glm::vec3(-2.0F, 3.0F, 0.75F) }) {
+    for (const auto parent_scale : {
+           glm::vec3(2.0F),
+           glm::vec3(2.0F, 3.0F, 0.75F),
+           glm::vec3(-2.0F, 3.0F, 0.75F),
+         }) {
       for (const auto camera_scale :
         { glm::vec3(1.0F), glm::vec3(-1.0F, 1.5F, 0.5F) }) {
         SCOPED_TRACE(static_cast<int>(mode));
@@ -309,8 +317,7 @@ NOLINT_TEST(OrbitCameraController, SettingsRestoreUsesPersistedWorldPivot)
   ASSERT_NE(settings, nullptr);
   // Change only this process's in-memory settings. Reload clears the dirty
   // state even on an assertion failure; no settings file is written/deleted.
-  const ScopeGuard restore_settings(
-    [&]() noexcept -> void { settings->Load(); });
+  const ScopeGuard restore_settings([&] noexcept -> void { settings->Load(); });
   const auto prefix = CameraSettingsService::CameraKey(
     "RestoreWorldOrbit", "OrbitWorldRestoreTest");
   settings->SetString(std::string(prefix) + ".mode", "orbit");

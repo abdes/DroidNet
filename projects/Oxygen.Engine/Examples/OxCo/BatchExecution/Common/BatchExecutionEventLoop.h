@@ -36,7 +36,7 @@ public:
   }
 
   void Stop() { should_stop_ = true; }
-  bool IsRunning() const noexcept { return running_; }
+  auto IsRunning() const noexcept -> bool { return running_; }
   void Schedule(std::function<void()> task) { tasks_.push(std::move(task)); }
 
 private:
@@ -50,13 +50,13 @@ private:
 //===----------------------------------------------------------------------===//
 
 template <> struct oxygen::co::EventLoopTraits<BatchExecutionEventLoop> {
-  static EventLoopID EventLoopId(BatchExecutionEventLoop& loop)
+  static auto EventLoopId(BatchExecutionEventLoop& loop) -> EventLoopID
   {
     return EventLoopID(&loop);
   }
   static void Run(BatchExecutionEventLoop& loop) { loop.Run(); }
   static void Stop(BatchExecutionEventLoop& loop) { loop.Stop(); }
-  static bool IsRunning(const BatchExecutionEventLoop& loop) noexcept
+  static auto IsRunning(const BatchExecutionEventLoop& loop) noexcept -> bool
   {
     return loop.IsRunning();
   }

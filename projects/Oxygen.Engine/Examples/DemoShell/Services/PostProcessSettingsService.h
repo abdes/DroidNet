@@ -278,7 +278,7 @@ namespace ui {
       = "post_process.auto_exposure.use_scene_mask";
 
     SceneActivationPolicy activation_policy_ {
-      SceneActivationPolicy::kRestorePreferences
+      SceneActivationPolicy::kRestorePreferences,
     };
     mutable State state_;
     mutable bool state_initialized_ { false };

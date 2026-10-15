@@ -45,8 +45,12 @@ NormalMapValidationTexture::NormalMapValidationTexture(
   // Positive tangent Y is essential: losing the bitangent sign under an X
   // reflection turns the expected upward normal into a downward one.
   auto image = ci::ScratchImage::CreateFromData(1U, 1U, Format::kRGBA8UNorm, 4U,
-    { std::byte { 128 }, std::byte { 204 }, std::byte { 230 },
-      std::byte { 255 } });
+    {
+      std::byte { 128 },
+      std::byte { 204 },
+      std::byte { 230 },
+      std::byte { 255 },
+    });
   auto desc = ci::TextureImportDesc {};
   desc.source_id = "VortexBasic/NormalMapValidation";
   desc.width = 1U;
@@ -78,12 +82,14 @@ NormalMapValidationTexture::NormalMapValidationTexture(
   auto packed = std::make_shared<std::vector<std::uint8_t>>(
     sizeof(TextureDesc) + payload.payload.size());
   std::memcpy(packed->data(), &packed_desc, sizeof(TextureDesc));
-  std::memcpy(packed->data() + sizeof(TextureDesc), payload.payload.data(),
-    payload.payload.size());
+  std::memcpy(std::to_address(packed->begin() + sizeof(TextureDesc)),
+    payload.payload.data(), payload.payload.size());
   key_ = loader_->MintSyntheticTextureKey();
   loader_->StartLoadTexture(
     content::CookedResourceData<data::TextureResource> {
-      .key = key_, .bytes = std::span<const std::uint8_t>(*packed) },
+      .key = key_,
+      .bytes = std::span<const std::uint8_t>(*packed),
+    },
     [state = load_state_, packed](
       std::shared_ptr<data::TextureResource> texture) {
       // The loader's input span remains valid until this callback completes.

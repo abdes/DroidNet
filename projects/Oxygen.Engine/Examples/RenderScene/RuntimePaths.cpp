@@ -3,6 +3,7 @@
 
 #include <Windows.h> // IWYU pragma: keep
 
+#include <filesystem>
 #include <source_location>
 #include <stdexcept>
 #include <string>
@@ -30,14 +31,22 @@ auto ResolveRuntimePaths() -> RuntimePaths
     = std::filesystem::path(executable).parent_path().parent_path();
   if (std::filesystem::is_regular_file(
         install_root / "share/oxygen/oxygen-source.json")) {
-    return { true, install_root, install_root / "share/oxygen/RenderScene",
-      install_root / "share/oxygen/Content" };
+    return {
+      .installed = true,
+      .root = install_root,
+      .showcase = install_root / "share/oxygen/RenderScene",
+      .content = install_root / "share/oxygen/Content",
+    };
   }
   const auto demo_root
     = std::filesystem::path(std::source_location::current().file_name())
         .parent_path();
-  return { false, demo_root.parent_path().parent_path(), demo_root,
-    demo_root.parent_path() / "Content" };
+  return {
+    .installed = false,
+    .root = demo_root.parent_path().parent_path(),
+    .showcase = demo_root,
+    .content = demo_root.parent_path() / "Content",
+  };
 }
 
 } // namespace oxygen::examples::render_scene

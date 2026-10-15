@@ -178,8 +178,13 @@ private:
   auto BuildSphereGeometry(
     std::string_view name, std::shared_ptr<const data::MaterialAsset> material)
     -> std::shared_ptr<const data::GeometryAsset>;
+  //! Roughness and metalness of a solid color material.
+  struct SurfaceFinish {
+    float roughness;
+    float metalness;
+  };
   auto MakeSolidColorMaterial(std::string_view name, const Vec4& rgba,
-    float roughness, float metalness, bool double_sided)
+    const SurfaceFinish& finish, bool double_sided)
     -> std::shared_ptr<const data::MaterialAsset>;
 
   std::string name_;
@@ -205,12 +210,12 @@ private:
   scene::SceneNode glossy_sphere_node_ {};
   scene::SceneNode ground_plane_node_ {};
 
-  std::shared_ptr<const data::GeometryAsset> gray_card_geo_ {};
-  std::shared_ptr<const data::GeometryAsset> white_card_geo_ {};
-  std::shared_ptr<const data::GeometryAsset> black_card_geo_ {};
-  std::shared_ptr<const data::GeometryAsset> matte_sphere_geo_ {};
-  std::shared_ptr<const data::GeometryAsset> glossy_sphere_geo_ {};
-  std::shared_ptr<const data::GeometryAsset> ground_plane_geo_ {};
+  std::shared_ptr<const data::GeometryAsset> gray_card_geo_;
+  std::shared_ptr<const data::GeometryAsset> white_card_geo_;
+  std::shared_ptr<const data::GeometryAsset> black_card_geo_;
+  std::shared_ptr<const data::GeometryAsset> matte_sphere_geo_;
+  std::shared_ptr<const data::GeometryAsset> glossy_sphere_geo_;
+  std::shared_ptr<const data::GeometryAsset> ground_plane_geo_;
 };
 
 } // namespace oxygen::examples::light_bench

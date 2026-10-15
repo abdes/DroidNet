@@ -41,7 +41,7 @@ public:
   //! Panel entry stored in the registry.
   struct PanelEntry {
     std::string name;
-    std::shared_ptr<DemoPanel> panel {};
+    std::shared_ptr<DemoPanel> panel;
   };
 
   //! Register a panel instance.
@@ -66,8 +66,8 @@ public:
   [[nodiscard]] auto GetPanels() const noexcept -> std::span<const PanelEntry>;
 
 private:
-  std::vector<PanelEntry> panels_ {};
-  std::optional<std::size_t> active_index_ {};
+  std::vector<PanelEntry> panels_;
+  std::optional<std::size_t> active_index_;
 };
 
 } // namespace oxygen::examples

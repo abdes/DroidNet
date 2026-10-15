@@ -7,6 +7,8 @@
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/UI/ContentVm.h"
 
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
@@ -46,16 +48,41 @@
 namespace oxygen::examples::render_scene {
 
 namespace {
-  auto SelectPanel(ImGuiTestContext* ctx, DemoShell& shell,
-    const std::string_view name, const std::string_view icon) -> void
+  //! A demo panel: its name and its sidebar icon.
+  struct PanelRef {
+    std::string_view name;
+    std::string_view icon;
+  };
+
+  constexpr PanelRef kEnvironmentPanel {
+    .name = "Environment",
+    .icon = imgui::icons::kIconEnvironment,
+  };
+  constexpr PanelRef kDiagnosticsPanel {
+    .name = "Diagnostics",
+    .icon = imgui::icons::kIconRendering,
+  };
+  constexpr PanelRef kPostProcessPanel {
+    .name = "Post Process",
+    .icon = imgui::icons::kIconHdrTonemap,
+  };
+  constexpr PanelRef kContentLoaderPanel {
+    .name = "Content Loader",
+    .icon = imgui::icons::kIconContentLoader,
+  };
+
+  auto SelectPanel(
+    ImGuiTestContext* ctx, DemoShell& shell, const PanelRef& panel) -> void
   {
     const auto active = shell.GetActivePanelName();
-    if (!active || *active != name) {
+    if (!active || *active != panel.name) {
+      const std::string icon_label { panel.icon };
       ctx->SetRef("//DemoPanelSideBar");
-      ctx->ItemClick(icon.data());
+      ctx->ItemClick(icon_label.c_str());
     }
     ctx->Yield(3);
-    ctx->SetRef(std::string(name).c_str());
+    const std::string panel_name { panel.name };
+    ctx->SetRef(panel_name.c_str());
   }
 
   auto SelectOutdoorProfile(ImGuiTestContext* ctx) -> void
@@ -67,8 +94,7 @@ namespace {
     ImGuiWindow* profile = nullptr;
     for (auto* window : ctx->UiContext->Windows) {
       if (window->RootWindow == parent->RootWindow
-        && std::string_view(window->Name).find("##EnvironmentProfile_")
-          != std::string_view::npos) {
+        && std::string_view(window->Name).contains("##EnvironmentProfile_")) {
         profile = window;
       }
     }
@@ -87,8 +113,7 @@ namespace {
   {
     for (auto* window : ctx->UiContext->Windows) {
       if (window->RootWindow == root->RootWindow
-        && std::string_view(window->Name).find(name)
-          != std::string_view::npos) {
+        && std::string_view(window->Name).contains(name)) {
         return window;
       }
     }
@@ -168,7 +193,7 @@ namespace {
 
 // NOLINTBEGIN(readability-magic-numbers) - concrete widget values and wait
 // bounds.
-auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
+auto MainModule::RegisterEmptySceneUiTest(ImGuiTestEngine* engine) -> void
 {
   if (testing::UiTestSession::UsesIsolatedSettings()
     && SettingsService::ForDemoApp()
@@ -193,6 +218,10 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       ctx->Yield(30);
     };
   }
+}
+
+auto MainModule::RegisterRetainedLibraryUiTest(ImGuiTestEngine* engine) -> void
+{
   if (!ContentSettingsService {}.GetMountedImportRecords().empty()) {
     auto* test = IM_REGISTER_TEST(engine, "renderscene", "retained_library");
     test->UserData = this;
@@ -234,7 +263,10 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       ctx->Yield(30);
     };
   }
+}
 
+auto MainModule::RegisterIblControlsUiTest(ImGuiTestEngine* engine) -> void
+{
   auto* test = IM_REGISTER_TEST(engine, "renderscene", "ibl_controls");
   test->UserData = this;
   test->TestFunc = [](ImGuiTestContext* ctx) -> void {
@@ -246,8 +278,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     }
     IM_CHECK(app.current_scene_key_.has_value());
     IM_CHECK(!app.active_scene_load_key_.has_value());
-    SelectPanel(
-      ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
+    SelectPanel(ctx, app.GetShell(), kEnvironmentPanel);
     ctx->Yield(3);
     SelectOutdoorProfile(ctx);
     ctx->ItemClose("**/Sun");
@@ -290,8 +321,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     ctx->Yield(3);
     IM_CHECK(sky->GetLowerHemisphereIsSolidColor());
     IM_CHECK_EQ(sky->GetLowerHemisphereBlendAlpha(), 0.35F);
-    SelectPanel(
-      ctx, app.GetShell(), "Diagnostics", imgui::icons::kIconRendering);
+    SelectPanel(ctx, app.GetShell(), kDiagnosticsPanel);
     ctx->Yield(3);
     ctx->SetRef("Diagnostics");
     ctx->ItemOpen("**/Sky Lighting");
@@ -321,8 +351,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     }
     IM_CHECK(
       renderer->GetDiagnosticsService().GetLatestGpuWorkSummary() != nullptr);
-    SelectPanel(
-      ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
+    SelectPanel(ctx, app.GetShell(), kEnvironmentPanel);
     ctx->Yield(3);
     ctx->SetRef("Environment");
     IM_CHECK(ctx->ItemExists("**/Specular Indirect"));
@@ -334,8 +363,11 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     ctx->Yield(3);
     IM_CHECK(renderer->InspectSkyLight(*scene).usable);
   };
+}
 
-  test = IM_REGISTER_TEST(engine, "renderscene", "ibl_source_and_fog");
+auto MainModule::RegisterIblSourceAndFogUiTest(ImGuiTestEngine* engine) -> void
+{
+  auto* test = IM_REGISTER_TEST(engine, "renderscene", "ibl_source_and_fog");
   test->UserData = this;
   test->TestFunc = [](ImGuiTestContext* ctx) -> void {
     auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
@@ -346,8 +378,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     }
     IM_CHECK(app.current_scene_key_.has_value());
     IM_CHECK(!app.active_scene_load_key_.has_value());
-    SelectPanel(
-      ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
+    SelectPanel(ctx, app.GetShell(), kEnvironmentPanel);
     ctx->Yield(3);
     SelectOutdoorProfile(ctx);
     ctx->ItemOpen("**/Sky Light (IBL)");
@@ -420,10 +451,13 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     IM_CHECK_EQ(sky->GetSpecularIntensity(), 1.0F);
     ctx->ItemOpen("**/Sky Light (IBL)");
   };
+}
 
+auto MainModule::RegisterStartupSkyboxUiTest(ImGuiTestEngine* engine) -> void
+{
   // Runs only when RenderScene starts with --startup-skybox <HDR image>.
   if (!startup_.skybox_path.empty()) {
-    test = IM_REGISTER_TEST(engine, "renderscene", "ibl_startup_skybox");
+    auto* test = IM_REGISTER_TEST(engine, "renderscene", "ibl_startup_skybox");
     test->UserData = this;
     test->TestFunc = [](ImGuiTestContext* ctx) -> void {
       auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
@@ -439,7 +473,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       const auto env = scene->GetEnvironment();
       IM_CHECK(env != nullptr);
       // The startup skybox cooks and equips the Sky Sphere asynchronously.
-      const auto sphere_cubemap = [&]() -> content::ResourceKey {
+      const auto sphere_cubemap = [&] -> content::ResourceKey {
         const auto sphere = env->TryGetSystem<scene::environment::SkySphere>();
         return sphere ? sphere->GetCubemapResource() : content::ResourceKey {};
       };
@@ -453,8 +487,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
 
       // Switching the source after the load equips the loaded cubemap; an
       // HDR skybox cooked to a float format then lights the scene.
-      SelectPanel(
-        ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
+      SelectPanel(ctx, app.GetShell(), kEnvironmentPanel);
       ctx->ItemOpen("**/Sky Light (IBL)");
       ctx->ItemCheck("**/Enabled##SkyLight");
       ctx->ItemClick("Source##SkyLight");
@@ -478,12 +511,12 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       ctx->Yield(3);
     };
   }
+}
 
-  if (!testing::UiTestSession::UsesIsolatedSettings()) {
-    return;
-  }
-
-  test = IM_REGISTER_TEST(engine, "renderscene", "ibl_editor_reference");
+auto MainModule::RegisterIblEditorReferenceUiTest(ImGuiTestEngine* engine)
+  -> void
+{
+  auto* test = IM_REGISTER_TEST(engine, "renderscene", "ibl_editor_reference");
   test->UserData = this;
   test->TestFunc = [](ImGuiTestContext* ctx) -> void {
     auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
@@ -531,9 +564,12 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     record.flush();
     IM_CHECK(record.good());
   };
+}
 
+auto MainModule::RegisterIblAppearanceUiTests(ImGuiTestEngine* engine) -> void
+{
   for (const auto* name : { "ibl_appearance_off", "ibl_appearance_on" }) {
-    test = IM_REGISTER_TEST(engine, "renderscene", name);
+    auto* test = IM_REGISTER_TEST(engine, "renderscene", name);
     test->UserData = this;
     struct AppearanceState {
       std::string post_process_scope;
@@ -560,8 +596,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       const auto scene = app.GetShell().TryGetScene();
       const auto renderer = app.ResolveRenderer();
       IM_CHECK(scene && renderer);
-      SelectPanel(
-        ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
+      SelectPanel(ctx, app.GetShell(), kEnvironmentPanel);
       SelectOutdoorProfile(ctx);
       ctx->ItemClose("**/Sun");
       ctx->ItemClose("**/Sky Atmosphere");
@@ -576,8 +611,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       if (!enabled) {
         ctx->ItemUncheck("**/Enabled##SkyLight");
       }
-      SelectPanel(
-        ctx, app.GetShell(), "Post Process", imgui::icons::kIconHdrTonemap);
+      SelectPanel(ctx, app.GetShell(), kPostProcessPanel);
       ctx->ItemCheck("**/Enable exposure");
       // BeginCombo lacks a discovery hook; use the panel's actual scene scope.
       const auto& scope = ctx->GetVars<AppearanceState>().post_process_scope;
@@ -608,8 +642,9 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
         }
       }
       // Close the panel through the sidebar so both images have the same area.
+      const std::string tonemap_icon { kPostProcessPanel.icon };
       ctx->SetRef("//DemoPanelSideBar");
-      ctx->ItemClick(imgui::icons::kIconHdrTonemap.data());
+      ctx->ItemClick(tonemap_icon.c_str());
       ctx->Yield(120);
       const auto graphics = app.Host().gfx_weak.lock();
       IM_CHECK(graphics);
@@ -637,8 +672,13 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       IM_CHECK(record.good());
     };
   }
+}
 
-  test = IM_REGISTER_TEST(engine, "renderscene", "ibl_persist_and_replace");
+auto MainModule::RegisterIblPersistAndReplaceUiTest(ImGuiTestEngine* engine)
+  -> void
+{
+  auto* test
+    = IM_REGISTER_TEST(engine, "renderscene", "ibl_persist_and_replace");
   test->UserData = this;
   test->TestFunc = [](ImGuiTestContext* ctx) -> void {
     auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
@@ -650,8 +690,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
     const auto renderer = app.ResolveRenderer();
     IM_CHECK(renderer);
-    SelectPanel(
-      ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
+    SelectPanel(ctx, app.GetShell(), kEnvironmentPanel);
     ctx->Yield(3);
     SelectOutdoorProfile(ctx);
     ctx->ItemClose("**/Sun");
@@ -693,14 +732,13 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
           return std::filesystem::path(entry.name).stem() == "Lantern";
         });
     IM_CHECK(original != scenes.end() && other != scenes.end());
-    const auto original_entry = *original;
-    const auto other_entry = *other;
+    const auto& original_entry = *original;
+    const auto& other_entry = *other;
     IM_CHECK(original_entry.key != other_entry.key);
     for (const auto& target : { other_entry, original_entry }) {
       const auto previous_lifetime
         = app.GetShell().TryGetScene()->GetLifetimeId();
-      SelectPanel(ctx, app.GetShell(), "Content Loader",
-        imgui::icons::kIconContentLoader);
+      SelectPanel(ctx, app.GetShell(), kContentLoaderPanel);
       ClickScene(ctx, target);
       if (ctx->IsError()) {
         return;
@@ -740,12 +778,14 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     }.dump(2);
     expected.flush();
     IM_CHECK(expected.good());
-    SelectPanel(
-      ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
+    SelectPanel(ctx, app.GetShell(), kEnvironmentPanel);
     ctx->Yield(5);
   };
+}
 
-  test = IM_REGISTER_TEST(engine, "renderscene", "ibl_reopen");
+auto MainModule::RegisterIblReopenUiTest(ImGuiTestEngine* engine) -> void
+{
+  auto* test = IM_REGISTER_TEST(engine, "renderscene", "ibl_reopen");
   test->UserData = this;
   test->TestFunc = [](ImGuiTestContext* ctx) -> void {
     auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
@@ -779,8 +819,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     const auto brightness = expected.at("average_brightness").get<float>();
     IM_CHECK(std::abs(state.average_brightness - brightness)
       <= std::max(0.00001F, brightness * 0.00001F));
-    SelectPanel(
-      ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
+    SelectPanel(ctx, app.GetShell(), kEnvironmentPanel);
     ctx->Yield(3);
     ctx->SetRef("Environment");
     ctx->ItemOpen("**/Sky Light (IBL)");
@@ -788,5 +827,24 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     IM_CHECK(ctx->ItemExists("**/Specular Indirect"));
   };
 }
+
+auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
+{
+  RegisterEmptySceneUiTest(engine);
+  RegisterRetainedLibraryUiTest(engine);
+  RegisterIblControlsUiTest(engine);
+  RegisterIblSourceAndFogUiTest(engine);
+  RegisterStartupSkyboxUiTest(engine);
+
+  if (!testing::UiTestSession::UsesIsolatedSettings()) {
+    return;
+  }
+
+  RegisterIblEditorReferenceUiTest(engine);
+  RegisterIblAppearanceUiTests(engine);
+  RegisterIblPersistAndReplaceUiTest(engine);
+  RegisterIblReopenUiTest(engine);
+}
+
 // NOLINTEND(readability-magic-numbers)
 } // namespace oxygen::examples::render_scene

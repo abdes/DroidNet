@@ -56,8 +56,14 @@ struct LightBenchSettings {
   Vec3 camera_position { 0.0F, 6.0F, 1.0F };
   Quat camera_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
   scene::CameraExposure camera_exposure;
-  std::array<float, 6> camera_extents { -4.0F, 4.0F, -2.25F, 2.25F, 0.1F,
-    100.0F };
+  std::array<float, 6> camera_extents {
+    -4.0F,
+    4.0F,
+    -2.25F,
+    2.25F,
+    0.1F,
+    100.0F,
+  };
   bool camera_fit_to_view { true };
   scene::ExposureSettings exposure;
   engine::ToneMapper tone_mapper { engine::ToneMapper::kNone };

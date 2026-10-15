@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <utility>
@@ -78,7 +79,7 @@ namespace {
     desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
     constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
     const std::size_t n = (std::min)(maxn, std::strlen(name));
-    std::memcpy(desc.header.name, name, n);
+    std::memcpy(std::begin(desc.header.name), name, n);
     desc.header.name[n] = '\0';
     desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
     desc.header.streaming_priority = 255;
@@ -150,8 +151,8 @@ auto SceneBootstrapper::GetScene() const -> observer_ptr<scene::Scene>
   return scene_;
 }
 
-auto SceneBootstrapper::EnsureProofAtmosphere(const float sun_lux,
-  const float scattering_strength, const bool backlit) -> void
+auto SceneBootstrapper::EnsureProofAtmosphere(const SunLux sun_lux,
+  const ScatteringStrength scattering_strength, const bool backlit) -> void
 {
   CHECK_NOTNULL_F(scene_.get());
   if (!scene_->GetEnvironment()) {
@@ -166,11 +167,11 @@ auto SceneBootstrapper::EnsureProofAtmosphere(const float sun_lux,
   }
   atmosphere->SetEnabled(true);
   atmosphere->SetAerialPerspectiveStartDepthMeters(0.0F);
-  atmosphere->SetAerialScatteringStrength(scattering_strength);
+  atmosphere->SetAerialScatteringStrength(scattering_strength.get());
   if (!proof_sun_node_.IsAlive()) {
     proof_sun_node_ = scene_->CreateNode("AtmosphereProofSun");
     auto sun = std::make_unique<scene::DirectionalLight>();
-    sun->SetIntensityLux(sun_lux);
+    sun->SetIntensityLux(sun_lux.get());
     sun->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
     sun->Common().casts_shadows = false;
     CHECK_F(proof_sun_node_.AttachLight(std::move(sun)));
@@ -186,7 +187,8 @@ auto SceneBootstrapper::ApplyLitAtmosphereProof() -> void
 {
   // The cards isolate emission by backlighting. The lit-material fixture must
   // light the visible faces of the original meshes instead.
-  EnsureProofAtmosphere(110000.0F, 1.0F, false);
+  EnsureProofAtmosphere(
+    SunLux { 110000.0F }, ScatteringStrength { 1.0F }, false);
 }
 
 auto SceneBootstrapper::ApplyDirectionalArrayProof() -> void
@@ -198,7 +200,8 @@ auto SceneBootstrapper::ApplyDirectionalArrayProof() -> void
   constexpr auto kFillRays = glm::vec3 { -0.7F, 0.3F, -1.0F };
   constexpr auto kSecondaryTint = glm::vec3 { 0.3F, 0.6F, 1.0F };
   constexpr auto kSecondaryRays = glm::vec3 { 0.8F, -0.4F, -1.0F };
-  EnsureProofAtmosphere(kPrimaryLux, 1.0F, false);
+  EnsureProofAtmosphere(
+    SunLux { kPrimaryLux }, ScatteringStrength { 1.0F }, false);
   CHECK_F(proof_sun_node_.EditLight<scene::DirectionalLight>(
     [kPrimaryLux](auto& primary) -> auto {
       primary.SetIntensityLux(kPrimaryLux);
@@ -311,12 +314,20 @@ auto SceneBootstrapper::ApplyConsumerVisualProof(const VisualFogMode fog_mode)
 
 auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
 {
-  const std::uint32_t phase = frame < 44U ? 0U
-    : frame < 48U                         ? 1U
-    : frame < 52U                         ? 2U
-    : frame < 56U                         ? 3U
-                                          : 4U;
-  EnsureProofAtmosphere(1000.0F, phase >= 3U ? 8.0F : 0.01F);
+  const std::uint32_t phase = [frame] -> std::uint32_t {
+    if (frame < 44U) {
+      return 0U;
+    }
+    if (frame < 48U) {
+      return 1U;
+    }
+    if (frame < 52U) {
+      return 2U;
+    }
+    return frame < 56U ? 3U : 4U;
+  }();
+  EnsureProofAtmosphere(
+    SunLux { 1000.0F }, ScatteringStrength { phase >= 3U ? 8.0F : 0.01F });
   if (phase == atmosphere_proof_phase_) {
     return;
   }

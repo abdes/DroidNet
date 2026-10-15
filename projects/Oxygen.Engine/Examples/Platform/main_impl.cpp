@@ -49,9 +49,15 @@ using WindowProps = oxygen::platform::window::Properties;
 using WindowEvent = oxygen::platform::window::Event;
 
 namespace {
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables) - static
-// loop traits
-bool is_running { false };
+//! Run flag shared by the event loop traits and the async main.
+class RunState {
+public:
+  static auto IsRunning() noexcept -> bool { return running_; }
+  static void SetRunning(const bool running) noexcept { running_ = running; }
+
+private:
+  static inline bool running_ { false };
+};
 
 //! Simple help text renderer using Windows GDI APIs
 class HelpRenderer {
@@ -220,7 +226,7 @@ private:
 
 void EventLoopRun(Platform& platform)
 {
-  while (is_running) {
+  while (RunState::IsRunning()) {
     platform.Async().PollOne();
     platform.Events().PollOne();
   }
@@ -229,10 +235,10 @@ void EventLoopRun(Platform& platform)
 
 template <> struct oxygen::co::EventLoopTraits<Platform> {
   static void Run(Platform& platform) { EventLoopRun(platform); }
-  static void Stop(Platform& /*platform*/) { is_running = false; }
+  static void Stop(Platform& /*platform*/) { RunState::SetRunning(false); }
   static auto IsRunning(const Platform& /*platform*/) -> bool
   {
-    return is_running;
+    return RunState::IsRunning();
   }
   static auto EventLoopId(const Platform& platform) -> EventLoopID
   {
@@ -247,7 +253,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
 {
   OXCO_WITH_NURSERY(n)
   {
-    is_running = true;
+    RunState::SetRunning(true);
 
     // Activate the live objects with our nursery, making it available for the
     // lifetime of the nursery.

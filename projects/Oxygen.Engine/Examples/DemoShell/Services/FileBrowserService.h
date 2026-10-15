@@ -33,7 +33,7 @@ struct FileBrowserFilter {
 struct FileBrowserConfig {
   std::string title;
   std::filesystem::path initial_directory;
-  std::vector<FileBrowserFilter> filters {};
+  std::vector<FileBrowserFilter> filters;
   bool select_directory { false };
   bool allow_create_directory { true };
   bool allow_multi_select { false };
@@ -112,8 +112,10 @@ public:
 private:
   auto BuildTypeFilters(const FileBrowserConfig& config)
     -> std::vector<std::string>;
-  auto ResolveSettings() const noexcept -> observer_ptr<SettingsService>;
-  auto MakeSettingsKey(std::string_view title) const -> std::string;
+  [[nodiscard]] auto ResolveSettings() const noexcept
+    -> observer_ptr<SettingsService>;
+  [[nodiscard]] auto MakeSettingsKey(std::string_view title) const
+    -> std::string;
 
   std::unique_ptr<ImGui::FileBrowser> browser_;
   std::optional<Result> result_;
@@ -121,10 +123,10 @@ private:
   int last_update_frame_ { -1 };
   RequestId next_request_id_ { 0 };
   RequestId active_request_id_ { 0 };
-  std::string open_label_ {};
-  std::string settings_key_override_ {};
-  std::string settings_key_ {};
-  std::optional<ContentRootConfig> content_root_config_ {};
+  std::string open_label_;
+  std::string settings_key_override_;
+  std::string settings_key_;
+  std::optional<ContentRootConfig> content_root_config_;
 };
 
 //! Creates a file browser configuration for PAK files.

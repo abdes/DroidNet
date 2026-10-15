@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -20,13 +21,14 @@
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::examples {
 
 namespace {
 
   template <typename Callback>
-  auto VisitNodes(scene::Scene& scene, Callback&& callback) -> void
+  auto VisitNodes(scene::Scene& scene, Callback callback) -> void
   {
     auto stack = scene.GetRootNodes();
     while (!stack.empty()) {

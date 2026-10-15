@@ -6,10 +6,11 @@
 
 #include <iostream>
 
-#include <SDL3/SDL.h>
+#include <SDL3/SDL_keyboard.h>
+#include <SDL3/SDL_keycode.h>
 
-int main()
-{
+auto main() -> int
+try {
   std::cout << "SDLK_BACKSPACE:" << SDL_GetKeyName(SDLK_BACKSPACE) << '\n';
   std::cout << "SDLK_DELETE:" << SDL_GetKeyName(SDLK_DELETE) << '\n';
   std::cout << "SDLK_TAB:" << SDL_GetKeyName(SDLK_TAB) << '\n';
@@ -140,4 +141,7 @@ int main()
   std::cout << "SDLK_PRINTSCREEN:" << SDL_GetKeyName(SDLK_PRINTSCREEN) << '\n';
   std::cout << "SDLK_SYSREQ:" << SDL_GetKeyName(SDLK_SYSREQ) << '\n';
   std::cout << "SDLK_MENU:" << SDL_GetKeyName(SDLK_MENU) << '\n';
+  return 0;
+} catch (...) {
+  return 1;
 }

@@ -96,7 +96,7 @@ public:
   struct ImportStatus {
     bool in_flight { false };
     float overall_progress { 0.0F };
-    std::string message {};
+    std::string message;
   };
 
   //! One entry from textures.table for display and selection.
@@ -108,7 +108,7 @@ public:
     std::uint32_t array_layers { 0U };
     std::uint64_t size_bytes { 0U };
     std::uint64_t content_hash { 0U };
-    std::string name {};
+    std::string name;
     oxygen::Format format { oxygen::Format::kUnknown };
     oxygen::TextureType texture_type { oxygen::TextureType::kTexture2D };
   };
@@ -117,7 +117,7 @@ public:
   struct LoadResult {
     bool success { false };
     oxygen::content::ResourceKey resource_key { 0U };
-    std::string status_message {};
+    std::string status_message;
     int width { 0 };
     int height { 0 };
     oxygen::TextureType texture_type { oxygen::TextureType::kTexture2D };
@@ -180,9 +180,9 @@ private:
   bool metadata_loaded_ { false };
 
   oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader_;
-  oxygen::content::import::AsyncImportService import_service_ {};
+  oxygen::content::import::AsyncImportService import_service_;
 
-  mutable std::mutex import_mutex_ {};
+  mutable std::mutex import_mutex_;
   ImportStatus import_status_ {};
   bool import_completed_ { false };
   oxygen::content::import::ImportReport import_report_ {};
@@ -190,8 +190,8 @@ private:
   std::filesystem::path cooked_root_ {};
   std::filesystem::path textures_table_path_ {};
   std::filesystem::path textures_data_path_ {};
-  std::vector<oxygen::data::pak::core::TextureResourceDesc> texture_table_ {};
-  std::vector<CookedTextureEntry> cooked_entries_ {};
+  std::vector<oxygen::data::pak::core::TextureResourceDesc> texture_table_;
+  std::vector<CookedTextureEntry> cooked_entries_;
   data::SourceKey cooked_source_key_ {};
   std::filesystem::path mounted_root_;
   std::optional<base::Sha256Digest> mounted_fingerprint_;

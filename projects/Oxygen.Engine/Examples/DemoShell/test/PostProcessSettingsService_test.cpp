@@ -4,22 +4,34 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <limits>
 #include <memory>
+#include <utility>
+#include <vector>
 
+#include "DemoShell/Runtime/SceneActivationPolicy.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/test/Fakes/Graphics.h>
 
 namespace oxygen::examples::testing {
@@ -66,7 +78,7 @@ NOLINT_TEST_F(PostProcessSettingsServiceTest,
   for (const auto handle : { 11U, 22U }) {
     const auto status = renderer_->InspectExposureTransition(
       vortex::CompositionView::ViewStateHandle { handle });
-    ASSERT_TRUE(status.has_value());
+    ASSERT_HAS_VALUE(status);
     EXPECT_EQ(status->phase, vortex::ExposureTransitionPhase::kQueued);
     EXPECT_EQ(
       status->request.policy, vortex::ExposureTransitionPolicy::kSeedFromEv100);
@@ -87,20 +99,28 @@ NOLINT_TEST_F(PostProcessSettingsServiceTest,
   Register(ViewId { 1U }, 11U);
   const auto handle = vortex::CompositionView::ViewStateHandle { 11U };
   service_.ResetAutoExposure(4.0F);
-  const auto first = renderer_->InspectExposureTransition(handle)->request;
+  const auto transition = renderer_->InspectExposureTransition(handle);
+  ASSERT_HAS_VALUE(transition);
+  const auto first = transition.value().request;
   service_.ResetAutoExposure(8.0F);
-  const auto second = renderer_->InspectExposureTransition(handle)->request;
+  const auto transition2 = renderer_->InspectExposureTransition(handle);
+  ASSERT_HAS_VALUE(transition2);
+  const auto second = transition2.value().request;
   EXPECT_GT(second.generation, first.generation);
   {
     const auto retry = renderer_->RetryExposureTransition(first);
-    ASSERT_TRUE(retry.has_value());
+    ASSERT_HAS_VALUE(retry);
     EXPECT_EQ(*retry, vortex::ExposureTransitionPhase::kSuperseded);
   }
   service_.ResetAutoExposure(std::numeric_limits<float>::infinity());
-  EXPECT_EQ(renderer_->InspectExposureTransition(handle)->request, second);
+  const auto transition3 = renderer_->InspectExposureTransition(handle);
+  ASSERT_HAS_VALUE(transition3);
+  EXPECT_EQ(transition3.value().request, second);
   service_.BindVortexRenderer({});
   service_.ResetAutoExposure(12.0F);
-  EXPECT_EQ(renderer_->InspectExposureTransition(handle)->request, second);
+  const auto transition4 = renderer_->InspectExposureTransition(handle);
+  ASSERT_HAS_VALUE(transition4);
+  EXPECT_EQ(transition4.value().request, second);
 }
 
 NOLINT_TEST_F(PostProcessSettingsServiceTest,
@@ -266,14 +286,16 @@ NOLINT_TEST(PostProcessAuthoringTest,
   service.PersistActiveCameraSettings();
   EXPECT_EQ(node.GetTransform().GetLocalPosition(), Vec3(1.0F, 2.0F, 3.0F));
   const auto component = node.GetCameraAs<scene::PerspectiveCamera>();
-  ASSERT_TRUE(component.has_value());
+  ASSERT_HAS_VALUE(component);
   EXPECT_FLOAT_EQ(component->get().Exposure().aperture_f, 8.0F);
   EXPECT_EQ(saved->GetFloat(key + ".position.x"), 90.0F);
   EXPECT_EQ(saved->GetFloat(key + ".camera.exposure.aperture_f"), 2.0F);
   service.SetSceneActivationPolicy(SceneActivationPolicy::kRestorePreferences);
   service.OnSceneActivated(*world);
   service.OnMainViewReady(ViewId { 1U }, node, ViewPort {});
-  EXPECT_FLOAT_EQ(node.GetTransform().GetLocalPosition()->x, 90.0F);
+  const auto node_position = node.GetTransform().GetLocalPosition();
+  ASSERT_HAS_VALUE(node_position);
+  EXPECT_FLOAT_EQ(node_position.value().x, 90.0F);
   EXPECT_FLOAT_EQ(component->get().Exposure().aperture_f, 2.0F);
 }
 

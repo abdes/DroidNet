@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <utility>
 
 #include "DemoShell/Services/DefaultSceneLighting.h"
 #include <glm/geometric.hpp>
@@ -16,6 +17,7 @@
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::examples::testing {
@@ -38,7 +40,7 @@ NOLINT_TEST(DefaultSceneLighting, AuthorsSunAndEnvironment)
   EXPECT_NE(env->TryGetSystem<scene::environment::SkyLight>(), nullptr);
 
   const auto primary = scene->GetDirectionalLightResolver().ResolvePrimarySun();
-  ASSERT_TRUE(primary.has_value());
+  ASSERT_HAS_VALUE(primary);
   EXPECT_EQ(primary->Node().GetName(), "TestSun");
   EXPECT_TRUE(primary->Light().GetAtmosphereLightSlot()
     == scene::AtmosphereLightSlot::kPrimary);
@@ -75,7 +77,7 @@ NOLINT_TEST(DefaultSceneLighting, ExplicitSunShadowBiasIsAppliedAndPreserved)
       *scene, DefaultSceneLightingDesc { .sun_shadow_bias = bias });
     ASSERT_TRUE(sun.IsAlive());
     const auto light = sun.GetLightAs<scene::DirectionalLight>();
-    ASSERT_TRUE(light.has_value());
+    ASSERT_HAS_VALUE(light);
     EXPECT_FLOAT_EQ(light->get().Common().shadow.bias, bias);
 
     EXPECT_EQ(EnsureDefaultSceneLighting(*scene).GetHandle(), sun.GetHandle());
@@ -88,7 +90,7 @@ NOLINT_TEST(DefaultSceneLighting, ExplicitSunShadowBiasIsAppliedAndPreserved)
       *preview_scene, DefaultSceneLightingDesc { .sun_shadow_bias = bias });
     ASSERT_TRUE(preview.IsAlive());
     const auto preview_light = preview.GetLightAs<scene::DirectionalLight>();
-    ASSERT_TRUE(preview_light.has_value());
+    ASSERT_HAS_VALUE(preview_light);
     EXPECT_FLOAT_EQ(preview_light->get().Common().shadow.bias, bias);
   }
 }
@@ -101,7 +103,7 @@ NOLINT_TEST(DefaultSceneLighting, PreviewAddsOnlyOneSunWithoutEnvironment)
   const auto sun = AddPreviewSunIfMissing(*scene);
   ASSERT_TRUE(sun.IsAlive());
   const auto primary = scene->GetDirectionalLightResolver().ResolvePrimarySun();
-  ASSERT_TRUE(primary.has_value());
+  ASSERT_HAS_VALUE(primary);
   EXPECT_EQ(primary->NodeHandle(), sun.GetHandle());
   EXPECT_FLOAT_EQ(primary->Light().GetIntensityLux(), 100000.0F);
   EXPECT_TRUE(primary->Light().Common().affects_world);
@@ -146,7 +148,7 @@ NOLINT_TEST(DefaultSceneLighting, PreviewPreservesUntaggedDirectionalLight)
   EXPECT_FALSE(AddPreviewSunIfMissing(*scene).IsAlive());
   EXPECT_EQ(scene->GetRootNodes().size(), 1U);
   const auto preserved = node.GetLightAs<scene::DirectionalLight>();
-  ASSERT_TRUE(preserved.has_value());
+  ASSERT_HAS_VALUE(preserved);
   EXPECT_FALSE(preserved->get().GetAtmosphereLightSlot()
     == scene::AtmosphereLightSlot::kPrimary);
 
@@ -159,7 +161,7 @@ NOLINT_TEST(DefaultSceneLighting, PreviewPreservesDisabledNestedDirectional)
   auto scene = std::make_shared<scene::Scene>("DisabledDirectionalImport", 16);
   auto parent = scene->CreateNode("Parent");
   const auto child = scene->CreateChildNode(parent, "DisabledLight");
-  ASSERT_TRUE(child.has_value());
+  ASSERT_HAS_VALUE(child);
   auto node = *child;
   auto light = std::make_unique<scene::DirectionalLight>();
   light->Common().affects_world = false;
@@ -167,8 +169,9 @@ NOLINT_TEST(DefaultSceneLighting, PreviewPreservesDisabledNestedDirectional)
 
   EXPECT_FALSE(AddPreviewSunIfMissing(*scene).IsAlive());
   EXPECT_EQ(scene->GetRootNodes().size(), 1U);
-  EXPECT_FALSE(
-    node.GetLightAs<scene::DirectionalLight>()->get().Common().affects_world);
+  const auto node_light = node.GetLightAs<scene::DirectionalLight>();
+  ASSERT_HAS_VALUE(node_light);
+  EXPECT_FALSE(node_light.value().get().Common().affects_world);
 }
 
 NOLINT_TEST(DefaultSceneLighting, PreviewPreservesAuthoredSun)
@@ -178,7 +181,7 @@ NOLINT_TEST(DefaultSceneLighting, PreviewPreservesAuthoredSun)
     *scene, DefaultSceneLightingDesc { .sun_intensity_lux = 1234.0F });
   EXPECT_FALSE(AddPreviewSunIfMissing(*scene).IsAlive());
   const auto primary = scene->GetDirectionalLightResolver().ResolvePrimarySun();
-  ASSERT_TRUE(primary.has_value());
+  ASSERT_HAS_VALUE(primary);
   EXPECT_EQ(primary->NodeHandle(), authored.GetHandle());
   EXPECT_FLOAT_EQ(primary->Light().GetIntensityLux(), 1234.0F);
 }
@@ -194,7 +197,9 @@ NOLINT_TEST(DefaultSceneLighting, PreviewPreservesInvisibleDirectional)
 
   EXPECT_FALSE(AddPreviewSunIfMissing(*scene).IsAlive());
   EXPECT_EQ(scene->GetRootNodes().size(), 1U);
-  EXPECT_FALSE(hidden.GetFlags()->get().GetEffectiveValue(
+  const auto hidden_flags = hidden.GetFlags();
+  ASSERT_HAS_VALUE(hidden_flags);
+  EXPECT_FALSE(hidden_flags.value().get().GetEffectiveValue(
     scene::SceneNodeFlags::kVisible));
 }
 
@@ -207,14 +212,13 @@ NOLINT_TEST(DefaultSceneLighting, PreviewBelongsToEachScene)
   ASSERT_TRUE(first_sun.EditLight<scene::DirectionalLight>(
     [](auto& light) { light.SetIntensityLux(17.0F); }));
   ASSERT_TRUE(AddPreviewSunIfMissing(*second).IsAlive());
-  EXPECT_FLOAT_EQ(second->GetDirectionalLightResolver()
-                    .ResolvePrimarySun()
-                    ->Light()
-                    .GetIntensityLux(),
-    100000.0F);
-  EXPECT_FLOAT_EQ(
-    first_sun.GetLightAs<scene::DirectionalLight>()->get().GetIntensityLux(),
-    17.0F);
+  const auto primary_sun
+    = second->GetDirectionalLightResolver().ResolvePrimarySun();
+  ASSERT_HAS_VALUE(primary_sun);
+  EXPECT_FLOAT_EQ(primary_sun.value().Light().GetIntensityLux(), 100000.0F);
+  const auto first_sun_light = first_sun.GetLightAs<scene::DirectionalLight>();
+  ASSERT_HAS_VALUE(first_sun_light);
+  EXPECT_FLOAT_EQ(first_sun_light.value().get().GetIntensityLux(), 17.0F);
 }
 
 } // namespace oxygen::examples::testing

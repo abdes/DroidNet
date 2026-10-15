@@ -630,12 +630,11 @@ auto LightBenchPanel::DrawPresetControls(const float button_width) -> void
   }
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - command prefix, then
-// label
-auto LightBenchPanel::DrawSceneObjectControls(const std::string_view object,
-  const std::string_view label, const LightScene::SceneObjectState& state,
-  const bool allow_rotation) -> void
+auto LightBenchPanel::DrawSceneObjectControls(const SceneObjectHeading& heading,
+  const LightScene::SceneObjectState& state, const bool allow_rotation) -> void
 {
+  const std::string_view object = heading.id;
+  const std::string_view label = heading.label;
   ImGui::Text("%s", std::string(label).c_str());
   ImGui::Indent();
   const std::string id(label);
@@ -675,7 +674,7 @@ auto LightBenchPanel::DrawSceneAdvancedSection() -> void
       ImGui::Spacing();
     }
     first = false;
-    DrawSceneObjectControls(object.id, object.label,
+    DrawSceneObjectControls({ .id = object.id, .label = object.label },
       ((*light_scene_).*object.state)(), object.allow_rotation);
   }
 }

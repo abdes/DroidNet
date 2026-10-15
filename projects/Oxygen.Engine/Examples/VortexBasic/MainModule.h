@@ -157,7 +157,7 @@ private:
   SceneOptions scene_options_ {};
   std::unique_ptr<NormalMapValidationTexture> validation_normal_map_;
   scene::SceneNode validation_root_ {};
-  IAsyncEngine::ModuleSubscription renderer_subscription_ {};
+  IAsyncEngine::ModuleSubscription renderer_subscription_;
 
   std::shared_ptr<scene::Scene> scene_;
   scene::SceneNode cube_node_ {};
@@ -182,7 +182,7 @@ private:
   glm::vec3 cube_rotation_axis_ { 0.0F, 0.0F, 1.0F };
   std::mt19937 cube_rotation_rng_ { std::random_device {}() };
   vortex::ShaderDebugMode shader_debug_mode_ {
-    vortex::ShaderDebugMode::kDisabled
+    vortex::ShaderDebugMode::kDisabled,
   };
 };
 

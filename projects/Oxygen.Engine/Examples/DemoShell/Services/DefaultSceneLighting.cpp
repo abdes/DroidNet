@@ -7,6 +7,7 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "DemoShell/Services/DefaultSceneLighting.h"
 #include <glm/common.hpp>
@@ -35,14 +36,14 @@ namespace {
   {
     if (glm::dot(direction_ws, direction_ws)
       <= math::EpsilonDirection * math::EpsilonDirection) {
-      return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+      return { 1.0F, 0.0F, 0.0F, 0.0F };
     }
 
     constexpr glm::vec3 from_dir = space::move::Forward;
     const glm::vec3 to_dir = glm::normalize(direction_ws);
     const float cos_theta = glm::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
     if (cos_theta >= 0.9999F) {
-      return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+      return { 1.0F, 0.0F, 0.0F, 0.0F };
     }
     if (cos_theta <= -0.9999F) {
       return glm::angleAxis(glm::pi<float>(), space::move::Up);

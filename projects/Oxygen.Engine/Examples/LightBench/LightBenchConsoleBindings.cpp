@@ -17,7 +17,6 @@
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Commands/Params.h>
 #include <Oxygen/Console/Console.h>
-#include <Oxygen/Console/Constants.h>
 
 namespace oxygen::examples::light_bench {
 namespace {

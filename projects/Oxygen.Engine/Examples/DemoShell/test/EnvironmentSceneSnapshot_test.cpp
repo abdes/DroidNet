@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <utility>
 
 #include "DemoShell/Services/EnvironmentSceneSnapshot.h"
 #include <glm/gtc/quaternion.hpp>
@@ -141,7 +142,7 @@ NOLINT_TEST_F(EnvironmentSceneSnapshotTest,
   ASSERT_TRUE(parent.GetTransform().SetLocalRotation(
     glm::angleAxis(0.7F, glm::vec3(0.0F, 0.0F, 1.0F))));
   auto sun = scene_->CreateChildNode(parent, "Authored Sun");
-  ASSERT_TRUE(sun.has_value());
+  ASSERT_HAS_VALUE(sun);
   const auto original_rotation
     = glm::angleAxis(0.3F, glm::vec3(1.0F, 0.0F, 0.0F));
   ASSERT_TRUE(sun->GetTransform().SetLocalRotation(original_rotation));
@@ -157,7 +158,7 @@ NOLINT_TEST_F(EnvironmentSceneSnapshotTest,
   scene_->Update(false);
   scene_->SyncObservers();
   const auto before = scene_->GetDirectionalLightResolver().ResolvePrimarySun();
-  ASSERT_TRUE(before.has_value());
+  ASSERT_HAS_VALUE(before);
   const auto original_direction = before->DirectionToLightWs();
   snapshot_.Capture(*scene_);
 
@@ -174,7 +175,7 @@ NOLINT_TEST_F(EnvironmentSceneSnapshotTest,
   snapshot_.Restore(*scene_);
 
   const auto restored = sun->GetLightAs<scene::DirectionalLight>();
-  ASSERT_TRUE(restored.has_value());
+  ASSERT_HAS_VALUE(restored);
   EXPECT_TRUE(restored->get().GetAtmosphereLightSlot()
     == scene::AtmosphereLightSlot::kPrimary);
 
@@ -188,7 +189,7 @@ NOLINT_TEST_F(EnvironmentSceneSnapshotTest,
   EXPECT_EQ(
     sun->GetTransform().GetLocalPosition(), glm::vec3(3.0F, 4.0F, 5.0F));
   const auto after = scene_->GetDirectionalLightResolver().ResolvePrimarySun();
-  ASSERT_TRUE(after.has_value());
+  ASSERT_HAS_VALUE(after);
   EXPECT_LT(
     glm::length(after->DirectionToLightWs() - original_direction), 1e-5F);
 }
@@ -197,45 +198,67 @@ NOLINT_TEST_F(EnvironmentSceneSnapshotTest,
   RestoresLocalFogComponentsWithoutRecreatingOrRemovingNodes)
 {
   auto authored = scene_->CreateNode("Authored Fog");
-  auto& fog = authored.GetImpl()->get().AddComponent<env::LocalFogVolume>();
+  const auto authored_impl = authored.GetImpl();
+  ASSERT_HAS_VALUE(authored_impl);
+  auto& fog = authored_impl.value().get().AddComponent<env::LocalFogVolume>();
   fog.SetRadialFogExtinction(0.023F);
   fog.SetFogAlbedo({ 0.2F, 0.4F, 0.6F });
   fog.SetSortPriority(3);
   auto removed = scene_->CreateNode("Removed Fog");
-  removed.GetImpl()
-    ->get()
+  const auto removed_impl = removed.GetImpl();
+  ASSERT_HAS_VALUE(removed_impl);
+  removed_impl.value()
+    .get()
     .AddComponent<env::LocalFogVolume>()
     .SetHeightFogExtinction(0.047F);
   auto destroyed = scene_->CreateNode("Destroyed Fog");
-  destroyed.GetImpl()->get().AddComponent<env::LocalFogVolume>();
+  const auto destroyed_impl = destroyed.GetImpl();
+  ASSERT_HAS_VALUE(destroyed_impl);
+  destroyed_impl.value().get().AddComponent<env::LocalFogVolume>();
   auto empty = scene_->CreateNode("Initially Empty");
   snapshot_.Capture(*scene_);
 
   fog.SetRadialFogExtinction(0.5F);
   fog.SetFogAlbedo({ 1.0F, 1.0F, 1.0F });
   fog.SetSortPriority(9);
-  removed.GetImpl()->get().RemoveComponent<env::LocalFogVolume>();
-  empty.GetImpl()->get().AddComponent<env::LocalFogVolume>();
+  const auto removed_impl2 = removed.GetImpl();
+  ASSERT_HAS_VALUE(removed_impl2);
+  removed_impl2.value().get().RemoveComponent<env::LocalFogVolume>();
+  const auto empty_impl = empty.GetImpl();
+  ASSERT_HAS_VALUE(empty_impl);
+  empty_impl.value().get().AddComponent<env::LocalFogVolume>();
   ASSERT_TRUE(scene_->DestroyNode(destroyed));
   auto added = scene_->CreateNode("Destroyed Fog");
-  added.GetImpl()->get().AddComponent<env::LocalFogVolume>();
+  const auto added_impl = added.GetImpl();
+  ASSERT_HAS_VALUE(added_impl);
+  added_impl.value().get().AddComponent<env::LocalFogVolume>();
   const auto node_count = scene_->GetNodeCount();
 
   snapshot_.Restore(*scene_);
 
+  const auto authored_impl2 = authored.GetImpl();
+  ASSERT_HAS_VALUE(authored_impl2);
   const auto& restored
-    = authored.GetImpl()->get().GetComponent<env::LocalFogVolume>();
+    = authored_impl2.value().get().GetComponent<env::LocalFogVolume>();
   EXPECT_FLOAT_EQ(restored.GetRadialFogExtinction(), 0.023F);
   EXPECT_EQ(restored.GetFogAlbedo(), glm::vec3(0.2F, 0.4F, 0.6F));
   EXPECT_EQ(restored.GetSortPriority(), 3);
-  ASSERT_TRUE(removed.GetImpl()->get().HasComponent<env::LocalFogVolume>());
-  EXPECT_FLOAT_EQ(removed.GetImpl()
-                    ->get()
+  const auto removed_impl3 = removed.GetImpl();
+  ASSERT_HAS_VALUE(removed_impl3);
+  ASSERT_TRUE(removed_impl3.value().get().HasComponent<env::LocalFogVolume>());
+  const auto removed_impl4 = removed.GetImpl();
+  ASSERT_HAS_VALUE(removed_impl4);
+  EXPECT_FLOAT_EQ(removed_impl4.value()
+                    .get()
                     .GetComponent<env::LocalFogVolume>()
                     .GetHeightFogExtinction(),
     0.047F);
-  EXPECT_FALSE(empty.GetImpl()->get().HasComponent<env::LocalFogVolume>());
-  EXPECT_FALSE(added.GetImpl()->get().HasComponent<env::LocalFogVolume>());
+  const auto empty_impl2 = empty.GetImpl();
+  ASSERT_HAS_VALUE(empty_impl2);
+  EXPECT_FALSE(empty_impl2.value().get().HasComponent<env::LocalFogVolume>());
+  const auto added_impl2 = added.GetImpl();
+  ASSERT_HAS_VALUE(added_impl2);
+  EXPECT_FALSE(added_impl2.value().get().HasComponent<env::LocalFogVolume>());
   EXPECT_EQ(scene_->GetNodeCount(), node_count);
   EXPECT_TRUE(added.IsAlive());
   EXPECT_FALSE(destroyed.IsAlive());

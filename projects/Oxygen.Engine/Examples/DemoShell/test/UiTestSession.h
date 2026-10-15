@@ -29,11 +29,11 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(UiTestSession)
   OXYGEN_MAKE_NON_MOVABLE(UiTestSession)
 
-  auto Engine() const -> ImGuiTestEngine* { return engine_; }
+  [[nodiscard]] auto Engine() const -> ImGuiTestEngine* { return engine_; }
   auto Start() -> void;
   // Called after actual presentation. True means the queue finished.
   auto AfterPresent() -> bool;
-  auto OutputDirectory() const -> const std::filesystem::path&
+  [[nodiscard]] auto OutputDirectory() const -> const std::filesystem::path&
   {
     return output_;
   }

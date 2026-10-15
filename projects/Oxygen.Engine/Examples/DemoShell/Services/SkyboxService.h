@@ -100,7 +100,7 @@ public:
   struct LoadResult {
     bool success { false };
     content::ResourceKey resource_key { 0U };
-    std::string status_message {};
+    std::string status_message;
     int face_size { 0 };
     //! Estimated sun direction (if detectable from the skybox).
     glm::vec3 estimated_sun_dir { 0.35F, -0.45F, -1.0F };
@@ -162,8 +162,6 @@ private:
 
   //! Cached RGBA8 pixel data for sun direction estimation.
   std::vector<std::byte> cached_rgba8_;
-  std::uint32_t cached_width_ { 0U };
-  std::uint32_t cached_height_ { 0U };
 };
 
 } // namespace oxygen::examples

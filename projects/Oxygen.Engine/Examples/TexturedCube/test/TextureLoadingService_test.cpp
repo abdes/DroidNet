@@ -135,7 +135,7 @@ NOLINT_TEST_F(TextureLoadingServiceTest,
         for (size_t index = 0; index < assigned.size(); ++index) {
           oxygen::co::Event complete;
           service.StartLoadCookedTexture(
-            static_cast<uint32_t>(index + 1U), [&](auto result) -> void {
+            static_cast<uint32_t>(index + 1U), [&](const auto& result) -> void {
               EXPECT_TRUE(result.success);
               EXPECT_NE(loader.GetTexture(result.resource_key), nullptr);
               complete.Trigger();

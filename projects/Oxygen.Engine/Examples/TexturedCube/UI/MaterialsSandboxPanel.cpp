@@ -68,22 +68,31 @@ namespace {
     const char* label;
   };
   constexpr auto kModes = std::array {
-    ModeInfo { .mode = MaterialMode::kFallback,
+    ModeInfo {
+      .mode = MaterialMode::kFallback,
       .name = "fallback",
-      .label = "Fallback" },
-    ModeInfo { .mode = MaterialMode::kForcedError,
+      .label = "Fallback",
+    },
+    ModeInfo {
+      .mode = MaterialMode::kForcedError,
       .name = "forced_error",
-      .label = "Forced Error" },
-    ModeInfo { .mode = MaterialMode::kSolidColor,
+      .label = "Forced Error",
+    },
+    ModeInfo {
+      .mode = MaterialMode::kSolidColor,
       .name = "solid_color",
-      .label = "Solid Color" },
+      .label = "Solid Color",
+    },
     ModeInfo {
       .mode = MaterialMode::kCustomTexture,
       .name = "custom_texture",
       .label = "Custom Texture",
     },
     ModeInfo {
-      .mode = MaterialMode::kGrid, .name = "grid", .label = "Grid Material" },
+      .mode = MaterialMode::kGrid,
+      .name = "grid",
+      .label = "Grid Material",
+    },
     ModeInfo {
       .mode = MaterialMode::kCustomMaterial,
       .name = "custom_material",

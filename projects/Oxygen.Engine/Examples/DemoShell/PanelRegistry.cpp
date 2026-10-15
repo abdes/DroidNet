@@ -5,9 +5,18 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <expected>
+#include <iterator>
+#include <memory>
+#include <span>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
 
 #include "DemoShell/PanelRegistry.h"
+#include "DemoShell/UI/DemoPanel.h"
 
 namespace oxygen::examples {
 
@@ -28,7 +37,8 @@ auto PanelRegistry::RegisterPanel(std::shared_ptr<DemoPanel> panel)
     throw std::invalid_argument("PanelRegistry: duplicate panel name");
   }
 
-  panels_.push_back(PanelEntry { std::string(name), std::move(panel) });
+  panels_.push_back(
+    PanelEntry { .name = std::string(name), .panel = std::move(panel) });
 
   if (panels_.back().panel) {
     panels_.back().panel->OnRegistered();

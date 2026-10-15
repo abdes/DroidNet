@@ -575,24 +575,24 @@ auto PostProcessSettingsService::SetUseSceneMeteringMask(const bool enabled)
 }
 
 auto PostProcessSettingsService::TrySetExposureSettings(
-  const scene::ExposureSettings& requested) -> bool
+  const scene::ExposureSettings& settings) -> bool
 {
   EnsureStateLoaded();
-  if (requested.metering_mask.get() != 0U
-    && requested.metering_mask != scene_defaults_.exposure.metering_mask) {
+  if (settings.metering_mask.get() != 0U
+    && settings.metering_mask != scene_defaults_.exposure.metering_mask) {
     validation_error_
       = "Choose the scene's authored metering mask or disable it.";
     LOG_F(WARNING, "Exposure edit rejected: {}", validation_error_);
     return false;
   }
-  if (!CommitExposure(requested)) {
+  if (!CommitExposure(settings)) {
     return false;
   }
   transient_exposure_mode_.reset();
   transient_manual_exposure_ev_.reset();
   transient_exposure_enabled_.reset();
   use_scene_mask_
-    = requested.metering_mask == scene_defaults_.exposure.metering_mask;
+    = settings.metering_mask == scene_defaults_.exposure.metering_mask;
   PersistAllExposure();
   return true;
 }
@@ -688,10 +688,10 @@ auto PostProcessSettingsService::GetManualExposureEv() const -> float
   EnsureStateLoaded();
   return state_.exposure.manual_ev;
 }
-auto PostProcessSettingsService::SetManualExposureEv(const float value) -> void
+auto PostProcessSettingsService::SetManualExposureEv(const float ev) -> void
 {
   SetExposureFloat(
-    &scene::ExposureSettings::manual_ev, value, kExposureManualEVKey);
+    &scene::ExposureSettings::manual_ev, ev, kExposureManualEVKey);
 }
 
 auto PostProcessSettingsService::GetExposureCompensation() const -> float
@@ -699,11 +699,11 @@ auto PostProcessSettingsService::GetExposureCompensation() const -> float
   EnsureStateLoaded();
   return state_.exposure.compensation_ev;
 }
-auto PostProcessSettingsService::SetExposureCompensation(const float value)
+auto PostProcessSettingsService::SetExposureCompensation(const float stops)
   -> void
 {
   SetExposureFloat(
-    &scene::ExposureSettings::compensation_ev, value, kExposureCompensationKey);
+    &scene::ExposureSettings::compensation_ev, stops, kExposureCompensationKey);
 }
 
 auto PostProcessSettingsService::GetExposureKey() const -> float
@@ -711,9 +711,11 @@ auto PostProcessSettingsService::GetExposureKey() const -> float
   EnsureStateLoaded();
   return state_.exposure.key;
 }
-auto PostProcessSettingsService::SetExposureKey(const float value) -> void
+auto PostProcessSettingsService::SetExposureKey(const float exposure_key)
+  -> void
 {
-  SetExposureFloat(&scene::ExposureSettings::key, value, kExposureKeyKey);
+  SetExposureFloat(
+    &scene::ExposureSettings::key, exposure_key, kExposureKeyKey);
 }
 
 auto PostProcessSettingsService::GetAutoExposureAdaptationSpeedUp() const
@@ -723,10 +725,10 @@ auto PostProcessSettingsService::GetAutoExposureAdaptationSpeedUp() const
   return state_.exposure.speed_up;
 }
 auto PostProcessSettingsService::SetAutoExposureAdaptationSpeedUp(
-  const float value) -> void
+  const float speed) -> void
 {
   SetExposureFloat(
-    &scene::ExposureSettings::speed_up, value, kAutoExposureSpeedUpKey);
+    &scene::ExposureSettings::speed_up, speed, kAutoExposureSpeedUpKey);
 }
 
 auto PostProcessSettingsService::GetAutoExposureAdaptationSpeedDown() const
@@ -736,10 +738,10 @@ auto PostProcessSettingsService::GetAutoExposureAdaptationSpeedDown() const
   return state_.exposure.speed_down;
 }
 auto PostProcessSettingsService::SetAutoExposureAdaptationSpeedDown(
-  const float value) -> void
+  const float speed) -> void
 {
   SetExposureFloat(
-    &scene::ExposureSettings::speed_down, value, kAutoExposureSpeedDownKey);
+    &scene::ExposureSettings::speed_down, speed, kAutoExposureSpeedDownKey);
 }
 
 auto PostProcessSettingsService::GetAutoExposureLowPercentile() const -> float
@@ -747,10 +749,10 @@ auto PostProcessSettingsService::GetAutoExposureLowPercentile() const -> float
   EnsureStateLoaded();
   return state_.exposure.low_percentile;
 }
-auto PostProcessSettingsService::SetAutoExposureLowPercentile(const float value)
-  -> void
+auto PostProcessSettingsService::SetAutoExposureLowPercentile(
+  const float percentile) -> void
 {
-  SetExposureFloat(&scene::ExposureSettings::low_percentile, value,
+  SetExposureFloat(&scene::ExposureSettings::low_percentile, percentile,
     kAutoExposureLowPercentileKey);
 }
 
@@ -760,9 +762,9 @@ auto PostProcessSettingsService::GetAutoExposureHighPercentile() const -> float
   return state_.exposure.high_percentile;
 }
 auto PostProcessSettingsService::SetAutoExposureHighPercentile(
-  const float value) -> void
+  const float percentile) -> void
 {
-  SetExposureFloat(&scene::ExposureSettings::high_percentile, value,
+  SetExposureFloat(&scene::ExposureSettings::high_percentile, percentile,
     kAutoExposureHighPercentileKey);
 }
 
@@ -771,10 +773,11 @@ auto PostProcessSettingsService::GetAutoExposureMinEv() const -> float
   EnsureStateLoaded();
   return state_.exposure.min_ev;
 }
-auto PostProcessSettingsService::SetAutoExposureMinEv(const float value) -> void
+auto PostProcessSettingsService::SetAutoExposureMinEv(const float min_ev)
+  -> void
 {
   SetExposureFloat(
-    &scene::ExposureSettings::min_ev, value, kAutoExposureMinEvKey);
+    &scene::ExposureSettings::min_ev, min_ev, kAutoExposureMinEvKey);
 }
 
 auto PostProcessSettingsService::GetAutoExposureMaxEv() const -> float
@@ -782,10 +785,11 @@ auto PostProcessSettingsService::GetAutoExposureMaxEv() const -> float
   EnsureStateLoaded();
   return state_.exposure.max_ev;
 }
-auto PostProcessSettingsService::SetAutoExposureMaxEv(const float value) -> void
+auto PostProcessSettingsService::SetAutoExposureMaxEv(const float max_ev)
+  -> void
 {
   SetExposureFloat(
-    &scene::ExposureSettings::max_ev, value, kAutoExposureMaxEvKey);
+    &scene::ExposureSettings::max_ev, max_ev, kAutoExposureMaxEvKey);
 }
 
 auto PostProcessSettingsService::GetAutoExposureMinLogLuminance() const -> float
@@ -794,9 +798,9 @@ auto PostProcessSettingsService::GetAutoExposureMinLogLuminance() const -> float
   return state_.exposure.min_log_luminance;
 }
 auto PostProcessSettingsService::SetAutoExposureMinLogLuminance(
-  const float value) -> void
+  const float luminance) -> void
 {
-  SetExposureFloat(&scene::ExposureSettings::min_log_luminance, value,
+  SetExposureFloat(&scene::ExposureSettings::min_log_luminance, luminance,
     kAutoExposureMinLogLumKey);
 }
 
@@ -807,9 +811,9 @@ auto PostProcessSettingsService::GetAutoExposureLogLuminanceRange() const
   return state_.exposure.log_luminance_range;
 }
 auto PostProcessSettingsService::SetAutoExposureLogLuminanceRange(
-  const float value) -> void
+  const float range) -> void
 {
-  SetExposureFloat(&scene::ExposureSettings::log_luminance_range, value,
+  SetExposureFloat(&scene::ExposureSettings::log_luminance_range, range,
     kAutoExposureLogLumRangeKey);
 }
 
@@ -819,9 +823,9 @@ auto PostProcessSettingsService::GetAutoExposureTargetLuminance() const -> float
   return state_.exposure.target_luminance;
 }
 auto PostProcessSettingsService::SetAutoExposureTargetLuminance(
-  const float value) -> void
+  const float luminance) -> void
 {
-  SetExposureFloat(&scene::ExposureSettings::target_luminance, value,
+  SetExposureFloat(&scene::ExposureSettings::target_luminance, luminance,
     kAutoExposureTargetLumKey);
 }
 
@@ -831,9 +835,9 @@ auto PostProcessSettingsService::GetAutoExposureSpotMeterRadius() const -> float
   return state_.exposure.spot_meter_radius;
 }
 auto PostProcessSettingsService::SetAutoExposureSpotMeterRadius(
-  const float value) -> void
+  const float radius) -> void
 {
-  SetExposureFloat(&scene::ExposureSettings::spot_meter_radius, value,
+  SetExposureFloat(&scene::ExposureSettings::spot_meter_radius, radius,
     kAutoExposureSpotRadiusKey);
 }
 
@@ -843,10 +847,10 @@ auto PostProcessSettingsService::GetAutoExposureBlackInfluence() const -> float
   return state_.exposure.black_influence;
 }
 auto PostProcessSettingsService::SetAutoExposureBlackInfluence(
-  const float value) -> void
+  const float influence) -> void
 {
   SetExposureFloat(
-    &scene::ExposureSettings::black_influence, value, kBlackInfluenceKey);
+    &scene::ExposureSettings::black_influence, influence, kBlackInfluenceKey);
 }
 
 auto PostProcessSettingsService::GetAutoExposureTransitionDistance() const
@@ -856,9 +860,9 @@ auto PostProcessSettingsService::GetAutoExposureTransitionDistance() const
   return state_.exposure.transition_distance;
 }
 auto PostProcessSettingsService::SetAutoExposureTransitionDistance(
-  const float value) -> void
+  const float distance) -> void
 {
-  SetExposureFloat(&scene::ExposureSettings::transition_distance, value,
+  SetExposureFloat(&scene::ExposureSettings::transition_distance, distance,
     kTransitionDistanceKey);
 }
 
@@ -868,10 +872,10 @@ auto PostProcessSettingsService::GetManualCameraAperture() const -> float
   return camera != nullptr ? camera->aperture_f
                            : engine::kDefaultCameraApertureF;
 }
-auto PostProcessSettingsService::SetManualCameraAperture(const float value)
+auto PostProcessSettingsService::SetManualCameraAperture(const float aperture)
   -> void
 {
-  SetCameraExposureFloat(&scene::CameraExposure::aperture_f, value);
+  SetCameraExposureFloat(&scene::CameraExposure::aperture_f, aperture);
 }
 
 auto PostProcessSettingsService::GetManualCameraShutterRate() const -> float
@@ -880,10 +884,10 @@ auto PostProcessSettingsService::GetManualCameraShutterRate() const -> float
   return camera != nullptr ? camera->shutter_rate
                            : engine::kDefaultCameraShutterRate;
 }
-auto PostProcessSettingsService::SetManualCameraShutterRate(const float value)
-  -> void
+auto PostProcessSettingsService::SetManualCameraShutterRate(
+  const float shutter_rate) -> void
 {
-  SetCameraExposureFloat(&scene::CameraExposure::shutter_rate, value);
+  SetCameraExposureFloat(&scene::CameraExposure::shutter_rate, shutter_rate);
 }
 
 auto PostProcessSettingsService::GetManualCameraIso() const -> float
@@ -891,9 +895,9 @@ auto PostProcessSettingsService::GetManualCameraIso() const -> float
   const auto* camera = ResolveActiveCameraExposure(camera_settings_);
   return camera != nullptr ? camera->iso : engine::kDefaultCameraIso;
 }
-auto PostProcessSettingsService::SetManualCameraIso(const float value) -> void
+auto PostProcessSettingsService::SetManualCameraIso(const float iso) -> void
 {
-  SetCameraExposureFloat(&scene::CameraExposure::iso, value);
+  SetCameraExposureFloat(&scene::CameraExposure::iso, iso);
 }
 
 auto PostProcessSettingsService::GetManualCameraEv() const -> float
@@ -922,34 +926,34 @@ auto PostProcessSettingsService::SetCameraExposureFloat(
   }
 }
 
-auto PostProcessSettingsService::SetAutoExposureRange(
-  const ExposureRange bounds) -> void
+auto PostProcessSettingsService::SetAutoExposureRange(const ExposureRange ev)
+  -> void
 {
   auto next = GetExposureSettings();
-  next.min_ev = bounds.minimum;
-  next.max_ev = bounds.maximum;
+  next.min_ev = ev.minimum;
+  next.max_ev = ev.maximum;
   if (CommitExposure(next)) {
     PersistExposure(kAutoExposureMinEvKey);
     PersistExposure(kAutoExposureMaxEvKey);
   }
 }
 auto PostProcessSettingsService::SetAutoExposurePercentiles(
-  const ExposureRange bounds) -> void
+  const ExposureRange percentiles) -> void
 {
   auto next = GetExposureSettings();
-  next.low_percentile = bounds.minimum;
-  next.high_percentile = bounds.maximum;
+  next.low_percentile = percentiles.minimum;
+  next.high_percentile = percentiles.maximum;
   if (CommitExposure(next)) {
     PersistExposure(kAutoExposureLowPercentileKey);
     PersistExposure(kAutoExposureHighPercentileKey);
   }
 }
 auto PostProcessSettingsService::SetAutoExposureHistogramWindow(
-  const ExposureRange bounds) -> void
+  const ExposureRange log_luminance) -> void
 {
   auto next = GetExposureSettings();
-  next.min_log_luminance = bounds.minimum;
-  next.log_luminance_range = bounds.maximum - bounds.minimum;
+  next.min_log_luminance = log_luminance.minimum;
+  next.log_luminance_range = log_luminance.maximum - log_luminance.minimum;
   if (CommitExposure(next)) {
     PersistExposure(kAutoExposureMinLogLumKey);
     PersistExposure(kAutoExposureLogLumRangeKey);

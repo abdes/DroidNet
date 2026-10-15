@@ -9,11 +9,18 @@
 #include <cstdint>
 #include <memory>
 
+#include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::examples::multiview {
+
+//! Illuminance of the atmosphere proof's sun, in lux.
+using SunLux = NamedType<float, struct SunLuxTag>;
+
+//! Strength of the aerial scattering in the atmosphere proof.
+using ScatteringStrength = NamedType<float, struct ScatteringStrengthTag>;
 
 enum class VisualFogMode : std::uint8_t { kClear, kVolumetric, kLocal };
 
@@ -59,8 +66,8 @@ public:
   auto ApplyMixedExposureProof() -> void;
 
 private:
-  auto EnsureProofAtmosphere(
-    float sun_lux, float scattering_strength, bool backlit = true) -> void;
+  auto EnsureProofAtmosphere(SunLux sun_lux,
+    ScatteringStrength scattering_strength, bool backlit = true) -> void;
   auto EnsureSphere(scene::Scene& scene) -> void;
   auto EnsureCube(scene::Scene& scene) -> void;
   auto EnsureCylinder(scene::Scene& scene) -> void;

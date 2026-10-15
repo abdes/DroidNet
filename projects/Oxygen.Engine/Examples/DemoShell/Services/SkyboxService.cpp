@@ -109,12 +109,21 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
     return;
   }
 
-  using namespace oxygen::content::import;
+  using content::import::Bc7Quality;
+  using content::import::D3D12PackingPolicy;
+  using content::import::HdrHandling;
+  using content::import::ImportCubeMapFromEquirect;
+  using content::import::ImportCubeMapFromLayoutImage;
+  using content::import::MipFilter;
+  using content::import::MipPolicy;
+  using content::import::TextureImportDesc;
+  using content::import::TextureImportResult;
+  using content::import::TextureIntent;
 
   // Determine output format
   auto output_fmt = Format::kRGBA8UNormSRGB;
   bool use_bc7 = false;
-  auto format_name = "RGBA8";
+  const auto* format_name = "RGBA8";
 
   switch (options.output_format) {
   case OutputFormat::kRGBA8:
@@ -254,7 +263,7 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
   auto packed = std::make_shared<std::vector<std::uint8_t>>();
   packed->resize(sizeof(PakTextureResourceDesc) + payload.payload.size());
   std::memcpy(packed->data(), &pak_desc, sizeof(PakTextureResourceDesc));
-  std::memcpy(packed->data() + sizeof(PakTextureResourceDesc),
+  std::memcpy(std::to_address(packed->begin() + sizeof(PakTextureResourceDesc)),
     payload.payload.data(), payload.payload.size());
 
   asset_loader_->StartLoadTexture(
@@ -267,7 +276,7 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
       should_tonemap_hdr_to_ldr, tonemap_forced,
       face_size = static_cast<int>(payload.desc.width),
       mip_levels = payload.desc.mip_levels,
-      resource_key](std::shared_ptr<data::TextureResource> tex) mutable {
+      resource_key](const std::shared_ptr<data::TextureResource>& tex) mutable {
       const auto state = request.lock();
       if (!state || state->generation != generation) {
         return;

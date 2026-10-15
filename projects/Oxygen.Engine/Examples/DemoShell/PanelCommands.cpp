@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <functional>
 #include <iterator>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -60,7 +61,7 @@ namespace {
   {
     std::array<char, 32> text {};
     const auto written
-      = std::to_chars(text.data(), text.data() + text.size(), value);
+      = std::to_chars(text.data(), std::to_address(text.end()), value);
     double result {};
     std::from_chars(text.data(), written.ptr, result);
     return result;

@@ -200,8 +200,10 @@ private:
   bool viewport_proof_resized_ { false };
   bool viewport_proof_scissored_ { false };
   bool retain_inactive_pip_ { false };
-  platform::window::ExtentT window_proof_initial_extent_ { .width = 0U,
-    .height = 0U };
+  platform::window::ExtentT window_proof_initial_extent_ {
+    .width = 0U,
+    .height = 0U,
+  };
   platform::window::ExtentT last_viewport_ { .width = 0, .height = 0 };
 };
 

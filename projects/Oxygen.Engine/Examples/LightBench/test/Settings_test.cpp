@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <cstddef>
 #include <fstream>
 #include <iterator>
 #include <limits>
@@ -126,8 +127,9 @@ NOLINT_TEST(LightBenchSettings, CompletePresetsValidateAndRoundTrip)
     auto modified = *decoded;
     modified.exposure.compensation_ev += 1.0F;
     EXPECT_FALSE(IsPresetSettings(modified));
-    if (info.preset == LightBenchPreset::kIndoor)
+    if (info.preset == LightBenchPreset::kIndoor) {
       RecordProperty("indoor_settings_json", *encoded);
+    }
   }
 }
 
@@ -151,8 +153,9 @@ NOLINT_TEST(
     EXPECT_TRUE(std::isfinite(settings.initial_auto_ev));
     EXPECT_NE(std::abs(settings.directional.direction_ws.y),
       std::abs(settings.directional.direction_ws.z));
-    for (std::size_t i = 0; i < 5; ++i)
+    for (std::size_t i = 0; i < 5; ++i) {
       EXPECT_FLOAT_EQ(settings.objects.at(i).position.z, .5F);
+    }
   }
   EXPECT_FLOAT_EQ(PresetSettings(LightBenchPreset::kOutdoorDaylight)
                     .directional.illuminance_lux,

@@ -16,7 +16,9 @@
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::examples::ui {
 
@@ -60,8 +62,8 @@ namespace {
     const float axis_pixel_length = config.size * config.axis_length;
 
     return {
-      center.x + view_axis.x * axis_pixel_length,
-      center.y - view_axis.y * axis_pixel_length,
+      center.x + (view_axis.x * axis_pixel_length),
+      center.y - (view_axis.y * axis_pixel_length),
     };
   }
 
@@ -103,42 +105,44 @@ void AxesWidget::Draw(const glm::mat3& world_to_view_rotation)
 
   // Center of the widget where axes originate
   const glm::vec2 center {
-    widget_pos.x + config.size * 0.5F,
-    widget_pos.y + config.size * 0.5F,
+    widget_pos.x + (config.size * 0.5F),
+    widget_pos.y + (config.size * 0.5F),
   };
 
   // Define the positive world axes under Oxygen engine law:
   // +X = Right, +Y = Back, +Z = Up. The widget must visualize these axes as
   // they appear in the current camera view, not the movement "forward" axis.
-  std::array<AxisInfo, 3> axes = { {
+  std::array<AxisInfo, 3> axes = {
     {
-      .direction = space::move::Right,
-      .screen_end
-      = ProjectAxis(space::move::Right, world_to_view_rotation, center, config),
-      .color = kAxisColorX,
-      .color_dim = kAxisColorXDim,
-      .label = "X",
-      .depth = (world_to_view_rotation * space::move::Right).z,
+      {
+        .direction = space::move::Right,
+        .screen_end = ProjectAxis(
+          space::move::Right, world_to_view_rotation, center, config),
+        .color = kAxisColorX,
+        .color_dim = kAxisColorXDim,
+        .label = "X",
+        .depth = (world_to_view_rotation * space::move::Right).z,
+      },
+      {
+        .direction = space::move::Back,
+        .screen_end = ProjectAxis(
+          space::move::Back, world_to_view_rotation, center, config),
+        .color = kAxisColorY,
+        .color_dim = kAxisColorYDim,
+        .label = "Y",
+        .depth = (world_to_view_rotation * space::move::Back).z,
+      },
+      {
+        .direction = space::move::Up,
+        .screen_end
+        = ProjectAxis(space::move::Up, world_to_view_rotation, center, config),
+        .color = kAxisColorZ,
+        .color_dim = kAxisColorZDim,
+        .label = "Z",
+        .depth = (world_to_view_rotation * space::move::Up).z,
+      },
     },
-    {
-      .direction = space::move::Back,
-      .screen_end
-      = ProjectAxis(space::move::Back, world_to_view_rotation, center, config),
-      .color = kAxisColorY,
-      .color_dim = kAxisColorYDim,
-      .label = "Y",
-      .depth = (world_to_view_rotation * space::move::Back).z,
-    },
-    {
-      .direction = space::move::Up,
-      .screen_end
-      = ProjectAxis(space::move::Up, world_to_view_rotation, center, config),
-      .color = kAxisColorZ,
-      .color_dim = kAxisColorZDim,
-      .label = "Z",
-      .depth = (world_to_view_rotation * space::move::Up).z,
-    },
-  } };
+  };
 
   // Sort axes by depth (draw furthest first, nearest last)
   std::ranges::sort(axes, [](const AxisInfo& lhs, const AxisInfo& rhs) {
@@ -174,14 +178,14 @@ void AxesWidget::Draw(const glm::mat3& world_to_view_rotation)
       constexpr float kArrowSize = 4.0F;
 
       const ImVec2 tip(axis.screen_end.x, axis.screen_end.y);
-      const ImVec2 left(axis.screen_end.x - dir_norm.x * kArrowSize
-          + perp.x * kArrowSize * 0.5F,
-        axis.screen_end.y - dir_norm.y * kArrowSize
-          + perp.y * kArrowSize * 0.5F);
-      const ImVec2 right(axis.screen_end.x - dir_norm.x * kArrowSize
-          - perp.x * kArrowSize * 0.5F,
-        axis.screen_end.y - dir_norm.y * kArrowSize
-          - perp.y * kArrowSize * 0.5F);
+      const ImVec2 left(axis.screen_end.x - (dir_norm.x * kArrowSize)
+          + (perp.x * kArrowSize * 0.5F),
+        axis.screen_end.y - (dir_norm.y * kArrowSize)
+          + (perp.y * kArrowSize * 0.5F));
+      const ImVec2 right(axis.screen_end.x - (dir_norm.x * kArrowSize)
+          - (perp.x * kArrowSize * 0.5F),
+        axis.screen_end.y - (dir_norm.y * kArrowSize)
+          - (perp.y * kArrowSize * 0.5F));
 
       draw_list->AddTriangleFilled(tip, left, right, color);
     }

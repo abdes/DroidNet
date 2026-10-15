@@ -226,8 +226,10 @@ auto MaterialsSandboxVm::BrowseForSourcePath() -> void
     FileBrowserConfig config;
     config.title = "Select Source Texture";
     // config.initial_directory = ...
-    config.filters.push_back({ .description = "Image Files",
-      .extensions = { ".png", ".jpg", ".tga", ".bmp", ".hdr", ".exr" } });
+    config.filters.push_back({
+      .description = "Image Files",
+      .extensions = { ".png", ".jpg", ".tga", ".bmp", ".hdr", ".exr" },
+    });
 
     if (import_state_.source_path[0] != '\0') {
       config.initial_directory

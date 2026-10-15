@@ -69,7 +69,12 @@ private:
   auto DrawSceneSection() -> void;
   auto DrawPresetControls(float button_width) -> void;
   auto DrawSceneAdvancedSection() -> void;
-  auto DrawSceneObjectControls(std::string_view object, std::string_view label,
+  //! Identifies a scene object: its command value and its label.
+  struct SceneObjectHeading {
+    std::string_view id;
+    std::string_view label;
+  };
+  auto DrawSceneObjectControls(const SceneObjectHeading& heading,
     const LightScene::SceneObjectState& state, bool allow_rotation) -> void;
   auto RegisterCommands() -> void;
   auto DrawLightsSection() -> void;

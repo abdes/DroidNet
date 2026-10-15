@@ -224,7 +224,7 @@ private:
   //! Log the runtime scene hierarchy.
   void LogSceneHierarchy(const scene::Scene& scene);
 
-  content::IAssetLoader& loader_; // FIXME
+  observer_ptr<content::IAssetLoader> loader_;
   Extent<uint32_t> extent_ {};
 
   // Stored execution context for reloading
@@ -242,7 +242,7 @@ private:
   std::unordered_set<data::AssetKey> pending_geometry_keys_;
   std::vector<data::AssetKey> ready_geometry_keys_;
 
-  PhysicsPayloads hydration_payloads_ {};
+  PhysicsPayloads hydration_payloads_;
   observer_ptr<const data::PhysicsSceneAsset> current_physics_context_;
   observer_ptr<scene::Scene> runtime_scene_;
   bool hydration_window_active_ { false };

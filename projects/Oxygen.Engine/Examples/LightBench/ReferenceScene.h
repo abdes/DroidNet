@@ -22,8 +22,11 @@ inline constexpr float kMinimumViewHeight = 3.75F;
 // E=1-ln(2), B=3.3614294725518486e-5; w=1+F0*(1/E-1),
 // T=1-w*(F0*E+(1-F0)*B), L=1000*(F0*w/(4*pi)+albedo*T/pi).
 // These are ideal authored values; native tests account separately for packing.
-inline constexpr std::array<double, 3> kExpectedLuminance { 59.99767546326685,
-  286.1055379496847, 9.751483799618446 };
+inline constexpr std::array<double, 3> kExpectedLuminance {
+  59.99767546326685,
+  286.1055379496847,
+  9.751483799618446,
+};
 // Independently resolved log2(expected gray luminance / 0.18), not GPU
 // feedback.
 inline constexpr float kExposureEv = 8.380765889564564F;

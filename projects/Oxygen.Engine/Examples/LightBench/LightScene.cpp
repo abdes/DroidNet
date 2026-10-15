@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <utility>
@@ -34,6 +35,7 @@
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -292,20 +294,23 @@ auto LightScene::EnsureGeometryAssets() -> void
   }
 
   const auto gray_mat = MakeSolidColorMaterial("GrayCard",
-    Vec4 { Vec3 { reference::kReflectances[0] }, 1.0F }, reference::kRoughness,
-    0.0F, false);
+    Vec4 { Vec3 { reference::kReflectances[0] }, 1.0F },
+    { .roughness = reference::kRoughness, .metalness = 0.0F }, false);
   const auto white_mat = MakeSolidColorMaterial("WhiteCard",
-    Vec4 { Vec3 { reference::kReflectances[1] }, 1.0F }, reference::kRoughness,
-    0.0F, false);
+    Vec4 { Vec3 { reference::kReflectances[1] }, 1.0F },
+    { .roughness = reference::kRoughness, .metalness = 0.0F }, false);
   const auto black_mat = MakeSolidColorMaterial("BlackCard",
-    Vec4 { Vec3 { reference::kReflectances[2] }, 1.0F }, reference::kRoughness,
-    0.0F, false);
-  const auto matte_mat = MakeSolidColorMaterial(
-    "MatteSphere", Vec4 { 0.5F, 0.5F, 0.5F, 1.0F }, 0.95F, 0.0F, false);
-  const auto glossy_mat = MakeSolidColorMaterial(
-    "GlossySphere", Vec4 { 0.9F, 0.9F, 0.9F, 1.0F }, 0.08F, 0.0F, false);
-  const auto ground_mat = MakeSolidColorMaterial(
-    "Ground", Vec4 { 0.18F, 0.18F, 0.18F, 1.0F }, 0.9F, 0.0F, false);
+    Vec4 { Vec3 { reference::kReflectances[2] }, 1.0F },
+    { .roughness = reference::kRoughness, .metalness = 0.0F }, false);
+  const auto matte_mat
+    = MakeSolidColorMaterial("MatteSphere", Vec4 { 0.5F, 0.5F, 0.5F, 1.0F },
+      { .roughness = 0.95F, .metalness = 0.0F }, false);
+  const auto glossy_mat
+    = MakeSolidColorMaterial("GlossySphere", Vec4 { 0.9F, 0.9F, 0.9F, 1.0F },
+      { .roughness = 0.08F, .metalness = 0.0F }, false);
+  const auto ground_mat
+    = MakeSolidColorMaterial("Ground", Vec4 { 0.18F, 0.18F, 0.18F, 1.0F },
+      { .roughness = 0.9F, .metalness = 0.0F }, false);
 
   gray_card_geo_ = BuildSurfaceGeometry("Quad", "GrayCard", gray_mat);
   white_card_geo_ = BuildSurfaceGeometry("Quad", "WhiteCard", white_mat);
@@ -485,7 +490,7 @@ auto LightScene::BuildSurfaceGeometry(std::string_view generator,
     = MeshBuilder(oxygen::data::LodIndex {}, name)
         .WithVertices(surface_data->first)
         .WithIndices(surface_data->second)
-        .BeginSubMesh("full", material)
+        .BeginSubMesh("full", std::move(material))
         .WithMeshView(MeshViewDesc {
           .first_index = 0,
           .index_count = static_cast<uint32_t>(surface_data->second.size()),
@@ -528,7 +533,7 @@ auto LightScene::BuildSphereGeometry(
     = MeshBuilder(oxygen::data::LodIndex {}, name)
         .WithVertices(sphere_data->first)
         .WithIndices(sphere_data->second)
-        .BeginSubMesh("full", material)
+        .BeginSubMesh("full", std::move(material))
         .WithMeshView(MeshViewDesc {
           .first_index = 0,
           .index_count = static_cast<uint32_t>(sphere_data->second.size()),
@@ -557,17 +562,22 @@ auto LightScene::BuildSphereGeometry(
 }
 
 auto LightScene::MakeSolidColorMaterial(std::string_view name, const Vec4& rgba,
-  const float roughness, const float metalness, const bool double_sided)
+  const SurfaceFinish& finish, const bool double_sided)
   -> std::shared_ptr<const data::MaterialAsset>
 {
-  using namespace oxygen::data;
+  namespace pak = oxygen::data::pak;
+  using oxygen::data::AssetKey;
+  using oxygen::data::MaterialAsset;
+  using oxygen::data::MaterialDomain;
+  using oxygen::data::ShaderReference;
+  using oxygen::data::Unorm16;
 
   pak::render::MaterialAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
   constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
   const std::size_t n = (std::min)(maxn, name.size());
-  std::memcpy(desc.header.name, name.data(), n);
+  std::memcpy(std::begin(desc.header.name), name.data(), n);
   desc.header.name[n] = '\0';
   desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
   desc.header.streaming_priority = 255;
@@ -580,8 +590,8 @@ auto LightScene::MakeSolidColorMaterial(std::string_view name, const Vec4& rgba,
   desc.base_color[2] = rgba.b;
   desc.base_color[3] = rgba.a;
   desc.normal_scale = 1.0F;
-  desc.metalness = Unorm16 { metalness };
-  desc.roughness = Unorm16 { roughness };
+  desc.metalness = Unorm16 { finish.metalness };
+  desc.roughness = Unorm16 { finish.roughness };
   desc.ambient_occlusion = Unorm16 { 1.0F };
   const AssetKey asset_key = AssetKey::FromVirtualPath(
     "/Engine/Examples/LightBench/Materials/" + std::string(name) + ".omat");

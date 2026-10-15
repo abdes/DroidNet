@@ -112,6 +112,15 @@ protected:
 private:
 #ifdef OXYGEN_BUILD_UI_TESTS
   auto RegisterUiTests(ImGuiTestEngine* engine) -> void override;
+  auto RegisterEmptySceneUiTest(ImGuiTestEngine* engine) -> void;
+  auto RegisterRetainedLibraryUiTest(ImGuiTestEngine* engine) -> void;
+  auto RegisterIblControlsUiTest(ImGuiTestEngine* engine) -> void;
+  auto RegisterIblSourceAndFogUiTest(ImGuiTestEngine* engine) -> void;
+  auto RegisterStartupSkyboxUiTest(ImGuiTestEngine* engine) -> void;
+  auto RegisterIblEditorReferenceUiTest(ImGuiTestEngine* engine) -> void;
+  auto RegisterIblAppearanceUiTests(ImGuiTestEngine* engine) -> void;
+  auto RegisterIblPersistAndReplaceUiTest(ImGuiTestEngine* engine) -> void;
+  auto RegisterIblReopenUiTest(ImGuiTestEngine* engine) -> void;
 #endif
   auto ReleaseCurrentSceneAsset(const char* reason) -> void;
 

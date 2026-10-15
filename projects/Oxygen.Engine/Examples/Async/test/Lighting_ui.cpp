@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <filesystem>
+#include <string>
 
 #include "Async/AsyncDemoVm.h"
 #include "Async/AsyncShowcase.h"
@@ -110,8 +111,9 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     // Exercise the actual sun control, including captured-sky invalidation.
     const auto active_panel = app.GetShell().GetActivePanelName();
     if (!active_panel || *active_panel != "Environment") {
+      const std::string environment_icon { imgui::icons::kIconEnvironment };
       ctx->SetRef("//DemoPanelSideBar");
-      ctx->ItemClick(imgui::icons::kIconEnvironment.data());
+      ctx->ItemClick(environment_icon.c_str());
     }
     ctx->Yield(3);
     ctx->SetRef("//Environment");
@@ -173,8 +175,9 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     const bool original_sky = sky->IsEnabled();
     const auto active_panel = app.GetShell().GetActivePanelName();
     if (!active_panel || *active_panel != "Async Demo") {
+      const std::string demo_panel_icon { imgui::icons::kIconDemoPanel };
       ctx->SetRef("//DemoPanelSideBar");
-      ctx->ItemClick(imgui::icons::kIconDemoPanel.data());
+      ctx->ItemClick(demo_panel_icon.c_str());
       ctx->Yield(3);
     }
     ctx->SetRef("//Async Demo");

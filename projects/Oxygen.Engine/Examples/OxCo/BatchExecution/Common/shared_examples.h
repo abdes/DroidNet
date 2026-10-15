@@ -33,9 +33,10 @@ void RunExample1(BatchProcessor& processor, const std::string& approach_name)
 
   std::optional<int> first_even;
   std::vector<int> all_even_numbers;
-  size_t count_greater_than_10;
+  size_t count_greater_than_10 {};
   std::vector<size_t> indices_of_odd;
-  int min_val, max_val;
+  int min_val {};
+  int max_val {};
 
   processor.ExecuteBatch([&](auto& p) {
     p.FindFirst(predicates::is_even, first_even);
@@ -66,7 +67,7 @@ void RunExample2(BatchProcessor& processor, const std::string& approach_name)
 
   std::vector<int> primes;
   std::vector<size_t> prime_indices;
-  size_t prime_count;
+  size_t prime_count {};
   std::optional<int> first_prime_gt_10;
 
   processor.ExecuteBatch([&](auto& p) {
@@ -93,8 +94,12 @@ void RunExample3(BatchProcessor& processor, const std::string& approach_name)
 {
   std::cout << "\nExample 3: Range analysis with " << approach_name << "\n";
 
-  size_t small_count, medium_count, large_count;
-  std::vector<int> small_numbers, medium_numbers, large_numbers;
+  size_t small_count {};
+  size_t medium_count {};
+  size_t large_count {};
+  std::vector<int> small_numbers;
+  std::vector<int> medium_numbers;
+  std::vector<int> large_numbers;
 
   processor.ExecuteBatch([&](auto& p) {
     p.Count(predicates::small_range, small_count);
@@ -124,7 +129,7 @@ void RunExample4(BatchProcessor& processor, const std::string& approach_name)
 
   std::optional<int> result_before_exception;
   std::vector<int> all_results;
-  size_t count_before_exception;
+  size_t count_before_exception {};
 
   try {
     processor.ExecuteBatch([&](auto& p) {

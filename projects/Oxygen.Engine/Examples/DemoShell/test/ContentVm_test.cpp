@@ -42,10 +42,10 @@ namespace {
   class MemoryContentSettings final : public ContentSettingsService {
   public:
     ContentExplorerSettings explorer {};
-    std::vector<std::filesystem::path> paks {};
-    std::vector<std::filesystem::path> indices {};
-    std::vector<std::filesystem::path> records {};
-    std::optional<ContentActiveSceneSelection> active_scene {};
+    std::vector<std::filesystem::path> paks;
+    std::vector<std::filesystem::path> indices;
+    std::vector<std::filesystem::path> records;
+    std::optional<ContentActiveSceneSelection> active_scene;
 
     auto GetExplorerSettings() const -> ContentExplorerSettings override
     {
@@ -145,7 +145,7 @@ namespace {
     std::filesystem::path record_ {};
     std::filesystem::path generation_ {};
     MemoryContentSettings settings_ {};
-    FileBrowserService browser_ {};
+    FileBrowserService browser_;
   };
 
   NOLINT_TEST_F(

@@ -8,6 +8,7 @@
 
 #include <glm/ext/matrix_float4x4.hpp>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -42,6 +43,9 @@ class AxesWidget {
 public:
   explicit AxesWidget(observer_ptr<UiSettingsVm> settings_vm);
   ~AxesWidget() = default;
+
+  OXYGEN_DEFAULT_COPYABLE(AxesWidget)
+  OXYGEN_DEFAULT_MOVABLE(AxesWidget)
 
   //! Draw the axes widget using the provided camera.
   void Draw(observer_ptr<scene::SceneNode> camera);

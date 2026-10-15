@@ -6,6 +6,8 @@
 
 #include <filesystem>
 #include <memory>
+#include <system_error>
+#include <utility>
 
 #include "DemoShell/PanelCommands.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
@@ -14,10 +16,13 @@
 #include "DemoShell/UI/DiagnosticsVm.h"
 #include <imgui.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -72,7 +77,9 @@ namespace {
       auto& io = ImGui::GetIO();
       io.DisplaySize = ImVec2 { 1280.0F, 720.0F };
       io.DeltaTime = 1.0F / 60.0F;
-      io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+      io.BackendFlags = static_cast<ImGuiBackendFlags>(
+        static_cast<unsigned int>(io.BackendFlags)
+        | static_cast<unsigned int>(ImGuiBackendFlags_RendererHasTextures));
     }
 
     void TearDown() override

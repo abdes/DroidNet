@@ -9,16 +9,21 @@
 #include <functional>
 #include <iostream>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
-#include "OxCo/BatchExecution/Common.h"
+#include "OxCo/BatchExecution/Common/BatchExecutionEventLoop.h"
+#include "OxCo/BatchExecution/Common/shared_examples.h"
+#include "OxCo/BatchExecution/Common/shared_utilities.h"
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 
-using namespace oxygen::co;
+using oxygen::co::Co;
+using oxygen::co::kJoin;
 
 //===----------------------------------------------------------------------===//
 // Custom YieldAwaiter for control flow
@@ -27,10 +32,10 @@ using namespace oxygen::co;
 struct YieldAwaiter {
   BatchExecutionEventLoop* loop;
 
-  bool await_ready() const noexcept { return false; }
-  void await_suspend(std::coroutine_handle<> handle)
+  [[nodiscard]] auto await_ready() const noexcept -> bool { return false; }
+  void await_suspend(std::coroutine_handle<> handle) const
   {
-    loop->Schedule([handle]() { handle.resume(); });
+    loop->Schedule([handle] { handle.resume(); });
   }
   void await_resume() { }
 };
@@ -42,8 +47,8 @@ struct YieldAwaiter {
 class YieldAwaiterBatchProcessor {
 public:
   explicit YieldAwaiterBatchProcessor(BatchExecutionEventLoop& loop)
-    : loop_(loop)
-    , collection_(kTestCollection)
+    : loop_(oxygen::observer_ptr { &loop })
+    , collection_(kTestCollection.begin(), kTestCollection.end())
   {
   }
 
@@ -51,7 +56,7 @@ public:
   template <typename Predicate>
   void FindFirst(Predicate predicate, std::optional<int>& result)
   {
-    operations_.emplace_back([this, predicate, &result]() -> Co<> {
+    operations_.emplace_back([this, predicate, &result] -> Co<> {
       std::cout << "  [FindFirst] Starting sequential search\n";
       result = std::nullopt;
 
@@ -67,7 +72,7 @@ public:
         }
 
         // Yield between elements for interleaved processing
-        co_await YieldAwaiter { &loop_ };
+        co_await YieldAwaiter { loop_.get() };
       }
 
       std::cout << "  [FindFirst] Completed - no match found\n";
@@ -79,7 +84,7 @@ public:
   template <typename Predicate>
   void FindAll(Predicate predicate, std::vector<int>& results)
   {
-    operations_.emplace_back([this, predicate, &results]() -> Co<> {
+    operations_.emplace_back([this, predicate, &results] -> Co<> {
       std::cout << "  [FindAll] Starting complete search\n";
       results.clear();
 
@@ -94,7 +99,7 @@ public:
         }
 
         // Yield between elements for interleaved processing
-        co_await YieldAwaiter { &loop_ };
+        co_await YieldAwaiter { loop_.get() };
       }
 
       std::cout << "  [FindAll] Completed with " << results.size()
@@ -106,7 +111,7 @@ public:
   // Count elements matching predicate and store in provided reference
   template <typename Predicate> void Count(Predicate predicate, size_t& count)
   {
-    operations_.emplace_back([this, predicate, &count]() -> Co<> {
+    operations_.emplace_back([this, predicate, &count] -> Co<> {
       std::cout << "  [Count] Starting count operation\n";
       count = 0;
 
@@ -120,7 +125,7 @@ public:
         }
 
         // Yield between elements for interleaved processing
-        co_await YieldAwaiter { &loop_ };
+        co_await YieldAwaiter { loop_.get() };
       }
 
       std::cout << "  [Count] Completed with count: " << count << "\n";
@@ -132,7 +137,7 @@ public:
   template <typename Predicate>
   void FindIndices(Predicate predicate, std::vector<size_t>& indices)
   {
-    operations_.emplace_back([this, predicate, &indices]() -> Co<> {
+    operations_.emplace_back([this, predicate, &indices] -> Co<> {
       std::cout << "  [FindIndices] Starting index search\n";
       indices.clear();
 
@@ -146,7 +151,7 @@ public:
         }
 
         // Yield between elements for interleaved processing
-        co_await YieldAwaiter { &loop_ };
+        co_await YieldAwaiter { loop_.get() };
       }
 
       std::cout << "  [FindIndices] Completed with " << indices.size()
@@ -158,7 +163,7 @@ public:
   // Get min and max values
   void FindMinMax(int& min_value, int& max_value)
   {
-    operations_.emplace_back([this, &min_value, &max_value]() -> Co<> {
+    operations_.emplace_back([this, &min_value, &max_value] -> Co<> {
       std::cout << "  [FindMinMax] Starting min/max search\n";
       bool first = true;
 
@@ -183,7 +188,7 @@ public:
         }
 
         // Yield between elements for interleaved processing
-        co_await YieldAwaiter { &loop_ };
+        co_await YieldAwaiter { loop_.get() };
       }
 
       std::cout << "  [FindMinMax] Completed - min: " << min_value
@@ -194,7 +199,7 @@ public:
 
   // Execute all registered operations using YieldAwaiter approach
   void ExecuteBatch(
-    std::function<void(YieldAwaiterBatchProcessor&)> batch_operations)
+    const std::function<void(YieldAwaiterBatchProcessor&)>& batch_operations)
   {
     std::cout
       << "\n=== ExecuteBatch: Starting YieldAwaiter Batch Processing ===\n";
@@ -213,7 +218,7 @@ public:
     std::cout << "Registered " << operations_.size() << " operations\n";
 
     // Run the async implementation
-    oxygen::co::Run(loop_, ExecuteBatchAsync());
+    oxygen::co::Run(*loop_, ExecuteBatchAsync());
 
     // Clear operations after execution
     operations_.clear();
@@ -222,7 +227,7 @@ public:
   }
 
 private:
-  Co<> ExecuteBatchAsync()
+  auto ExecuteBatchAsync() -> Co<>
   {
     std::cout << "Setting up nursery for YieldAwaiter batch operations\n";
 
@@ -230,7 +235,7 @@ private:
     {
       // Start a coroutine for each operation
       for (auto& operation : operations_) {
-        nursery.Start([&operation]() -> Co<> {
+        nursery.Start([&operation] -> Co<> {
           co_await operation();
           co_return;
         });
@@ -243,7 +248,7 @@ private:
     co_return;
   }
 
-  BatchExecutionEventLoop& loop_;
+  oxygen::observer_ptr<BatchExecutionEventLoop> loop_;
   std::vector<int> collection_;
   std::vector<std::function<Co<>()>> operations_;
 };

@@ -198,38 +198,70 @@ auto ReferenceSettings() -> LightBenchSettings
 auto GetPresets() -> std::span<const PresetInfo>
 {
   static constexpr std::array presets {
-    PresetInfo { LightBenchPreset::kNeutralReference, "neutral-reference",
-      "Neutral Reference",
-      "Three calibrated cards under 1000 lux. Fixed exposure, no tone curve; "
-      "use this to check physical lighting and EV changes." },
-    PresetInfo { LightBenchPreset::kPointFalloff, "point-falloff",
-      "Point Falloff",
-      "One gray receiver, 1000 lm point light, 2 m distance. Exposure stays "
-      "fixed: moving to 1 m gives about 4x the illumination; 4 m gives about "
-      "1/4." },
-    PresetInfo { LightBenchPreset::kSpotCone, "spot-cone", "Spot Cone",
-      "A white 1000 lm spot aimed at a broad gray receiver, 3 m away. "
-      "Inner/outer half angles are 15/30 degrees. Change the cone to inspect "
-      "its footprint and edge falloff." },
-    PresetInfo { LightBenchPreset::kMaterialLighting, "material-lighting",
-      "Material Lighting",
-      "Matte and glossy spheres on a lit ground. Angled directional "
-      "illumination, shadows, fixed EV8 and ACES make surface response and "
-      "highlights easy to compare." },
-    PresetInfo { LightBenchPreset::kAutoAdaptation, "auto-adaptation",
-      "Auto Adaptation",
-      "Cards, spheres and ground receive balanced directional illumination. "
-      "Auto + Average metering + ACES. Use the light steps to see adaptation "
-      "without resetting its history." },
-    PresetInfo { LightBenchPreset::kIndoor, "indoor", "Indoor",
-      "Warm 1600 lm point fill and 2500 lm spot lighting. Auto + Center "
-      "Weighted metering + ACES; a practical indoor direct-lighting setup with "
-      "the same reference objects." },
-    PresetInfo { LightBenchPreset::kOutdoorDaylight, "outdoor-daylight",
-      "Outdoor Daylight",
-      "100,000 lux white directional daylight illuminates both the objects and "
-      "ground. Auto + Center Weighted metering + ACES maintains a useful "
-      "exposure at outdoor light levels." },
+    PresetInfo {
+      .preset = LightBenchPreset::kNeutralReference,
+      .id = "neutral-reference",
+      .name = "Neutral Reference",
+      .description
+      = "Three calibrated cards under 1000 lux. Fixed exposure, no tone curve; "
+        "use this to check physical lighting and EV changes.",
+    },
+    PresetInfo {
+      .preset = LightBenchPreset::kPointFalloff,
+      .id = "point-falloff",
+      .name = "Point Falloff",
+      .description
+      = "One gray receiver, 1000 lm point light, 2 m distance. Exposure stays "
+        "fixed: moving to 1 m gives about 4x the illumination; 4 m gives about "
+        "1/4.",
+    },
+    PresetInfo {
+      .preset = LightBenchPreset::kSpotCone,
+      .id = "spot-cone",
+      .name = "Spot Cone",
+      .description
+      = "A white 1000 lm spot aimed at a broad gray receiver, 3 m away. "
+        "Inner/outer half angles are 15/30 degrees. Change the cone to inspect "
+        "its footprint and edge falloff.",
+    },
+    PresetInfo {
+      .preset = LightBenchPreset::kMaterialLighting,
+      .id = "material-lighting",
+      .name = "Material Lighting",
+      .description
+      = "Matte and glossy spheres on a lit ground. Angled directional "
+        "illumination, shadows, fixed EV8 and ACES make surface response and "
+        "highlights easy to compare.",
+    },
+    PresetInfo {
+      .preset = LightBenchPreset::kAutoAdaptation,
+      .id = "auto-adaptation",
+      .name = "Auto Adaptation",
+      .description
+      = "Cards, spheres and ground receive balanced directional illumination. "
+        "Auto + Average metering + ACES. Use the light steps to see adaptation "
+        "without resetting its history.",
+    },
+    PresetInfo {
+      .preset = LightBenchPreset::kIndoor,
+      .id = "indoor",
+      .name = "Indoor",
+      .description
+      = "Warm 1600 lm point fill and 2500 lm spot lighting. Auto + Center "
+        "Weighted metering + ACES; a practical indoor direct-lighting setup "
+        "with "
+        "the same reference objects.",
+    },
+    PresetInfo {
+      .preset = LightBenchPreset::kOutdoorDaylight,
+      .id = "outdoor-daylight",
+      .name = "Outdoor Daylight",
+      .description
+      = "100,000 lux white directional daylight illuminates both the objects "
+        "and "
+        "ground. Auto + Center Weighted metering + ACES maintains a useful "
+        "exposure at outdoor light levels.",
+    },
   };
   return presets;
 }

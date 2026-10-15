@@ -5,21 +5,35 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <iterator>
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "DemoShell/Services/DefaultSceneLighting.h"
+#include "DemoShell/Services/SkyboxService.h"
 #include "TexturedCube/SceneSetup.h"
+#include "TexturedCube/TextureLoadingService.h"
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 
 namespace {

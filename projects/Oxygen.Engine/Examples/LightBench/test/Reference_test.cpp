@@ -13,11 +13,13 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <numbers>
 #include <span>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "LightBench/LightBenchSettings.h"
 #include "LightBench/LightScene.h"
@@ -29,11 +31,14 @@
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -41,13 +46,17 @@
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/SceneSync/SceneObserverSyncModule.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/test/Lighting/Reference/GgxBrdf.h>
@@ -99,7 +108,8 @@ namespace {
       const auto desc = source->GetDesc();
       D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint {};
       UINT rows = 0;
-      UINT64 row_bytes = 0, bytes = 0;
+      UINT64 row_bytes = 0;
+      UINT64 bytes = 0;
       Backend().GetCurrentDevice()->GetCopyableFootprints(
         &desc, 0, 1, 0, &footprint, &rows, &row_bytes, &bytes);
       auto readback
@@ -134,13 +144,14 @@ namespace {
       const auto width = footprint.Footprint.Width;
       const auto stride = row_bytes / width;
       std::vector<float> result(static_cast<std::size_t>(width) * rows);
-      for (std::size_t y = 0; y < rows; ++y)
+      for (std::size_t y = 0; y < rows; ++y) {
         for (std::size_t x = 0; x < width; ++x) {
           const auto pixel = data.subspan(footprint.Offset
               + (y * footprint.Footprint.RowPitch) + (x * stride),
             sizeof(float));
-          std::memcpy(&result.at(y * width + x), pixel.data(), sizeof(float));
+          std::memcpy(&result.at((y * width) + x), pixel.data(), sizeof(float));
         }
+      }
       readback->UnMap();
       return result;
     }
@@ -211,7 +222,7 @@ NOLINT_TEST_F(
         graphics::ResourceStates::kShaderResource);
     RecordProperty(
       forward ? "forward_gain" : "deferred_gain", gain_state.displayed_scale);
-    const double gain = std::exp2(-double(reference::kExposureEv));
+    const double gain = std::exp2(-static_cast<double>(reference::kExposureEv));
     // Inset 16x16 regions around projected card centres. Entire regions must be
     // foreground; surrounding background cannot count as a dark card.
     for (std::size_t card = 0; card < 3; ++card) {
@@ -243,8 +254,8 @@ NOLINT_TEST_F(
       // The card offsets remain +/-1.6 m; framing may change independently.
       const auto center_x = static_cast<std::uint32_t>(kWidth
         * (.5
-          + (static_cast<double>(card) - 1.0) * 1.6
-            / reference::kMinimumViewWidth));
+          + ((static_cast<double>(card) - 1.0) * 1.6
+            / reference::kMinimumViewWidth)));
       std::uint32_t foreground = 0;
       double total = 0;
       double maximum_radiance_error = 0;
@@ -324,7 +335,7 @@ NOLINT_TEST_F(
         }
         const auto bytes = rb->MapNow();
         ASSERT_TRUE(bytes);
-        const auto code = std::to_integer<unsigned>(bytes->Data()[0]);
+        const auto code = std::to_integer<unsigned>(*bytes->Data());
         RecordProperty("deferred_code_" + std::to_string(card), code);
       }
       const auto depth = owner->GetSceneTextures().GetSceneDepthResource();
@@ -332,7 +343,7 @@ NOLINT_TEST_F(
       ASSERT_EQ(depth->GetDescriptor().format, Format::kDepth32Stencil8);
       const auto depth_pixels = ReadDepth(*depth);
       double maximum_depth_error = 0;
-      for (std::uint32_t y = kHeight / 2 - 8; y < kHeight / 2 + 8; ++y) {
+      for (std::uint32_t y = (kHeight / 2) - 8; y < (kHeight / 2) + 8; ++y) {
         for (std::uint32_t x = center_x - 8; x < center_x + 8; ++x) {
           const auto z = depth_pixels.at((y * kWidth) + x);
           ASSERT_TRUE(std::isfinite(z));
@@ -360,15 +371,15 @@ NOLINT_TEST_F(
   scenesync::SceneObserverSyncModule sync(
     engine::kSceneObserverSyncModulePriority);
   co::testing::TestEventLoop loop;
-  const auto synchronize = [&]() -> void {
-    co::Run(loop, [&]() -> co::Co<> {
+  const auto synchronize = [&] -> void {
+    co::Run(loop, [&] -> co::Co<> {
       co_await sync.OnSceneMutation(observer_ptr { &frame });
     });
   };
   synchronize();
   ASSERT_EQ(
     scene->GetDirectionalLightResolver().ResolveDirectionalLights().size(), 1U);
-  const auto centre = (kHeight / 2U) * kWidth + kWidth / 2U;
+  const auto centre = ((kHeight / 2U) * kWidth) + (kWidth / 2U);
   for (const bool forward : { false, true }) {
     SCOPED_TRACE(forward ? "forward" : "deferred");
     RenderSurface(forward, reference::kExposureEv);
@@ -404,15 +415,18 @@ namespace {
     {
       const auto authored = PresetSettings(preset);
       ApplySettings(authored, bench, camera);
-      LightScene::FitReferenceCamera(camera, float(width) / float(height));
+      LightScene::FitReferenceCamera(
+        camera, static_cast<float>(width) / static_cast<float>(height));
       settings = authored.exposure;
       view.viewport.width = static_cast<float>(width);
       view.viewport.height = static_cast<float>(height);
-      auto output = CreateRegisteredTexture({ .width = width,
+      auto output = CreateRegisteredTexture({
+        .width = width,
         .height = height,
         .format = Format::kRGBA32Float,
         .is_render_target = true,
-        .initial_state = graphics::ResourceStates::kCommon });
+        .initial_state = graphics::ResourceStates::kCommon,
+      });
       framebuffer = Backend().CreateFramebuffer(
         graphics::FramebufferDesc {}.AddColorAttachment(output));
       ++surface_view_id;
@@ -430,8 +444,9 @@ namespace {
         expected_draws = count;
         ready = count == draws;
       };
-      for (unsigned attempt = 0; attempt < 30 && !ready; ++attempt)
+      for (unsigned attempt = 0; attempt < 30 && !ready; ++attempt) {
         RenderSurface(forward, settings.manual_ev, 1U);
+      }
       probe->inspect = {};
       ASSERT_TRUE(ready) << "Preset geometry did not become ready";
       expected_draws = draws;
@@ -450,48 +465,57 @@ namespace {
       const auto& pixel = pixels.at(index);
       double profile = 1;
       if (settings.metering_mode == engine::MeteringMode::kCenterWeighted) {
-        const auto x = double(index % width), y = double(index / width);
+        const auto x = static_cast<double>(index % width);
+        const auto row = index / width;
+        const auto y = static_cast<double>(row);
         profile = std::max(0.0,
           1.0
-            - std::hypot(
-              ((2 * x + 1) - width) / width, ((2 * y + 1) - height) / height));
+            - std::hypot((((2 * x) + 1) - width) / width,
+              (((2 * y) + 1) - height) / height));
       }
-      const auto quantized = std::floor(profile * 4095.0 + .5);
-      if (quantized == 0)
+      const auto quantized = std::floor((profile * 4095.0) + .5);
+      if (quantized == 0) {
         continue;
+      }
       const double luminance
-        = .2126 * pixel.at(0) + .7152 * pixel.at(1) + .0722 * pixel.at(2);
+        = (.2126 * pixel.at(0)) + (.7152 * pixel.at(1)) + (.0722 * pixel.at(2));
       if (!std::isfinite(luminance)
-        || luminance <= std::exp2(settings.min_log_luminance))
+        || luminance <= std::exp2(settings.min_log_luminance)) {
         continue;
+      }
       const double position
         = std::clamp((std::log2(luminance) - settings.min_log_luminance)
               / settings.log_luminance_range,
             0.0, 1.0)
         * 255.0;
       const auto lower = static_cast<std::size_t>(position);
-      const double upper = std::floor(quantized * (position - lower) + .5);
+      const double upper = std::floor(
+        (quantized * (position - static_cast<double>(lower))) + .5);
       histogram.at(lower) += quantized - upper;
       histogram.at(std::min(lower + 1, std::size_t { 255 })) += upper;
     }
     double total = 0;
-    for (const auto weight : histogram)
+    for (const auto weight : histogram) {
       total += weight;
-    const double low = total * settings.low_percentile,
-                 high = total * settings.high_percentile;
-    double cursor = 0, moment = 0, retained = 0;
+    }
+    const double low = total * settings.low_percentile;
+    const double high = total * settings.high_percentile;
+    double cursor = 0;
+    double moment = 0;
+    double retained = 0;
     for (std::size_t bin = 0; bin < histogram.size(); ++bin) {
       const double end = cursor + histogram.at(bin);
       const double weight
         = std::max(0.0, std::min(end, high) - std::max(cursor, low));
       moment += weight
         * (settings.min_log_luminance
-          + double(bin) * settings.log_luminance_range / 255.0);
+          + (static_cast<double>(bin) * settings.log_luminance_range / 255.0));
       retained += weight;
       cursor = end;
     }
-    if (retained <= 0)
+    if (retained <= 0) {
       throw std::runtime_error("Saved Auto scene has no valid meter samples");
+    }
     return std::exp2(moment / retained);
   }
 }
@@ -509,17 +533,21 @@ NOLINT_TEST_F(
   ASSERT_TRUE(saved) << saved.error().message;
   // 5:4 approximates the scene region in the supplied image; copied authored
   // inputs are exact. Both dimensions are below the 512-cell meter grid cap.
-  constexpr std::uint32_t width = 320, height = 256;
+  constexpr std::uint32_t width = 320;
+  constexpr std::uint32_t height = 256;
   view.viewport.width = static_cast<float>(width);
   view.viewport.height = static_cast<float>(height);
-  auto output = CreateRegisteredTexture({ .width = width,
+  auto output = CreateRegisteredTexture({
+    .width = width,
     .height = height,
     .format = Format::kRGBA32Float,
     .is_render_target = true,
-    .initial_state = graphics::ResourceStates::kCommon });
+    .initial_state = graphics::ResourceStates::kCommon,
+  });
   framebuffer = Backend().CreateFramebuffer(
     graphics::FramebufferDesc {}.AddColorAttachment(output));
-  LightScene::FitReferenceCamera(camera, float(width) / float(height));
+  LightScene::FitReferenceCamera(
+    camera, static_cast<float>(width) / static_cast<float>(height));
   settings.mode = engine::ExposureMode::kManual;
   frame_delta_seconds = 1.0F / 30.0F;
   RenderSurface(false, reference::kExposureEv);
@@ -527,7 +555,8 @@ NOLINT_TEST_F(
     = Read<vortex::ExposureStateData>(*probe->exposure->current_state->buffer,
       graphics::ResourceStates::kShaderResource);
   ApplySettings(*saved, bench, camera);
-  LightScene::FitReferenceCamera(camera, float(width) / float(height));
+  LightScene::FitReferenceCamera(
+    camera, static_cast<float>(width) / static_cast<float>(height));
   settings = saved->exposure;
   // Newly enabled geometry uploads asynchronously. Gate this numerical
   // observation on actual published draw readiness, not a fixed warmup count.
@@ -542,7 +571,8 @@ NOLINT_TEST_F(
   ASSERT_TRUE(ready) << "Full scene did not publish all six draw records";
   probe->inspect = {};
   expected_draws = 6;
-  double target = 0, meter = 0;
+  double target = 0;
+  double meter = 0;
   unsigned frames = 0;
   for (const unsigned checkpoint : { 1U, 30U, 60U, 120U, 240U, 480U, 900U }) {
     RenderSurface(false, reference::kExposureEv, checkpoint - frames);
@@ -557,7 +587,8 @@ NOLINT_TEST_F(
       const auto pixels = ReadFloatTexture(*probe->color);
       meter = ReferenceMeter(pixels, settings);
       const auto ev = std::clamp(std::log2(meter / .18),
-        double(settings.min_ev), double(settings.max_ev));
+        static_cast<double>(settings.min_ev),
+        static_cast<double>(settings.max_ev));
       target = std::exp2(-ev);
       RecordProperty("independent_meter_luminance", meter);
       RecordProperty("independent_target_gain", target);
@@ -574,13 +605,16 @@ NOLINT_TEST_F(
     if (checkpoint == 900) {
       EXPECT_NEAR(std::log2(state.displayed_scale), std::log2(target), 5e-4);
       const auto pixels = ReadFloatTexture(*probe->color);
-      std::size_t clipped = 0, positive = 0;
+      std::size_t clipped = 0;
+      std::size_t positive = 0;
       for (const auto& pixel : pixels) {
         const auto peak = std::max({ pixel.at(0), pixel.at(1), pixel.at(2) });
-        if (peak > 0)
+        if (peak > 0) {
           ++positive;
-        if (peak * state.displayed_scale > 1)
+        }
+        if (peak * state.displayed_scale > 1) {
           ++clipped;
+        }
       }
       RecordProperty("clipped_pixels", clipped);
       RecordProperty("positive_pixels", positive);
@@ -603,8 +637,9 @@ NOLINT_TEST_F(LightBenchAutoExposureTest,
     const double lux
       = 1000.0 / (4 * std::numbers::pi * distance * distance) * fade;
     const double expected = Expected(.18, .04) * lux / 1000.0;
-    for (std::size_t channel = 0; channel < 3; ++channel)
+    for (std::size_t channel = 0; channel < 3; ++channel) {
       EXPECT_NEAR(pixel.at(channel), expected, expected * 2e-5);
+    }
     RecordProperty(
       "distance_" + std::to_string(static_cast<int>(distance)) + "m_luminance",
       pixel.at(0));
@@ -615,22 +650,23 @@ NOLINT_TEST_F(LightBenchAutoExposureTest,
 NOLINT_TEST_F(
   LightBenchAutoExposureTest, SpotPresetHasBrightCenterAndFiniteConeFootprint)
 {
-  constexpr unsigned width = 321, height = 257;
+  constexpr unsigned width = 321;
+  constexpr unsigned height = 257;
   ASSERT_NO_FATAL_FAILURE(
     StagePreset(LightBenchPreset::kSpotCone, width, height, true));
   const auto pixels = ReadFloatTexture(*probe->color);
-  const auto center = pixels.at((height / 2) * width + width / 2);
-  const double ci = std::cos(15.0 * std::numbers::pi / 180.0),
-               co = std::cos(30.0 * std::numbers::pi / 180.0);
-  const double omega = 2 * std::numbers::pi * ((1 - ci) + (ci - co) / 3);
+  const auto center = pixels.at(((height / 2) * width) + (width / 2));
+  const double ci = std::cos(15.0 * std::numbers::pi / 180.0);
+  const double co = std::cos(30.0 * std::numbers::pi / 180.0);
+  const double omega = 2 * std::numbers::pi * ((1 - ci) + ((ci - co) / 3));
   const double lux = 1000 / omega / 9 * std::pow(1 - std::pow(3.0 / 20, 4), 2);
   const double expected = Expected(.18, .04) * lux / 1000;
   EXPECT_NEAR(center.at(0), expected, expected * 2e-5);
   // Probe 2 m from the center: outside the 1.732 m cone radius but still on
   // the 5 m receiver, independently of the camera's default framing.
-  const auto outside_x
-    = static_cast<unsigned>(width * (.5 + 2.0 / reference::kMinimumViewWidth));
-  const auto outside = pixels.at((height / 2) * width + outside_x);
+  const auto outside_x = static_cast<unsigned>(
+    width * (.5 + (2.0 / reference::kMinimumViewWidth)));
+  const auto outside = pixels.at(((height / 2) * width) + outside_x);
   EXPECT_GT(outside.at(3), .99F);
   EXPECT_FLOAT_EQ(outside.at(0), 0.0F);
   RecordProperty("spot_center_luminance", center.at(0));
@@ -639,38 +675,41 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   LightBenchAutoExposureTest, SpotPresetFullFootprintMatchesIndependentFalloff)
 {
-  constexpr unsigned width = 321, height = 257;
+  constexpr unsigned width = 321;
+  constexpr unsigned height = 257;
   constexpr double view_width = reference::kMinimumViewWidth;
   constexpr double light_distance = 3.0;
   const double inner = std::cos(15.0 * std::numbers::pi / 180.0);
   const double outer = std::cos(30.0 * std::numbers::pi / 180.0);
   // Integrate the authored squared angular distribution over solid angle.
   const double intensity
-    = 1000.0 / (2 * std::numbers::pi * (1 - inner + (inner - outer) / 3));
+    = 1000.0 / (2 * std::numbers::pi * (1 - inner + ((inner - outer) / 3)));
   const auto moments = oracle::IntegrateGgxMoments(
     oracle::PerceptualRoughness { 1.0 }, oracle::ViewCosine { 1.0 });
   ASSERT_TRUE(moments);
-  const auto radiance = [&](double radius, double albedo, double f0) {
-    const double distance = std::hypot(light_distance, radius);
-    const double cosine = light_distance / distance;
-    const double angular
-      = std::pow(std::clamp((cosine - outer) / (inner - outer), 0.0, 1.0), 2);
-    std::array<oracle::BrdfReflectance, 3> material;
-    material.fill({ .f0 = f0, .diffuse = albedo });
-    const auto brdf = oracle::EvaluateRasterGgxBrdf(
-      { .light = oracle::LightCosine { cosine } }, material, *moments);
-    if (!brdf) {
-      throw std::runtime_error("Independent spot BRDF failed");
-    }
-    const auto& lobe = brdf->front();
-    const double window = std::pow(1 - std::pow(distance / 20.0, 4), 2);
-    return intensity * angular * window / (distance * distance) * cosine
-      * (lobe.diffuse + lobe.single_scattering + lobe.multiple_scattering);
+  const auto radiance
+    = [&](double radius, const oracle::BrdfReflectance& reflectance) {
+        const double distance = std::hypot(light_distance, radius);
+        const double cosine = light_distance / distance;
+        const double angular = std::pow(
+          std::clamp((cosine - outer) / (inner - outer), 0.0, 1.0), 2);
+        std::array<oracle::BrdfReflectance, 3> material;
+        material.fill(reflectance);
+        const auto brdf = oracle::EvaluateRasterGgxBrdf(
+          { .light = oracle::LightCosine { cosine } }, material, *moments);
+        if (!brdf) {
+          throw std::runtime_error("Independent spot BRDF failed");
+        }
+        const auto& lobe = brdf->front();
+        const double window = std::pow(1 - std::pow(distance / 20.0, 4), 2);
+        return intensity * angular * window / (distance * distance) * cosine
+          * (lobe.diffuse + lobe.single_scattering + lobe.multiple_scattering);
+      };
+  const double peak = radiance(0, { .f0 = .04, .diffuse = .18 });
+  const double encoded = (1.055 * std::pow(.18, 1.0 / 2.4)) - .055;
+  const auto decode = [](double code) {
+    return std::pow(((code / 255.0) + .055) / 1.055, 2.4);
   };
-  const double peak = radiance(0, .18, .04);
-  const double encoded = 1.055 * std::pow(.18, 1.0 / 2.4) - .055;
-  const auto decode
-    = [](double code) { return std::pow((code / 255.0 + .055) / 1.055, 2.4); };
   for (const bool forward : { true, false }) {
     SCOPED_TRACE(forward ? "forward" : "deferred");
     ASSERT_NO_FATAL_FAILURE(
@@ -681,25 +720,29 @@ NOLINT_TEST_F(
     const auto domain = Read<vortex::FrameExposureData>(
       *probe->exposure->buffer, graphics::ResourceStates::kShaderResource);
     ASSERT_FLOAT_EQ(domain.pre_exposure, 1.0F);
-    double maximum_error = 0, maximum_excess = 0;
-    unsigned samples = 0, dark_samples = 0;
+    double maximum_error = 0;
+    double maximum_excess = 0;
+    unsigned samples = 0;
+    unsigned dark_samples = 0;
     std::ostringstream profile;
     profile << std::setprecision(12)
             << "radius_m,expected_hdr,actual_hdr,display_output\n";
     for (unsigned y = 0; y < height; ++y) {
       for (unsigned x = 0; x < width; ++x) {
         const double dx
-          = (double(x) + .5 - double(width) / 2) * view_width / width;
+          = (static_cast<double>(x) + .5 - (static_cast<double>(width) / 2))
+          * view_width / width;
         const double dy
-          = (double(y) + .5 - double(height) / 2) * view_width / width;
+          = (static_cast<double>(y) + .5 - (static_cast<double>(height) / 2))
+          * view_width / width;
         const double radius = std::hypot(dx, dy);
         // Includes the complete cone and a foreground annulus outside it.
         if (radius > 2.0) {
           continue;
         }
-        const auto& pixel = pixels.at(y * width + x);
+        const auto& pixel = pixels.at((y * width) + x);
         ASSERT_GT(pixel.at(3), .99F);
-        const double expected = radiance(radius, .18, .04);
+        const double expected = radiance(radius, { .f0 = .04, .diffuse = .18 });
         double packing_bound = 0;
         if (!forward) {
           // Same storage/sampling uncertainty as the calibrated card test.
@@ -707,8 +750,9 @@ NOLINT_TEST_F(
             { std::floor(encoded * 255) - .5, std::ceil(encoded * 255) + .5 }) {
             for (const double specular : { 127.0 / 255, 128.0 / 255 }) {
               packing_bound = std::max(packing_bound,
-                std::abs(
-                  radiance(radius, decode(code), .08 * specular) - expected));
+                std::abs(radiance(radius,
+                           { .f0 = .08 * specular, .diffuse = decode(code) })
+                  - expected));
             }
           }
         }
@@ -725,7 +769,7 @@ NOLINT_TEST_F(
         dark_samples += expected == 0 ? 1 : 0;
         if (y == height / 2 && x >= width / 2) {
           profile << radius << ',' << expected << ',' << pixel.at(0) << ','
-                  << output.at(y * width + x).at(0) << '\n';
+                  << output.at((y * width) + x).at(0) << '\n';
         }
       }
     }
@@ -751,10 +795,14 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(LightBenchAutoExposureTest,
   IndoorOutdoorAndAdaptationPresetsConvergeWithoutWhiteSubjects)
 {
-  constexpr unsigned width = 320, height = 256;
+  constexpr unsigned width = 320;
+  constexpr unsigned height = 256;
   frame_delta_seconds = 1.0F / 30.0F;
-  for (const auto preset : { LightBenchPreset::kAutoAdaptation,
-         LightBenchPreset::kIndoor, LightBenchPreset::kOutdoorDaylight }) {
+  for (const auto preset : {
+         LightBenchPreset::kAutoAdaptation,
+         LightBenchPreset::kIndoor,
+         LightBenchPreset::kOutdoorDaylight,
+       }) {
     SCOPED_TRACE(GetPresetInfo(preset).id);
     ASSERT_NO_FATAL_FAILURE(StagePreset(preset, width, height));
     const auto initial
@@ -778,14 +826,15 @@ NOLINT_TEST_F(LightBenchAutoExposureTest,
     const auto position = bench.GetGrayCardState().position;
     const auto clip = resolved.ProjectionMatrix() * resolved.ViewMatrix()
       * Vec4 { position, 1.0F };
-    const auto x = static_cast<unsigned>((clip.x / clip.w * .5F + .5F) * width);
+    const auto x
+      = static_cast<unsigned>(((clip.x / clip.w * .5F) + .5F) * width);
     const auto y
-      = static_cast<unsigned>((.5F - clip.y / clip.w * .5F) * height);
+      = static_cast<unsigned>((.5F - (clip.y / clip.w * .5F)) * height);
     ASSERT_LT(x, width);
     ASSERT_LT(y, height);
     const auto output = ReadFloatTexture(
       *framebuffer->GetDescriptor().color_attachments.front().texture);
-    const auto gray = output.at(y * width + x);
+    const auto gray = output.at((y * width) + x);
     EXPECT_GT(gray.at(0), .05F);
     EXPECT_LT(std::max({ gray.at(0), gray.at(1), gray.at(2) }), .98F);
     const auto label = std::string(GetPresetInfo(preset).id);
@@ -821,7 +870,8 @@ NOLINT_TEST_F(LightBenchAutoExposureTest,
       / ReferenceMeter(ReadFloatTexture(*probe->color), settings, 320, 256);
     const auto delta
       = std::log2(first.displayed_scale / previous.displayed_scale);
-    EXPECT_LE(std::abs(delta), settings.speed_up * frame_delta_seconds + 1e-4);
+    EXPECT_LE(
+      std::abs(delta), (settings.speed_up * frame_delta_seconds) + 1e-4);
     EXPECT_EQ(first.applied_generation, generation);
     EXPECT_NEAR(std::log2(first.target_scale), std::log2(target), 2e-4);
     RenderSurface(false, settings.manual_ev, 600U);

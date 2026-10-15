@@ -8,12 +8,13 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 
-#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -51,13 +52,17 @@ namespace {
       scene::SceneNode camera;
     };
 
-    //! A scene named `name` with a perspective camera named `camera` at the
-    //! origin.
-    static auto MakeWorld(const std::string& name, const std::string& camera)
-      -> World
+    //! The names of a scene and of its camera.
+    struct WorldNames {
+      std::string scene;
+      std::string camera;
+    };
+
+    //! A scene with a perspective camera at the origin.
+    static auto MakeWorld(const WorldNames& names) -> World
     {
-      auto scene = std::make_shared<scene::Scene>(name, kSceneCapacity);
-      auto node = scene->CreateNode(camera);
+      auto scene = std::make_shared<scene::Scene>(names.scene, kSceneCapacity);
+      auto node = scene->CreateNode(names.camera);
       EXPECT_TRUE(
         node.AttachCamera(std::make_unique<scene::PerspectiveCamera>()));
       return { .scene = std::move(scene), .camera = node };
@@ -98,12 +103,12 @@ namespace {
   NOLINT_TEST_F(CameraSettingsServiceTest, EachSceneRestoresItsOwnCameraPose)
   {
     CameraSettingsService service;
-    auto first = MakeWorld("First", "MainCamera");
-    auto second = MakeWorld("Second", "MainCamera");
+    auto first = MakeWorld({ .scene = "First", .camera = "MainCamera" });
+    auto second = MakeWorld({ .scene = "Second", .camera = "MainCamera" });
     SavePose(service, first, { 1.0F, 2.0F, 3.0F });
     SavePose(service, second, { -4.0F, 5.0F, -6.0F });
 
-    auto first_again = MakeWorld("First", "MainCamera");
+    auto first_again = MakeWorld({ .scene = "First", .camera = "MainCamera" });
     Activate(service, first_again);
 
     EXPECT_EQ(first_again.camera.GetTransform().GetLocalPosition(),
@@ -123,14 +128,14 @@ namespace {
       return "Scene" + std::to_string(i);
     };
     for (std::size_t i = 0; i < CameraSettingsService::kRememberedScenes; ++i) {
-      auto world = MakeWorld(scene_name(i), "Camera");
+      auto world = MakeWorld({ .scene = scene_name(i), .camera = "Camera" });
       SavePose(service, world, { static_cast<float>(i + 1U), 0.0F, 0.0F });
     }
     // Scene0 is the oldest; using it again makes Scene1 the oldest.
-    auto oldest = MakeWorld(scene_name(0), "Camera");
+    auto oldest = MakeWorld({ .scene = scene_name(0), .camera = "Camera" });
     Activate(service, oldest);
 
-    auto newest = MakeWorld("Newest", "Camera");
+    auto newest = MakeWorld({ .scene = "Newest", .camera = "Camera" });
     SavePose(service, newest, { 9.0F, 0.0F, 0.0F });
 
     const auto saved = [](const std::string& scene) -> bool {
@@ -152,7 +157,7 @@ namespace {
     Settings().SetString("camera_rig.MainCamera.orbit.mode", "turntable");
     Settings().SetString("camera.orbit_mode", "trackball");
     CameraSettingsService service;
-    auto world = MakeWorld("Level", "MainCamera");
+    auto world = MakeWorld({ .scene = "Level", .camera = "MainCamera" });
 
     Activate(service, world);
 

@@ -6,14 +6,18 @@
 
 #include <filesystem>
 #include <memory>
+#include <system_error>
+#include <utility>
 
 #include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -68,7 +72,7 @@ namespace {
       settings->Load();
     }
 
-    RenderingSettingsService service_ {};
+    RenderingSettingsService service_;
   };
 
 } // namespace

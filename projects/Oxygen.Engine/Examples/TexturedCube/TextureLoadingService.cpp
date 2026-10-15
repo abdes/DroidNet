@@ -9,27 +9,42 @@
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
+#include <stdexcept>
+#include <string>
+#include <system_error>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include "TexturedCube/TextureLoadingService.h"
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -63,7 +78,7 @@ auto ContentHashPrefix(const oxygen::data::pak::core::ContentHashDigest& hash)
 auto IsHdrPath(const std::filesystem::path& path) -> bool
 {
   std::string ext = path.extension().string();
-  std::transform(ext.begin(), ext.end(), ext.begin(),
+  std::ranges::transform(ext, ext.begin(),
     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return (ext == ".hdr") || (ext == ".exr");
 }
@@ -161,11 +176,12 @@ auto LoadPackedTable(const std::filesystem::path& table_path) -> std::vector<T>
 
   const auto count = size_bytes / sizeof(T);
   std::vector<T> entries(count);
-  stream.read(reinterpret_cast<char*>(entries.data()),
-    static_cast<std::streamsize>(size_bytes));
+  std::vector<char> raw(size_bytes);
+  stream.read(raw.data(), static_cast<std::streamsize>(size_bytes));
   if (!stream) {
     throw std::runtime_error("failed to read table file");
   }
+  std::memcpy(entries.data(), raw.data(), size_bytes);
 
   return entries;
 }
@@ -190,7 +206,7 @@ TextureLoadingService::~TextureLoadingService() { import_service_.Stop(); }
 
 auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
 {
-  std::lock_guard lock(import_mutex_);
+  std::scoped_lock lock(import_mutex_);
 
   import_status_ = {};
   import_status_.message = "Preparing import...";
@@ -312,7 +328,7 @@ auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
   const auto on_complete = [this, settings](
                              oxygen::content::import::ImportJobId /*job_id*/,
                              const ImportReport& report) {
-    std::lock_guard lock(import_mutex_);
+    std::scoped_lock lock(import_mutex_);
     import_report_ = report;
     import_completed_ = true;
     import_status_.in_flight = false;
@@ -340,7 +356,7 @@ auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
   };
 
   const auto on_progress = [this](const ProgressEvent& progress) {
-    std::lock_guard lock(import_mutex_);
+    std::scoped_lock lock(import_mutex_);
     import_status_.in_flight = true;
     import_status_.overall_progress = progress.header.overall_progress;
     if (!progress.header.message.empty()) {
@@ -362,7 +378,7 @@ auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
 
 auto TextureLoadingService::ConsumeImportReport(ImportReport& report) -> bool
 {
-  std::lock_guard lock(import_mutex_);
+  std::scoped_lock lock(import_mutex_);
   if (!import_completed_) {
     return false;
   }
@@ -374,7 +390,7 @@ auto TextureLoadingService::ConsumeImportReport(ImportReport& report) -> bool
 
 auto TextureLoadingService::GetImportStatus() const -> ImportStatus
 {
-  std::lock_guard lock(import_mutex_);
+  std::scoped_lock lock(import_mutex_);
   return import_status_;
 }
 
@@ -387,8 +403,9 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
     if (cooked_root.empty()) {
       LOG_F(
         INFO, "TextureLoadingService: cooked root is empty, skipping refresh");
-      if (error_message)
+      if (error_message) {
         *error_message = "Cooked root is empty";
+      }
       // Treat as success (nothing to load)
       cooked_entries_.clear();
       return true;
@@ -494,7 +511,9 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
 
       std::ifstream file(desc_path, std::ios::binary);
       if (file) {
-        if (file.read(reinterpret_cast<char*>(&header), sizeof(header))) {
+        std::array<char, sizeof(header)> raw {};
+        if (file.read(raw.data(), static_cast<std::streamsize>(raw.size()))) {
+          std::memcpy(&header, raw.data(), sizeof(header));
           header_read = true;
           const auto hash_prefix = ContentHashPrefix(header.content_hash);
           hash_to_name[hash_prefix] = asset.virtual_path;
@@ -506,8 +525,8 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
         std::filesystem::path vpath(asset.virtual_path);
         std::string key = vpath.stem().string();
 
-        std::lock_guard lock(import_mutex_);
-        if (pending_metadata_.count(key)) {
+        std::scoped_lock lock(import_mutex_);
+        if (pending_metadata_.contains(key)) {
           TextureMetadata meta;
           meta.settings = pending_metadata_[key].settings;
           meta.source_path = meta.settings.source_path.string();
@@ -527,7 +546,7 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
     // HEURISTIC FALLBACK: If Assets index is empty (or we have leftover pending
     // metadata) and we have pending metadata and unmapped hashes in the table.
     if (!pending_metadata_.empty()) {
-      std::lock_guard lock(import_mutex_);
+      std::scoped_lock lock(import_mutex_);
 
       LOG_F(INFO,
         "TextureLoadingService: Fallback match check for {} pending items",
@@ -544,12 +563,12 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
         for (size_t i = 0; i < texture_table_.size(); ++i) {
           // SKIP FALLBACK TEXTURE (Index 0 is always reserved for the engine
           // fallback)
-          if (i == 0)
+          if (i == 0) {
             continue;
+          }
 
           uint64_t hash = texture_table_[i].content_hash;
-          bool is_mapped
-            = (texture_metadata_.find(hash) != texture_metadata_.end());
+          bool is_mapped = texture_metadata_.contains(hash);
 
           if (!is_mapped) {
             unmapped_hashes.push_back(hash);
@@ -633,7 +652,7 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
       std::string name;
 
       // Prefer metadata name/source
-      if (texture_metadata_.count(desc.content_hash)) {
+      if (texture_metadata_.contains(desc.content_hash)) {
         name = texture_metadata_[desc.content_hash].source_path;
       } else if (auto it = hash_to_name.find(desc.content_hash);
         it != hash_to_name.end()) {
@@ -763,16 +782,15 @@ void TextureLoadingService::LoadTexturesJson()
     if (j.contains("textures")) {
       for (const auto& item : j["textures"]) {
         uint64_t hash = item.value("content_hash", 0ULL);
-        if (hash == 0) {
-          // Try to read content_hash as a number even if it's large
-          if (item.contains("content_hash")
-            && item["content_hash"].is_number_integer()) {
-            hash = item["content_hash"].get<uint64_t>();
-          }
+        // Try to read content_hash as a number even if it's large
+        if (hash == 0 && item.contains("content_hash")
+          && item["content_hash"].is_number_integer()) {
+          hash = item["content_hash"].get<uint64_t>();
         }
 
-        if (hash == 0)
+        if (hash == 0) {
           continue;
+        }
 
         TextureMetadata meta;
         meta.source_path = item.value("source_path", "");
@@ -811,8 +829,9 @@ void TextureLoadingService::LoadTexturesJson()
 
 void TextureLoadingService::SaveTexturesJson()
 {
-  if (cooked_root_.empty())
+  if (cooked_root_.empty()) {
     return;
+  }
   std::filesystem::path json_path = cooked_root_ / "textures.json";
 
   nlohmann::json j;
@@ -861,7 +880,7 @@ void TextureLoadingService::SaveTexturesJson()
 auto TextureLoadingService::GetTextureMetadataJson(uint64_t hash) const
   -> std::string
 {
-  std::lock_guard lock(import_mutex_);
+  std::scoped_lock lock(import_mutex_);
   auto it = texture_metadata_.find(hash);
   if (it == texture_metadata_.end()) {
     return "";

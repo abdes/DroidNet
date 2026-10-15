@@ -5,22 +5,31 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <string>
+#include <system_error>
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 
 namespace oxygen::examples::testing {
 
@@ -122,11 +131,13 @@ NOLINT_TEST_F(
   vm_.SetSkyLightSource(0);
   EXPECT_FALSE(vm_.GetSkyLightFeedback().warning);
   EXPECT_FALSE(vm_.GetSkyLightFeedback().active);
-  service_.runtime = { .observed = true,
+  service_.runtime = {
+    .observed = true,
     .enabled = true,
     .usable = true,
     .status
-    = vortex::environment::StaticSkyLightProductStatus::kValidCurrentKey };
+    = vortex::environment::StaticSkyLightProductStatus::kValidCurrentKey,
+  };
   EXPECT_EQ(vm_.GetSkyLightFeedback().label, "Active");
   EXPECT_TRUE(vm_.GetSkyLightFeedback().active);
   service_.runtime.status
@@ -155,12 +166,14 @@ NOLINT_TEST_F(EnvironmentVmTest,
   service_.SetRuntimeConfig({ .scene = observer_ptr { scene.get() } });
   vm_.SetSkyLightEnabled(true);
   vm_.SetSkyLightSource(0);
-  service_.runtime = { .observed = true,
+  service_.runtime = {
+    .observed = true,
     .enabled = true,
     .usable = true,
     .source = 1U,
     .status
-    = vortex::environment::StaticSkyLightProductStatus::kValidCurrentKey };
+    = vortex::environment::StaticSkyLightProductStatus::kValidCurrentKey,
+  };
   EXPECT_EQ(vm_.GetSkyLightFeedback().label, "Updating source");
   EXPECT_FALSE(vm_.GetSkyLightFeedback().active);
   service_.runtime.source = 0U;
@@ -179,12 +192,14 @@ NOLINT_TEST_F(EnvironmentVmTest, GpuFailureDoesNotClaimRetainedLighting)
   service_.SetRuntimeConfig({ .scene = observer_ptr { scene.get() } });
   vm_.SetSkyLightEnabled(true);
   vm_.SetSkyLightSource(0);
-  service_.runtime = { .observed = true,
+  service_.runtime = {
+    .observed = true,
     .enabled = true,
     .usable = true,
     .unavailable_reason
     = vortex::environment::StaticSkyLightUnavailableReason::kProcessingFailed,
-    .gpu_validation = vortex::SkyLightGpuValidation::kInvalid };
+    .gpu_validation = vortex::SkyLightGpuValidation::kInvalid,
+  };
   EXPECT_EQ(vm_.GetSkyLightFeedback().label, "Invalid sky lighting");
   EXPECT_TRUE(vm_.GetSkyLightFeedback().warning);
   EXPECT_FALSE(vm_.GetSkyLightFeedback().active);
@@ -192,10 +207,12 @@ NOLINT_TEST_F(EnvironmentVmTest, GpuFailureDoesNotClaimRetainedLighting)
     "GPU validation failed. This generation contributes no lighting.");
   service_.runtime.unavailable_reason
     = vortex::environment::StaticSkyLightUnavailableReason::kNone;
-  for (const auto state : { vortex::SkyLightGpuValidation::kNotRequested,
+  for (const auto state : {
+         vortex::SkyLightGpuValidation::kNotRequested,
          vortex::SkyLightGpuValidation::kPending,
          vortex::SkyLightGpuValidation::kValid,
-         vortex::SkyLightGpuValidation::kUnavailable }) {
+         vortex::SkyLightGpuValidation::kUnavailable,
+       }) {
     service_.runtime.gpu_validation = state;
     EXPECT_TRUE(vm_.GetSkyLightFeedback().active);
     EXPECT_FALSE(vm_.GetSkyLightFeedback().warning);
@@ -216,8 +233,12 @@ NOLINT_TEST_F(EnvironmentVmTest,
   RejectsInvalidSelectionWithoutChangingEnvironmentOrExposure)
 {
   const auto previous_epoch = service_.GetEpoch();
-  for (const int index : std::array { -1, vm_.GetPresetCount(),
-         std::numeric_limits<int>::min(), std::numeric_limits<int>::max() }) {
+  for (const int index : std::array {
+         -1,
+         vm_.GetPresetCount(),
+         std::numeric_limits<int>::min(),
+         std::numeric_limits<int>::max(),
+       }) {
     SCOPED_TRACE(index);
     vm_.ApplyPreset(index);
 
@@ -266,9 +287,15 @@ NOLINT_TEST_F(EnvironmentVmTest, PreviewToggleDoesNotChangeEnvironmentProfile)
 
 NOLINT_TEST_F(EnvironmentVmTest, ProfileKeysRoundTripInUiOrder)
 {
-  constexpr std::array<std::string_view, 7> keys { "scene", "custom",
-    "outdoor-sunny", "outdoor-cloudy", "foggy-daylight", "outdoor-dawn",
-    "outdoor-dusk" };
+  constexpr std::array<std::string_view, 7> keys {
+    "scene",
+    "custom",
+    "outdoor-sunny",
+    "outdoor-cloudy",
+    "foggy-daylight",
+    "outdoor-dawn",
+    "outdoor-dusk",
+  };
   ASSERT_EQ(vm_.GetPresetCount(), keys.size());
   for (std::size_t i = 0; i < keys.size(); ++i) {
     SCOPED_TRACE(keys[i]);
@@ -279,13 +306,24 @@ NOLINT_TEST_F(EnvironmentVmTest, ProfileKeysRoundTripInUiOrder)
 
 NOLINT_TEST_F(EnvironmentVmTest, ProfileKeysRejectAliasesAndInvalidIndices)
 {
-  for (const auto key : { "", "Scene", "use-scene", "Outdoor Sunny",
-         "outdoor-sunny ", " outdoor-sunny", "unknown" }) {
+  for (const auto* const key : {
+         "",
+         "Scene",
+         "use-scene",
+         "Outdoor Sunny",
+         "outdoor-sunny ",
+         " outdoor-sunny",
+         "unknown",
+       }) {
     SCOPED_TRACE(key);
     EXPECT_FALSE(ui::EnvironmentVm::FindPresetIndex(key));
   }
-  for (const int index : std::array { -1, vm_.GetPresetCount(),
-         std::numeric_limits<int>::min(), std::numeric_limits<int>::max() }) {
+  for (const int index : std::array {
+         -1,
+         vm_.GetPresetCount(),
+         std::numeric_limits<int>::min(),
+         std::numeric_limits<int>::max(),
+       }) {
     SCOPED_TRACE(index);
     EXPECT_TRUE(ui::EnvironmentVm::GetPresetKey(index).empty());
   }

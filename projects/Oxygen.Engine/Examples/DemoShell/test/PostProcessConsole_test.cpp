@@ -7,23 +7,33 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include "DemoShell/Internal/PostProcessConsoleBindings.h"
+#include "DemoShell/Runtime/SceneActivationPolicy.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/test/Fakes/Graphics.h>
 
 namespace oxygen::examples::testing {
@@ -84,8 +94,10 @@ namespace {
     auto Execute(const std::string& command) -> commands::CommandResult
     {
       return console.Execute(command,
-        { .source = commands::CommandSource::kAutomation,
-          .shipping_build = true });
+        {
+          .source = commands::CommandSource::kAutomation,
+          .shipping_build = true,
+        });
     }
     oxygen::commands::CommandRegistry command_registry;
     console::Console console { oxygen::observer_ptr { &command_registry } };
@@ -126,10 +138,16 @@ NOLINT_TEST_F(
 {
   const auto before = settings.GetExposureSettings();
   const auto epoch = settings.GetEpoch();
-  for (const auto* invalid :
-    { "manual_ev=4 min_ev=12 max_ev=2", "manual_ev=4 nonexistent=1",
-      "manual_ev=4 key=0", "manual_ev=nan", "manual_ev=4 manual_ev=5",
-      "manual_ev=", "enabled=maybe", "mode=unknown" }) {
+  for (const auto* invalid : {
+         "manual_ev=4 min_ev=12 max_ev=2",
+         "manual_ev=4 nonexistent=1",
+         "manual_ev=4 key=0",
+         "manual_ev=nan",
+         "manual_ev=4 manual_ev=5",
+         "manual_ev=",
+         "enabled=maybe",
+         "mode=unknown",
+       }) {
     EXPECT_EQ(Execute("pp.exposure " + target + " " + invalid).status,
       Status::kInvalidArguments);
     EXPECT_EQ(settings.GetExposureSettings(), before);
@@ -152,7 +170,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(PostProcessConsoleTest, ValidatesWholeCameraAndOutputRequests)
 {
   const auto camera = settings.GetCameraExposure();
-  ASSERT_TRUE(camera);
+  ASSERT_HAS_VALUE(camera);
   const auto epoch = settings.GetEpoch();
   EXPECT_EQ(Execute("pp.camera " + target + " 2 60 0").status,
     Status::kInvalidArguments);
@@ -208,12 +226,13 @@ NOLINT_TEST_F(
   EXPECT_EQ(queued.status, Status::kOk);
   EXPECT_TRUE(queued.output.starts_with("queued"));
   const auto first = renderer->InspectExposureTransition(owner);
-  ASSERT_TRUE(first);
+  ASSERT_HAS_VALUE(first);
   EXPECT_EQ(first->phase, vortex::ExposureTransitionPhase::kQueued);
   EXPECT_EQ(first->request.seed_ev, 8.0F);
   EXPECT_EQ(Execute("pp.transition 11 seed 9").status, Status::kOk);
-  EXPECT_GT(renderer->InspectExposureTransition(owner)->request.generation,
-    first->request.generation);
+  const auto transition2 = renderer->InspectExposureTransition(owner);
+  ASSERT_HAS_VALUE(transition2);
+  EXPECT_GT(transition2.value().request.generation, first->request.generation);
   EXPECT_TRUE(Execute("pp.transition.status 11").output.starts_with("queued"));
   renderer->RemovePublishedRuntimeView(frame, ViewId { 1U });
   EXPECT_EQ(

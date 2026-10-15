@@ -7,20 +7,24 @@
 #include <cstdlib>
 #include <functional>
 #include <iostream>
-#include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
-#include "OxCo/BatchExecution/Common.h"
+#include "OxCo/BatchExecution/Common/BatchExecutionEventLoop.h"
+#include "OxCo/BatchExecution/Common/shared_examples.h"
+#include "OxCo/BatchExecution/Common/shared_utilities.h"
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/EventLoop.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/RepeatableShared.h>
 #include <Oxygen/OxCo/Run.h>
 
-using namespace oxygen::co;
+using oxygen::co::Co;
+using oxygen::co::kJoin;
+using oxygen::co::RepeatableShared;
 
 //===----------------------------------------------------------------------===//
 // RepeatableShared Batch Processor with Result Population
@@ -29,8 +33,8 @@ using namespace oxygen::co;
 class RepeatableSharedBatchProcessor {
 public:
   explicit RepeatableSharedBatchProcessor(BatchExecutionEventLoop& loop)
-    : loop_(loop)
-    , collection_(kTestCollection)
+    : loop_(oxygen::observer_ptr { &loop })
+    , collection_(kTestCollection.begin(), kTestCollection.end())
   {
   }
 
@@ -206,8 +210,8 @@ public:
   }
 
   // Execute all registered operations using RepeatableShared
-  void ExecuteBatch(
-    std::function<void(RepeatableSharedBatchProcessor&)> batch_operations)
+  void ExecuteBatch(const std::function<void(RepeatableSharedBatchProcessor&)>&
+      batch_operations)
   {
     std::cout
       << "\n=== ExecuteBatch: Starting RepeatableShared Batch Processing ===\n";
@@ -226,7 +230,7 @@ public:
     std::cout << "Registered " << operations_.size() << " operations\n";
 
     // Run the async implementation
-    oxygen::co::Run(loop_, ExecuteBatchAsync());
+    oxygen::co::Run(*loop_, ExecuteBatchAsync());
 
     // Clear operations after execution
     operations_.clear();
@@ -235,23 +239,30 @@ public:
   }
 
 private:
-  Co<> ExecuteBatchAsync()
+  auto ExecuteBatchAsync() -> Co<>
   {
     std::cout << "Setting up RepeatableShared element source\n";
 
     // Create RepeatableShared for element distribution
     size_t current_index = 0;
-    RepeatableShared<ElementData> element_source { [this, &current_index]()
-                                                     -> Co<ElementData> {
+    RepeatableShared<ElementData> element_source { [this, &current_index]
+      -> Co<ElementData> {
       if (current_index >= collection_.size()) {
         // This shouldn't happen if operations respect is_last
         std::cout
           << "  [ElementSource] Warning: Requested element beyond collection\n";
-        co_return ElementData(0, current_index, true);
+        co_return ElementData {
+          .value = 0,
+          .index = current_index,
+          .is_last = true,
+        };
       }
 
-      auto element = ElementData(collection_[current_index], current_index,
-        current_index == collection_.size() - 1);
+      auto element = ElementData {
+        .value = collection_[current_index],
+        .index = current_index,
+        .is_last = current_index == collection_.size() - 1,
+      };
 
       std::cout << "\n--- RepeatableShared providing element " << current_index
                 << " (" << element.value << ")"
@@ -267,7 +278,7 @@ private:
       std::cout << "Starting " << operations_.size()
                 << " RepeatableShared operations\n";
       for (auto& operation : operations_) {
-        nursery.Start([&operation, &element_source]() -> Co<> {
+        nursery.Start([&operation, &element_source] -> Co<> {
           co_await operation(element_source);
           co_return;
         });
@@ -280,7 +291,7 @@ private:
     co_return;
   }
 
-  BatchExecutionEventLoop& loop_;
+  oxygen::observer_ptr<BatchExecutionEventLoop> loop_;
   std::vector<int> collection_;
   std::vector<std::function<Co<>(RepeatableShared<ElementData>&)>> operations_;
 };

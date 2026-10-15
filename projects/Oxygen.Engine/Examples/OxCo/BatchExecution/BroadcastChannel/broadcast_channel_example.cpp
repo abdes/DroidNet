@@ -9,20 +9,26 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
-#include "OxCo/BatchExecution/Common.h"
+#include "OxCo/BatchExecution/Common/BatchExecutionEventLoop.h"
+#include "OxCo/BatchExecution/Common/shared_examples.h"
+#include "OxCo/BatchExecution/Common/shared_utilities.h"
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/EventLoop.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Yield.h>
 
-using namespace oxygen::co;
-using namespace oxygen::co::detail::channel;
+using oxygen::co::BroadcastChannel;
+using oxygen::co::Co;
+using oxygen::co::kJoin;
+using oxygen::co::Yield;
+using oxygen::co::detail::channel::BroadcastingWriter;
 
 //===----------------------------------------------------------------------===//
 // BroadcastChannel Batch Processor with Result Population
@@ -31,8 +37,8 @@ using namespace oxygen::co::detail::channel;
 class BroadcastChannelBatchProcessor {
 public:
   explicit BroadcastChannelBatchProcessor(BatchExecutionEventLoop& loop)
-    : loop_(loop)
-    , collection_(kTestCollection)
+    : loop_(oxygen::observer_ptr { &loop })
+    , collection_(kTestCollection.begin(), kTestCollection.end())
   {
   }
 
@@ -40,70 +46,70 @@ public:
   template <typename Predicate>
   void FindFirst(Predicate predicate, std::optional<int>& result)
   {
-    operations_.emplace_back([this, predicate, &result](
-                               BroadcastChannel<ElementData>& channel) -> Co<> {
-      std::cout << "  [FindFirst] Starting BroadcastChannel search\n";
-      auto reader = channel.ForRead();
-      result = std::nullopt;
+    operations_.emplace_back(
+      [predicate, &result](BroadcastChannel<ElementData>& channel) -> Co<> {
+        std::cout << "  [FindFirst] Starting BroadcastChannel search\n";
+        auto reader = channel.ForRead();
+        result = std::nullopt;
 
-      while (true) {
-        auto element = co_await reader.Receive();
-        if (!element) {
-          std::cout << "  [FindFirst] Channel closed - no match found\n";
-          break;
+        while (true) {
+          auto element = co_await reader.Receive();
+          if (!element) {
+            std::cout << "  [FindFirst] Channel closed - no match found\n";
+            break;
+          }
+
+          std::cout << "    [FindFirst] Checking element " << element->index
+                    << " (" << element->value << ")\n";
+
+          if (predicate(element->value)) {
+            std::cout << "    [FindFirst] Found match: " << element->value
+                      << "\n";
+            result = element->value;
+            break; // Early termination
+          }
         }
 
-        std::cout << "    [FindFirst] Checking element " << element->index
-                  << " (" << element->value << ")\n";
-
-        if (predicate(element->value)) {
-          std::cout << "    [FindFirst] Found match: " << element->value
-                    << "\n";
-          result = element->value;
-          break; // Early termination
-        }
-      }
-
-      co_return;
-    });
+        co_return;
+      });
   }
 
   // Find all elements matching predicate and store in provided vector
   template <typename Predicate>
   void FindAll(Predicate predicate, std::vector<int>& results)
   {
-    operations_.emplace_back([this, predicate, &results](
-                               BroadcastChannel<ElementData>& channel) -> Co<> {
-      std::cout << "  [FindAll] Starting BroadcastChannel search\n";
-      auto reader = channel.ForRead();
-      results.clear();
+    operations_.emplace_back(
+      [predicate, &results](BroadcastChannel<ElementData>& channel) -> Co<> {
+        std::cout << "  [FindAll] Starting BroadcastChannel search\n";
+        auto reader = channel.ForRead();
+        results.clear();
 
-      while (true) {
-        auto element = co_await reader.Receive();
-        if (!element) {
-          std::cout << "  [FindAll] Channel closed - found " << results.size()
-                    << " total matches\n";
-          break;
+        while (true) {
+          auto element = co_await reader.Receive();
+          if (!element) {
+            std::cout << "  [FindAll] Channel closed - found " << results.size()
+                      << " total matches\n";
+            break;
+          }
+
+          std::cout << "    [FindAll] Checking element " << element->index
+                    << " (" << element->value << ")\n";
+
+          if (predicate(element->value)) {
+            results.push_back(element->value);
+            std::cout << "    [FindAll] Added match: " << element->value
+                      << " (total: " << results.size() << ")\n";
+          }
         }
 
-        std::cout << "    [FindAll] Checking element " << element->index << " ("
-                  << element->value << ")\n";
-
-        if (predicate(element->value)) {
-          results.push_back(element->value);
-          std::cout << "    [FindAll] Added match: " << element->value
-                    << " (total: " << results.size() << ")\n";
-        }
-      }
-
-      co_return;
-    });
+        co_return;
+      });
   }
 
   // Count elements matching predicate and store in provided reference
   template <typename Predicate> void Count(Predicate predicate, size_t& count)
   {
-    operations_.emplace_back([this, predicate, &count](
+    operations_.emplace_back([predicate, &count](
                                BroadcastChannel<ElementData>& channel) -> Co<> {
       std::cout << "  [Count] Starting BroadcastChannel count\n";
       auto reader = channel.ForRead();
@@ -134,38 +140,38 @@ public:
   template <typename Predicate>
   void FindIndices(Predicate predicate, std::vector<size_t>& indices)
   {
-    operations_.emplace_back([this, predicate, &indices](
-                               BroadcastChannel<ElementData>& channel) -> Co<> {
-      std::cout << "  [FindIndices] Starting BroadcastChannel index search\n";
-      auto reader = channel.ForRead();
-      indices.clear();
+    operations_.emplace_back(
+      [predicate, &indices](BroadcastChannel<ElementData>& channel) -> Co<> {
+        std::cout << "  [FindIndices] Starting BroadcastChannel index search\n";
+        auto reader = channel.ForRead();
+        indices.clear();
 
-      while (true) {
-        auto element = co_await reader.Receive();
-        if (!element) {
-          std::cout << "  [FindIndices] Channel closed - found "
-                    << indices.size() << " matching indices\n";
-          break;
+        while (true) {
+          auto element = co_await reader.Receive();
+          if (!element) {
+            std::cout << "  [FindIndices] Channel closed - found "
+                      << indices.size() << " matching indices\n";
+            break;
+          }
+
+          std::cout << "    [FindIndices] Checking element " << element->index
+                    << " (" << element->value << ")\n";
+
+          if (predicate(element->value)) {
+            indices.push_back(element->index);
+            std::cout << "    [FindIndices] Added index: " << element->index
+                      << "\n";
+          }
         }
 
-        std::cout << "    [FindIndices] Checking element " << element->index
-                  << " (" << element->value << ")\n";
-
-        if (predicate(element->value)) {
-          indices.push_back(element->index);
-          std::cout << "    [FindIndices] Added index: " << element->index
-                    << "\n";
-        }
-      }
-
-      co_return;
-    });
+        co_return;
+      });
   }
 
   // Get min and max values and store in provided references
   void FindMinMax(int& min_value, int& max_value)
   {
-    operations_.emplace_back([this, &min_value, &max_value](
+    operations_.emplace_back([&min_value, &max_value](
                                BroadcastChannel<ElementData>& channel) -> Co<> {
       std::cout << "  [FindMinMax] Starting BroadcastChannel min/max search\n";
       auto reader = channel.ForRead();
@@ -203,8 +209,8 @@ public:
   }
 
   // Execute all registered operations using BroadcastChannel
-  void ExecuteBatch(
-    std::function<void(BroadcastChannelBatchProcessor&)> batch_operations)
+  void ExecuteBatch(const std::function<void(BroadcastChannelBatchProcessor&)>&
+      batch_operations)
   {
     std::cout
       << "\n=== ExecuteBatch: Starting BroadcastChannel Batch Processing ===\n";
@@ -223,7 +229,7 @@ public:
     std::cout << "Registered " << operations_.size() << " operations\n";
 
     // Run the async implementation
-    oxygen::co::Run(loop_, ExecuteBatchAsync());
+    oxygen::co::Run(*loop_, ExecuteBatchAsync());
 
     // Clear operations after execution
     operations_.clear();
@@ -246,14 +252,14 @@ private:
       std::cout << "Starting " << operations_.size()
                 << " BroadcastChannel operations\n";
       for (auto& operation : operations_) {
-        nursery.Start([&operation, &element_channel]() -> Co<> {
+        nursery.Start([&operation, &element_channel] -> Co<> {
           co_await operation(element_channel);
           co_return;
         });
       }
 
       // Start the collection traversal coroutine
-      nursery.Start([this, &writer]() -> Co<> {
+      nursery.Start([this, &writer] -> Co<> {
         co_await TraverseCollection(writer);
         co_return;
       });
@@ -273,13 +279,17 @@ private:
     // Send each element through the broadcast channel
     for (size_t i = 0; i < collection_.size(); ++i) {
       bool is_last = (i == collection_.size() - 1);
-      ElementData element(collection_[i], i, is_last);
+      ElementData element {
+        .value = collection_[i],
+        .index = i,
+        .is_last = is_last,
+      };
 
       std::cout << "\n  Broadcasting element " << i << ": " << element.value
                 << "\n";
 
       // Send element to all operations via broadcast channel
-      bool sent = co_await writer.Send(std::move(element));
+      bool sent = co_await writer.Send(element);
 
       if (!sent) {
         std::cout << "  [Async] Failed to send element (channel closed)\n";
@@ -297,7 +307,7 @@ private:
     co_return;
   }
 
-  BatchExecutionEventLoop& loop_;
+  oxygen::observer_ptr<BatchExecutionEventLoop> loop_;
   std::vector<int> collection_;
   std::vector<std::function<Co<>(BroadcastChannel<ElementData>&)>> operations_;
 };

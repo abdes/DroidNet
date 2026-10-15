@@ -225,7 +225,7 @@ namespace {
       settings->Load();
     }
 
-    EnvironmentSettingsService service_ {};
+    EnvironmentSettingsService service_;
   };
 
 } // namespace
