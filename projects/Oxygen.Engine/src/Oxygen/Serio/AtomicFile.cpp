@@ -22,6 +22,8 @@
 #ifdef OXYGEN_WINDOWS
 #  include <Windows.h> // IWYU pragma: keep
 
+#  include <AccCtrl.h>
+#  include <AclAPI.h>
 #  include <errhandlingapi.h>
 #  include <fileapi.h>
 #  include <handleapi.h>
@@ -37,14 +39,12 @@
 namespace oxygen::serio {
 namespace {
 
-  auto WriteTemporary(const std::filesystem::path& path,
-    const std::filesystem::path& destination, std::span<const std::byte> bytes)
-    -> Result<void>
+  auto WriteTemporary(const std::filesystem::path& temporary,
+    std::span<const std::byte> bytes) -> Result<void>
   {
 #ifdef OXYGEN_WINDOWS
-    static_cast<void>(destination);
-    const auto handle = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
-      CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    auto* const handle = CreateFileW(temporary.c_str(), GENERIC_WRITE, 0,
+      nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
       return Result<void>::Err(std::error_code(
         static_cast<int>(GetLastError()), std::system_category()));
@@ -69,18 +69,13 @@ namespace {
         static_cast<int>(GetLastError()), std::system_category()));
     }
 #else
-    const auto descriptor = ::open(
-      path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, S_IRUSR | S_IWUSR);
+    const auto descriptor = ::open(temporary.c_str(),
+      O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, S_IRUSR | S_IWUSR);
     if (descriptor < 0) {
       return Result<void>::Err(std::error_code(errno, std::generic_category()));
     }
     const auto close
       = ScopeGuard([descriptor]() noexcept { ::close(descriptor); });
-    struct stat original {};
-    if (::stat(destination.c_str(), &original) == 0
-      && ::fchmod(descriptor, original.st_mode) != 0) {
-      return Result<void>::Err(std::error_code(errno, std::generic_category()));
-    }
     while (!bytes.empty()) {
       const auto written = ::write(descriptor, bytes.data(), bytes.size());
       if (written < 0) {
@@ -102,6 +97,62 @@ namespace {
     return {};
   }
 
+#ifdef OXYGEN_WINDOWS
+  //! Gives the temporary the destination's DACL, keeping its protection, so
+  //! the rename preserves access permissions. A missing destination has none.
+  auto CopyAccessControl(const std::filesystem::path& destination,
+    const std::filesystem::path& temporary) -> Result<void>
+  {
+    PACL dacl = nullptr;
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    const auto queried = GetNamedSecurityInfoW(destination.c_str(),
+      SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, nullptr, nullptr, &dacl,
+      nullptr, &descriptor);
+    if (queried == ERROR_FILE_NOT_FOUND || queried == ERROR_PATH_NOT_FOUND) {
+      return {};
+    }
+    if (queried != ERROR_SUCCESS) {
+      return Result<void>::Err(
+        std::error_code(static_cast<int>(queried), std::system_category()));
+    }
+    const auto release
+      = ScopeGuard([descriptor] noexcept -> void { LocalFree(descriptor); });
+    SECURITY_DESCRIPTOR_CONTROL control = 0;
+    DWORD revision = 0;
+    if (GetSecurityDescriptorControl(descriptor, &control, &revision)
+      == FALSE) {
+      return Result<void>::Err(std::error_code(
+        static_cast<int>(GetLastError()), std::system_category()));
+    }
+    // Inherited ACEs in the copied DACL are recomputed from the shared parent.
+    const DWORD protection = (control & SE_DACL_PROTECTED) != 0
+      ? PROTECTED_DACL_SECURITY_INFORMATION
+      : UNPROTECTED_DACL_SECURITY_INFORMATION;
+    const auto applied = SetNamedSecurityInfoW(
+      const_cast<wchar_t*>(temporary.c_str()), // NOLINT(*-const-cast)
+      SE_FILE_OBJECT, DACL_SECURITY_INFORMATION | protection, nullptr, nullptr,
+      dacl, nullptr);
+    if (applied != ERROR_SUCCESS) {
+      return Result<void>::Err(
+        std::error_code(static_cast<int>(applied), std::system_category()));
+    }
+    return {};
+  }
+#else
+  //! Gives the temporary the destination's mode so the rename preserves access
+  //! permissions. A missing destination has none.
+  auto CopyAccessControl(const std::filesystem::path& destination,
+    const std::filesystem::path& temporary) -> Result<void>
+  {
+    struct stat original {};
+    if (::stat(destination.c_str(), &original) == 0
+      && ::chmod(temporary.c_str(), original.st_mode) != 0) {
+      return Result<void>::Err(std::error_code(errno, std::generic_category()));
+    }
+    return {};
+  }
+#endif
+
 } // namespace
 
 auto WriteFileAtomically(const std::filesystem::path& path,
@@ -119,19 +170,20 @@ auto WriteFileAtomically(const std::filesystem::path& path,
     std::error_code error;
     std::filesystem::remove(temporary, error);
   });
-  const auto written = WriteTemporary(temporary, native_path, bytes);
+  const auto written = WriteTemporary(temporary, bytes);
   if (!written) {
     return Result<AtomicFileCommit>::Err(written.error());
   }
+  const auto access = CopyAccessControl(native_path, temporary);
+  if (!access) {
+    return Result<AtomicFileCommit>::Err(access.error());
+  }
 #ifdef OXYGEN_WINDOWS
-  const bool exists
-    = GetFileAttributesW(native_path.c_str()) != INVALID_FILE_ATTRIBUTES;
-  const auto replaced = exists
-    ? ReplaceFileW(
-        native_path.c_str(), temporary.c_str(), nullptr, 0, nullptr, nullptr)
-    : MoveFileExW(
-        temporary.c_str(), native_path.c_str(), MOVEFILE_WRITE_THROUGH);
-  if (replaced == FALSE) {
+  // One same-directory rename that always replaces: concurrent publishers
+  // never see a missing destination or race an existence check.
+  if (MoveFileExW(temporary.c_str(), native_path.c_str(),
+        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)
+    == FALSE) {
     return Result<AtomicFileCommit>::Err(std::error_code(
       static_cast<int>(GetLastError()), std::system_category()));
   }

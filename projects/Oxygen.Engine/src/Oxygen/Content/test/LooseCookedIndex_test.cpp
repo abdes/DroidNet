@@ -6,18 +6,26 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
+#include <chrono>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <iterator>
+#include <ostream>
 #include <stdexcept>
+#include <string>
+#include <thread>
 
 #include "./AssetLoader_test.h"
 #include "Fixtures/LooseCookedTestLayout.h"
 #include <gtest/gtest.h>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -40,6 +48,14 @@ protected:
   }
 };
 
+//! Writes the object representation of a trivially copyable value.
+template <typename T>
+auto WriteObject(std::ostream& out, const T& value) -> void
+{
+  const auto bytes = std::bit_cast<std::array<char, sizeof(T)>>(value);
+  out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+}
+
 auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
 {
   for (uint8_t i = 0; i < 16; ++i) {
@@ -49,6 +65,69 @@ auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
     = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
   header.source_identity.at(8)
     = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
+}
+
+auto WriteMinimalIndex(const std::filesystem::path& index_path) -> void
+{
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
+
+  IndexHeader header {};
+  FillTestGuid(header);
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
+  header.string_table_offset = sizeof(IndexHeader);
+  header.string_table_size = 1; // NUL terminator only
+  header.asset_entries_offset
+    = header.string_table_offset + header.string_table_size;
+  header.asset_entry_size = sizeof(AssetEntry);
+  header.file_records_offset = header.asset_entries_offset;
+  header.file_record_size = sizeof(FileRecord);
+
+  std::ofstream out(index_path, std::ios::binary);
+  WriteObject(out, header);
+  const char zero = 0;
+  out.write(&zero, 1);
+}
+
+//! Test: Index loads wait for an in-process publication to finish
+/*!
+ Scenario: Holds the exclusive index file lock through a differently spelled
+ path while the index is absent, as during a replace. A concurrent load must
+ wait and read the republished index instead of failing on the missing file.
+*/
+NOLINT_TEST_F(LooseCookedIndexTest, LoadFromRootWaitsForExclusivePublication)
+{
+  using oxygen::content::internal::LooseCookedIndexImpl;
+  using oxygen::content::lc::LooseCookedIndex;
+
+  // Arrange
+  const auto cooked_root = temp_dir_ / "loose_cooked_root";
+  std::filesystem::create_directories(cooked_root);
+  const auto index_path = cooked_root / "container.index.bin";
+  WriteMinimalIndex(index_path);
+  auto publication = LooseCookedIndexImpl::LockFileExclusive(
+    cooked_root / "." / "container.index.bin");
+  std::filesystem::remove(index_path);
+
+  // Act
+  auto load_error = std::string {};
+  auto reader = std::thread([&cooked_root, &load_error] -> void {
+    try {
+      static_cast<void>(LooseCookedIndex::LoadFromRoot(cooked_root));
+    } catch (const std::exception& ex) {
+      load_error = ex.what();
+    }
+  });
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  WriteMinimalIndex(index_path);
+  publication.unlock();
+  reader.join();
+
+  // Assert
+  EXPECT_TRUE(load_error.empty()) << load_error;
 }
 
 //! Test: Descriptor SHA-256 verification uses the standard digest
@@ -95,7 +174,7 @@ NOLINT_TEST_F(
   header.asset_count = 1;
   header.asset_entry_size = sizeof(AssetEntry);
   header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
+    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
   header.file_record_count = 0;
   header.file_record_size = sizeof(FileRecord);
 
@@ -147,9 +226,9 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&entry), sizeof(entry));
+    WriteObject(out, entry);
   }
 
   // Act & Assert
@@ -190,7 +269,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootMinimalIndexSucceeds)
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     const char zero = 0;
     out.write(&zero, 1);
   }
@@ -233,7 +312,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootUnsupportedVersionThrows)
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     const char zero = 0;
     out.write(&zero, 1);
   }
@@ -277,7 +356,7 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     const char zero = 0;
     out.write(&zero, 1);
   }
@@ -326,7 +405,7 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
   }
 
@@ -374,7 +453,7 @@ NOLINT_TEST_F(
   header.asset_count = 1;
   header.asset_entry_size = sizeof(AssetEntry);
   header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
+    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
   header.file_record_count = 0;
   header.file_record_size = sizeof(FileRecord);
 
@@ -388,9 +467,9 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&entry), sizeof(entry));
+    WriteObject(out, entry);
   }
 
   // Act & Assert
@@ -437,7 +516,7 @@ NOLINT_TEST_F(
   header.asset_count = 1;
   header.asset_entry_size = sizeof(AssetEntry);
   header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
+    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
   header.file_record_count = 0;
   header.file_record_size = sizeof(FileRecord);
 
@@ -451,9 +530,9 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&entry), sizeof(entry));
+    WriteObject(out, entry);
   }
 
   // Act & Assert
@@ -479,7 +558,7 @@ NOLINT_TEST_F(
   std::filesystem::create_directories(cooked_root);
   const auto index_path = cooked_root / "container.index.bin";
   // The asset entry references this descriptor path.
-  std::ofstream { cooked_root / "A.bin", std::ios::binary };
+  std::ofstream(cooked_root / "A.bin", std::ios::binary).close();
 
   std::string strings;
   strings.push_back('\0');
@@ -503,7 +582,7 @@ NOLINT_TEST_F(
   header.asset_count = 1;
   header.asset_entry_size = sizeof(AssetEntry);
   header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
+    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
   header.file_record_count = 0;
   header.file_record_size = sizeof(FileRecord);
 
@@ -514,13 +593,14 @@ NOLINT_TEST_F(
   entry.virtual_path_offset = off_vpath;
   entry.asset_type = 0;
   entry.descriptor_size = 0;
-  std::ranges::copy(oxygen::base::ComputeSha256({}), entry.descriptor_sha256);
+  std::ranges::copy(
+    oxygen::base::ComputeSha256({}), std::begin(entry.descriptor_sha256));
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&entry), sizeof(entry));
+    WriteObject(out, entry);
   }
 
   // Act & Assert
@@ -566,7 +646,7 @@ NOLINT_TEST_F(
   header.asset_count = 1;
   header.asset_entry_size = sizeof(AssetEntry);
   header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
+    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
   header.file_record_count = 0;
   header.file_record_size = sizeof(FileRecord);
 
@@ -580,9 +660,9 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&entry), sizeof(entry));
+    WriteObject(out, entry);
   }
 
   // Act & Assert
@@ -636,9 +716,9 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootUnknownFileKindThrows)
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&record), sizeof(record));
+    WriteObject(out, record);
   }
 
   // Act & Assert
@@ -697,10 +777,10 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDuplicateFileKindThrows)
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&r0), sizeof(r0));
-    out.write(reinterpret_cast<const char*>(&r1), sizeof(r1));
+    WriteObject(out, r0);
+    WriteObject(out, r1);
   }
 
   // Act & Assert
@@ -752,7 +832,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDuplicateAssetKeyThrows)
   header.asset_count = 2;
   header.asset_entry_size = sizeof(AssetEntry);
   header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
+    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
   header.file_record_count = 0;
   header.file_record_size = sizeof(FileRecord);
 
@@ -774,10 +854,10 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDuplicateAssetKeyThrows)
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&a), sizeof(a));
-    out.write(reinterpret_cast<const char*>(&b), sizeof(b));
+    WriteObject(out, a);
+    WriteObject(out, b);
   }
 
   // Act & Assert
@@ -831,7 +911,7 @@ NOLINT_TEST_F(
   header.asset_count = 2;
   header.asset_entry_size = sizeof(AssetEntry);
   header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
+    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
   header.file_record_count = 0;
   header.file_record_size = sizeof(FileRecord);
 
@@ -856,10 +936,10 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&a), sizeof(a));
-    out.write(reinterpret_cast<const char*>(&b), sizeof(b));
+    WriteObject(out, a);
+    WriteObject(out, b);
   }
 
   // Act & Assert
@@ -898,10 +978,8 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootTableWithoutDataThrows)
     std::ofstream out(
       cooked_root / layout.resources_dir / layout.textures_table_file_name,
       std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&fallback_desc),
-      static_cast<std::streamsize>(sizeof(fallback_desc)));
-    out.write(reinterpret_cast<const char*>(&test_desc),
-      static_cast<std::streamsize>(sizeof(test_desc)));
+    WriteObject(out, fallback_desc);
+    WriteObject(out, test_desc);
   }
 
   MaterialAssetDesc material_desc {};
@@ -913,8 +991,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootTableWithoutDataThrows)
       = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
     std::ofstream out(
       cooked_root / layout.materials_subdir / material_file, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&material_desc),
-      static_cast<std::streamsize>(sizeof(material_desc)));
+    WriteObject(out, material_desc);
   }
 
   // Build index string table.
@@ -944,7 +1021,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootTableWithoutDataThrows)
   header.asset_count = 1;
   header.asset_entry_size = sizeof(AssetEntry);
   header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
+    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
   header.file_record_count = 1;
   header.file_record_size = sizeof(FileRecord);
 
@@ -963,11 +1040,10 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootTableWithoutDataThrows)
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&asset_entry), sizeof(asset_entry));
-    out.write(reinterpret_cast<const char*>(&tex_table_record),
-      sizeof(tex_table_record));
+    WriteObject(out, asset_entry);
+    WriteObject(out, tex_table_record);
   }
 
   // Act & Assert
@@ -1021,10 +1097,9 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDataWithoutTableThrows)
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(
-      reinterpret_cast<const char*>(&tex_data_record), sizeof(tex_data_record));
+    WriteObject(out, tex_data_record);
   }
 
   // Act & Assert
@@ -1046,12 +1121,12 @@ NOLINT_TEST_F(
   const auto index_path = cooked_root / "container.index.bin";
 
   {
-    std::ofstream out(cooked_root / "Resources" / "scripts.table",
-      std::ios::binary | std::ios::trunc);
+    std::ofstream out(
+      cooked_root / "Resources" / "scripts.table", std::ios::binary);
   }
   {
-    std::ofstream out(cooked_root / "Resources" / "scripts.data",
-      std::ios::binary | std::ios::trunc);
+    std::ofstream out(
+      cooked_root / "Resources" / "scripts.data", std::ios::binary);
   }
 
   std::string strings;
@@ -1093,12 +1168,10 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&scripts_table_record),
-      sizeof(scripts_table_record));
-    out.write(reinterpret_cast<const char*>(&scripts_data_record),
-      sizeof(scripts_data_record));
+    WriteObject(out, scripts_table_record);
+    WriteObject(out, scripts_data_record);
   }
 
   EXPECT_NO_THROW({ asset_loader_->AddLooseCookedRoot(cooked_root); });
@@ -1147,10 +1220,9 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&scripts_data_record),
-      sizeof(scripts_data_record));
+    WriteObject(out, scripts_data_record);
   }
 
   EXPECT_THROW(
@@ -1171,12 +1243,12 @@ NOLINT_TEST_F(
   const auto index_path = cooked_root / "container.index.bin";
 
   {
-    std::ofstream out(cooked_root / "Resources" / "physics.table",
-      std::ios::binary | std::ios::trunc);
+    std::ofstream out(
+      cooked_root / "Resources" / "physics.table", std::ios::binary);
   }
   {
-    std::ofstream out(cooked_root / "Resources" / "physics.data",
-      std::ios::binary | std::ios::trunc);
+    std::ofstream out(
+      cooked_root / "Resources" / "physics.data", std::ios::binary);
   }
 
   std::string strings;
@@ -1218,12 +1290,10 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&physics_table_record),
-      sizeof(physics_table_record));
-    out.write(reinterpret_cast<const char*>(&physics_data_record),
-      sizeof(physics_data_record));
+    WriteObject(out, physics_table_record);
+    WriteObject(out, physics_data_record);
   }
 
   EXPECT_NO_THROW({ asset_loader_->AddLooseCookedRoot(cooked_root); });
@@ -1272,10 +1342,9 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&physics_data_record),
-      sizeof(physics_data_record));
+    WriteObject(out, physics_data_record);
   }
 
   EXPECT_THROW(
@@ -1316,10 +1385,8 @@ NOLINT_TEST_F(
     std::ofstream out(
       cooked_root / layout.resources_dir / layout.textures_table_file_name,
       std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&fallback_desc),
-      static_cast<std::streamsize>(sizeof(fallback_desc)));
-    out.write(reinterpret_cast<const char*>(&test_desc),
-      static_cast<std::streamsize>(sizeof(test_desc)));
+    WriteObject(out, fallback_desc);
+    WriteObject(out, test_desc);
   }
   {
     std::ofstream out(
@@ -1364,11 +1431,10 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(
-      reinterpret_cast<const char*>(&table_record), sizeof(table_record));
-    out.write(reinterpret_cast<const char*>(&data_record), sizeof(data_record));
+    WriteObject(out, table_record);
+    WriteObject(out, data_record);
   }
 
   // Act & Assert
@@ -1406,8 +1472,7 @@ NOLINT_TEST_F(
       = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
     std::ofstream out(
       cooked_root / layout.materials_subdir / material_file, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&material_desc),
-      static_cast<std::streamsize>(sizeof(material_desc)));
+    WriteObject(out, material_desc);
   }
 
   std::string strings;
@@ -1433,7 +1498,7 @@ NOLINT_TEST_F(
   header.asset_count = 1;
   header.asset_entry_size = sizeof(AssetEntry);
   header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
+    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
   header.file_record_count = 0;
   header.file_record_size = sizeof(FileRecord);
 
@@ -1448,9 +1513,9 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&entry), sizeof(entry));
+    WriteObject(out, entry);
   }
 
   // Act & Assert
@@ -1491,7 +1556,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootUnknownFlagsThrows)
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     const char zero = 0;
     out.write(&zero, 1);
   }
@@ -1535,7 +1600,7 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     const char zero = 0;
     out.write(&zero, 1);
   }
@@ -1591,9 +1656,9 @@ NOLINT_TEST_F(
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    out.write(reinterpret_cast<const char*>(&record), sizeof(record));
+    WriteObject(out, record);
   }
 
   // Act & Assert
@@ -1627,7 +1692,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootNoGuidThrows)
 
   {
     std::ofstream out(index_path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    WriteObject(out, header);
     const char zero = 0;
     out.write(&zero, 1);
   }

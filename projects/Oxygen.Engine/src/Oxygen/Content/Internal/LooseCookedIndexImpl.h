@@ -10,7 +10,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <span>
 #include <string>
 #include <string_view>
@@ -38,7 +40,7 @@ public:
     data::pak::core::AssetReferenceTable references {};
   };
 
-  //! Load and validate an index file.
+  //! Load and validate an index file under its shared file lock.
   /*!
    @param index_path Path to `container.index.bin`.
    @return Parsed index.
@@ -47,6 +49,28 @@ public:
   */
   OXGN_CNTT_NDAPI static auto LoadFromFile(
     const std::filesystem::path& index_path) -> LooseCookedIndexImpl;
+
+  //! Load and validate an index file whose file lock the caller holds.
+  OXGN_CNTT_NDAPI static auto LoadFromLockedFile(
+    const std::filesystem::path& index_path) -> LooseCookedIndexImpl;
+
+  //! Hold off in-process index publication while reading `index_path`.
+  /*!
+   The lock is process-wide and keyed by path identity. Readers in other
+   processes are not coordinated.
+  */
+  OXGN_CNTT_NDAPI static auto LockFileShared(
+    const std::filesystem::path& index_path)
+    -> std::shared_lock<std::shared_mutex>;
+
+  //! Exclude in-process index readers while publishing `index_path`.
+  /*!
+   Hold it across the whole read/merge/replace cycle. Reads made while holding
+   it must use LoadFromLockedFile().
+  */
+  OXGN_CNTT_NDAPI static auto LockFileExclusive(
+    const std::filesystem::path& index_path)
+    -> std::unique_lock<std::shared_mutex>;
 
   OXGN_CNTT_NDAPI auto Guid() const noexcept -> data::SourceKey;
 

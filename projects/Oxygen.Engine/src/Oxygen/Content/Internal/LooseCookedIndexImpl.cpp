@@ -11,14 +11,19 @@
 #include <filesystem>
 #include <ios>
 #include <iterator>
+#include <memory>
+#include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
@@ -41,7 +46,6 @@ using oxygen::data::loose_cooked::kHasVirtualPaths;
 using oxygen::data::loose_cooked::kHeaderMagic;
 using oxygen::data::loose_cooked::kKnownIndexFlags;
 
-namespace serio = oxygen::serio;
 namespace data = oxygen::data;
 namespace content = oxygen::content;
 
@@ -121,8 +125,7 @@ auto ExtractNullTerminatedString(std::string_view table, const uint32_t offset)
   return { tail.data(), len };
 }
 
-auto ValidateNoDotSegments(
-  const std::string_view path, const std::string_view what) -> void
+auto ValidateNoDotSegments(const std::string_view path) -> void
 {
   size_t pos = 0;
   while (pos <= path.size()) {
@@ -131,10 +134,10 @@ auto ValidateNoDotSegments(
       = (next == std::string_view::npos) ? (path.size() - pos) : (next - pos);
     const auto segment = path.substr(pos, len);
     if (segment == ".") {
-      throw std::runtime_error(std::string(what) + " must not contain '.'");
+      throw std::runtime_error("Index path must not contain '.'");
     }
     if (segment == "..") {
-      throw std::runtime_error(std::string(what) + " must not contain '..'");
+      throw std::runtime_error("Index path must not contain '..'");
     }
 
     if (next == std::string_view::npos) {
@@ -170,7 +173,7 @@ auto ValidateRelativePath(const std::string_view relpath) -> void
     throw std::runtime_error("Index path must not contain '//'");
   }
 
-  ValidateNoDotSegments(relpath, "Index path");
+  ValidateNoDotSegments(relpath);
 
   std::filesystem::path p(relpath);
   if (p.is_absolute() || p.has_root_path() || p.has_root_name()) {
@@ -271,11 +274,51 @@ struct LooseCookedIndexImpl::IndexLoadContext {
   oxygen::observer_ptr<LooseCookedIndexImpl> index;
   std::string_view stored_table {}; // NOLINT
   std::unordered_set<std::string_view> unique_virtual_paths {}; // NOLINT
-  std::unordered_set<std::string_view> unique_file_paths {};
+  std::unordered_set<std::string_view> unique_file_paths {}; // NOLINT
 };
+
+namespace {
+  auto IndexFileMutex(const std::filesystem::path& index_path)
+    -> std::shared_mutex&
+  {
+    static std::mutex map_mutex;
+    // Entries are never erased, so returned references stay valid.
+    static std::unordered_map<std::string, std::unique_ptr<std::shared_mutex>>
+      mutexes;
+
+    const auto key = base::PathIdentityKey(index_path);
+    const std::scoped_lock lock(map_mutex);
+    auto& slot = mutexes[key];
+    if (!slot) {
+      slot = std::make_unique<std::shared_mutex>();
+    }
+    return *slot;
+  }
+} // namespace
+
+auto LooseCookedIndexImpl::LockFileShared(
+  const std::filesystem::path& index_path)
+  -> std::shared_lock<std::shared_mutex>
+{
+  return std::shared_lock(IndexFileMutex(index_path));
+}
+
+auto LooseCookedIndexImpl::LockFileExclusive(
+  const std::filesystem::path& index_path)
+  -> std::unique_lock<std::shared_mutex>
+{
+  return std::unique_lock(IndexFileMutex(index_path));
+}
 
 auto LooseCookedIndexImpl::LoadFromFile(const std::filesystem::path& index_path)
   -> LooseCookedIndexImpl
+{
+  const auto lock = LockFileShared(index_path);
+  return LoadFromLockedFile(index_path);
+}
+
+auto LooseCookedIndexImpl::LoadFromLockedFile(
+  const std::filesystem::path& index_path) -> LooseCookedIndexImpl
 {
   serio::FileStream<> stream(index_path, std::ios::in);
   auto size_result = stream.Size();

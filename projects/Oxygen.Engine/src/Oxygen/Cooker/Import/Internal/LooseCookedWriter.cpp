@@ -13,7 +13,6 @@
 #include <ios>
 #include <limits>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -73,8 +72,7 @@ namespace {
       bytes, [](const auto b) -> auto { return b == 0; });
   }
 
-  auto ValidateNoDotSegments(
-    const std::string_view path, const std::string_view what) -> void
+  auto ValidateNoDotSegments(const std::string_view path) -> void
   {
     size_t pos = 0;
     while (pos <= path.size()) {
@@ -83,10 +81,10 @@ namespace {
         = (next == std::string_view::npos) ? (path.size() - pos) : (next - pos);
       const auto segment = path.substr(pos, len);
       if (segment == ".") {
-        throw std::runtime_error(std::string(what) + " must not contain '.'");
+        throw std::runtime_error("Index path must not contain '.'");
       }
       if (segment == "..") {
-        throw std::runtime_error(std::string(what) + " must not contain '..'");
+        throw std::runtime_error("Index path must not contain '..'");
       }
 
       if (next == std::string_view::npos) {
@@ -118,7 +116,7 @@ namespace {
       throw std::runtime_error("Index path must not contain '//'");
     }
 
-    ValidateNoDotSegments(relpath, "Index path");
+    ValidateNoDotSegments(relpath);
 
     std::filesystem::path p(relpath);
     if (p.is_absolute() || p.has_root_path() || p.has_root_name()) {
@@ -182,7 +180,7 @@ namespace {
   };
 
   struct StoredAsset final {
-    data::AssetKey key {};
+    data::AssetKey key;
     data::AssetType asset_type = data::AssetType::kUnknown;
     std::string virtual_path;
     std::string descriptor_relpath;
@@ -254,6 +252,7 @@ namespace {
   {
     std::filesystem::create_directories(base::ToNativePath(path.parent_path()));
 
+    // NOLINTNEXTLINE(*-signed-bitwise) - std::ios openmode bitmask
     serio::FileStream stream(path, std::ios::out | std::ios::trunc);
     ThrowOnError(stream.Write(bytes), "Failed to write cooked file");
     ThrowOnError(stream.Flush(), "Failed to flush cooked file");
@@ -285,21 +284,10 @@ namespace {
     return out;
   }
 
-  auto GetCookedRootLock(const std::filesystem::path& cooked_root)
-    -> std::shared_ptr<std::mutex>
+  auto IndexPath(const std::filesystem::path& cooked_root)
+    -> std::filesystem::path
   {
-    static std::mutex map_mutex;
-    static std::unordered_map<std::string, std::shared_ptr<std::mutex>> locks;
-
-    const auto key = base::PathIdentityKey(cooked_root);
-    std::scoped_lock lock(map_mutex);
-    auto it = locks.find(key);
-    if (it != locks.end()) {
-      return it->second;
-    }
-    auto created = std::make_shared<std::mutex>();
-    locks.emplace(key, created);
-    return created;
+    return cooked_root / std::filesystem::path(kIndexFileName);
   }
 
 } // namespace
@@ -308,6 +296,8 @@ struct LooseCookedWriter::Impl final {
   explicit Impl(std::filesystem::path cooked_root)
     : cooked_root_(std::move(cooked_root))
   {
+    const auto lock = content::internal::LooseCookedIndexImpl::LockFileShared(
+      IndexPath(cooked_root_));
     LoadExistingIndexIfPresent_();
   }
 
@@ -620,8 +610,11 @@ struct LooseCookedWriter::Impl final {
 
   [[nodiscard]] auto Finish() -> LooseCookedWriteResult
   {
-    auto cooked_root_lock = GetCookedRootLock(cooked_root_);
-    std::scoped_lock lock(*cooked_root_lock);
+    const auto index_path = IndexPath(cooked_root_);
+    // Merge with the latest published index and replace it as one step for
+    // every in-process writer and reader of this cooked root.
+    const auto lock
+      = content::internal::LooseCookedIndexImpl::LockFileExclusive(index_path);
 
     auto current_assets = assets_;
     auto current_files = files_;
@@ -668,8 +661,6 @@ struct LooseCookedWriter::Impl final {
     const auto source_key = ResolveSourceKey_();
     const auto content_version = ResolveContentVersion_();
 
-    const auto index_path
-      = cooked_root_ / std::filesystem::path(kIndexFileName);
     std::filesystem::create_directories(
       base::ToNativePath(index_path.parent_path()));
 
@@ -747,10 +738,10 @@ private:
     return true;
   }
 
+  //! Requires the index file lock.
   auto LoadExistingIndexIfPresent_() -> void
   {
-    const auto index_path
-      = cooked_root_ / std::filesystem::path(kIndexFileName);
+    const auto index_path = IndexPath(cooked_root_);
     if (!std::filesystem::exists(base::ToNativePath(index_path))) {
       return;
     }
@@ -767,7 +758,7 @@ private:
       existing_content_version_ = header.content_version;
 
       const auto index
-        = oxygen::content::internal::LooseCookedIndexImpl::LoadFromFile(
+        = oxygen::content::internal::LooseCookedIndexImpl::LoadFromLockedFile(
           index_path);
 
       for (const auto key : index.GetAllAssetKeys()) {
