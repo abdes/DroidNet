@@ -117,11 +117,14 @@ RequiredDefineShaderFileSpec(std::string_view, std::array<EntryPoint, E>,
   std::array<std::string_view, R>, std::array<std::string_view, P>)
   -> RequiredDefineShaderFileSpec<E, R, P>;
 
-//! Computes total shader count for a list of specs.
-template <typename... Specs>
-consteval auto ComputeShaderCount(const Specs&... specs) -> size_t
+//! Computes total shader count for a list of spec types.
+//!
+//! The count depends only on the spec types, so callers pass them as template
+//! arguments. MSVC 14.52 crashes when a signature forwards reference parameters
+//! to a consteval function.
+template <typename... Specs> consteval auto ComputeShaderCount() -> size_t
 {
-  return (specs.variant_count() + ...);
+  return (Specs::variant_count() + ...);
 }
 
 //! Expands a single spec into shader entries, writing to output starting at
@@ -212,9 +215,9 @@ consteval auto ExpandSpec(const RequiredDefineShaderFileSpec<E, R, P>& spec,
 //! @endcode
 template <typename... Specs>
 consteval auto GenerateCatalog(const Specs&... specs)
-  -> std::array<ShaderEntry, ComputeShaderCount(specs...)>
+  -> std::array<ShaderEntry, ComputeShaderCount<Specs...>()>
 {
-  constexpr size_t total = ComputeShaderCount(specs...);
+  constexpr size_t total = ComputeShaderCount<Specs...>();
   std::array<ShaderEntry, total> result {};
 
   size_t index = 0;
