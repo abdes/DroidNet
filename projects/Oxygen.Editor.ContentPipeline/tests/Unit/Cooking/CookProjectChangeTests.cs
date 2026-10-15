@@ -20,7 +20,6 @@ public sealed class CookProjectChangeTests
     {
         var context = CreateContextService();
         using var coordinator = CreateCoordinator(context);
-        coordinator.IsAutomaticCookingPaused = true;
         var replaced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var change = coordinator.RunProjectChangeAsync(
@@ -34,7 +33,6 @@ public sealed class CookProjectChangeTests
             },
             this.TestContext.CancellationToken);
         await replaced.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = coordinator.IsAutomaticCookingPaused.Should().BeTrue();
         var entered = false;
         var cook = coordinator.RunAsync(
             (_, _) =>

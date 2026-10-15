@@ -179,6 +179,31 @@ public sealed class AssetCatalogTests
         _ = repaired.PublicationError.Should().BeNull();
     }
 
+    /// <summary>Opening lists the project's files without reporting them as changed, and installing new catalogs reports only what differs.</summary>
+    [TestMethod]
+    public async Task ReinstalledCatalogsReportOnlyDifferences()
+    {
+        using var fixture = new Fixture();
+        var cooked = Directory.CreateDirectory(Path.Combine(fixture.Project.ProjectRoot, ".cooked"));
+        var head = Path.Combine(cooked.FullName, "head.json");
+        await File.WriteAllTextAsync(head, "{broken", this.TestContext.CancellationToken).ConfigureAwait(false);
+        fixture.RootRelease.SetResult();
+        fixture.ContentRelease.SetResult();
+        await using var catalog = fixture.CreateCatalog();
+        var notifications = new ConcurrentQueue<AssetChange>();
+        using var subscription = catalog.Changes.Subscribe(notifications.Enqueue);
+        await catalog.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = notifications.Select(static change => change.Kind).Should().AllBeEquivalentTo(AssetChangeKind.Listed, "opening a project changes no file");
+        _ = notifications.Should().Contain(new AssetChange(AssetChangeKind.Listed, new Uri("asset:///Content/Shape.ogeo")));
+        notifications.Clear();
+
+        File.Delete(head);
+        await catalog.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = fixture.RootEnumerations.Should().Be(1, "the authored folders stay watched while the publication changes");
+        _ = notifications.Should().BeEmpty();
+    }
+
     /// <summary>An older automatic observation cannot displace an explicitly accepted publication.</summary>
     [TestMethod]
     [DataRow(false)]

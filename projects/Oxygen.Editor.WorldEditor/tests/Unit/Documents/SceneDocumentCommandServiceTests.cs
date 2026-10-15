@@ -1388,7 +1388,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         return new(metadata.DocumentId, metadata, scene, new HistoryKeeper(scene));
     }
 
-    private static Fixture CreateFixture(ISceneEngineSync? synchronization = null, IProjectManagerService? projectManager = null, Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService? automaticCooking = null, Oxygen.Editor.World.Workspace.WorkspaceInteractionService? interaction = null, Oxygen.Editor.ContentPipeline.Relocation.IAssetRedirects? redirects = null)
+    private static Fixture CreateFixture(ISceneEngineSync? synchronization = null, IProjectManagerService? projectManager = null, Oxygen.Editor.World.Workspace.WorkspaceInteractionService? interaction = null, Oxygen.Editor.ContentPipeline.Relocation.IAssetRedirects? redirects = null)
     {
         var sync = new Mock<ISceneEngineSync>(MockBehavior.Strict);
         long sequence = 0;
@@ -1405,7 +1405,6 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = inventories.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<Uri>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((ProjectContext _, Uri uri, CancellationToken _) => TestSlotInventory(uri));
         var sut = new SceneDocumentCommandService(
-            automaticCooking ?? Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new SceneSelectionService(),
             synchronization ?? sync.Object,
             projectManager ?? new Mock<IProjectManagerService>(MockBehavior.Strict).Object,

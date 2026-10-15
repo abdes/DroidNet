@@ -101,4 +101,7 @@ public interface IProjectInfo
     ///     requires an explicit choice rather than falling back to last-opened or first-listed.
     /// </remarks>
     public Guid? DefaultSceneId { get; set; }
+
+    /// <summary>Gets or sets the project's settings.</summary>
+    public ProjectSettings Settings { get; set; }
 }

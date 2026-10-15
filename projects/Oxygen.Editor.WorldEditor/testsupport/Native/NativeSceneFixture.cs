@@ -269,7 +269,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         _ = this.documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(() => this.Source.Id);
         _ = this.AssetCatalog.Setup(value => value.Items).Returns(this.feedAssets);
         _ = this.AssetCatalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        this.Commands = new SceneDocumentCommandService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new SceneSelectionService(), this.sync, this.manager, this.documents.Object, default, this.messenger, results, new OperationStatusReducer(), this.materialSlotProvider.Object, this.projectContexts, hierarchyAuthoring ? new SceneMutator(NullLogger<SceneMutator>.Instance) : Mock.Of<ISceneMutator>(), hierarchyAuthoring ? new SceneOrganizer(NullLogger<SceneOrganizer>.Instance) : Mock.Of<ISceneOrganizer>());
+        this.Commands = new SceneDocumentCommandService(new SceneSelectionService(), this.sync, this.manager, this.documents.Object, default, this.messenger, results, new OperationStatusReducer(), this.materialSlotProvider.Object, this.projectContexts, hierarchyAuthoring ? new SceneMutator(NullLogger<SceneMutator>.Instance) : Mock.Of<ISceneMutator>(), hierarchyAuthoring ? new SceneOrganizer(NullLogger<SceneOrganizer>.Instance) : Mock.Of<ISceneOrganizer>());
         this.Model = new EnvironmentViewModel(this.Commands, () => this.Context);
         this.Model.SetScene(this.Source);
         this.sync.SceneSynchronized += (_, args) =>

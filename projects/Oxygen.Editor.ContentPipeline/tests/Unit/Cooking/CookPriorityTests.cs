@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.TestSupport;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookCoordinatorScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
@@ -44,35 +45,6 @@ public sealed class CookPriorityTests
                 this.TestContext.CancellationToken);
     }
 
-    /// <summary>Pausing while a writer is active holds queued demand and Save work, but permits explicit work.</summary>
-    /// <returns>The asynchronous pause and resume regression.</returns>
-    [TestMethod]
-    public async Task PauseAppliesToAlreadyQueuedDemandWithoutPreemptingActiveCook()
-    {
-        var context = CreateContextService();
-        using var coordinator = CreateCoordinator(context);
-        var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var active = coordinator.RunAsync((_, _) => release.Task, this.TestContext.CancellationToken);
-        var automaticEntered = false;
-        var demand = coordinator.RunCookAsync(
-            new(CookTargetKind.Asset, new Uri("asset:///Content/Preview.omat.json"), IsAutomatic: true) { IsDemand = true },
-            (_, _) =>
-            {
-                automaticEntered = true;
-                return Task.FromResult(1);
-            },
-            this.TestContext.CancellationToken);
-        coordinator.IsAutomaticCookingPaused = true;
-        var explicitCook = coordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null), (_, _) => Task.FromResult(2), this.TestContext.CancellationToken);
-        _ = active.IsCompleted.Should().BeFalse();
-        release.SetResult(0);
-        _ = await active.ConfigureAwait(false);
-        _ = (await explicitCook.ConfigureAwait(false)).Should().Be(2);
-        _ = automaticEntered.Should().BeFalse();
-        coordinator.IsAutomaticCookingPaused = false;
-        _ = (await demand.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(1);
-    }
-
     /// <summary>Removing a cancelled priority waiter allows the next save to acquire the writer.</summary>
     /// <returns>The asynchronous cancellation regression.</returns>
     [TestMethod]
@@ -105,20 +77,21 @@ public sealed class CookPriorityTests
         _ = entered.Should().BeFalse();
     }
 
-    /// <summary>Automatic pause belongs to the old project and cannot strand a new project's requests.</summary>
+    /// <summary>Closing a project cancels its queued requests, which cannot strand a new project's requests.</summary>
     /// <returns>The asynchronous project-lifetime regression.</returns>
     [TestMethod]
-    public async Task SwitchingProjectClearsPauseAndCancelsPausedRequests()
+    public async Task SwitchingProjectCancelsQueuedRequests()
     {
         var context = CreateContextService();
         using var coordinator = CreateCoordinator(context);
-        coordinator.IsAutomaticCookingPaused = true;
+        var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
         var request = new CookRunRequest(CookTargetKind.Asset, new Uri("asset:///Content/Preview.omat.json"), IsAutomatic: true) { IsDemand = true };
         var old = coordinator.RunCookAsync(request, (_, _) => Task.FromResult(1), this.TestContext.CancellationToken);
         context.Activate(CreateContext());
-        _ = coordinator.IsAutomaticCookingPaused.Should().BeFalse();
         Func<Task> completion = async () => await old.ConfigureAwait(false);
         _ = await completion.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
+        Func<Task> held = async () => await hold.Held.ConfigureAwait(false);
+        _ = await held.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         _ = (await coordinator.RunCookAsync(request, (_, _) => Task.FromResult(2), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(2);
     }
 }

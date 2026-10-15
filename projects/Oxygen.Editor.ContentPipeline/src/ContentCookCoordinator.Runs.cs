@@ -4,7 +4,6 @@
 
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Assets;
@@ -150,6 +149,7 @@ public sealed partial class ContentCookCoordinator
             run.Snapshot = snapshot = Append(run.Snapshot with { UnsavedDocuments = documents }, new(Message: "Waiting for participating documents to be saved.", State: CookRunState.NeedsSave));
         }
 
+        this.LogRunWaitingForSave(snapshot.DisplayName, documents.Length);
         this.PublishRun(snapshot, reveal: !snapshot.Request.IsAutomatic);
         return resume;
     }
@@ -184,6 +184,7 @@ public sealed partial class ContentCookCoordinator
             this.revealQueueOutcome |= !snapshot.Request.IsAutomatic;
         }
 
+        this.LogRunQueued(snapshot.DisplayName, snapshot.Request.IsDemand ? "the active preview" : snapshot.Request.IsAutomatic ? "cook on change" : "a request");
         this.PublishRun(snapshot, reveal: !snapshot.Request.IsAutomatic);
         return new RunProgress(this, operation.OperationId);
     }
@@ -324,6 +325,7 @@ public sealed partial class ContentCookCoordinator
             queueOutcome = this.TakeCompletedQueueOutcome();
         }
 
+        this.LogRunFinished(snapshot);
         this.PublishCompletedQueue(snapshot, queueOutcome);
     }
 
@@ -376,9 +378,6 @@ public sealed partial class ContentCookCoordinator
             await ((CookCompletedHandler)handler)(args).ConfigureAwait(false);
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "A cooking presentation subscriber failed.")]
-    private partial void LogRunObserverFailure(Exception exception);
 
     private sealed class RunEntry(CookRunSnapshot snapshot, CancellationTokenSource cancellation)
     {

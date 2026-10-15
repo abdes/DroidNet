@@ -296,7 +296,6 @@ public sealed class SceneContentDemandObserverTests
         var projects = new ProjectContextService();
         projects.Activate(ProjectContext.FromProjectInfo(ObserverTestProjectInfo));
         var sut = new SceneDocumentCommandService(
-            Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new SceneSelectionService(),
             sync.Object,
             Mock.Of<IProjectManagerService>(),

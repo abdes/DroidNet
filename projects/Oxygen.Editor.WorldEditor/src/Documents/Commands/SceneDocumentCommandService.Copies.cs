@@ -49,7 +49,6 @@ public sealed partial class SceneDocumentCommandService
 
             var copy = Scene.CreateAndHydrate(context.Scene.Project, data);
             context.Scene.Project.Scenes.Add(copy);
-            this.NotifySceneSaved(copy, previousHash: null);
             return SceneCommandResults.Success(copy);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)

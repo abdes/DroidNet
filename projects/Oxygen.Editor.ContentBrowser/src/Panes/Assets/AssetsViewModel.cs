@@ -32,7 +32,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <summary>
 ///     The ViewModel for the <see cref="AssetsView" /> view.
 /// </summary>
-/// <param name="cookRuns">The session cooking controls.</param>
+/// <param name="automaticCooking">Cooks changed sources and holds the project's Cook on change setting.</param>
 /// <param name="vmToViewConverter">The converter for converting view models to views.</param>
 /// <param name="contentBrowserState">The content browser state to track selection changes.</param>
 /// <param name="projectContextService">The active project context service.</param>
@@ -49,7 +49,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="scripts">New Script and New Input File; without it those commands are unavailable.</param>
 /// <param name="codeEditor">The code editor that opens scripts and input files; without it Edit is unavailable.</param>
 public partial class AssetsViewModel(
-    Oxygen.Editor.ContentPipeline.Cooking.ICookRunService cookRuns,
+    Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
     ViewModelToView vmToViewConverter,
     ContentBrowserState contentBrowserState,
     IProjectContextService projectContextService,
@@ -72,8 +72,8 @@ public partial class AssetsViewModel(
 
     private bool isInitialized;
 
-    /// <summary>Gets the shared session controls for automatic cooking.</summary>
-    public Oxygen.Editor.ContentPipeline.Cooking.ICookRunService CookRuns { get; } = cookRuns;
+    /// <summary>Gets a value indicating whether the project cooks changed sources without being asked.</summary>
+    public bool CookOnChange => automaticCooking.CookOnChange;
 
     /// <summary>
     ///     Gets the converter for converting view models to views.
@@ -152,6 +152,7 @@ public partial class AssetsViewModel(
 
             messenger.Register<CreateScriptRequestMessage>(this, (_, message) => message.Reply(scripts?.CreateScriptAsync() ?? Task.FromResult<string?>(null)));
             relocation?.Completed += this.OnRelocationCompleted;
+            automaticCooking.PropertyChanged += this.OnAutomaticCookingChanged;
 
             // Indexing is started by ContentBrowserViewModel - no need to start here
             this.isInitialized = true;
@@ -312,6 +313,7 @@ public partial class AssetsViewModel(
             if (disposing)
             {
                 messenger.UnregisterAll(this);
+                automaticCooking.PropertyChanged -= this.OnAutomaticCookingChanged;
 
                 // Cleanup event subscriptions
                 contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
@@ -602,6 +604,40 @@ public partial class AssetsViewModel(
         var defaultName = string.Create(CultureInfo.InvariantCulture, $"NewScene{sceneCount + 1}");
 
         await this.CreateNewSceneAsync(defaultName).ConfigureAwait(true);
+    }
+
+    /// <summary>Turns the project's Cook on change setting on or off.</summary>
+    /// <returns>Completion after the setting is saved, or its failure is reported.</returns>
+    [RelayCommand]
+    private async Task ToggleCookOnChangeAsync()
+    {
+        var enabled = !automaticCooking.CookOnChange;
+        try
+        {
+            await automaticCooking.SetCookOnChangeAsync(enabled).ConfigureAwait(true);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            this.PublishFailure(
+                ContentPipelineOperationKinds.CookOnChangeSet,
+                "Cook on change",
+                "The project's Cook on change setting could not be saved: " + error.Message,
+                ContentPipelineDiagnosticCodes.CookOnChangeNotSaved,
+                scopeUri: null,
+                error,
+                showInBrowser: false);
+
+            // The menu item flipped itself; show the setting as it is.
+            this.OnPropertyChanged(nameof(this.CookOnChange));
+        }
+    }
+
+    private void OnAutomaticCookingChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (string.Equals(args.PropertyName, nameof(Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService.CookOnChange), StringComparison.Ordinal))
+        {
+            this.OnPropertyChanged(nameof(this.CookOnChange));
+        }
     }
 
     private string ResolveMaterialFolder(string? selected)

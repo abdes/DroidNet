@@ -145,7 +145,7 @@ public sealed class AssetsViewModelCommandTests
         var state = new ContentBrowserState(projects);
         var messenger = new StrongReferenceMessenger();
         var browser = new AssetsViewModel(
-            Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService>(),
+            Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new DroidNet.Mvvm.Converters.ViewModelToView(Mock.Of<DroidNet.Mvvm.IViewLocator>()),
             state,
             projects,

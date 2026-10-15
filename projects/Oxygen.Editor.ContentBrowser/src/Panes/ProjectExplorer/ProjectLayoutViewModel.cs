@@ -441,6 +441,7 @@ public partial class ProjectLayoutViewModel(
             context.Thumbnail)
         {
             DefaultSceneId = context.DefaultSceneId,
+            Settings = projectContextService.Settings,
         };
         foreach (var mount in context.AuthoringMounts)
         {

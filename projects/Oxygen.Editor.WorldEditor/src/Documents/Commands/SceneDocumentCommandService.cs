@@ -28,7 +28,6 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 
 /// <inheritdoc />
-/// <param name="automaticCooking">Schedules cooking after acknowledged source saves.</param>
 /// <param name="selectionService">The selection service.</param>
 /// <param name="sceneEngineSync">The scene engine sync.</param>
 /// <param name="projectManager">The project manager.</param>
@@ -45,7 +44,6 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// <param name="redirects">Resolves references captured before asset relocations; optional.</param>
 /// <param name="logger">Records relocation follow-up and restored deleted references.</param>
 public sealed partial class SceneDocumentCommandService(
-    Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
     ISceneSelectionService selectionService,
     ISceneEngineSync sceneEngineSync,
     IProjectManagerService projectManager,
@@ -1381,7 +1379,6 @@ public sealed partial class SceneDocumentCommandService(
             await this.CompleteEditSessionsAsync(context, commit: true).ConfigureAwait(true);
             var version = context.Metadata.ChangeVersion;
             var snapshot = SceneSaveSnapshot.Capture(context.Scene);
-            var previousSource = this.projectManager.GetSceneSourceVersion(context.Scene);
             var success = await this.projectManager.SaveSceneSnapshotAsync(snapshot).ConfigureAwait(true);
             if (!success)
             {
@@ -1395,9 +1392,7 @@ public sealed partial class SceneDocumentCommandService(
                 return new SceneCommandResult(Succeeded: false, operationResultId);
             }
 
-            var result = await this.AcknowledgeSceneSaveAsync(context, version).ConfigureAwait(true);
-            this.NotifySceneSaved(context.Scene, previousSource?.Version.Sha256);
-            return result;
+            return await this.AcknowledgeSceneSaveAsync(context, version).ConfigureAwait(true);
         }
         catch (DroidNet.Storage.StorageWriteConflictException exception)
         {
@@ -1426,17 +1421,6 @@ public sealed partial class SceneDocumentCommandService(
         finally
         {
             _ = gate.Release();
-        }
-    }
-
-    private void NotifySceneSaved(Scene scene, string? previousHash)
-    {
-        if (this.projectManager.GetSceneSourceVersion(scene) is { } savedSource)
-        {
-            automaticCooking.NotifySaved(
-                savedSource.SourcePath,
-                savedSource.Version.Sha256,
-                contentChanged: !string.Equals(previousHash, savedSource.Version.Sha256, StringComparison.Ordinal));
         }
     }
 

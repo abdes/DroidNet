@@ -337,7 +337,7 @@ public sealed class DocumentManagerSceneLifetimeTests
             close.Register(this.Window, this.First.Id, this.Participant);
             var selection = new SceneSelectionService();
             var commands = new SceneDocumentCommandService(
-                Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), selection, this.Sync.Object,
+                selection, this.Sync.Object,
                 projects.Object, this.Documents, this.Window, this.messenger, Mock.Of<IOperationResultPublisher>(),
                 new OperationStatusReducer(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(),
                 this.Contexts, new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance));

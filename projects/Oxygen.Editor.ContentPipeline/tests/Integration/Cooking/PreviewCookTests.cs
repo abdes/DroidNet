@@ -33,14 +33,14 @@ public sealed class PreviewCookTests
         var scenePath = Path.Combine(workspace.Root, "Content", "Scenes", "Main.oscene.json");
         var scene = SavedState(scenePath) with { Revision = 2, IsDirty = true };
         using var registration = workspace.Documents.Register(scenePath, _ => Task.FromResult<CookDocumentReadLease?>(new(scene, static () => { })));
-        workspace.CookCoordinator.IsAutomaticCookingPaused = true;
+        var hold = WriterHold.Take(workspace.CookCoordinator, this.TestContext.CancellationToken);
         var saved = pipeline.CookSavedAssetAsync(materialUri, workspace.ProjectContext, this.TestContext.CancellationToken);
         var preview = pipeline.CookPreviewAssetAsync(materialUri, workspace.ProjectContext, this.TestContext.CancellationToken);
         var queued = workspace.CookCoordinator.Runs.Should().ContainSingle().Subject;
         _ = queued.Request.IsDemand.Should().BeTrue();
         _ = queued.Request.IsAutomatic.Should().BeTrue();
         _ = preview.IsCompleted.Should().BeFalse();
-        workspace.CookCoordinator.IsAutomaticCookingPaused = false;
+        await hold.ReleaseAsync().ConfigureAwait(false);
         var result = await preview.ConfigureAwait(false);
         AssertCookSucceeded(result);
         _ = (await saved.ConfigureAwait(false)).Should().BeSameAs(result);

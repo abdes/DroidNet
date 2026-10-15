@@ -32,7 +32,6 @@ public sealed partial class CookingSaveConflictTests : DroidNet.Tests.VisualUser
     {
         var services = scenario.Services;
         var materials = scenario.Materials;
-        services.Runs.IsAutomaticCookingPaused = true;
         var unrelated = await CreateDirtySaveParticipantsAsync(scenario, cancellationToken).ConfigureAwait(true);
         var actions = new Mock<ICookingWorkspaceActions>();
         _ = actions.Setup(value => value.SaveListedAsync(It.IsAny<CookRunSnapshot>())).Returns<CookRunSnapshot>(async run =>

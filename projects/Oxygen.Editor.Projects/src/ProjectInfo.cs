@@ -121,6 +121,9 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     /// <inheritdoc />
     public Guid? DefaultSceneId { get; set; }
 
+    /// <inheritdoc />
+    public ProjectSettings Settings { get; set; } = new();
+
     /// <summary>
     ///     Deserializes a JSON string into a <see cref="ProjectInfo" /> object.
     /// </summary>
@@ -163,6 +166,9 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
             obj.DefaultSceneId = null;
         }
 
+        // A manifest written before settings existed, or one with "Settings": null, uses the defaults.
+        obj.Settings ??= new();
+
         return obj.Id == Guid.Empty
             ? throw new JsonException("ProjectInfo JSON is missing required 'Id' property or it is empty.")
             : (IProjectInfo)obj;
@@ -186,6 +192,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
             LocalFolderMounts = [.. projectInfo.LocalFolderMounts],
             CookedContentOrder = [.. projectInfo.CookedContentOrder],
             DefaultSceneId = projectInfo.DefaultSceneId,
+            Settings = projectInfo.Settings,
         };
         return JsonSerializer.Serialize(descriptor, JsonOptions);
     }
@@ -219,5 +226,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
         public IList<CookedContentSource> CookedContentOrder { get; init; } = [];
 
         public Guid? DefaultSceneId { get; init; }
+
+        public ProjectSettings Settings { get; init; } = new();
     }
 }

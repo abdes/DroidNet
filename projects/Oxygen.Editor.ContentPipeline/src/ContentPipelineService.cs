@@ -319,7 +319,7 @@ public sealed partial class ContentPipelineService(
         return input.Kind == kind ? input : throw new ArgumentException("The asset kind does not match its source identity.", nameof(assetUri));
     }
 
-    private static bool IsCookableDescriptorFile(string path)
+    internal static bool IsCookableDescriptorFile(string path)
         => path.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
            || path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
            || path.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase)

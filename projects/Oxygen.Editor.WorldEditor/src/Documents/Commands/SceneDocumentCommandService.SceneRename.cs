@@ -111,27 +111,9 @@ public sealed partial class SceneDocumentCommandService
             context.Metadata.MarkSaved(context.Metadata.ChangeVersion);
         }
 
-        try
+        if (!await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true))
         {
-            if (!await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true))
-            {
-                throw new InvalidOperationException("The scene asset was renamed, but its document tab could not be refreshed.");
-            }
-        }
-        finally
-        {
-            foreach (var source in result.Sources)
-            {
-                if (!string.Equals(source.Previous.SourcePath, source.Current.SourcePath, StringComparison.Ordinal))
-                {
-                    automaticCooking.NotifyRenamed(source.Previous.SourcePath, source.Current.SourcePath, source.Current.Version.Sha256);
-                }
-                else
-                {
-                    automaticCooking.NotifySaved(source.Current.SourcePath, source.Current.Version.Sha256);
-                }
-            }
-
+            throw new InvalidOperationException("The scene asset was renamed, but its document tab could not be refreshed.");
         }
     }
 

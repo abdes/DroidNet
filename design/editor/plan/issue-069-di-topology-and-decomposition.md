@@ -147,24 +147,30 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   with its `IAssetRuntimeStatusSource` port; the file types table is in
   `Oxygen.Managed.Assets`; the asset messages are gone. Its registration module
   waits for Phase 3.
-- **S1.2 Cook on change** (documents design 4.1, 4.2, and rules 1 to 3 of 4.6).
-  The automatic cook listens to `IAssetCatalog.Changes` instead of being told
-  about saves. Changes under authoring roots open the quiet window, and when it
-  closes one automatic run cooks every input that changed in it; while that run
-  waits, new changes join it, and while it runs, they collect into the next one.
-  Automatic runs cook what is on disk and never park in `NeedsSave`. The **Cook
-  on change** project setting, stored in the project manifest, replaces the
-  in-memory pause, and the Content Explorer's toggle edits it. `NotifySaved` and
-  `NotifyRenamed` go, with their calls in the scene command service, scene
-  rename, the material document service and script analysis. So that the
-  catalog's changes are file changes, `FileSystemAssetCatalog` reports a file
-  replaced by an atomic save as updated, and `AssetCatalog` reports only the
-  differences when it installs new catalogs. The cook is registered beside the
-  catalog, in the workspace's scope. Until S1.10 moves their checks, scripts and
-  input files cook like any file, and one with problems fails its cook. Explicit
-  cooks keep today's unsaved-document handling until S1.12. Gate:
-  Managed.Assets, Assets and ContentPipeline tests, the tests of the callers,
-  the reviewer's editor build and acceptance of the toggle.
+- **S1.2 Cook on change** (documents design 4.1 and 4.2, and the quiet window of
+  4.6). The automatic cook listens to `IAssetCatalog.Changes` instead of being
+  told about saves. Changes to cookable files under authoring roots open the
+  quiet window. When it closes, a run waiting in `NeedsSave` for a changed file
+  resumes; for the others, the cook waits until no cook of the project is in
+  progress and cooks each changed asset whose published output does not match
+  what is on disk, so a cook that already covered the change (Play's) is not
+  repeated. Each asset gets today's automatic cook, with at most one in flight.
+  Opening a project cooks nothing: the catalog reports the files it starts
+  listing as `Listed`, not as changes. The **Cook on change** project setting,
+  stored in the project manifest and changed without reactivating the project,
+  replaces the in-memory pause; the Content Explorer's toggle edits it.
+  `NotifySaved` and `NotifyRenamed` go, with their calls in the scene command
+  service, scene rename, the material document service and script analysis. So
+  that no change goes unseen, `FileSystemAssetCatalog` reports a file replaced
+  by an atomic save as updated and every known file as updated after a watcher
+  overflow, and `AssetCatalog` keeps watching the authored folders across
+  publications and reports only the differences when it installs new catalogs.
+  Every cook logs when it is queued, starts, waits for a save and finishes. The
+  cook is registered beside the catalog, in the workspace's scope. Until S1.10,
+  scripts and input files cook like any file, and one with problems fails its
+  cook. Gate: Managed.Assets, Projects, Assets and ContentPipeline tests, the
+  tests of the callers, the reviewer's editor build and acceptance of the
+  toggle.
 - **S1.3 Foreground cooks** (rules 4 to 6 of documents design 4.6). A running
   automatic run stops at its next safe point when the user cooks or plays, and
   its unfinished inputs return to the waiting automatic run; an explicit request
@@ -211,11 +217,15 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   (documents design decision 7); the editing part of `MaterialDocumentService`
   moves into `Material` and the Material Editor. Gate: World and Material Editor
   tests.
-- **S1.10 Script and input checks** (documents design 4.2). ContentPipeline
-  takes the input file check and the script check, and produces the problems of
-  the World models; script analysis runs through a port ContentPipeline owns,
-  which LivePreview implements. Cook on change skips an input with problems.
-  Gate: ContentPipeline and LivePreview tests.
+- **S1.10 Script and input checks** (documents design 4.2, and rules 1 to 3 of
+  4.6). ContentPipeline takes the input file check and the script check, and
+  produces the problems of the World models; script analysis runs through a port
+  ContentPipeline owns, which LivePreview implements. Cook on change skips an
+  input with problems, so one automatic run can cover every input that changed
+  in a quiet window: while it waits, new changes join it, and while it runs,
+  they collect into the next one. A cook run fails as a whole when one input
+  fails, which is why the single run waits for the skip. Gate: ContentPipeline
+  and LivePreview tests.
 - **S1.11 Shell** (C9, C10, C12, C16). `Oxygen.Editor.Shell` is created with the
   layout of shell design section 7 and receives the generic workspace machinery
   of `WorldEditor/Workspace`. Its document service (`IDocumentService`,
@@ -236,9 +246,10 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   declares `IUnsavedDocuments`, the Shell's document service implements it and
   ContentPipeline consumes it. Play, Cook and relocation ask before they run.
   The `NeedsSave` state, `CookDocumentRegistry`, the read leases, the save gates
-  and `SceneCookInputRegistrar` are removed. Gate: ContentPipeline tests, the
-  reviewer's editor build, and the reviewer's acceptance of the confirmations in
-  the running editor.
+  and `SceneCookInputRegistrar` are removed, so every cook reads what is on disk
+  and a cook on change no longer waits for a dirty document (scenario 2.6).
+  Gate: ContentPipeline tests, the reviewer's editor build, and the reviewer's
+  acceptance of the confirmations in the running editor.
 - **S1.13 Features**, a move commit and a rename commit each, with the feature's
   module, theme dictionary and tests, in this order: `Output`, `Problems`,
   `Cooking`, `CookedInspector` (from `Inspection`), `SceneExplorer` (C3 explorer

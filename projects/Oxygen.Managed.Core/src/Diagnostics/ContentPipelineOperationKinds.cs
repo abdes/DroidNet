@@ -58,4 +58,9 @@ public static class ContentPipelineOperationKinds
     /// Post-cook catalog refresh.
     /// </summary>
     public const string CatalogRefresh = "Content.Catalog.Refresh";
+
+    /// <summary>
+    /// Change of the project's Cook on change setting.
+    /// </summary>
+    public const string CookOnChangeSet = "Content.Cook.OnChange.Set";
 }

@@ -42,4 +42,9 @@ public static class ContentPipelineDiagnosticCodes
     /// Loose cooked output validation failed.
     /// </summary>
     public const string ValidateFailed = DiagnosticCodes.ContentPipelinePrefix + "VALIDATE.Failed";
+
+    /// <summary>
+    /// The project's Cook on change setting could not be saved.
+    /// </summary>
+    public const string CookOnChangeNotSaved = DiagnosticCodes.ContentPipelinePrefix + "COOK_ON_CHANGE.NotSaved";
 }

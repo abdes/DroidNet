@@ -26,7 +26,7 @@ public sealed partial class ContentBrowserCookFeedbackTests
         _ = pipeline.Setup(value => value.CookProjectAsync(It.IsAny<CancellationToken>())).Returns(pending.Task);
         var projects = new ProjectContextService();
         using var browser = new AssetsViewModel(
-            Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService>(),
+            Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new DroidNet.Mvvm.Converters.ViewModelToView(Mock.Of<DroidNet.Mvvm.IViewLocator>()),
             new ContentBrowserState(projects),
             projects,

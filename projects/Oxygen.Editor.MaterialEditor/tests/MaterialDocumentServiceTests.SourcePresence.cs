@@ -16,7 +16,7 @@ public sealed partial class MaterialDocumentServiceTests
     public async Task DeletedSourceIsMissingUntilSavingWritesItAgain()
     {
         using var workspace = new TempWorkspace();
-        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore());
+        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore());
         var document = await service.CreateAsync(new Uri("asset:///Content/Materials/Gone.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         File.Delete(document.SourcePath);
 
@@ -34,7 +34,7 @@ public sealed partial class MaterialDocumentServiceTests
     public async Task SourceRestoredUnchangedIsInStepAgain()
     {
         using var workspace = new TempWorkspace();
-        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore());
+        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore());
         var document = await service.CreateAsync(new Uri("asset:///Content/Materials/Back.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var original = await File.ReadAllBytesAsync(document.SourcePath, this.TestContext.CancellationToken).ConfigureAwait(false);
         File.Delete(document.SourcePath);
@@ -55,7 +55,7 @@ public sealed partial class MaterialDocumentServiceTests
     public async Task SourceRestoredWithOtherContentConflictsOnSave()
     {
         using var workspace = new TempWorkspace();
-        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore());
+        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore());
         var document = await service.CreateAsync(new Uri("asset:///Content/Materials/Other.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var external = await File.ReadAllTextAsync(document.SourcePath, this.TestContext.CancellationToken).ConfigureAwait(false) + "\n ";
         File.Delete(document.SourcePath);

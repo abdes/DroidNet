@@ -21,7 +21,6 @@ namespace Oxygen.Editor.MaterialEditor;
 /// <summary>
 /// Default scalar material document service.
 /// </summary>
-/// <param name="automaticCooking">Schedules cooking after acknowledged source saves.</param>
 /// <param name="pathResolver">The material source path resolver.</param>
 /// <param name="cookService">The material cook service.</param>
 /// <param name="cookDocuments">The shared registry of saved authoring inputs.</param>
@@ -29,7 +28,6 @@ namespace Oxygen.Editor.MaterialEditor;
 /// <param name="operationResults">Optional operation-result publisher.</param>
 /// <param name="loggerFactory">Optional logger factory.</param>
 public sealed partial class MaterialDocumentService(
-    Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
     IMaterialSourcePathResolver pathResolver,
     IMaterialCookService cookService,
     ICookDocumentRegistry cookDocuments,
@@ -116,9 +114,7 @@ public sealed partial class MaterialDocumentService(
         var source = CreateDefaultSource(assetName);
         var version = await this.atomicFiles.WriteAsync(location.SourcePath, SerializeSource(source), FileVersion.Missing, cancellationToken).ConfigureAwait(false);
 
-        var document = this.Track(location, source, assetName, MaterialCookState.NotCooked, version);
-        automaticCooking.NotifySaved(location.SourcePath, version.Sha256);
-        return document;
+        return this.Track(location, source, assetName, MaterialCookState.NotCooked, version);
     }
 
     /// <inheritdoc />
@@ -220,12 +216,10 @@ public sealed partial class MaterialDocumentService(
             lock (this.sync)
             {
                 var current = this.GetDocument(documentId);
-                var changed = !SameSource(this.histories[documentId].SavedSource, source);
                 this.histories[documentId].SavedSource = source;
                 var saved = current with { SavedRevision = document.Revision, IsDirty = !SameSource(current.Source, source) };
                 this.documents[documentId] = saved;
                 this.PublishCookDocumentState(documentId);
-                automaticCooking.NotifySaved(saved.SourcePath, this.fileVersions[documentId].Sha256, changed);
 
                 return new MaterialSaveResult(Succeeded: true, OperationId: null) { HasUnsavedChanges = saved.IsDirty };
             }

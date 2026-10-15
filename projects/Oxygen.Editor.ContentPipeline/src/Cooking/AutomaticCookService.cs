@@ -2,73 +2,107 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Cooking;
 
-/// <summary>Coalesces Save requests per source and uses the shared cook writer and run history.</summary>
-public sealed partial class AutomaticCookService : IAutomaticCookService, IObserver<ProjectContext?>, IDisposable
+/// <summary>Turns the asset catalog's changes into automatic cooks of the changed sources, through the shared cook writer and run history.</summary>
+/// <remarks>
+/// A change to a cookable source under an authoring mount opens a quiet window, which each further change restarts, up
+/// to <see cref="QuietWindowLimit"/> after the first change. When it closes, a run waiting for one of the changed
+/// sources to be saved resumes. Otherwise, while Cook on change is on, the service waits until no cook of the project is
+/// in progress and cooks each changed source whose published output does not match what is on disk; a cook that ran
+/// after the change, such as Play's, already covered it. A source has at most one cook in flight, and a change while it
+/// runs cooks the source once more when it ends.
+/// </remarks>
+public sealed partial class AutomaticCookService : IAutomaticCookService, IDisposable
 {
+    /// <summary>How long the sources must stay unchanged before they are cooked.</summary>
+    public static readonly TimeSpan QuietWindow = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>How long after its first change a window closes, even while changes keep coming.</summary>
+    public static readonly TimeSpan QuietWindowLimit = TimeSpan.FromSeconds(5);
+
     private readonly IProjectContextService projects;
+    private readonly IProjectManagerService projectManager;
     private readonly IContentPipelineService pipeline;
+    private readonly IAssetCookStatusReader statuses;
     private readonly ICookRunService runs;
+    private readonly TimeProvider time;
     private readonly ILogger<AutomaticCookService> logger;
     private readonly Lock sync = new();
-    private readonly Dictionary<Uri, SavedRequest> requests = [];
-    private readonly IDisposable subscription;
+    private readonly Dictionary<Uri, string> changed = [];
+    private readonly Dictionary<Uri, SourceCook> cooks = [];
+    private readonly ITimer window;
+    private readonly IDisposable projectSubscription;
+    private readonly IDisposable settingsSubscription;
+    private readonly IDisposable catalogSubscription;
     private ProjectContext? project;
+    private CancellationTokenSource projectLifetime = new();
+    private long windowOpenedAt;
+    private bool windowOpen;
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="AutomaticCookService"/> class.</summary>
-    /// <param name="projects">The active project and its lifetime notifications.</param>
+    /// <param name="projects">The active project, its settings and their changes.</param>
+    /// <param name="projectManager">Saves the project's settings.</param>
+    /// <param name="catalog">The asset catalog, whose changes are the changed sources.</param>
     /// <param name="pipeline">The same saved-input pipeline used by explicit cooks.</param>
-    /// <param name="runs">The shared run history and save recovery controls.</param>
-    /// <param name="logger">Reports scheduling failures without failing an acknowledged Save.</param>
-    public AutomaticCookService(IProjectContextService projects, IContentPipelineService pipeline, ICookRunService runs, ILogger<AutomaticCookService> logger)
+    /// <param name="statuses">Tells whether a source's published output matches what is on disk.</param>
+    /// <param name="runs">The shared run history, holding the runs that wait for a source to be saved.</param>
+    /// <param name="logger">Reports scheduling failures and sources left uncooked.</param>
+    /// <param name="time">The clock of the quiet window; the system clock when omitted.</param>
+    public AutomaticCookService(
+        IProjectContextService projects,
+        IProjectManagerService projectManager,
+        IAssetCatalog catalog,
+        IContentPipelineService pipeline,
+        IAssetCookStatusReader statuses,
+        ICookRunService runs,
+        ILogger<AutomaticCookService> logger,
+        TimeProvider? time = null)
     {
+        ArgumentNullException.ThrowIfNull(catalog);
         this.projects = projects;
+        this.projectManager = projectManager;
         this.pipeline = pipeline;
+        this.statuses = statuses;
         this.runs = runs;
         this.logger = logger;
-        this.subscription = projects.ProjectChanged.Subscribe(this);
+        this.time = time ?? TimeProvider.System;
+        this.window = this.time.CreateTimer(_ => _ = this.CloseWindowAsync(), state: null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        this.projectSubscription = projects.ProjectChanged.Subscribe(this.OnProjectChanged);
+        this.settingsSubscription = projects.SettingsChanged.Subscribe(this.OnSettingsChanged);
+        this.catalogSubscription = catalog.Changes.Subscribe(this.OnCatalogChange);
     }
 
     /// <inheritdoc />
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Scheduling derived work must never change an acknowledged source Save into a failure.")]
-    public void NotifySaved(string sourcePath, string contentHash, bool contentChanged = true)
-    {
-        try
-        {
-            this.QueueSaved(sourcePath, contentHash, contentChanged);
-        }
-        catch (Exception exception)
-        {
-            this.LogSchedulingFailure(exception, sourcePath);
-        }
-    }
+    public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <inheritdoc />
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Scheduling derived work reports failures without rejecting an acknowledged rename.")]
-    public void NotifyRenamed(string previousPath, string sourcePath, string contentHash)
-    {
-        try
-        {
-            lock (this.sync)
-            {
-                if (this.project is { } current && ResolveSource(current, previousPath) is { } previous
-                    && this.requests.Remove(previous, out var retired))
-                {
-                    CancelRequest(retired);
-                }
-            }
+    public bool CookOnChange => this.projects.Settings.CookOnChange;
 
-            this.QueueSaved(sourcePath, contentHash, contentChanged: true);
-        }
-        catch (Exception exception)
+    /// <inheritdoc />
+    public async Task SetCookOnChangeAsync(bool enabled, CancellationToken cancellationToken = default)
+    {
+        var current = this.projects.ActiveProject ?? throw new InvalidOperationException("Cook on change is a setting of the active project.");
+        var settings = this.projects.Settings with { CookOnChange = enabled };
+        if (settings == this.projects.Settings)
         {
-            this.LogSchedulingFailure(exception, sourcePath);
+            return;
+        }
+
+        await this.projectManager.SaveProjectSettingsAsync(current.ProjectRoot, settings, cancellationToken).ConfigureAwait(true);
+        if (ReferenceEquals(current, this.projects.ActiveProject))
+        {
+            this.projects.UpdateSettings(settings);
         }
     }
 
@@ -77,211 +111,373 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IObser
     {
         lock (this.sync)
         {
+            if (this.disposed)
+            {
+                return;
+            }
+
             this.disposed = true;
-            foreach (var request in this.requests.Values)
-            {
-                CancelRequest(request);
-            }
-
-            this.requests.Clear();
+            this.changed.Clear();
+            this.RetireAll();
+            this.projectLifetime.Cancel();
         }
 
-        this.subscription.Dispose();
-        GC.SuppressFinalize(this);
+        this.catalogSubscription.Dispose();
+        this.settingsSubscription.Dispose();
+        this.projectSubscription.Dispose();
+        this.window.Dispose();
+        this.projectLifetime.Dispose();
     }
 
-    /// <inheritdoc />
-    void IObserver<ProjectContext?>.OnNext(ProjectContext? value)
+    // A source name the catalog reports for a cooked record resolves to the same source; only a change to the source
+    // file itself is cooked.
+    private static bool TryResolveSource(ProjectContext project, Uri uri, [NotNullWhen(true)] out string? source)
     {
+        source = null;
+        var path = Uri.UnescapeDataString(uri.AbsolutePath);
+        if (!string.Equals(uri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase) || path.Length < 2)
+        {
+            return false;
+        }
+
+        var slash = path.IndexOf('/', 1);
+        var mount = slash < 0 ? null : project.AuthoringMounts.FirstOrDefault(mount => !ProjectOutputFolders.Contains(mount)
+            && string.Equals(mount.Name, path[1..slash], StringComparison.OrdinalIgnoreCase));
+        if (mount is null)
+        {
+            return false;
+        }
+
+        var root = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath)).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var absolute = Path.GetFullPath(Path.Combine(root, path[(slash + 1)..]));
+        if (!absolute.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !ContentPipelineService.IsCookableDescriptorFile(absolute))
+        {
+            return false;
+        }
+
+        source = absolute;
+        return true;
+    }
+
+    private static void Cancel(SourceCook cook) => cook.CancellationCompletion ??= cook.Cancellation.CancelAsync();
+
+    private void OnProjectChanged(ProjectContext? value)
+    {
+        CancellationTokenSource ended;
         lock (this.sync)
         {
+            if (this.disposed)
+            {
+                return;
+            }
+
+            ended = this.projectLifetime;
+            this.projectLifetime = new();
             this.project = value;
-            foreach (var request in this.requests.Values)
-            {
-                CancelRequest(request);
-            }
-
-            this.requests.Clear();
+            this.changed.Clear();
+            this.windowOpen = false;
+            _ = this.window.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            this.RetireAll();
         }
+
+        ended.Cancel();
+        ended.Dispose();
+        this.PropertyChanged?.Invoke(this, new(nameof(this.CookOnChange)));
     }
 
-    /// <inheritdoc />
-    void IObserver<ProjectContext?>.OnCompleted() => ((IObserver<ProjectContext?>)this).OnNext(value: null);
-
-    /// <inheritdoc />
-    void IObserver<ProjectContext?>.OnError(Exception error) => ((IObserver<ProjectContext?>)this).OnNext(value: null);
-
-    private static void CancelRequest(SavedRequest request)
+    private void OnSettingsChanged(ProjectSettings settings)
     {
-        if (request.Running)
+        if (!settings.CookOnChange)
         {
-            request.CancellationCompletion ??= request.Cancellation.CancelAsync();
-        }
-    }
-
-    private static Uri? ResolveSource(ProjectContext project, string sourcePath)
-    {
-        foreach (var mount in project.AuthoringMounts.OrderByDescending(static item => item.RelativePath.Length))
-        {
-            var root = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath));
-            var relative = Path.GetRelativePath(root, sourcePath);
-            if (!Path.IsPathRooted(relative) && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) && !string.Equals(relative, "..", StringComparison.Ordinal))
-            {
-                return new Uri($"{AssetUris.Scheme}:///{Uri.EscapeDataString(mount.Name)}/{string.Join('/', relative.Split(Path.DirectorySeparatorChar).Select(Uri.EscapeDataString))}");
-            }
-        }
-
-        return null;
-    }
-
-    private void QueueSaved(string sourcePath, string contentHash, bool contentChanged)
-    {
-        SavedRequest request;
-        lock (this.sync)
-        {
-            if (this.disposed || this.project is not { } current || !ReferenceEquals(current, this.projects.ActiveProject)
-                || ResolveSource(current, sourcePath) is not { } uri)
-            {
-                return;
-            }
-
-            // A pending explicit or automatic cook already owns this saved dependency.
-            var resumed = false;
-            foreach (var run in this.runs.Runs.Where(run => run.ProjectId == current.ProjectId && run.State == CookRunState.NeedsSave
-                && run.UnsavedDocuments.Any(document => string.Equals(document.SourcePath, sourcePath, StringComparison.OrdinalIgnoreCase))))
-            {
-                resumed |= this.runs.ResumeAfterSave(run.OperationId);
-            }
-
-            if (!contentChanged)
-            {
-                return;
-            }
-
-            if (this.requests.TryGetValue(uri, out var existing))
-            {
-                if (string.Equals(existing.ContentHash, contentHash, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                existing.ContentHash = contentHash;
-                if (existing.Running)
-                {
-                    return;
-                }
-            }
-
-            request = new(current, uri, contentHash) { Running = !resumed };
-            this.requests[uri] = request;
-            if (resumed)
-            {
-                request.Cancellation.Dispose();
-                return;
-            }
-        }
-
-        // Leave document save gates before source capture starts; this task owns and observes its failures.
-        _ = Task.Run(() => this.CookSavedAsync(request), CancellationToken.None);
-    }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The shared coordinator records background failures in Cooking; they must not escape onto the document's Save caller.")]
-    private async Task CookSavedAsync(SavedRequest request)
-    {
-        try
-        {
-            await this.CookSavedCoreAsync(request).ConfigureAwait(false);
-        }
-        finally
-        {
-            Task? cancellation;
+            // A running cook finishes; it does not cook its source again for the changes it saw.
             lock (this.sync)
             {
-                request.Running = false;
-                cancellation = request.CancellationCompletion;
-            }
-
-            try
-            {
-                if (cancellation is not null)
+                foreach (var cook in this.cooks.Values)
                 {
-                    await cancellation.ConfigureAwait(false);
+                    cook.Again = false;
                 }
             }
-            catch (Exception exception)
+        }
+
+        this.LogCookOnChangeSet(settings.CookOnChange);
+        this.PropertyChanged?.Invoke(this, new(nameof(this.CookOnChange)));
+    }
+
+    private void OnCatalogChange(AssetChange change)
+    {
+        lock (this.sync)
+        {
+            // A listed asset became visible without changing: opening a project cooks nothing.
+            if (this.disposed || this.project is not { } current || change.Kind is AssetChangeKind.Listed)
             {
-                this.LogSchedulingFailure(exception, request.AssetUri.AbsoluteUri);
+                return;
             }
-            finally
+
+            if (change.Kind is AssetChangeKind.Removed)
             {
-                request.Cancellation.Dispose();
+                _ = this.changed.Remove(change.Uri);
+                this.Retire(change.Uri);
+                return;
             }
+
+            if (change is { Kind: AssetChangeKind.Relocated, PreviousUri: { } previous })
+            {
+                _ = this.changed.Remove(previous);
+                this.Retire(previous);
+            }
+
+            if (!TryResolveSource(current, change.Uri, out var source))
+            {
+                return;
+            }
+
+            this.changed[change.Uri] = source;
+            var now = this.time.GetTimestamp();
+            if (!this.windowOpen)
+            {
+                this.windowOpen = true;
+                this.windowOpenedAt = now;
+            }
+
+            var left = QuietWindowLimit - this.time.GetElapsedTime(this.windowOpenedAt, now);
+            _ = this.window.Change(left < QuietWindow ? (left > TimeSpan.Zero ? left : TimeSpan.Zero) : QuietWindow, Timeout.InfiniteTimeSpan);
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Background cook failures are reported and must not escape to source authoring.")]
-    private async Task CookSavedCoreAsync(SavedRequest request)
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The timer owns this task; a failed status read cooks the sources instead of leaving them stale.")]
+    private async Task CloseWindowAsync()
+    {
+        KeyValuePair<Uri, string>[] closed;
+        ProjectContext current;
+        CancellationToken lifetime;
+        lock (this.sync)
+        {
+            if (this.disposed || this.project is null || !this.windowOpen)
+            {
+                return;
+            }
+
+            this.windowOpen = false;
+            closed = [.. this.changed];
+            this.changed.Clear();
+            current = this.project;
+            lifetime = this.projectLifetime.Token;
+        }
+
+        var changedSources = closed.Where(item => !this.ResumeWaitingRuns(current, item.Value)).Select(static item => item.Key).ToList();
+        if (changedSources.Count == 0)
+        {
+            return;
+        }
+
+        if (!this.CookOnChange)
+        {
+            this.LogNotCooked(changedSources.Count);
+            return;
+        }
+
+        IReadOnlyCollection<Uri> stale = changedSources;
+        try
+        {
+            await this.WaitForProjectCooksAsync(current, lifetime).ConfigureAwait(false);
+            var cooked = (await this.statuses.ReadAsync(current, changedSources, lifetime).ConfigureAwait(false))
+                .Where(static status => status.Freshness == AssetCookFreshness.Current).Select(static status => status.AssetUri).ToHashSet();
+            stale = [.. changedSources.Where(asset => !cooked.Contains(asset))];
+            if (cooked.Count > 0)
+            {
+                this.LogAlreadyCooked(cooked.Count);
+            }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            this.LogStatusUnavailable(exception, changedSources.Count);
+        }
+
+        if (!this.CookOnChange)
+        {
+            this.LogNotCooked(stale.Count);
+            return;
+        }
+
+        foreach (var asset in stale)
+        {
+            this.Queue(current, asset);
+        }
+    }
+
+    // A cook in progress may cover the change; one waiting for a Save does not end on its own and is not waited for.
+    private async Task WaitForProjectCooksAsync(ProjectContext current, CancellationToken cancellationToken)
     {
         while (true)
         {
-            string capturedHash;
-            lock (this.sync)
-            {
-                if (!this.IsCurrent(request))
-                {
-                    return;
-                }
-
-                capturedHash = request.ContentHash;
-            }
-
+            var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnRunChanged(object? sender, CookRunChangedEventArgs args) => changed.TrySetResult();
+            this.runs.RunChanged += OnRunChanged;
             try
             {
-                var result = await this.pipeline.CookSavedAssetAsync(request.AssetUri, request.Project, request.Cancellation.Token).ConfigureAwait(false);
-                capturedHash = result.InputSnapshot?.Inputs.FirstOrDefault(input => input.AssetUri == request.AssetUri)?.DiscoveryHash ?? capturedHash;
-            }
-            catch (OperationCanceledException)
-            {
-                // Cancellation remains visible in the run history; only a later changed Save can request new work.
-            }
-            catch (Exception exception)
-            {
-                this.LogSchedulingFailure(exception, request.AssetUri.AbsoluteUri);
-            }
-
-            lock (this.sync)
-            {
-                if (!this.IsCurrent(request))
+                if (!this.runs.Runs.Any(run => run.ProjectId == current.ProjectId && !run.IsCompleted && run.State != CookRunState.NeedsSave))
                 {
                     return;
                 }
 
-                if (string.Equals(request.ContentHash, capturedHash, StringComparison.Ordinal))
-                {
-                    request.Running = false;
-                    return;
-                }
+                await changed.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                this.runs.RunChanged -= OnRunChanged;
             }
         }
     }
 
-    private bool IsCurrent(SavedRequest request)
-        => !this.disposed && ReferenceEquals(request.Project, this.project)
-            && this.requests.TryGetValue(request.AssetUri, out var current) && ReferenceEquals(current, request)
-            && !request.Cancellation.IsCancellationRequested;
+    private bool ResumeWaitingRuns(ProjectContext current, string source)
+    {
+        var resumed = false;
+        foreach (var run in this.runs.Runs.Where(run => run.ProjectId == current.ProjectId && run.State == CookRunState.NeedsSave
+            && run.UnsavedDocuments.Any(document => string.Equals(document.SourcePath, source, StringComparison.OrdinalIgnoreCase))))
+        {
+            resumed |= this.runs.ResumeAfterSave(run.OperationId);
+        }
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Automatic cooking failed for saved source {Source}.")]
-    private partial void LogSchedulingFailure(Exception exception, string source);
+        return resumed;
+    }
 
-    private sealed class SavedRequest(ProjectContext project, Uri assetUri, string contentHash)
+    private void Queue(ProjectContext current, Uri asset)
+    {
+        SourceCook cook;
+        lock (this.sync)
+        {
+            if (this.disposed || !ReferenceEquals(current, this.project))
+            {
+                return;
+            }
+
+            if (this.cooks.TryGetValue(asset, out var running))
+            {
+                running.Again = true;
+                return;
+            }
+
+            cook = new(current, asset);
+            this.cooks[asset] = cook;
+        }
+
+        // The cook runs off the catalog's notification; this task owns and observes its failures.
+        _ = Task.Run(() => this.CookAsync(cook), CancellationToken.None);
+    }
+
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Background cook failures are recorded in Cooking and logged; they must not escape onto the catalog.")]
+    private async Task CookAsync(SourceCook cook)
+    {
+        try
+        {
+            while (true)
+            {
+                lock (this.sync)
+                {
+                    if (!this.IsCurrent(cook))
+                    {
+                        return;
+                    }
+
+                    cook.Again = false;
+                }
+
+                try
+                {
+                    _ = await this.pipeline.CookSavedAssetAsync(cook.AssetUri, cook.Project, cook.Cancellation.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Cancellation stays visible in the run history; the next change cooks the source again.
+                }
+                catch (Exception exception)
+                {
+                    this.LogSchedulingFailure(exception, cook.AssetUri.AbsoluteUri);
+                }
+
+                lock (this.sync)
+                {
+                    if (!this.IsCurrent(cook) || !cook.Again)
+                    {
+                        if (this.cooks.TryGetValue(cook.AssetUri, out var current) && ReferenceEquals(current, cook))
+                        {
+                            _ = this.cooks.Remove(cook.AssetUri);
+                        }
+
+                        return;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            await this.ReleaseAsync(cook).ConfigureAwait(false);
+        }
+    }
+
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Releasing a finished cook only logs a failed cancellation.")]
+    private async Task ReleaseAsync(SourceCook cook)
+    {
+        Task? cancellation;
+        lock (this.sync)
+        {
+            cancellation = cook.CancellationCompletion;
+        }
+
+        try
+        {
+            if (cancellation is not null)
+            {
+                await cancellation.ConfigureAwait(false);
+            }
+        }
+        catch (Exception exception)
+        {
+            this.LogSchedulingFailure(exception, cook.AssetUri.AbsoluteUri);
+        }
+        finally
+        {
+            cook.Cancellation.Dispose();
+        }
+    }
+
+    // Called under sync.
+    private void Retire(Uri asset)
+    {
+        if (this.cooks.Remove(asset, out var cook))
+        {
+            Cancel(cook);
+        }
+    }
+
+    // Called under sync.
+    private void RetireAll()
+    {
+        foreach (var cook in this.cooks.Values)
+        {
+            Cancel(cook);
+        }
+
+        this.cooks.Clear();
+    }
+
+    // Called under sync.
+    private bool IsCurrent(SourceCook cook)
+        => !this.disposed && ReferenceEquals(cook.Project, this.project)
+            && this.cooks.TryGetValue(cook.AssetUri, out var current) && ReferenceEquals(current, cook)
+            && !cook.Cancellation.IsCancellationRequested;
+
+    private sealed class SourceCook(ProjectContext project, Uri assetUri)
     {
         public ProjectContext Project { get; } = project;
 
         public Uri AssetUri { get; } = assetUri;
 
-        public string ContentHash { get; set; } = contentHash;
-
-        public bool Running { get; set; }
+        public bool Again { get; set; }
 
         public CancellationTokenSource Cancellation { get; } = new();
 

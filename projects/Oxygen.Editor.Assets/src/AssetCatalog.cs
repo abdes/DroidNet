@@ -26,7 +26,11 @@ namespace Oxygen.Editor.Assets;
 /// <remarks>
 /// The catalog reads the project's current publication itself, or shows the publication an owner of publication
 /// acceptance hands it through <see cref="UsePublicationAsync"/>. Its records change when files change or when a
-/// different publication is shown.
+/// different publication is shown. Records that appear because the catalog starts listing them, when a project opens
+/// or a folder or publication is added, are reported as listed, not added: the files did not change. Showing another
+/// publication keeps watching the project's authored folders, reports the records that appeared or disappeared, and
+/// reports every cooked record that stays as updated, since the publication may have changed it; an authored file that
+/// did not change reports nothing.
 /// </remarks>
 public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarget, IAssetCatalogReader, IDisposable, IAsyncDisposable
 {
@@ -46,6 +50,8 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
     private readonly Lock stateLock = new();
     private readonly Lock notificationLock = new();
     private readonly List<Registration> catalogs = [];
+    private readonly HashSet<Uri> visible = [];
+    private Guid? visibleProjectId;
     private readonly HashSet<Task> initializationRuns = [];
     private readonly Subject<AssetChange> changes = new();
     private readonly CancellationTokenSource lifetime = new();
@@ -397,6 +403,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
     private async Task InitializeCoreAsync(ProjectContext project, TaskCompletionSource completion, ICookPublicationReadLease? supplied, string? publicationError = null)
     {
         var candidates = new List<Registration>();
+        var kept = new Dictionary<Registration, IReadOnlyList<AssetRecord>>();
         var selected = supplied;
         IReadOnlyList<IAssetCatalog> cooked = [];
         var cookedPrepared = 0;
@@ -422,13 +429,13 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
                 }
             }
 
-            await this.PrepareAuthoredCatalogsAsync(project, selected, candidates).ConfigureAwait(false);
+            await this.PrepareAuthoredCatalogsAsync(project, selected, candidates, kept).ConfigureAwait(false);
             for (; cookedPrepared < cooked.Count; cookedPrepared++)
             {
-                candidates.Add(await this.PrepareCatalogAsync(cooked[cookedPrepared]).ConfigureAwait(false));
+                candidates.Add(await this.PrepareCatalogAsync(cooked[cookedPrepared], isCooked: true).ConfigureAwait(false));
             }
 
-            this.InstallCatalogs(candidates, completion, project, selected, publicationError);
+            this.InstallCatalogs(candidates, kept, completion, project, selected, publicationError);
         }
         catch (OperationCanceledException) when (this.lifetimeToken.IsCancellationRequested)
         {
@@ -468,7 +475,8 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
         }
         finally
         {
-            foreach (var candidate in candidates)
+            // A kept registration still belongs to the installed catalogs.
+            foreach (var candidate in candidates.Where(candidate => !kept.ContainsKey(candidate)))
             {
                 candidate.Dispose();
             }
@@ -484,37 +492,56 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "PrepareCatalogAsync owns each child catalog through Registration and disposes it on preparation failure.")]
-    private async Task PrepareAuthoredCatalogsAsync(ProjectContext project, ICookPublicationReadLease? selected, List<Registration> candidates)
+    private async Task PrepareAuthoredCatalogsAsync(ProjectContext project, ICookPublicationReadLease? selected, List<Registration> candidates, Dictionary<Registration, IReadOnlyList<AssetRecord>> kept)
     {
         candidates.Add(await this.PrepareCatalogAsync(new BuiltinAssetCatalog(this.builtins)).ConfigureAwait(false));
         if (!string.IsNullOrEmpty(project.ProjectRoot))
         {
-            candidates.Add(await this.PrepareCatalogAsync(new FileSystemAssetCatalog(
-                this.storage,
-                new FileSystemAssetCatalogOptions { RootFolderPath = project.ProjectRoot, MountPoint = "project" })).ConfigureAwait(false));
+            candidates.Add(await this.PrepareFolderAsync(project, "project", project.ProjectRoot, kept).ConfigureAwait(false));
         }
 
         foreach (var mount in project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount)))
         {
             this.lifetimeToken.ThrowIfCancellationRequested();
             var root = this.storage.NormalizeRelativeTo(project.ProjectRoot, mount.RelativePath);
-            candidates.Add(await this.PrepareCatalogAsync(new FileSystemAssetCatalog(
-                this.storage,
-                new FileSystemAssetCatalogOptions { RootFolderPath = root, MountPoint = mount.Name })).ConfigureAwait(false));
+            candidates.Add(await this.PrepareFolderAsync(project, mount.Name, root, kept).ConfigureAwait(false));
         }
 
         // Preserve authored-folder browsing for external folders without cooked content.
         foreach (var mount in project.LocalFolderMounts.Where(mount => selected?.Roots.Any(root =>
             root.Owner == CookPublicationRootOwner.Library && string.Equals(root.Name, mount.Name, StringComparison.OrdinalIgnoreCase)) != true))
         {
-            candidates.Add(await this.PrepareCatalogAsync(new FileSystemAssetCatalog(this.storage,
-                new FileSystemAssetCatalogOptions { RootFolderPath = mount.AbsolutePath, MountPoint = mount.Name })).ConfigureAwait(false));
+            candidates.Add(await this.PrepareFolderAsync(project, mount.Name, mount.AbsolutePath, kept).ConfigureAwait(false));
         }
     }
 
-    private async Task<Registration> PrepareCatalogAsync(IAssetCatalog catalog)
+    // A folder the installed catalogs already watch for this project keeps its catalog and watcher, so no change made
+    // while another publication is installed goes unseen.
+    private async Task<Registration> PrepareFolderAsync(ProjectContext project, string mountPoint, string root, Dictionary<Registration, IReadOnlyList<AssetRecord>> kept)
     {
-        var registration = new Registration(catalog);
+        var folder = new WatchedFolder(project.ProjectId, mountPoint, root);
+        Registration? installed;
+        lock (this.stateLock)
+        {
+            installed = this.catalogs.FirstOrDefault(registration => folder.Equals(registration.Folder));
+        }
+
+        if (installed is not null)
+        {
+            kept[installed] = await installed.Catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.lifetimeToken).ConfigureAwait(false);
+            return installed;
+        }
+
+        var registration = await this.PrepareCatalogAsync(new FileSystemAssetCatalog(
+            this.storage,
+            new FileSystemAssetCatalogOptions { RootFolderPath = root, MountPoint = mountPoint })).ConfigureAwait(false);
+        registration.Folder = folder;
+        return registration;
+    }
+
+    private async Task<Registration> PrepareCatalogAsync(IAssetCatalog catalog, bool isCooked = false)
+    {
+        var registration = new Registration(catalog, isCooked);
         try
         {
             registration.Subscription = catalog.Changes.Subscribe(change => this.OnCatalogChange(registration, change));
@@ -529,11 +556,11 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
         }
     }
 
-    private void InstallCatalogs(List<Registration> candidates, TaskCompletionSource completion, ProjectContext project, ICookPublicationReadLease? publication, string? publicationError)
+    private void InstallCatalogs(List<Registration> candidates, Dictionary<Registration, IReadOnlyList<AssetRecord>> kept, TaskCompletionSource completion, ProjectContext project, ICookPublicationReadLease? publication, string? publicationError)
     {
         lock (this.notificationLock)
         {
-            var notifications = this.CommitCatalogs(candidates, completion, project, publication, publicationError, out var retired, out var retiredPublication);
+            var notifications = this.CommitCatalogs(candidates, kept, completion, project, publication, publicationError, out var retired, out var retiredPublication);
             candidates.Clear();
             foreach (var registration in retired)
             {
@@ -546,7 +573,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
         }
     }
 
-    private List<AssetChange> CommitCatalogs(IReadOnlyList<Registration> candidates, TaskCompletionSource completion, ProjectContext project,
+    private List<AssetChange> CommitCatalogs(IReadOnlyList<Registration> candidates, IReadOnlyDictionary<Registration, IReadOnlyList<AssetRecord>> kept, TaskCompletionSource completion, ProjectContext project,
         ICookPublicationReadLease? publication, string? publicationError, out Registration[] retired, out ICookPublicationReadLease? retiredPublication)
     {
         var notifications = new List<AssetChange>();
@@ -558,13 +585,9 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
                 throw new OperationCanceledException("A newer project configuration superseded catalog initialization.");
             }
 
-            foreach (var candidate in candidates)
-            {
-                notifications.AddRange(candidate.Initial.Select(static record => new AssetChange(AssetChangeKind.Added, record.Uri)));
-                notifications.AddRange(candidate.Pending);
-            }
+            this.CollectInstallChanges(project, candidates, kept, notifications);
 
-            retired = this.catalogs.ToArray();
+            retired = [.. this.catalogs.Where(registration => !kept.ContainsKey(registration))];
             this.catalogs.EnsureCapacity(candidates.Count);
             var accepted = publication?.Retain();
             retiredPublication = this.installedPublication;
@@ -606,9 +629,77 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
             {
                 return;
             }
+
+            this.Track(change);
         }
 
         this.PublishChanges([change]);
+    }
+
+    // Called under stateLock while the candidates replace the installed catalogs.
+    private void CollectInstallChanges(ProjectContext project, IReadOnlyList<Registration> candidates, IReadOnlyDictionary<Registration, IReadOnlyList<AssetRecord>> kept, List<AssetChange> notifications)
+    {
+        if (this.visibleProjectId != project.ProjectId)
+        {
+            // Another project's records are all gone, even where a path matches.
+            notifications.AddRange(this.visible.Select(static uri => new AssetChange(AssetChangeKind.Removed, uri)));
+            this.visible.Clear();
+            this.visibleProjectId = project.ProjectId;
+        }
+
+        var installed = new HashSet<Uri>();
+        foreach (var candidate in candidates)
+        {
+            foreach (var record in kept.TryGetValue(candidate, out var records) ? records : candidate.Initial)
+            {
+                if (!installed.Add(record.Uri))
+                {
+                    continue;
+                }
+
+                if (!this.visible.Contains(record.Uri))
+                {
+                    notifications.Add(new(AssetChangeKind.Listed, record.Uri));
+                }
+                else if (candidate.IsCooked)
+                {
+                    notifications.Add(new(AssetChangeKind.Updated, record.Uri));
+                }
+            }
+        }
+
+        notifications.AddRange(this.visible.Where(uri => !installed.Contains(uri)).Select(static uri => new AssetChange(AssetChangeKind.Removed, uri)));
+        this.visible.Clear();
+        this.visible.UnionWith(installed);
+        foreach (var change in candidates.SelectMany(static candidate => candidate.Pending))
+        {
+            notifications.Add(change);
+            this.Track(change);
+        }
+    }
+
+    // Called under stateLock.
+    private void Track(AssetChange change)
+    {
+        switch (change.Kind)
+        {
+            case AssetChangeKind.Added or AssetChangeKind.Listed:
+                _ = this.visible.Add(change.Uri);
+                break;
+            case AssetChangeKind.Removed:
+                _ = this.visible.Remove(change.Uri);
+                break;
+            case AssetChangeKind.Relocated:
+                if (change.PreviousUri is { } previous)
+                {
+                    _ = this.visible.Remove(previous);
+                }
+
+                _ = this.visible.Add(change.Uri);
+                break;
+            case AssetChangeKind.Updated:
+                break;
+        }
     }
 
     private void PublishChanges(IReadOnlyList<AssetChange> notifications)
@@ -667,9 +758,13 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
         }
     }
 
-    private sealed partial class Registration(IAssetCatalog catalog) : IDisposable
+    private sealed partial class Registration(IAssetCatalog catalog, bool isCooked) : IDisposable
     {
         public IAssetCatalog Catalog { get; } = catalog;
+
+        public bool IsCooked { get; } = isCooked;
+
+        public WatchedFolder? Folder { get; set; }
 
         public IDisposable? Subscription { get; set; }
 
@@ -684,5 +779,16 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
             this.Subscription?.Dispose();
             (this.Catalog as IDisposable)?.Dispose();
         }
+    }
+
+    private sealed record WatchedFolder(Guid ProjectId, string MountPoint, string Root)
+    {
+        public bool Equals(WatchedFolder? other)
+            => other is not null && this.ProjectId == other.ProjectId
+                && string.Equals(this.MountPoint, other.MountPoint, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(this.Root, other.Root, StringComparison.OrdinalIgnoreCase);
+
+        public override int GetHashCode()
+            => HashCode.Combine(this.ProjectId, StringComparer.OrdinalIgnoreCase.GetHashCode(this.MountPoint), StringComparer.OrdinalIgnoreCase.GetHashCode(this.Root));
     }
 }

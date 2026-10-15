@@ -7,12 +7,14 @@ using System.Security.Cryptography;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.MaterialEditor;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core.Diagnostics;
@@ -81,8 +83,7 @@ internal static class PublicationWorkflows
         _ = before.CookStatus.HasPublishedOutput.Should().BeFalse();
         _ = File.Exists(before.CookedPath).Should().BeFalse();
         _ = before.RuntimeAvailability.Should().NotBe(AssetRuntimeAvailability.Mounted);
-        services.Runs.IsAutomaticCookingPaused = false;
-        _ = await WaitForPublicationRunAsync(services, [], cancellationToken).ConfigureAwait(true);
+        _ = (await services.Pipeline.CookAssetAsync(material.MaterialUri, cancellationToken).ConfigureAwait(true)).IsPublished.Should().BeTrue();
         var choice = await feed.ResolveAsync(material.MaterialUri, cancellationToken).ConfigureAwait(true);
         _ = choice!.CookStatus!.Freshness.Should().Be(AssetCookFreshness.Current);
         _ = choice.RuntimeAvailability.Should().Be(AssetRuntimeAvailability.Mounted);
@@ -121,11 +122,10 @@ internal static class PublicationWorkflows
         var history = fixture.Context.History.UndoStack.Count;
         var dirty = fixture.Context.Metadata.IsDirty;
         var prior = services.Runs.Runs.Select(static run => run.OperationId).ToHashSet();
-        services.Runs.IsAutomaticCookingPaused = true;
+        SetCookOnChange(services, scope is null);
         await SetPublicationMaterialColorAsync(materials, material.DocumentId, green, cancellationToken).ConfigureAwait(true);
         if (scope is null)
         {
-            services.Runs.IsAutomaticCookingPaused = false;
             var run = await WaitForPublicationRunAsync(services, prior, cancellationToken).ConfigureAwait(true);
             _ = run.Request.IsAutomatic.Should().BeTrue();
         }
@@ -171,14 +171,14 @@ internal static class PublicationWorkflows
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(testContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(120));
         using var services = new CatalogWorkloadServices(fixture);
-        services.Runs.IsAutomaticCookingPaused = true;
-        using var automatic = new AutomaticCookService(services.Projects, services.Pipeline, services.Runs, NullLogger<AutomaticCookService>.Instance);
+        SetCookOnChange(services, enabled: false);
         await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
+        using var automatic = new AutomaticCookService(services.Projects, Mock.Of<IProjectManagerService>(), catalog, services.Pipeline, services.Pipeline, services.Runs, NullLogger<AutomaticCookService>.Instance);
         using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
         using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus);
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         using var publication = fixture.RegisterWorkspacePublication(services, catalog);
-        var materials = new MaterialDocumentService(automatic, new ProjectMaterialSourcePathResolver(services.Projects), new MaterialCookService(services.Pipeline, services.Projects, NullLogger<MaterialCookService>.Instance), services.Documents, new NativeAtomicFileStore(new RealFileSystem()));
+        var materials = new MaterialDocumentService(new ProjectMaterialSourcePathResolver(services.Projects), new MaterialCookService(services.Pipeline, services.Projects, NullLogger<MaterialCookService>.Instance), services.Documents, new NativeAtomicFileStore(new RealFileSystem()));
         var uri = new Uri("asset:///Content/Materials/Shared.omat.json");
         var material = await materials.CreateAsync(uri, timeout.Token).ConfigureAwait(true);
         try
@@ -201,6 +201,34 @@ internal static class PublicationWorkflows
                 await services.Runs.CancelAsync(pending.OperationId).ConfigureAwait(true);
             }
         }
+    }
+
+    /// <summary>Turns the scenario's Cook on change setting on or off, as the setting's toggle does.</summary>
+    /// <param name="services">The scenario's services.</param>
+    /// <param name="enabled">Whether changed sources cook without being asked.</param>
+    internal static void SetCookOnChange(CatalogWorkloadServices services, bool enabled)
+        => services.Projects.UpdateSettings(services.Projects.Settings with { CookOnChange = enabled });
+
+    /// <summary>Turns Cook on change on and holds the cook writer, so the automatic cook of the next change stays queued.</summary>
+    /// <param name="services">The scenario's services.</param>
+    /// <param name="cancellationToken">Cancels the hold.</param>
+    /// <returns>Releases the writer to the queued cooks; the hold also ends when the project closes.</returns>
+    internal static Func<Task> QueueCookOnChange(CatalogWorkloadServices services, CancellationToken cancellationToken)
+    {
+        SetCookOnChange(services, enabled: true);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var held = services.Runs.RunAsync(
+            async (_, token) =>
+            {
+                await release.Task.WaitAsync(token).ConfigureAwait(false);
+                return 0;
+            },
+            cancellationToken);
+        return async () =>
+        {
+            _ = release.TrySetResult();
+            _ = await held.ConfigureAwait(true);
+        };
     }
 
     internal sealed record PublicationScenario(NativeSceneFixture SceneAuthoringFixture, CatalogWorkloadServices Services, AssetCatalog Catalog, IAssetFeed Feed, MaterialDocumentService Materials, MaterialDocument Material, string Key);

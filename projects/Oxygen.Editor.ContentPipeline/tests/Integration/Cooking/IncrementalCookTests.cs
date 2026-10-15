@@ -48,21 +48,22 @@ public sealed class IncrementalCookTests
         _ = (await pipeline.CookSavedAssetAsync(sceneUri, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
     }
 
-    /// <summary>An explicit cook joins a paused Save through the real snapshot and native publication pipeline.</summary>
+    /// <summary>An explicit cook joins a queued Save through the real snapshot and native publication pipeline.</summary>
     /// <returns>The asynchronous shared native workflow regression.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
-    public async Task ExplicitCookSharesPausedSavedScopeThroughNativePublication()
+    public async Task ExplicitCookSharesQueuedSavedScopeThroughNativePublication()
     {
         using var workspace = new CookWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
         var sceneUri = new Uri("asset:///Content/Scenes/Main.oscene.json");
-        workspace.CookCoordinator.IsAutomaticCookingPaused = true;
+        var hold = WriterHold.Take(workspace.CookCoordinator, this.TestContext.CancellationToken);
         var saved = pipeline.CookSavedAssetAsync(sceneUri, workspace.ProjectContext, this.TestContext.CancellationToken);
         _ = saved.IsCompleted.Should().BeFalse();
         var explicitCook = pipeline.CookAssetAsync(sceneUri, this.TestContext.CancellationToken);
+        await hold.ReleaseAsync().ConfigureAwait(false);
         var savedResult = await saved.ConfigureAwait(false);
         var explicitResult = await explicitCook.ConfigureAwait(false);
         AssertCookSucceeded(savedResult);

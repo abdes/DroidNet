@@ -120,19 +120,15 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
                 return;
             }
 
-            var sameProject = this.project is { } current && value is not null && current.ProjectId == value.ProjectId
-                && string.Equals(current.ProjectRoot, value.ProjectRoot, StringComparison.OrdinalIgnoreCase);
             previous = this.lifetimeCancellation;
             this.lifetimeCancellation = new();
             this.project = value;
             this.lifetime++;
-            this.automaticCookingPaused = sameProject && this.automaticCookingPaused;
             this.DispatchNextWriter();
         }
 
         _ = this.CancelLifetimeAsync(previous);
         this.ReleaseRetryInputsIfClosed();
-        this.PropertyChanged?.Invoke(this, new(nameof(this.IsAutomaticCookingPaused)));
     }
 
     /// <inheritdoc />
@@ -162,6 +158,10 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             {
                 await this.AcquireWriterAsync(operation, request, shared, requestCancellation.Token).ConfigureAwait(false);
                 acquired = true;
+                if (request is not null)
+                {
+                    this.LogRunStarted(operation.OperationId);
+                }
 
                 if (progress is not null)
                 {
@@ -364,7 +364,4 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             cancellation.Dispose();
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Content cook lifetime cancellation failed.")]
-    private partial void LogLifetimeFailure(Exception exception);
 }

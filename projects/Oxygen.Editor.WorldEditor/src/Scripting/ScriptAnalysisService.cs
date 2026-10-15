@@ -14,7 +14,6 @@ using Json.Schema;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentBrowser.Scripts;
-using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
@@ -39,7 +38,7 @@ namespace Oxygen.Editor.World.Scripting;
 /// </para>
 /// <para>
 /// Hand-written input files are checked the same way, in managed code: JSON, the engine schema and self-contained
-/// action references. A saved input file that passes is cooked automatically, so its actions and contexts stay current.
+/// action references.
 /// </para>
 /// </remarks>
 public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDisposable
@@ -57,7 +56,6 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
     private readonly Lazy<string?> definitions;
     private readonly IEngineService engine;
     private readonly TaskCompletionSource nativeReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly IAutomaticCookService? automaticCooking;
     private readonly ConcurrentDictionary<string, JsonSchema?> inputSchemas = new(StringComparer.OrdinalIgnoreCase);
     private int unavailableReported;
     private string? scannedProjectRoot;
@@ -72,7 +70,6 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
     /// <param name="engine">The engine service, which makes the native SDK loadable.</param>
     /// <param name="loggerFactory">The logger factory.</param>
     /// <param name="paths">The SDK scripting files; discovered from the editor installation when omitted.</param>
-    /// <param name="automaticCooking">Cooks a saved input file once it checks clean.</param>
     public ScriptAnalysisService(
         IProjectContextService projects,
         IAssetCatalog catalog,
@@ -80,15 +77,13 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         IOperationResultPublisher operationResults,
         IEngineService engine,
         ILoggerFactory? loggerFactory = null,
-        ScriptToolingPaths? paths = null,
-        IAutomaticCookService? automaticCooking = null)
+        ScriptToolingPaths? paths = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(hosting);
         ArgumentNullException.ThrowIfNull(engine);
         this.projects = projects;
         this.engine = engine;
-        this.automaticCooking = automaticCooking;
         engine.StateChanged += this.OnEngineStateChanged;
         this.OnEngineStateChanged(engine.State);
         this.operationResults = operationResults;
@@ -115,7 +110,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
 
     /// <inheritdoc />
     public Task<ScriptAnalysisSnapshot?> AnalyzeAsync(string sourcePath, CancellationToken cancellationToken = default)
-        => this.AnalyzeAsync(sourcePath, force: false, cookWhenValid: false, cancellationToken);
+        => this.AnalyzeAsync(sourcePath, force: false, cancellationToken);
 
     /// <inheritdoc />
     public Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -245,10 +240,9 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
     /// <summary>Analyzes a script, unless its content is unchanged and <paramref name="force"/> is not set.</summary>
     /// <param name="sourcePath">The script file.</param>
     /// <param name="force">Whether to analyze even when the content is unchanged.</param>
-    /// <param name="cookWhenValid">Whether an input file whose content changed is cooked when it checks clean.</param>
     /// <param name="cancellationToken">A token that cancels the analysis.</param>
     /// <returns>The analysis, or <see langword="null"/> when the file is not a script of the active project.</returns>
-    private async Task<ScriptAnalysisSnapshot?> AnalyzeAsync(string sourcePath, bool force, bool cookWhenValid, CancellationToken cancellationToken)
+    private async Task<ScriptAnalysisSnapshot?> AnalyzeAsync(string sourcePath, bool force, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         var path = Path.GetFullPath(sourcePath);
@@ -259,7 +253,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
 
         if (AssetFileTypes.Is(path, AssetFileCategory.Input))
         {
-            return await this.CheckInputFileAsync(path, virtualPath, force, cookWhenValid, cancellationToken).ConfigureAwait(false);
+            return await this.CheckInputFileAsync(path, virtualPath, force, cancellationToken).ConfigureAwait(false);
         }
 
         if (!AssetFileTypes.Is(path, AssetFileCategory.Script))
@@ -311,7 +305,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         return snapshot;
     }
 
-    private async Task<ScriptAnalysisSnapshot?> CheckInputFileAsync(string path, string virtualPath, bool force, bool cookWhenValid, CancellationToken cancellationToken)
+    private async Task<ScriptAnalysisSnapshot?> CheckInputFileAsync(string path, string virtualPath, bool force, CancellationToken cancellationToken)
     {
         byte[] bytes;
         try
@@ -342,11 +336,6 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         var snapshot = new ScriptAnalysisSnapshot(path, new Uri($"{AssetUris.Scheme}://{virtualPath}"), problems, [], ParametersOutOfDate: false);
         this.entries[path] = new Entry(hash, snapshot, []);
         this.changes.OnNext(snapshot);
-        if (cookWhenValid && problems.Count == 0 && previous?.Hash != hash)
-        {
-            this.automaticCooking?.NotifySaved(path, hash);
-        }
-
         return snapshot;
     }
 
@@ -456,7 +445,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
             foreach (var path in scripts)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                _ = await this.AnalyzeAsync(path, force, cookWhenValid: false, cancellationToken).ConfigureAwait(false);
+                _ = await this.AnalyzeAsync(path, force, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
@@ -513,7 +502,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
     {
         try
         {
-            _ = await this.AnalyzeAsync(path, force: false, cookWhenValid: true, this.lifetime.Token).ConfigureAwait(false);
+            _ = await this.AnalyzeAsync(path, force: false, this.lifetime.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

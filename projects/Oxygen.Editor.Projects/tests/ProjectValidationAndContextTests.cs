@@ -102,6 +102,28 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
+    public void ProjectContextService_ShouldUpdateSettingsWithoutActivatingTheProjectAgain()
+    {
+        var service = new ProjectContextService();
+        var context = CreateContext("Settings");
+        service.Activate(context);
+        var projects = new RecordingObserver<ProjectContext?>();
+        var settings = new RecordingObserver<ProjectSettings>();
+        using var projectSubscription = service.ProjectChanged.Subscribe(projects);
+        using var settingsSubscription = service.SettingsChanged.Subscribe(settings);
+        var updated = new ProjectSettings { CookOnChange = false };
+
+        service.UpdateSettings(updated);
+
+        _ = service.Settings.Should().Be(updated);
+        _ = service.ActiveProject.Should().BeSameAs(context);
+        _ = projects.Values.Should().ContainSingle().Which.Should().BeSameAs(context);
+        _ = settings.Values.Should().Equal(updated);
+        service.Activate(context with { });
+        _ = service.Settings.Should().Be(context.Settings, "activating a project uses the settings its context was read with");
+    }
+
+    [TestMethod]
     public void ProjectCookScopeProvider_ShouldUseProjectCookedOutputRoot()
     {
         var storage = new Mock<IStorageProvider>();

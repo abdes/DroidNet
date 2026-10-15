@@ -5,7 +5,7 @@
 namespace Oxygen.Editor.ContentPipeline.Cooking;
 
 /// <summary>Exposes the coordinator's cook history and scoped controls to the workspace.</summary>
-public interface ICookRunService : System.ComponentModel.INotifyPropertyChanged
+public interface ICookRunService
 {
     /// <summary>Occurs when a run changes; callbacks may arrive on a worker thread.</summary>
     public event EventHandler<CookRunChangedEventArgs>? RunChanged;
@@ -14,9 +14,6 @@ public interface ICookRunService : System.ComponentModel.INotifyPropertyChanged
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1003:Use generic event handler instances", Justification = "Publication awaits every consumer before releasing the writer; a void event cannot express completion.")]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0046:The delegate must return void", Justification = "Consumers return tasks so publication retains writer ownership until refresh completes.")]
     public event CookCompletedHandler? CookCompleted;
-
-    /// <summary>Gets or sets a value indicating whether automatic cooks wait in the queue; active and explicit cooks continue.</summary>
-    public bool IsAutomaticCookingPaused { get; set; }
 
     /// <summary>Gets a consistent snapshot of this editor session's runs.</summary>
     public IReadOnlyList<CookRunSnapshot> Runs { get; }

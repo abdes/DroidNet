@@ -176,9 +176,10 @@
                                 </MenuFlyoutItem>
                                 <MenuFlyoutSeparator />
                                 <ToggleMenuFlyoutItem
-                                    IsChecked="{x:Bind ViewModel.CookRuns.IsAutomaticCookingPaused, Mode=TwoWay}"
-                                    Text="Pause automatic cooking"
-                                    ToolTipService.ToolTip="Stop cooking after each Save until resumed." />
+                                    Command="{x:Bind ViewModel.ToggleCookOnChangeCommand}"
+                                    IsChecked="{x:Bind ViewModel.CookOnChange, Mode=OneWay}"
+                                    Text="Cook on change"
+                                    ToolTipService.ToolTip="Cook changed files as soon as they are saved, in the editor or by another tool. Saved with the project." />
                                 <MenuFlyoutItem Command="{x:Bind ViewModel.ShowCookingJobsCommand}" Text="Show cooking jobs">
                                     <MenuFlyoutItem.Icon>
                                         <FontIcon Glyph="&#xE9D5;" />

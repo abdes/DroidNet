@@ -43,7 +43,6 @@ public sealed class SceneDocumentSaveTests
         var documents = new Mock<IDocumentService>(MockBehavior.Strict);
         var results = new Mock<IOperationResultPublisher>();
         var sut = new SceneDocumentCommandService(
-            Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new SceneSelectionService(),
             new Mock<ISceneEngineSync>(MockBehavior.Strict).Object,
             projects.Object,

@@ -89,8 +89,7 @@ public sealed partial class MaterialDocumentService
             bytes = SerializeSource(source);
         }
 
-        var version = await this.atomicFiles.WriteAsync(target.SourcePath, bytes, FileVersion.Missing, cancellationToken).ConfigureAwait(false);
-        automaticCooking.NotifySaved(target.SourcePath, version.Sha256);
+        _ = await this.atomicFiles.WriteAsync(target.SourcePath, bytes, FileVersion.Missing, cancellationToken).ConfigureAwait(false);
         return target.MaterialUri;
     }
 }

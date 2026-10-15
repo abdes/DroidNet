@@ -150,6 +150,38 @@ public sealed class FileSystemAssetCatalogTests
         _ = snapshot.Select(r => r.Uri).Should().NotContain(new Uri("asset:///Content/Textures/Wood01.png"));
     }
 
+    [TestMethod]
+    public async Task Changes_WhenHiddenTemporaryFileReplacesKnownFile_ShouldEmitUpdated()
+    {
+        // Arrange
+        var fs = new MockFileSystem();
+        _ = fs.Directory.CreateDirectory(@"C:\Project\Content\Materials");
+        await fs.File.WriteAllTextAsync(@"C:\Project\Content\Materials\Wood.omat.json", "{}", this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        var storage = new NativeStorageProvider(fs);
+        using var events = new ManualEventSource();
+        using var catalog = new FileSystemAssetCatalog(
+            storage,
+            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", MountPoint = "Content" },
+            events);
+        _ = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var received = new List<AssetChange>();
+        using var sub = catalog.Changes.Subscribe(received.Add);
+
+        // Act: an atomic save writes a hidden temporary file, then moves it over the destination.
+        events.Emit(new FileSystemCatalogEvent(FileSystemCatalogEventKind.Created, @"C:\Project\Content\Materials\.oxygen-0123.tmp"));
+        events.Emit(new FileSystemCatalogEvent(
+            FileSystemCatalogEventKind.Renamed,
+            FullPath: @"C:\Project\Content\Materials\Wood.omat.json",
+            OldFullPath: @"C:\Project\Content\Materials\.oxygen-0123.tmp"));
+        await Task.Delay(150, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        // Assert
+        _ = received.Should().ContainSingle()
+            .Which.Should().Be(new AssetChange(AssetChangeKind.Updated, new Uri("asset:///Content/Materials/Wood.omat.json")));
+    }
+
     private sealed class ManualEventSource : IFileSystemCatalogEventSource
     {
         private readonly Subject<FileSystemCatalogEvent> subject = new();

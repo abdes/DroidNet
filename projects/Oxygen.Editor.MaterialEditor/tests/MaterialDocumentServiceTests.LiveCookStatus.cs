@@ -21,7 +21,7 @@ public sealed partial class MaterialDocumentServiceTests
     {
         using var workspace = new TempWorkspace();
         var cook = new RecordingCookService();
-        var service = new MaterialDocumentService(Mock.Of<IAutomaticCookService>(), new TestResolver(workspace.Root), cook, workspace.CookDocuments, CreateFileStore());
+        var service = new MaterialDocumentService(new TestResolver(workspace.Root), cook, workspace.CookDocuments, CreateFileStore());
         var uri = new Uri("asset:///Content/Materials/Live.omat.json");
         var created = await service.CreateAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(false);
         await service.CloseAsync(created.DocumentId, discard: false, this.TestContext.CancellationToken).ConfigureAwait(false);

@@ -46,6 +46,13 @@ public interface IProjectManagerService
     /// <returns>Completion of the committed save; conflicts and write failures are propagated.</returns>
     public Task SaveProjectInfoAsync(IProjectInfo projectInfo, IProjectInfo expected, CancellationToken cancellationToken);
 
+    /// <summary>Saves a project's settings into its manifest and keeps the rest of the manifest as it is on disk.</summary>
+    /// <param name="projectRoot">The project's folder.</param>
+    /// <param name="settings">The settings to save.</param>
+    /// <param name="cancellationToken">Cancels the save.</param>
+    /// <returns>Completion after the manifest is written.</returns>
+    public Task SaveProjectSettingsAsync(string projectRoot, ProjectSettings settings, CancellationToken cancellationToken);
+
     /// <summary>
     /// Loads a project asynchronously based on the provided project information.
     /// </summary>

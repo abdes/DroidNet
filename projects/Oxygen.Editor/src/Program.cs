@@ -457,7 +457,6 @@ public static partial class Program
         container.Register<ContentPipeline.Publication.CookPublicationService>(Reuse.Singleton);
         container.RegisterMapping<ContentPipeline.Publication.ICookPublicationReader, ContentPipeline.Publication.CookPublicationService>();
         container.Register<ContentPipeline.Mounting.CookedContentMountService>(Reuse.Singleton);
-        container.Register<ContentPipeline.Cooking.IAutomaticCookService, ContentPipeline.Cooking.AutomaticCookService>(Reuse.Singleton);
         container.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
         container.Register<IMaterialSourcePathResolver, ProjectMaterialSourcePathResolver>(Reuse.Singleton);
         container.Register<IMaterialDocumentService, MaterialDocumentService>(Reuse.Singleton);

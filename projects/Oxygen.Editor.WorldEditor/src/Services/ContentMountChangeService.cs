@@ -48,8 +48,9 @@ public sealed class ContentMountChangeService(IContentCookCoordinator coordinato
         };
     }
 
-    private static ProjectInfo CreateProjectInfo(ProjectContext context) => new(context.ProjectId, context.Name, context.Category, context.ProjectRoot, context.Thumbnail)
+    private static ProjectInfo CreateProjectInfo(ProjectContext context, ProjectSettings settings) => new(context.ProjectId, context.Name, context.Category, context.ProjectRoot, context.Thumbnail)
     {
+        Settings = settings,
         AuthoringMounts = [.. context.AuthoringMounts],
         LocalFolderMounts = [.. context.LocalFolderMounts],
         CookedContentOrder = [.. context.CookedContentOrder],
@@ -85,7 +86,7 @@ public sealed class ContentMountChangeService(IContentCookCoordinator coordinato
     {
         this.VerifyExpectedContext(expected, operation);
         var next = CreateCandidateContext(expected, configuration);
-        using var accepted = await this.publication.ChangeMountsAsync(operation, next, CreateProjectInfo(expected), configuration, token).ConfigureAwait(true);
+        using var accepted = await this.publication.ChangeMountsAsync(operation, next, CreateProjectInfo(expected, this.projects.Settings), configuration, token).ConfigureAwait(true);
         if (!ReferenceEquals(expected, this.projects.ActiveProject))
         {
             return;

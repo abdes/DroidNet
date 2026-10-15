@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.TestSupport;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookCoordinatorScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
@@ -46,18 +47,19 @@ public sealed class SharedCookTests
         }
     }
 
-    /// <summary>An explicit caller promotes and resumes an equivalent paused automatic scope.</summary>
+    /// <summary>An explicit caller promotes an equivalent queued automatic scope.</summary>
     /// <returns>The asynchronous promotion regression.</returns>
     [TestMethod]
-    public async Task ExplicitRequestPromotesSharedPausedSaveAndRevealsItsRun()
+    public async Task ExplicitRequestPromotesSharedQueuedSaveAndRevealsItsRun()
     {
         var context = CreateContextService();
         using var coordinator = CreateCoordinator(context);
-        coordinator.IsAutomaticCookingPaused = true;
+        var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
         var revealed = false;
         coordinator.RunChanged += (_, args) => revealed |= args.Reveal;
         var save = coordinator.RunCookAsync(SharedAssetRequest(), (_, _) => Task.FromResult(1), this.TestContext.CancellationToken);
         var explicitCook = coordinator.RunCookAsync(SharedAssetRequest() with { IsAutomatic = false }, (_, _) => Task.FromResult(2), this.TestContext.CancellationToken);
+        await hold.ReleaseAsync().ConfigureAwait(false);
         _ = (await save.ConfigureAwait(false)).Should().Be(1);
         _ = (await explicitCook.ConfigureAwait(false)).Should().Be(1);
         _ = coordinator.Runs.Should().ContainSingle().Which.Request.IsAutomatic.Should().BeFalse();
@@ -91,7 +93,7 @@ public sealed class SharedCookTests
         using var coordinator = CreateCoordinator(context);
         using var firstOwner = new CancellationTokenSource();
         using var secondOwner = new CancellationTokenSource();
-        coordinator.IsAutomaticCookingPaused = true;
+        var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
         var calls = 0;
         var first = coordinator.RunCookAsync(SharedAssetRequest(), Work, firstOwner.Token);
         var second = coordinator.RunCookAsync(SharedAssetRequest(), Work, secondOwner.Token);
@@ -99,7 +101,7 @@ public sealed class SharedCookTests
         await secondOwner.CancelAsync().ConfigureAwait(false);
         Func<Task> completion = async () => await Task.WhenAll(first, second).ConfigureAwait(false);
         _ = await completion.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
-        coordinator.IsAutomaticCookingPaused = false;
+        await hold.ReleaseAsync().ConfigureAwait(false);
         _ = (await coordinator.RunCookAsync(SharedAssetRequest(), Work, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(1);
         _ = calls.Should().Be(1);
 
@@ -119,7 +121,7 @@ public sealed class SharedCookTests
     {
         var context = CreateContextService();
         using var coordinator = CreateCoordinator(context);
-        coordinator.IsAutomaticCookingPaused = true;
+        _ = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
         var first = coordinator.RunCookAsync(SharedAssetRequest(), (_, _) => Task.FromResult(1), this.TestContext.CancellationToken);
         var second = coordinator.RunCookAsync(SharedAssetRequest(), (_, _) => Task.FromResult(2), this.TestContext.CancellationToken);
         context.Activate(CreateContext());
@@ -176,13 +178,14 @@ public sealed class SharedCookTests
     {
         var context = CreateContextService();
         using var coordinator = CreateCoordinator(context);
-        coordinator.IsAutomaticCookingPaused = true;
+        var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
         var first = coordinator.RunCookAsync(SharedAssetRequest(), (_, _) => Task.FromResult(1), this.TestContext.CancellationToken);
         var second = coordinator.RunCookAsync(SharedAssetRequest(), (_, _) => Task.FromResult(2), this.TestContext.CancellationToken);
         await coordinator.CancelAsync(coordinator.Runs.Single().OperationId).ConfigureAwait(false);
         Func<Task> completion = async () => await Task.WhenAll(first, second).ConfigureAwait(false);
         _ = await completion.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         _ = coordinator.Runs.Single().State.Should().Be(CookRunState.Cancelled);
+        await hold.ReleaseAsync().ConfigureAwait(false);
     }
 
     /// <summary>Different originating contexts cannot bypass the retained delegate's project validation.</summary>
@@ -192,13 +195,13 @@ public sealed class SharedCookTests
     {
         var context = CreateContextService();
         using var coordinator = CreateCoordinator(context);
-        coordinator.IsAutomaticCookingPaused = true;
+        var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
         var current = context.ActiveProject!;
         var old = current with { };
         var first = coordinator.RunCookAsync(SharedAssetRequest() with { OriginContext = current }, (_, _) => Task.FromResult(1), this.TestContext.CancellationToken);
         var stale = coordinator.RunCookAsync(SharedAssetRequest() with { OriginContext = old }, (_, _) => Task.FromException<int>(new OperationCanceledException()), this.TestContext.CancellationToken);
         _ = coordinator.Runs.Should().HaveCount(2);
-        coordinator.IsAutomaticCookingPaused = false;
+        await hold.ReleaseAsync().ConfigureAwait(false);
         _ = (await first.ConfigureAwait(false)).Should().Be(1);
         Func<Task> completion = async () => await stale.ConfigureAwait(false);
         _ = await completion.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);

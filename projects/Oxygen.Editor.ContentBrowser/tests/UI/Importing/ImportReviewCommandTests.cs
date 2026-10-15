@@ -63,7 +63,7 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
         var dialogs = CreateDialogs(project, source, selectSource, accept);
         var provider = new Mock<IAssetFeed>();
         using var browser = new AssetsViewModel(
-            Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService>(),
+            Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new ViewModelToView(locator.Object),
             CreateSceneFolderImportState(projects),
             projects,

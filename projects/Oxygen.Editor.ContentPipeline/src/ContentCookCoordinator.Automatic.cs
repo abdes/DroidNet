@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.ComponentModel;
 using Oxygen.Editor.ContentPipeline.Cooking;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -11,38 +10,6 @@ namespace Oxygen.Editor.ContentPipeline;
 public sealed partial class ContentCookCoordinator
 {
     private readonly List<WriterRequest> waitingWriters = [];
-    private bool automaticCookingPaused;
-
-    /// <inheritdoc />
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    /// <inheritdoc />
-    public bool IsAutomaticCookingPaused
-    {
-        get
-        {
-            lock (this.stateLock)
-            {
-                return this.automaticCookingPaused;
-            }
-        }
-
-        set
-        {
-            lock (this.stateLock)
-            {
-                if (value == this.automaticCookingPaused)
-                {
-                    return;
-                }
-
-                this.automaticCookingPaused = value;
-                this.DispatchNextWriter();
-            }
-
-            this.PropertyChanged?.Invoke(this, new(nameof(this.IsAutomaticCookingPaused)));
-        }
-    }
 
     private async Task AcquireWriterAsync(ContentCookOperation operation, CookRunRequest? request, SharedCook? shared, CancellationToken cancellationToken)
     {
@@ -91,28 +58,22 @@ public sealed partial class ContentCookCoordinator
             return;
         }
 
-        var next = this.waitingWriters.FindIndex(waiting => this.CanStart(waiting) && waiting.IsForeground);
+        var next = this.waitingWriters.FindIndex(static waiting => waiting.IsForeground);
         if (next < 0)
         {
-            next = this.waitingWriters.FindIndex(this.CanStart);
+            next = 0;
         }
 
-        if (next >= 0)
+        var granted = this.waitingWriters[next];
+        this.waitingWriters.RemoveAt(next);
+        this.activeOperation = granted.Operation;
+        if (granted.Shared is { } shared)
         {
-            var waiting = this.waitingWriters[next];
-            this.waitingWriters.RemoveAt(next);
-            this.activeOperation = waiting.Operation;
-            if (waiting.Shared is { } shared)
-            {
-                this.RemovePendingShared(shared);
-            }
-
-            _ = waiting.Granted.TrySetResult();
+            this.RemovePendingShared(shared);
         }
-    }
 
-    private bool CanStart(WriterRequest waiting)
-        => !this.automaticCookingPaused || waiting.Request?.IsAutomatic != true;
+        _ = granted.Granted.TrySetResult();
+    }
 
     private sealed class WriterRequest(ContentCookOperation operation, CookRunRequest? request, SharedCook? shared, CancellationToken cancellationToken)
     {

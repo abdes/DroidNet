@@ -347,8 +347,9 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IRefreshableAssetCat
 
         if (!this.TryMapIfUnderRoot(ev.OldFullPath, out var oldUri))
         {
-            // Old was outside scope; new might be inside.
-            this.ApplyCreated(ev);
+            // Old was outside scope or hidden, as the temporary file of an atomic save is; new might be inside, and
+            // replacing a known file changes it.
+            this.ApplyChanged(ev);
             return;
         }
 
@@ -366,8 +367,8 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IRefreshableAssetCat
         }
         else
         {
-            // If we didn't know the old key, treat as add.
-            this.ApplyCreated(ev);
+            // If we didn't know the old key, the new file appeared or replaced a known one.
+            this.ApplyChanged(ev);
         }
     }
 
@@ -430,7 +431,8 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IRefreshableAssetCat
             }
         }
 
-        // Added
+        // Added, and when reporting, updated: a rescan follows lost watcher events, so a file it already knew may have
+        // changed without being reported.
         foreach (var kvp in next)
         {
             if (this.records.TryAdd(kvp.Key, kvp.Value))
@@ -439,6 +441,10 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IRefreshableAssetCat
                 {
                     this.changes.OnNext(new AssetChange(AssetChangeKind.Added, kvp.Key));
                 }
+            }
+            else if (publishChanges)
+            {
+                this.changes.OnNext(new AssetChange(AssetChangeKind.Updated, kvp.Key));
             }
         }
     }

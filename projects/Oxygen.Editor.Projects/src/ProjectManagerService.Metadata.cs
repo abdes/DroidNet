@@ -10,6 +10,36 @@ namespace Oxygen.Editor.Projects;
 /// <summary>Commits complete project metadata without truncating the accepted manifest or overwriting an external edit.</summary>
 public partial class ProjectManagerService
 {
+    /// <inheritdoc />
+    public Task SaveProjectSettingsAsync(string projectRoot, ProjectSettings settings, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
+        ArgumentNullException.ThrowIfNull(settings);
+        var path = storage.NormalizeRelativeTo(projectRoot, Constants.ProjectFileName);
+        return this.sceneWrites.RunAsync(
+            path,
+            async () =>
+            {
+                var snapshot = await this.AtomicFiles.ReadAsync(path, cancellationToken).ConfigureAwait(true);
+                if (!snapshot.Version.Exists)
+                {
+                    throw new FileNotFoundException("The project file is missing.", path);
+                }
+
+                var saved = ProjectInfo.FromJson(Encoding.UTF8.GetString(snapshot.Content.AsSpan()).TrimStart('﻿'));
+                saved.Settings = settings;
+                _ = await this.AtomicFiles.WriteAsync(path, Encoding.UTF8.GetBytes(ProjectInfo.ToJson(saved)), snapshot.Version, cancellationToken).ConfigureAwait(true);
+                if (this.CurrentProject?.ProjectInfo is { Location: { } location } current
+                    && string.Equals(Path.GetFullPath(location), Path.GetFullPath(projectRoot), StringComparison.OrdinalIgnoreCase))
+                {
+                    current.Settings = settings;
+                }
+
+                return true;
+            },
+            cancellationToken);
+    }
+
     private Task<bool> SaveProjectInfoCoreAsync(IProjectInfo projectInfo, IProjectInfo? expected, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(projectInfo);

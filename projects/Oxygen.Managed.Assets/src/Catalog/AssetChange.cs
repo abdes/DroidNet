@@ -28,6 +28,12 @@ public enum AssetChangeKind
     /// An asset changed identity (rename/move). <see cref="AssetChange.PreviousUri"/> carries the old value.
     /// </summary>
     Relocated,
+
+    /// <summary>
+    /// An asset became visible because the catalog started listing it, as when a project opens or a folder is added;
+    /// the asset itself did not change.
+    /// </summary>
+    Listed,
 }
 
 /// <summary>

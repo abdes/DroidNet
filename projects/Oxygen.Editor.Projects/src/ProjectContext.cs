@@ -70,6 +70,12 @@ public sealed record ProjectContext
     public Guid? DefaultSceneId { get; init; }
 
     /// <summary>
+    ///     Gets the project's settings as its manifest held them when this context was created. A settings change does
+    ///     not activate the project again, so <see cref="IProjectContextService.Settings"/> holds the current ones.
+    /// </summary>
+    public ProjectSettings Settings { get; init; } = new();
+
+    /// <summary>
     ///     Creates a context snapshot from a loaded project.
     /// </summary>
     /// <param name="project">The loaded project.</param>
@@ -105,6 +111,7 @@ public sealed record ProjectContext
             CookedContentOrder = [.. info.CookedContentOrder],
             Scenes = [.. scenes ?? []],
             DefaultSceneId = info.DefaultSceneId,
+            Settings = info.Settings,
         };
     }
 }

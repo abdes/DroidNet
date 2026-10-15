@@ -21,6 +21,7 @@
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/ControlledSourceAnalysis.cs" Link="Support/ControlledSourceAnalysis.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CookScenario.cs" Link="Support/CookScenario.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CookWorkspace.cs" Link="Support/CookWorkspace.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/WriterHold.cs" Link="Support/WriterHold.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/FixedCookScopeProvider.cs" Link="Support/FixedCookScopeProvider.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/FixedToolLocator.cs" Link="Support/FixedToolLocator.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/ImportAdapterScenario.cs" Link="Support/ImportAdapterScenario.cs" />
