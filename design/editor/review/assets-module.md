@@ -46,8 +46,9 @@ how they are created, moved or deleted (ContentPipeline), how they are opened
   explorer's query.
 - Display text that four features show (badges, status wording) is the module's
   shared vocabulary and lives in Assets as plain strings (`AssetStatusText`).
-- Script facts, templates, input files and code-editor launch form a domain area
-  of their own (open question 5 of the architecture). None of it is in Assets.
+- Script facts are on World's `Script`, computed by ContentPipeline with the
+  input file checks; templates are written by ContentPipeline and the code
+  editor is launched by the Shell. None of it is in Assets.
 - The pipeline's file types (each source suffix, what it is, and the cooked
   descriptor it cooks into) are shared with the native engine and the tools
   outside the editor, so they live in Oxygen.Managed.Assets as `AssetFileTypes`,
@@ -304,7 +305,5 @@ Elsewhere:
 
 - Move the display properties off `AssetEntry` into `AssetStatusText` and the
   explorer. It touches every surface that shows a badge.
-- The Scripting design: contracts, the analysis implementation, templates, and
-  code-editor launch split with the Shell.
 - The ContentExplorer rename, and the relocation and creation cuts.
 - Phase 3: the Assets registration module, replacing the workspace lines.
