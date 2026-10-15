@@ -41,6 +41,9 @@ Detailed milestone plans should include:
 - [Scene Explorer and generic DynamicTree design implementation](./scene-explorer-dynamictree-design.md):
   three large slices implementing the brief/showcase, reusable control extensions,
   atomic hierarchy authoring and workspace protection. No old-UI baseline stage.
+- [Issue #69: DI scope topology and WorldEditor decomposition](./issue-069-di-topology-and-decomposition.md):
+  commit-sized slices for the scope chain and per-editor projects specified in
+  the DI topology review, with code drift and implementation decisions.
 
 ## Milestone Plans
 
