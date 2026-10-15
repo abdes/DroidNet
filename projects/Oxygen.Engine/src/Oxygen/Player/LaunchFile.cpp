@@ -74,6 +74,11 @@ namespace {
     if (const auto it = window.find("title"); it != window.end()) {
       out.title = it->get<std::string>();
     }
+    if (const auto it = window.find("mode"); it != window.end()) {
+      out.mode = it->get<std::string>() == "borderless"
+        ? LaunchWindowMode::kBorderless
+        : LaunchWindowMode::kWindowed;
+    }
     if (const auto it = window.find("width"); it != window.end()) {
       out.width = it->get<std::uint32_t>();
     }
@@ -151,6 +156,16 @@ auto CanRemount(const PlayerLaunch& launch) noexcept -> bool
     launch.mounts, [](const LaunchMount& mount) -> bool {
       return mount.kind == LaunchMount::Kind::kLooseCookedRoot;
     });
+}
+
+auto PlanRemount(const PlayerLaunch& mounted,
+  const PlayerLaunch& current) noexcept -> RemountPlan
+{
+  if (CanRemount(mounted) && CanRemount(current)) {
+    return RemountPlan::kRemount;
+  }
+  return mounted.mounts == current.mounts ? RemountPlan::kReuse
+                                          : RemountPlan::kRelaunch;
 }
 
 } // namespace oxygen::player

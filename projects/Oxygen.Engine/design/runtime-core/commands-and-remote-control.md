@@ -1,42 +1,39 @@
 # Commands and remote control
 
-Status: **approved 2026-10-13; decisions RC-D1 to RC-D9 taken
-2026-10-13. New ground: this design is expected to change as R1 is built,
-and changes are recorded here as they are made
-([§13](#13-changes-since-approval))**. Delivery step R1 of
-[runtime host §9](runtime-host.md#9-delivery-order-and-exit-gates), before
-E2. Decisions are in [§10](#10-decisions).
+Status: **approved 2026-10-13; decisions RC-D1 to RC-D9 taken 2026-10-13. New
+ground: this design is expected to change as R1 is built, and changes are
+recorded here as they are made ([§13](#13-changes-since-approval))**. Delivery
+step R1 of [runtime host §9](runtime-host.md#9-delivery-order-and-exit-gates),
+before E2. Decisions are in [§10](#10-decisions).
 
 Summary:
 
 - **Every interaction is a command.** A toolbar button, a menu item, a key
-  binding, the command palette, a console line, closing the window and a
-  remote request all run a registered command through one dispatcher. No UI
-  code changes engine, host or scene state any other way
-  ([§2](#2-the-rule)).
-- Commands get their own module, `Oxygen.Commands`; the console becomes a
-  text front end over it and keeps console variables. A command declares
-  typed parameters, a label, availability and a structured result. The same
-  declaration gives the console its grammar and help and gives remote
-  callers a JSON Schema. A command may take several frames; it then runs as a
-  job that can be awaited and cancelled ([§3](#3-command-model)).
-- The engine owns only the command registry. Dispatch, jobs, the event log
-  and the control server live in a new module, `Oxygen.Control`, composed by
-  the host ([§3.4](#34-dispatch-and-jobs), [§4](#4-control-server)).
-- Local front ends (toolbar, keys, console, palette) post to the dispatcher
-  in process. The control server is the remote front end: JSON-RPC 2.0, one
-  JSON object per line, over loopback TCP, on the platform's `io_context` on
-  the engine thread. Every command is a JSON-RPC method of the same name
+  binding, the command palette, a console line, closing the window and a remote
+  request all run a registered command through one dispatcher. No UI code
+  changes engine, host or scene state any other way ([§2](#2-the-rule)).
+- Commands get their own module, `Oxygen.Commands`; the console becomes a text
+  front end over it and keeps console variables. A command declares typed
+  parameters, a label, availability and a structured result. The same
+  declaration gives the console its grammar and help and gives remote callers a
+  JSON Schema. A command may take several frames; it then runs as a job that can
+  be awaited and cancelled ([§3](#3-command-model)).
+- The engine owns only the command registry. Dispatch, jobs, the event log and
+  the control server live in a new module, `Oxygen.Control`, composed by the
+  host ([§3.4](#34-dispatch-and-jobs), [§4](#4-control-server)).
+- Local front ends (toolbar, keys, console, palette) post to the dispatcher in
+  process. The control server is the remote front end: JSON-RPC 2.0, one JSON
+  object per line, over loopback TCP, on the platform's `io_context` on the
+  engine thread. Every command is a JSON-RPC method of the same name
   ([§4](#4-control-server), [§5](#5-protocol)).
-- Events (lifecycle, log, script diagnostics, executed commands, GPU work)
-  are numbered notifications kept in a ring buffer, so a client can catch up
-  after a gap ([§6](#6-events)).
-- The player's named pipe, its request schema and its reader thread are
-  removed; the editor and `play_scene` use the control server
-  ([§7](#7-oxygenplayer), [§8](#8-consumers)).
+- Events (lifecycle, log, script diagnostics, executed commands, GPU work) are
+  numbered notifications kept in a ring buffer, so a client can catch up after a
+  gap ([§6](#6-events)).
+- The player's named pipe, its request schema and its reader thread are removed;
+  the editor and `play_scene` use the control server ([§7](#7-oxygenplayer),
+  [§8](#8-consumers)).
 - An MCP server for agents (R2) and frame capture, scene queries and input
-  injection (R3) build on this and are not part of R1
-  ([§11](#11-not-in-scope)).
+  injection (R3) build on this and are not part of R1 ([§11](#11-not-in-scope)).
 
 ## 1. Findings
 
@@ -55,10 +52,10 @@ Recorded before R1; the code they cite has since changed.
 
 ## 2. The rule
 
-An **interaction** is anything a user or a program does that changes the
-state of the engine, the scene, the host or its debug UI: play state, view
-mode, show flags, panel visibility, console variables, content mounts,
-quitting. Every interaction runs a command through the command dispatcher
+An **interaction** is anything a user or a program does that changes the state
+of the engine, the scene, the host or its debug UI: play state, view mode, show
+flags, panel visibility, console variables, content mounts, quitting. Every
+interaction runs a command through the command dispatcher
 ([§3.4](#34-dispatch-and-jobs)), whatever started it:
 
 | Origin                      | How it runs a command                                                                                        |
@@ -75,33 +72,33 @@ Local front ends post to the dispatcher in process; only remote clients go
 through the control server. A key press or a console line never becomes
 JSON-RPC.
 
-Not interactions, and not commands: presentation inside a widget (typing in
-the console's input field, moving the palette cursor, hovering, scrolling,
-opening a dropdown), and game input. Game input goes from `InputSystem` to
-the scene's input mapping contexts and never passes through the dispatcher;
-injecting game input from a program is itself a command (R3).
+Not interactions, and not commands: presentation inside a widget (typing in the
+console's input field, moving the palette cursor, hovering, scrolling, opening a
+dropdown), and game input. Game input goes from `InputSystem` to the scene's
+input mapping contexts and never passes through the dispatcher; injecting game
+input from a program is itself a command (R3).
 
 Consequences:
 
-- Anything a person can do in the window, a remote client can do, with the
-  same validation and the same result.
-- Every executed command is an event with its source
-  ([§6](#6-events)), so a remote client sees what a person clicked, and a
-  person's session can be replayed from its command events.
+- Anything a person can do in the window, a remote client can do, with the same
+  validation and the same result.
+- Every executed command is an event with its source ([§6](#6-events)), so a
+  remote client sees what a person clicked, and a person's session can be
+  replayed from its command events.
 - A widget never decides availability itself: it reads the command's
   availability and shows the reason when disabled.
 
-The rule binds every host-based application. E2 converts DemoShell's
-panels: a panel control that changes settings or state posts a command or
-sets a console variable; panel layout and widget presentation stay local.
+The rule binds every host-based application. E2 converts DemoShell's panels: a
+panel control that changes settings or state posts a command or sets a console
+variable; panel layout and widget presentation stay local.
 
 ## 3. Command model
 
-Commands live in their own module, `Oxygen.Commands`. A command is broader
-than a console line: a toolbar, a key, a game's own menu or a remote client
-runs it with typed arguments and may await it across frames. The console is
-one text front end among those callers, and it also ships in games, where it
-must stay small and expose only what a shipped build allows.
+Commands live in their own module, `Oxygen.Commands`. A command is broader than
+a console line: a toolbar, a key, a game's own menu or a remote client runs it
+with typed arguments and may await it across frames. The console is one text
+front end among those callers, and it also ships in games, where it must stay
+small and expose only what a shipped build allows.
 
 | Module            | Owns                                                                                                                                                                                     | Depends on                      |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
@@ -110,16 +107,16 @@ must stay small and expose only what a shipped build allows.
 | `Oxygen.Engine`   | The registry and console instances, the `RegisterCommands` module hook, the run state the run-state commands drive                                                                       | both                            |
 | `Oxygen.Control`  | The dispatcher and its jobs, the run-state and job commands, the event log and log capture, the control server ([§3.4](#34-dispatch-and-jobs), [§4](#4-control-server), [§6](#6-events)) | Commands, Console, Engine, Asio |
 
-The console turns a text line into invocations and runs them through the
-command registry; it no longer stores commands. Console variables stay in
-the console, and the console registers the `cvar.*` commands that read and
-set them. The free-form `std::vector<std::string>` handler is removed, and
-every registered command is migrated in R1 (no second command path).
+The console turns a text line into invocations and runs them through the command
+registry; it no longer stores commands. Console variables stay in the console,
+and the console registers the `cvar.*` commands that read and set them. The
+free-form `std::vector<std::string>` handler is removed, and every registered
+command is migrated in R1 (no second command path).
 
-Modules register their commands from the `EngineModule::RegisterCommands`
-hook, called once when the module is attached, and unregister them when
-they shut down. Services that are not modules (graphics, the asset loader,
-script compilation) register from the engine.
+Modules register their commands from the `EngineModule::RegisterCommands` hook,
+called once when the module is attached, and unregister them when they shut
+down. Services that are not modules (graphics, the asset loader, script
+compilation) register from the engine.
 
 ### 3.1 Definition
 
@@ -151,11 +148,10 @@ using AsyncCommandHandler = std::function<auto(
   CommandArgs, CommandContext)->co::Co<CommandResult>>;
 ```
 
-The types live in namespace `oxygen::commands`. `CommandContext` carries
-the source, whether the build is a shipping build, the client name for
-remote sources and the `JobId` of the running invocation.
-`CommandRegistry::Register` returns a `CommandHandle` that unregisters the
-command.
+The types live in namespace `oxygen::commands`. `CommandContext` carries the
+source, whether the build is a shipping build, the client name for remote
+sources and the `JobId` of the running invocation. `CommandRegistry::Register`
+returns a `CommandHandle` that unregisters the command.
 
 ### 3.2 Parameters
 
@@ -173,15 +169,14 @@ struct CommandParam {
 ```
 
 - **One parameter list, two syntaxes.** Console text is positional in
-  declaration order, with `name=value` allowed for any parameter; JSON
-  callers pass an object. `BindText` and `BindJson` both produce the same
-  `CommandArgs`, typed, defaulted and range-checked before the handler runs.
-  Handlers no longer parse text.
-- **Schema.** The registry builds each command's JSON Schema from its
-  parameters (`additionalProperties: false`) for clients and tools. The
-  parameter list is itself the validator: text and JSON are both converted
-  through it, so their errors match and `Oxygen.Commands` needs no schema
-  validator library.
+  declaration order, with `name=value` allowed for any parameter; JSON callers
+  pass an object. `BindText` and `BindJson` both produce the same `CommandArgs`,
+  typed, defaulted and range-checked before the handler runs. Handlers no longer
+  parse text.
+- **Schema.** The registry builds each command's JSON Schema from its parameters
+  (`additionalProperties: false`) for clients and tools. The parameter list is
+  itself the validator: text and JSON are both converted through it, so their
+  errors match and `Oxygen.Commands` needs no schema validator library.
 - **Completion and help.** `help <name>` prints the label, parameters and
   defaults; completion offers `kEnum` values and parameter names.
 
@@ -196,28 +191,28 @@ struct CommandResult {
 };
 ```
 
-`ExecutionStatus` gains `kDisabled` (availability said no; `error` holds
-the reason), `kCancelled` and `kPending` (returned by the registry's
-synchronous `Execute` for an asynchronous command, which only a dispatcher
-can run). A command with `result_schema` is tested against it.
+`ExecutionStatus` gains `kDisabled` (availability said no; `error` holds the
+reason), `kCancelled` and `kPending` (returned by the registry's synchronous
+`Execute` for an asynchronous command, which only a dispatcher can run). A
+command with `result_schema` is tested against it.
 
-Console variables are commands too: the built-ins `cvar.get`, `cvar.set`
-and `cvar.list` take and return typed values, and the console's
-`name value` shorthand is parsed into `cvar.set`. Command discovery and
-jobs are built-ins as well ([§3.5](#35-built-in-commands)).
+Console variables are commands too: the built-ins `cvar.get`, `cvar.set` and
+`cvar.list` take and return typed values, and the console's `name value`
+shorthand is parsed into `cvar.set`. Command discovery and jobs are built-ins as
+well ([§3.5](#35-built-in-commands)).
 
 A console line may hold several commands separated by `;`. The whole line is
-parsed and bound before any of it runs, so a mistake anywhere in the line
-runs nothing; the commands then run in order and stop at the first failure.
+parsed and bound before any of it runs, so a mistake anywhere in the line runs
+nothing; the commands then run in order and stop at the first failure.
 
 ### 3.4 Dispatch and jobs
 
 The engine stays lean: it owns the command registry because every module
 registers into it, and nothing else of dispatch. `control::CommandDispatcher`
-runs every invocation. It is a `co::LiveObject` owned by the host and
-activated in the host's nursery, so its jobs outlive module teardown;
-`control::CommandDispatchModule`, an engine module at the highest priority
-in the frame-start phase, ticks it once per frame.
+runs every invocation. It is a `co::LiveObject` owned by the host and activated
+in the host's nursery, so its jobs outlive module teardown;
+`control::CommandDispatchModule`, an engine module at the highest priority in
+the frame-start phase, ticks it once per frame.
 
 ```cpp
 // control::CommandDispatcher
@@ -233,109 +228,111 @@ auto Cancel(JobId job) -> bool;
 auto NextFrame() -> co::Co<>;
 ```
 
-- Every invocation, from any source, starts at frame start on the engine
-  thread, so a remote command never runs in the middle of a frame phase and
-  a click takes effect at most one frame later.
+- Every invocation, from any source, starts at frame start on the engine thread,
+  so a remote command never runs in the middle of a frame phase and a click
+  takes effect at most one frame later.
 - Jobs start in arrival order, and each runs until it first waits before the
-  next one starts, so their effects apply in arrival order: `ngin.step 5`
-  then `ngin.resume` in the same frame requests the steps, then cancels
-  them.
-- A synchronous handler completes at that point. An asynchronous handler
-  keeps running as a job in the dispatcher's nursery and may await frames,
-  loads or other jobs; `Cancel` cancels its coroutine, and the command
-  decides what cancellation undoes. Jobs still running when the host stops
-  are cancelled.
-- Jobs are numbered per process. A job finishes with a `CommandResult`,
-  which goes to whoever awaits it, into the console's execution records
-  when it came from a line, and into a `command` event.
+  next one starts, so their effects apply in arrival order: `ngin.step 5` then
+  `ngin.resume` in the same frame requests the steps, then cancels them.
+- A synchronous handler completes at that point. An asynchronous handler keeps
+  running as a job in the dispatcher's nursery and may await frames, loads or
+  other jobs; `Cancel` cancels its coroutine, and the command decides what
+  cancellation undoes. Jobs still running when the host stops are cancelled.
+- Jobs are numbered per process. A job finishes with a `CommandResult`, which
+  goes to whoever awaits it, into the console's execution records when it came
+  from a line, and into a `command` event.
 - Each job is logged when it starts and when it finishes, and a job still
   running after 600 frames is reported once, so a stuck command is visible.
-- `CommandRegistry::Run` is the primitive the dispatcher calls; tests use
-  the registry directly, without an engine.
+- `CommandRegistry::Run` is the primitive the dispatcher calls; tests use the
+  registry directly, without an engine.
 
 The dispatcher registers the run-state commands, because their replies need
 frames. `ngin.step` replies when its frames have run: the engine reports how
 many requested steps have not yet started (`IAsyncEngine::GetPendingSteps`),
-which reaches zero when they have all begun or when `ngin.resume` or a
-session change cancels them, so the wait always ends. Its `data` holds the
-frames requested and the frames that ran; fewer is `kCancelled`.
-`ngin.session.end` replies when the session has ended.
+which reaches zero when they have all begun or when `ngin.resume` or a session
+change cancels them, so the wait always ends. Its `data` holds the frames
+requested and the frames that ran; fewer is `kCancelled`. `ngin.session.end`
+replies when the session has ended.
 
 ### 3.5 Built-in commands
 
-| Command                                           | Effect                                                                                      | Registered by |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------- |
-| `help [name]`                                     | From the parameter list.                                                                    | Console       |
-| `find`, `list`                                    | Search and list commands and variables.                                                     | Console       |
-| `exec <path>`                                     | Runs a file of console lines.                                                               | Console       |
-| `cvar.get <name>`                                 | Typed value, origin, latched and restart values.                                            | Console       |
-| `cvar.set <name> <value>`                         | Sets a variable; the `name value` shorthand.                                                | Console       |
-| `cvar.list [pattern]`                             | Variables with type, range, allowed values and flags.                                       | Console       |
-| `cmd.list [pattern]`                              | Commands with label, help, parameter schema, result schema, flags and current availability. | Commands      |
-| `cmd.jobs`                                        | Running jobs: id, command, source, start frame.                                             | Control       |
-| `cmd.cancel <job>`                                | Cancels a job.                                                                              | Control       |
-| `ngin.pause`, `ngin.resume`, `ngin.step [frames]` | Run state; `ngin.resume` cancels pending steps.                                             | Control       |
-| `ngin.session.end`                                | Ends the play session; replies when it has ended.                                           | Control       |
-| `ngin.quit`                                       | Stops the engine; the process exits. The window close button posts it.                      | Control       |
-| `ui.console [action]`, `ui.palette [action]`      | Show, hide or focus the console and the palette (`toggle` by default).                      | Console UI    |
+| Command                                           | Effect                                                                                                                            | Registered by |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `help [name]`                                     | From the parameter list.                                                                                                          | Console       |
+| `find`, `list`                                    | Search and list commands and variables.                                                                                           | Console       |
+| `exec <path>`                                     | Runs a file of console lines.                                                                                                     | Console       |
+| `cvar.get <name>`                                 | Typed value, origin, latched and restart values.                                                                                  | Console       |
+| `cvar.set <name> <value>`                         | Sets a variable; the `name value` shorthand.                                                                                      | Console       |
+| `cvar.list [pattern]`                             | Variables with type, range, allowed values and flags.                                                                             | Console       |
+| `cmd.list [pattern]`                              | Commands with label, help, parameter schema, result schema, flags and current availability.                                       | Commands      |
+| `cmd.jobs`                                        | Running jobs: id, command, source, start frame.                                                                                   | Control       |
+| `cmd.cancel <job>`                                | Cancels a job.                                                                                                                    | Control       |
+| `ngin.pause`, `ngin.resume`, `ngin.step [frames]` | Run state; `ngin.resume` cancels pending steps.                                                                                   | Control       |
+| `ngin.session.end`                                | Ends the play session; replies when it has ended.                                                                                 | Control       |
+| `ngin.quit`                                       | Stops the engine; the process exits. The window close button posts it.                                                            | Control       |
+| `ui.console [action]`, `ui.palette [action]`      | Show, hide or focus the console and the palette (`toggle` by default).                                                            | Console UI    |
+| `host.window.size <width> <height>`               | Resizes the window's framebuffer, in physical pixels, restoring it first when maximized; disabled while full screen or minimized. | Host          |
+| `host.window.mode <windowed\|borderless>`         | Frames the window, or covers its display at the desktop resolution without changing the display mode.                             | Host          |
 
 ### 3.6 Key bindings
 
-A key binding is owned by the code that owns the chord, and pressing it
-posts a command line with source `key`. The viewport toolbar binds F1 and
-Alt+1…; the console UI binds backtick (`ui.console open`, `close` or `focus`,
-decided from what the user sees when the key is pressed) and Ctrl+Shift+P
-(`ui.palette`). Bindings fire only when ImGui does not want text input,
-except backtick, which always reaches the console. A shared binding table
-that menus and tooltips read, and user rebinding, are not in R1.
+A key binding is owned by the code that owns the chord, and pressing it posts a
+command line with source `key`. The viewport toolbar binds F1 and Alt+1…; the
+console UI binds backtick (`ui.console open`, `close` or `focus`, decided from
+what the user sees when the key is pressed) and Ctrl+Shift+P (`ui.palette`).
+Bindings fire only when ImGui does not want text input, except backtick, which
+always reaches the console. A shared binding table that menus and tooltips read,
+and user rebinding, are not in R1.
 
 ### 3.7 Source policy
 
-Policy is per source and lives in `Oxygen.Commands`; it applies to every
-caller, not only the console.
+Policy is per source and lives in `Oxygen.Commands`; it applies to every caller,
+not only the console.
 
-- The remote source runs every command and sets every variable, the same as
-  the local console; `kRemoteAllowed` and the remote allowlist are removed.
-  The control server is a development facility, protected by loopback and a
-  token ([§4.2](#42-endpoint-token-and-discovery)).
-- `kDevOnly` and `kCheat` gating for shipping builds is unchanged and now
-  covers every source. A shipped game's console lists, completes and runs
-  only the commands its policy allows; development commands are neither
-  visible nor runnable there, while the game's own UI can still run the
-  commands it needs.
-- Console history records only lines typed in the console
-  (`local_console`).
+- The remote source runs every command and sets every variable, the same as the
+  local console; `kRemoteAllowed` and the remote allowlist are removed. The
+  control server is a development facility, protected by loopback and a token
+  ([§4.2](#42-endpoint-token-and-discovery)).
+- `kDevOnly` and `kCheat` gating for shipping builds is unchanged and now covers
+  every source. A shipped game's console lists, completes and runs only the
+  commands its policy allows; development commands are neither visible nor
+  runnable there, while the game's own UI can still run the commands it needs.
+- Console history records only lines typed in the console (`local_console`).
 
 ## 4. Control server
 
 `control::ControlServer`, in `Oxygen.Control`, off unless the application
 enables it (`HostConfig::control`, the `--control [port]` option, or the
-player's launch file). Like the dispatcher it is a `co::LiveObject` owned by
-the host and activated in the host's nursery.
+player's launch file). Like the dispatcher it is a `co::LiveObject` owned by the
+host and activated in the host's nursery.
 
 ### 4.1 Transport and threading
 
 - TCP, bound to `127.0.0.1` only. Port `0` (the default) takes an ephemeral
-  port; `--control <port>` fixes it. `--control` is a runtime option of
-  every host application.
+  port; `--control <port>` fixes it. `--control` is a runtime option of every
+  host application.
 - Asio's `ip::tcp` on the platform's `io_context` (`AsyncOps::IoContext()`),
-  written as OxCo coroutines with `co::asio_awaitable`: an accept loop, one
-  read loop and one write queue per connection, all in the server's nursery.
-  No extra thread; the host event loop already polls that `io_context` on
-  the engine thread.
-- A request is read, parsed and bound on the engine thread, then posted to
-  the dispatcher; its reply is written when the job's result is known. A
-  client may have many requests in flight; replies carry their ids and may
-  arrive in any order.
-- Limits: 1 MiB per incoming line (larger closes the connection), 8
-  connections (more are refused). No idle timeout: agents and editors stay
-  connected between turns.
+  written as OxCo coroutines with `co::asio_awaitable`: an accept loop, one read
+  loop and one write queue per connection, all in the server's nursery. No extra
+  thread; the host event loop already polls that `io_context` on the engine
+  thread.
+- A request is read, parsed and bound on the engine thread, then posted to the
+  dispatcher; its reply is written when the job's result is known. A client may
+  have many requests in flight; replies carry their ids and may arrive in any
+  order.
+- Limits: 1 MiB per incoming line (larger closes the connection), 8 connections
+  (more are refused). No idle timeout: agents and editors stay connected between
+  turns.
 
 ### 4.2 Endpoint, token and discovery
 
-On start the server writes a discovery file to the per-user local data
-folder (`%LOCALAPPDATA%\Oxygen\control\<pid>.json` on Windows,
-`$XDG_RUNTIME_DIR/Oxygen/control` elsewhere), and deletes it on clean exit:
+On start the server writes a discovery file to the per-user local data folder
+(`%LOCALAPPDATA%\Oxygen\control\<pid>.json` on Windows,
+`$XDG_RUNTIME_DIR/Oxygen/control` elsewhere), and deletes it on clean exit. It
+writes the file aside and renames it into place, so a client that finds the file
+reads it whole. When the engine has completed, the host awaits
+`ControlServer::FlushAsync` (at most half a second) before the connections
+close, so clients receive the last events, such as the player's `stopping`:
 
 ```json
 {
@@ -350,42 +347,39 @@ folder (`%LOCALAPPDATA%\Oxygen\control\<pid>.json` on Windows,
 }
 ```
 
-- The token is 256 random bits per run. Only processes of the same user can
-  read the file; that, plus loopback, is the access control.
+- The token is 256 random bits per run. Only processes of the same user can read
+  the file; that, plus loopback, is the access control.
 - A launcher knows the pid it started and waits for that file. A client
   attaching later lists the folder and picks an instance by its `name`, the
-  label the launcher gave with `--control-name`; instances of one
-  application differ only by pid otherwise. The label also ends the window
-  title (`MultiView Example [left]`), so a person can match a window to its
-  file. `started` and `command_line` describe an unlabelled instance.
-- A killed application cannot delete its file. Each server removes the files
-  of processes that no longer run when it starts, and a client that finds
-  one deletes it.
+  label the launcher gave with `--control-name`; instances of one application
+  differ only by pid otherwise. The label also ends the window title
+  (`MultiView Example [left]`), so a person can match a window to its file.
+  `started` and `command_line` describe an unlabelled instance.
+- A killed application cannot delete its file. Each server removes the files of
+  processes that no longer run when it starts, and a client that finds one
+  deletes it.
 - Instances of one application share its saved state (console variables,
-  history, settings). The first to start owns it; a later one starts from
-  the saved state but does not save, and logs a warning, so it cannot
-  overwrite the owner's changes.
+  history, settings). The first to start owns it; a later one starts from the
+  saved state but does not save, and logs a warning, so it cannot overwrite the
+  owner's changes.
 
 ### 4.3 Connection lifetime and ownership
 
-- The first message on a connection must be `rpc.hello` with the token;
-  anything else, or a wrong token, is answered with an error and closes the
-  connection.
-- A client may claim **ownership** in `rpc.hello`; there is at most one
-  owner. When the application was started with `exit_when_owner_leaves`
-  (the player's launch file, for the editor and `play_scene`), losing the
-  owner's connection posts `ngin.quit`, and so does no owner arriving within
-  10 seconds of start. Otherwise the application keeps running and accepts
-  new clients.
-- A client's disconnect does not cancel the jobs it started; their results
-  still reach the event stream. `rpc.cancel` cancels explicitly.
+- The first message on a connection must be `rpc.hello` with the token; anything
+  else, or a wrong token, is answered with an error and closes the connection.
+- A client may claim **ownership** in `rpc.hello`; there is at most one owner.
+  When the application was started with `exit_when_owner_leaves` (the player's
+  launch file, for the editor and `play_scene`), losing the owner's connection
+  posts `ngin.quit`, and so does no owner arriving within 10 seconds of start.
+  Otherwise the application keeps running and accepts new clients.
+- A client's disconnect does not cancel the jobs it started; their results still
+  reach the event stream. `rpc.cancel` cancels explicitly.
 
 ## 5. Protocol
 
-[JSON-RPC 2.0](https://www.jsonrpc.org/specification), UTF-8, one JSON
-object per line (`\n`), no batches. Method names starting with `rpc.` are
-reserved by JSON-RPC for the protocol itself; every other method is a
-command.
+[JSON-RPC 2.0](https://www.jsonrpc.org/specification), UTF-8, one JSON object
+per line (`\n`), no batches. Method names starting with `rpc.` are reserved by
+JSON-RPC for the protocol itself; every other method is a command.
 
 ### 5.1 Connection methods
 
@@ -407,11 +401,11 @@ connection receives.
 {"jsonrpc":"2.0","id":7,"result":{"output":"stepped 3 frame(s)","data":{"frames":3,"ran":3}}}
 ```
 
-The reply comes when the command finishes: `ngin.step` after its three
-frames, `ngin.session.begin` when the scene has loaded or failed. Clients
-set their own timeouts. A request without an `id` is a notification: the
-command runs and nothing is replied. A failed command's error `data` holds
-its `status`, its `output` and any data it returned.
+The reply comes when the command finishes: `ngin.step` after its three frames,
+`ngin.session.begin` when the scene has loaded or failed. Clients set their own
+timeouts. A request without an `id` is a notification: the command runs and
+nothing is replied. A failed command's error `data` holds its `status`, its
+`output` and any data it returned.
 
 | Outcome                    | JSON-RPC error                                  |
 | -------------------------- | ----------------------------------------------- |
@@ -426,11 +420,11 @@ its `status`, its `output` and any data it returned.
 
 ### 5.3 Commands as methods
 
-A command's name is its method name and its parameter schema is the
-method's `params` schema; `cmd.list` returns all of them, with current
-availability, so a client needs no other description of the protocol.
-Adding a command adds a method; the protocol version changes only when the
-framing, the `rpc.*` methods or the event envelope change.
+A command's name is its method name and its parameter schema is the method's
+`params` schema; `cmd.list` returns all of them, with current availability, so a
+client needs no other description of the protocol. Adding a command adds a
+method; the protocol version changes only when the framing, the `rpc.*` methods
+or the event envelope change.
 
 ## 6. Events
 
@@ -447,11 +441,11 @@ framing, the `rpc.*` methods or the event envelope change.
 }
 ```
 
-`control::EventLog` numbers events: `seq` increases by one per event across
-all topics. It keeps the last 4,096 events in a ring buffer, whether or not
-anyone is subscribed, so `rpc.events` can return what a client missed
-between turns. Publishing is thread-safe; the server pushes notifications
-from the engine thread.
+`control::EventLog` numbers events: `seq` increases by one per event across all
+topics. It keeps the last 4,096 events in a ring buffer, whether or not anyone
+is subscribed, so `rpc.events` can return what a client missed between turns.
+Publishing is thread-safe; the server pushes notifications from the engine
+thread.
 
 | Topic        | Data                                                                                                                                              | Published by      |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
@@ -460,34 +454,35 @@ from the engine thread.
 | `lifecycle`  | `session_started`, `scene_loaded`, `scene_failed` (with issues), `paused`, `resumed`, `session_ended`, `stopping`                                 | player            |
 | `diagnostic` | A [script diagnostic](../scripting/script-diagnostics.md#2-model)                                                                                 | player            |
 | `gpu_work`   | A [GPU work summary](../vortex/lld/gpu-work-summary.md#41-types), on each new revision                                                            | player            |
+| `stats`      | `fps`, whole frames per second, when the engine's sampled rate changes                                                                            | player            |
 
 `ui` and `key` are new `CommandSource` values, so the audit hook and the
 `command` event distinguish a click from a typed line.
 
-`gpu_work` events exist only while some client subscribes to the topic: the
-event log counts interest per topic, and the player holds a GPU timeline
-lease only while `gpu_work` has interest, replacing the pipe's `stats`
+`gpu_work` and `stats` events exist only while some client subscribes to the
+topic: the event log counts interest per topic, and the player holds a GPU
+timeline lease only while `gpu_work` has interest, replacing the pipe's `stats`
 request.
 
 Each publisher defines its topics' data: the player's in
-`oxygen.player-events.schema.json` (`{topic, data}`, installed with the
-SDK), the `command` and `log` topics in `Oxygen.Control`'s README.
+`oxygen.player-events.schema.json` (`{topic, data}`, installed with the SDK),
+the `command` and `log` topics in `Oxygen.Control`'s README.
 
 ## 7. `Oxygen.Player`
 
 - Launch file `version` 2: `diagnostics_pipe` is replaced by an optional
   `control` object, `{ "port": 0, "exit_when_owner_leaves": true }`. With
-  `control` present the player starts the server; `--control [port]` starts
-  it from the command line. Version 1 files are rejected with the schema
-  error.
-- `ngin.session.begin [scene]` is the one Play: it remounts loose cooked
-  roots and begins the session (what the pipe's `play` did), so the toolbar's
-  Play also shows recooked content. It is asynchronous and replies with the
-  scene's load outcome: `data` has the scene and the camera it is viewed
-  through; a failed load returns `kError` with the issues.
-- Removed: `PipeChannel`, `EventStream`, the request parser and its
-  variant, the requests schema and the module's request handling. The log
-  capture moves into the event log.
+  `control` present the player starts the server; `--control [port]` starts it
+  from the command line. Version 1 files are rejected with the schema error.
+- `ngin.session.begin [scene]` is the one Play: it reads the launch file again,
+  remounts the loose cooked roots it names and begins the session (what the
+  pipe's `play` did), so the toolbar's Play also shows recooked content. It is
+  asynchronous and replies with the scene's load outcome: `data` has the scene
+  and the camera it is viewed through; a failed load returns `kError` with the
+  issues.
+- Removed: `PipeChannel`, `EventStream`, the request parser and its variant, the
+  requests schema and the module's request handling. The log capture moves into
+  the event log.
 - The pipe's requests map to commands:
 
 | Pipe request       | Command                                        |
@@ -501,18 +496,19 @@ SDK), the `command` and `log` topics in `Oxygen.Control`'s README.
 
 ## 8. Consumers
 
-- **Editor Play** ([script authoring §8](../../../../design/editor/lld/script-authoring.md#8-play)):
+- **Editor Play**
+  ([script authoring §8](../../../../design/editor/lld/script-authoring.md#8-play)):
   writes `control` instead of a pipe name, reads the discovery file of the
-  player it started, connects as owner and subscribes to `lifecycle`, `log`
-  and `diagnostic`. Play runs `ngin.session.begin`, Stop runs
-  `ngin.session.end`, Close player runs `ngin.quit`. The editor has no pipe
-  code yet, so this changes its design only.
+  player it started, connects as owner and subscribes to `lifecycle`, `log` and
+  `diagnostic`. Play runs `ngin.session.begin`, Stop runs `ngin.session.end`,
+  Close player runs `ngin.quit`. The editor has no pipe code yet, so this
+  changes its design only.
 - **`Examples/Content/play_scene`**: writes a version 2 launch file without
   `control`, so the player runs standalone; `-- --control` makes it accept
   clients.
 - **Tests and agents** attach to any running host application through its
-  discovery file. The Python JSON-RPC client arrives with the MCP server
-  (R2), which uses it.
+  discovery file. The Python JSON-RPC client arrives with the MCP server (R2),
+  which uses it.
 
 ## 9. Exit gates
 
@@ -545,18 +541,17 @@ Binding for R1.
 ## 11. Not in scope
 
 - **R2, MCP server**: a Python process (the repository's `uv` workspace) that
-  launches or attaches to host applications through discovery files and
-  exposes `command_list`, `command_run`, event catch-up and, after R3,
-  screenshots as MCP tools. Its JSON-RPC client is the repository's Python
-  client for the protocol.
+  launches or attaches to host applications through discovery files and exposes
+  `command_list`, `command_run`, event catch-up and, after R3, screenshots as
+  MCP tools. Its JSON-RPC client is the repository's Python client for the
+  protocol.
 - **R3, observation and input**: frame capture returning PNG, scene queries
-  (nodes, transforms, components), game input injection through
-  `InputSystem`, Lua evaluation, deterministic stepping with a fixed frame
-  time. Each is a command.
-- Control from another machine (binding beyond loopback, TLS), shipping
-  builds, a shared key binding table and user rebinding, command recording
-  and replay as a feature, and the editor's in-process engine exposing the
-  same server.
+  (nodes, transforms, components), game input injection through `InputSystem`,
+  Lua evaluation, deterministic stepping with a fixed frame time. Each is a
+  command.
+- Control from another machine (binding beyond loopback, TLS), shipping builds,
+  a shared key binding table and user rebinding, command recording and replay as
+  a feature, and the editor's in-process engine exposing the same server.
 
 ## 12. Documents changed with R1
 

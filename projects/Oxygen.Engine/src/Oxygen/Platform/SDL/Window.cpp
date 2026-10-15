@@ -333,6 +333,11 @@ auto Window::EnterFullScreen() const -> void
   sdl::SetWindowFullScreen(GetComponent<Data>().sdl_window_.get(), true);
 }
 
+auto Window::EnterBorderlessFullScreen() const -> void
+{
+  sdl::SetWindowBorderlessFullScreen(GetComponent<Data>().sdl_window_.get());
+}
+
 auto Window::ExitFullScreen() const -> void
 {
   sdl::SetWindowFullScreen(GetComponent<Data>().sdl_window_.get(), false);
@@ -393,6 +398,15 @@ auto Window::Resize(const window::ExtentT& extent) const -> void
   if (CheckNotInFullScreenMode(*this, "resize")
     && CheckNotMinimized(*this, "resize")) {
     GetComponent<ManagerInterfaceImpl>().DoResize(extent);
+  }
+}
+
+auto Window::ResizeFramebuffer(const window::ExtentT& extent) const -> void
+{
+  if (CheckNotInFullScreenMode(*this, "resize")
+    && CheckNotMinimized(*this, "resize")) {
+    sdl::SetWindowFramebufferExtent(
+      GetComponent<Data>().sdl_window_.get(), extent, false);
   }
 }
 

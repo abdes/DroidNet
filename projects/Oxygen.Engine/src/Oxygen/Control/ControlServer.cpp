@@ -315,6 +315,8 @@ struct ControlServer::Impl {
   std::filesystem::path discovery_file;
   uint16_t port { 0U };
   std::size_t connections { 0U };
+  //! The connections being served, for `FlushAsync`.
+  std::vector<std::weak_ptr<Connection>> live;
   bool owner_connected { false };
 
   //! Quits through the dispatcher, like the window's close button.
@@ -341,6 +343,8 @@ struct ControlServer::Connection {
   tcp::socket socket;
   std::deque<std::string> outbox;
   co::ParkingLot outbox_ready;
+  //! Woken when the outbox has been written, or the connection closed.
+  co::ParkingLot outbox_drained;
   std::string client;
   //! Subscribed topics, and the last event sequence number pushed.
   std::vector<std::string> topics;
@@ -406,8 +410,12 @@ auto ControlServer::Run() -> void
   std::filesystem::create_directories(folder);
   RemoveStaleDiscoveryFiles(folder);
   impl_->discovery_file = folder / fmt::format("{}.json", ProcessId());
+  // Written aside and renamed into place, so a client never reads a partial
+  // file.
+  auto pending_file = impl_->discovery_file;
+  pending_file += ".tmp";
   {
-    auto file = std::ofstream(impl_->discovery_file, std::ios::trunc);
+    auto file = std::ofstream(pending_file, std::ios::trunc);
     file << json {
       { "protocol", kProtocolVersion },
       { "pid", ProcessId() },
@@ -420,6 +428,7 @@ auto ControlServer::Run() -> void
     }
               .dump(2);
   }
+  std::filesystem::rename(pending_file, impl_->discovery_file);
   LOG_F(INFO, "control server listening on 127.0.0.1:{} ({})", impl_->port,
     impl_->discovery_file.string());
 
@@ -501,8 +510,14 @@ auto ControlServer::OwnerGrace() -> co::Co<>
 auto ControlServer::Serve(std::shared_ptr<Connection> connection) -> co::Co<>
 {
   ++impl_->connections;
-  const auto count = ScopeGuard(
-    [impl = impl_.get()] noexcept -> void { --impl->connections; });
+  impl_->live.push_back(connection);
+  const auto count = ScopeGuard([impl = impl_.get()] noexcept -> void {
+    --impl->connections;
+    std::erase_if(
+      impl->live, [](const std::weak_ptr<Connection>& entry) -> bool {
+        return entry.expired();
+      });
+  });
   OXCO_WITH_NURSERY(n)
   {
     n.Start([connection] -> co::Co<> {
@@ -516,6 +531,9 @@ auto ControlServer::Serve(std::shared_ptr<Connection> connection) -> co::Co<>
           connection->socket, asio::buffer(line), co::asio_nothrow_awaitable);
         if (error) {
           co_return;
+        }
+        if (connection->outbox.empty()) {
+          connection->outbox_drained.UnParkAll();
         }
       }
     });
@@ -586,6 +604,7 @@ auto ControlServer::Serve(std::shared_ptr<Connection> connection) -> co::Co<>
   };
 
   connection->closed = true;
+  connection->outbox_drained.UnParkAll();
   for (const auto& topic : connection->topics) {
     impl_->events->RemoveInterest(topic);
   }
@@ -724,18 +743,46 @@ auto ControlServer::PushEvents(std::shared_ptr<Connection> connection)
 {
   for (;;) {
     co_await impl_->events_ready.Park();
-    if (connection->topics.empty()) {
+    PushPending(*connection);
+  }
+}
+
+auto ControlServer::PushPending(Connection& connection) -> void
+{
+  if (connection.closed || connection.topics.empty()) {
+    return;
+  }
+  const auto batch = impl_->events->Since(connection.cursor, connection.topics);
+  connection.cursor = batch.next_seq - 1U;
+  for (const auto& event : batch.events) {
+    connection.Send({
+      { "jsonrpc", "2.0" },
+      { "method", "rpc.event" },
+      { "params", EventJson(event) },
+    });
+  }
+}
+
+auto ControlServer::FlushAsync() -> co::Co<>
+{
+  auto timer = asio::steady_timer(impl_->io, kFlushTimeout);
+  static_cast<void>(co_await co::AnyOf(
+    DrainConnections(), timer.async_wait(co::asio_nothrow_awaitable)));
+}
+
+auto ControlServer::DrainConnections() -> co::Co<>
+{
+  // A connection that closes meanwhile leaves the list; the copy keeps the
+  // iteration valid.
+  const auto live = impl_->live;
+  for (const auto& entry : live) {
+    const auto connection = entry.lock();
+    if (!connection) {
       continue;
     }
-    const auto batch
-      = impl_->events->Since(connection->cursor, connection->topics);
-    connection->cursor = batch.next_seq - 1U;
-    for (const auto& event : batch.events) {
-      connection->Send({
-        { "jsonrpc", "2.0" },
-        { "method", "rpc.event" },
-        { "params", EventJson(event) },
-      });
+    PushPending(*connection);
+    while (!connection->outbox.empty() && !connection->closed) {
+      co_await connection->outbox_drained.Park();
     }
   }
 }

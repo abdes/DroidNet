@@ -17,8 +17,11 @@ namespace {
 using oxygen::player::CanRemount;
 using oxygen::player::LaunchFileError;
 using oxygen::player::LaunchMount;
+using oxygen::player::LaunchWindowMode;
 using oxygen::player::ParseLaunchFile;
+using oxygen::player::PlanRemount;
 using oxygen::player::ReadLaunchFile;
+using oxygen::player::RemountPlan;
 
 class LaunchFileTest : public testing::Test {
 protected:
@@ -62,8 +65,8 @@ NOLINT_TEST_F(LaunchFileTest, ReadsEveryFieldAndResolvesRelativePaths)
     "mounts": ["base.pak", "cooked"],
     "scene": "/.cooked/Scenes/Level.oscene",
     "script_source_roots": ["scripts"],
-    "window": { "title": "Level", "width": 1600, "height": 900,
-                "vsync": false, "frame_cap": 60 },
+    "window": { "title": "Level", "mode": "borderless", "width": 1600,
+                "height": 900, "vsync": false, "frame_cap": 60 },
     "control": { "port": 4711, "exit_when_owner_leaves": true }
   })");
 
@@ -77,13 +80,17 @@ NOLINT_TEST_F(LaunchFileTest, ReadsEveryFieldAndResolvesRelativePaths)
   EXPECT_EQ(
     launch.script_source_roots[0], (root_ / "scripts").lexically_normal());
   EXPECT_EQ(launch.window.title, "Level");
+  EXPECT_EQ(launch.window.mode, LaunchWindowMode::kBorderless);
   EXPECT_EQ(launch.window.width, 1600U);
   EXPECT_EQ(launch.window.height, 900U);
   EXPECT_FALSE(launch.window.vsync);
   EXPECT_EQ(launch.window.frame_cap, 60U);
-  ASSERT_TRUE(launch.control.has_value());
-  EXPECT_EQ(launch.control->port, 4711U);
-  EXPECT_TRUE(launch.control->exit_when_owner_leaves);
+  if (!launch.control.has_value()) {
+    FAIL() << "The launch file has no control block";
+  }
+  const auto& control = launch.control.value();
+  EXPECT_EQ(control.port, 4711U);
+  EXPECT_TRUE(control.exit_when_owner_leaves);
   EXPECT_FALSE(CanRemount(launch));
 }
 
@@ -95,6 +102,7 @@ NOLINT_TEST_F(LaunchFileTest, OptionalFieldsTakeTheirDefaults)
 
   EXPECT_TRUE(launch.script_source_roots.empty());
   EXPECT_EQ(launch.window.title, "Oxygen Player");
+  EXPECT_EQ(launch.window.mode, LaunchWindowMode::kWindowed);
   EXPECT_EQ(launch.window.width, 1280U);
   EXPECT_EQ(launch.window.height, 720U);
   EXPECT_TRUE(launch.window.vsync);
@@ -167,6 +175,50 @@ NOLINT_TEST_F(LaunchFileTest, UnreadableFileIsReported)
 {
   EXPECT_THROW(
     static_cast<void>(ReadLaunchFile(root_ / "missing.json")), LaunchFileError);
+}
+
+NOLINT_TEST_F(LaunchFileTest, PlayRemountsLooseRootsTheLaunchFileNamesNow)
+{
+  std::filesystem::create_directories(root_ / "republished");
+  const auto mounted = Parse(R"({
+    "version": 2, "mounts": ["cooked"], "scene": "/Scenes/A.oscene"
+  })");
+  const auto current = Parse(R"({
+    "version": 2, "mounts": ["republished"], "scene": "/Scenes/B.oscene"
+  })");
+
+  EXPECT_EQ(PlanRemount(mounted, current), RemountPlan::kRemount);
+  EXPECT_EQ(PlanRemount(mounted, mounted), RemountPlan::kRemount);
+}
+
+NOLINT_TEST_F(LaunchFileTest, PlayReusesUnchangedPakMounts)
+{
+  const auto mounted = Parse(R"({
+    "version": 2, "mounts": ["base.pak", "cooked"], "scene": "/Scenes/A.oscene"
+  })");
+  const auto current = Parse(R"({
+    "version": 2, "mounts": ["base.pak", "cooked"], "scene": "/Scenes/B.oscene"
+  })");
+
+  EXPECT_EQ(PlanRemount(mounted, current), RemountPlan::kReuse);
+}
+
+NOLINT_TEST_F(LaunchFileTest, ChangedPakMountsNeedANewPlayer)
+{
+  std::ofstream(root_ / "patch.pak") << "pak";
+  const auto loose = Parse(R"({
+    "version": 2, "mounts": ["cooked"], "scene": "/Scenes/A.oscene"
+  })");
+  const auto pak = Parse(R"({
+    "version": 2, "mounts": ["base.pak"], "scene": "/Scenes/A.oscene"
+  })");
+  const auto patched = Parse(R"({
+    "version": 2, "mounts": ["base.pak", "patch.pak"], "scene": "/Scenes/A.oscene"
+  })");
+
+  EXPECT_EQ(PlanRemount(pak, patched), RemountPlan::kRelaunch);
+  EXPECT_EQ(PlanRemount(loose, pak), RemountPlan::kRelaunch);
+  EXPECT_EQ(PlanRemount(pak, loose), RemountPlan::kRelaunch);
 }
 
 } // namespace

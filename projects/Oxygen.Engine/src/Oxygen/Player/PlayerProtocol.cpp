@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -111,6 +112,11 @@ auto LifecycleData(const LifecycleState state, const std::string_view scene,
 auto DiagnosticData(const scripting::ScriptDiagnostic& diagnostic) -> json
 {
   return json::parse(scripting::ToJson(diagnostic));
+}
+
+auto StatsData(const std::uint32_t fps) -> json
+{
+  return json { { "fps", fps } };
 }
 
 auto GpuWorkData(const vortex::GpuWorkSummary& summary) -> json

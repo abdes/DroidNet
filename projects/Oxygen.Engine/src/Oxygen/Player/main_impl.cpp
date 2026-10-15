@@ -218,7 +218,8 @@ auto MakeHostConfig(const player::PlayerLaunch& launch,
 }
 
 auto RegisterModules(AsyncEngine& engine, host::HostContext& context,
-  player::PlayerLaunch launch, std::vector<std::string> cvar_names) -> void
+  player::PlayerLaunch launch, std::filesystem::path launch_path,
+  std::vector<std::string> cvar_names) -> void
 {
   host::RegisterRequiredModule(engine,
     std::make_unique<oxygen::scenesync::SceneObserverSyncModule>(
@@ -227,8 +228,8 @@ auto RegisterModules(AsyncEngine& engine, host::HostContext& context,
     std::make_unique<oxygen::scripting::ScriptingModule>(
       oxygen::engine::kScriptingModulePriority));
   host::RegisterRequiredModule(engine,
-    std::make_unique<player::PlayerModule>(
-      context, std::move(launch), std::move(cvar_names)));
+    std::make_unique<player::PlayerModule>(context, std::move(launch),
+      std::move(launch_path), std::move(cvar_names)));
 
   constexpr auto kCapabilities
     = vortex::RendererCapabilityFamily::kScenePreparation
@@ -262,8 +263,8 @@ auto Run(const oxygen::clap::CommandLineContext& context,
   auto config = MakeHostConfig(launch, context, runtime, engine_cli);
   return host::RunHost(std::move(config),
     [&](AsyncEngine& engine, host::HostContext& host_context) -> void {
-      RegisterModules(
-        engine, host_context, std::move(launch), CVarNames(engine_cli));
+      RegisterModules(engine, host_context, std::move(launch),
+        std::filesystem::absolute(launch_path), CVarNames(engine_cli));
     });
 }
 

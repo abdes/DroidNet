@@ -7,7 +7,7 @@
   "required": ["topic", "data"],
   "properties": {
     "topic": {
-      "enum": ["lifecycle", "diagnostic", "gpu_work"]
+      "enum": ["lifecycle", "diagnostic", "gpu_work", "stats"]
     },
     "data": {
       "type": "object"
@@ -94,6 +94,31 @@
         "properties": {
           "data": {
             "$ref": "#/definitions/gpu_work_summary"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "topic": {
+            "const": "stats"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["fps"],
+            "properties": {
+              "fps": {
+                "description": "Frames per second, whole, sampled a few times a second.",
+                "type": "integer",
+                "minimum": 0
+              }
+            }
           }
         }
       }

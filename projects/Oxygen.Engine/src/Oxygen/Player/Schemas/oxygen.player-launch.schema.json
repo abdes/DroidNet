@@ -39,14 +39,18 @@
         "title": {
           "type": "string"
         },
+        "mode": {
+          "description": "windowed: in a frame at width x height; borderless: over its display at the desktop resolution.",
+          "enum": ["windowed", "borderless"]
+        },
         "width": {
-          "description": "Client width in pixels.",
+          "description": "Framebuffer width in physical pixels, while windowed.",
           "type": "integer",
           "minimum": 64,
           "maximum": 16384
         },
         "height": {
-          "description": "Client height in pixels.",
+          "description": "Framebuffer height in physical pixels, while windowed.",
           "type": "integer",
           "minimum": 64,
           "maximum": 16384

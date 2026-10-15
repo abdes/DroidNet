@@ -48,6 +48,13 @@ enum class LifecycleState : std::uint8_t {
 [[nodiscard]] auto DiagnosticData(const scripting::ScriptDiagnostic& diagnostic)
   -> nlohmann::json;
 
+//! The topic of the player's frame statistics, published while a client
+//! subscribes to it.
+inline constexpr std::string_view kStatsTopic = "stats";
+
+//! Data of a `stats` event: `{fps}`, whole frames per second.
+[[nodiscard]] auto StatsData(std::uint32_t fps) -> nlohmann::json;
+
 //! Data of a `gpu_work` event: the summary, field for field, with buckets
 //! written as their catalog ids.
 [[nodiscard]] auto GpuWorkData(const vortex::GpuWorkSummary& summary)

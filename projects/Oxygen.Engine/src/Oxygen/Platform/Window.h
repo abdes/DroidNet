@@ -132,6 +132,9 @@ public:
   OXGN_PLAT_API auto Show() const -> void;
   OXGN_PLAT_API auto Hide() const -> void;
   OXGN_PLAT_API auto EnterFullScreen() const -> void;
+  //! Covers the window's display at the desktop resolution, without changing
+  //! the display mode: borderless full screen.
+  OXGN_PLAT_API auto EnterBorderlessFullScreen() const -> void;
   OXGN_PLAT_API auto ExitFullScreen() const -> void;
   OXGN_PLAT_API auto Minimize() const -> void;
   OXGN_PLAT_API auto Maximize() const -> void;
@@ -143,6 +146,10 @@ public:
   OXGN_PLAT_API auto EnableResizing() const -> void;
   OXGN_PLAT_API auto DisableResizing() const -> void;
   OXGN_PLAT_API auto Resize(const window::ExtentT& extent) const -> void;
+  //! Resizes the window so its framebuffer is `extent` physical pixels, at any
+  //! display scale. Refused in full screen or minimized, like `Resize`.
+  OXGN_PLAT_API auto ResizeFramebuffer(const window::ExtentT& extent) const
+    -> void;
   OXGN_PLAT_API auto MoveTo(const window::PositionT& position) const -> void;
   OXGN_PLAT_API auto SetTitle(const std::string& title) const -> void;
   OXGN_PLAT_API auto Activate() const -> void;

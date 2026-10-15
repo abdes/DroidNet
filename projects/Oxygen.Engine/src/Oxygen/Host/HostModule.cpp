@@ -7,14 +7,17 @@
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/View.h>
@@ -124,9 +127,119 @@ auto HostModule::RegisterCommands(
 {
   try {
     console_host_.RegisterCommands(*registry);
+    if (window_) {
+      RegisterWindowCommands(*registry);
+    }
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "{}: command registration failed: {}", GetName(), ex.what());
   }
+}
+
+auto HostModule::RegisterWindowCommands(commands::CommandRegistry& registry)
+  -> void
+{
+  using commands::CommandArgs;
+  using commands::CommandAvailability;
+  using commands::CommandContext;
+  using commands::CommandParam;
+  using commands::CommandResult;
+  using commands::ExecutionStatus;
+  using commands::ParamType;
+
+  const auto extent_param
+    = [](std::string name, std::string help) -> CommandParam {
+    return CommandParam {
+      .name = std::move(name),
+      .type = ParamType::kInt,
+      .help = std::move(help),
+      .required = true,
+      .min_value = static_cast<double>(kMinWindowExtent),
+      .max_value = static_cast<double>(kMaxWindowExtent),
+    };
+  };
+  static_cast<void>(registry.Register(commands::CommandDefinition {
+    .name = std::string(kWindowSizeCommand),
+    .label = "Window Size",
+    .help = "Resize the window's framebuffer, in physical pixels; a maximized "
+            "window is restored first",
+    .params = {
+      extent_param("width", "Framebuffer width, in physical pixels"),
+      extent_param("height", "Framebuffer height, in physical pixels"),
+    },
+    .availability = [this](const CommandContext&) -> CommandAvailability {
+      const auto window = window_->GetWindow();
+      if (!window) {
+        return { .enabled = false, .reason = "the window is closed" };
+      }
+      if (window->FullScreen()) {
+        return { .enabled = false, .reason = "the window is full screen" };
+      }
+      if (window->Minimized()) {
+        return { .enabled = false, .reason = "the window is minimized" };
+      }
+      return {};
+    },
+    .handler
+    = [this](const CommandArgs& args, const CommandContext&) -> CommandResult {
+      const auto window = window_->GetWindow();
+      if (!window) {
+        return CommandResult::Failure(
+          ExecutionStatus::kDisabled, "the window is closed");
+      }
+      if (window->Maximized()) {
+        window->Restore();
+      }
+      const platform::window::ExtentT extent {
+        .width = static_cast<std::uint32_t>(args.GetInt("width")),
+        .height = static_cast<std::uint32_t>(args.GetInt("height")),
+      };
+      window->ResizeFramebuffer(extent);
+      return CommandResult::Success({},
+        nlohmann::json {
+          { "width", extent.width },
+          { "height", extent.height },
+        });
+    },
+  }));
+  static_cast<void>(registry.Register(commands::CommandDefinition {
+    .name = std::string(kWindowModeCommand),
+    .label = "Window Mode",
+    .help = "Show the window in a frame, or borderless over its display at the "
+            "desktop resolution",
+    .params = {
+      CommandParam {
+        .name = "mode",
+        .type = ParamType::kEnum,
+        .help = "windowed or borderless",
+        .required = true,
+        .allowed_values = {
+          std::string(kWindowedMode),
+          std::string(kBorderlessMode),
+        },
+      },
+    },
+    .availability = [this](const CommandContext&) -> CommandAvailability {
+      if (!window_->GetWindow()) {
+        return { .enabled = false, .reason = "the window is closed" };
+      }
+      return {};
+    },
+    .handler
+    = [this](const CommandArgs& args, const CommandContext&) -> CommandResult {
+      const auto window = window_->GetWindow();
+      if (!window) {
+        return CommandResult::Failure(
+          ExecutionStatus::kDisabled, "the window is closed");
+      }
+      const auto& mode = args.GetString("mode");
+      if (mode == kBorderlessMode) {
+        window->EnterBorderlessFullScreen();
+      } else {
+        window->ExitFullScreen();
+      }
+      return CommandResult::Success({}, nlohmann::json { { "mode", mode } });
+    },
+  }));
 }
 
 auto HostModule::PostLine(

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
@@ -51,18 +52,21 @@ struct PlayOutcome;
 
  Without a scene (stopped, loading, failed) the window shows why. Play
  (`ngin.session.begin`, from the toolbar, the console or a remote client)
- remounts loose cooked roots first, so recooked files are seen, and replies
- with the load outcome. Lifecycle, script diagnostic and GPU work events go
+ reads the launch file again and remounts the loose cooked roots it names,
+ so content a launcher published since is seen, and replies with the load
+ outcome. Lifecycle, script diagnostic and GPU work events go
  to the host's event log.
 */
 class PlayerModule final : public host::HostModule {
   OXYGEN_TYPED(PlayerModule)
 
 public:
-  //! `host` must outlive the module. `startup_cvars` names the console
+  //! `host` must outlive the module. `launch` was read from `launch_path`,
+  //! which every Play reads again. `startup_cvars` names the console
   //! variables the command line set; unknown names are reported once every
   //! module is attached.
   PlayerModule(const host::HostContext& host, PlayerLaunch launch,
+    std::filesystem::path launch_path,
     std::vector<std::string> startup_cvars = {});
   ~PlayerModule() override;
 
@@ -129,10 +133,13 @@ private:
   auto LogSessionLeftovers() const -> void;
   auto ReportUnknownStartupCVars() -> void;
   auto ReportGpuWork() -> void;
+  //! Publishes `stats` while a client subscribes to it.
+  auto ReportStats(const engine::FrameContext& context) -> void;
   auto NotifyMainViewDiscontinuity(vortex::ViewDiscontinuity reason) -> void;
   auto DrawStatus() -> void;
 
   PlayerLaunch launch_;
+  std::filesystem::path launch_path_;
   observer_ptr<control::EventLog> events_;
   //! Plays waiting for the load outcome; shared so a waiting command never
   //! touches the module.
@@ -167,6 +174,7 @@ private:
   observer_ptr<scripting::ScriptingModule> scripting_ { nullptr };
   vortex::GpuTimelineLease gpu_work_lease_;
   std::uint64_t gpu_work_revision_ { 0U };
+  std::optional<std::uint32_t> reported_fps_;
 };
 
 } // namespace oxygen::player

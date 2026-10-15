@@ -5,7 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <memory>
@@ -265,9 +267,10 @@ namespace {
 } // namespace
 
 PlayerModule::PlayerModule(const host::HostContext& host, PlayerLaunch launch,
-  std::vector<std::string> startup_cvars)
+  std::filesystem::path launch_path, std::vector<std::string> startup_cvars)
   : HostModule(host)
   , launch_(std::move(launch))
+  , launch_path_(std::move(launch_path))
   , events_(host.events.get())
   , startup_cvars_(std::move(startup_cvars))
   , next_scene_(launch_.scene)
@@ -281,10 +284,15 @@ auto PlayerModule::BuildWindowProperties() const -> platform::window::Properties
 {
   auto props = HostModule::BuildWindowProperties();
   props.title = launch_.window.title;
-  props.extent = {
-    .width = launch_.window.width,
-    .height = launch_.window.height,
-  };
+  if (launch_.window.mode == LaunchWindowMode::kBorderless) {
+    // The desktop mode: no display mode is selected, so no framebuffer size.
+    props.flags.full_screen = true;
+  } else {
+    props.framebuffer_extent = {
+      .width = launch_.window.width,
+      .height = launch_.window.height,
+    };
+  }
   return props;
 }
 
@@ -352,12 +360,13 @@ auto PlayerModule::OnShutdown() noexcept -> void
 auto PlayerModule::RegisterCommands(
   const observer_ptr<commands::CommandRegistry> registry) noexcept -> void
 {
+  HostModule::RegisterCommands(registry);
   try {
     static_cast<void>(registry->Register(commands::CommandDefinition {
       .name = std::string(kSessionBeginCommand),
       .label = "Play",
-      .help = "Remount the content and play the scene, or the scene at the "
-              "given virtual path",
+      .help = "Read the launch file again, remount its content and play "
+              "its scene, or the scene at the given virtual path",
       .params = {
         commands::CommandParam {
           .name = "scene",
@@ -479,6 +488,7 @@ auto PlayerModule::OnFrameStart(
   ReportPauseChanges();
   UpdateGpuWorkLease();
   ReportGpuWork();
+  ReportStats(*context);
   HostModule::OnFrameStart(context);
 }
 
@@ -515,8 +525,24 @@ auto PlayerModule::HandlePlay(const std::optional<std::string>& scene)
     return commands::CommandResult::Failure(
       commands::ExecutionStatus::kError, "a play session is already running");
   }
+  auto current = PlayerLaunch {};
+  try {
+    current = ReadLaunchFile(launch_path_);
+  } catch (const LaunchFileError& ex) {
+    return commands::CommandResult::Failure(
+      commands::ExecutionStatus::kError, ex.what());
+  }
+  const auto plan = PlanRemount(launch_, current);
+  if (plan == RemountPlan::kRelaunch) {
+    return commands::CommandResult::Failure(commands::ExecutionStatus::kError,
+      "the launch file changed its PAK files; close the player and launch it "
+      "again to mount them");
+  }
+  // Window, control and script source roots belong to the process.
+  launch_.mounts = std::move(current.mounts);
+  launch_.scene = std::move(current.scene);
   next_scene_ = scene.value_or(launch_.scene);
-  if (!CanRemount(launch_)) {
+  if (plan == RemountPlan::kReuse) {
     // PAK files are immutable; a launcher recooks loose roots only.
     LOG_F(INFO, "{}: PAK mounts are reused, not remounted", GetName());
     if (!Host().engine->BeginSession()) {
@@ -654,6 +680,23 @@ auto PlayerModule::UpdateGpuWorkLease() -> void
     gpu_work_lease_ = renderer->GetDiagnosticsService().AcquireGpuTimeline();
     gpu_work_revision_ = 0U;
   }
+}
+
+auto PlayerModule::ReportStats(const engine::FrameContext& context) -> void
+{
+  if (!events_->HasInterest(kStatsTopic)) {
+    reported_fps_.reset();
+    return;
+  }
+  // The engine's frame rate is sampled and held, so it changes a few times a
+  // second at most; whole frames per second are all a status shows.
+  const auto fps = static_cast<std::uint32_t>(
+    std::lround(context.GetModuleTimingData().current_fps));
+  if (reported_fps_ == fps) {
+    return;
+  }
+  reported_fps_ = fps;
+  events_->Publish(kStatsTopic, StatsData(fps));
 }
 
 auto PlayerModule::ReportGpuWork() -> void

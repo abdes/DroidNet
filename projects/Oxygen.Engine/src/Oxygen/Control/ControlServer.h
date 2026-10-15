@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -59,6 +60,9 @@ struct ControlServerConfig {
 */
 class ControlServer final : public co::LiveObject {
 public:
+  //! How long `FlushAsync` waits for slow or stalled clients.
+  static constexpr auto kFlushTimeout = std::chrono::milliseconds(500);
+
   OXGN_CTRL_API ControlServer(observer_ptr<IAsyncEngine> engine,
     observer_ptr<CommandDispatcher> dispatcher, observer_ptr<EventLog> events,
     asio::io_context& io, ControlServerConfig config);
@@ -72,6 +76,11 @@ public:
   //! Listens, writes the discovery file and starts accepting connections.
   OXGN_CTRL_API auto Run() -> void override;
   OXGN_CTRL_API auto Stop() -> void override;
+  //! Writes the events published so far to every connection and waits until
+  //! they are sent, for at most `kFlushTimeout`. A host awaits it after the
+  //! engine completed, so clients receive the last events, such as a player's
+  //! `stopping`, before the connections close.
+  OXGN_CTRL_API auto FlushAsync() -> co::Co<>;
   OXGN_CTRL_NDAPI auto IsRunning() const -> bool override
   {
     return nursery_ != nullptr;
@@ -91,6 +100,8 @@ private:
   auto Handle(std::shared_ptr<Connection> connection, std::string line)
     -> co::Co<>;
   auto PushEvents(std::shared_ptr<Connection> connection) -> co::Co<>;
+  auto PushPending(Connection& connection) -> void;
+  auto DrainConnections() -> co::Co<>;
   auto OwnerGrace() -> co::Co<>;
 
   std::unique_ptr<Impl> impl_;

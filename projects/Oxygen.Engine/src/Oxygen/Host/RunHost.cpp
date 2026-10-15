@@ -135,6 +135,11 @@ namespace {
       });
 
       co_await host.engine->Completed();
+      if (host.control_server) {
+        // Clients receive the events of the shutdown before the connections
+        // close.
+        co_await host.control_server->FlushAsync();
+      }
       host.nursery = nullptr;
       co_return co::kCancel;
     };
@@ -166,6 +171,11 @@ namespace {
     if (host.platform) {
       host.platform->Stop();
     }
+    // Created last, released first: the control server's sockets and timers
+    // belong to the platform's I/O context, and the dispatcher runs the
+    // engine's commands.
+    host.control_server.reset();
+    host.commands.reset();
     host.engine.reset();
     if (auto gfx = host.gfx_weak.lock()) {
       gfx->Stop();

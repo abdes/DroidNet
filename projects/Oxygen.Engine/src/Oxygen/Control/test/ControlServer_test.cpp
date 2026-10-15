@@ -49,6 +49,7 @@ auto TestDiscoveryFolder() -> std::filesystem::path
 }
 
 using namespace std::chrono_literals;
+using asio::ip::tcp;
 using nlohmann::json;
 using oxygen::observer_ptr;
 using oxygen::co::Co;
@@ -57,7 +58,6 @@ using oxygen::control::ControlServer;
 using oxygen::control::ControlServerConfig;
 using oxygen::control::EventLog;
 using oxygen::control::testing::TestEngine;
-using tcp = asio::ip::tcp;
 
 //! A line-based JSON client over the test's I/O context.
 class Client {
@@ -96,9 +96,8 @@ public:
 
   auto Close() -> void
   {
-    auto ignored = std::error_code {};
-    socket_.shutdown(tcp::socket::shutdown_both, ignored);
-    socket_.close(ignored);
+    auto error = std::error_code {};
+    EXPECT_FALSE(socket_.close(error)) << error.message();
   }
 
   //! Sends a request and returns its reply, skipping notifications.
@@ -136,13 +135,13 @@ protected:
     server_ = std::make_unique<ControlServer>(
       observer_ptr<oxygen::IAsyncEngine> { &engine_ },
       observer_ptr { &dispatcher_ }, observer_ptr { &events_ }, io_, config_);
-    oxygen::co::Run(io_, [&]() -> Co<> {
+    oxygen::co::Run(io_, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&CommandDispatcher::ActivateAsync, &dispatcher_);
         co_await n.Start(&ControlServer::ActivateAsync, server_.get());
         server_->Run();
-        n.Start([&]() -> Co<> {
+        n.Start([&] -> Co<> {
           for (uint64_t frame = 1;; ++frame) {
             dispatcher_.OnFrameStart(frame, true);
             auto timer = asio::steady_timer(io_, 1ms);
@@ -180,7 +179,7 @@ protected:
 //! events it produced.
 NOLINT_TEST_F(ControlServerTest, RunsCommandsForAnAuthenticatedClient)
 {
-  RunServing([&]() -> Co<> {
+  RunServing([&] -> Co<> {
     auto client = Client(io_);
     co_await client.Connect(server_->Port());
 
@@ -210,7 +209,7 @@ NOLINT_TEST_F(ControlServerTest, RunsCommandsForAnAuthenticatedClient)
 //! Without the right token the server refuses and closes the connection.
 NOLINT_TEST_F(ControlServerTest, RefusesAWrongToken)
 {
-  RunServing([&]() -> Co<> {
+  RunServing([&] -> Co<> {
     auto client = Client(io_);
     co_await client.Connect(server_->Port());
 
@@ -226,7 +225,7 @@ NOLINT_TEST_F(ControlServerTest, RefusesAWrongToken)
 //! Subscribed topics are pushed as `rpc.event` notifications.
 NOLINT_TEST_F(ControlServerTest, PushesSubscribedEvents)
 {
-  RunServing([&]() -> Co<> {
+  RunServing([&] -> Co<> {
     auto client = Client(io_);
     co_await client.Connect(server_->Port());
     static_cast<void>(co_await client.Call(
@@ -241,6 +240,29 @@ NOLINT_TEST_F(ControlServerTest, PushesSubscribedEvents)
     EXPECT_EQ(event["params"]["topic"], "custom");
     EXPECT_EQ(event["params"]["data"]["value"], 42);
     EXPECT_TRUE(events_.HasInterest("custom"));
+  });
+}
+
+//! An event published as the host stops reaches the client before the server
+//! closes its connection.
+NOLINT_TEST_F(ControlServerTest, FlushSendsTheLastEventsBeforeStopping)
+{
+  RunServing([&] -> Co<> {
+    auto client = Client(io_);
+    co_await client.Connect(server_->Port());
+    static_cast<void>(co_await client.Call(
+      1, "rpc.hello", { { "token", Token() }, { "client", "test" } }));
+    static_cast<void>(
+      co_await client.Call(2, "rpc.subscribe", { { "topics", { "custom" } } }));
+
+    events_.Publish("custom", json { { "state", "stopping" } });
+    co_await server_->FlushAsync();
+    server_->Stop();
+    const auto last = co_await client.Receive();
+    const auto closed = co_await client.Receive();
+
+    EXPECT_EQ(last["params"]["data"]["state"], "stopping");
+    EXPECT_TRUE(closed.is_null());
   });
 }
 
@@ -261,7 +283,7 @@ NOLINT_TEST_F(ControlServerTest, RpcCancelCancelsARequestInFlight)
         co_return oxygen::commands::CommandResult::Success("unreachable");
       },
     }));
-  RunServing([&]() -> Co<> {
+  RunServing([&] -> Co<> {
     auto client = Client(io_);
     co_await client.Connect(server_->Port());
     static_cast<void>(co_await client.Call(
@@ -297,7 +319,7 @@ NOLINT_TEST_F(ControlServerTest, RpcCancelCancelsARequestInFlight)
 //! A ninth connection is refused and closed.
 NOLINT_TEST_F(ControlServerTest, RefusesConnectionsBeyondTheLimit)
 {
-  RunServing([&]() -> Co<> {
+  RunServing([&] -> Co<> {
     auto clients = std::vector<std::unique_ptr<Client>> {};
     for (int i = 0; i < 8; ++i) {
       clients.push_back(std::make_unique<Client>(io_));
@@ -319,7 +341,7 @@ NOLINT_TEST_F(ControlServerTest, RefusesConnectionsBeyondTheLimit)
 NOLINT_TEST_F(ControlServerTest, OwnerLeavingPostsQuit)
 {
   config_.exit_when_owner_leaves = true;
-  RunServing([&]() -> Co<> {
+  RunServing([&] -> Co<> {
     {
       auto owner = Client(io_);
       co_await owner.Connect(server_->Port());
@@ -359,7 +381,7 @@ NOLINT_TEST(ControlServerDiscovery, FileLivesWithTheServer)
     ControlServer server { observer_ptr<oxygen::IAsyncEngine> { &engine },
       observer_ptr { &dispatcher }, observer_ptr { &events }, io,
       ControlServerConfig { .discovery_folder = TestDiscoveryFolder() } };
-    oxygen::co::Run(io, [&]() -> Co<> {
+    oxygen::co::Run(io, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&ControlServer::ActivateAsync, &server);
@@ -397,7 +419,7 @@ NOLINT_TEST(ControlServerDiscovery, RemovesStaleFilesAndNamesTheInstance)
       .name = "left",
       .discovery_folder = folder,
     } };
-  oxygen::co::Run(io, [&]() -> Co<> {
+  oxygen::co::Run(io, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ControlServer::ActivateAsync, &server);

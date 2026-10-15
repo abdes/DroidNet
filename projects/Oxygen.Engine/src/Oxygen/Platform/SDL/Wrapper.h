@@ -107,6 +107,13 @@ inline auto SetWindowFullScreen(SDL_Window* window, const bool full_screen)
   SdlCheck(SDL_SetWindowFullscreen(window, full_screen));
 }
 
+//! Full screen at the desktop mode: a null mode is SDL's borderless one.
+inline auto SetWindowBorderlessFullScreen(SDL_Window* window) -> void
+{
+  SdlCheck(SDL_SetWindowFullscreenMode(window, nullptr));
+  SdlCheck(SDL_SetWindowFullscreen(window, true));
+}
+
 inline auto ShowWindow(SDL_Window* window) -> void
 {
   SdlCheck(SDL_ShowWindow(window));

@@ -33,11 +33,22 @@ struct LaunchMount {
   Kind kind { Kind::kLooseCookedRoot };
   //! Absolute.
   std::filesystem::path path;
+
+  auto operator==(const LaunchMount&) const -> bool = default;
+};
+
+//! How the player window shows.
+enum class LaunchWindowMode : std::uint8_t {
+  //! In a frame, at the launch size.
+  kWindowed,
+  //! Over its display at the desktop resolution, without a frame.
+  kBorderless,
 };
 
 struct LaunchWindow {
   std::string title { "Oxygen Player" };
-  //! Client size in pixels.
+  LaunchWindowMode mode { LaunchWindowMode::kWindowed };
+  //! Framebuffer size in physical pixels, while windowed.
   std::uint32_t width { 1280U };
   std::uint32_t height { 720U };
   bool vsync { true };
@@ -87,5 +98,21 @@ struct PlayerLaunch {
 //! Whether the loader can replace these mounts in place between sessions:
 //! true when every mount is a loose cooked root.
 [[nodiscard]] auto CanRemount(const PlayerLaunch& launch) noexcept -> bool;
+
+//! How a Play takes the mounts its launch file names now.
+enum class RemountPlan : std::uint8_t {
+  //! Replace the loose cooked roots with the ones named now.
+  kRemount,
+  //! Keep the mounts: PAK files are immutable and the list is unchanged.
+  kReuse,
+  //! The PAK mounts changed, which only a new player process can apply.
+  kRelaunch,
+};
+
+//! Decides how a Play moves from the `mounted` content to the `current`
+//! launch file's mounts. A launcher rewrites the launch file when it
+//! publishes content to new roots, so every Play reads it again.
+[[nodiscard]] auto PlanRemount(const PlayerLaunch& mounted,
+  const PlayerLaunch& current) noexcept -> RemountPlan;
 
 } // namespace oxygen::player

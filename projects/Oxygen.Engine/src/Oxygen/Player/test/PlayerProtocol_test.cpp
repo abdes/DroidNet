@@ -25,8 +25,10 @@ using nlohmann::json;
 using oxygen::player::DiagnosticData;
 using oxygen::player::EventSchema;
 using oxygen::player::GpuWorkData;
+using oxygen::player::kStatsTopic;
 using oxygen::player::LifecycleData;
 using oxygen::player::LifecycleState;
+using oxygen::player::StatsData;
 
 //! Checks event data is valid for its topic against the player's event
 //! schema, and returns it.
@@ -96,6 +98,13 @@ NOLINT_TEST(PlayerProtocolTest, DiagnosticEventsCarryTheDiagnosticJson)
   const auto data = CheckEvent("diagnostic", DiagnosticData(diagnostic));
 
   EXPECT_EQ(data["message"], "unexpected symbol");
+}
+
+NOLINT_TEST(PlayerProtocolTest, StatsEventsCarryWholeFramesPerSecond)
+{
+  const auto out = CheckEvent(std::string(kStatsTopic), StatsData(60U));
+
+  EXPECT_EQ(out["fps"], 60);
 }
 
 NOLINT_TEST(PlayerProtocolTest, GpuWorkEventsMirrorTheSummary)

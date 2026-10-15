@@ -6,8 +6,10 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -47,6 +49,18 @@ namespace oxygen::host {
 
 struct HostContext;
 class HostWindow;
+
+//! Resizes the host window: `{width, height}` of its framebuffer in physical
+//! pixels, each between `kMinWindowExtent` and `kMaxWindowExtent`.
+inline constexpr std::string_view kWindowSizeCommand = "host.window.size";
+inline constexpr std::uint32_t kMinWindowExtent = 64U;
+inline constexpr std::uint32_t kMaxWindowExtent = 16384U;
+
+//! Switches the host window between `kWindowedMode` and `kBorderlessMode`
+//! (full screen at the desktop resolution): `{mode}`.
+inline constexpr std::string_view kWindowModeCommand = "host.window.mode";
+inline constexpr std::string_view kWindowedMode = "windowed";
+inline constexpr std::string_view kBorderlessMode = "borderless";
 
 //! The views a host module renders this frame.
 struct HostViews {
@@ -206,6 +220,8 @@ protected:
     std::string line, commands::CommandSource source) const -> void;
 
 private:
+  auto RegisterWindowCommands(commands::CommandRegistry& registry) -> void;
+
   const HostContext& host_;
   std::shared_ptr<HostWindow> window_;
   ViewPublisher publisher_;
