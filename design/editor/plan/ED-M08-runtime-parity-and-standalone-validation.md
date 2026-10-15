@@ -1,18 +1,16 @@
 # ED-M08 — Runtime parity and editor authoring workspace
 
-Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.9
-validated; rescoped on 2026-10-08; M08.10 added on 2026-10-09, M08.10a–d
-delivered on 2026-10-09, M08.10e on 2026-10-10, M08.10f and M08.10g on
-2026-10-11, the M08.10h scripting design and M08.10i–k on 2026-10-11,
-M08.10l validated on 2026-10-12, M08.10m validated on 2026-10-13, M08.10n delivered on 2026-10-13, M08.10o validated on 2026-10-14, and M08.10p delivered on 2026-10-14 and in owner review**
+Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.10
+validated; rescoped on 2026-10-08; M08.10 closed on 2026-10-15**
 
-Current: **M08.10 Engine capability parity in the editor**. The
+Current: **M08.11 Asset thumbnails and previews**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
 (former M08.3 and M08.5–M08.8) and the former M08.4 audit, and replaces them
 with what the editor still lacks as an authoring tool: viewport picking,
 selection feedback, transform gizmos, scene helpers and a refined HUD, and a
 Content Browser with real previews, working commands and drag-and-drop. The
-former ED-M09 viewport tools are delivered by M08.4–M08.6. See [remaining slices](#4-execution-sequence) and
+former ED-M09 viewport tools are delivered by M08.4–M08.6. See
+[remaining slices](#4-execution-sequence) and
 [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
 its rendering, precision and publication contracts remain unchanged.
@@ -24,20 +22,20 @@ The editor and native engine implement one canonical V0.1 authoring contract
 viewports whose state survives reopening (M08.V0–V2).
 
 The editor becomes a workspace in which a content author assembles a scene
-without touching the Inspector for placement: click to select, see the
-selection outlined, frame it, move/rotate/scale it with snapping, see and pick
-lights and cameras, and drag assets from a Content Browser that shows what
-they look like. Every visible command works or explains why it is unavailable.
+without touching the Inspector for placement: click to select, see the selection
+outlined, frame it, move/rotate/scale it with snapping, see and pick lights and
+cameras, and drag assets from a Content Browser that shows what they look like.
+Every visible command works or explains why it is unavailable.
 
 Runtime parity rests on one production path: the editor and the standalone
-runtime share Vortex, the loaders and the cooked formats, and M08.1/M08.2
-added native tests for every changed capability. The closeout loads an
-editor-authored, editor-cooked project in the maintained RenderScene example.
-No separate qualification harness is built.
+runtime share Vortex, the loaders and the cooked formats, and M08.1/M08.2 added
+native tests for every changed capability. The closeout loads an
+editor-authored, editor-cooked project in the maintained RenderScene example. No
+separate qualification harness is built.
 
 The design mockup and brief (`F:/projects/oxygen-editor-design`, chapters
-Viewport & input, Rotation feedback and Content Browser) set the layout,
-density and interaction intent. WinUI 3 and the DroidNet controls are the
+Viewport & input, Rotation feedback and Content Browser) set the layout, density
+and interaction intent. WinUI 3 and the DroidNet controls are the
 implementation; Oxygen contracts win where the mockup differs.
 
 Trace: REQ-005/006/008/013/018–021/025–035/037/039–041;
@@ -93,9 +91,10 @@ implementation must produce new evidence for captured sky and specular lighting.
 ### Delivered canonical authoring (M08.1–M08.V2)
 
 - Ten canonical primitives, including Capsule, using shared native recipes and
-  the metric centred defaults: horizontal Plane, upright Quad and 1 m outer Torus.
-- Stable per-geometry material-slot identities and independent instance overrides
-  for all existing slots; clearing restores the mesh material.
+  the metric centred defaults: horizontal Plane, upright Quad and 1 m outer
+  Torus.
+- Stable per-geometry material-slot identities and independent instance
+  overrides for all existing slots; clearing restores the mesh material.
 - Scalar emission colour/intensity with float32 storage, explicit linear-colour
   conversion and finite HDR bounds.
 - Local/Inherit visibility and geometry shadow flags, independent light
@@ -130,8 +129,8 @@ implementation must produce new evidence for captured sky and specular lighting.
 
 - **Development qualification harness** (former M08.3, the M08.5 preparation
   adapter, M08.6–M08.8 and the former qualification constants): opt-in
-  native/managed targets, saved-revision capture, a standalone child process
-  and semantic/image comparison. It would compare the production renderer with
+  native/managed targets, saved-revision capture, a standalone child process and
+  semantic/image comparison. It would compare the production renderer with
   itself, cost several slices of development-only code and add no authoring
   capability. The [standalone LLD](../lld/standalone-runtime-validation.md)
   remains a post-V0.1 design.
@@ -139,8 +138,8 @@ implementation must produce new evidence for captured sky and specular lighting.
   migrated every maintained project and there are no external projects.
   Missing/broken reference detection remains as delivered by ED-M06.
 - **Workspace-Hide representation mask** (former M08.4): Hide keeps removing
-  geometry from the editing view; keeping hidden casters and lights
-  contributing is post-V0.1.
+  geometry from the editing view; keeping hidden casters and lights contributing
+  is post-V0.1.
 - **Formal inspector audit** (former M08.4): the inspectors were rebuilt and
   validated by M08.2 and the inspector refactoring plan. Defects found while
   using them are fixed as bugs in the slice that finds them.
@@ -161,33 +160,33 @@ implementation must produce new evidence for captured sky and specular lighting.
 3. **Overlays and tools are view state.** They never enter the authored scene,
    history, Save or Cook; they are composed after post-processing and are
    excluded from exposure metering and grading. Pane-level toggles persist with
-   the M08.V2 pane state; snapping is a per-user editor setting and the
-   active tool is session state.
+   the M08.V2 pane state; snapping is a per-user editor setting and the active
+   tool is session state.
 4. **One mutation path.** Native code performs hover and drag math without a
-   managed round trip per pointer move. Managed code owns begin/commit/cancel:
-   a drag previews through the existing property edit session (live
-   projection, no history), release commits one undoable command for every
-   target, and Escape restores the starting values exactly.
-5. **Thumbnails are a derived local cache.** The production renderer draws
-   them offscreen; they are keyed by asset identity and content revision,
-   stored in the project's local cache, and never authored, cooked or required
-   for browsing.
+   managed round trip per pointer move. Managed code owns begin/commit/cancel: a
+   drag previews through the existing property edit session (live projection, no
+   history), release commits one undoable command for every target, and Escape
+   restores the starting values exactly.
+5. **Thumbnails are a derived local cache.** The production renderer draws them
+   offscreen; they are keyed by asset identity and content revision, stored in
+   the project's local cache, and never authored, cooked or required for
+   browsing.
 6. **Panes render on demand; the user owns the frame clock.** A pane renders
    when an event may have changed what it shows: a scene-changing command, a
    completed load, newly resident renderer content, input or a move of its
-   camera. An idle pane keeps its last image and costs no rendering,
-   composition or present. VSync and the frame-rate cap are engine-wide settings in the
+   camera. An idle pane keeps its last image and costs no rendering, composition
+   or present. VSync and the frame-rate cap are engine-wide settings in the
    scene editor's Settings flyout; the editor imposes no rate of its own, and
-   each frame has exactly one clock: the display with vsync on, the cap with
-   it off.
+   each frame has exactly one clock: the display with vsync on, the cap with it
+   off.
 
-Owners: WorldEditor `Viewport`, `ViewportViewModel`, `SceneEditorViewModel`
-and the scene document toolbar; ContentBrowser shell, panes and asset
-provider; Runtime view/input/pick contracts; Interop `EditorModule`,
-`EditorView` and commands; Vortex overlay and pick passes and offscreen views.
+Owners: WorldEditor `Viewport`, `ViewportViewModel`, `SceneEditorViewModel` and
+the scene document toolbar; ContentBrowser shell, panes and asset provider;
+Runtime view/input/pick contracts; Interop `EditorModule`, `EditorView` and
+commands; Vortex overlay and pick passes and offscreen views.
 
-Engine edits that leave a deferred boundary carry `TODO(post-v0.1, <ID>)`
-linked to the engine scope record. Current M08 obligations are not future TODOs.
+Engine edits that leave a deferred boundary carry `TODO(post-v0.1, <ID>)` linked
+to the engine scope record. Current M08 obligations are not future TODOs.
 
 ## 4. Execution sequence
 
@@ -196,12 +195,12 @@ ED-M08 is paused until the Vortex milestone
 is validated; work resumes at the first open slice below.
 
 Each slice ends with focused checks and a buildable code/test/doc commit. Native
-contracts and rendered behavior pass before editor implementation relies on them.
-From M08.3 on, every slice closes only after the user has reviewed the running
-editor UI; implementation pauses at that point for feedback. Order: M08.1 →
-M08.F1 → M08.2 → M08.V0 → M08.V1 → M08.V2 → M08.3 → M08.4 → M08.5 → M08.6 →
-M08.7 → M08.8 → M08.9 → M08.10 → M08.11 → M08.12. Viewport slices come first
-for immediate value; M08.7 and M08.8 are managed-only. M08.9 precedes
+contracts and rendered behavior pass before editor implementation relies on
+them. From M08.3 on, every slice closes only after the user has reviewed the
+running editor UI; implementation pauses at that point for feedback. Order:
+M08.1 → M08.F1 → M08.2 → M08.V0 → M08.V1 → M08.V2 → M08.3 → M08.4 → M08.5 →
+M08.6 → M08.7 → M08.8 → M08.9 → M08.10 → M08.11 → M08.12. Viewport slices come
+first for immediate value; M08.7 and M08.8 are managed-only. M08.9 precedes
 thumbnails because previews render alongside the viewports and need the frame
 budget it recovers; M08.10 precedes them so previews render with every
 capability the editor exposes.
@@ -211,8 +210,8 @@ capability the editor exposes.
 Completed foundations: canonical primitives and axial Physics mapping;
 Local/Inherit native records; atmospheric role records, import and conflict
 validation; captured-sky toggle removal; native slot IDs, inventory validation
-and revision hashing. Their remaining rendered/editor qualification stays in
-the owning later slices.
+and revision hashing. Their remaining rendered/editor qualification stays in the
+owning later slices.
 
 #### M08.1 remaining increments
 
@@ -229,89 +228,95 @@ the owning later slices.
 | M08.1.9 Native analysis          | validated | Batch native source dependency/output analysis against captured input proofs. Managed orchestration keeps project resolution, dirty state and snapshot ownership. Remove parallel descriptor dependency parsers; prove analyzed/cooked closure equality and bounded process launches.                                                                           |
 
 M08.1.7 also separates event-driven cooking freshness from integrity validation.
-Badge refreshes reuse status snapshots; they neither launch tools nor hash cooked
-payloads. Full native verification remains at cook reuse/publication and explicit
-validation; normal mounts retain metadata admission. Unknown availability is
-neutral, and observed missing output offers cooking.
+Badge refreshes reuse status snapshots; they neither launch tools nor hash
+cooked payloads. Full native verification remains at cook reuse/publication and
+explicit validation; normal mounts retain metadata admission. Unknown
+availability is neutral, and observed missing output offers cooking.
 
-Damaged shared roots rebuild automatically from known sources into empty staging;
-unknown auxiliary ownership or missing sources fail without changing publication.
-Native per-source reports retain auxiliary-file ownership, without duplicating
-inventory hashes. Named texture descriptors participate in output association,
-freshness, repair and exact material/scene reference resolution. Native job order
-uses the captured dependency graph, including generated-shape default materials.
+Damaged shared roots rebuild automatically from known sources into empty
+staging; unknown auxiliary ownership or missing sources fail without changing
+publication. Native per-source reports retain auxiliary-file ownership, without
+duplicating inventory hashes. Named texture descriptors participate in output
+association, freshness, repair and exact material/scene reference resolution.
+Native job order uses the captured dependency graph, including generated-shape
+default materials.
 
 M08.1.8 closes in two implementation checkpoints, keeping engine and editor
 commits separate:
 
-1. **M08.1.8.1 native admission — validated:** prepare the complete source set off the engine
-   thread; preserve generation leases and old source-qualified objects. Validate
-   lifetime/restart epoch and mount revision before callback-free loader/resolver
-   swaps. Deliver prepared retirements after both owners switch. Native imports
-   accept a fresh root identity through the existing request contract.
-2. **M08.1.8.2 publication cutover — validated:** one leased immutable document owns root order,
-   input identities and provenance; one atomic head selects it. Migrate catalogs,
-   inspection, cooking, mount changes and texture references to that snapshot.
-   Replace root-directory swap recovery with head/source recovery. Reclaim
-   superseded generations automatically during owned maintenance, excluding
-   selected, recovering or leased generations. Keep ordinary staging copies and
-   exclude generation markers until sealing. Rebuild maintained project outputs.
+1. **M08.1.8.1 native admission — validated:** prepare the complete source set
+   off the engine thread; preserve generation leases and old source-qualified
+   objects. Validate lifetime/restart epoch and mount revision before
+   callback-free loader/resolver swaps. Deliver prepared retirements after both
+   owners switch. Native imports accept a fresh root identity through the
+   existing request contract.
+2. **M08.1.8.2 publication cutover — validated:** one leased immutable document
+   owns root order, input identities and provenance; one atomic head selects it.
+   Migrate catalogs, inspection, cooking, mount changes and texture references
+   to that snapshot. Replace root-directory swap recovery with head/source
+   recovery. Reclaim superseded generations automatically during owned
+   maintenance, excluding selected, recovering or leased generations. Keep
+   ordinary staging copies and exclude generation markers until sealing. Rebuild
+   maintained project outputs.
 
 The gates are failed/stale multi-root preparation, reentrant eviction reloads,
-old-reader retention, source/head crash boundaries, source CAS conflicts, catalog
-head refresh, texture references after consecutive publications and safe automatic
-reclamation. Native source analysis is delivered by M08.1.9.
+old-reader retention, source/head crash boundaries, source CAS conflicts,
+catalog head refresh, texture references after consecutive publications and safe
+automatic reclamation. Native source analysis is delivered by M08.1.9.
 
 M08.1.9's three delivery stages are validated:
 
-1. **M08.1.9.1 native input observations — validated:** extend the existing source snapshot
-   to retain successful reads and presence/absence/metadata probes. Preserve
-   original I/O errors, reject contradictory observations and verify the same
-   facts before publication. Test missing-file appearance, metadata changes,
-   cancellation and ranged reads. Keep this mechanism in Cooker.
-2. **M08.1.9.2 shared preparation and batch analysis — validated:** extract preparation from
-   native descriptor builders/jobs and model adapters. Analysis and cooking use
-   the same validation, references, naming and recipe interpretation for
-   materials, textures, geometry, projected scenes and glTF/FBX. Expose declared
-   outputs and attributed input observations through one batch tool contract;
-   analysis writes no cooked output. Enforce captured input membership during
-   cooking and test analysis/cook dependency equality.
+1. **M08.1.9.1 native input observations — validated:** extend the existing
+   source snapshot to retain successful reads and presence/absence/metadata
+   probes. Preserve original I/O errors, reject contradictory observations and
+   verify the same facts before publication. Test missing-file appearance,
+   metadata changes, cancellation and ranged reads. Keep this mechanism in
+   Cooker.
+2. **M08.1.9.2 shared preparation and batch analysis — validated:** extract
+   preparation from native descriptor builders/jobs and model adapters. Analysis
+   and cooking use the same validation, references, naming and recipe
+   interpretation for materials, textures, geometry, projected scenes and
+   glTF/FBX. Expose declared outputs and attributed input observations through
+   one batch tool contract; analysis writes no cooked output. Enforce captured
+   input membership during cooking and test analysis/cook dependency equality.
    Commit checkpoints:
-   - **M08.1.9.2.1 native preparation and analysis — validated:** shared source preparation,
-     batch analysis, captured-reader ownership and model-read enforcement.
-     Debug: 667 owning-suite tests; Release: 106 contract/model tests; each
-     configuration passes four CLI tests. Scoped tidy, MSVC warning checks and
-     extra-high review are clear.
-   - **M08.1.9.2.2 captured batch execution — validated:** capture-map ingestion,
-     observed descriptor/provenance ingress and all-family dependency enforcement.
-     Full engine/examples Debug/Release builds and the installed-SDK C++20
-     consumer pass; 602 owning tests and 11 CLI tests pass per configuration.
-     All 16 Content scenes recook, and packaging reports no warnings/errors.
-     RenderScene validates loose and PAK scene replacement, IBL and matching
-     appearance. Scoped tidy, compiler warnings and extra-high review are clear.
-3. **M08.1.9.3 editor cutover — validated:** batch each unresolved dependency frontier,
-   capture and compare the reported input proofs, then cook through the native
-   contract. Remove duplicate managed cook-dependency parsers. Retain project
-   resolution, source editing, dirty-document policy and progress/diagnostics;
-   badge refresh uses accepted dependency facts without launching native tools.
-   Qualify bounded process launches and real import/cook/reimport workflows.
-   Commit checkpoints:
-   - **M08.1.9.3.1 native client and capture transport — validated:** typed reports,
-     leased schemas, correlated batch queries and capture-map transport. Replacement
-     analysis preserves logical identity without installing incoming sources. The
-     exposed worker drain includes file/artifact cleanup. Debug/Release each pass
-     73 client/compatibility tests and the installed-tool analysis/capture/cook
-     roundtrip; native analysis/snapshot suites, 14 CLI cases per configuration,
-     the C++20 SDK consumer, scoped tidy and extra-high review also pass.
-   - **M08.1.9.3.2 discovery and status cutover — validated:** replace managed cook parsers,
-     batch frontiers, verify captured observations and publish accepted facts;
-     keep badge reads passive and close real editor workflows. Workspace acceptance
-     includes visible content-refresh failures and project-scoped preview
-     preferences (60 FPS / Error defaults), as specified in the settings LLD.
-     Static textured glTF/FBX imports use the shared native policy and retain
-     external images; unsupported animation/skinning and unmapped texture
-     channels remain explicit errors. Validate import/reimport from retained
-     sources and verify non-placeholder cooked texture bindings.
+   - **M08.1.9.2.1 native preparation and analysis — validated:** shared source
+     preparation, batch analysis, captured-reader ownership and model-read
+     enforcement. Debug: 667 owning-suite tests; Release: 106 contract/model
+     tests; each configuration passes four CLI tests. Scoped tidy, MSVC warning
+     checks and extra-high review are clear.
+   - **M08.1.9.2.2 captured batch execution — validated:** capture-map
+     ingestion, observed descriptor/provenance ingress and all-family dependency
+     enforcement. Full engine/examples Debug/Release builds and the
+     installed-SDK C++20 consumer pass; 602 owning tests and 11 CLI tests pass
+     per configuration. All 16 Content scenes recook, and packaging reports no
+     warnings/errors. RenderScene validates loose and PAK scene replacement, IBL
+     and matching appearance. Scoped tidy, compiler warnings and extra-high
+     review are clear.
+3. **M08.1.9.3 editor cutover — validated:** batch each unresolved dependency
+   frontier, capture and compare the reported input proofs, then cook through
+   the native contract. Remove duplicate managed cook-dependency parsers. Retain
+   project resolution, source editing, dirty-document policy and
+   progress/diagnostics; badge refresh uses accepted dependency facts without
+   launching native tools. Qualify bounded process launches and real
+   import/cook/reimport workflows. Commit checkpoints:
+   - **M08.1.9.3.1 native client and capture transport — validated:** typed
+     reports, leased schemas, correlated batch queries and capture-map
+     transport. Replacement analysis preserves logical identity without
+     installing incoming sources. The exposed worker drain includes
+     file/artifact cleanup. Debug/Release each pass 73 client/compatibility
+     tests and the installed-tool analysis/capture/cook roundtrip; native
+     analysis/snapshot suites, 14 CLI cases per configuration, the C++20 SDK
+     consumer, scoped tidy and extra-high review also pass.
+   - **M08.1.9.3.2 discovery and status cutover — validated:** replace managed
+     cook parsers, batch frontiers, verify captured observations and publish
+     accepted facts; keep badge reads passive and close real editor workflows.
+     Workspace acceptance includes visible content-refresh failures and
+     project-scoped preview preferences (60 FPS / Error defaults), as specified
+     in the settings LLD. Static textured glTF/FBX imports use the shared native
+     policy and retain external images; unsupported animation/skinning and
+     unmapped texture channels remain explicit errors. Validate import/reimport
+     from retained sources and verify non-placeholder cooked texture bindings.
 
      Debug/Release pipeline suites pass 514 tests each, with affected-scope
      followups after the tangent-policy and cleanup changes. Eighteen rendered
@@ -319,20 +324,21 @@ M08.1.9's three delivery stages are validated:
      picking/history/reopen, cooking feedback and runtime preferences. Four
      maintained projects recook and render in the normal Release editor; a
      rejected publication produces a persistent error banner and Retry restores
-     rendering. Native texture/AO/tangent checks, RenderScene loose/PAK captures,
-     the refreshed 16-scene library and four retained models pass. No-op cooks
-     and passive badge reads launch no native workers. Extra-high correctness
-     and complexity review is clear.
+     rendering. Native texture/AO/tangent checks, RenderScene loose/PAK
+     captures, the refreshed 16-scene library and four retained models pass.
+     No-op cooks and passive badge reads launch no native workers. Extra-high
+     correctness and complexity review is clear.
 
-M08.1.7's whole-slice review is complete: unnecessary complexity, duplicate state,
-owner/API integration and C++20/23 use were reviewed, with affected checks rerun
-after corrections. The validation ledger records the accepted scope.
+M08.1.7's whole-slice review is complete: unnecessary complexity, duplicate
+state, owner/API integration and C++20/23 use were reviewed, with affected
+checks rerun after corrections. The validation ledger records the accepted
+scope.
 
-Execute M08.1.5 → .6 → .7 → .8 → .9 after the current-format M08.1.4
-checkpoint. These are the approved simplification order; all are validated.
-The separately planned [M08.F1 format milestone](ED-M08.F1-descriptor-local-references.md)
-then precedes M08.2. Each format change owns its own migration and recook;
-M08.1.4 verification is not deferred until F1.
+Execute M08.1.5 → .6 → .7 → .8 → .9 after the current-format M08.1.4 checkpoint.
+These are the approved simplification order; all are validated. The separately
+planned [M08.F1 format milestone](ED-M08.F1-descriptor-local-references.md) then
+precedes M08.2. Each format change owns its own migration and recook; M08.1.4
+verification is not deferred until F1.
 
 M08.1.4 closes in small reviewed checkpoints:
 
@@ -342,14 +348,17 @@ M08.1.4 closes in small reviewed checkpoints:
 | Bounded resource maintenance | validated | Full Debug/Release/Tracy builds; 193 Debug and 184 Release resource/lifecycle tests; scoped tidy clean; native scene replacement with debug-layer and IBL checks. CPU baseline below. |
 | SDK/editor workflows         | validated | Release SDK/Interop/app build; 13 native UI cases; all four normal projects open/render/Save; automatic publication and zero-node Save/reopen pass.                                   |
 
-The [upload owner](../../../projects/Oxygen.Engine/design/vortex/lld/upload.md#result-ownership)
+The
+[upload owner](../../../projects/Oxygen.Engine/design/vortex/lld/upload.md#result-ownership)
 defines lifetime and maintenance contracts. Each checkpoint keeps its tests and
-owner documentation with the code; no expiry workaround or GPU wait is introduced.
+owner documentation with the code; no expiry workaround or GPU wait is
+introduced.
 
-**Maintenance baseline — 2026-09-29.** Ryzen 9 9950X, RTX 3080 (610.62),
-MSVC 14.51, Release; source is the bounded-maintenance checkpoint containing
-this table. CPU tests use FakeGraphics, five runs with default 64-LOD reclamation.
-Registry rows report the median across runs; geometry reports the observed range.
+**Maintenance baseline — 2026-09-29.** Ryzen 9 9950X, RTX 3080 (610.62), MSVC
+14.51, Release; source is the bounded-maintenance checkpoint containing this
+table. CPU tests use FakeGraphics, five runs with default 64-LOD reclamation.
+Registry rows report the median across runs; geometry reports the observed
+range.
 
 | Measurement                                                    | Result                                                           |
 | -------------------------------------------------------------- | ---------------------------------------------------------------- |
@@ -362,31 +371,35 @@ Registry rows report the median across runs; geometry reports the observed range
 Reproduce CPU measurements from `projects/Oxygen.Engine` with Release binaries
 `Oxygen.Graphics.Common.ResourceRegistry.Tests.exe` and
 `Oxygen.Vortex.GeometryUploader.Tests.exe` under `out/build-ninja/bin/Release`,
-using `--gtest_also_run_disabled_tests --gtest_filter=*Benchmark.* --gtest_repeat=5`.
+using
+`--gtest_also_run_disabled_tests --gtest_filter=*Benchmark.* --gtest_repeat=5`.
 
 The native baseline uses RenderScene's `ibl_persist_and_replace` UI test at
 1920×1080, 60-FPS cap, Sponza → Lantern → Sponza, with isolated settings and
 `OXYGEN_UI_TEST_FILTER=ibl_persist_and_replace`. Run the Tracy preset and export
-`Vortex.Geometry` / `Vortex.Texture` zones with `tracy-csvexport -u -f`.
-This replacement retains cached assets; the native timings measure publication,
-not large-unload driver cost. Large-unload bounds and viewless cleanup are covered
-by the CPU baseline and lifecycle regression. The separate debug-layer run passed
-in 11.69 s with no D3D12 errors. Traces, screenshots and logs stay outside Git.
+`Vortex.Geometry` / `Vortex.Texture` zones with `tracy-csvexport -u -f`. This
+replacement retains cached assets; the native timings measure publication, not
+large-unload driver cost. Large-unload bounds and viewless cleanup are covered
+by the CPU baseline and lifecycle regression. The separate debug-layer run
+passed in 11.69 s with no D3D12 errors. Traces, screenshots and logs stay
+outside Git.
 
 #### M08.1.5 qualification and locator baseline
 
-Full Debug/Release engine and example builds pass without MSVC warnings.
-Content plus renderer resource suites pass **310 Debug / 304 Release** cases.
-The selected four tidy checks pass across modified files. Source review is clear.
+Full Debug/Release engine and example builds pass without MSVC warnings. Content
+plus renderer resource suites pass **310 Debug / 304 Release** cases. The
+selected four tidy checks pass across modified files. Source review is clear.
 Both SDK configurations, Interop and normal editor builds pass; existing managed
 analyzer warnings remain in unchanged editor code. RenderScene passes
-`ibl_persist_and_replace` and `ibl_reopen` with isolated settings, Sponza/Lantern,
-1920×1080 at 60 FPS, and the D3D12 debug layer, with no debug-layer errors.
+`ibl_persist_and_replace` and `ibl_reopen` with isolated settings,
+Sponza/Lantern, 1920×1080 at 60 FPS, and the D3D12 debug layer, with no
+debug-layer errors.
 
 Regressions cover exact hash collisions, same-key refresh with changed payloads,
 revocation during dependencies, independent generation reopen, lazy reload after
 eviction, supplied-byte provenance, synthetic script reload, allocation failure
-rollback and bounded locator retirement. Existing-ID inspection allocates nothing.
+rollback and bounded locator retirement. Existing-ID inspection allocates
+nothing.
 
 Release baseline (2026-09-29, MSVC x64; 65,536 locators; median of three runs):
 
@@ -399,8 +412,9 @@ Release baseline (2026-09-29, MSVC x64; 65,536 locators; median of three runs):
 | Empty registry bucket capacity after the mixed-set peak | 4.00 MiB |
 
 The memory figures measure interner allocator requests. The second phase briefly
-holds both sets; buckets retain that peak capacity for reuse. Synthetic identities
-remain valid for the loader's producer lifetime, independently of payload eviction.
+holds both sets; buckets retain that peak capacity for reuse. Synthetic
+identities remain valid for the loader's producer lifetime, independently of
+payload eviction.
 
 Reproduce from the engine root:
 
@@ -416,17 +430,19 @@ Automatic request controls and immutable parent bindings replace manual release
 balancing and the duplicate dependency graph. Exact cache-incarnation tickets
 isolate replacements; frame-start processing handles 128 returned controls,
 including frames without views. Explicit trim, pressure recovery and shutdown
-drain fully. The [Content contract](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/deps_and_cache.md)
+drain fully. The
+[Content contract](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/deps_and_cache.md)
 owns lifetime and failure semantics.
 
-Full Debug/Release engine and example builds pass without MSVC warnings;
-**422 Debug / 419 Release** focused tests pass. Both SDK installs, Interop and
-normal editor builds pass; existing managed analyzer warnings remain in unchanged
-editor code. The selected four tidy checks are clean. Source review and regressions
-cover callback-driven destruction/restart, allocation failure, off-thread returns,
-coalesced delivery, retained children and generation-isolated script reload.
-RenderScene passes `ibl_persist_and_replace` and `ibl_reopen` with isolated
-Sponza/Lantern settings, 1920×1080 at 60 FPS and the D3D12 debug layer.
+Full Debug/Release engine and example builds pass without MSVC warnings; **422
+Debug / 419 Release** focused tests pass. Both SDK installs, Interop and normal
+editor builds pass; existing managed analyzer warnings remain in unchanged
+editor code. The selected four tidy checks are clean. Source review and
+regressions cover callback-driven destruction/restart, allocation failure,
+off-thread returns, coalesced delivery, retained children and
+generation-isolated script reload. RenderScene passes `ibl_persist_and_replace`
+and `ibl_reopen` with isolated Sponza/Lantern settings, 1920×1080 at 60 FPS and
+the D3D12 debug layer.
 
 Release CPU baseline (2026-09-29, Ryzen 9 9950X, MSVC 14.51 x64):
 
@@ -441,7 +457,8 @@ Release CPU baseline (2026-09-29, Ryzen 9 9950X, MSVC 14.51 x64):
 Each run measures 512 batches of 128 acquisitions and 32 large-payload releases.
 The batch limit bounds bookkeeping; individual CPU payload destruction remains
 synchronous. Existing entry-unit budget accounting is unchanged; byte weighting
-is tracked as [CNTT-BUDGET-01](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/implementation_plan.md#cpu-budget-accounting).
+is tracked as
+[CNTT-BUDGET-01](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/implementation_plan.md#cpu-budget-accounting).
 
 Reproduce from the engine root:
 
@@ -453,31 +470,37 @@ Reproduce from the engine root:
 ```
 
 Qualify the engine and all maintained examples before editor validation: finish
-native content migration, retained reimport, loose/PAK loading and bounded runtime
-checks first. Keep the existing IBL rendering and performance contracts intact.
+native content migration, retained reimport, loose/PAK loading and bounded
+runtime checks first. Keep the existing IBL rendering and performance contracts
+intact.
 
-Cutover includes shared [Base filesystem support](../../../projects/Oxygen.Engine/src/Oxygen/Base/Docs/Filesystem.md)
+Cutover includes shared
+[Base filesystem support](../../../projects/Oxygen.Engine/src/Oxygen/Base/Docs/Filesystem.md)
 at native I/O boundaries. Qualify retained imports beyond Windows' legacy path
-limit, logical record paths, and DemoShell library restoration by authored record.
+limit, logical record paths, and DemoShell library restoration by authored
+record.
 
-M08.1.4 includes genuine zero-node cooked scenes. Preserve scene-level environment
-and authored identity without placeholder nodes or omitted outputs. Qualify
-descriptor generation, native cooking/loading and both formerly blocked
+M08.1.4 includes genuine zero-node cooked scenes. Preserve scene-level
+environment and authored identity without placeholder nodes or omitted outputs.
+Qualify descriptor generation, native cooking/loading and both formerly blocked
 `NewScene2` project scenes; keep invalid component references rejected.
 
-Owner contracts: [Content identities/ownership](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/deps_and_cache.md#identities),
+Owner contracts:
+[Content identities/ownership](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/deps_and_cache.md#identities),
 [native integrity inventory](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/loose_cooked_content.md#complete-integrity-inventory),
-and [project publication/analysis](../lld/content-pipeline.md#23-native-source-analysis).
-Fix the wrong-type cache-checkout retain and qualify physics-sidecar hashes after
-PAK relocation as focused correctness work, separately from the ownership and
-format redesigns.
+and
+[project publication/analysis](../lld/content-pipeline.md#23-native-source-analysis).
+Fix the wrong-type cache-checkout retain and qualify physics-sidecar hashes
+after PAK relocation as focused correctness work, separately from the ownership
+and format redesigns.
 
 M08.1.1 also delivers the approved native retained-model publication contract:
 immutable per-source generations under existing Content, selected atomically
 with native provenance in the authored import record. DemoShell and CLI use the
 same Cooker API; no writes beside external inputs or whole-root copies. Validate
 interruption, concurrent publication, settings changes and old-reader lifetime.
-The [Cooker owner design](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Docs/Import/async_import_pipeline_v2.md#retained-model-publication)
+The
+[Cooker owner design](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Docs/Import/async_import_pipeline_v2.md#retained-model-publication)
 owns storage and lifecycle details.
 
 Editor persistence, descriptor export and existing command transports move with
@@ -486,8 +509,8 @@ the general migration/recovery workflow retain M08.4/M08.5 ownership. One-time
 cutover scripts and recoverable backups stay in ignored local output.
 
 Resolve slot identity at import, load, edit and geometry replacement, then use
-the existing indexed render cache. Do not add UUID lookup, provenance hashing
-or extra allocations to draw submission. Separate source declarations retain
+the existing indexed render cache. Do not add UUID lookup, provenance hashing or
+extra allocations to draw submission. Separate source declarations retain
 independent bindings even when their default material matches.
 
 The implementation review uses UE5.7.4 at `F:/Epic Games/UE_5.7`:
@@ -498,14 +521,14 @@ Oxygen's established vertical-FOV convention remain authoritative. Detailed
 contracts and reference rationale belong in the owner documents below.
 
 Implement engine-owned schemas/versioned records for flag source modes, slot
-identity/overrides, camera aspect policy, atmospheric slots and float32 emission.
-Schema validation covers shape/range/count limits; semantic validation covers
-identity, references, conflicts and representability.
+identity/overrides, camera aspect policy, atmospheric slots and float32
+emission. Schema validation covers shape/range/count limits; semantic validation
+covers identity, references, conflicts and representability.
 
 Implement importer-owned slot inventories/provenance and continuity rules from
 the content contract. Material parameter changes alone keep IDs. Structural
-changes without proven continuity retain explicit repair-required references;
-no name/index guessing rebinds an override. Update native hydration, Inspector
+changes without proven continuity retain explicit repair-required references; no
+name/index guessing rebinds an override. Update native hydration, Inspector
 metadata and catalog output for every new record.
 
 Implement Capsule, upright Quad, Torus defaults and finite-parameter rejection
@@ -529,8 +552,8 @@ one-time migration scripts in the build tree; retain source-tree tooling only
 when it has an ongoing use. Refresh every affected maintained bundle and
 RenderScene source import before M08.3 loads it. Migration validates inputs,
 preserves recoverable backups, updates references and invokes current producers;
-no obsolete reader survives.
-M08.5 extends this foundation to editor document migration and repair workflows.
+no obsolete reader survives. M08.5 extends this foundation to editor document
+migration and repair workflows.
 
 Owners: `Oxygen/Data` format/catalog/procedural files; `Oxygen/Scene`;
 `Oxygen/Cooker/Import` and schemas; native Inspector; shared scene hydration.
@@ -543,100 +566,106 @@ maps through `height = 2 * (half_height + radius)`. Qualify that relationship,
 including the sphere limit, body/shape transforms and affected maintained source
 recipes, before closing primitive parity.
 
-Checks: schema/round trips; slot continuity and structural changes; nonzero
-slot overrides; Local/Inherit; hidden/off role conflicts; Auto/Fixed records;
-finite HDR precision; primitive bounds/attributes/sidedness; obsolete format
-rejection. Cook and inspect through native tools, never managed binary decoding.
+Checks: schema/round trips; slot continuity and structural changes; nonzero slot
+overrides; Local/Inherit; hidden/off role conflicts; Auto/Fixed records; finite
+HDR precision; primitive bounds/attributes/sidedness; obsolete format rejection.
+Cook and inspect through native tools, never managed binary decoding.
 
 ### M08.F1 — Descriptor-local reference format
 
-Status: **validated — closed on 2026-10-06**. Depends on M08.1.9; prerequisite for M08.2 and subsequent
-qualification. The [format plan](ED-M08.F1-descriptor-local-references.md) owns
-execution, version changes, recooking and its
-[closure verification](ED-M08.F1-descriptor-local-references.md#closure-verification). Data
-and Cooker own the wire contract and packaging behavior; this milestone
+Status: **validated — closed on 2026-10-06**. Depends on M08.1.9; prerequisite
+for M08.2 and subsequent qualification. The
+[format plan](ED-M08.F1-descriptor-local-references.md) owns execution, version
+changes, recooking and its
+[closure verification](ED-M08.F1-descriptor-local-references.md#closure-verification).
+Data and Cooker own the wire contract and packaging behavior; this milestone
 introduces no compatibility reader.
 
 ### M08.2 — Native rendering and view behavior
 
 M08.2 finishes the authoring surface the editor already shows and completes the
 light-editing stack. The content author can already place and transform objects,
-assign materials, add directional/point/spot lights and orthographic cameras, and
-set environment/exposure/tone mapping. Five gaps remain: one missing control,
-three controls shown but inert, and one complete light-type UI suite. Each item
-below is a content-author need, not an internal engine seam.
+assign materials, add directional/point/spot lights and orthographic cameras,
+and set environment/exposure/tone mapping. Five gaps remain: one missing
+control, three controls shown but inert, and one complete light-type UI suite.
+Each item below is a content-author need, not an internal engine seam.
 
 1. **Every edit takes effect immediately.** When the author sets a light node's
-   `Visible` flag to Hidden, changes its role (None/Primary/Secondary), or flips a
-   Cast/Receive Shadows flag, the view must relight on that edit alone. Today the
-   cached light list and captured-sky lighting are not recomputed on a flag-only
-   change, so the edit looks like it did nothing until an unrelated edit refreshes
-   the cache. Deliver: emit a mutation on flag/role changes and invalidate the
-   directional-light resolver, the per-frame light selection, and the captured-sky
-   products in the same operation that applied the change.
+   `Visible` flag to Hidden, changes its role (None/Primary/Secondary), or flips
+   a Cast/Receive Shadows flag, the view must relight on that edit alone. Today
+   the cached light list and captured-sky lighting are not recomputed on a
+   flag-only change, so the edit looks like it did nothing until an unrelated
+   edit refreshes the cache. Deliver: emit a mutation on flag/role changes and
+   invalidate the directional-light resolver, the per-frame light selection, and
+   the captured-sky products in the same operation that applied the change.
 
-2. **Node "Rendering" section.** The author cannot yet choose which objects render
-   or cast/receive shadows. Add a "Rendering" property section to the node
-   Inspector — Scene Visibility, Geometry Cast Shadows, Geometry Receive Shadows —
-   placed after the component inspectors. These are node flags the engine already
-   stores and consumes; the section wires them through command/history/Undo/Save/
-   cook and live projection.
+2. **Node "Rendering" section.** The author cannot yet choose which objects
+   render or cast/receive shadows. Add a "Rendering" property section to the
+   node Inspector — Scene Visibility, Geometry Cast Shadows, Geometry Receive
+   Shadows — placed after the component inspectors. These are node flags the
+   engine already stores and consumes; the section wires them through
+   command/history/Undo/Save/ cook and live projection.
 
-3. **Color grading takes effect.** The author already sees Saturation, Contrast and
-   Vignette in the environment inspector; editing them does nothing today. Add the
-   shader consumers in the fixed order — exposure once → Rec.709 saturation →
-   linear-light contrast about 0.18 → tone curve → content-ellipse vignette →
-   display gamma → background/coverage composition — so the sliders grade the
-   frame, including the clear-background colour and foreground transparency.
+3. **Color grading takes effect.** The author already sees Saturation, Contrast
+   and Vignette in the environment inspector; editing them does nothing today.
+   Add the shader consumers in the fixed order — exposure once → Rec.709
+   saturation → linear-light contrast about 0.18 → tone curve → content-ellipse
+   vignette → display gamma → background/coverage composition — so the sliders
+   grade the frame, including the clear-background colour and foreground
+   transparency.
 
-4. **Camera framing and orthographic editor.** The author can set Aspect Mode = Fixed on a
-   camera; today the image stretches instead of showing letterbox/pillarbox bars.
-   Auto fills the target with the unchanged vertical FOV (perspective) or
-   OrthographicSize (orthographic); Fixed fits the authored ratio in a centred
-   content rectangle with bars composed after post-processing and excluded from
-   metering and grading. One framing contract serves both projection types. Add the
-   orthographic camera sync command (`RuntimeAttachOrthographicCamera`) to enable
-   rendering of authored orthographic cameras in the editor view, and add the editor
-   property section (OrthographicSize, AspectMode/AspectRatio, near/far) following
-   the perspective camera pattern. Physical exposure stays deferred.
+4. **Camera framing and orthographic editor.** The author can set Aspect Mode =
+   Fixed on a camera; today the image stretches instead of showing
+   letterbox/pillarbox bars. Auto fills the target with the unchanged vertical
+   FOV (perspective) or OrthographicSize (orthographic); Fixed fits the authored
+   ratio in a centred content rectangle with bars composed after post-processing
+   and excluded from metering and grading. One framing contract serves both
+   projection types. Add the orthographic camera sync command
+   (`RuntimeAttachOrthographicCamera`) to enable rendering of authored
+   orthographic cameras in the editor view, and add the editor property section
+   (OrthographicSize, AspectMode/AspectRatio, near/far) following the
+   perspective camera pattern. Physical exposure stays deferred.
 
-5. **Point and Spot light editors.** The author can already create point and spot
-   lights and the native rendering exists, but the Inspector has no controls for
-   them. Add editor property sections reusing directional-light patterns and common
-   inspector controls. Point lights expose lumens, range and source radius; spot
-   lights additionally expose inner and outer cone angles. Wire both through
-   command/history/Undo/Save/cook and live projection. Both lights support the
-   same shared fields as directional (colour, Affects Scene, Cast Shadows, contact
-   shadows, shadow bias/normal-bias/resolution, exposure compensation).
+5. **Point and Spot light editors.** The author can already create point and
+   spot lights and the native rendering exists, but the Inspector has no
+   controls for them. Add editor property sections reusing directional-light
+   patterns and common inspector controls. Point lights expose lumens, range and
+   source radius; spot lights additionally expose inner and outer cone angles.
+   Wire both through command/history/Undo/Save/cook and live projection. Both
+   lights support the same shared fields as directional (colour, Affects Scene,
+   Cast Shadows, contact shadows, shadow bias/normal-bias/resolution, exposure
+   compensation).
 
 Pushed to M08.4: the editor representation mask — the native per-view delivery
 that keeps workspace-Hide geometry casting and lighting. The eye toggle already
-hides geometry in the editing view; preserving caster/light eligibility for hidden
-geometry is a refinement of that shipped feature. This work defers to M08.4 as
-it becomes essential only for large scenes, which is not the case for current
-content validation.
+hides geometry in the editing view; preserving caster/light eligibility for
+hidden geometry is a refinement of that shipped feature. This work defers to
+M08.4 as it becomes essential only for large scenes, which is not the case for
+current content validation.
 
 Owners: `Scene/Scene.*` mutation dispatch and `Scene/SceneTraversal.h`;
-`Scene/Light/DirectionalLightResolver.*`; `SceneRenderer::BuildFrameLightSelection`;
-`Scene/Camera/Perspective`, `Scene/Camera/Orthographic`, `Vortex/SceneCameraViewResolver`,
+`Scene/Light/DirectionalLightResolver.*`;
+`SceneRenderer::BuildFrameLightSelection`; `Scene/Camera/Perspective`,
+`Scene/Camera/Orthographic`, `Vortex/SceneCameraViewResolver`,
 `Core/Types/ResolvedView`, InitViews/SceneTextures and composition;
-`Vortex/PostProcess/*` and `Tonemap.hlsl`/`Exposure.hlsl`. Light and camera editors:
-WorldEditor inspector/commands, `World` light component types, camera property sections
-and property slots, and the Interop light/camera-command transport. The node "Rendering"
-section: `World` node-flag slots (`RenderingSlot` / `LightingSlot`) and flag-command
-transport.
+`Vortex/PostProcess/*` and `Tonemap.hlsl`/`Exposure.hlsl`. Light and camera
+editors: WorldEditor inspector/commands, `World` light component types, camera
+property sections and property slots, and the Interop light/camera-command
+transport. The node "Rendering" section: `World` node-flag slots
+(`RenderingSlot` / `LightingSlot`) and flag-command transport.
 
-Checks (focused native tests and rendered evidence precede M08.3): flag/role edits
-invalidate the light list and captured sky after cache population; the three node
-"Rendering" flags round-trip edit/Undo/Save/reopen with live effect, including a
-locally Shown child under a Hidden parent; the Saturation/Contrast/Vignette golden,
-neutral, None, background and transparent-coverage cases; Auto resize without
-authored mutation and the Fixed 4:3/16:9 bar fits. Point/spot light edits
-(range, lumens, cone angles) with live effect and history/Undo/Save/reopen;
-orthographic camera edits (OrthographicSize, AspectMode/AspectRatio, near/far)
-with live effect and history/Undo/Save/reopen; orthographic framing with Auto resize
-and Fixed fit; orthographic sync command attaches authored cameras to editor views.
-Preserve existing material-sidedness and mirrored-winding correctness.
+Checks (focused native tests and rendered evidence precede M08.3): flag/role
+edits invalidate the light list and captured sky after cache population; the
+three node "Rendering" flags round-trip edit/Undo/Save/reopen with live effect,
+including a locally Shown child under a Hidden parent; the
+Saturation/Contrast/Vignette golden, neutral, None, background and
+transparent-coverage cases; Auto resize without authored mutation and the Fixed
+4:3/16:9 bar fits. Point/spot light edits (range, lumens, cone angles) with live
+effect and history/Undo/Save/reopen; orthographic camera edits
+(OrthographicSize, AspectMode/AspectRatio, near/far) with live effect and
+history/Undo/Save/reopen; orthographic framing with Auto resize and Fixed fit;
+orthographic sync command attaches authored cameras to editor views. Preserve
+existing material-sidedness and mirrored-winding correctness.
 
 #### M08.2 status
 
@@ -653,8 +682,8 @@ workflow checks above.
 
 ### M08.V0 — Viewport robustness prerequisites
 
-Interop view and compositing corrections that M08.V1 builds on. Each lands
-as its own buildable commit; no user-visible behaviour changes except R7.
+Interop view and compositing corrections that M08.V1 builds on. Each lands as
+its own buildable commit; no user-visible behaviour changes except R7.
 
 | Item                   | Change and rationale                                                                                                                                                                                                                            |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -680,72 +709,72 @@ its own surface or to a destination rectangle with a z-order
 closes the gaps; the contract is the
 [viewport LLD](../lld/viewport-and-tools.md#multi-viewport-layouts).
 
-1. **Every layout is supported.** Each pane of every `SceneViewLayout` holds
-   one surface lease and one engine view. A layout change creates and releases
-   only the panes that change, keeps the surviving panes' camera state, and
-   leaks no view or lease. Presentation follows each pane through splits,
-   resizes, dock moves, document switches and close/reopen.
-2. **Panes are independent.** Each pane has its own editor camera, view
-   preset, orthographic size, camera control mode and viewed scene camera. A
-   camera piloted in one pane moves live in every other pane that shows it or
-   looks through it; one pane at a time pilots a given camera.
+1. **Every layout is supported.** Each pane of every `SceneViewLayout` holds one
+   surface lease and one engine view. A layout change creates and releases only
+   the panes that change, keeps the surviving panes' camera state, and leaks no
+   view or lease. Presentation follows each pane through splits, resizes, dock
+   moves, document switches and close/reopen.
+2. **Panes are independent.** Each pane has its own editor camera, view preset,
+   orthographic size, camera control mode and viewed scene camera. A camera
+   piloted in one pane moves live in every other pane that shows it or looks
+   through it; one pane at a time pilots a given camera.
 3. **Focus and routing.** Each document has one focused pane. It receives
    keyboard shortcuts, frame commands, Scene Explorer camera commands and Align
    to View. Pointer input (navigation, picking, gizmos) goes to the pane under
    the pointer and focuses it. Selection feedback, gizmos, icons and workspace
    Hide apply in every editing pane.
-4. **Camera preview inset.** Selecting a camera node shows a
-   picture-in-picture inset in the focused pane, rendered through that camera
-   with its framing and bars. The inset hides when the camera is deselected or
-   when the pane already looks through it. It is editor-only presentation,
-   composed through the engine's destination viewport and z-order, and is
-   excluded from the host view's metering.
+4. **Camera preview inset.** Selecting a camera node shows a picture-in-picture
+   inset in the focused pane, rendered through that camera with its framing and
+   bars. The inset hides when the camera is deselected or when the pane already
+   looks through it. It is editor-only presentation, composed through the
+   engine's destination viewport and z-order, and is excluded from the host
+   view's metering.
 
 Known defects closed by these items: a recreated view (dock move, document
 switch, maximize) loses its editor camera and preset; a preset requested before
 the native camera exists is dropped; maximize/restore discards the other panes
 and leaks their view models, as does any layout shrink; Align to View
 (`Ctrl+Shift+F`) reaches whichever pane WinUI finds first; two panes can pilot
-one camera; the wheel does not focus its pane. Panes capture their editor
-camera state before a view is released and recreate the view with it.
-Maximize is presentation only: the layout and pane indexes are unchanged and
-the hidden panes release their views but keep their state.
+one camera; the wheel does not focus its pane. Panes capture their editor camera
+state before a view is released and recreate the view with it. Maximize is
+presentation only: the layout and pane indexes are unchanged and the hidden
+panes release their views but keep their state.
 
 Owners: WorldEditor `SceneEditorViewModel`, `ViewportViewModel` and the
 `Viewport` control; Runtime surface leases and view lifetimes; Interop
 `EditorModule` views and `EditorCompositor`; Vortex `CompositionView`.
 
-Checks: open, switch and close every layout, returning the native view and
-lease counts to their baseline with no debug-layer or resource-state errors;
-resize and dock moves present to the correct surfaces; per-pane camera
-independence; a piloted camera observed from a second pane; shortcuts and
-Scene Explorer commands reach the focused pane; inset show/hide rules.
+Checks: open, switch and close every layout, returning the native view and lease
+counts to their baseline with no debug-layer or resource-state errors; resize
+and dock moves present to the correct surfaces; per-pane camera independence; a
+piloted camera observed from a second pane; shortcuts and Scene Explorer
+commands reach the focused pane; inset show/hide rules.
 
 ### M08.V2 — Viewport state persistence
 
 Depends on M08.V1. A scene reopens with its layout, focused pane and every
 pane's camera as the user left them. Viewport state is user-local workspace
-state, never authoring data: it does not dirty the scene, enter history or
-reach cooked output. The storage contract is
+state, never authoring data: it does not dirty the scene, enter history or reach
+cooked output. The storage contract is
 [settings architecture §5.2](../lld/settings-architecture.md#52-viewport-state-storage-and-lifetime).
 
-1. **What is kept.** Per scene: the layout and focused pane. Per pane, by
-   layout index: editor camera position, rotation and orbit focus point, view
-   preset, orthographic size, camera control mode, and the viewed scene
-   camera's node ID.
+1. **What is kept.** Per scene: the layout and focused pane. Per pane, by layout
+   index: editor camera position, rotation and orbit focus point, view preset,
+   orthographic size, camera control mode, and the viewed scene camera's node
+   ID.
 2. **Restore.** State applies when the scene's panes are created, before their
    first presented frame. A pane that was piloting reopens looking through its
-   camera, not piloting. A viewed camera that no longer exists falls back to
-   the editor camera with an informational log entry. Panes with no stored
-   state use the defaults; stored panes beyond the layout are ignored.
+   camera, not piloting. A viewed camera that no longer exists falls back to the
+   editor camera with an informational log entry. Panes with no stored state use
+   the defaults; stored panes beyond the layout are ignored.
 3. **Write.** Shortly after navigation stops, on any layout, preset, mode or
-   camera-assignment change, and when the document closes. Writes are
-   serialized per project, and a stale restore never overwrites newer state.
+   camera-assignment change, and when the document closes. Writes are serialized
+   per project, and a stale restore never overwrites newer state.
 4. **Native.** View creation accepts the editor camera state (position,
-   rotation, focus point and orthographic size), the view preset and the
-   viewed scene camera, so a restored pane is correct on its first presented
-   frame; a view query reports the editor camera state back. A separate set
-   command would land after the default camera had presented.
+   rotation, focus point and orthographic size), the view preset and the viewed
+   scene camera, so a restored pane is correct on its first presented frame; a
+   view query reports the editor camera state back. A separate set command would
+   land after the default camera had presented.
 
 Owners: WorldEditor viewport-state service with `IEditorSettingsManager`;
 `ViewportViewModel`; Runtime and Interop view creation and camera query.
@@ -762,19 +791,19 @@ nothing visible. M08.3 replaces that with one quiet, icon-led row and makes
 every control in it real.
 
 1. **HUD row.** Left to right: View camera ▾, View mode ▾, Show ▾, spacer, the
-   transform group (filled by M08.5, focused pane only), Layout ▾ and
-   Maximize. Controls are 32 px icon + short label on a translucent strip over
-   the render, with tooltips naming shortcuts. As a pane narrows, labels drop
-   first and then lower-priority controls move into a Viewport settings flyout;
-   a quarter pane at 1280×720 shows no clipped control.
-2. **View camera flyout.** Perspective modes as described rows (Turntable:
-   orbit with a level horizon; Trackball: orbit freely, including roll; Fly:
-   move through the scene), then a 3×2 grid of orthographic directions. Below:
-   fly speed in m/s with a slider and the input hint; vertical FOV
-   (perspective only); a Clipping disclosure summarizing the range, with
-   validated near/far and a lens reset that leaves mode, speed and pose
-   unchanged; and the existing scene-camera look-through, Pilot and Align to
-   View entries. The button label names the mode or orthographic direction.
+   transform group (filled by M08.5, focused pane only), Layout ▾ and Maximize.
+   Controls are 32 px icon + short label on a translucent strip over the render,
+   with tooltips naming shortcuts. As a pane narrows, labels drop first and then
+   lower-priority controls move into a Viewport settings flyout; a quarter pane
+   at 1280×720 shows no clipped control.
+2. **View camera flyout.** Perspective modes as described rows (Turntable: orbit
+   with a level horizon; Trackball: orbit freely, including roll; Fly: move
+   through the scene), then a 3×2 grid of orthographic directions. Below: fly
+   speed in m/s with a slider and the input hint; vertical FOV (perspective
+   only); a Clipping disclosure summarizing the range, with validated near/far
+   and a lens reset that leaves mode, speed and pose unchanged; and the existing
+   scene-camera look-through, Pilot and Align to View entries. The button label
+   names the mode or orthographic direction.
 3. **View modes.** Lit, Unlit (base colour), Wireframe and Lit + wireframe; a
    Lighting group (direct only, indirect only); and a Buffer visualization group
    (world normals, roughness, metalness, linear depth, directional shadow mask).
@@ -786,19 +815,19 @@ every control in it real.
    statistics, and the scene's node count) and the camera preview inset. Icons
    and Selection outline join in M08.4/M08.6. The former Show FPS, Show Stats,
    Stat1–3 and Show Toolbar toggles are removed.
-5. **Layout picker.** A flyout of pictograms for the 14 layouts in their
-   groups (One Pane, Four Quadrants; Two, Three and Four Panes with Main
-   Left/Right/Top/Bottom), current layout highlighted. It replaces the
-   hamburger menu. Maximize/restore keeps its M08.V1 semantics.
+5. **Layout picker.** A flyout of pictograms for the 14 layouts in their groups
+   (One Pane, Four Quadrants; Two, Three and Four Panes with Main
+   Left/Right/Top/Bottom), current layout highlighted. It replaces the hamburger
+   menu. Maximize/restore keeps its M08.V1 semantics.
 6. **Gesture hint.** The focused pane shows a quiet bottom-left chip with its
    mode and next gestures (for example "Alt+drag orbit · wheel zoom · RMB+WASD
    fly"); it hides while navigating and after first use per session.
 7. **Scene document toolbar.** Save, Cook scene, Add ▾ (Empty node, the ten
-   primitives, the three light types and both camera types, created in front
-   of the focused pane's camera, selected and undoable), Browse to asset
-   (Ctrl+B, reveals the selected nodes' geometry/material assets in the Content
-   Browser) and Environment (selects the scene root's environment). Existing
-   commands only; no second document lifecycle.
+   primitives, the three light types and both camera types, created in front of
+   the focused pane's camera, selected and undoable), Browse to asset (Ctrl+B,
+   reveals the selected nodes' geometry/material assets in the Content Browser)
+   and Environment (selects the scene root's environment). Existing commands
+   only; no second document lifecycle.
 
 Native/Interop: per-view render and debug mode commands, a per-view grid flag
 for perspective views, and a frame-statistics query.
@@ -811,8 +840,8 @@ assets across mounts.
 
 ### M08.4 — Picking, selection outline and framing
 
-Today selection happens only in the Scene Explorer. M08.4 makes the viewport
-the primary place to select.
+Today selection happens only in the Scene Explorer. M08.4 makes the viewport the
+primary place to select.
 
 1. **Pick pass.** On request, Vortex renders node IDs and depth for a pick
    rectangle of one view (visible, non-hidden geometry; M08.6 adds icons) and
@@ -825,25 +854,24 @@ the primary place to select.
    selects every node with visible pixels inside it, with the same modifiers.
    Alt-navigation is unchanged, and gizmo hits (M08.5) take precedence.
    Workspace-hidden nodes are not pickable; locked nodes are selectable but not
-   manipulable. Picking has no category filter: the Scene Explorer's Mesh,
-   Light and Camera buttons filter the tree only.
-3. **Selection outline.** Selected nodes get a crisp screen-space outline in
-   the editor overlay stage, in every editing pane and view mode: accent
-   colour, brighter for the active node, dimmed where occluded.
-4. **Framing.** F frames the selection and Shift+F frames all, with a 10%
-   margin and a short eased transition. Orthographic views adjust their size.
-   Nodes without geometry use a default extent; an empty scene frames the
-   origin. Double-clicking a Scene Explorer row frames that node in the
-   focused pane.
+   manipulable. Picking has no category filter: the Scene Explorer's Mesh, Light
+   and Camera buttons filter the tree only.
+3. **Selection outline.** Selected nodes get a crisp screen-space outline in the
+   editor overlay stage, in every editing pane and view mode: accent colour,
+   brighter for the active node, dimmed where occluded.
+4. **Framing.** F frames the selection and Shift+F frames all, with a 10% margin
+   and a short eased transition. Orthographic views adjust their size. Nodes
+   without geometry use a default extent; an empty scene frames the origin.
+   Double-clicking a Scene Explorer row frames that node in the focused pane.
 5. **Shared selection.** Viewport, Scene Explorer and Inspector stay in sync
    through the existing selection service; a viewport pick reveals and scrolls
    to its Explorer row.
 
-Checks: picking in every projection, view mode and pane of a split layout;
-child meshes select their node; marquee with modifiers; stale results after
-layout, document or scene changes; outline with multiple selection;
-framing a transformed hierarchy, a light, a camera and an empty scene, with no
-authored change.
+Checks: picking in every projection, view mode and pane of a split layout; child
+meshes select their node; marquee with modifiers; stale results after layout,
+document or scene changes; outline with multiple selection; framing a
+transformed hierarchy, a light, a camera and an empty scene, with no authored
+change.
 
 ### M08.5 — Transform gizmos and snapping
 
@@ -851,103 +879,101 @@ authored change.
    view-plane centre), rotate (axis rings and a view ring) and scale (axis
    handles, plane handles and a uniform centre). They keep a constant screen
    size, use X red / Y green / Z blue, highlight on hover, have hit targets
-   larger than their visuals, and dim rather than hide occluded parts.
-   Oxygen's Z-up world makes XY the ground plane.
+   larger than their visuals, and dim rather than hide occluded parts. Oxygen's
+   Z-up world makes XY the ground plane.
 2. **Drag feedback.** The active axis draws a guideline through the pivot and
-   other handles hide. Rotation follows the mockup's rotation-feedback
-   contract: only the active ring, start and moving spokes, and a translucent
-   signed, multi-turn swept sector in the ring plane (never the shortest arc).
-   A chip near the pointer shows the applied value ("X 1.250 m", "Z 45.0°",
-   "Y 1.200×") and "Esc cancel".
+   other handles hide. Rotation follows the mockup's rotation-feedback contract:
+   only the active ring, start and moving spokes, and a translucent signed,
+   multi-turn swept sector in the ring plane (never the shortest arc). A chip
+   near the pointer shows the applied value ("X 1.250 m", "Z 45.0°", "Y 1.200×")
+   and "Esc cancel".
 3. **Space and pivot.** World/Local toggle; the pivot is the active node's
-   origin; a multi-selection receives one common world delta around that
-   pivot. Scale always acts along each node's own axes, spreading positions
-   from the pivot, because world-axis scale of a rotated node needs shear.
-   Targets under transformed parents convert through their parents; a
-   result the authored model cannot represent (shear) is rejected without a
-   partial edit.
+   origin; a multi-selection receives one common world delta around that pivot.
+   Scale always acts along each node's own axes, spreading positions from the
+   pivot, because world-axis scale of a rotated node needs shear. Targets under
+   transformed parents convert through their parents; a result the authored
+   model cannot represent (shear) is rejected without a partial edit.
 4. **Tools and keys.** A left tool rail in the focused pane (Select Q, Move W,
-   Rotate E, Scale R, then Frame F); Space cycles tools and Move is the
-   default. With viewport focus: Delete, Ctrl+D duplicate, Ctrl+Z/Ctrl+Y.
-   Alt-drag on a gizmo previews on the originals and, on release, duplicates
-   the selection at the dragged transforms as one undo entry; a cancelled
-   Alt-drag leaves nothing. Locked nodes show no gizmo.
-5. **Snapping.** The HUD transform group holds World/Local, the snap toggle
-   and the translation, rotation and scale increments, collapsing into the
-   settings flyout when narrow. Each increment offers presets plus a custom
-   value. Translation snaps the pivot to the world grid in World space and
-   the applied offset in Local space; rotation and scale snap the applied
-   delta. Ctrl inverts snapping for the current drag. Toggle state,
-   increments and space are per-user editor settings that persist across
-   sessions and projects. The defaults are in [section 5](#5-interaction-defaults).
+   Rotate E, Scale R, then Frame F); Space cycles tools and Move is the default.
+   With viewport focus: Delete, Ctrl+D duplicate, Ctrl+Z/Ctrl+Y. Alt-drag on a
+   gizmo previews on the originals and, on release, duplicates the selection at
+   the dragged transforms as one undo entry; a cancelled Alt-drag leaves
+   nothing. Locked nodes show no gizmo.
+5. **Snapping.** The HUD transform group holds World/Local, the snap toggle and
+   the translation, rotation and scale increments, collapsing into the settings
+   flyout when narrow. Each increment offers presets plus a custom value.
+   Translation snaps the pivot to the world grid in World space and the applied
+   offset in Local space; rotation and scale snap the applied delta. Ctrl
+   inverts snapping for the current drag. Toggle state, increments and space are
+   per-user editor settings that persist across sessions and projects. The
+   defaults are in [section 5](#5-interaction-defaults).
 6. **Transactions.** A drag previews live through the property edit session,
    with Inspector values updating; release commits one undo entry for every
    target; Escape or right-click restores the starting transforms exactly.
 
-Checks: every tool, space and handle on single and multiple selection,
-including rotated and non-uniformly scaled parents; snapping and Ctrl
-inversion; exact cancel; one undo entry per drag; Save, reopen and cook agree
-with the viewport; gizmos usable in quarter panes and orthographic views.
+Checks: every tool, space and handle on single and multiple selection, including
+rotated and non-uniformly scaled parents; snapping and Ctrl inversion; exact
+cancel; one undo entry per drag; Save, reopen and cook agree with the viewport;
+gizmos usable in quarter panes and orthographic views.
 
 ### M08.6 — Scene helpers and orientation
 
-1. **Icons.** Screen-sized billboards for directional, point and spot lights
-   and for cameras, tinted by light colour, pickable through M08.4 and
-   toggled from the Show flyout.
+1. **Icons.** Screen-sized billboards for directional, point and spot lights and
+   for cameras, tinted by light colour, pickable through M08.4 and toggled from
+   the Show flyout.
 2. **Selected helpers.** A camera frustum including its Fixed-aspect frame; a
    directional light's direction arrow; a point light's range sphere; a spot
    light's inner and outer cones. Range and outer/inner cone handles are
    draggable and edit the light through the same transaction path as gizmos.
-3. **Orientation triad.** A bottom-left X/Y/Z triad in axis colours, drawn
-   as small letters without filled discs, following the view camera. Clicking
-   an axis selects the matching orthographic view; hover and keyboard focus
-   are visible.
+3. **Orientation triad.** A bottom-left X/Y/Z triad in axis colours, drawn as
+   small letters without filled discs, following the view camera. Clicking an
+   axis selects the matching orthographic view; hover and keyboard focus are
+   visible.
 
-Checks: icons and helpers in every projection and view mode; picking a light
-or camera by its icon; handle drags with exact cancel and one undo entry;
-triad clicks select the correct view; no helper reaches Save or Cook.
+Checks: icons and helpers in every projection and view mode; picking a light or
+camera by its icon; handle drags with exact cancel and one undo entry; triad
+clicks select the correct view; no helper reaches Save or Cook.
 
 ### M08.7 — Content Browser redesign and working commands
 
-M08.7 rebuilds the presentation around the existing query, navigation and
-mount semantics. The docked browser keeps its place; an expanded mode for
-library work waits for dock improvements.
+M08.7 rebuilds the presentation around the existing query, navigation and mount
+semantics. The docked browser keeps its place; an expanded mode for library work
+waits for dock improvements.
 
-1. **Layout.** A navigation row (Back, Forward, Up, Refresh, breadcrumb,
-   search, Filter ▾ with an active-count badge, Tiles/List/Details switch,
-   details-pane toggle) and, when filtered, a row of removable filter chips
-   with Clear all. Left: sources, with the Content subtree and each mount
-   (Cooked, Imported, local folders) as expandable subtrees carrying
-   read-only badges, and Mounts and Content priority at the bottom. Centre:
-   results. Right (optional): a docked details pane replacing the tooltip,
-   with preview, name, type, status, logical path, file, size, modified time,
-   identity, Locate and Copy path; multi-selection shows type and status
-   counts and the selected list. Footer: "N of M assets · K selected" and
-   whether the location is an authoring or a read-only source.
-2. **Views and selection.** Tiles (preview, name, type, status dot and
-   label), List and Details (sortable name/type/status/location/size/modified
-   columns); tile-size slider in Tiles; Sort by any of those fields, ascending
-   or descending. Ctrl/Shift multi-selection in every view, kept across view
-   switches and re-sorts. Enter and double-click open. Previews are the
-   material base colour or the type glyph; rendered previews are M08.11.
+1. **Layout.** A navigation row (Back, Forward, Up, Refresh, breadcrumb, search,
+   Filter ▾ with an active-count badge, Tiles/List/Details switch, details-pane
+   toggle) and, when filtered, a row of removable filter chips with Clear all.
+   Left: sources, with the Content subtree and each mount (Cooked, Imported,
+   local folders) as expandable subtrees carrying read-only badges, and Mounts
+   and Content priority at the bottom. Centre: results. Right (optional): a
+   docked details pane replacing the tooltip, with preview, name, type, status,
+   logical path, file, size, modified time, identity, Locate and Copy path;
+   multi-selection shows type and status counts and the selected list. Footer:
+   "N of M assets · K selected" and whether the location is an authoring or a
+   read-only source.
+2. **Views and selection.** Tiles (preview, name, type, status dot and label),
+   List and Details (sortable name/type/status/location/size/modified columns);
+   tile-size slider in Tiles; Sort by any of those fields, ascending or
+   descending. Ctrl/Shift multi-selection in every view, kept across view
+   switches and re-sorts. Enter and double-click open. Previews are the material
+   base colour or the type glyph; rendered previews are M08.11.
 3. **Commands.** New ▾ (Folder, Scene, Material); Import ▾ (Source model,
    Texture or image, Reimport, Show import source); Cook ▾ grouped as build
    scope (Cook selected, current folder, project), published output (Inspect,
    Validate) and the cooking service (Pause automatic cooking, Show cooking
-   jobs). The asset commands are toolbar icons rather than a hand-made ⋯
-   menu: Rename, Cut, Copy, Paste, Duplicate and Delete in Scene Explorer's
-   order, then Copy path and Show in File Explorer. The DroidNet toolbar's
-   overflow priorities decide what folds into its own ⋯ when the pane is
-   narrow: path commands first, then asset commands, then Cook; New and
-   Import stay longest. Open stays on Enter, double-click and the item
-   context menu, which mirrors the toolbar. Unavailable entries stay visible,
-   disabled, and explain why.
+   jobs). The asset commands are toolbar icons rather than a hand-made ⋯ menu:
+   Rename, Cut, Copy, Paste, Duplicate and Delete in Scene Explorer's order,
+   then Copy path and Show in File Explorer. The DroidNet toolbar's overflow
+   priorities decide what folds into its own ⋯ when the pane is narrow: path
+   commands first, then asset commands, then Cook; New and Import stay longest.
+   Open stays on Enter, double-click and the item context menu, which mirrors
+   the toolbar. Unavailable entries stay visible, disabled, and explain why.
 4. **Commands that need no references.** New Folder (named in place in the
    sources tree), Copy path and Show in File Explorer work in this slice; a
-   folder can be renamed only while it holds no files. Rename, Cut, Copy,
-   Paste, Duplicate and Delete are present and disabled, explaining that the
-   scenes and materials that use an asset must be updated with it, until the
-   M08.8 transaction lands; no button is ever inert.
+   folder can be renamed only while it holds no files. Rename, Cut, Copy, Paste,
+   Duplicate and Delete are present and disabled, explaining that the scenes and
+   materials that use an asset must be updated with it, until the M08.8
+   transaction lands; no button is ever inert.
 5. **Empty states.** An empty folder and a no-match result each give one next
    action (Clear search and filters).
 
@@ -961,24 +987,23 @@ Assets are identified by their virtual path (`asset:///<Mount>/<Path>`), and
 native asset keys derive from that path. This is kept: it is the deliberate
 engine identity that M08.F1 just finalized, and it is the Unreal model, where
 renames rewrite referrers. Moving to GUID identity would be another format
-milestone across Data, Cooker, Content and every editor serializer, and it
-would still need a reverse index for delete warnings and Find references.
-Relocation is therefore a reference-aware project transaction; the contract
-is [Content Browser LLD §9.5](../lld/content-browser-asset-identity.md#95-asset-relocation).
+milestone across Data, Cooker, Content and every editor serializer, and it would
+still need a reverse index for delete warnings and Find references. Relocation
+is therefore a reference-aware project transaction; the contract is
+[Content Browser LLD §9.5](../lld/content-browser-asset-identity.md#95-asset-relocation).
 
-1. **Reference index.** Every authored outgoing reference, read structurally
-   per file kind rather than by text search: scene component and material-slot
+1. **Reference index.** Every authored outgoing reference, read structurally per
+   file kind rather than by text search: scene component and material-slot
    geometry/material URIs, the exposure metering mask and `ExtraAssets`;
    material texture paths; geometry descriptor material, buffer and skeleton
    paths; texture descriptor sources and identity; import sidecar bundle and
-   output paths. Identities compare without the scheme and the `.json`
-   authoring suffix, so `asset:///Content/M/Red.omat.json` and
-   `/Content/M/Red.omat` are one asset; each rewrite keeps its field's form.
-   The index is built on demand from saved files, cached until a catalog
-   change, and always rebuilt inside a relocation. The details pane and Find
-   references show an asset's referrers.
-2. **Relocation plan.** Rename, move by drag in the source tree, Cut/Paste
-   and folder rename/move produce one plan: source moves (each asset with its
+   output paths. Identities compare without the scheme and the `.json` authoring
+   suffix, so `asset:///Content/M/Red.omat.json` and `/Content/M/Red.omat` are
+   one asset; each rewrite keeps its field's form. The index is built on demand
+   from saved files, cached until a catalog change, and always rebuilt inside a
+   relocation. The details pane and Find references show an asset's referrers.
+2. **Relocation plan.** Rename, move by drag in the source tree, Cut/Paste and
+   folder rename/move produce one plan: source moves (each asset with its
    companion files: a texture's image, a model's sidecar), a folder prefix
    mapping, and the rewritten bytes of every referrer, including a moved
    descriptor's own `virtual_path` and file-relative sources. The plan rejects
@@ -990,66 +1015,66 @@ is [Content Browser LLD §9.5](../lld/content-browser-asset-identity.md#95-asset
    the operation, and the result reports what moved and how many files were
    updated, with Undo.
 3. **Imported model outputs.** A model import owns one output group in its
-   mount: `Materials/<group>`, `Geometry/<group>` and `Scenes/<group>`, named
-   by the sidecar's `OutputDirectory` (which may be nested, such as
-   `Vehicles/Car`). Import creates no folders there, so the group is renamed
-   or moved with **Rename output group…** on the model source or any of its
+   mount: `Materials/<group>`, `Geometry/<group>` and `Scenes/<group>`, named by
+   the sidecar's `OutputDirectory` (which may be nested, such as
+   `Vehicles/Car`). Import creates no folders there, so the group is renamed or
+   moved with **Rename output group…** on the model source or any of its
    outputs. A real folder inside a type folder that is, or contains, an output
    group relocates it in all three type folders together. Either way the plan
-   applies one prefix mapping under each type folder, rewrites
-   `OutputDirectory` in every affected sidecar, checks collisions in all three
-   (including other imports' groups), and the result reports the moved group
-   folders. Moving a group to another mount is rejected. Renaming or moving
-   the bundle folder rewrites the sidecar's `BundleRoot`; renaming the model
-   file renames its sidecar and rewrites `PrimaryRelativePath` and `Files`.
+   applies one prefix mapping under each type folder, rewrites `OutputDirectory`
+   in every affected sidecar, checks collisions in all three (including other
+   imports' groups), and the result reports the moved group folders. Moving a
+   group to another mount is rejected. Renaming or moving the bundle folder
+   rewrites the sidecar's `BundleRoot`; renaming the model file renames its
+   sidecar and rewrites `PrimaryRelativePath` and `Files`.
 4. **Scenes.** Editor scenes are `Content/Scenes/<Name>.oscene.json` and are
    identified by name, so a scene can be renamed (through the existing scene
-   rename, which also fixes `ExtraAssets` and the open document) and
-   duplicated, but not moved. Deleting the open scene is rejected.
-5. **Transaction.** The plan runs under the content cook coordinator's
-   project writer, so it never overlaps a cook or import. If any open
-   document has unsaved changes, the operation is rejected and names the
-   documents to save. Referrer bytes are prepared first; a journal under
-   `.build/relocation/<operation>/` records every move and edit with its
-   before and after hashes; files move and referrers are written through the
-   atomic file store against their baselines; any failure restores every file,
-   and project activation recovers an interrupted journal. Every step is
-   logged. The operation result offers Undo, which plans and runs the reverse
-   relocation; it does not enter scene history.
+   rename, which also fixes `ExtraAssets` and the open document) and duplicated,
+   but not moved. Deleting the open scene is rejected.
+5. **Transaction.** The plan runs under the content cook coordinator's project
+   writer, so it never overlaps a cook or import. If any open document has
+   unsaved changes, the operation is rejected and names the documents to save.
+   Referrer bytes are prepared first; a journal under
+   `.build/relocation/<operation>/` records every move and edit with its before
+   and after hashes; files move and referrers are written through the atomic
+   file store against their baselines; any failure restores every file, and
+   project activation recovers an interrupted journal. Every step is logged. The
+   operation result offers Undo, which plans and runs the reverse relocation; it
+   does not enter scene history.
 6. **Open documents.** No document is reloaded or closed by a rename or move.
-   Before the writer is released, each open document that the relocation
-   rewrote or moved updates itself in memory: a scene re-points the geometry
-   and material-slot references, slot targets, environment mask and
-   `ExtraAssets` of the affected nodes only; a material re-points its texture
-   paths, and a moved material document re-points its own path and keeps its
-   history. Neither change enters undo history or marks the document dirty;
-   the owner records the version the transaction wrote as its saved state, so
-   cooking sees a consistent document. After the follow-up cook publishes,
-   the runtime refreshes only the affected scene nodes and the environment.
-   A deleted asset's open document closes.
-7. **Undo history.** History is never rewritten or cleared. The session keeps
-   a combined in-memory table of every committed relocation's old-to-new
+   Before the writer is released, each open document that the relocation rewrote
+   or moved updates itself in memory: a scene re-points the geometry and
+   material-slot references, slot targets, environment mask and `ExtraAssets` of
+   the affected nodes only; a material re-points its texture paths, and a moved
+   material document re-points its own path and keeps its history. Neither
+   change enters undo history or marks the document dirty; the owner records the
+   version the transaction wrote as its saved state, so cooking sees a
+   consistent document. After the follow-up cook publishes, the runtime
+   refreshes only the affected scene nodes and the environment. A deleted
+   asset's open document closes.
+7. **Undo history.** History is never rewritten or cleared. The session keeps a
+   combined in-memory table of every committed relocation's old-to-new
    identities (A to B then B to C resolves A to C; the relocation's Undo maps
    back). When undo, redo or paste restores an asset reference, it passes
-   through the table, so older edits restore the asset's current path. An
-   edit that restores a deleted asset completes as a missing reference with
-   the existing missing-reference diagnostic and a visible warning; it never
-   blocks older undo steps. The table resets when the project closes.
-8. **Cooking.** A prior cooked product whose authored source no longer exists
-   is retired for every asset kind, not only scenes: its root is rebuilt from
-   the remaining owners, so the old native key leaves the index. An imported
-   product whose outputs fall outside its sidecar's current group is rebuilt
-   into the new group; neither case counts as a forbidden identity change or a
-   namespace overlap with the retired owner.
+   through the table, so older edits restore the asset's current path. An edit
+   that restores a deleted asset completes as a missing reference with the
+   existing missing-reference diagnostic and a visible warning; it never blocks
+   older undo steps. The table resets when the project closes.
+8. **Cooking.** A prior cooked product whose authored source no longer exists is
+   retired for every asset kind, not only scenes: its root is rebuilt from the
+   remaining owners, so the old native key leaves the index. An imported product
+   whose outputs fall outside its sidecar's current group is rebuilt into the
+   new group; neither case counts as a forbidden identity change or a namespace
+   overlap with the retired owner.
 9. **Copy, Duplicate and Delete.** Copy/Paste and Duplicate create new paths
    with a unique name (`Name (2)`), give copied descriptors their new identity
    and rewrite no referrers; model sources and cooked-only outputs cannot be
    copied (import again instead). Delete shows the referrers, requires
    confirmation when any exist, moves files and companions to the Recycle Bin
    (an image another texture still uses stays), and leaves referrers with the
-   existing missing-reference diagnostics. The cooker reports a deleted
-   texture as a warning and cooks the material without it (a scene without
-   its metering mask), so one deleted texture never stops the project cook.
+   existing missing-reference diagnostics. The cooker reports a deleted texture
+   as a warning and cooks the material without it (a scene without its metering
+   mask), so one deleted texture never stops the project cook.
 
 Implementation, in build order:
 
@@ -1064,57 +1089,55 @@ Implementation, in build order:
 Checks: unit tests for each reader/rewriter (form preservation, nested slots,
 targeted overrides, texture `source` and `virtual_path`, sidecar fields), the
 planner's rejection rules and group expansion, and the transaction's rollback
-from an injected failure at each step and recovery from an interrupted
-journal; cooking tests that a renamed material and a renamed import group
-retire their old keys and keep other assets; Content Browser command
-availability and tooltips; user review of rename and move of a material,
-texture, geometry descriptor, scene, source model with its sidecar, a
-populated folder and an import group with referrers in saved and open
-documents, the dirty-document rejection, Undo, and delete with and without
-referrers.
+from an injected failure at each step and recovery from an interrupted journal;
+cooking tests that a renamed material and a renamed import group retire their
+old keys and keep other assets; Content Browser command availability and
+tooltips; user review of rename and move of a material, texture, geometry
+descriptor, scene, source model with its sidecar, a populated folder and an
+import group with referrers in saved and open documents, the dirty-document
+rejection, Undo, and delete with and without referrers.
 
 ### M08.9 — Viewport performance and per-frame editor work
 
 A code review of the multi-pane editor against the native MultiView example
-found the gap in how the editor drives the shared engine, not in Vortex
-shading or managed code: both run one `AsyncEngine` frame loop on the engine
-thread, and the managed layer does no per-frame work. In priority order:
+found the gap in how the editor drives the shared engine, not in Vortex shading
+or managed code: both run one `AsyncEngine` frame loop on the engine thread, and
+the managed layer does no per-frame work. In priority order:
 
-1. **One frame clock, owned by the user.** Each composition surface
-   presented with a fixed `Present(1, 0)`, ignoring the vsync setting that
-   the windowed swap chain honours, while the engine also paced to a 60 FPS
-   deadline that only the editor imposed. The two clocks beat against each
-   other, and every pane added a vsync-interval present that could block the
-   engine thread; the native example presents once. Composition surfaces
-   follow the engine's vsync setting. Their swap chains carry a frame-latency
-   waitable object at maximum latency 2; with vsync on, the engine presents
-   every surface and then waits on each latency object, and because the
-   frames retire at the same vblank, N surfaces cost one wait. The wait is
-   bounded at 100 ms so a hidden panel never stalls the engine. With vsync
-   off, surfaces present at interval 0 (DWM composition cannot tear) and the
-   frame-rate cap is the clock, or nothing when the cap is off. A cap below
-   the refresh rate with vsync on is the user's choice, and both apply.
+1. **One frame clock, owned by the user.** Each composition surface presented
+   with a fixed `Present(1, 0)`, ignoring the vsync setting that the windowed
+   swap chain honours, while the engine also paced to a 60 FPS deadline that
+   only the editor imposed. The two clocks beat against each other, and every
+   pane added a vsync-interval present that could block the engine thread; the
+   native example presents once. Composition surfaces follow the engine's vsync
+   setting. Their swap chains carry a frame-latency waitable object at maximum
+   latency 2; with vsync on, the engine presents every surface and then waits on
+   each latency object, and because the frames retire at the same vblank, N
+   surfaces cost one wait. The wait is bounded at 100 ms so a hidden panel never
+   stalls the engine. With vsync off, surfaces present at interval 0 (DWM
+   composition cannot tear) and the frame-rate cap is the clock, or nothing when
+   the cap is off. A cap below the refresh rate with vsync on is the user's
+   choice, and both apply.
 2. **Engine settings in the Settings flyout.** The scene editor's Settings
-   flyout holds the settings that apply to the whole embedded engine,
-   persisted with the project's preview preferences: VSync, on by default; a
-   frame-rate cap, off by default and up to the engine maximum when on; idle
-   viewports, rendered on change by default or always rendered; and the
-   existing native log verbosity. The editor imposes no rate of its own:
-   `EngineConstants.DefaultTargetFps` is 0, and preferences saved earlier
-   keep their log verbosity but not their 60 FPS cap. `EngineRunner` exposes
-   vsync through the engine's `gfx.vsync` setting and the idle-pane choice
-   through `EditorModule`. Renderer tuning variables (fog, occlusion,
-   atmosphere) stay console diagnostics.
+   flyout holds the settings that apply to the whole embedded engine, persisted
+   with the project's preview preferences: VSync, on by default; a frame-rate
+   cap, off by default and up to the engine maximum when on; idle viewports,
+   rendered on change by default or always rendered; and the existing native log
+   verbosity. The editor imposes no rate of its own:
+   `EngineConstants.DefaultTargetFps` is 0, and preferences saved earlier keep
+   their log verbosity but not their 60 FPS cap. `EngineRunner` exposes vsync
+   through the engine's `gfx.vsync` setting and the idle-pane choice through
+   `EditorModule`. Renderer tuning variables (fog, occlusion, atmosphere) stay
+   console diagnostics.
 3. **Panes render on demand.** `EditorModule::OnPublishViews` published every
-   visible pane every frame, so four panes rendered four full deferred
-   pipelines while one was navigated. A pane now renders only when what it
-   shows may have changed, and the triggers are events, not timers:
+   visible pane every frame, so four panes rendered four full deferred pipelines
+   while one was navigated. A pane now renders only when what it shows may have
+   changed, and the triggers are events, not timers:
    - every pane, when an executed command can change the scene, a completed
      asset load or cooked-content refresh changes it, the selection outline
-     changes, a piloted scene camera moves, or the renderer's resident
-     content changes (`Renderer::GetResidentContentRevision`: streamed
-     textures, uploaded geometry, refreshed environment probes and exposure
-     masks);
+     changes, a piloted scene camera moves, or the renderer's resident content
+     changes (`Renderer::GetResidentContentRevision`: streamed textures,
+     uploaded geometry, refreshed environment probes and exposure masks);
    - one pane, when a command that only affects that view runs (its settings,
      camera mode, visibility, framing), input is routed to it, or a pick is
      pending for it;
@@ -1123,31 +1146,31 @@ thread, and the managed layer does no per-frame work. In priority order:
 
    Each command declares its reach (`EditorCommand::GetInvalidation`: scene by
    default, one view, or nothing for queries), so a new command cannot leave
-   panes stale by omission. A surface renders all its panes or none, because
-   a host and its camera inset compose together. A held pane stays published
+   panes stale by omission. A surface renders all its panes or none, because a
+   host and its camera inset compose together. A held pane stays published
    through `Renderer::HoldPublishedRuntimeView`, keeping its identity and
    output, and its surface is neither composed nor presented, so it keeps the
-   last image. A pane whose image still moves on its own, such as auto
-   exposure adapting (M08.10), renders until the renderer reports rest. With
-   idle viewports set to render, every visible pane renders each frame.
+   last image. A pane whose image still moves on its own, such as auto exposure
+   adapting (M08.10), renders until the renderer reports rest. With idle
+   viewports set to render, every visible pane renders each frame.
 
-4. **One compositing submission.** `Renderer::OnCompositing` acquired a
-   command recorder per target surface; it records every surface's
-   composition into one recorder per frame, and each backbuffer reaches its
-   present state once after the last composition targeting it. The copy into
-   each surface stays: it is inherent to one swap chain per pane.
+4. **One compositing submission.** `Renderer::OnCompositing` acquired a command
+   recorder per target surface; it records every surface's composition into one
+   recorder per frame, and each backbuffer reaches its present state once after
+   the last composition targeting it. The copy into each surface stays: it is
+   inherent to one swap chain per pane.
 5. **Lean per-frame editor work.** Publication is split into collecting the
-   panes, deciding which render and publishing them, so the on-demand rules
-   live in one place, and the selection outline and pane overlays are built
-   only for panes that render. Commands run through one helper that logs
-   failures and records their invalidation.
+   panes, deciding which render and publishing them, so the on-demand rules live
+   in one place, and the selection outline and pane overlays are built only for
+   panes that render. Commands run through one helper that logs failures and
+   records their invalidation.
 
 6. **The editor renderer gets the runtime's capabilities.** The editor's
-   capability set left out shadowing, so shadow debug views and the
-   shadow-only profile were refused while shadows rendered, and enabled
-   diagnostics only with ImGui, which disabled the GPU timeline and pass
-   diagnostics in the editor. The editor requests all eight capability
-   families; ImGui stays governed by its own setting.
+   capability set left out shadowing, so shadow debug views and the shadow-only
+   profile were refused while shadows rendered, and enabled diagnostics only
+   with ImGui, which disabled the GPU timeline and pass diagnostics in the
+   editor. The editor requests all eight capability families; ImGui stays
+   governed by its own setting.
 7. **Fog follows the scene.** Editor views hardcoded height and local fog off,
    overriding the scene. The flags derive from the scene environment as in the
    runtime shell (fog enabled and rendered in the main pass; any enabled local
@@ -1155,25 +1178,24 @@ thread, and the managed layer does no per-frame work. In priority order:
 8. **No unused pane depth.** Each pane allocates a depth texture that Vortex
    never uses, since it renders depth in its own scene textures; the pane
    framebuffer keeps only its color target.
-9. **The ground grid is stable on a floor at Z 0.** The grid writes its
-   analytic plane depth and depth-tests it against the scene, so a surface
-   at Z 0 has the same depth up to precision and the winner flips per pixel.
-   Other editors leave this unresolved: Unreal closed its grid z-fighting
-   reports as Won't Fix and users move floors off Z 0, and Blender biases its
-   grid behind coplanar geometry, losing the grid on floor objects. Our grid
-   resolves coplanarity in world units: its depth moves toward the camera by
-   the ray distance at which a surface within a height tolerance of the
-   plane would lie (the tolerance over the ray's vertical component). An
-   object standing on the plane shows the grid only within that height of its
-   base, at any viewing angle, because the ray meets it no higher than the
-   tolerance. The tolerance grows with distance to match depth precision.
-   A floor at Z 0 shows the grid drawn steadily on it, and anything clearly
-   above the plane still hides it.
+9. **The ground grid is stable on a floor at Z 0.** The grid writes its analytic
+   plane depth and depth-tests it against the scene, so a surface at Z 0 has the
+   same depth up to precision and the winner flips per pixel. Other editors
+   leave this unresolved: Unreal closed its grid z-fighting reports as Won't Fix
+   and users move floors off Z 0, and Blender biases its grid behind coplanar
+   geometry, losing the grid on floor objects. Our grid resolves coplanarity in
+   world units: its depth moves toward the camera by the ray distance at which a
+   surface within a height tolerance of the plane would lie (the tolerance over
+   the ray's vertical component). An object standing on the plane shows the grid
+   only within that height of its base, at any viewing angle, because the ray
+   meets it no higher than the tolerance. The tolerance grows with distance to
+   match depth precision. A floor at Z 0 shows the grid drawn steadily on it,
+   and anything clearly above the plane still hides it.
 
-Kept as they are after review: the runtime command dispatcher calls the
-native input transport under its run gate, because the gate is what keeps
-teardown from destroying the transport during the call; and the wheel's
-navigation-settle debounce, one small allocation per wheel step.
+Kept as they are after review: the runtime command dispatcher calls the native
+input transport under its run gate, because the gate is what keeps teardown from
+destroying the transport during the call; and the wheel's navigation-settle
+debounce, one small allocation per wheel step.
 
 Implementation, in build order:
 
@@ -1188,132 +1210,129 @@ Implementation, in build order:
 
 Checks: Vortex tests that a held view leaves the frame family yet stays
 published past the idle limit, and that texture descriptors and completed
-geometry uploads advance the resident revision, that the ground grid
-settles to rest; Interop tests of the pane
-policy (new, unchanged, moved, invalidated, scene-changed, always-render and
-forgotten panes); managed tests that the preferences round-trip vsync, the
-cap off and on, and idle viewports, that the cap off reaches the engine as 0
-and that earlier preferences drop their cap; MultiView's four-view layout
-with its ImGui overlay; user review of one- to four-pane layouts in the
-running editor with vsync on and off and the cap off and on, including
-navigation, an edit, selection and gizmo drag in one pane updating the
-others, picking in an idle pane, resize, and a reimport refreshing idle
-panes; and, in the running editor, a shadow debug view and a floor at Z 0
+geometry uploads advance the resident revision, that the ground grid settles to
+rest; Interop tests of the pane policy (new, unchanged, moved, invalidated,
+scene-changed, always-render and forgotten panes); managed tests that the
+preferences round-trip vsync, the cap off and on, and idle viewports, that the
+cap off reaches the engine as 0 and that earlier preferences drop their cap;
+MultiView's four-view layout with its ImGui overlay; user review of one- to
+four-pane layouts in the running editor with vsync on and off and the cap off
+and on, including navigation, an edit, selection and gizmo drag in one pane
+updating the others, picking in an idle pane, resize, and a reimport refreshing
+idle panes; and, in the running editor, a shadow debug view and a floor at Z 0
 showing the grid steadily while objects above it still hide it.
 
 ### M08.10 — Engine capability parity in the editor
 
 The editor exposes what the engine renders today. Several engine capabilities
 were locked out of the editor by implementation choices that later documents
-recorded as scope: an environment command that forces scene fog off,
-documents stating that V0.1 offers no fog, cubemap or physical-camera
-authoring, and no editor settings for the ground grid. No owner decision
-stands behind them. This slice removes those lock-outs.
+recorded as scope: an environment command that forces scene fog off, documents
+stating that V0.1 offers no fog, cubemap or physical-camera authoring, and no
+editor settings for the ground grid. No owner decision stands behind them. This
+slice removes those lock-outs.
 
 1. **Every exclusion is checked against the engine.** Each exclusion in the
    [authoring scope](../review/ED-M08-v01-authoring-scope.md#4-canonical-migration-and-excluded-scope),
    the [environment LLD](../lld/environment-authoring.md) and the
-   [inspector LLD](../lld/property-inspector.md) was verified against the
-   engine source. The engine renders physical-camera exposure, the Sky
-   Sphere and every Sky Light source and multiplier, so they join this
-   slice. It has no generic node activation, authored Shadows Only or
-   hidden-shadow mode, blended-material shadow casting, more than two
-   atmospheric sources, sky-only light contribution, lunar surface or phase
-   shading, celestial motion, light baking, finite-source directional
-   shading, volumetric cloud pass, fog inscattering cubemap, depth of field
-   or motion blur; those stay out and the
+   [inspector LLD](../lld/property-inspector.md) was verified against the engine
+   source. The engine renders physical-camera exposure, the Sky Sphere and every
+   Sky Light source and multiplier, so they join this slice. It has no generic
+   node activation, authored Shadows Only or hidden-shadow mode,
+   blended-material shadow casting, more than two atmospheric sources, sky-only
+   light contribution, lunar surface or phase shading, celestial motion, light
+   baking, finite-source directional shading, volumetric cloud pass, fog
+   inscattering cubemap, depth of field or motion blur; those stay out and the
    [engine capability record](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md)
    records them as engine facts. By owner decision on 2026-10-09, physics
    authoring is post-V0.1 and script authoring joins this slice.
 2. **Fog.** Height fog, including its second layer, and volumetric fog are
    authored on the scene environment and round-trip through the scene file,
    cooking and the runtime loader, which already carry them
-   (`FogEnvironmentRecord`). `EnsureDisabledFog` goes. Local fog volumes are
-   a node component with an inspector section, cooked as
-   `LocalFogVolumeRecord`. M08.9 already derives the panes' fog passes from
-   the scene, so authored fog renders in the editor as in the runtime.
+   (`FogEnvironmentRecord`). `EnsureDisabledFog` goes. Local fog volumes are a
+   node component with an inspector section, cooked as `LocalFogVolumeRecord`.
+   M08.9 already derives the panes' fog passes from the scene, so authored fog
+   renders in the editor as in the runtime.
 3. **Sky.** The Sky Sphere (solid color or cubemap background, with tint,
    intensity and rotation) and the Sky Light's source (captured scene or a
-   specified cubemap, which yields diffuse and specular lighting), tint,
-   diffuse and specular multipliers, cubemap rotation, lower-hemisphere
-   color, reflection and volumetric scattering contributions are authored.
-   The cooker already imports cube textures; the editor's texture import
-   gains the cubemap option so both sources can name a cubemap asset. The
-   user interface for sky maps, sky cubemaps and image-based lighting (how a
-   cubemap is imported and previewed, how the Sky Sphere and Sky Light
-   sections present their sources, and how they relate to the atmosphere)
-   is designed with the owner interactively before any implementation, and
-   its design joins this plan before the code does. The agreed design is in
-   the [environment LLD](../lld/environment-authoring.md) section 4: one
-   Backdrop choice over engine-shaped records, a Sky Light section, EV
-   intensities, and a Cube shape in texture import. Cooked cubemaps become
-   scene texture bindings like the metering mask (scene format 12), and the
-   live editor loads all environment textures as one request. Texture import
-   also takes six separate face files, detected by name
-   ([issue 21](https://github.com/abdes/DroidNet/issues/21)).
-   The engine's captured-scene Sky Light did not read the Sky Sphere, so a
-   cubemap or solid color backdrop lit nothing
+   specified cubemap, which yields diffuse and specular lighting), tint, diffuse
+   and specular multipliers, cubemap rotation, lower-hemisphere color,
+   reflection and volumetric scattering contributions are authored. The cooker
+   already imports cube textures; the editor's texture import gains the cubemap
+   option so both sources can name a cubemap asset. The user interface for sky
+   maps, sky cubemaps and image-based lighting (how a cubemap is imported and
+   previewed, how the Sky Sphere and Sky Light sections present their sources,
+   and how they relate to the atmosphere) is designed with the owner
+   interactively before any implementation, and its design joins this plan
+   before the code does. The agreed design is in the
+   [environment LLD](../lld/environment-authoring.md) section 4: one Backdrop
+   choice over engine-shaped records, a Sky Light section, EV intensities, and a
+   Cube shape in texture import. Cooked cubemaps become scene texture bindings
+   like the metering mask (scene format 12), and the live editor loads all
+   environment textures as one request. Texture import also takes six separate
+   face files, detected by name
+   ([issue 21](https://github.com/abdes/DroidNet/issues/21)). The engine's
+   captured-scene Sky Light did not read the Sky Sphere, so a cubemap or solid
+   color backdrop lit nothing
    ([issue 22](https://github.com/abdes/DroidNet/issues/22)). It now captures
    the Sky Sphere's imported radiance when no atmosphere is authored. By owner
-   decision on 2026-10-09 display and lighting are decoupled: the Sky
-   Sphere's intensity and tint scale only the view, and lighting accepts only
-   float radiance. The Sky Sphere and a specified cubemap carry an optional
-   illuminance in lux that calibrates their radiance for both view and
-   lighting ([environment LLD](../lld/environment-authoring.md#calibration)).
-   The Sky Light section explains, from the rendered state, why it lights
-   nothing ([issue 23](https://github.com/abdes/DroidNet/issues/23)).
-   Eviction of a bound cubemap rewrites its descriptor with a 2D placeholder
-   while frames may still read it; the editor keeps applied textures
-   resident, and the engine fix is tracked in
-   [issue 25](https://github.com/abdes/DroidNet/issues/25).
+   decision on 2026-10-09 display and lighting are decoupled: the Sky Sphere's
+   intensity and tint scale only the view, and lighting accepts only float
+   radiance. The Sky Sphere and a specified cubemap carry an optional
+   illuminance in lux that calibrates their radiance for both view and lighting
+   ([environment LLD](../lld/environment-authoring.md#calibration)). The Sky
+   Light section explains, from the rendered state, why it lights nothing
+   ([issue 23](https://github.com/abdes/DroidNet/issues/23)). Eviction of a
+   bound cubemap rewrites its descriptor with a 2D placeholder while frames may
+   still read it; the editor keeps applied textures resident, and the engine fix
+   is tracked in [issue 25](https://github.com/abdes/DroidNet/issues/25).
 4. **Ground grid settings.** The grid's engine settings are per-user editor
    settings in the Settings flyout, applied through
-   `Renderer::SetGroundGridConfig`: enabled, spacing, major lines every N,
-   line, major and axis thickness, fade start and power, horizon boost,
-   origin, smooth motion and its time, and the minor, major, axis and origin
-   colors. The pane-level grid toggle stays. They are an application-scoped
-   setting restored with the preview preferences, with a reset to the engine
-   defaults ([settings LLD](../lld/settings-architecture.md#54-ground-grid-preferences)).
+   `Renderer::SetGroundGridConfig`: enabled, spacing, major lines every N, line,
+   major and axis thickness, fade start and power, horizon boost, origin, smooth
+   motion and its time, and the minor, major, axis and origin colors. The
+   pane-level grid toggle stays. They are an application-scoped setting restored
+   with the preview preferences, with a reset to the engine defaults
+   ([settings LLD](../lld/settings-architecture.md#54-ground-grid-preferences)).
 5. **Eye adaptation in editor panes.** Auto exposure in the runtime adapts
-   gradually: when the view moves from a dark area to a bright one, the
-   exposure eases toward the new level at the authored speeds (EV per second
-   brightening and darkening), as an eye adapts. That needs the previous
-   frame's exposure, which Vortex keeps per view state. Runtime views carry
-   a persistent `ViewStateHandle` (RenderScene allocates one for its main
-   view); editor panes publish none, so editor auto exposure jumps to its
-   metered value every frame, the authored adaptation speeds have no effect,
-   and exposure transitions and other temporal history are unavailable. Each
-   pane publishes a persistent state handle derived from its unique view id;
-   the renderer releases the state with the publication, so a pane withdrawn
-   while hidden starts its exposure afresh. Adaptation then moves the image
-   with no input change, so Vortex reports a view as adapting
-   (`Renderer::IsExposureAdapting`) while its auto exposure has not reached
-   its target, and the pane renders until it settles. The flag travels in the
-   exposure's existing completed status, which an adapting-capable view now
-   copies back on every rendered frame; panes render a few frames past
-   convergence because readbacks lag.
-6. **Physical camera.** Aperture, shutter rate and ISO set the camera's
-   exposure in the engine and already round-trip through the editor's scene
-   model, sync and cooking, and the exposure section already offers the
-   ManualCamera mode, but the camera inspector has no controls for them, so
-   ManualCamera exposure always uses the defaults. Perspective and
-   orthographic camera sections gain the three fields.
+   gradually: when the view moves from a dark area to a bright one, the exposure
+   eases toward the new level at the authored speeds (EV per second brightening
+   and darkening), as an eye adapts. That needs the previous frame's exposure,
+   which Vortex keeps per view state. Runtime views carry a persistent
+   `ViewStateHandle` (RenderScene allocates one for its main view); editor panes
+   publish none, so editor auto exposure jumps to its metered value every frame,
+   the authored adaptation speeds have no effect, and exposure transitions and
+   other temporal history are unavailable. Each pane publishes a persistent
+   state handle derived from its unique view id; the renderer releases the state
+   with the publication, so a pane withdrawn while hidden starts its exposure
+   afresh. Adaptation then moves the image with no input change, so Vortex
+   reports a view as adapting (`Renderer::IsExposureAdapting`) while its auto
+   exposure has not reached its target, and the pane renders until it settles.
+   The flag travels in the exposure's existing completed status, which an
+   adapting-capable view now copies back on every rendered frame; panes render a
+   few frames past convergence because readbacks lag.
+6. **Physical camera.** Aperture, shutter rate and ISO set the camera's exposure
+   in the engine and already round-trip through the editor's scene model, sync
+   and cooking, and the exposure section already offers the ManualCamera mode,
+   but the camera inspector has no controls for them, so ManualCamera exposure
+   always uses the defaults. Perspective and orthographic camera sections gain
+   the three fields.
 7. **Scripting.** The engine attaches scripts to scene nodes as script slots
-   with typed parameters and runs them in the runtime; the editor authors
-   them and runs the cooked scene with Play. Owner decisions of 2026-10-11:
-   Play launches the runtime from the editor; slot execution order, source
-   reload into running slots, start/destroy hooks and engine-owned slot
-   attachment (replacing the example shell's code) are engine work in this
-   slice; script errors are reported with source spans in the style of
-   `rustc`. Play starts on the starting camera and input contexts authored in the
-   scene's Play section, and scripts switch both at runtime. A split Play
-   button carries per-user session settings. Hand-written input files are cooked;
-   editor input authoring is [ED-M09](ED-M09-input-authoring.md). The design is in the
+   with typed parameters and runs them in the runtime; the editor authors them
+   and runs the cooked scene with Play. Owner decisions of 2026-10-11: Play
+   launches the runtime from the editor; slot execution order, source reload
+   into running slots, start/destroy hooks and engine-owned slot attachment
+   (replacing the example shell's code) are engine work in this slice; script
+   errors are reported with source spans in the style of `rustc`. Play starts on
+   the starting camera and input contexts authored in the scene's Play section,
+   and scripts switch both at runtime. A split Play button carries per-user
+   session settings. Hand-written input files are cooked; editor input authoring
+   is [ED-M09](ED-M09-input-authoring.md). The design is in the
    [script authoring LLD](../lld/script-authoring.md) (workflow, inspector,
    cooking, Play, Problems) and the engine's
    [scene script hosting](../../../projects/Oxygen.Engine/design/scripting/scene-script-hosting.md),
    [script diagnostics](../../../projects/Oxygen.Engine/design/scripting/script-diagnostics.md)
-   and [scene instantiation and player](../../../projects/Oxygen.Engine/design/runtime-core/scene-instantiation-and-player.md)
+   and
+   [scene instantiation and player](../../../projects/Oxygen.Engine/design/runtime-core/scene-instantiation-and-player.md)
    documents. The owner's design decisions are recorded in
    [scripting decisions](#scripting-decisions).
 
@@ -1341,34 +1360,33 @@ Implementation, in build order:
 
 #### M08.10 status
 
-| Step      | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M08.10a   | Delivered on 2026-10-09: exclusions grounded in engine facts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| M08.10b   | Delivered on 2026-10-09: height and volumetric fog; local fog volume component, viewport icon and composition.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| M08.10c–d | Validated on 2026-10-09 by owner review in the running editor: backdrop, Sky Sphere, Sky Light, calibration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| M08.10e   | Delivered on 2026-10-10: per-user ground grid settings in the Settings flyout, applied to every pane.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| M08.10f   | Delivered on 2026-10-11: per-pane exposure state; adapting auto exposure keeps its pane rendering.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| M08.10g   | Delivered on 2026-10-11: aperture, shutter rate and ISO in both camera sections, with undo and live sync.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| M08.10h   | Delivered on 2026-10-11: scripting design and owner decisions SD-1–SD-7.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| M08.10i   | Delivered on 2026-10-11: parameter declarations, analyzer, asset and node parameters, sidecar validation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| M08.10j   | Delivered on 2026-10-11: instances with `self`, start/destroy hooks, execution order, owned listeners.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| M08.10k   | Delivered on 2026-10-11: diagnostic model, catalog, text and JSON forms; compile, binding and runtime producers.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| M08.10l   | Validated on 2026-10-12: engine scene instantiation and start state, model scene instances, script camera and context switching, input identity by asset key, source reload. The owner loaded every maintained scene in RenderScene, saw a script switch cameras, and saw two source edits reload into the running scene.                                                                                                                                                                                                                                                                                                         |
-| M08.10m   | Validated on 2026-10-13: every [runtime host](../../../projects/Oxygen.Engine/design/runtime-core/runtime-host.md#9-delivery-order-and-exit-gates) step (I1, H1–H3, P1, R1, E1–E3) delivered; the owner ran the editor, DemoShell and every native example; the player, driven over its control protocol, played the recooked camera-switch scene on the next session.                                                                                                                                                                                                                                                            |
-| M08.10n   | Delivered on 2026-10-13: binding tables with Luau signatures for every pack but physics (declared `any`), `oxygen.d.luau` generated by the build and installed with the SDK, analyzer lint (S04xx) and type (S05xx) levels; coverage, validity, example and API-tour tests pass.                                                                                                                                                                                                                                                                                                                                                  |
-| M08.10o   | Validated on 2026-10-14: script assets with New Script, Edit, Open with and the code-editor choice (SD-8–SD-9), engine analysis through Interop on project open and on save, a Problems panel (SD-10), project tooling for VS Code (SD-11), name collisions reported and refused on create, rename, move and copy, and hand-written input files with New Input File, check and cook on save, and their actions and contexts in their folder (SD-12). The engine accepts a job layout on `input` jobs and analyzes input sources. The owner checked each scenario in the running editor.                                           |
-| M08.10p   | Delivered on 2026-10-14, in owner review in the running editor: a Scripting component with ordered slots, typed values and execution order that save, reopen, undo and follow renames; the Scripting inspector section with one field per declared parameter, asset and node pickers, override markers, stale values and Problems badges; scene cooks that compile each script as debug bytecode next to its source and attach the slots through a script sidecar, with Go To Property on slot problems. The cooker accepts compiled external scripts, analyzes script jobs and resolves sidecar references from published roots. |
-| M08.10q   | Open; next after M08.10p.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Step      | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M08.10a   | Delivered on 2026-10-09: exclusions grounded in engine facts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| M08.10b   | Delivered on 2026-10-09: height and volumetric fog; local fog volume component, viewport icon and composition.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| M08.10c–d | Validated on 2026-10-09 by owner review in the running editor: backdrop, Sky Sphere, Sky Light, calibration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| M08.10e   | Delivered on 2026-10-10: per-user ground grid settings in the Settings flyout, applied to every pane.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| M08.10f   | Delivered on 2026-10-11: per-pane exposure state; adapting auto exposure keeps its pane rendering.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| M08.10g   | Delivered on 2026-10-11: aperture, shutter rate and ISO in both camera sections, with undo and live sync.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| M08.10h   | Delivered on 2026-10-11: scripting design and owner decisions SD-1–SD-7.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| M08.10i   | Delivered on 2026-10-11: parameter declarations, analyzer, asset and node parameters, sidecar validation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| M08.10j   | Delivered on 2026-10-11: instances with `self`, start/destroy hooks, execution order, owned listeners.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| M08.10k   | Delivered on 2026-10-11: diagnostic model, catalog, text and JSON forms; compile, binding and runtime producers.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| M08.10l   | Validated on 2026-10-12: engine scene instantiation and start state, model scene instances, script camera and context switching, input identity by asset key, source reload. The owner loaded every maintained scene in RenderScene, saw a script switch cameras, and saw two source edits reload into the running scene.                                                                                                                                                                                                                                                                                                                                                                           |
+| M08.10m   | Validated on 2026-10-13: every [runtime host](../../../projects/Oxygen.Engine/design/runtime-core/runtime-host.md#9-delivery-order-and-exit-gates) step (I1, H1–H3, P1, R1, E1–E3) delivered; the owner ran the editor, DemoShell and every native example; the player, driven over its control protocol, played the recooked camera-switch scene on the next session.                                                                                                                                                                                                                                                                                                                              |
+| M08.10n   | Delivered on 2026-10-13: binding tables with Luau signatures for every pack but physics (declared `any`), `oxygen.d.luau` generated by the build and installed with the SDK, analyzer lint (S04xx) and type (S05xx) levels; coverage, validity, example and API-tour tests pass.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| M08.10o   | Validated on 2026-10-14: script assets with New Script, Edit, Open with and the code-editor choice (SD-8–SD-9), engine analysis through Interop on project open and on save, a Problems panel (SD-10), project tooling for VS Code (SD-11), name collisions reported and refused on create, rename, move and copy, and hand-written input files with New Input File, check and cook on save, and their actions and contexts in their folder (SD-12). The engine accepts a job layout on `input` jobs and analyzes input sources. The owner checked each scenario in the running editor.                                                                                                             |
+| M08.10p   | Validated on 2026-10-15 by owner review in the running editor: a Scripting component with ordered slots, typed values and execution order that save, reopen, undo and follow renames; the Scripting inspector section with one field per declared parameter, asset and node pickers, override markers, stale values and Problems badges; scene cooks that compile each script as debug bytecode next to its source and attach the slots through a script sidecar, with Go To Property on slot problems. The cooker accepts compiled external scripts, analyzes script jobs and resolves sidecar references from published roots.                                                                    |
+| M08.10q   | Validated on 2026-10-15 by owner review in the running editor: a Play section with the starting camera (Automatic names the first camera) and starting input contexts with their own or overridden priorities, a Starting camera toggle on each camera, both cooked into the scene; a Play split button with Restart, Stop, a stale marker, per-user session settings and Close player, F5 and Shift+F5; Play saves, cooks and starts or reuses the player, streams its log to Output and its script diagnostics and scene issues to Problems. The player reads its launch file again on every Play, so recooked content is mounted; source analysis reports starting input contexts as references. |
 
-Checks: each authored capability survives save, reopen and cook, and the
-cooked project renders it in RenderScene as in the editor; the grid
-settings persist per user and apply to every pane; a Vortex test that a
-view reports settling while its exposure adapts and stops when it
-converges; user review in the running editor of fog, local fog volumes, the
-sky settings, the grid settings, and eye adaptation in a pane that settles
-and then idles. Scripting: the exit gates of the
-[script authoring LLD](../lld/script-authoring.md#11-exit-gates) and the
-engine's hosting (SSH), diagnostics (SDG) and player (SIP) gates.
+Checks: each authored capability survives save, reopen and cook, and the cooked
+project renders it in RenderScene as in the editor; the grid settings persist
+per user and apply to every pane; a Vortex test that a view reports settling
+while its exposure adapts and stops when it converges; user review in the
+running editor of fog, local fog volumes, the sky settings, the grid settings,
+and eye adaptation in a pane that settles and then idles. Scripting: the exit
+gates of the [script authoring LLD](../lld/script-authoring.md#11-exit-gates)
+and the engine's hosting (SSH), diagnostics (SDG) and player (SIP) gates.
 
 #### Scripting decisions
 
@@ -1389,52 +1407,52 @@ engine's hosting (SSH), diagnostics (SDG) and player (SIP) gates.
 
 ### M08.11 — Asset thumbnails and previews
 
-1. **Native preview renderer.** Interop renders through Vortex into an
-   offscreen target with a private preview scene: neutral studio lighting and
-   sky, a material on a sphere, a geometry asset auto-framed at a three-quarter
-   view, at 256² scaled for DPI. Production readback returns BGRA8 pixels. At
-   most one preview renders per frame alongside the viewports, cancellable,
-   and nothing runs while idle.
+1. **Native preview renderer.** Interop renders through Vortex into an offscreen
+   target with a private preview scene: neutral studio lighting and sky, a
+   material on a sphere, a geometry asset auto-framed at a three-quarter view,
+   at 256² scaled for DPI. Production readback returns BGRA8 pixels. At most one
+   preview renders per frame alongside the viewports, cancellable, and nothing
+   runs while idle.
 2. **Other kinds.** Textures render on a quad from cooked data; unimported
    images decode from source. Scene thumbnails are a downscaled capture of the
    focused pane when the scene is saved, with no extra render.
 3. **Thumbnail service.** Asynchronous and prioritized by visible items; keyed
    by asset identity and content revision; stored in the project's local cache
-   folder, ignored by cooking and version control; invalidated by save,
-   reimport and cook. Pending or failed items show the type glyph and never
-   block browsing.
-4. **Consumers.** Content Browser tiles, rows and details pane; the
-   Inspector's geometry and material pickers, replacing flat colour swatches;
-   and the Material Editor preview, re-rendered after edits, replacing the CPU
-   swatch ball.
+   folder, ignored by cooking and version control; invalidated by save, reimport
+   and cook. Pending or failed items show the type glyph and never block
+   browsing.
+4. **Consumers.** Content Browser tiles, rows and details pane; the Inspector's
+   geometry and material pickers, replacing flat colour swatches; and the
+   Material Editor preview, re-rendered after edits, replacing the CPU swatch
+   ball.
 
 Checks: thumbnails for each kind appear and update after an edit, reimport or
 cook; the cache survives restart and regenerates when deleted; viewports stay
-interactive while previews render; device loss and project close cancel
-pending work cleanly.
+interactive while previews render; device loss and project close cancel pending
+work cleanly.
 
 ### M08.12 — Drag-and-drop scene assembly and closeout
 
 1. **Geometry into the scene.** Dragging a geometry asset over the viewport
    shows a placement preview at the surface under the cursor (pick depth,
-   falling back to the ground plane, with snapping) and drops a new node in
-   one undo entry; Escape cancels. Dropping on a Scene Explorer row creates
-   the node under, before or after that row.
+   falling back to the ground plane, with snapping) and drops a new node in one
+   undo entry; Escape cancels. Dropping on a Scene Explorer row creates the node
+   under, before or after that row.
 2. **Materials onto objects.** Dragging a material highlights the object and
    slot under the cursor and assigns that slot on drop, in one undo entry.
    Dropping on an Inspector material slot assigns that slot.
-3. **Locate.** Inspector asset slots gain Locate, which reveals the asset in
-   the Content Browser.
+3. **Locate.** Inspector asset slots gain Locate, which reveals the asset in the
+   Content Browser.
 4. **Models into the scene.** Dragging a model source or its scene output
    creates a model instance node
    ([scene composition §6](../../../projects/Oxygen.Engine/design/runtime-core/scene-composition.md#6-editor));
-   the Scene Explorer shows the model's tree under it read-only, and a
-   reimport refreshes open scenes.
-5. **Closeout walkthrough.** With the user, in the normal Release editor:
-   create a project, import a model, author materials, assemble a scene by
-   drag-and-drop, arrange it with gizmos and snapping, light it, save, cook
-   and reopen; then load the cooked project in RenderScene and compare it with
-   the editor viewport.
+   the Scene Explorer shows the model's tree under it read-only, and a reimport
+   refreshes open scenes.
+5. **Closeout walkthrough.** With the user, in the normal Release editor: create
+   a project, import a model, author materials, assemble a scene by
+   drag-and-drop, arrange it with gizmos and snapping, light it, save, cook and
+   reopen; then load the cooked project in RenderScene and compare it with the
+   editor viewport.
 
 Checks: drop placement on geometry, on empty space and in orthographic views;
 slot-accurate material drops on multi-slot meshes; undo and cancel; the
@@ -1458,31 +1476,31 @@ walkthrough completes without manual file repair.
 
 ## 6. Build and verification
 
-Native work uses the existing `projects/Oxygen.Engine/out/build-ninja` tree
-with normal Ninja parallelism and CTest; install the SDK, then rebuild Interop
-and the editor with 64-bit MSBuild. Batch engine and editor rebuilds per
-review pass rather than per edit. Run only the tests for the code being
-changed, one GPU test process at a time. Viewport behavior that depends on
-real input is reviewed by the user in the running editor at each slice pause;
-UI tests never drive the system mouse or need window focus.
+Native work uses the existing `projects/Oxygen.Engine/out/build-ninja` tree with
+normal Ninja parallelism and CTest; install the SDK, then rebuild Interop and
+the editor with 64-bit MSBuild. Batch engine and editor rebuilds per review pass
+rather than per edit. Run only the tests for the code being changed, one GPU
+test process at a time. Viewport behavior that depends on real input is reviewed
+by the user in the running editor at each slice pause; UI tests never drive the
+system mouse or need window focus.
 
 ## 7. Exit checklist
 
-- [x] Canonical formats, migration and native producer/loader mappings
-      (M08.1, M08.F1).
+- [x] Canonical formats, migration and native producer/loader mappings (M08.1,
+      M08.F1).
 - [x] Authoring surface and rendering behavior (M08.2).
-- [x] Every scene layout and the camera preview inset pass M08.V1, and
-      viewport state survives reopening per M08.V2.
+- [x] Every scene layout and the camera preview inset pass M08.V1, and viewport
+      state survives reopening per M08.V2.
 - [x] HUD, view modes and scene toolbar (M08.3).
 - [x] Picking, outline and framing (M08.4).
 - [x] Gizmos, snapping and viewport editing shortcuts (M08.5).
 - [x] Scene helpers, editable light handles and orientation triad (M08.6).
 - [x] Content Browser layout, views and working commands (M08.7).
 - [x] Rename, move, cut/copy/paste and delete with reference updates (M08.8).
-- [x] Viewport frame clock, on-demand pane rendering and lean per-frame
-      editor work (M08.9).
-- [ ] Engine capabilities the editor exposes: fog, local fog volumes, sky,
-      grid settings, eye adaptation and the audited exclusions (M08.10).
+- [x] Viewport frame clock, on-demand pane rendering and lean per-frame editor
+      work (M08.9).
+- [x] Engine capabilities the editor exposes: fog, local fog volumes, sky, grid
+      settings, eye adaptation and the audited exclusions (M08.10).
 - [ ] Rendered thumbnails in browser, pickers and Material Editor (M08.11).
 - [ ] Drag-and-drop assembly and the closeout walkthrough, including the
       RenderScene load of the editor-cooked project (M08.12).
