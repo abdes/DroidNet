@@ -19,7 +19,6 @@
 
 #  include <Oxygen/Base/Logging.h>
 #  include <Oxygen/Base/ObserverPtr.h>
-#  include <Oxygen/Console/Command.h>
 #  include <Oxygen/Core/Types/Format.h>
 #  include <Oxygen/Core/Types/View.h>
 #  include <Oxygen/Data/MaterialDomain.h>
