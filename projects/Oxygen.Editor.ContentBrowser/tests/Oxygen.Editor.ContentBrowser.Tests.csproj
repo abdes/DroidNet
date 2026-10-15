@@ -11,18 +11,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="..\testsupport\AssetStatusFixture.cs" Link="AssetStatusFixture.cs" />
-        <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
-        <None Include="..\..\Oxygen.Engine\src\Oxygen\Cooker\Test\Assets\Models\static_scalar_triangle.gltf" Link="Fixtures\static_scalar_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\tests\Fixtures\BuiltinGeometryCatalog.json" Link="Fixtures\BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
         <PackageReference Include="Moq" />
         <ProjectReference Include="..\src\Oxygen.Editor.ContentBrowser.csproj" />
         <ProjectReference Include="..\..\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />
         <ProjectReference Include="..\..\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="..\..\Oxygen.Editor.World\src\Oxygen.Editor.World.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <Compile Include="$(ProjectsRoot)\Oxygen.Managed.Assets\testsupport\LooseCookedIndexFixture.cs" Link="LooseCookedIndexFixture.cs" />
     </ItemGroup>
 </Project>

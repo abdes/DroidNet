@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -15,19 +16,6 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </remarks>
 public static class InputFileReferences
 {
-    /// <summary>The suffix of a mapping-context input file.</summary>
-    public const string InputFileSuffix = ".input.json";
-
-    /// <summary>The suffix of a single-action input file.</summary>
-    public const string InputActionFileSuffix = ".input-action.json";
-
-    /// <summary>Checks whether a path names a hand-written input file.</summary>
-    /// <param name="path">The path or virtual path.</param>
-    /// <returns><see langword="true"/> for <c>*.input.json</c> and <c>*.input-action.json</c>.</returns>
-    public static bool IsInputFile(string path)
-        => path.EndsWith(InputFileSuffix, StringComparison.OrdinalIgnoreCase)
-           || path.EndsWith(InputActionFileSuffix, StringComparison.OrdinalIgnoreCase);
-
     /// <summary>Finds the action names an input file uses without declaring them.</summary>
     /// <param name="json">The input file text.</param>
     /// <returns>The undeclared names in first-use order; empty when the file is self-contained or not valid JSON,

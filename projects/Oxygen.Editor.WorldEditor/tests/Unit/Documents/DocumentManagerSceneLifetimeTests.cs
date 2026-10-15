@@ -346,7 +346,7 @@ public sealed class DocumentManagerSceneLifetimeTests
                 selection, commands, projectContexts: this.Contexts);
             this.Manager = new DocumentManager(
                 this.Documents, this.messenger, this.Contexts, Mock.Of<IProjectUsageService>(),
-                Mock.Of<IMaterialDocumentService>(), this.Window, projects.Object, this.Sync.Object);
+                Mock.Of<IMaterialDocumentService>(), this.Window, projects.Object, this.Sync.Object, Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         }
 
         public string Root { get; }

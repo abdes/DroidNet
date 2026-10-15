@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.World;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -12,8 +13,6 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public sealed partial class SceneDescriptorGenerator
 {
-    private const string MappingContextExtension = ".oimap";
-
     /// <summary>Resolves the camera node the cooked scene starts viewing through.</summary>
     /// <remarks>
     /// An unset starting camera cooks as the first camera in hierarchy order, which is the camera the editor shows
@@ -51,7 +50,7 @@ public sealed partial class SceneDescriptorGenerator
         foreach (var entry in scene.Play.StartingInputContexts)
         {
             var path = Uri.UnescapeDataString(entry.Context.AbsolutePath);
-            if (!path.EndsWith(MappingContextExtension, StringComparison.OrdinalIgnoreCase))
+            if (!path.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.OrdinalIgnoreCase))
             {
                 site.Report(ScenePlayPropertyPaths.StartingInputContexts, $"'{path}' is not an input mapping context. Remove it from the scene's starting input contexts.");
                 continue;
@@ -66,7 +65,7 @@ public sealed partial class SceneDescriptorGenerator
             }
 
             contexts.Add(new NativeStartingInputContext(
-                ContentPipelinePaths.ToNativeDescriptorPath(entry.Context, MappingContextExtension),
+                ContentPipelinePaths.ToNativeDescriptorPath(entry.Context, AssetFileTypes.InputMappingContext),
                 InputContextSources.EffectivePriority(scope.Project, entry)));
         }
 

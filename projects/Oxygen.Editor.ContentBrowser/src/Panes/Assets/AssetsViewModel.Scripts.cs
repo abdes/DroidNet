@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -27,7 +27,7 @@ public partial class AssetsViewModel
     /// <summary>Finds the file the code editor opens for an asset.</summary>
     /// <param name="asset">The asset.</param>
     /// <returns>The file and line, or <see langword="null"/> when the asset has no hand-written source.</returns>
-    internal InputDeclaration? FindCodeSource(ContentBrowserAssetItem asset)
+    internal InputDeclaration? FindCodeSource(AssetEntry asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
         if (asset is { Kind: AssetKind.Script or AssetKind.InputFile, SourcePath: { } source } && File.Exists(source))
@@ -86,7 +86,7 @@ public partial class AssetsViewModel
     /// <summary>Opens an invoked script or input asset in the code editor.</summary>
     /// <param name="asset">The invoked asset.</param>
     /// <returns><see langword="true"/> when the asset has a hand-written source and the editor was asked to open it.</returns>
-    private async Task<bool> TryEditInvokedAsync(ContentBrowserAssetItem asset)
+    private async Task<bool> TryEditInvokedAsync(AssetEntry asset)
     {
         if (codeEditor is null || this.FindCodeSource(asset) is not { } source)
         {

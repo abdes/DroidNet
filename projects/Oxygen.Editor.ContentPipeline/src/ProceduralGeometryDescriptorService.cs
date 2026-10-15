@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -48,7 +49,7 @@ public sealed class ProceduralGeometryDescriptorService(IBuiltinGeometryCatalogP
                     AssetUris.BuildGeneratedUri("Materials/Default"),
                     ContentCookAssetKind.Material,
                     "Materials",
-                    ".omat.json",
+                    AssetFileTypes.MaterialDescriptor,
                     cancellationToken).ConfigureAwait(false));
             }
 
@@ -64,7 +65,7 @@ public sealed class ProceduralGeometryDescriptorService(IBuiltinGeometryCatalogP
                 uri,
                 ContentCookAssetKind.Geometry,
                 "Geometry",
-                ".ogeo.json",
+                AssetFileTypes.GeometryDescriptor,
                 cancellationToken).ConfigureAwait(false));
         }
 

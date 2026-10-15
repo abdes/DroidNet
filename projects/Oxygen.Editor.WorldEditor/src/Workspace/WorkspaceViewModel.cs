@@ -7,9 +7,8 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Routing;
 using DryIoc;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
-using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.Assets;
+using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.Data.Services;
@@ -368,14 +367,13 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
                 resolver.Resolve<Microsoft.Extensions.Logging.ILogger<Oxygen.Editor.ContentPipeline.Discovery.BuiltinCatalogDiscovery>>(),
                 resolver.Resolve<Oxygen.Managed.Core.Compatibility.INativeCompatibilityService>(Oxygen.Managed.Core.Compatibility.EditorNativeCompatibilityService.CookingServiceKey)),
             Reuse.Singleton);
-        childContainer.Register<ProjectAssetCatalog>(Reuse.Singleton);
-        childContainer.RegisterMapping<IProjectAssetCatalog, ProjectAssetCatalog>();
-        childContainer.RegisterMapping<IAssetCatalog, ProjectAssetCatalog>();
-        childContainer.Register<IAssetIdentityReducer, AssetIdentityReducer>(Reuse.Singleton);
+        childContainer.Register<AssetCatalog>(Reuse.Singleton);
+        childContainer.RegisterMapping<IAssetCatalog, AssetCatalog>();
+        childContainer.RegisterMapping<IAssetPublicationTarget, AssetCatalog>();
         childContainer.RegisterDelegate<Oxygen.Editor.ContentPipeline.Status.IAssetCookStatusReader>(
             resolver => resolver.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(), Reuse.Singleton);
-        childContainer.Register<IContentBrowserAssetProvider, ContentBrowserAssetProvider>(Reuse.Singleton);
-        childContainer.Register<IMaterialPickerService, MaterialPickerService>(Reuse.Singleton);
+        childContainer.Register<IAssetRuntimeStatusSource, AssetRuntimeStatusSource>(Reuse.Singleton);
+        childContainer.Register<IAssetFeed, AssetFeed>(Reuse.Singleton);
         childContainer.Register<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService, Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationService>(Reuse.Singleton);
 
         // One instance for the workspace: open documents register as participants on it, and the Content Browser's
@@ -408,7 +406,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     private void RegisterOutputPanels(IContainer childContainer)
     {
         this.cookHosting = childContainer.Resolve<DroidNet.Hosting.WinUI.HostingContext>();
-        this.cookedCatalog = childContainer.Resolve<IProjectAssetCatalog>();
+        this.cookedCatalog = childContainer.Resolve<IAssetPublicationTarget>();
         if (this.projectContextService.ActiveProject is { } project)
         {
             this.publicationRegistration = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>()
@@ -448,7 +446,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             mounted = true;
             stage = "asset catalog refresh";
             var catalog = this.cookedCatalog ?? throw new InvalidOperationException("The workspace asset catalog is not initialized.");
-            await catalog.RefreshAsync(reader, CancellationToken.None).ConfigureAwait(true);
+            await catalog.UsePublicationAsync(reader, CancellationToken.None).ConfigureAwait(true);
             this.HasContentFailure = false;
             this.LogMountedRoots(mounts.Roots);
             await this.MaintainPublicationAsync(publication, project).ConfigureAwait(true);

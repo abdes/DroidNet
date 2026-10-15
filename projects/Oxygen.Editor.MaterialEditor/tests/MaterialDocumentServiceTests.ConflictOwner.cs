@@ -22,7 +22,7 @@ public sealed partial class MaterialDocumentServiceTests
         var original = await service.CreateAsync(new Uri("asset:///Content/Materials/Original.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var prompt = new RecordingConflictPrompt();
         var metadata = new MaterialDocumentMetadata(original.MaterialUri);
-        using var editor = new MaterialEditorViewModel(metadata, service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance, conflictPrompt: prompt);
+        using var editor = new MaterialEditorViewModel(metadata, service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance, conflictPrompt: prompt);
         await WaitForMaterialUiAsync(() => editor.IsLoaded, this.TestContext.CancellationToken).ConfigureAwait(false);
         editor.RoughnessFactor = 0.8f;
         await File.AppendAllTextAsync(original.SourcePath, "\n ", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -55,7 +55,7 @@ public sealed partial class MaterialDocumentServiceTests
         var original = await service.CreateAsync(new Uri("asset:///Content/Materials/Close.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var prompt = new RecordingConflictPrompt();
         var metadata = new MaterialDocumentMetadata(original.MaterialUri);
-        using var editor = new MaterialEditorViewModel(metadata, service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance, conflictPrompt: prompt);
+        using var editor = new MaterialEditorViewModel(metadata, service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance, conflictPrompt: prompt);
         await WaitForMaterialUiAsync(() => editor.IsLoaded, this.TestContext.CancellationToken).ConfigureAwait(false);
         editor.RoughnessFactor = 0.8f;
         await File.AppendAllTextAsync(original.SourcePath, "\n ", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -86,7 +86,7 @@ public sealed partial class MaterialDocumentServiceTests
         var service = CreateService(workspace);
         var original = await service.CreateAsync(new Uri("asset:///Content/Materials/Invalid.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var metadata = new MaterialDocumentMetadata(original.MaterialUri);
-        using var editor = new MaterialEditorViewModel(metadata, service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
+        using var editor = new MaterialEditorViewModel(metadata, service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForMaterialUiAsync(() => editor.IsLoaded, this.TestContext.CancellationToken).ConfigureAwait(false);
         editor.RoughnessFactor = 0.8f;
         await File.WriteAllTextAsync(original.SourcePath, "{ invalid", this.TestContext.CancellationToken).ConfigureAwait(false);

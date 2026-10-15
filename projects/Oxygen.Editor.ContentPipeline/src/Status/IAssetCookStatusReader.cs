@@ -25,5 +25,5 @@ public interface IAssetCookStatusReader
     /// <param name="assetUris">The requested identities.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>Facts bound to that publication's output identities.</returns>
-    public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, Publication.CookPublicationReadLease publication, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default);
+    public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, Publication.ICookPublicationReadLease publication, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default);
 }

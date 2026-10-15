@@ -5,8 +5,7 @@
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
@@ -23,7 +22,6 @@ internal static class InspectorEditorFactory
     /// <summary>Creates construction operations while leaving cached instance ownership with the host.</summary>
     /// <param name="hosting">The existing WinUI hosting context.</param>
     /// <param name="assets">The shared asset catalog.</param>
-    /// <param name="materials">The shared material picker.</param>
     /// <param name="builtins">The native built-in catalog.</param>
     /// <param name="demand">The saved-asset demand owner.</param>
     /// <param name="slots">The geometry slot inventory.</param>
@@ -35,8 +33,7 @@ internal static class InspectorEditorFactory
     /// <returns>The component construction operations.</returns>
     internal static Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> Create(
         HostingContext hosting,
-        IContentBrowserAssetProvider assets,
-        IMaterialPickerService materials,
+        IAssetFeed assets,
         IBuiltinCatalogDiscovery builtins,
         ISceneContentDemandService demand,
         IGeometryMaterialSlotProvider slots,
@@ -48,7 +45,7 @@ internal static class InspectorEditorFactory
         => new()
         {
             [typeof(TransformComponent)] = _ => new TransformViewModel(logger, commands, context),
-            [typeof(GeometryComponent)] = _ => new GeometryViewModel(hosting, assets, materials, builtins, demand, slots, projects, commands, context),
+            [typeof(GeometryComponent)] = _ => new GeometryViewModel(hosting, assets, builtins, demand, slots, projects, commands, context),
             [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(commands, context),
             [typeof(OrthographicCamera)] = _ => new OrthographicCameraViewModel(commands, context),
             [typeof(DirectionalLightComponent)] = _ => new DirectionalLightViewModel(commands, context),

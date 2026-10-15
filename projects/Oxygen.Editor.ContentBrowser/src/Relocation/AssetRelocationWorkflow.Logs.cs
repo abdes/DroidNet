@@ -48,13 +48,6 @@ public sealed partial class AssetRelocationWorkflow
     private void LogOutcome(string title, bool succeeded, string message)
         => LogOutcome(this.logger, title, succeeded, message);
 
-    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "After {Title}: refreshing the browser and announcing {Moves} moves, {Rewritten} rewritten and {Deleted} deleted files.")]
-    private static partial void LogAnnouncingChanges(ILogger logger, string title, int moves, int rewritten, int deleted);
-
-    [System.Diagnostics.Conditional("DEBUG")]
-    private void LogAnnouncingChanges(string title, int moves, int rewritten, int deleted)
-        => LogAnnouncingChanges(this.logger, title, moves, rewritten, deleted);
-
     [LoggerMessage(Level = LogLevel.Information, Message = "Cooking the project after {Title} to publish the changed scenes.")]
     private partial void LogCookStarted(string title);
 

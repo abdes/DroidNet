@@ -8,7 +8,7 @@ using System.Diagnostics;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Serialization;
@@ -19,7 +19,7 @@ namespace Oxygen.Editor.World.Inspector.Environment;
 /// <summary>Owns exposure modes, related bounds, curve policy and the scheduled texture catalog.</summary>
 public sealed partial class ExposureSectionViewModel : ObservableObject, IDisposable
 {
-    private readonly IContentBrowserAssetProvider? assetProvider;
+    private readonly IAssetFeed? assetProvider;
     private readonly IScheduler observerScheduler;
     private IDisposable? assetSubscription;
     private bool disposed;
@@ -30,7 +30,7 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
     /// <param name="observerScheduler">The injected notification scheduler.</param>
     internal ExposureSectionViewModel(
         SceneEnvironmentEditOwner owner,
-        IContentBrowserAssetProvider? assetProvider,
+        IAssetFeed? assetProvider,
         IScheduler observerScheduler)
     {
         this.EditOwner = owner;
@@ -311,7 +311,7 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
         {
             if (this.assetProvider is { } provider)
             {
-                await provider.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(false);
+                await provider.RefreshAsync().ConfigureAwait(false);
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ObjectDisposedException or OperationCanceledException)
@@ -320,22 +320,21 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
         }
     }
 
-    private void UpdateMeteringMaskRows(IReadOnlyList<ContentBrowserAssetItem> assets)
+    private void UpdateMeteringMaskRows(IReadOnlyList<AssetEntry> assets)
     {
         if (this.disposed)
         {
             return;
         }
 
-        var textures = assets.Where(static asset => asset.Kind == AssetKind.Texture && !asset.IsBuiltin)
-            .OrderBy(static asset => asset.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
+        var textures = AssetRule.For(AssetKind.Texture).Apply(assets);
         var wanted = textures.Select(static asset => asset.IdentityUri.AbsoluteUri).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var removed in this.MeteringMaskRows.Where(row => !wanted.Contains(row.Item.Uri.AbsoluteUri)).ToArray())
         {
             _ = this.MeteringMaskRows.Remove(removed);
         }
 
-        for (var index = 0; index < textures.Length; index++)
+        for (var index = 0; index < textures.Count; index++)
         {
             var asset = textures[index];
             var item = new AssetPickerItem(asset.DisplayName, asset.IdentityUri, "Texture · " + asset.PrimaryBadge, asset.DisplayPath, AssetPickerGroup.Content, asset.IsSelectable, "\uE7C3");

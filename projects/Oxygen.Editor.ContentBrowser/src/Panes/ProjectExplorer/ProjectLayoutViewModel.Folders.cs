@@ -189,7 +189,9 @@ public partial class ProjectLayoutViewModel
     }
 
     // Folders that moved or were deleted change the tree and the selected folders; reload both from disk.
-    private async Task FollowChangedFilesAsync(AssetFilesChangedMessage message)
+    private void OnFilesChanged(object? sender, AssetFilesChangedEventArgs args) => _ = this.FollowChangedFilesAsync(args);
+
+    private async Task FollowChangedFilesAsync(AssetFilesChangedEventArgs message)
     {
         // The tree shows folders only: a file move, rename or delete leaves it as it is.
         if (projectContextService.ActiveProject is not { } project || !message.FoldersChanged)

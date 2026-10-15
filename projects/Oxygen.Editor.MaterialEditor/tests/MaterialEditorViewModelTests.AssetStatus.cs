@@ -6,7 +6,7 @@ using System.Reactive.Concurrency;
 using System.Reactive.Subjects;
 using AwesomeAssertions;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
 
@@ -22,10 +22,10 @@ public sealed partial class MaterialEditorViewModelTests
     {
         var service = new RecordingDocumentService(CreateDocument());
         var item = CreateStatusItem(service.Document.MaterialUri);
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([item]);
-        var provider = new Mock<IContentBrowserAssetProvider>();
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
+        var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
-        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         using var editor = new MaterialEditorViewModel(new(service.Document.MaterialUri), service, provider.Object, ImmediateScheduler.Instance);
         await WaitForLoadAsync(editor).ConfigureAwait(false);
         _ = editor.CookStatusText.Should().Be("Cooked", "the document's older local cook enum cannot replace shared status");
@@ -56,12 +56,12 @@ public sealed partial class MaterialEditorViewModelTests
     public async Task ClosingMaterialDetachesPendingStatusWait()
     {
         var service = new RecordingDocumentService(CreateDocument());
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([]);
-        var provider = new Mock<IContentBrowserAssetProvider>();
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([]);
+        var provider = new Mock<IAssetFeed>();
         var detached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = provider.SetupGet(value => value.Items).Returns(updates);
-        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()))
-            .Returns(async (AssetBrowserFilter _, CancellationToken token) =>
+        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>()))
+            .Returns(async (CancellationToken token) =>
             {
                 try
                 {
@@ -82,7 +82,7 @@ public sealed partial class MaterialEditorViewModelTests
         _ = editor.AssetStatus.Should().BeNull();
     }
 
-    private static ContentBrowserAssetItem CreateStatusItem(Uri uri) => new(
+    private static AssetEntry CreateStatusItem(Uri uri) => new(
         uri, "Test", AssetKind.Material, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Unknown, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, CookedUri: null, CookedPath: null, AssetGuid: null, DiagnosticCodes: [], IsSelectable: true)
     {
         CookStatus = new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []),

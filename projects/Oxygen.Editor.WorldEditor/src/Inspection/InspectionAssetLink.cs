@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Assets;
+
 namespace Oxygen.Editor.World.Inspection;
 
 /// <summary>An explicit navigation target in an inspection report.</summary>
@@ -20,7 +22,7 @@ public sealed record InspectionAssetLink(Uri Uri)
     internal static string DisplayName(Uri uri)
     {
         var name = System.IO.Path.GetFileName(System.Uri.UnescapeDataString(uri.AbsolutePath));
-        foreach (var suffix in new[] { ".omat.json", ".ogeo.json", ".oscene.json", ".omat", ".ogeo", ".oscene" })
+        foreach (var suffix in new[] { AssetFileTypes.MaterialDescriptor, AssetFileTypes.GeometryDescriptor, AssetFileTypes.SceneDescriptor, AssetFileTypes.Material, AssetFileTypes.Geometry, AssetFileTypes.Scene })
         {
             if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
             {

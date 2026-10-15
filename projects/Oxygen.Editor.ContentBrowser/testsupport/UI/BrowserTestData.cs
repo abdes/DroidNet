@@ -5,7 +5,7 @@
 using System.Reactive.Subjects;
 using DroidNet.Storage;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
@@ -14,7 +14,7 @@ namespace Oxygen.Editor.ContentBrowser.TestSupport;
 
 internal static class BrowserTestData
 {
-    internal static ContentBrowserAssetItem CreateStatusAsset(int index)
+    internal static AssetEntry CreateStatusAsset(int index)
     {
         var name = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Material {index:00}");
         var uri = new Uri("asset:///Content/" + Uri.EscapeDataString(name) + ".omat.json");
@@ -30,13 +30,23 @@ internal static class BrowserTestData
         return new(Mock.Of<Oxygen.Editor.ContentPipeline.IContentCookCoordinator>(), projects, files, new ProjectManagerService(storage, atomicFiles: files));
     }
 
-    internal static ContentBrowserAssetItem CreateNavigationAsset(string path, AssetKind kind) => new(new("asset://" + path), Path.GetFileName(path), kind, AssetState.Descriptor, DerivedState: null, AssetRuntimeAvailability.Unknown, path, path, path, CookedUri: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
-
-    internal static Mock<IContentBrowserAssetProvider> CreateQueryProvider(BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>> updates)
+    /// <summary>Creates an asset catalog whose only behavior is the record changes a test announces.</summary>
+    /// <param name="changes">The catalog's changes; never emits when omitted.</param>
+    /// <returns>The catalog.</returns>
+    internal static Oxygen.Managed.Assets.Catalog.IAssetCatalog CreateNavigationCatalog(IObservable<Oxygen.Managed.Assets.Catalog.AssetChange>? changes = null)
     {
-        var provider = new Mock<IContentBrowserAssetProvider>();
+        var catalog = new Mock<Oxygen.Managed.Assets.Catalog.IAssetCatalog>();
+        _ = catalog.SetupGet(value => value.Changes).Returns(changes ?? System.Reactive.Linq.Observable.Never<Oxygen.Managed.Assets.Catalog.AssetChange>());
+        return catalog.Object;
+    }
+
+    internal static AssetEntry CreateNavigationAsset(string path, AssetKind kind) => new(new("asset://" + path), Path.GetFileName(path), kind, AssetState.Descriptor, DerivedState: null, AssetRuntimeAvailability.Unknown, path, path, path, CookedUri: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
+
+    internal static Mock<IAssetFeed> CreateQueryProvider(BehaviorSubject<IReadOnlyList<AssetEntry>> updates)
+    {
+        var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
-        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         return provider;
     }
 
@@ -47,7 +57,7 @@ internal static class BrowserTestData
         return projects;
     }
 
-    internal static ContentBrowserAssetItem CreateQueryAsset(string name, AssetKind kind, AssetCookFreshness freshness)
+    internal static AssetEntry CreateQueryAsset(string name, AssetKind kind, AssetCookFreshness freshness)
     {
         var folder = kind == AssetKind.Material ? "Materials" : "Geometry";
         var asset = CreateNavigationAsset("/Content/" + folder + "/" + Uri.EscapeDataString(name), kind);

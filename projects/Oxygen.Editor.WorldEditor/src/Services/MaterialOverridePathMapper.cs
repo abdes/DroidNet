@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.World.Services;
@@ -27,7 +28,7 @@ internal static class MaterialOverridePathMapper
         }
 
         var virtualPath = AssetUriHelper.GetVirtualPath(materialUri);
-        return virtualPath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
+        return virtualPath.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
             ? virtualPath[..^".json".Length]
             : virtualPath;
     }

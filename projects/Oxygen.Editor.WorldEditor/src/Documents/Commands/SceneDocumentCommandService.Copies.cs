@@ -4,7 +4,6 @@
 
 using System.Text.Json;
 using CommunityToolkit.Mvvm.Messaging;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents.Commands;
 using Oxygen.Editor.World.Serialization;
@@ -51,7 +50,6 @@ public sealed partial class SceneDocumentCommandService
             var copy = Scene.CreateAndHydrate(context.Scene.Project, data);
             context.Scene.Project.Scenes.Add(copy);
             this.NotifySceneSaved(copy, previousHash: null);
-            _ = this.messenger.Send(new AssetsChangedMessage());
             return SceneCommandResults.Success(copy);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)

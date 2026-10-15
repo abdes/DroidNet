@@ -3,14 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 
 namespace Oxygen.Editor.World.Inspector.Geometry;
 
 /// <summary>Projects shared identities and availability into stable geometry choices.</summary>
 public sealed partial class GeometryViewModel
 {
-    private IReadOnlyList<ContentBrowserAssetItem> latestAssets = [];
+    private IReadOnlyList<AssetEntry> latestAssets = [];
 
     private void StartAssetCatalogSubscription()
     {
@@ -24,7 +24,7 @@ public sealed partial class GeometryViewModel
     {
         try
         {
-            await this.assetProvider.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(false);
+            await this.assetProvider.RefreshAsync().ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ObjectDisposedException or OperationCanceledException)
         {
@@ -32,7 +32,7 @@ public sealed partial class GeometryViewModel
         }
     }
 
-    private void ApplySharedAssets(IReadOnlyList<ContentBrowserAssetItem> assets)
+    private void ApplySharedAssets(IReadOnlyList<AssetEntry> assets)
     {
         if (this.disposed)
         {
@@ -43,8 +43,7 @@ public sealed partial class GeometryViewModel
         var previousGeometry = this.latestAssets.FirstOrDefault(asset => selectedGeometry is not null && (asset.IdentityUri == selectedGeometry || asset.CookedUri == selectedGeometry));
         var currentGeometry = assets.FirstOrDefault(asset => selectedGeometry is not null && (asset.IdentityUri == selectedGeometry || asset.CookedUri == selectedGeometry));
         this.latestAssets = assets;
-        var geometries = assets.Where(static asset => asset.Kind == AssetKind.Geometry && !asset.IsBuiltin)
-            .OrderBy(static asset => asset.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
+        var geometries = AssetRule.For(AssetKind.Geometry).Apply(assets, selectedGeometry);
         var wanted = geometries.Select(static asset => asset.IdentityUri.AbsoluteUri).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var removed in this.contentItemsByKey.Keys.Where(key => !wanted.Contains(key)).ToArray())
         {
@@ -52,7 +51,7 @@ public sealed partial class GeometryViewModel
             _ = this.contentItemsByKey.Remove(removed);
         }
 
-        for (var index = 0; index < geometries.Length; index++)
+        for (var index = 0; index < geometries.Count; index++)
         {
             var asset = geometries[index];
             var item = new AssetPickerItem(

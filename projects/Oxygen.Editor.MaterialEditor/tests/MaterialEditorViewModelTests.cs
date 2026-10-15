@@ -30,7 +30,7 @@ public sealed partial class MaterialEditorViewModelTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var service = new RecordingDocumentService(CreateDocument()) { PendingWrite = release.Task };
         var metadata = new MaterialDocumentMetadata(service.Document.MaterialUri);
-        using var sut = new MaterialEditorViewModel(metadata, service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
+        using var sut = new MaterialEditorViewModel(metadata, service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForLoadAsync(sut).ConfigureAwait(false);
         sut.MetallicFactor = 0.25f;
         var save = sut.SaveAsync();
@@ -54,7 +54,7 @@ public sealed partial class MaterialEditorViewModelTests
     public async Task DisposalDoesNotCloseOrDiscardTheMaterial()
     {
         var service = new RecordingDocumentService(CreateDocument());
-        var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
+        var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForLoadAsync(sut).ConfigureAwait(false);
         sut.MetallicFactor = 0.75f;
         await WaitForEditAsync(service, expectedCount: 1).ConfigureAwait(false);
@@ -73,7 +73,7 @@ public sealed partial class MaterialEditorViewModelTests
         var editCompleted = new TaskCompletionSource<MaterialEditResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         service.PendingEdit = editCompleted.Task;
         var metadata = new MaterialDocumentMetadata(service.Document.MaterialUri);
-        using var sut = new MaterialEditorViewModel(metadata, service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
+        using var sut = new MaterialEditorViewModel(metadata, service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForLoadAsync(sut).ConfigureAwait(false);
         sut.MetallicFactor = 0.75f;
 
@@ -98,7 +98,7 @@ public sealed partial class MaterialEditorViewModelTests
     public async Task ScalarPropertyChangesUseSchemaPropertyEdit()
     {
         var service = new RecordingDocumentService(CreateDocument());
-        using var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
+        using var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForLoadAsync(sut).ConfigureAwait(false);
 
         sut.MetallicFactor = 0.75f;
@@ -120,7 +120,7 @@ public sealed partial class MaterialEditorViewModelTests
     public async Task SetBaseColorBatchesChannelsIntoOneSchemaPropertyEdit()
     {
         var service = new RecordingDocumentService(CreateDocument());
-        using var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
+        using var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForLoadAsync(sut).ConfigureAwait(false);
 
         sut.SetBaseColor(new ColorChannels(0.25, 0.5, 1, 0.75));
@@ -198,6 +198,8 @@ public sealed partial class MaterialEditorViewModelTests
 
         public MaterialDocument Document { get; private set; } = document;
 
+        public bool IsSourceMissing { get; set; }
+
         public Task? PendingWrite { get; set; }
 
         public TaskCompletionSource WriteStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -242,6 +244,8 @@ public sealed partial class MaterialEditorViewModelTests
         public MaterialEditResult Redo(Guid documentId) => new(Succeeded: true, OperationId: null);
 
         public Task<MaterialDocument> ReloadAsync(Guid documentId, CancellationToken cancellationToken = default) => Task.FromResult(this.Document);
+
+        public Task<bool> RefreshSourcePresenceAsync(Guid documentId, CancellationToken cancellationToken = default) => Task.FromResult(this.IsSourceMissing);
 
         public Task<Uri> SaveCopyAsync(Guid documentId, Uri targetUri, CancellationToken cancellationToken = default) => Task.FromResult(targetUri);
 

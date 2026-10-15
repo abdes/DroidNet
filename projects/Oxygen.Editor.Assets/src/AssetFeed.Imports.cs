@@ -1,0 +1,90 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Catalog;
+
+namespace Oxygen.Editor.Assets;
+
+/// <summary>Projects retained sources and actual published outputs without fabricating subasset identities.</summary>
+public sealed partial class AssetFeed
+{
+    private static bool IsModelSource(Uri uri) => Path.GetExtension(uri.AbsolutePath).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX";
+
+    private static bool IsProjectCookedOutput(IEnumerable<string> roots, AssetEntry item)
+        => item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene
+            && item.CookedUri is not null && roots.Any(root => IsInOutputRoot(item, root));
+
+    private static string? ResolvePublishedOutputPath(AssetEntry item, AssetCookStatus status)
+    {
+        var output = status.Outputs.FirstOrDefault(output => output.CookedAssetUri == item.CookedUri);
+        return status.HasAvailableOutput && output?.DescriptorRelativePath is { } descriptor
+            && status.OutputRoots.TryGetValue(output.MountName, out var root) ? Path.Combine(root, descriptor) : null;
+    }
+
+    private static bool IsInOutputRoot(AssetEntry item, string root)
+        => item.CookedMetadata is { } metadata ? string.Equals(Path.GetFullPath(metadata.RootFolderPath), root, StringComparison.OrdinalIgnoreCase)
+            : item.CookedPath is { } path && Path.GetFullPath(path).StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+
+    private static AssetEntry ApplyOwnedCookStatus(ProjectContext project, AssetEntry item, AssetCookStatus status)
+    {
+        if (item.ImportSourceUri is not null || item.DescriptorPath is not null)
+        {
+            return ApplyCookStatus(item, status);
+        }
+
+        var output = status.Outputs.FirstOrDefault(output => output.CookedAssetUri == item.IdentityUri && IsModelSource(output.SourceAssetUri));
+        return output is not null && IsProjectCookedOutput(status.OutputRoots.Values, item)
+            ? ApplyCookStatus(item with { ImportSourceUri = output.SourceAssetUri, ImportSourcePath = TryResolveSourcePath(project, output.SourceAssetUri) }, status)
+            : item;
+    }
+
+    private static AssetEntry[] AddKnownImportedOutputs(ProjectContext project, IReadOnlyList<AssetEntry> items, IEnumerable<AssetCookStatus> statuses)
+    {
+        var rows = items.ToList();
+        var known = items.SelectMany(static item => new[] { item.IdentityUri, item.CookedUri }).OfType<Uri>().ToHashSet();
+        foreach (var state in statuses)
+        {
+            foreach (var output in state.Outputs.Where(static output => IsModelSource(output.SourceAssetUri)))
+            {
+                if (!known.Add(output.CookedAssetUri))
+                {
+                    continue;
+                }
+
+                var kind = output.Kind switch
+                {
+                    ContentCookAssetKind.Geometry => AssetKind.Geometry,
+                    ContentCookAssetKind.Material => AssetKind.Material,
+                    ContentCookAssetKind.Scene => AssetKind.Scene,
+                    _ => AssetKind.Unknown,
+                };
+                var row = new AssetEntry(
+                    output.CookedAssetUri,
+                    AssetIdentityReducer.GetDisplayName(output.CookedAssetUri),
+                    kind,
+                    AssetState.Cooked,
+                    DerivedState: null,
+                    AssetRuntimeAvailability.NotMounted,
+                    AssetUriHelper.GetVirtualPath(output.CookedAssetUri),
+                    SourcePath: null,
+                    DescriptorPath: null,
+                    output.CookedAssetUri,
+                    CookedPath: null,
+                    AssetGuid: null,
+                    [],
+                    IsSelectable: true)
+                {
+                    ImportSourceUri = output.SourceAssetUri,
+                    ImportSourcePath = TryResolveSourcePath(project, output.SourceAssetUri),
+                };
+                rows.Add(ApplyCookStatus(row, state with { AssetUri = output.CookedAssetUri, HasPublishedOutput = true }));
+            }
+        }
+
+        return rows.ToArray();
+    }
+}

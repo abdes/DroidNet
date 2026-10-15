@@ -96,6 +96,23 @@ public sealed class CookedContentMountTests
         _ = changed.Message.Should().Contain("'First'").And.Contain(recorded.IndexSha256).And.Contain(changed.ActualIndexSha256!);
     }
 
+    /// <summary>Opening the catalog of a library re-cooked after capture names the root and both index identities.</summary>
+    /// <returns>The asynchronous stale-catalog diagnosis regression.</returns>
+    [TestMethod]
+    public async Task RecookedLibraryFailsCatalogOpeningNamingBothIdentities()
+    {
+        using var fixture = new MountFixture();
+        using var reader = await fixture.CaptureAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var recorded = reader.Roots.Single(static root => string.Equals(root.Name, "First", StringComparison.Ordinal));
+        fixture.RecookFirst();
+        var current = await CookedIndexSnapshot.ReadAsync(fixture.First, this.TestContext.CancellationToken).ConfigureAwait(false);
+        Func<Task> open = () => reader.CreateCatalogAsync(recorded, this.TestContext.CancellationToken);
+        var changed = (await open.Should().ThrowAsync<CookedLibraryChangedException>().ConfigureAwait(false)).Which;
+        _ = changed.Message.Should().Contain("'First'").And.Contain(fixture.First)
+            .And.Contain(recorded.SourceKey.ToString("D")).And.Contain(recorded.IndexSha256)
+            .And.Contain(current.Index.SourceGuid.ToString("D")).And.Contain(current.Fingerprint);
+    }
+
     /// <summary>Cancellation waits for preparation to end and releases every acquired file reader.</summary>
     /// <returns>The asynchronous cancellation regression.</returns>
     [TestMethod]

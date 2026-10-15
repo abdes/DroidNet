@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
@@ -20,7 +20,7 @@ namespace Oxygen.Editor.ContentBrowser.Relocation;
 /// <summary>Runs Content Browser renames, moves, copies and deletes, then refreshes the browser and open documents.</summary>
 /// <param name="relocation">Applies the file changes and recooks after them.</param>
 /// <param name="dialogs">Asks for names, and confirms deleting content that other content uses.</param>
-/// <param name="messenger">Tells the browser and open documents what changed.</param>
+/// <param name="messenger">Hands scene commands to the open scene workspace.</param>
 /// <param name="assets">The browser's asset rows.</param>
 /// <param name="pipeline">Recooks the project after a scene command.</param>
 /// <param name="shell">Moves deleted files to the Recycle Bin.</param>
@@ -29,7 +29,7 @@ public sealed partial class AssetRelocationWorkflow(
     IAssetRelocationService relocation,
     IDialogService dialogs,
     IMessenger messenger,
-    IContentBrowserAssetProvider assets,
+    IAssetFeed assets,
     IContentPipelineService pipeline,
     IAssetShell shell,
     ILogger<AssetRelocationWorkflow>? logger = null) : IAssetRelocationWorkflow, IDisposable
@@ -62,7 +62,7 @@ public sealed partial class AssetRelocationWorkflow(
             }
 
             this.undo = applied.Reverse;
-            await this.AfterChangeAsync(title, applied.Moves, applied.RewrittenFiles, [], cook: false).ConfigureAwait(true);
+            await this.AfterChangeAsync(title, cook: false).ConfigureAwait(true);
             _ = this.ReportPublicationAsync(title, applied.ContentPublished);
             return this.Publish(new(Succeeded: true, title, DescribeResult(applied), CanUndo: true));
         }
@@ -85,7 +85,7 @@ public sealed partial class AssetRelocationWorkflow(
         {
             var applied = await relocation.RelocateAsync(request, CancellationToken.None).ConfigureAwait(true);
             this.undo = null;
-            await this.AfterChangeAsync("Undo", applied.Moves, applied.RewrittenFiles, [], cook: false).ConfigureAwait(true);
+            await this.AfterChangeAsync("Undo", cook: false).ConfigureAwait(true);
             _ = this.ReportPublicationAsync("Undo", applied.ContentPublished);
             return this.Publish(new(Succeeded: true, "Undo", "Restored the previous names, locations and references.", CanUndo: false));
         }
@@ -102,7 +102,7 @@ public sealed partial class AssetRelocationWorkflow(
         try
         {
             var copies = await relocation.CopyAsync(sources, targetFolder, CancellationToken.None).ConfigureAwait(true);
-            await this.AfterChangeAsync(title, [], [], [], cook: false).ConfigureAwait(true);
+            await this.AfterChangeAsync(title, cook: false).ConfigureAwait(true);
             var message = copies.Count == 1
                 ? $"Created {RelocationPaths.GetName(copies[0])}."
                 : string.Create(CultureInfo.CurrentCulture, $"Created {copies.Count} copies in {targetFolder}.");
@@ -141,17 +141,13 @@ public sealed partial class AssetRelocationWorkflow(
             }
         }
 
-        var deleted = new List<string>();
-        var foldersDeleted = false;
         try
         {
             await relocation.DeleteAsync(
                 sources,
                 paths =>
                 {
-                    foldersDeleted = paths.Any(Directory.Exists);
                     shell.MoveToRecycleBin(paths);
-                    deleted.AddRange(paths);
                     return Task.CompletedTask;
                 },
                 CancellationToken.None).ConfigureAwait(true);
@@ -161,7 +157,7 @@ public sealed partial class AssetRelocationWorkflow(
             return this.Publish(new(Succeeded: false, title, error.Message, this.CanUndo));
         }
 
-        await this.AfterChangeAsync(title, [], [], deleted, cook: false, foldersDeleted).ConfigureAwait(true);
+        await this.AfterChangeAsync(title, cook: false).ConfigureAwait(true);
         this.ForgetUndo();
         return this.Publish(new(Succeeded: true, title, $"Moved {Describe(sources)} to the Recycle Bin. Restore {(sources.Count == 1 ? "it" : "them")} from there to bring {(sources.Count == 1 ? "it" : "them")} back.", CanUndo: false));
     }
@@ -175,11 +171,9 @@ public sealed partial class AssetRelocationWorkflow(
             SceneAssetCommand.Duplicate => "Duplicate scene",
             _ => "Delete scene",
         };
-        var deleted = new List<string>();
         var request = new SceneAssetCommandMessage(command, sceneName, newName, paths =>
         {
             shell.MoveToRecycleBin(paths);
-            deleted.AddRange(paths);
             return Task.CompletedTask;
         });
         this.LogSceneCommand(command, sceneName, newName);
@@ -207,7 +201,7 @@ public sealed partial class AssetRelocationWorkflow(
         }
 
         relocation.Invalidate();
-        await this.AfterChangeAsync(title, [], [], deleted, cook: true).ConfigureAwait(true);
+        await this.AfterChangeAsync(title, cook: true).ConfigureAwait(true);
         var message = command switch
         {
             SceneAssetCommand.Rename => $"Renamed scene '{sceneName}' to '{newName}'.",
@@ -316,16 +310,13 @@ public sealed partial class AssetRelocationWorkflow(
         }
     }
 
-    // Refreshes rows and pickers and tells the sources tree and open documents what changed. Relocations, copies and
-    // deletes recook through the relocation service, after open documents followed; a scene command changes files
-    // through the scene workspace, so it starts the cook here.
-    private async Task AfterChangeAsync(string title, IReadOnlyList<RelocationFileMove> moves, IReadOnlyList<string> rewritten, List<string> deleted, bool cook, bool foldersDeleted = false)
+    // Refreshes rows and pickers at once; the sources tree and open documents follow the relocation service's report.
+    // Relocations, copies and deletes recook through the relocation service, after open documents followed; a scene
+    // command changes files through the scene workspace, so it starts the cook here.
+    private async Task AfterChangeAsync(string title, bool cook)
     {
         relocation.Invalidate();
-        await assets.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(true);
-        this.LogAnnouncingChanges(title, moves.Count, rewritten.Count, deleted.Count);
-        _ = messenger.Send(new AssetsChangedMessage());
-        _ = messenger.Send(new AssetFilesChangedMessage(moves, rewritten, deleted) { FoldersChanged = foldersDeleted || moves.Any(static move => move.IsDirectory) });
+        await assets.RefreshAsync().ConfigureAwait(true);
         if (cook)
         {
             this.LogCookStarted(title);

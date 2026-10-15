@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Controls;
 using DroidNet.Controls.Selection;
+using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Storage;
@@ -17,8 +18,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Filesystem;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
@@ -34,7 +37,10 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
+/// <param name="catalog">The asset catalog, whose changes may bring new cooked folders.</param>
+/// <param name="hostingContext">Brings catalog notifications to the UI thread.</param>
 /// <param name="relocation">Renames, moves and copies folders with their references; without it only empty folders rename.</param>
+/// <param name="relocationService">Reports the folders the editor moved or deleted; absent where the editor cannot relocate.</param>
 public partial class ProjectLayoutViewModel(
     IProjectContextService projectContextService,
     IStorageProvider storage,
@@ -43,8 +49,11 @@ public partial class ProjectLayoutViewModel(
     ViewModelToView vmToView,
     IMessenger messenger,
     Oxygen.Editor.ContentPipeline.Publication.CookPublicationService publications,
+    IAssetCatalog catalog,
+    HostingContext hostingContext,
     ILoggerFactory? loggerFactory,
-    Relocation.IAssetRelocationWorkflow? relocation = null)
+    Relocation.IAssetRelocationWorkflow? relocation = null,
+    IAssetRelocationService? relocationService = null)
     : DynamicTreeViewModel(loggerFactory), IRoutingAware
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectLayoutViewModel>() ??
@@ -58,6 +67,8 @@ public partial class ProjectLayoutViewModel(
     private ProjectRootTreeItemAdapter? projectRoot;
     private bool suppressTreeSelectionEvents;
     private bool isSubscribed;
+    private IDisposable? catalogSubscription;
+    private int publishedFoldersCheckQueued;
 
     private ITreeItem? selectedItem;
     private bool hasUnsavedChanges;
@@ -108,9 +119,12 @@ public partial class ProjectLayoutViewModel(
 
             // Subscribe to navigation requests
             this.messenger.Register<NavigateToFolderRequestMessage>(this, (_, message) => _ = HandleNavigateRequestAsync(message));
-            this.messenger.Register<AssetsChangedMessage>(this, (_, _) => _ = this.RefreshPublishedFoldersAsync());
             this.messenger.Register<CreateFolderRequestMessage>(this, (_, message) => _ = this.CreateFolderAsync(message));
-            this.messenger.Register<AssetFilesChangedMessage>(this, (_, message) => _ = this.FollowChangedFilesAsync(message));
+            this.catalogSubscription = catalog.Changes.Subscribe(_ => this.OnCatalogChanged());
+            if (relocationService is not null)
+            {
+                relocationService.FilesChanged += this.OnFilesChanged;
+            }
 
             this.isSubscribed = true;
         }
@@ -207,6 +221,11 @@ public partial class ProjectLayoutViewModel(
             this.selectionDisposed = true;
             this.selectionRequestVersion++;
             this.messenger.UnregisterAll(this);
+            this.catalogSubscription?.Dispose();
+            if (relocationService is not null)
+            {
+                relocationService.FilesChanged -= this.OnFilesChanged;
+            }
             contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
             this.projectRoot?.Dispose();
         }

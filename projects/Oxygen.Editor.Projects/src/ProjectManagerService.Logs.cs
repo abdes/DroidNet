@@ -17,6 +17,12 @@ namespace Oxygen.Editor.Projects;
 /// <summary>Log messages.</summary>
 public partial class ProjectManagerService
 {
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Scene `{scene}` is open but its file `{location}` was deleted or moved outside the editor; saving writes it again.")]
+    partial void SceneSourceMissing(string scene, string location);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Scene `{scene}` file is back on disk (unchanged: {unchanged}).")]
+    partial void SceneSourceRestored(string scene, bool unchanged);
+
     [LoggerMessage(
         Level = LogLevel.Error,
         Message = "Could not load project info from `{location}`; {error}")]

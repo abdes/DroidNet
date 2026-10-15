@@ -5,7 +5,7 @@
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Relocation;
 using Oxygen.Editor.ContentPipeline;
@@ -152,7 +152,7 @@ public sealed class AssetsViewModelCommandTests
             Mock.Of<IProjectManagerService>(),
             Mock.Of<IAuthoringTargetResolver>(),
             Mock.Of<IContentPipelineService>(),
-            Mock.Of<IContentBrowserAssetProvider>(),
+            Mock.Of<IAssetFeed>(),
             Mock.Of<IOperationResultPublisher>(),
             Mock.Of<IStatusReducer>(),
             Mock.Of<DroidNet.Storage.IStorageProvider>(),
@@ -165,7 +165,7 @@ public sealed class AssetsViewModelCommandTests
         return (browser, state, messenger);
     }
 
-    private static ContentBrowserAssetItem CreateAsset(string path, AssetKind kind, string? descriptor)
+    private static AssetEntry CreateAsset(string path, AssetKind kind, string? descriptor)
         => new(
             new Uri("asset://" + path),
             Path.GetFileName(path),

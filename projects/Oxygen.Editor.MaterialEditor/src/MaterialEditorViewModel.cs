@@ -12,7 +12,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Editor.Schemas;
@@ -30,10 +30,11 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private readonly MaterialDocumentMetadata metadata;
     private readonly IMaterialDocumentService documentService;
     private readonly ILogger logger;
-    private readonly Action<Uri>? assetChanged;
+    private readonly IAssetFeed assets;
     private readonly IDocumentInputCommitter? inputCommitter;
     private readonly WindowId windowId;
     private readonly IDocumentConflictPrompt? conflictPrompt;
+    private readonly IDocumentService? documents;
     private readonly SemaphoreSlim editGate = new(1, 1);
     private readonly Task loadTask;
     private Task<bool>? pendingSave;
@@ -54,30 +55,31 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// <param name="assetProvider">The shared source, publication and cooking status feed.</param>
     /// <param name="uiScheduler">Marshals status updates to the document's UI thread.</param>
     /// <param name="loggerFactory">Optional logger factory.</param>
-    /// <param name="assetChanged">Optional callback used by the host to refresh content-browser projections.</param>
     /// <param name="inputCommitter">Completes the focused numeric control before snapshot capture.</param>
     /// <param name="windowId">The owner window.</param>
     /// <param name="conflictPrompt">Presents recovery actions after an ordinary Save conflict.</param>
     /// <param name="relocation">Keeps the open material in step with asset relocations; optional.</param>
+    /// <param name="documents">The host's documents, told when the material's file goes missing on disk or returns; optional.</param>
     public MaterialEditorViewModel(
         MaterialDocumentMetadata metadata,
         IMaterialDocumentService documentService,
-        IContentBrowserAssetProvider assetProvider,
+        IAssetFeed assetProvider,
         IScheduler uiScheduler,
         ILoggerFactory? loggerFactory = null,
-        Action<Uri>? assetChanged = null,
         IDocumentInputCommitter? inputCommitter = null,
         WindowId windowId = default,
         IDocumentConflictPrompt? conflictPrompt = null,
-        Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation = null)
+        Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation = null,
+        IDocumentService? documents = null)
     {
         this.metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
         this.documentService = documentService ?? throw new ArgumentNullException(nameof(documentService));
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<MaterialEditorViewModel>();
-        this.assetChanged = assetChanged;
+        this.assets = assetProvider ?? throw new ArgumentNullException(nameof(assetProvider));
         this.inputCommitter = inputCommitter;
         this.windowId = windowId;
         this.conflictPrompt = conflictPrompt;
+        this.documents = documents;
         this.MaterialUriText = metadata.MaterialUri.ToString();
         this.TextureChannels =
         [
@@ -454,8 +456,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
         this.RefreshDocument(current.DocumentId);
         this.HasSaveConflict = false;
+        await this.RefreshSourcePresenceAsync().ConfigureAwait(true);
         this.StatusText = this.IsDirty ? "Saved; newer changes remain unsaved" : string.Empty;
-        this.assetChanged?.Invoke(this.metadata.MaterialUri);
         return !this.IsDirty;
     }
 

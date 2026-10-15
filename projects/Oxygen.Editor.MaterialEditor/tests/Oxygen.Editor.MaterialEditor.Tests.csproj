@@ -12,7 +12,6 @@
         <ProjectReference Include="..\src\Oxygen.Editor.MaterialEditor.csproj" />
         <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
         <Compile Include="..\..\Oxygen.Editor.ContentPipeline\testsupport\Native\NativeContentPipelineFixture.cs" Link="NativeContentPipelineFixture.cs" />
-        <Compile Include="..\..\Oxygen.Editor.ContentBrowser\testsupport\AssetStatusFixture.cs" Link="AssetStatusFixture.cs" />
     </ItemGroup>
 
 </Project>

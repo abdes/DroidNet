@@ -10,7 +10,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Projects;
@@ -34,10 +34,10 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
     public Task AssetStatusUpdatesPreserveBrowserSelectionAndScroll(bool tiles) => EnqueueAsync(async () =>
     {
         var items = Enumerable.Range(0, 20).Select(CreateStatusAsset).ToArray();
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>(items);
-        var provider = new Mock<IContentBrowserAssetProvider>();
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>(items);
+        var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
-        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var projects = new ProjectContextService();
         var state = new ContentBrowserState(projects);
         var hosting = CreateStatusHosting();

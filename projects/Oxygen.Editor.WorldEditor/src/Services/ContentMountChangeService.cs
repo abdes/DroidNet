@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Hosting.WinUI;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
@@ -14,14 +14,14 @@ namespace Oxygen.Editor.World.Services;
 /// <param name="coordinator">The shared project writer.</param>
 /// <param name="projects">The active project context.</param>
 /// <param name="publication">The journaled source, configuration and native publication owner.</param>
-/// <param name="catalog">The accepted browser catalog.</param>
+/// <param name="catalog">Shows the accepted publication's cooked content in the asset catalog.</param>
 /// <param name="hosting">The owning workspace dispatcher.</param>
-public sealed class ContentMountChangeService(IContentCookCoordinator coordinator, IProjectContextService projects, CookPublicationService publication, IProjectAssetCatalog catalog, HostingContext hosting)
+public sealed class ContentMountChangeService(IContentCookCoordinator coordinator, IProjectContextService projects, CookPublicationService publication, IAssetPublicationTarget catalog, HostingContext hosting)
 {
     private readonly IContentCookCoordinator coordinator = coordinator;
     private readonly IProjectContextService projects = projects;
     private readonly CookPublicationService publication = publication;
-    private readonly IProjectAssetCatalog catalog = catalog;
+    private readonly IAssetPublicationTarget catalog = catalog;
 
     /// <summary>Validates and commits one confirmed change, preserving old roots if it fails before saving.</summary>
     /// <param name="expected">The configuration accepted when editing began.</param>
@@ -95,7 +95,7 @@ public sealed class ContentMountChangeService(IContentCookCoordinator coordinato
         // Workspace notification is derived state and runs outside the head gate.
         beforeActivate(next);
         this.projects.Activate(next);
-        await this.catalog.RefreshAsync(accepted, CancellationToken.None).ConfigureAwait(true);
+        await this.catalog.UsePublicationAsync(accepted, CancellationToken.None).ConfigureAwait(true);
     }
 
     private void VerifyExpectedContext(ProjectContext expected, ContentCookOperation operation)

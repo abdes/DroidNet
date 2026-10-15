@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Reactive.Linq;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
@@ -13,6 +14,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
@@ -48,7 +50,7 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
         _ = pipeline.Setup(value => value.InspectCookedOutputAsync(metadata.ScopeUri, It.IsAny<CancellationToken>(), It.IsAny<bool>(), project)).Returns((Uri? _, CancellationToken _, bool validate, ProjectContext? _) => Task.FromResult(CreateInspectionReport(project, validate)));
         Uri? navigated = null;
-        using var model = new CookedInspectionViewModel(metadata, pipeline.Object, Oxygen.Testing.AssetStatusFixture.EmptyProvider, projects, uri =>
+        using var model = new CookedInspectionViewModel(metadata, pipeline.Object, Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()), projects, uri =>
         {
             navigated = uri;
             return Task.FromResult(true);
@@ -106,7 +108,7 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
         var calls = 0;
         var pipeline = new Mock<IContentPipelineService>();
         _ = pipeline.Setup(value => value.InspectCookedOutputAsync(It.Is<Uri?>(scope => scope == null), It.IsAny<CancellationToken>(), It.IsAny<bool>(), project)).Returns(() => ++calls == 1 ? first.Task : second.Task);
-        using var model = new CookedInspectionViewModel(metadata, pipeline.Object, Oxygen.Testing.AssetStatusFixture.EmptyProvider, projects, _ => Task.FromResult(false));
+        using var model = new CookedInspectionViewModel(metadata, pipeline.Object, Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()), projects, _ => Task.FromResult(false));
         var original = model.InitializeAsync();
         metadata.RequestRefresh(validate: true);
         _ = calls.Should().Be(1);
@@ -139,7 +141,7 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
         await using var containerLifetime = container.ConfigureAwait(true);
         container.RegisterInstance(pipeline.Object);
         container.RegisterInstance<IProjectContextService>(projects);
-        container.RegisterInstance(Oxygen.Testing.AssetStatusFixture.EmptyProvider);
+        container.RegisterInstance(Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()));
         container.RegisterInstance<IMessenger>(messenger);
         var windowId = new WindowId(501);
         var open = new List<IDocumentMetadata>();
@@ -158,7 +160,7 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
         var engine = new Mock<IEngineService>();
         _ = engine.Setup(value => value.ReleaseDocumentSurfacesAsync(It.IsAny<Guid>())).Returns(ValueTask.CompletedTask);
         using var host = new DocumentHostViewModel(documents.Object, views.Object, engine.Object, results, Mock.Of<IStatusReducer>(), container, new DocumentCloseCoordinator(Mock.Of<IDocumentClosePrompt>(), results), Mock.Of<IWindowManagerService>(), windowId);
-        using var manager = new DocumentManager(documents.Object, messenger, projects, Mock.Of<IProjectUsageService>(), Mock.Of<IMaterialDocumentService>(), windowId, Mock.Of<IProjectManagerService>(), Mock.Of<Oxygen.Editor.World.Services.ISceneEngineSync>());
+        using var manager = new DocumentManager(documents.Object, messenger, projects, Mock.Of<IProjectUsageService>(), Mock.Of<IMaterialDocumentService>(), windowId, Mock.Of<IProjectManagerService>(), Mock.Of<Oxygen.Editor.World.Services.ISceneEngineSync>(), Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         await LoadTestContentAsync(new DocumentHostView { ViewModel = host }).ConfigureAwait(true);
         var scope = new Uri("asset:///Content/Materials");
         _ = (await messenger.Send(new OpenCookedInspectionRequestMessage(project, scope, validate: false)).Response.ConfigureAwait(true)).Should().BeTrue();

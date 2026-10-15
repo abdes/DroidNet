@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -11,10 +12,9 @@ namespace Oxygen.Editor.ContentPipeline;
 internal static class CookInputResolver
 {
     /// <summary>The cooked script extension.</summary>
-    private const string ScriptExtension = ".oscript";
 
     /// <summary>The script source extensions, in the order a source is looked for.</summary>
-    private static readonly string[] ScriptSourceExtensions = [".lua", ".luau"];
+    private static readonly IReadOnlyList<string> ScriptSourceExtensions = AssetFileTypes.Suffixes(AssetFileCategory.Script);
 
     /// <summary>Maps a project-owned physical source to its declared authoring identity.</summary>
     /// <param name="project">The owning project and mount declarations.</param>
@@ -68,7 +68,7 @@ internal static class CookInputResolver
     public static ContentCookInput Resolve(ProjectContext project, Uri uri, ContentCookInputRole role)
     {
         var path = Uri.UnescapeDataString(uri.AbsolutePath);
-        if (InputFileReferences.IsInputFile(path))
+        if (AssetFileTypes.Is(path, AssetFileCategory.Input))
         {
             return ResolveInputFile(project, uri, path, role);
         }
@@ -116,7 +116,7 @@ internal static class CookInputResolver
     public static ContentCookInput? TryResolveScript(ProjectContext project, Uri uri, ContentCookInputRole role)
     {
         var path = Uri.UnescapeDataString(uri.AbsolutePath);
-        var stem = path.EndsWith(ScriptExtension, StringComparison.OrdinalIgnoreCase) ? path[..^ScriptExtension.Length]
+        var stem = path.EndsWith(AssetFileTypes.Script, StringComparison.OrdinalIgnoreCase) ? path[..^AssetFileTypes.Script.Length]
             : ScriptSourceExtensions.FirstOrDefault(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) is { } source ? path[..^source.Length]
             : null;
         var slash = stem is null || !ContentPipelinePaths.IsCanonicalVirtualPath(path) ? -1 : stem.IndexOf('/', 1);
@@ -135,13 +135,13 @@ internal static class CookInputResolver
             return null;
         }
 
-        var output = stem + ScriptExtension;
+        var output = stem + AssetFileTypes.Script;
         var relative = Path.GetRelativePath(project.ProjectRoot, absolute).Replace('\\', '/');
         return new(new Uri($"{AssetUris.Scheme}://{string.Join('/', output.Split('/').Select(Uri.EscapeDataString))}"), ContentCookAssetKind.Script, mount.Name, relative, absolute, output, role);
     }
 
     private static bool IsScriptReference(string path)
-        => path.EndsWith(ScriptExtension, StringComparison.OrdinalIgnoreCase)
+        => path.EndsWith(AssetFileTypes.Script, StringComparison.OrdinalIgnoreCase)
             || ScriptSourceExtensions.Any(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
 
     // An input file keeps its own identity; its output path is the file itself, whose folder receives its actions

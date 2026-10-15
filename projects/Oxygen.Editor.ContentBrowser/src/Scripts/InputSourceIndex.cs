@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.ContentBrowser.Scripts;
 
@@ -28,7 +29,7 @@ public static partial class InputSourceIndex
             return null;
         }
 
-        foreach (var file in Directory.EnumerateFiles(folder).Where(ScriptSources.IsInputSource).Order(StringComparer.OrdinalIgnoreCase))
+        foreach (var file in Directory.EnumerateFiles(folder).Where(static file => AssetFileTypes.Is(file, AssetFileCategory.Input)).Order(StringComparer.OrdinalIgnoreCase))
         {
             string text;
             try
@@ -60,7 +61,7 @@ public static partial class InputSourceIndex
                 return false;
             }
 
-            if (file.EndsWith(ScriptSources.InputActionFileSuffix, StringComparison.OrdinalIgnoreCase))
+            if (file.EndsWith(AssetFileTypes.InputActionFile, StringComparison.OrdinalIgnoreCase))
             {
                 return !isContext && HasName(root, name);
             }

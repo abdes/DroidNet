@@ -333,6 +333,15 @@ public interface ISceneDocumentCommandService
     /// <returns>The replacement model, or a failure retaining the original authoring state.</returns>
     public Task<SceneValueCommandResult<Scene>> ReloadSceneAsync(SceneDocumentCommandContext context, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Re-checks whether the scene's file is still on disk and marks the document accordingly. A scene whose file was
+    /// deleted or moved outside the editor stays open; saving writes the file again, closing discards it.
+    /// </summary>
+    /// <param name="context">The open scene document.</param>
+    /// <param name="cancellationToken">Cancels reading the file.</param>
+    /// <returns>Whether the scene's file is missing on disk.</returns>
+    public Task<bool> RefreshSourcePresenceAsync(SceneDocumentCommandContext context, CancellationToken cancellationToken = default);
+
     /// <summary>Creates an empty scene node under a node, a folder, or the scene root.</summary>
     /// <param name="context">The document command context.</param>
     /// <param name="parentNodeId">The destination parent node, or <see langword="null"/> for root/folder scope.</param>

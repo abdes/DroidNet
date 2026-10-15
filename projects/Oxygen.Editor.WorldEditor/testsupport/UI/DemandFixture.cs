@@ -10,7 +10,7 @@ using DroidNet.Tests;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
@@ -62,8 +62,8 @@ internal sealed partial class DemandFixture : IDisposable
             IdentityUri = this.MaterialUri,
             CookStatus = new(this.MaterialUri, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
         };
-        _ = this.Assets.SetupGet(value => value.Items).Returns(Observable.Return<IReadOnlyList<ContentBrowserAssetItem>>([this.GeometryAsset, material]));
-        _ = this.Assets.Setup(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        _ = this.Assets.SetupGet(value => value.Items).Returns(Observable.Return<IReadOnlyList<AssetEntry>>([this.GeometryAsset, material]));
+        _ = this.Assets.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         _ = this.Assets.Setup(value => value.ResolveAsync(this.GeometryUri, It.IsAny<CancellationToken>())).ReturnsAsync(this.GeometryAsset);
         _ = this.Assets.Setup(value => value.ResolveAsync(this.MaterialUri, It.IsAny<CancellationToken>())).ReturnsAsync(material);
         _ = this.pipeline.Setup(value => value.CookPreviewAssetAsync(It.IsAny<Uri>(), It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>())).Returns((Uri uri, ProjectContext project, CancellationToken token) =>
@@ -81,7 +81,7 @@ internal sealed partial class DemandFixture : IDisposable
 
     public SceneAuthoringFixture Authoring { get; } = new();
 
-    public Mock<IContentBrowserAssetProvider> Assets { get; } = new();
+    public Mock<IAssetFeed> Assets { get; } = new();
 
     public Uri GeometryUri { get; } = new("asset:///Content/Geometry/Custom.ogeo.json");
 
@@ -89,7 +89,7 @@ internal sealed partial class DemandFixture : IDisposable
 
     public GeometryComponent Geometry { get; }
 
-    public ContentBrowserAssetItem GeometryAsset { get; }
+    public AssetEntry GeometryAsset { get; }
 
     public SceneContentDemandService Service { get; }
 

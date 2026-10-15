@@ -4,7 +4,6 @@
 
 using System.Numerics;
 using AwesomeAssertions;
-using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Publication;
@@ -99,7 +98,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             var cancelled = await WaitForProjectCookAsync(services, prior, completed: true, cancellationToken).ConfigureAwait(true);
             _ = cancelled.State.Should().Be(CookRunState.Cancelled);
             _ = services.Projects.ActiveProject.Should().BeNull();
-            await scenario.Picker.RefreshAsync(MaterialPickerFilter.Default, cancellationToken).ConfigureAwait(true);
+            await scenario.Feed.RefreshAsync(cancellationToken).ConfigureAwait(true);
             _ = ReadPublishedHashes(fixture.ProjectRoot).Should().BeEquivalentTo(hashes);
             _ = fixture.Runtime.State.Should().Be(EngineServiceState.NoEngine);
             using (await CookOutputLease.AcquireWriteAsync(fixture.ProjectRoot, CancellationToken.None).ConfigureAwait(true))

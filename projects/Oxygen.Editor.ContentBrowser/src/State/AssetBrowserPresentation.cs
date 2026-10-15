@@ -4,7 +4,8 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
+using Oxygen.Editor.ContentBrowser.Panes.Assets;
 
 namespace Oxygen.Editor.ContentBrowser;
 
@@ -70,7 +71,7 @@ public sealed partial class AssetBrowserPresentation : ObservableObject
     /// <summary>Orders rows by the current field and direction, ties by name and then identity.</summary>
     /// <param name="items">The rows to order.</param>
     /// <returns>The ordered rows.</returns>
-    public IReadOnlyList<ContentBrowserAssetItem> Sort(IEnumerable<ContentBrowserAssetItem> items)
+    public IReadOnlyList<AssetEntry> Sort(IEnumerable<AssetEntry> items)
     {
         ArgumentNullException.ThrowIfNull(items);
         var keyed = items.Select(item => (Item: item, Facts: this.SortField is AssetSortField.Size or AssetSortField.Modified ? AssetFileFacts.Read(item) : default)).ToList();
@@ -116,14 +117,14 @@ public sealed partial class AssetBrowserPresentation : ObservableObject
             _ => descending ? right!.Value.CompareTo(left!.Value) : left!.Value.CompareTo(right!.Value),
         };
 
-    private static string GetFolder(ContentBrowserAssetItem item)
+    private static string GetFolder(AssetEntry item)
     {
         var path = item.DisplayPath.Replace('\\', '/');
         var slash = path.LastIndexOf('/');
         return slash <= 0 ? "/" : path[..slash];
     }
 
-    private int CompareField(ContentBrowserAssetItem left, AssetFileFacts leftFacts, ContentBrowserAssetItem right, AssetFileFacts rightFacts)
+    private int CompareField(AssetEntry left, AssetFileFacts leftFacts, AssetEntry right, AssetFileFacts rightFacts)
     {
         var sign = this.SortDescending ? -1 : 1;
         return this.SortField switch

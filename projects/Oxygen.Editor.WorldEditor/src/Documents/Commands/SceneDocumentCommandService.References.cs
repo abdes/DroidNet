@@ -5,6 +5,7 @@
 using DroidNet.TimeMachine;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -59,17 +60,17 @@ public sealed partial class SceneDocumentCommandService
             return "Scene reference collections cannot be null.";
         }
 
-        if (ValidateTypedReferences(references.Scripts, ".oscript") is { } scripts)
+        if (ValidateTypedReferences(references.Scripts, AssetFileTypes.Script) is { } scripts)
         {
             return scripts;
         }
 
-        if (ValidateTypedReferences(references.InputActions, ".oiact") is { } actions)
+        if (ValidateTypedReferences(references.InputActions, AssetFileTypes.InputAction) is { } actions)
         {
             return actions;
         }
 
-        if (ValidateTypedReferences(references.PhysicsSidecars, ".opscene") is { } physics)
+        if (ValidateTypedReferences(references.PhysicsSidecars, AssetFileTypes.PhysicsScene) is { } physics)
         {
             return physics;
         }

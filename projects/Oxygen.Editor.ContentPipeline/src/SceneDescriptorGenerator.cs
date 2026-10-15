@@ -10,6 +10,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -462,19 +463,19 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         var name = Path.GetFileName(sceneInput.SourceRelativePath);
         var normalized = ContentPipelinePaths.NormalizeSceneDescriptorName(name);
         var folder = Path.GetDirectoryName(sceneInput.SourceRelativePath) ?? string.Empty;
-        return Path.Combine(scope.PreparationRoot ?? scope.InputRoot, ".pipeline", "Scenes", folder, normalized + ".oscene.json");
+        return Path.Combine(scope.PreparationRoot ?? scope.InputRoot, ".pipeline", "Scenes", folder, normalized + AssetFileTypes.SceneDescriptor);
     }
 
     private static string? ResolveGeometryRef(Uri geometryUri, IReadOnlyList<ContentCookInput> generatedGeometryInputs)
         => ProceduralGeometryDescriptorService.IsGeneratedBasicShape(geometryUri)
             ? generatedGeometryInputs.FirstOrDefault(input => input.AssetUri == geometryUri)?.OutputVirtualPath
-            : ContentPipelinePaths.ToNativeDescriptorPath(geometryUri, ".ogeo");
+            : ContentPipelinePaths.ToNativeDescriptorPath(geometryUri, AssetFileTypes.Geometry);
 
     private static string? ResolveMaterialRef(Uri? materialUri, IReadOnlyList<ContentCookInput> generatedInputs)
         => materialUri is null || IsEmptyAssetUri(materialUri)
             ? null : IsDefaultMaterial(materialUri)
             ? generatedInputs.FirstOrDefault(static input => IsDefaultMaterial(input.AssetUri))?.OutputVirtualPath
-            : ContentPipelinePaths.ToNativeDescriptorPath(materialUri, ".omat");
+            : ContentPipelinePaths.ToNativeDescriptorPath(materialUri, AssetFileTypes.Material);
 
     private static NativeReferences? CreateNativeReferences(
         Oxygen.Editor.World.Serialization.SceneReferencesData references,
@@ -484,9 +485,9 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
 
         try
         {
-            var scripts = ResolveTypedReferences(references.Scripts, ".oscript");
-            var inputActions = ResolveTypedReferences(references.InputActions, ".oiact");
-            var physicsSidecars = ResolveTypedReferences(references.PhysicsSidecars, ".opscene");
+            var scripts = ResolveTypedReferences(references.Scripts, AssetFileTypes.Script);
+            var inputActions = ResolveTypedReferences(references.InputActions, AssetFileTypes.InputAction);
+            var physicsSidecars = ResolveTypedReferences(references.PhysicsSidecars, AssetFileTypes.PhysicsScene);
             if (references.ExtraAssets.Any(static path => !ContentPipelinePaths.IsCanonicalVirtualPath(path)))
             {
                 throw new InvalidDataException("Extra scene asset references must be absolute canonical virtual paths.");
@@ -604,7 +605,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
 
             try
             {
-                _ = ContentPipelinePaths.ToNativeDescriptorPath(mask, ".otex");
+                _ = ContentPipelinePaths.ToNativeDescriptorPath(mask, AssetFileTypes.Texture);
             }
             catch (ArgumentException error)
             {
@@ -751,7 +752,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             DisplayGamma: authored.DisplayGamma);
 
     private static string? GetTexturePath(Uri? texture)
-        => texture is null ? null : ContentPipelinePaths.ToNativeDescriptorPath(texture, ".otex");
+        => texture is null ? null : ContentPipelinePaths.ToNativeDescriptorPath(texture, AssetFileTypes.Texture);
 
     // Mirrors the native Earth baseline in Oxygen/Core/Types/Atmosphere.h.
     private static NativeSkyAtmosphereEnvironment CreateSkyAtmosphere(bool enabled, SkyAtmosphereEnvironmentData authored)

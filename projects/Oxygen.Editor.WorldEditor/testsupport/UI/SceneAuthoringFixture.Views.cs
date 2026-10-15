@@ -10,7 +10,6 @@ using DroidNet.Tests;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Moq;
-using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
@@ -21,7 +20,7 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 
 internal sealed partial class SceneAuthoringFixture
 {
-    public SceneNodeEditorViewModel CreateInspectorHost(string kind, bool realizeViews = false, Oxygen.Editor.WorldEditor.Documents.Commands.ISceneDocumentCommandService? commandService = null, ISceneContentDemandService? contentDemand = null, Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider? assetProvider = null)
+    public SceneNodeEditorViewModel CreateInspectorHost(string kind, bool realizeViews = false, Oxygen.Editor.WorldEditor.Documents.Commands.ISceneDocumentCommandService? commandService = null, ISceneContentDemandService? contentDemand = null, Oxygen.Editor.Assets.IAssetFeed? assetProvider = null)
     {
         IList<SceneNode> selection = string.Equals(kind, "Environment", StringComparison.Ordinal) ? [] : [this.Node];
         this.Messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
@@ -34,14 +33,11 @@ internal sealed partial class SceneAuthoringFixture
             _ = locator.Setup(value => value.ResolveView(It.IsAny<object>())).Returns((object model) => model is Oxygen.Editor.World.Inspector.Geometry.GeometryViewModel ? new Oxygen.Editor.World.Inspector.Geometry.GeometryView() : CreateNumericView((IPropertyEditor<SceneNode>)model));
         }
 
-        var catalog = new Mock<Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider>();
-        _ = catalog.SetupGet(value => value.Items).Returns(System.Reactive.Linq.Observable.Empty<IReadOnlyList<Oxygen.Editor.ContentBrowser.AssetIdentity.ContentBrowserAssetItem>>());
-        _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<Oxygen.Editor.ContentBrowser.AssetIdentity.AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        var materials = new Mock<IMaterialPickerService>();
-        _ = materials.SetupGet(value => value.Results).Returns(System.Reactive.Linq.Observable.Return<IReadOnlyList<MaterialPickerResult>>([]));
-        _ = materials.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        var catalog = new Mock<Oxygen.Editor.Assets.IAssetFeed>();
+        _ = catalog.SetupGet(value => value.Items).Returns(System.Reactive.Linq.Observable.Empty<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>>());
+        _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
-        return new(new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) }, new ViewModelToView(locator.Object), this.Messenger, commandService ?? this.Commands, this.Documents.Object, default, assetProvider ?? catalog.Object, materials.Object, this.Sync.Object, this.Selection, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.Slots.Object, this.Projects, interaction: this.interaction);
+        return new(new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) }, new ViewModelToView(locator.Object), this.Messenger, commandService ?? this.Commands, this.Documents.Object, default, assetProvider ?? catalog.Object, this.Sync.Object, this.Selection, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.Slots.Object, this.Projects, interaction: this.interaction);
     }
 
     public void ConfigureObservedSync(SceneEngineSync throttle, List<DateTimeOffset> previews, Action terminal)

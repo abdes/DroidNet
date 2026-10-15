@@ -9,8 +9,7 @@ using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.World.Inspector.Geometry;
 using static DroidNet.Tests.UiTestHosting;
@@ -44,14 +43,11 @@ internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTe
             BuiltinOriginUri = engine.Uri,
             PrimaryState = AssetState.Generated,
         };
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([asset, copy]);
-        var provider = new Mock<IContentBrowserAssetProvider>();
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([asset, copy]);
+        var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
-        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        var materials = new Mock<IMaterialPickerService>();
-        _ = materials.SetupGet(value => value.Results).Returns(Observable.Return<IReadOnlyList<MaterialPickerResult>>([]));
-        _ = materials.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        using var model = new GeometryViewModel(CreateStatusHosting(), provider.Object, materials.Object, builtins, Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
+        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        using var model = new GeometryViewModel(CreateStatusHosting(), provider.Object, builtins, Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
         {
             IsExpanded = true,
         };

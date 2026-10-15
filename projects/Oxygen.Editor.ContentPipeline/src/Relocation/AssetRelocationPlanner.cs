@@ -4,6 +4,7 @@
 
 using DroidNet.Storage;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -245,7 +246,7 @@ internal static class AssetRelocationPlanner
             return Path.Combine(targetFolder, string.Equals(companionStem, stem, StringComparison.OrdinalIgnoreCase) ? newStem + RelocationPaths.GetExtension(name) : name);
         }
 
-        if (source.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase))
+        if (source.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
         {
             var content = File.ReadAllBytes(source);
             foreach (var image in AuthoredReferenceFormat.ReadTextureSources(source, content)
@@ -257,7 +258,7 @@ internal static class AssetRelocationPlanner
             return;
         }
 
-        foreach (var descriptor in index.Descriptors.Where(descriptor => descriptor.Path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
+        foreach (var descriptor in index.Descriptors.Where(descriptor => descriptor.Path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
             && string.Equals(Path.GetDirectoryName(descriptor.Path), folder, StringComparison.OrdinalIgnoreCase) && !map.IsMoved(descriptor.Path)))
         {
             var sources = AuthoredReferenceFormat.ReadTextureSources(descriptor.Path, File.ReadAllBytes(descriptor.Path));

@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Messaging;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
@@ -47,7 +46,6 @@ public sealed partial class SceneDocumentCommandService
 
             accepted = await this.AcceptSceneReloadAsync(context, snapshot, replacement).ConfigureAwait(true);
             _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
-            _ = this.messenger.Send(new AssetsChangedMessage());
             return SceneCommandResults.Success(accepted);
         }
         catch (OperationCanceledException) when (accepted is null)

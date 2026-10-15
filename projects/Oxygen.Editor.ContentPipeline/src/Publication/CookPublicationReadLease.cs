@@ -11,7 +11,7 @@ using Oxygen.Editor.Projects;
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
 /// <summary>A captured publication and the lifetime ownership of its immutable document and generations.</summary>
-public sealed class CookPublicationReadLease : IDisposable
+public sealed class CookPublicationReadLease : ICookPublicationReadLease
 {
     private readonly SharedState state;
     private bool disposed;
@@ -56,7 +56,8 @@ public sealed class CookPublicationReadLease : IDisposable
     /// <param name="root">A root from this publication.</param>
     /// <param name="cancellationToken">Cancels reading the index; payloads are not hashed.</param>
     /// <returns>A catalog whose records remain tied to this publication.</returns>
-    /// <exception cref="CookedLibraryChangedException">The root's index was replaced after this publication was captured.</exception>
+    /// <exception cref="CookedLibraryChangedException">A library root's index was replaced after this publication was captured.</exception>
+    /// <exception cref="InvalidDataException">The project's own root no longer matches this publication.</exception>
     public async Task<Oxygen.Managed.Assets.Catalog.LooseCooked.LooseCookedIndexAssetCatalog> CreateCatalogAsync(
         CookPublicationRoot root, CancellationToken cancellationToken)
     {
@@ -70,7 +71,7 @@ public sealed class CookPublicationReadLease : IDisposable
         var index = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
         if (index.Index.SourceGuid != root.SourceKey || !string.Equals(index.Fingerprint, root.IndexSha256, StringComparison.OrdinalIgnoreCase))
         {
-            throw new CookedLibraryChangedException(root, path, index.Index.SourceGuid, index.Fingerprint);
+            throw CookedLibraryChangedException.ForChangedRoot(root, path, index.Index.SourceGuid, index.Fingerprint);
         }
 
         return new(index.Index, path);
@@ -101,6 +102,33 @@ public sealed class CookPublicationReadLease : IDisposable
     }
 
     /// <inheritdoc />
+    ICookPublicationReadLease ICookPublicationReadLease.Retain() => this.Retain();
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Oxygen.Managed.Assets.Catalog.IAssetCatalog>> CreateCatalogsAsync(CancellationToken cancellationToken)
+    {
+        var catalogs = new List<Oxygen.Managed.Assets.Catalog.IAssetCatalog>(this.Roots.Length);
+        try
+        {
+            foreach (var root in this.Roots.Where(root => !this.UnavailableRoots.Contains(root)))
+            {
+                catalogs.Add(await this.CreateCatalogAsync(root, cancellationToken).ConfigureAwait(false));
+            }
+
+            return catalogs;
+        }
+        catch
+        {
+            foreach (var catalog in catalogs)
+            {
+                (catalog as IDisposable)?.Dispose();
+            }
+
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
     public void Dispose()
     {
         List<FileStream>? release = null;
@@ -125,6 +153,17 @@ public sealed class CookPublicationReadLease : IDisposable
                 handle.Dispose();
             }
         }
+    }
+
+    /// <summary>Returns a lease handed back to the pipeline as the lease the pipeline issued.</summary>
+    /// <param name="lease">A lease from <see cref="ICookPublicationReader"/>.</param>
+    /// <returns>The pipeline's own lease.</returns>
+    /// <exception cref="ArgumentException">The lease was not issued by the content pipeline.</exception>
+    internal static CookPublicationReadLease Issued(ICookPublicationReadLease lease)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+        return lease as CookPublicationReadLease
+            ?? throw new ArgumentException("The publication lease was not issued by the content pipeline.", nameof(lease));
     }
 
     /// <summary>Captures the selected document after recovery, while the caller owns the selection gate.</summary>

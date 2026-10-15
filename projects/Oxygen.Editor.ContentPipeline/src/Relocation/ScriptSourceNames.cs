@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Assets;
+
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
 /// <summary>
@@ -10,7 +12,7 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// </summary>
 internal static class ScriptSourceNames
 {
-    private static readonly string[] Extensions = [".lua", ".luau"];
+    private static readonly IReadOnlyList<string> Extensions = AssetFileTypes.Suffixes(AssetFileCategory.Script);
 
     /// <summary>Finds an existing script source that a script written at <paramref name="target"/> would collide with.</summary>
     /// <param name="target">The physical path a script would be written to.</param>
@@ -39,6 +41,6 @@ internal static class ScriptSourceNames
     {
         ArgumentNullException.ThrowIfNull(virtualPath);
         var extension = Extensions.FirstOrDefault(candidate => virtualPath.EndsWith(candidate, StringComparison.OrdinalIgnoreCase));
-        return extension is null ? null : virtualPath[..^extension.Length] + ".oscript";
+        return extension is null ? null : virtualPath[..^extension.Length] + AssetFileTypes.Script;
     }
 }

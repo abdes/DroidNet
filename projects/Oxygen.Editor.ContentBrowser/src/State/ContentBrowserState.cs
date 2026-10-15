@@ -4,7 +4,7 @@
 
 using System.ComponentModel;
 using DroidNet.Storage;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
 
@@ -40,7 +40,7 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
     public string ProjectRootPath => projectContextService.ActiveProject?.ProjectRoot ?? string.Empty;
 
     /// <summary>Gets the selected assets of the active layout, in selection order; the last is the active asset.</summary>
-    public IReadOnlyList<ContentBrowserAssetItem> SelectedAssets { get; private set; } = [];
+    public IReadOnlyList<AssetEntry> SelectedAssets { get; private set; } = [];
 
     /// <summary>Gets the number of results the active layout shows after search and filters.</summary>
     public int ResultCount { get; private set; }
@@ -143,7 +143,7 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
 
     /// <summary>Publishes the active layout's selection to the details pane and commands.</summary>
     /// <param name="assets">The selected assets; the last is the active asset.</param>
-    internal void PublishSelection(IReadOnlyList<ContentBrowserAssetItem> assets)
+    internal void PublishSelection(IReadOnlyList<AssetEntry> assets)
     {
         if (this.SelectedAssets.SequenceEqual(assets))
         {

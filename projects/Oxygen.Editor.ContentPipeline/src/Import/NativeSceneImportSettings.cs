@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Json.Schema;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
 
@@ -31,7 +32,7 @@ public sealed record NativeSceneImportSettings(
     string OutputDirectory)
 {
     /// <summary>The sidecar suffix already used for source import configuration.</summary>
-    public const string SidecarSuffix = ".import.json";
+    public const string SidecarSuffix = AssetFileTypes.ImportSettings;
 
     /// <summary>The native scene importer contract.</summary>
     public const string ImporterIdentity = "Oxygen.Cooker.Scene/v1";

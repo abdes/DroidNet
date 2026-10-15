@@ -29,6 +29,7 @@ public sealed partial class MaterialDocumentService
                     lock (this.sync)
                     {
                         this.fileVersions[document.DocumentId] = version;
+                        this.ForgetMissingSource(document.DocumentId);
                     }
 
                     return true;

@@ -7,14 +7,13 @@ using System.Security.Cryptography;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
-using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.MaterialEditor;
+using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
@@ -72,11 +71,11 @@ internal static class PublicationWorkflows
         }
     }
 
-    internal static async Task<string> PrepareSharedPublicationMaterialAsync(NativeSceneFixture fixture, CatalogWorkloadServices services, MaterialPickerService picker, MaterialDocumentService materials, MaterialDocument material, CancellationToken cancellationToken)
+    internal static async Task<string> PrepareSharedPublicationMaterialAsync(NativeSceneFixture fixture, CatalogWorkloadServices services, IAssetFeed feed, MaterialDocumentService materials, MaterialDocument material, CancellationToken cancellationToken)
     {
         var red = new Vector4(1, 0, 0, 1);
         await SetPublicationMaterialColorAsync(materials, material.DocumentId, red, cancellationToken).ConfigureAwait(true);
-        var before = await picker.ResolveAsync(material.MaterialUri, cancellationToken).ConfigureAwait(true);
+        var before = await feed.ResolveAsync(material.MaterialUri, cancellationToken).ConfigureAwait(true);
         _ = before.Should().NotBeNull();
         _ = before!.CookStatus!.Freshness.Should().Be(AssetCookFreshness.NeedsCooking);
         _ = before.CookStatus.HasPublishedOutput.Should().BeFalse();
@@ -84,7 +83,7 @@ internal static class PublicationWorkflows
         _ = before.RuntimeAvailability.Should().NotBe(AssetRuntimeAvailability.Mounted);
         services.Runs.IsAutomaticCookingPaused = false;
         _ = await WaitForPublicationRunAsync(services, [], cancellationToken).ConfigureAwait(true);
-        var choice = await picker.ResolveAsync(material.MaterialUri, cancellationToken).ConfigureAwait(true);
+        var choice = await feed.ResolveAsync(material.MaterialUri, cancellationToken).ConfigureAwait(true);
         _ = choice!.CookStatus!.Freshness.Should().Be(AssetCookFreshness.Current);
         _ = choice.RuntimeAvailability.Should().Be(AssetRuntimeAvailability.Mounted);
         _ = File.Exists(choice.CookedPath).Should().BeTrue();
@@ -95,7 +94,7 @@ internal static class PublicationWorkflows
             foreach (var nodeId in nodes)
             {
                 var target = await fixture.ReadSingleMaterialSlotAsync(nodeId, cancellationToken).ConfigureAwait(true);
-                var result = await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [nodeId], target, choice.MaterialUri, EditSessionToken.OneShot, cancellationToken).ConfigureAwait(true);
+                var result = await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [nodeId], target, choice.IdentityUri, EditSessionToken.OneShot, cancellationToken).ConfigureAwait(true);
                 _ = result.Succeeded.Should().BeTrue();
             }
         }
@@ -109,7 +108,7 @@ internal static class PublicationWorkflows
         return first.MaterialKeys.Single();
     }
 
-    internal static async Task CheckSharedPublicationRefreshAsync(NativeSceneFixture fixture, CatalogWorkloadServices services, MaterialPickerService picker, MaterialDocumentService materials, MaterialDocument material, CookTargetKind? scope, string key, CancellationToken cancellationToken)
+    internal static async Task CheckSharedPublicationRefreshAsync(NativeSceneFixture fixture, CatalogWorkloadServices services, IAssetFeed feed, MaterialDocumentService materials, MaterialDocument material, CookTargetKind? scope, string key, CancellationToken cancellationToken)
     {
         if (scope is not null)
         {
@@ -156,7 +155,7 @@ internal static class PublicationWorkflows
         _ = fixture.Context.Metadata.ChangeVersion.Should().Be(revision);
         _ = fixture.Context.History.UndoStack.Should().HaveCount(history);
         _ = fixture.Context.Metadata.IsDirty.Should().Be(dirty);
-        var updated = await picker.ResolveAsync(material.MaterialUri, cancellationToken).ConfigureAwait(true);
+        var updated = await feed.ResolveAsync(material.MaterialUri, cancellationToken).ConfigureAwait(true);
         _ = updated!.CookStatus!.Freshness.Should().Be(AssetCookFreshness.Current);
         _ = updated.RuntimeAvailability.Should().Be(AssetRuntimeAvailability.Mounted);
     }
@@ -174,9 +173,9 @@ internal static class PublicationWorkflows
         using var services = new CatalogWorkloadServices(fixture);
         services.Runs.IsAutomaticCookingPaused = true;
         using var automatic = new AutomaticCookService(services.Projects, services.Pipeline, services.Runs, NullLogger<AutomaticCookService>.Instance);
-        await using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
-        using var provider = new ContentBrowserAssetProvider(catalog, services.Projects, services.Scopes, new AssetIdentityReducer(), services.Pipeline, services.Documents, services.Runs, fixture.Runtime);
-        using var picker = new MaterialPickerService(provider);
+        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
+        using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
+        using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus);
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         using var publication = fixture.RegisterWorkspacePublication(services, catalog);
         var materials = new MaterialDocumentService(automatic, new ProjectMaterialSourcePathResolver(services.Projects), new MaterialCookService(services.Pipeline, services.Projects, NullLogger<MaterialCookService>.Instance), services.Documents, new NativeAtomicFileStore(new RealFileSystem()));
@@ -184,14 +183,14 @@ internal static class PublicationWorkflows
         var material = await materials.CreateAsync(uri, timeout.Token).ConfigureAwait(true);
         try
         {
-            var key = await PrepareSharedPublicationMaterialAsync(fixture, services, picker, materials, material, timeout.Token).ConfigureAwait(true);
+            var key = await PrepareSharedPublicationMaterialAsync(fixture, services, provider, materials, material, timeout.Token).ConfigureAwait(true);
             if (verify is null)
             {
-                await CheckSharedPublicationRefreshAsync(fixture, services, picker, materials, material, scope, key, timeout.Token).ConfigureAwait(true);
+                await CheckSharedPublicationRefreshAsync(fixture, services, provider, materials, material, scope, key, timeout.Token).ConfigureAwait(true);
             }
             else
             {
-                await verify(new(fixture, services, catalog, picker, materials, material, key), timeout.Token).ConfigureAwait(true);
+                await verify(new(fixture, services, catalog, provider, materials, material, key), timeout.Token).ConfigureAwait(true);
             }
         }
         finally
@@ -204,5 +203,5 @@ internal static class PublicationWorkflows
         }
     }
 
-    internal sealed record PublicationScenario(NativeSceneFixture SceneAuthoringFixture, CatalogWorkloadServices Services, IProjectAssetCatalog Catalog, MaterialPickerService Picker, MaterialDocumentService Materials, MaterialDocument Material, string Key);
+    internal sealed record PublicationScenario(NativeSceneFixture SceneAuthoringFixture, CatalogWorkloadServices Services, AssetCatalog Catalog, IAssetFeed Feed, MaterialDocumentService Materials, MaterialDocument Material, string Key);
 }

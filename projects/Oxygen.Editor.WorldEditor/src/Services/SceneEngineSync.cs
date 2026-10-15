@@ -10,6 +10,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Services;
@@ -782,7 +783,7 @@ public sealed partial class SceneEngineSync(
             return null;
         }
 
-        var path = ContentPipeline.ContentPipelinePaths.ToNativeDescriptorPath(texture, ".otex");
+        var path = ContentPipeline.ContentPipelinePaths.ToNativeDescriptorPath(texture, AssetFileTypes.Texture);
         var separator = path.IndexOf('/', 1);
         if (separator <= 1 || scene.Project.ProjectInfo.Location is not { } projectRoot
             || !Path.IsPathFullyQualified(projectRoot))

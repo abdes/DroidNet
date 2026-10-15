@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Assets;
+
 namespace Oxygen.Editor.ContentBrowser.Models;
 
 /// <summary>
@@ -216,7 +218,7 @@ public class GameAsset
 
     private static string NormalizeDisplayName(string name)
     {
-        foreach (var suffix in new[] { ".omat", ".ogeo", ".oscene", ".otex" })
+        foreach (var suffix in new[] { AssetFileTypes.Material, AssetFileTypes.Geometry, AssetFileTypes.Scene, AssetFileTypes.Texture })
         {
             if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
             {

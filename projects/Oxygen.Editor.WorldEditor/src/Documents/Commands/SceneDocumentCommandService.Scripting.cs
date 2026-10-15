@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using DroidNet.TimeMachine;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -86,7 +87,7 @@ public sealed partial class SceneDocumentCommandService
 
         foreach (var slot in slots)
         {
-            if (slot.Script is { } script && ValidateTypedReferences([script], ".oscript") is { } scriptError)
+            if (slot.Script is { } script && ValidateTypedReferences([script], AssetFileTypes.Script) is { } scriptError)
             {
                 return scriptError;
             }

@@ -14,7 +14,7 @@ using Oxygen.Editor.World.Serialization;
 namespace Oxygen.Editor.World.Documents;
 
 /// <summary>
-/// Content Browser changes to open documents and scenes. Open documents follow renames and moves in memory as
+/// Editor-made file changes to open documents and scenes. Open documents follow renames and moves in memory as
 /// relocation participants; here a deleted material's tab closes and moved materials' tabs refresh. Saved scenes
 /// that are not open are renamed, duplicated or deleted here, because the project identifies scenes by name; the
 /// open scene's editor renames it.
@@ -23,7 +23,7 @@ public sealed partial class DocumentManager
 {
     private void RegisterRelocationMessages()
     {
-        this.messenger.Register<AssetFilesChangedMessage>(this, (_, message) => _ = this.FollowChangedFilesAsync(message));
+        this.relocation.FilesChanged += this.OnFilesChanged;
         this.messenger.Register<SceneAssetCommandMessage>(this, (_, message) =>
         {
             if (message.HasReceivedResponse || this.projectManager.CurrentProject is not { } project)
@@ -154,7 +154,9 @@ public sealed partial class DocumentManager
 
     // Open materials follow renames and moves in memory as relocation participants; here a deleted material's tab
     // closes, and a moved material's tab refreshes the title its editor already re-pointed.
-    private async Task FollowChangedFilesAsync(AssetFilesChangedMessage message)
+    private void OnFilesChanged(object? sender, AssetFilesChangedEventArgs args) => _ = this.FollowChangedFilesAsync(args);
+
+    private async Task FollowChangedFilesAsync(AssetFilesChangedEventArgs change)
     {
         if (this.disposed || this.projectContextService.ActiveProject is not { } project)
         {
@@ -169,7 +171,7 @@ public sealed partial class DocumentManager
                 continue;
             }
 
-            var deleted = message.DeletedFiles.Any(item => string.Equals(path, item, StringComparison.OrdinalIgnoreCase)
+            var deleted = change.DeletedFiles.Any(item => string.Equals(path, item, StringComparison.OrdinalIgnoreCase)
                 || path.StartsWith(item.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
             if (deleted)
             {
@@ -182,7 +184,7 @@ public sealed partial class DocumentManager
                     this.LogDeletedMaterialNotClosed(metadata.MaterialUri);
                 }
             }
-            else if (message.Moves.Any(move => string.Equals(path, move.Target, StringComparison.OrdinalIgnoreCase)
+            else if (change.Moves.Any(move => string.Equals(path, move.Target, StringComparison.OrdinalIgnoreCase)
                 || (move.IsDirectory && path.StartsWith(move.Target + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))))
             {
                 _ = await this.documentService.UpdateMetadataAsync(this.windowId, metadata.DocumentId, metadata).ConfigureAwait(true);

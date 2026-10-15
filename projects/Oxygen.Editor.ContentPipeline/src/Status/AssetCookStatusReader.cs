@@ -44,6 +44,10 @@ public sealed partial class AssetCookStatusReader(
         return await this.ReadAsync(project, output, assetUris, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
+    Task<IReadOnlyList<AssetCookStatus>> IAssetCookStatusReader.ReadAsync(ProjectContext project, ICookPublicationReadLease publication, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken)
+        => this.ReadAsync(project, CookPublicationReadLease.Issued(publication), assetUris, cancellationToken);
+
     /// <summary>Reads status while the caller retains the project's finite inspection lease.</summary>
     /// <param name="project">The protected project.</param>
     /// <param name="snapshot">The retained publication selection.</param>

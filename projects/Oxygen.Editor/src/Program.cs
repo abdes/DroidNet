@@ -455,6 +455,7 @@ public static partial class Program
         container.RegisterDelegate(
             resolver => (ContentPipeline.Inspection.IScriptDeclarationProvider)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
         container.Register<ContentPipeline.Publication.CookPublicationService>(Reuse.Singleton);
+        container.RegisterMapping<ContentPipeline.Publication.ICookPublicationReader, ContentPipeline.Publication.CookPublicationService>();
         container.Register<ContentPipeline.Mounting.CookedContentMountService>(Reuse.Singleton);
         container.Register<ContentPipeline.Cooking.IAutomaticCookService, ContentPipeline.Cooking.AutomaticCookService>(Reuse.Singleton);
         container.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);

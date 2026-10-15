@@ -4,7 +4,7 @@
 
 using System.Globalization;
 using System.Numerics;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -43,7 +43,7 @@ public sealed partial class AssetDetailsViewModel
         var type = parameter.Kind switch
         {
             ScriptParameterKind.Vec3 or ScriptParameterKind.Vec4 when parameter.IsColor => "color",
-            ScriptParameterKind.Asset => "asset (" + AssetIdentityReducer.GetCookedKind(parameter.AssetType) + ")",
+            ScriptParameterKind.Asset => "asset (" + AssetKinds.FromCookedType(parameter.AssetType) + ")",
             _ => parameter.Kind.ToString().ToLowerInvariant(),
         };
         var value = parameter.DefaultValue switch
@@ -61,7 +61,7 @@ public sealed partial class AssetDetailsViewModel
         return value is null ? $"{parameter.Name}: {type}" : $"{parameter.Name}: {type} = {value}{unit}";
     }
 
-    private IEnumerable<AssetInformationFact> BuildSourceFacts(ContentBrowserAssetItem asset)
+    private IEnumerable<AssetInformationFact> BuildSourceFacts(AssetEntry asset)
     {
         if (asset is { Kind: AssetKind.Script, SourcePath: { } source } && this.scripts is not null)
         {

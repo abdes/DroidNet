@@ -5,6 +5,7 @@
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -19,8 +20,6 @@ public static class InputContextSources
 {
     /// <summary>The priority the input schema gives a context that declares none.</summary>
     public const int DefaultPriority = 0;
-
-    private const string ContextExtension = ".oimap";
 
     /// <summary>Finds what the project says about a mapping context.</summary>
     /// <param name="project">The project whose authoring mounts hold the input files.</param>
@@ -48,7 +47,7 @@ public static class InputContextSources
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(context);
         var path = Uri.UnescapeDataString(context.AbsolutePath);
-        if (!path.EndsWith(ContextExtension, StringComparison.OrdinalIgnoreCase)
+        if (!path.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.OrdinalIgnoreCase)
             || RelocationPaths.ToPhysical(project, RelocationPaths.GetParent(path)) is not { } folder
             || !Directory.Exists(folder))
         {
@@ -56,7 +55,7 @@ public static class InputContextSources
         }
 
         var name = Path.GetFileNameWithoutExtension(path);
-        foreach (var file in Directory.EnumerateFiles(folder, "*" + InputFileReferences.InputFileSuffix).Order(StringComparer.OrdinalIgnoreCase))
+        foreach (var file in Directory.EnumerateFiles(folder, "*" + AssetFileTypes.InputFile).Order(StringComparer.OrdinalIgnoreCase))
         {
             string text;
             try

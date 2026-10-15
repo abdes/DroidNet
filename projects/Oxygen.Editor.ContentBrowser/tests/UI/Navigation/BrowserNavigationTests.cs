@@ -15,7 +15,7 @@ using DroidNet.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
@@ -45,10 +45,10 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         var state = new ContentBrowserState(projects);
         var geometry = CreateNavigationAsset("/Content/Geometry/Cube.ogeo.json", AssetKind.Geometry);
         var material = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
-        using var items = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([geometry, material]);
-        var provider = new Mock<IContentBrowserAssetProvider>();
+        using var items = new BehaviorSubject<IReadOnlyList<AssetEntry>>([geometry, material]);
+        var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(items);
-        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var hosting = CreateStatusHosting();
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, hosting, builtins) : new ListLayoutViewModel(provider.Object, projects, state, hosting, builtins);
@@ -111,7 +111,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         var projects = new ProjectContextService();
         projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = root.Location, AuthoringMounts = [new("Content", "Content") { IsExpanded = false }], LocalFolderMounts = [], Scenes = [], });
         var state = new ContentBrowserState(projects);
-        using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), NullLoggerFactory.Instance);
+        using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var selected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         model.PropertyChanged += OnSelectionChanged;
         try
@@ -200,7 +200,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
             message.Reply(Task.FromResult(succeeds));
         });
         var state = new ContentBrowserState(projects);
-        using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), messenger, CreateNavigationPublication(projects, storage.Object), NullLoggerFactory.Instance);
+        using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), messenger, CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         await model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!).ConfigureAwait(true);
         var tree = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Single();
         var renamed = tree.VirtualFolderMounts.Single(mount => string.Equals(mount.MountPointName, "Library", StringComparison.Ordinal));
@@ -222,13 +222,13 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         }
     });
 
-    /// <summary>Publication notifications during preparation cannot install a closed or superseded project's tree.</summary>
+    /// <summary>Catalog changes during preparation cannot install a closed or superseded project's tree.</summary>
     [TestMethod]
     [DataRow(false, false)]
     [DataRow(true, false)]
     [DataRow(false, true)]
     [DataRow(true, true)]
-    public Task TreePreparationRejectsOldProjectAfterPublicationNotification(bool close, bool failObsoleteRead) => EnqueueAsync(async () =>
+    public Task TreePreparationRejectsOldProjectAfterCatalogChange(bool close, bool failObsoleteRead) => EnqueueAsync(async () =>
     {
         using var firstDirectory = new NavigationDirectory();
         using var nextDirectory = new NavigationDirectory();
@@ -262,13 +262,13 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
             Scenes = [],
         };
         projects.Activate(first);
-        var messenger = new StrongReferenceMessenger();
-        using var model = new ProjectLayoutViewModel(projects, storage.Object, new ContentBrowserState(projects), Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), messenger, CreateNavigationPublication(projects, storage.Object), NullLoggerFactory.Instance);
+        using var changes = new System.Reactive.Subjects.Subject<Oxygen.Managed.Assets.Catalog.AssetChange>();
+        using var model = new ProjectLayoutViewModel(projects, storage.Object, new ContentBrowserState(projects), Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(changes), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var load = model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!);
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true);
-            messenger.Send(new AssetsChangedMessage());
+            changes.OnNext(new(Oxygen.Managed.Assets.Catalog.AssetChangeKind.Added, new("asset:///Cooked/Published.omat")));
             if (close)
             {
                 projects.Close();
@@ -277,7 +277,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
             else
             {
                 projects.Activate(first with { ProjectId = Guid.NewGuid(), Name = "Next", ProjectRoot = nextDirectory.Path });
-                messenger.Send(new AssetsChangedMessage());
+                changes.OnNext(new(Oxygen.Managed.Assets.Catalog.AssetChangeKind.Added, new("asset:///Cooked/Published.omat")));
             }
         }
         finally

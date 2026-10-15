@@ -45,5 +45,5 @@ public static class Constants
     /// <remarks>
     /// This constant represents the file extension used for scene files within the Oxygen Editor.
     /// </remarks>
-    public const string SceneFileExtension = ".oscene.json";
+    public const string SceneFileExtension = Oxygen.Managed.Assets.AssetFileTypes.SceneDescriptor;
 }

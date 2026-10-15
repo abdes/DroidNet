@@ -51,6 +51,7 @@ public sealed partial class MaterialDocumentService
                     CookState = MaterialCookState.Stale,
                 };
                 this.fileVersions[documentId] = snapshot.Version;
+                this.ForgetMissingSource(documentId);
                 this.histories[documentId].Keeper.Clear();
                 this.histories[documentId].SavedSource = source;
                 this.documents[documentId] = reloaded;

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.Reactive.Concurrency;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
@@ -15,15 +16,36 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 /// <summary>Separates mount presentation, persistence and restoration operations.</summary>
 public partial class ProjectLayoutViewModel
 {
+    // A new publication reaches the catalog as a burst of record changes; one check on the UI thread covers the burst.
+    private void OnCatalogChanged()
+    {
+        if (Interlocked.Exchange(ref this.publishedFoldersCheckQueued, 1) == 0)
+        {
+            _ = hostingContext.DispatcherScheduler.Schedule(() =>
+            {
+                Volatile.Write(ref this.publishedFoldersCheckQueued, 0);
+                _ = this.RefreshPublishedFoldersAsync();
+            });
+        }
+    }
+
+    // Reloads the tree only when the project's cooked outputs differ from the cooked folders it shows, so that
+    // ordinary source changes leave the tree alone.
     private async Task RefreshPublishedFoldersAsync()
     {
-        if (this.selectionDisposed || projectContextService.ActiveProject?.AuthoringMounts.Any(static mount => string.Equals(mount.RelativePath.Replace('\\', '/').Trim('/'), ".cooked", StringComparison.OrdinalIgnoreCase)) != true)
+        if (this.selectionDisposed || projectContextService.ActiveProject is not { } project
+            || !project.AuthoringMounts.Any(static mount => string.Equals(mount.RelativePath.Replace('\\', '/').Trim('/'), ".cooked", StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
 
         try
         {
+            if (await this.ShowsCurrentCookedOutputsAsync(project).ConfigureAwait(true))
+            {
+                return;
+            }
+
             await this.ReloadMountTreeAsync().ConfigureAwait(true);
         }
         catch (OperationCanceledException)
@@ -34,6 +56,24 @@ public partial class ProjectLayoutViewModel
         {
             this.LogCookedProjectionFailure(failure);
         }
+    }
+
+    private async Task<bool> ShowsCurrentCookedOutputsAsync(ProjectContext project)
+    {
+        if (this.ShownItems.OfType<ProjectRootTreeItemAdapter>().FirstOrDefault() is not { } root)
+        {
+            return false;
+        }
+
+        var children = await root.Children.ConfigureAwait(true);
+        if (children.OfType<VirtualFolderMountTreeItemAdapter>().FirstOrDefault(static mount => mount.CookedVirtualPaths is not null) is not { } cooked)
+        {
+            return false;
+        }
+
+        using var selected = await publications.AcquireReadAsync(project, CancellationToken.None).ConfigureAwait(true);
+        return ReferenceEquals(project, projectContextService.ActiveProject)
+            && selected.ProjectOutputPaths.Distinct(StringComparer.Ordinal).SequenceEqual(cooked.CookedVirtualPaths!, StringComparer.Ordinal);
     }
 
     private static string? GetRelativeMountPath(string projectRoot, string path)

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -76,9 +77,9 @@ public static class ContentPipelinePaths
         ArgumentException.ThrowIfNullOrWhiteSpace(sceneFileName);
 
         var name = sceneFileName;
-        if (name.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase))
+        if (name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase))
         {
-            name = name[..^".oscene.json".Length];
+            name = name[..^AssetFileTypes.SceneDescriptor.Length];
         }
         else
         {
@@ -128,12 +129,12 @@ public static class ContentPipelinePaths
     /// <param name="sceneAssetUri">The scene's asset identity, such as <c>asset:///Content/Scenes/Level 1.oscene.json</c>.</param>
     /// <returns>The cooked scene's virtual path, such as <c>/Content/Scenes/Level_1.oscene</c>.</returns>
     public static string ToCookedScenePath(Uri sceneAssetUri)
-        => NormalizeSceneOutputPath(ToNativeDescriptorPath(sceneAssetUri, ".oscene"));
+        => NormalizeSceneOutputPath(ToNativeDescriptorPath(sceneAssetUri, AssetFileTypes.Scene));
 
     internal static string NormalizeSceneOutputPath(string virtualPath)
     {
         var separator = virtualPath.LastIndexOf('/');
-        return virtualPath[..(separator + 1)] + NormalizeSceneDescriptorName(virtualPath[(separator + 1)..]) + ".oscene";
+        return virtualPath[..(separator + 1)] + NormalizeSceneDescriptorName(virtualPath[(separator + 1)..]) + AssetFileTypes.Scene;
     }
 
     private static bool IsIdentifierStart(char ch)

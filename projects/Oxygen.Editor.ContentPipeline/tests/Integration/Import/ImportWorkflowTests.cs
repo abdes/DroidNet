@@ -56,6 +56,9 @@ public sealed class ImportWorkflowTests
             _ = run.Request.ScopeUri.Should().Be(result.RetainedSourceUri);
             _ = run.Assets.Keys.Should().Contain(result.CookedAssets.Select(static asset => asset.CookedAssetUri));
             _ = run.Assets[result.RetainedSourceUri!].Kind.Should().Be(ContentCookAssetKind.ForeignSource);
+            _ = run.ImportedOutputs.Should().BeEquivalentTo(result.CookedAssets.Select(static asset => asset.CookedAssetUri), "the run offers every imported output for navigation");
+            _ = run.Messages.Should().NotContain(static message => message.Text.Contains('\u001b'), "native output is captured without terminal escapes");
+            _ = run.Messages.Should().Contain(static message => message.Text.Contains("geom-buffer:", StringComparison.Ordinal) && !message.Text.EndsWith("...", StringComparison.Ordinal), "native progress lines reach the run whole");
             File.Delete(source);
             _ = (await service.ReimportSourceAsync(result.RetainedSourceUri!, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
         }
@@ -110,6 +113,55 @@ public sealed class ImportWorkflowTests
             runner.Fail = false;
             var recovered = await service.ReimportSourceAsync(retry.ScopeUri!, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = recovered.IsPublished.Should().BeTrue();
+        }
+        finally
+        {
+            external.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>A failed textured import retains the model and its texture, and Retry cooks them after both originals are gone.</summary>
+    /// <param name="format">The model source format.</param>
+    /// <returns>The asynchronous failed-import recovery test.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    [DataRow("gltf")]
+    [DataRow("fbx")]
+    public async Task TexturedImportFailureRetriesWithoutTheOriginalFiles(string format)
+    {
+        using var workspace = new CookWorkspace();
+        var external = Directory.CreateTempSubdirectory("OxygenFailedTexturedImport-");
+        try
+        {
+            var path = Path.Combine(external.FullName, "Triangle." + format);
+            var texture = Path.Combine(external.FullName, "static_textured_checker.png");
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_textured_triangle." + format), path);
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_textured_checker.png"), texture);
+            using var compatibility = EditorNativeCompatibilityService.ForCooking();
+            var runner = new FailImportBatchRunner();
+            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
+            var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Triangle", new("asset:///Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
+            _ = result.Status.Should().Be(OperationStatus.Failed);
+            _ = result.RetainedSourceUri.Should().NotBeNull();
+            var retained = Path.Combine(workspace.Root, "Content", "SourceMedia", "DCC", "Triangle");
+            _ = File.Exists(Path.Combine(retained, "Triangle." + format)).Should().BeTrue();
+            _ = File.Exists(Path.Combine(retained, "static_textured_checker.png")).Should().BeTrue();
+            using (var selected = await workspace.Publication.AcquireReadAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false))
+            {
+                _ = selected.PublicationId.Should().BeNull("a failed import publishes nothing");
+                _ = selected.Roots.Should().BeEmpty();
+            }
+
+            var retry = workspace.CookCoordinator.Runs.Single().Request;
+            _ = retry.IsReimport.Should().BeTrue();
+            _ = retry.Import.Should().BeNull();
+            File.Delete(path);
+            File.Delete(texture);
+            runner.Fail = false;
+            var recovered = await service.ReimportSourceAsync(retry.ScopeUri!, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+            _ = recovered.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, recovered.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
+            _ = recovered.CookedAssets.Should().Contain(static asset => asset.Kind == ContentCookAssetKind.Material);
         }
         finally
         {

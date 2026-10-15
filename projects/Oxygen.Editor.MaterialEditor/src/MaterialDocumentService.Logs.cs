@@ -33,6 +33,12 @@ public sealed partial class MaterialDocumentService
     [LoggerMessage(Level = LogLevel.Information, Message = "Material document '{Previous}' followed a relocation in memory as '{Current}' (file rewritten: {Rewritten}).")]
     private partial void LogMaterialFollowedRelocation(Uri previous, Uri current, bool rewritten);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Material '{Material}' is open but its file '{SourcePath}' was deleted or moved outside the editor; saving writes it again.")]
+    private partial void LogSourceMissing(Uri material, string sourcePath);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Material '{Material}' file is back on disk (unchanged: {Unchanged}).")]
+    private partial void LogSourceRestored(Uri material, bool unchanged);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Material '{Material}' restored a reference to the deleted texture(s) {Textures}; it shows as missing.")]
     private partial void LogRestoredDeletedTexture(Uri material, string textures);
 }

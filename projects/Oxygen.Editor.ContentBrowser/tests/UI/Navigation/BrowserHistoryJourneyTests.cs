@@ -7,7 +7,7 @@ using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.Shell;
@@ -134,7 +134,7 @@ public sealed partial class BrowserHistoryJourneyTests : DroidNet.Tests.VisualUs
         _ = fixture.HistoryPipeline.Invocations.Should().BeEmpty("browsing and filtering never submit cooking work");
     }
 
-    private static async Task AssertHistoryScopeAsync(BrowserRevealFixture fixture, ContentBrowserView view, ContentBrowserAssetItem[] all, string folder, bool tiles)
+    private static async Task AssertHistoryScopeAsync(BrowserRevealFixture fixture, ContentBrowserView view, AssetEntry[] all, string folder, bool tiles)
     {
         await WaitForRenderAsync().ConfigureAwait(true);
         var path = "/Content/" + folder;

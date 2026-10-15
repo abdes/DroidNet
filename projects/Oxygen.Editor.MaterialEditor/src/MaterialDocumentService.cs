@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core.Diagnostics;
@@ -311,6 +312,7 @@ public sealed partial class MaterialDocumentService(
                 this.histories[documentId].Keeper.Clear();
                 _ = this.histories.Remove(documentId);
                 _ = this.fileVersions.Remove(documentId);
+                this.ForgetMissingSource(documentId);
                 _ = this.saveGates.Remove(documentId);
                 this.cookRegistrations[documentId].Dispose();
                 _ = this.cookRegistrations.Remove(documentId);
@@ -544,8 +546,8 @@ public sealed partial class MaterialDocumentService(
 
     private static string StripKnownMaterialExtension(string fileName)
     {
-        const string SourceExtension = ".omat.json";
-        const string CookedExtension = ".omat";
+        const string SourceExtension = AssetFileTypes.MaterialDescriptor;
+        const string CookedExtension = AssetFileTypes.Material;
 
         return fileName.EndsWith(SourceExtension, StringComparison.OrdinalIgnoreCase)
             ? fileName[..^SourceExtension.Length]

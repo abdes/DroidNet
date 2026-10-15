@@ -105,6 +105,15 @@ public interface IProjectManagerService
     public SceneSourceVersion? GetSceneSourceVersion(Scene scene);
 
     /// <summary>
+    /// Re-checks whether an open scene's file is still on disk. While it is missing, the scene stays open and a save
+    /// writes the file again at its location.
+    /// </summary>
+    /// <param name="scene">The open scene.</param>
+    /// <param name="cancellationToken">Cancels reading the file.</param>
+    /// <returns>Whether the scene's file is missing on disk.</returns>
+    public Task<bool> RefreshSceneSourcePresenceAsync(Scene scene, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Records a version of an open scene's file written for it by an asset relocation, after the scene re-pointed
     /// its references to match, as the scene's saved source.
     /// </summary>

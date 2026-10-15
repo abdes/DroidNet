@@ -6,7 +6,7 @@ using System.ComponentModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
@@ -54,7 +54,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
 
     /// <summary>Gets the single selected asset, or null for none or several.</summary>
     [ObservableProperty]
-    public partial ContentBrowserAssetItem? Asset { get; private set; }
+    public partial AssetEntry? Asset { get; private set; }
 
     /// <summary>Gets the selected asset's row presentation: swatch, status tone and file facts.</summary>
     [ObservableProperty]
@@ -113,7 +113,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     /// <param name="asset">The asset.</param>
     /// <param name="file">The asset's file facts.</param>
     /// <returns>The labelled facts.</returns>
-    public static IReadOnlyList<AssetInformationFact> BuildFacts(ContentBrowserAssetItem asset, AssetFileFacts file)
+    public static IReadOnlyList<AssetInformationFact> BuildFacts(AssetEntry asset, AssetFileFacts file)
     {
         ArgumentNullException.ThrowIfNull(asset);
         var facts = new List<AssetInformationFact>
@@ -156,7 +156,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     /// <summary>Builds the type and status counts shown for a multi-selection.</summary>
     /// <param name="assets">The selected assets.</param>
     /// <returns>The labelled counts.</returns>
-    public static IReadOnlyList<AssetInformationFact> BuildSummaryFacts(IReadOnlyList<ContentBrowserAssetItem> assets)
+    public static IReadOnlyList<AssetInformationFact> BuildSummaryFacts(IReadOnlyList<AssetEntry> assets)
     {
         ArgumentNullException.ThrowIfNull(assets);
         return

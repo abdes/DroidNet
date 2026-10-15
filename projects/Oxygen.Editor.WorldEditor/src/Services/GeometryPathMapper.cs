@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.World.Services;
@@ -15,6 +16,6 @@ internal static class GeometryPathMapper
     public static string ToEnginePath(Uri uri)
     {
         var path = AssetUriHelper.GetEnginePath(uri);
-        return path.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase) ? path[..^5] : path;
+        return path.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase) ? path[..^5] : path;
     }
 }

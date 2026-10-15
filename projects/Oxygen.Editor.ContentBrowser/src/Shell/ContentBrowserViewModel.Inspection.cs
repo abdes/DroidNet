@@ -5,7 +5,8 @@
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using DryIoc;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
+using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
@@ -27,7 +28,7 @@ public sealed partial class ContentBrowserViewModel
         }
 
         var project = projectContextService.ActiveProject;
-        var item = await this.childContainer.Resolve<IContentBrowserAssetProvider>().ResolveAsync(assetUri).ConfigureAwait(true);
+        var item = await this.childContainer.Resolve<IAssetFeed>().ResolveAsync(assetUri).ConfigureAwait(true);
         return item is not null && item.PrimaryState != AssetState.Missing && ReferenceEquals(project, projectContextService.ActiveProject)
             && !this.isDisposed && project is not null && await this.RevealAssetsAsync(project, [item]).ConfigureAwait(true);
     }
@@ -44,8 +45,8 @@ public sealed partial class ContentBrowserViewModel
             return false;
         }
 
-        var provider = this.childContainer.Resolve<IContentBrowserAssetProvider>();
-        await provider.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(true);
+        var provider = this.childContainer.Resolve<IAssetFeed>();
+        await provider.RefreshAsync().ConfigureAwait(true);
         var items = await provider.Items.FirstAsync().ToTask().ConfigureAwait(true);
         var requested = assetUris.ToHashSet();
         var available = items.Where(item => item.PrimaryState != AssetState.Missing
@@ -54,10 +55,10 @@ public sealed partial class ContentBrowserViewModel
             && await this.RevealAssetsAsync(project, available).ConfigureAwait(true);
     }
 
-    private static bool IsCookedOnly(ContentBrowserAssetItem item)
+    private static bool IsCookedOnly(AssetEntry item)
         => item.SourcePath is null && item.DescriptorPath is null && !item.IsBuiltin;
 
-    private static string? LibraryFolder(ProjectContext project, ContentBrowserAssetItem item)
+    private static string? LibraryFolder(ProjectContext project, AssetEntry item)
     {
         if (item.CookedMetadata is not { } source)
         {
@@ -78,7 +79,7 @@ public sealed partial class ContentBrowserViewModel
         return "/" + library.Name + (slash < 0 ? string.Empty : "/" + relative[..slash]);
     }
 
-    private async Task<bool> RevealAssetsAsync(ProjectContext project, ContentBrowserAssetItem[] items)
+    private async Task<bool> RevealAssetsAsync(ProjectContext project, AssetEntry[] items)
     {
         var needsCooked = items.Any(item => IsCookedOnly(item) && LibraryFolder(project, item) is null);
         if (needsCooked && ProjectCookedFolders.Roots(project).Length == 0)
@@ -120,6 +121,6 @@ public sealed partial class ContentBrowserViewModel
 
         layout.SelectedAsset = items[0];
         layout.RevealSelection();
-        return layout.SelectedAsset is { } selected && AssetIdentityGrouping.Represents(selected, items[0].IdentityUri);
+        return layout.SelectedAsset is { } selected && AssetIdentity.Represents(selected, items[0].IdentityUri);
     }
 }

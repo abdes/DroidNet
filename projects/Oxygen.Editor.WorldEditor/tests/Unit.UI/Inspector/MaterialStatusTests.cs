@@ -10,7 +10,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.MaterialEditor;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
@@ -32,7 +32,7 @@ internal sealed class MaterialStatusTests : DroidNet.Tests.VisualUserInterfaceTe
         {
             IdentityUri = new("asset:///Content/Materials/UI.omat.json"),
         };
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([item]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
         using var model = CreateMaterialEditor(StatusProvider(updates));
         var view = new MaterialEditorView { ViewModel = model, Width = 920, Height = 600 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
@@ -73,11 +73,11 @@ internal sealed class MaterialStatusTests : DroidNet.Tests.VisualUserInterfaceTe
     });
 
     // The content browser's view of the document's asset, published by the test.
-    internal static IContentBrowserAssetProvider StatusProvider(IObservable<IReadOnlyList<ContentBrowserAssetItem>> updates)
+    internal static IAssetFeed StatusProvider(IObservable<IReadOnlyList<AssetEntry>> updates)
     {
-        var provider = new Mock<IContentBrowserAssetProvider>();
+        var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
-        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         return provider.Object;
     }
 }

@@ -11,7 +11,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline.Status;
@@ -51,7 +51,7 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
         var material = CreateQueryAsset("Blue", AssetKind.Material, AssetCookFreshness.NeedsCooking);
         var other = CreateQueryAsset("Red", AssetKind.Material, AssetCookFreshness.Current);
         var mesh = CreateQueryAsset("Blue mesh", AssetKind.Geometry, AssetCookFreshness.NeedsCooking);
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([material, other, mesh]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([material, other, mesh]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState(projects);
@@ -97,7 +97,7 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
         _ = search.Text.Should().BeEmpty();
         _ = list.Assets.Should().HaveCount(3);
         _ = tile.Assets.Should().HaveCount(3);
-        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
     });
 
     /// <summary>An empty cooked folder points to its authored counterpart without scheduling cooking.</summary>
@@ -105,7 +105,7 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
     [TestMethod]
     public Task EmptyCookedBrowserCanNavigateToSourceContent() => EnqueueAsync(async () =>
     {
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([CreateQueryAsset("Blue", AssetKind.Material, AssetCookFreshness.NeedsCooking)]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([CreateQueryAsset("Blue", AssetKind.Material, AssetCookFreshness.NeedsCooking)]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject(cookedMount: true);
         var state = new ContentBrowserState(projects);
@@ -124,7 +124,7 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = state.SelectedFolders.Should().Equal("/Content/Materials");
         _ = model.Assets.Should().ContainSingle();
-        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
     });
 
     /// <summary>Materials-and-scenes filtering shows one Default for its built-in and cooked representations.</summary>
@@ -158,7 +158,7 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
             CreateQueryAsset("Main", AssetKind.Scene, AssetCookFreshness.Current),
             CreateQueryAsset("Second", AssetKind.Scene, AssetCookFreshness.Current),
         };
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([origin, copy, .. scenes]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([origin, copy, .. scenes]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject(cookedMount: true);
         var state = new ContentBrowserState(projects);

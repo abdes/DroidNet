@@ -2,10 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Hosting.WinUI;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
-using Oxygen.Editor.ContentBrowser.Messages;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
@@ -18,15 +16,13 @@ namespace Oxygen.Editor.World.Workspace;
 /// <param name="engine">The workspace runtime.</param>
 /// <param name="hosting">The dispatcher owning workspace and runtime operations.</param>
 /// <param name="catalog">The catalog refreshed after publication.</param>
-/// <param name="messenger">Asset-change notifications for workspace consumers.</param>
 /// <param name="isCurrent">Checks that this workspace still owns the originating project.</param>
 /// <param name="contentReady">Clears the workspace failure after runtime and catalog recovery.</param>
 internal sealed class WorkspacePublicationPreview(
     ProjectContext project,
     IEngineService engine,
     HostingContext hosting,
-    IProjectAssetCatalog catalog,
-    IMessenger? messenger,
+    IAssetPublicationTarget catalog,
     Func<bool> isCurrent,
     Action contentReady) : ICookPublicationPreview
 {
@@ -88,8 +84,7 @@ internal sealed class WorkspacePublicationPreview(
     {
         if (isCurrent())
         {
-            await catalog.RefreshAsync(publication, CancellationToken.None).ConfigureAwait(true);
-            _ = messenger?.Send(new AssetsChangedMessage());
+            await catalog.UsePublicationAsync(publication, CancellationToken.None).ConfigureAwait(true);
             if (isCurrent() && this.IsRuntimeAvailable)
             {
                 contentReady();

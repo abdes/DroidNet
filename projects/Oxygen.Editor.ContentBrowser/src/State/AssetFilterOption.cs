@@ -4,14 +4,14 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 
 namespace Oxygen.Editor.ContentBrowser;
 
 /// <summary>A selectable filter over the shared asset facts.</summary>
 /// <param name="label">The user-facing filter name.</param>
 /// <param name="matches">The typed status or kind predicate.</param>
-public sealed partial class AssetFilterOption(string label, Func<ContentBrowserAssetItem, bool> matches) : ObservableObject
+public sealed partial class AssetFilterOption(string label, Func<AssetEntry, bool> matches) : ObservableObject
 {
     /// <summary>Gets the user-facing filter name.</summary>
     public string Label { get; } = label;
@@ -23,7 +23,7 @@ public sealed partial class AssetFilterOption(string label, Func<ContentBrowserA
     /// <summary>Tests the shared asset facts against this option.</summary>
     /// <param name="asset">The asset to examine.</param>
     /// <returns>Whether this option includes the asset.</returns>
-    internal bool Matches(ContentBrowserAssetItem asset) => matches(asset);
+    internal bool Matches(AssetEntry asset) => matches(asset);
 
     /// <summary>Removes this filter from the query, as its chip's close button does.</summary>
     [RelayCommand]

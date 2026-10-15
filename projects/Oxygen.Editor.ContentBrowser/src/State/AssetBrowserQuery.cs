@@ -5,7 +5,7 @@
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
 
@@ -94,7 +94,7 @@ public sealed partial class AssetBrowserQuery : ObservableObject
     /// <summary>Tests an asset against search, type and status without starting work.</summary>
     /// <param name="asset">The latest shared identity and status.</param>
     /// <returns>Whether the asset matches the browser query.</returns>
-    public bool Matches(ContentBrowserAssetItem asset)
+    public bool Matches(AssetEntry asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
         var search = this.SearchText.Trim();
@@ -104,10 +104,10 @@ public sealed partial class AssetBrowserQuery : ObservableObject
             && MatchesGroup(this.TypeOptions, asset) && MatchesGroup(this.StatusOptions, asset);
     }
 
-    private static bool MatchesGroup(IReadOnlyList<AssetFilterOption> options, ContentBrowserAssetItem asset)
+    private static bool MatchesGroup(IReadOnlyList<AssetFilterOption> options, AssetEntry asset)
         => !options.Any(static option => option.IsSelected) || options.Any(option => option.IsSelected && option.Matches(asset));
 
-    private static bool HasProblems(ContentBrowserAssetItem asset)
+    private static bool HasProblems(AssetEntry asset)
         => asset.HasDiagnostics || asset.PrimaryState is AssetState.Broken or AssetState.Missing
             || asset.CookStatus?.Freshness is AssetCookFreshness.MissingSource or AssetCookFreshness.InvalidSource
             || asset.CookStatus is { HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Missing }

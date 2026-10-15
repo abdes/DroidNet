@@ -8,7 +8,37 @@
     mc:Ignorable="d">
 
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <InfoBar
+            x:Name="MissingOnDiskBar"
+            Title="File missing on disk"
+            IsClosable="False"
+            IsOpen="{x:Bind ViewModel.IsActiveDocumentMissingOnDisk, Mode=OneWay}"
+            Message="{x:Bind ViewModel.MissingOnDiskNotice, Mode=OneWay}"
+            Severity="Warning">
+            <InfoBar.Content>
+                <StackPanel
+                    Margin="0,0,0,12"
+                    Orientation="Horizontal"
+                    Spacing="8">
+                    <Button
+                        AutomationProperties.AutomationId="MissingOnDiskSave"
+                        Command="{x:Bind ViewModel.SaveActiveDocumentCommand}"
+                        Content="Save" />
+                    <Button
+                        AutomationProperties.AutomationId="MissingOnDiskClose"
+                        Command="{x:Bind ViewModel.CloseActiveDocumentCommand}"
+                        Content="Close" />
+                </StackPanel>
+            </InfoBar.Content>
+        </InfoBar>
+
         <ContentControl
+            Grid.Row="1"
             HorizontalContentAlignment="Stretch"
             VerticalContentAlignment="Stretch"
             Content="{x:Bind ViewModel.ActiveEditorView, Mode=OneWay}" />

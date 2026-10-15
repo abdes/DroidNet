@@ -4,6 +4,7 @@
 
 using DroidNet.Controls;
 using Oxygen.Editor.Documents;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.MaterialEditor;
 
@@ -24,7 +25,6 @@ public sealed partial class MaterialEditorViewModel
     {
         _ = await this.documentService.ReloadAsync(current.DocumentId, CancellationToken.None).ConfigureAwait(true);
         this.HasSaveConflict = false;
-        this.assetChanged?.Invoke(this.metadata.MaterialUri);
         return new(Succeeded: true, "Reloaded from disk. Unsaved changes and Undo/Redo history were discarded.");
     });
 
@@ -37,11 +37,11 @@ public sealed partial class MaterialEditorViewModel
             return Task.FromResult(new DocumentConflictResult(Succeeded: false, "Enter a valid file name for the new copy."));
         }
 
-        var target = new Uri(this.metadata.MaterialUri, Uri.EscapeDataString(normalized) + ".omat.json");
+        var target = new Uri(this.metadata.MaterialUri, Uri.EscapeDataString(normalized) + AssetFileTypes.MaterialDescriptor);
         return this.ResolveConflictAsync(async current =>
         {
-            var saved = await this.documentService.SaveCopyAsync(current.DocumentId, target, CancellationToken.None).ConfigureAwait(true);
-            this.assetChanged?.Invoke(saved);
+            _ = await this.documentService.SaveCopyAsync(current.DocumentId, target, CancellationToken.None).ConfigureAwait(true);
+            await this.assets.RefreshAsync().ConfigureAwait(true);
             return new(Succeeded: true, $"Saved “{normalized}” as a separate asset. The original is still unsaved; keep it open or explicitly discard its changes.");
         });
     }

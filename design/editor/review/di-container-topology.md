@@ -2,6 +2,12 @@
 
 Status: **proposal, awaiting review** (no code changed)
 
+Section 7 (project decomposition, rules R1 to R6) and the project lists of
+section 9 Phase 1 are being replaced by the drafts
+[editor-module-architecture.md](editor-module-architecture.md) and
+[editor-shell.md](editor-shell.md): no `Authoring` or `Authoring.Abstractions`
+projects, no World Editor host, the Shell as application frame.
+
 Scope: how `Oxygen.Editor`, the World Editor workspace and the Content Browser
 use DryIoc containers and child containers, what leaks or is duplicated between
 them, and the target container topology that supports multi-window authoring.

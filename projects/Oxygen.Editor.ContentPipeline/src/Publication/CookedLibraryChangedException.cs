@@ -58,6 +58,24 @@ public sealed class CookedLibraryChangedException : IOException
     /// <summary>Gets the index digest found on disk.</summary>
     public string? ActualIndexSha256 { get; }
 
+    /// <summary>Creates the failure for a root whose index no longer matches the publication that recorded it.</summary>
+    /// <param name="root">The published binding.</param>
+    /// <param name="path">The resolved physical root.</param>
+    /// <param name="actualSourceKey">The source identity found on disk.</param>
+    /// <param name="actualIndexSha256">The index digest found on disk.</param>
+    /// <returns>
+    ///     A <see cref="CookedLibraryChangedException"/> for a library, which publishing the project again resolves; an
+    ///     <see cref="InvalidDataException"/> for the project's own output, which is damaged and must not be republished.
+    /// </returns>
+    internal static Exception ForChangedRoot(CookPublicationRoot root, string path, Guid actualSourceKey, string actualIndexSha256)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        return root.Owner == CookPublicationRootOwner.Library
+            ? new CookedLibraryChangedException(root, path, actualSourceKey, actualIndexSha256)
+            : new InvalidDataException($"Cooked project root '{root.Name}' at '{path}' no longer matches its publication: "
+                + $"recorded source {root.SourceKey:D} index {root.IndexSha256}, found source {actualSourceKey:D} index {actualIndexSha256}.");
+    }
+
     private static string Describe(CookPublicationRoot root, string path, Guid actualSourceKey, string actualIndexSha256)
     {
         ArgumentNullException.ThrowIfNull(root);

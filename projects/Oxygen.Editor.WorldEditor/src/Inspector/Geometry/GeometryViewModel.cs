@@ -8,8 +8,7 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Hosting.WinUI;
 using Microsoft.UI.Dispatching;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
@@ -17,6 +16,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.World.Inspector.Geometry;
@@ -32,8 +32,7 @@ namespace Oxygen.Editor.World.Inspector.Geometry;
 /// </remarks>
 public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
 {
-    private readonly IContentBrowserAssetProvider assetProvider;
-    private readonly IMaterialPickerService materialPickerService;
+    private readonly IAssetFeed assetProvider;
     private readonly IBuiltinCatalogDiscovery builtins;
     private readonly ISceneContentDemandService contentDemand;
     private readonly IGeometryMaterialSlotProvider materialSlots;
@@ -51,6 +50,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
     private IDisposable? assetChangesSubscription;
     private IDisposable? materialResultsSubscription;
+    private IReadOnlyList<AssetEntry> latestMaterialAssets = [];
 
     private ICollection<SceneNode>? selectedItems;
     private bool disposed;
@@ -60,7 +60,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// </summary>
     /// <param name="hosting">The WinUI hosting context used for UI-thread dispatch.</param>
     /// <param name="assetProvider">The shared asset identity, cook status and runtime availability feed.</param>
-    /// <param name="materialPickerService">Material picker service used to populate material choices.</param>
     /// <param name="builtins">The shared engine-provided catalog and last-known availability.</param>
     /// <param name="contentDemand">The lifetime owner for saved-asset preview requests.</param>
     /// <param name="materialSlots">The native geometry slot inventory reader.</param>
@@ -69,8 +68,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <param name="commandContextProvider">Optional provider for the active scene command context.</param>
     public GeometryViewModel(
         HostingContext hosting,
-        IContentBrowserAssetProvider assetProvider,
-        IMaterialPickerService materialPickerService,
+        IAssetFeed assetProvider,
         IBuiltinCatalogDiscovery builtins,
         ISceneContentDemandService contentDemand,
         IGeometryMaterialSlotProvider materialSlots,
@@ -79,7 +77,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         Func<SceneDocumentCommandContext?>? commandContextProvider = null)
     {
         this.assetProvider = assetProvider;
-        this.materialPickerService = materialPickerService;
         this.builtins = builtins;
         this.contentDemand = contentDemand;
         this.materialSlots = materialSlots;
@@ -307,15 +304,8 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         this.materialEdit = this.SelectedMaterialSlot is { } slot && this.CanEditMaterialSlot
             && this.selectedItems is { Count: > 0 } nodes && this.commandContextProvider?.Invoke() is { } context
                 ? new(context, nodes.ToList(), slot.Target) : null;
-        await this.materialPickerService
-            .RefreshAsync(MaterialPickerFilter.Default with { IncludeGenerated = false })
-            .ConfigureAwait(true);
-
-        if (!this.IsMaterialMixed
-            && Uri.TryCreate(this.SelectedMaterialUriString, UriKind.Absolute, out var currentMaterialUri))
-        {
-            _ = await this.materialPickerService.ResolveAsync(currentMaterialUri).ConfigureAwait(true);
-        }
+        await this.assetProvider.RefreshAsync().ConfigureAwait(true);
+        this.ApplyContentMaterials();
     }
 
     /// <summary>
@@ -373,7 +363,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     internal static string ExtractMaterialNameFromUriString(string uriString)
     {
         var name = ExtractNameFromUriString(uriString);
-        foreach (var suffix in new[] { ".omat.json", ".omat" })
+        foreach (var suffix in new[] { AssetFileTypes.MaterialDescriptor, AssetFileTypes.Material })
         {
             if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
             {
@@ -428,14 +418,14 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     private static bool UriValuesEqual(Uri? left, Uri? right)
         => string.Equals(left?.ToString(), right?.ToString(), StringComparison.OrdinalIgnoreCase);
 
-    private static MaterialPickerItem CreateContentMaterialItem(MaterialPickerResult asset)
+    private static MaterialPickerItem CreateContentMaterialItem(AssetEntry asset)
         => new(
             Name: asset.DisplayName,
-            Uri: asset.MaterialUri,
-            DisplayType: $"Material · {asset.StatusText}",
-            DisplayPath: asset.DescriptorPath ?? asset.CookedPath ?? AssetUriHelper.GetVirtualPath(asset.MaterialUri),
+            Uri: asset.IdentityUri,
+            DisplayType: $"Material · {AssetStatusText.ForEntry(asset)}",
+            DisplayPath: asset.DescriptorPath ?? asset.CookedPath ?? AssetUriHelper.GetVirtualPath(asset.IdentityUri),
             Group: AssetPickerGroup.Content,
-            IsEnabled: asset.DisplayState is not AssetState.Missing and not AssetState.Broken,
+            IsEnabled: asset.IsSelectable,
             ThumbnailModel: "\uE8B9");
 
     private bool IsCurrentSelection(List<SceneNode> nodes)
@@ -444,10 +434,20 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
     private void StartMaterialPickerSubscription()
     {
-        this.materialResultsSubscription = this.materialPickerService.Results.Subscribe(
-            rows => this.DispatchOnUi(() => this.ReplaceContentMaterialItems(rows)),
+        this.materialResultsSubscription = this.assetProvider.Items.Subscribe(
+            assets => this.DispatchOnUi(() =>
+            {
+                this.latestMaterialAssets = assets;
+                this.ApplyContentMaterials();
+            }),
             ex => Debug.WriteLine($"[GeometryViewModel] Error in material picker stream: {ex}"));
-        _ = this.materialPickerService.RefreshAsync(MaterialPickerFilter.Default with { IncludeGenerated = false });
+    }
+
+    // Lists the materials the slot accepts, keeping the one assigned now even when it is gone.
+    private void ApplyContentMaterials()
+    {
+        _ = Uri.TryCreate(this.IsMaterialMixed ? null : this.SelectedMaterialUriString, UriKind.Absolute, out var assigned);
+        this.ReplaceContentMaterialItems(AssetRule.For(AssetKind.Material).Apply(this.latestMaterialAssets, assigned));
     }
 
     private void UpdateMaterialDisplay(Uri? uri)
@@ -477,7 +477,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
 
-    private void ReplaceContentMaterialItems(IReadOnlyList<MaterialPickerResult> materials)
+    private void ReplaceContentMaterialItems(IReadOnlyList<AssetEntry> materials)
     {
         var existing = this.contentMaterialItems.ToDictionary(static row => row.Item.Uri!.ToString(), StringComparer.OrdinalIgnoreCase);
         this.contentMaterialItemsByKey.Clear();
@@ -485,7 +485,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         foreach (var material in materials.OrderBy(static m => m.DisplayName, StringComparer.OrdinalIgnoreCase))
         {
             var item = CreateContentMaterialItem(material);
-            var key = material.MaterialUri.ToString();
+            var key = material.IdentityUri.ToString();
             if (existing.TryGetValue(key, out var row))
             {
                 row.Update(item);

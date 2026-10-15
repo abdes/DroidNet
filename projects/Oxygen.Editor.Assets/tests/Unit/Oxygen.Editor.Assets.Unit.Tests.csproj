@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="MSTest.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+        <RootNamespace>Oxygen.Editor.Assets.Unit.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <DroidNetTestTier>Unit</DroidNetTestTier>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../../src/Oxygen.Editor.Assets.csproj" />
+        <PackageReference Include="Moq" />
+        <PackageReference Include="Testably.Abstractions" />
+        <None Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/tests/Fixtures/BuiltinGeometryCatalog.json" Link="Fixtures/BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Include="../TestSupport/AssetStatusFixture.cs" Link="TestSupport/AssetStatusFixture.cs" />
+        <Compile Include="../TestSupport/AssetWorkspace.cs" Link="TestSupport/AssetWorkspace.cs" />
+        <Compile Include="../TestSupport/Observer.cs" Link="TestSupport/Observer.cs" />
+        <Compile Include="../TestSupport/WorkspaceCookScopeProvider.cs" Link="TestSupport/WorkspaceCookScopeProvider.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Support/LooseCookedIndexFixture.cs" />
+    </ItemGroup>
+
+</Project>

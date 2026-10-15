@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -29,6 +30,9 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     private Task<AuthoredReferenceIndex>? cached;
     private ProjectContext? cachedProject;
 
+    /// <inheritdoc/>
+    public event EventHandler<AssetFilesChangedEventArgs>? FilesChanged;
+
     /// <summary>Gets or sets a test hook that fails a relocation after this many applied steps.</summary>
     internal int? FailAfterStep { get; set; }
 
@@ -48,6 +52,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     public async Task<AssetRelocationPlan> RelocateAsync(AssetRelocationRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        var caller = SynchronizationContext.Current;
         var published = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         AssetRelocationPlan plan;
         try
@@ -66,6 +71,8 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             _ = published.TrySetResult(null);
             return plan;
         }
+
+        this.RaiseFilesChanged(caller, new(plan.Moves, plan.RewrittenFiles, [], plan.Moves.Any(static move => move.IsDirectory)));
 
         // The writer is released: cook now, so open documents that followed the change are consistent with their files.
         _ = this.CookAfterChangeAsync("relocation", published);
@@ -129,11 +136,14 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     }
 
     /// <inheritdoc/>
-    public Task DeleteAsync(IReadOnlyList<string> sources, Func<IReadOnlyList<string>, Task> recycle, CancellationToken cancellationToken)
+    public async Task DeleteAsync(IReadOnlyList<string> sources, Func<IReadOnlyList<string>, Task> recycle, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(recycle);
-        return this.ThenCookAsync("delete", coordinator.RunAsync(
+        var caller = SynchronizationContext.Current;
+        IReadOnlyList<string> deleted = [];
+        var foldersDeleted = false;
+        _ = await this.ThenCookAsync("delete", coordinator.RunAsync(
             (operation, token) => this.LoggedAsync("Delete", async () =>
             {
                 var project = operation.Project;
@@ -166,9 +176,11 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                     this.LogRecycling(path);
                 }
 
+                foldersDeleted = distinct.Exists(Directory.Exists);
                 try
                 {
                     await recycle(distinct).ConfigureAwait(false);
+                    deleted = distinct;
                 }
                 finally
                 {
@@ -179,7 +191,11 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 redirects?.RecordDeleted(distinct.Select(path => RelocationPaths.ToVirtual(project, path)).OfType<string>().Select(RelocationPaths.ToIdentity));
                 return true;
             }),
-            cancellationToken));
+            cancellationToken)).ConfigureAwait(false);
+        if (deleted.Count != 0)
+        {
+            this.RaiseFilesChanged(caller, new([], [], deleted, foldersDeleted));
+        }
     }
 
     /// <inheritdoc/>
@@ -220,7 +236,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             var target = GetUniquePath(folder, Path.GetFileName(path), isDirectory, reserved);
             map.AddMove(new(path, target, isDirectory));
             copies.Add(RelocationPaths.ToVirtual(project, target)!);
-            if (!isDirectory && path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase))
+            if (!isDirectory && path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
             {
                 await AddTextureImageCopiesAsync(map, path, target, folder, reserved, cancellationToken).ConfigureAwait(false);
             }
@@ -296,9 +312,9 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             }
         }
 
-        if (isDirectory || !path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase))
+        if (isDirectory || !path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
         {
-            var descriptors = isDirectory ? [] : index.Descriptors.Where(descriptor => descriptor.Path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
+            var descriptors = isDirectory ? [] : index.Descriptors.Where(descriptor => descriptor.Path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(Path.GetDirectoryName(descriptor.Path), Path.GetDirectoryName(path), StringComparison.OrdinalIgnoreCase)
                 && AuthoredReferenceFormat.ReadTextureSources(descriptor.Path, File.ReadAllBytes(descriptor.Path)).Contains(path, StringComparer.OrdinalIgnoreCase))
                 .Select(static descriptor => descriptor.Path);
@@ -308,7 +324,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         // An image another texture still uses stays; only this texture's own images go with it.
         var folder = Path.GetDirectoryName(path);
         var shared = index.Descriptors
-            .Where(descriptor => descriptor.Path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
+            .Where(descriptor => descriptor.Path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(descriptor.Path, path, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(Path.GetDirectoryName(descriptor.Path), folder, StringComparison.OrdinalIgnoreCase))
             .SelectMany(static descriptor => AuthoredReferenceFormat.ReadTextureSources(descriptor.Path, File.ReadAllBytes(descriptor.Path)))
@@ -515,6 +531,24 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         finally
         {
             _ = published.TrySetResult(problem);
+        }
+    }
+
+    // Raised where the caller started the operation, like Progress<T>, so UI listeners need no dispatcher.
+    private void RaiseFilesChanged(SynchronizationContext? caller, AssetFilesChangedEventArgs args)
+    {
+        if (this.FilesChanged is not { } handlers)
+        {
+            return;
+        }
+
+        if (caller is null)
+        {
+            handlers(this, args);
+        }
+        else
+        {
+            caller.Post(_ => handlers(this, args), state: null);
         }
     }
 

@@ -6,7 +6,6 @@ using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.UI;
 using Moq;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Documents;
@@ -18,7 +17,7 @@ using Oxygen.Editor.World.Services;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
-/// <summary>Open material documents follow Content Browser deletes and moves.</summary>
+/// <summary>Open material documents follow the deletes and moves the editor makes.</summary>
 [TestClass]
 public sealed class DocumentManagerRelocationTests
 {
@@ -48,6 +47,7 @@ public sealed class DocumentManagerRelocationTests
             Scenes = [],
         });
         var documents = new EditorDocumentService();
+        var relocation = new Mock<IAssetRelocationService>();
         using var manager = new DocumentManager(
             documents,
             messenger,
@@ -56,7 +56,8 @@ public sealed class DocumentManagerRelocationTests
             Mock.Of<IMaterialDocumentService>(),
             window,
             Mock.Of<IProjectManagerService>(),
-            Mock.Of<ISceneEngineSync>());
+            Mock.Of<ISceneEngineSync>(),
+            relocation.Object);
         var metadata = new MaterialDocumentMetadata(new Uri("asset:///Content/Materials/Red.omat.json")) { Title = "Red" };
         _ = await documents.OpenDocumentAsync(window, metadata).ConfigureAwait(false);
         var source = Path.GetFullPath(Path.Combine(Root, "Content/Materials/Red.omat.json"));
@@ -67,13 +68,13 @@ public sealed class DocumentManagerRelocationTests
 
         if (!deleted)
         {
-            // The material editor, as a relocation participant, re-pointed its tab before the browser announces the move.
+            // The material editor, as a relocation participant, re-pointed its tab before the service reports the move.
             metadata.MaterialUri = new Uri("asset:///Content/Materials/Blue.omat.json");
         }
 
-        _ = messenger.Send(deleted
-            ? new AssetFilesChangedMessage([], [], [source])
-            : new AssetFilesChangedMessage([new RelocationFileMove(source, target, IsDirectory: false)], [], []));
+        relocation.Raise(value => value.FilesChanged += null, deleted
+            ? new AssetFilesChangedEventArgs([], [], [source], foldersChanged: false)
+            : new AssetFilesChangedEventArgs([new RelocationFileMove(source, target, IsDirectory: false)], [], [], foldersChanged: false));
         await settled.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = documents.GetOpenDocuments(window).OfType<MaterialDocumentMetadata>().Should().HaveCount(deleted ? 0 : 1);

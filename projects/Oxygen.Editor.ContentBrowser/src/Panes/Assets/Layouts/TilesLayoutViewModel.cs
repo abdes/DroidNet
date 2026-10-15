@@ -4,7 +4,7 @@
 
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Projects;
 
@@ -20,7 +20,7 @@ namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 /// <param name="builtins">The engine catalog availability.</param>
 /// <param name="scripts">The script analysis, which shows script problems in each row's status.</param>
 public partial class TilesLayoutViewModel(
-    IContentBrowserAssetProvider assetProvider,
+    IAssetFeed assetProvider,
     IProjectContextService projectContextService,
     ContentBrowserState contentBrowserState,
     HostingContext hostingContext,
@@ -33,5 +33,5 @@ public partial class TilesLayoutViewModel(
     /// </summary>
     /// <param name="item">The content browser asset row to invoke.</param>
     [RelayCommand]
-    private void InvokeItem(ContentBrowserAssetItem item) => this.OnItemInvoked(item);
+    private void InvokeItem(AssetEntry item) => this.OnItemInvoked(item);
 }

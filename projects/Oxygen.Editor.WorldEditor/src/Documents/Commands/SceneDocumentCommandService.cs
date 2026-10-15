@@ -7,7 +7,6 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using DroidNet.TimeMachine;
 using Microsoft.UI;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
@@ -1449,8 +1448,12 @@ public sealed partial class SceneDocumentCommandService(
         }
 
         context.Metadata.MarkSaved(version);
+        if (context.Metadata.IsMissingOnDisk)
+        {
+            context.Metadata.IsMissingOnDisk = await this.projectManager.RefreshSceneSourcePresenceAsync(context.Scene).ConfigureAwait(true);
+        }
+
         _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
-        _ = this.messenger.Send(new AssetsChangedMessage());
         var notice = context.Metadata.IsDirty
             ? this.PublishSceneWarning(SceneOperationKinds.Save, DiagnosticCodes.DocumentPrefix + "NEWER_CHANGES_UNSAVED", "Scene snapshot saved", "Saved; newer changes remain unsaved", context, domain: FailureDomain.Document)
             : (Guid?)null;

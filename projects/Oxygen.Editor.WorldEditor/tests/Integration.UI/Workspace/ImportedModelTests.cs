@@ -6,14 +6,13 @@ using System.Numerics;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
-using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector.Geometry;
+using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.CatalogWorkload;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
@@ -45,9 +44,9 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         timeout.CancelAfter(TimeSpan.FromSeconds(120));
         using var services = new CatalogWorkloadServices(fixture);
         var imported = libraryOnly ? await CreateImportedLibraryAsync(fixture, services, format, timeout.Token).ConfigureAwait(true) : null;
-        await using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
-        await using var provider = new ContentBrowserAssetProvider(catalog, services.Projects, services.Scopes, new AssetIdentityReducer(), services.Pipeline, services.Documents, services.Runs, fixture.Runtime);
-        using var picker = new MaterialPickerService(provider);
+        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
+        using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
+        await using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus);
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         using var previewRegistration = fixture.RegisterWorkspacePublication(services, catalog);
         if (imported is null)
@@ -70,7 +69,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         AssertImportedAssetInformation(geometryRow!, libraryOnly);
         AssertImportedAssetInformation(materialRow!, libraryOnly);
         using var demand = fixture.CreateImportedAssetDemand(services, provider);
-        using var host = fixture.CreateInspectorHost([fixture.Source.RootNodes[0]], provider, picker, services.Builtins, demand, services.Pipeline);
+        using var host = fixture.CreateInspectorHost([fixture.Source.RootNodes[0]], provider, services.Builtins, demand, services.Pipeline);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
         while (model.IsMaterialSlotLoading)
@@ -105,7 +104,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         }
     });
 
-    private static void AssertImportedAssetInformation(ContentBrowserAssetItem row, bool libraryOnly)
+    private static void AssertImportedAssetInformation(AssetEntry row, bool libraryOnly)
     {
         _ = row.Should().NotBeNull();
         _ = row.CookedMetadata.Should().NotBeNull();
@@ -125,7 +124,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         }
     }
 
-    private static async Task CheckImportedAssetControlsAsync(NativeSceneFixture fixture, ScrollViewer scroller, ContentBrowserAssetItem geometry, ContentBrowserAssetItem material, CancellationToken cancellationToken)
+    private static async Task CheckImportedAssetControlsAsync(NativeSceneFixture fixture, ScrollViewer scroller, AssetEntry geometry, AssetEntry material, CancellationToken cancellationToken)
     {
         var view = (GeometryView)scroller.Content;
         var model = view.ViewModel ?? throw new InvalidOperationException("The geometry inspector must be bound.");
@@ -170,7 +169,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         _ = ReadMaterialUri(fixture.Source.RootNodes[0]).Should().Be(material.IdentityUri);
     }
 
-    private static string ImportedNativeKey(ContentBrowserAssetItem asset)
+    private static string ImportedNativeKey(AssetEntry asset)
     {
         var bytes = new byte[16];
         asset.CookedMetadata!.AssetKey.WriteBytes(bytes);

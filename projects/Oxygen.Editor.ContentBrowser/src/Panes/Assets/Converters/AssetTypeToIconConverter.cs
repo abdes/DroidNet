@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.UI.Xaml.Data;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Models;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Converters;

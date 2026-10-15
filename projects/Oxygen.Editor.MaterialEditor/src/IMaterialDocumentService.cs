@@ -105,6 +105,15 @@ public interface IMaterialDocumentService : IMaterialPropertyEditService
     /// <returns>The save result.</returns>
     public Task<MaterialSaveResult> SaveAsync(Guid documentId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Re-checks whether an open material's file is still on disk. While it is missing, the document stays open and a
+    /// save writes the file again at its location.
+    /// </summary>
+    /// <param name="documentId">The open document.</param>
+    /// <param name="cancellationToken">Cancels reading the file.</param>
+    /// <returns>Whether the file is missing on disk.</returns>
+    public Task<bool> RefreshSourcePresenceAsync(Guid documentId, CancellationToken cancellationToken = default);
+
     /// <summary>Reloads source bytes after the caller explicitly confirms discarding unsaved changes.</summary>
     /// <param name="documentId">The open document.</param>
     /// <param name="cancellationToken">Cancels loading before replacement.</param>

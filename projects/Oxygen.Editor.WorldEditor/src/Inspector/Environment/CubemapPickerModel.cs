@@ -6,7 +6,7 @@ using System.Collections.ObjectModel;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.World.Inspector.Geometry;
 
@@ -76,14 +76,13 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
     /// </summary>
     /// <param name="assetProvider">The shared content catalog, or null when none is available.</param>
     /// <returns>The shared feed, or null without a catalog.</returns>
-    internal static IObservable<IReadOnlyList<CubeTextureAsset>>? CubeTextures(IContentBrowserAssetProvider? assetProvider)
+    internal static IObservable<IReadOnlyList<CubeTextureAsset>>? CubeTextures(IAssetFeed? assetProvider)
         => assetProvider?.Items
-            .Select(static assets => (IReadOnlyList<CubeTextureAsset>)assets
-                .Where(static asset => asset.Kind == AssetKind.Texture && !asset.IsBuiltin && asset.DescriptorPath is not null)
+            .Select(static assets => (IReadOnlyList<CubeTextureAsset>)AssetRule.For(AssetKind.Texture).Apply(assets)
+                .Where(static asset => asset.DescriptorPath is not null)
                 .Select(static asset => (Asset: asset, Cube: TextureSourceAssetImporter.ReadCubeDescriptor(asset.DescriptorPath!)))
                 .Where(static entry => entry.Cube is not null)
                 .Select(static entry => new CubeTextureAsset(entry.Asset, entry.Cube!.Value.StoresRadiance))
-                .OrderBy(static entry => entry.Asset.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToArray())
             .Replay(1)
             .RefCount();

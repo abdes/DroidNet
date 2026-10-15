@@ -10,8 +10,8 @@ using DroidNet.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
@@ -51,12 +51,12 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
                 RootFolderPath = Path.Combine(projects.ActiveProject!.ProjectRoot, ".cooked", "Content"),
                 AssetKey = new(3, 4),
             };
-            var effective = new ContentBrowserAssetItem(uri, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Mounted, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, uri, Path.Combine(high.RootFolderPath, "Shared.omat"), AssetGuid: null, [], IsSelectable: true)
+            var effective = new AssetEntry(uri, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Mounted, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, uri, Path.Combine(high.RootFolderPath, "Shared.omat"), AssetGuid: null, [], IsSelectable: true)
             {
                 CookedMetadata = high,
                 OverriddenCookedSources = [low],
             };
-            var provider = new Mock<IContentBrowserAssetProvider>();
+            var provider = new Mock<IAssetFeed>();
             _ = provider.Setup(value => value.ResolveAsync(uri, It.IsAny<CancellationToken>())).ReturnsAsync(effective);
             var metadata = new CookedInspectionDocumentMetadata(projects.ActiveProject!, new("asset:///Library/Shared.omat"), validate: false)
             {
@@ -114,8 +114,8 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
             _ => "otex",
         };
         var uri = builtin ? AssetUris.BuildGeneratedUri(kind == AssetKind.Material ? "Materials/Default" : "BasicShapes/Cube") : new Uri("asset:///Library/Main." + extension);
-        var item = new ContentBrowserAssetItem(uri, "Main", kind, builtin ? AssetState.Generated : AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.NotMounted, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, builtin ? null : uri, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
-        using var items = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([item]);
+        var item = new AssetEntry(uri, "Main", kind, builtin ? AssetState.Generated : AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.NotMounted, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, builtin ? null : uri, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
+        using var items = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
         var provider = CreateQueryProvider(items);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState(projects);
@@ -159,8 +159,8 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
     {
         var projects = CreateQueryProject();
         var uri = AssetUris.BuildGeneratedUri(geometry ? "BasicShapes/Cube" : "Materials/Default");
-        var item = new ContentBrowserAssetItem(uri, geometry ? "Cube" : "Default", geometry ? AssetKind.Geometry : AssetKind.Material, AssetState.Generated, DerivedState: null, AssetRuntimeAvailability.Mounted, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, CookedUri: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
-        using var items = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([item]);
+        var item = new AssetEntry(uri, geometry ? "Cube" : "Default", geometry ? AssetKind.Geometry : AssetKind.Material, AssetState.Generated, DerivedState: null, AssetRuntimeAvailability.Mounted, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, CookedUri: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
+        using var items = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
         var provider = CreateQueryProvider(items);
         _ = provider.Setup(value => value.ResolveAsync(uri, It.IsAny<CancellationToken>())).ReturnsAsync(item);
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);

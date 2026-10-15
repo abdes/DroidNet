@@ -9,7 +9,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Moq;
-using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.World.Inspector.Geometry;
 using static DroidNet.Tests.UiTestHosting;
@@ -28,18 +27,12 @@ internal sealed class AssetStatusTests : DroidNet.Tests.VisualUserInterfaceTests
     public Task MaterialStatusUpdatesPreserveTheOpenPickerChoice() => EnqueueAsync(async () =>
     {
         var asset = CreateStatusAsset(0);
-        var material = new MaterialPickerResult(asset.IdentityUri, asset.DisplayName, asset.PrimaryState, asset.DerivedState, asset.RuntimeAvailability, asset.DescriptorPath, asset.CookedPath, BaseColorPreview: null)
-        {
-            CookStatus = asset.CookStatus,
-        };
-        using var updates = new BehaviorSubject<IReadOnlyList<MaterialPickerResult>>([material]);
-        var picker = new Mock<IMaterialPickerService>();
-        _ = picker.SetupGet(value => value.Results).Returns(updates);
-        _ = picker.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        var catalog = new Mock<Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider>();
-        _ = catalog.SetupGet(value => value.Items).Returns(System.Reactive.Linq.Observable.Empty<IReadOnlyList<Oxygen.Editor.ContentBrowser.AssetIdentity.ContentBrowserAssetItem>>());
-        _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<Oxygen.Editor.ContentBrowser.AssetIdentity.AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, picker.Object, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
+        var material = asset with { Kind = Oxygen.Editor.Assets.AssetKind.Material };
+        using var updates = new BehaviorSubject<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>>([material]);
+        var catalog = new Mock<Oxygen.Editor.Assets.IAssetFeed>();
+        _ = catalog.SetupGet(value => value.Items).Returns(updates);
+        _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
         {
             IsExpanded = true,
         };

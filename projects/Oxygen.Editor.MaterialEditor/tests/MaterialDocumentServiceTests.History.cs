@@ -204,8 +204,8 @@ public sealed partial class MaterialDocumentServiceTests
         var service = CreateService(workspace);
         var first = await service.CreateAsync(new Uri("asset:///Content/Materials/UiFirst.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var second = await service.CreateAsync(new Uri("asset:///Content/Materials/UiSecond.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var firstEditor = new MaterialEditorViewModel(new MaterialDocumentMetadata(first.MaterialUri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
-        using var secondEditor = new MaterialEditorViewModel(new MaterialDocumentMetadata(second.MaterialUri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
+        using var firstEditor = new MaterialEditorViewModel(new MaterialDocumentMetadata(first.MaterialUri), service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance);
+        using var secondEditor = new MaterialEditorViewModel(new MaterialDocumentMetadata(second.MaterialUri), service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForMaterialUiAsync(() => firstEditor.IsLoaded && secondEditor.IsLoaded, this.TestContext.CancellationToken).ConfigureAwait(false);
         secondEditor.RoughnessFactor = 0.2f;
         firstEditor.BeginEditSession("Base color", NumberBoxEditInteractionKind.PointerDrag);
@@ -242,7 +242,7 @@ public sealed partial class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var service = CreateService(workspace);
         var original = await service.CreateAsync(new Uri("asset:///Content/Materials/UiWheel.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var editor = new MaterialEditorViewModel(new MaterialDocumentMetadata(original.MaterialUri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
+        using var editor = new MaterialEditorViewModel(new MaterialDocumentMetadata(original.MaterialUri), service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForMaterialUiAsync(() => editor.IsLoaded, this.TestContext.CancellationToken).ConfigureAwait(false);
         for (var index = 1; index <= 10; index++)
         {
@@ -277,7 +277,7 @@ public sealed partial class MaterialDocumentServiceTests
         var original = await service.CreateAsync(new Uri("asset:///Content/Materials/Focused.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var committer = new FocusedInputCommitter();
         var metadata = new MaterialDocumentMetadata(original.MaterialUri);
-        using var editor = new MaterialEditorViewModel(metadata, service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance, inputCommitter: committer);
+        using var editor = new MaterialEditorViewModel(metadata, service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance, inputCommitter: committer);
         await WaitForMaterialUiAsync(() => editor.IsLoaded, this.TestContext.CancellationToken).ConfigureAwait(false);
         editor.BeginEditSession("Roughness", NumberBoxEditInteractionKind.Text);
         committer.Flush = () => editor.RoughnessFactor = 0.67f;

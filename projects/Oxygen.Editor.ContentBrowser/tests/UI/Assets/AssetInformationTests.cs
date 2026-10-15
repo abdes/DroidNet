@@ -8,7 +8,7 @@ using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline.Status;
@@ -39,7 +39,7 @@ public sealed partial class AssetInformationTests : DroidNet.Tests.VisualUserInt
             SourcePath = "C:/Projects/Example/Content/Materials/BlueMetal.omat.json",
             DisplayPath = Uri.UnescapeDataString(asset.DisplayPath),
         };
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([asset]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([asset]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState(projects);
@@ -92,7 +92,7 @@ public sealed partial class AssetInformationTests : DroidNet.Tests.VisualUserInt
         _ = PaneText(pane).Should().Contain(cooked.CookedUri.AbsolutePath);
         _ = selector.SelectedItem.Should().BeSameAs(selected);
         _ = view.ActualSize.Should().Be(originalSize);
-        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
     });
 
     // Paths wrap at separators through zero-width breaks; compare the text a reader sees.

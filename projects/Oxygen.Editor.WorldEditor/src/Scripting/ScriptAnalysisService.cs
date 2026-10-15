@@ -13,13 +13,13 @@ using DroidNet.Hosting.WinUI;
 using Json.Schema;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Interop.Scripting;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -75,7 +75,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
     /// <param name="automaticCooking">Cooks a saved input file once it checks clean.</param>
     public ScriptAnalysisService(
         IProjectContextService projects,
-        IProjectAssetCatalog catalog,
+        IAssetCatalog catalog,
         HostingContext hosting,
         IOperationResultPublisher operationResults,
         IEngineService engine,
@@ -196,11 +196,11 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
             return [];
         }
 
-        var stem = ScriptSources.StripSourceExtension(Path.GetFileName(path));
+        var stem = AssetFileTypes.RemoveSuffix(Path.GetFileName(path));
         return [.. Directory.EnumerateFiles(folder)
-            .Where(other => ScriptSources.IsScriptSource(other)
+            .Where(other => AssetFileTypes.Is(other, AssetFileCategory.Script)
                 && !string.Equals(other, path, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(ScriptSources.StripSourceExtension(Path.GetFileName(other)), stem, StringComparison.OrdinalIgnoreCase))
+                && string.Equals(AssetFileTypes.RemoveSuffix(Path.GetFileName(other)), stem, StringComparison.OrdinalIgnoreCase))
             .Select(Path.GetFileName)
             .OfType<string>()
             .Order(StringComparer.OrdinalIgnoreCase)];
@@ -215,7 +215,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
 
         var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.Hidden | FileAttributes.System };
         return Directory.EnumerateFiles(root, "*", options)
-            .Where(static path => ScriptSources.IsScriptSource(path) || ScriptSources.IsInputSource(path))
+            .Where(static path => AssetFileTypes.Is(path, AssetFileCategory.Script) || AssetFileTypes.Is(path, AssetFileCategory.Input))
             .Where(path => !Path.GetRelativePath(root, path).Split(Path.DirectorySeparatorChar).Any(static segment => segment.StartsWith('.')));
     }
 
@@ -238,7 +238,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
     private static string? ToScriptPath(ProjectContext project, Uri uri)
     {
         var virtualPath = AssetUriHelper.GetVirtualPath(uri);
-        return (ScriptSources.IsScriptSource(virtualPath) || ScriptSources.IsInputSource(virtualPath))
+        return (AssetFileTypes.Is(virtualPath, AssetFileCategory.Script) || AssetFileTypes.Is(virtualPath, AssetFileCategory.Input))
             && RelocationPaths.ToPhysical(project, virtualPath) is { } physical ? physical : null;
     }
 
@@ -257,12 +257,12 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
             return null;
         }
 
-        if (ScriptSources.IsInputSource(path))
+        if (AssetFileTypes.Is(path, AssetFileCategory.Input))
         {
             return await this.CheckInputFileAsync(path, virtualPath, force, cookWhenValid, cancellationToken).ConfigureAwait(false);
         }
 
-        if (!ScriptSources.IsScriptSource(path))
+        if (!AssetFileTypes.Is(path, AssetFileCategory.Script))
         {
             return null;
         }
@@ -294,7 +294,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
 
         await this.nativeReady.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         var sourceName = Path.GetRelativePath(project.ProjectRoot, path).Replace('\\', '/');
-        var scriptUri = new Uri($"{AssetUris.Scheme}://{ScriptSources.ToCookedScriptPath(virtualPath)}");
+        var scriptUri = new Uri($"{AssetUris.Scheme}://{AssetFileTypes.ToCookedPath(virtualPath) ?? virtualPath}");
         var snapshot = this.Run(path, sourceName, bytes, scriptUri, previous?.LastValidParameters ?? []);
         if (snapshot is null || (this.versions.TryGetValue(path, out var latest) && latest != version))
         {
@@ -336,7 +336,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         }
 
         var schema = this.inputSchemas.GetOrAdd(
-            path.EndsWith(ScriptSources.InputActionFileSuffix, StringComparison.OrdinalIgnoreCase) ? "oxygen.input-action.schema.json" : "oxygen.input.schema.json",
+            path.EndsWith(AssetFileTypes.InputActionFile, StringComparison.OrdinalIgnoreCase) ? "oxygen.input-action.schema.json" : "oxygen.input.schema.json",
             this.LoadInputSchema);
         var problems = InputFileCheck.Check(path, System.Text.Encoding.UTF8.GetString(bytes), schema);
         var snapshot = new ScriptAnalysisSnapshot(path, new Uri($"{AssetUris.Scheme}://{virtualPath}"), problems, [], ParametersOutOfDate: false);
@@ -495,14 +495,14 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
             _ = Task.Run(() => this.AnalyzeChangedAsync(path));
         }
 
-        if (!ScriptSources.IsScriptSource(path))
+        if (!AssetFileTypes.Is(path, AssetFileCategory.Script))
         {
             return;
         }
 
         foreach (var sibling in this.entries.Keys.Where(other => !string.Equals(other, path, StringComparison.OrdinalIgnoreCase)
             && string.Equals(Path.GetDirectoryName(other), Path.GetDirectoryName(path), StringComparison.OrdinalIgnoreCase)
-            && string.Equals(ScriptSources.StripSourceExtension(Path.GetFileName(other)), ScriptSources.StripSourceExtension(Path.GetFileName(path)), StringComparison.OrdinalIgnoreCase)).ToArray())
+            && string.Equals(AssetFileTypes.RemoveSuffix(Path.GetFileName(other)), AssetFileTypes.RemoveSuffix(Path.GetFileName(path)), StringComparison.OrdinalIgnoreCase)).ToArray())
         {
             _ = Task.Run(() => this.AnalyzeChangedAsync(sibling));
         }

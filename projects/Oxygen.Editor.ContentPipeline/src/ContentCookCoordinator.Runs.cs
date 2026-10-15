@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -165,10 +166,10 @@ public sealed partial class ContentCookCoordinator
         };
         if (request.ScopeUri is { } assetUri && request.TargetKind is CookTargetKind.Asset or CookTargetKind.CurrentScene)
         {
-            var kind = request.TargetKind == CookTargetKind.CurrentScene || assetUri.AbsolutePath.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase)
-                ? ContentCookAssetKind.Scene : assetUri.AbsolutePath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
-                    ? ContentCookAssetKind.Material : assetUri.AbsolutePath.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
-                        ? ContentCookAssetKind.Geometry : assetUri.AbsolutePath.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
+            var kind = request.TargetKind == CookTargetKind.CurrentScene || assetUri.AbsolutePath.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
+                ? ContentCookAssetKind.Scene : assetUri.AbsolutePath.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
+                    ? ContentCookAssetKind.Material : assetUri.AbsolutePath.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase)
+                        ? ContentCookAssetKind.Geometry : assetUri.AbsolutePath.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
                             ? ContentCookAssetKind.Texture : request.Import is not null || request.IsReimport || IsModelSource(assetUri) ? ContentCookAssetKind.ForeignSource : ContentCookAssetKind.Unknown;
             snapshot = snapshot with { Assets = snapshot.Assets.Add(assetUri, new(assetUri, kind, CookAssetState.Preparing)) };
         }

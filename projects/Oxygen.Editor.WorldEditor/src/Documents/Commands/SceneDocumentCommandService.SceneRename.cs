@@ -6,7 +6,6 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Storage;
 using DroidNet.TimeMachine;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -133,7 +132,6 @@ public sealed partial class SceneDocumentCommandService
                 }
             }
 
-            _ = this.messenger.Send(new AssetsChangedMessage());
         }
     }
 

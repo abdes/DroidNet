@@ -5,6 +5,7 @@
 using DroidNet.TimeMachine;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -61,7 +62,7 @@ public sealed partial class SceneDocumentCommandService
             return "The starting camera must be a camera node of this scene.";
         }
 
-        if (ValidateTypedReferences(play.StartingInputContexts.Select(static entry => entry.Context), ".oimap") is { } contexts)
+        if (ValidateTypedReferences(play.StartingInputContexts.Select(static entry => entry.Context), AssetFileTypes.InputMappingContext) is { } contexts)
         {
             return contexts;
         }

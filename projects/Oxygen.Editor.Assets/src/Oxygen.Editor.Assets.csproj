@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+
+        <Title>Oxygen Editor Assets</Title>
+        <Description>The editor's live view of a project's assets: composed catalog, identity rules, asset states and material choices.</Description>
+        <PackageTags>oxygen;gameengine</PackageTags>
+        <RootNamespace>Oxygen.Editor.Assets</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="System.Reactive" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/src/Oxygen.Editor.ContentPipeline.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/src/Oxygen.Editor.Projects.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.World/src/Oxygen.Editor.World.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Assets/src/Oxygen.Managed.Assets.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Core/src/Oxygen.Managed.Core.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Storage/src/Storage.csproj" />
+    </ItemGroup>
+
+</Project>

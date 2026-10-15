@@ -21,6 +21,7 @@ using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.SceneEditor;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -72,6 +73,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="previewSettings">The shared project preview preferences.</param>
     /// <param name="loggerFactory">The logger factory.</param>
     /// <param name="conflictPrompt">Presents recovery after an ordinary Save conflict.</param>
+    /// <param name="catalog">Reports when the scene's file is removed or restored outside the editor; optional.</param>
     public SceneEditorViewModel(
         SceneDocumentMetadata metadata,
         IDocumentService documentService,
@@ -88,7 +90,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         SceneCookInputRegistrar cookInputs,
         Workspace.PreviewSettingsService previewSettings,
         ILoggerFactory? loggerFactory = null,
-        IDocumentConflictPrompt? conflictPrompt = null)
+        IDocumentConflictPrompt? conflictPrompt = null,
+        IAssetCatalog? catalog = null)
     {
         this.engineService = engineService;
         this.PreviewSettings = previewSettings;
@@ -123,6 +126,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.InitializePlay();
         this.RefreshCookInputRegistration();
         sceneEngineSync.SceneSynchronized += this.OnSceneSynchronized;
+        this.WatchSourcePresence(catalog);
         if (this.scene is { } loaded && sceneEngineSync.IsSceneSynchronized(loaded))
         {
             // The scene finished synchronizing before this editor existed.
@@ -247,6 +251,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         if (disposing)
         {
             this.isDisposed = true;
+            this.StopWatchingSourcePresence();
             this.DisposeRelocationParticipant();
             this.cookInputRegistration?.Dispose();
             this.cookInputRegistration = null;

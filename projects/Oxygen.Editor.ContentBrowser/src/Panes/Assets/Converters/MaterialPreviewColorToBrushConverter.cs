@@ -4,7 +4,7 @@
 
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
-using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.Assets.Materials;
 using Windows.UI;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Converters;

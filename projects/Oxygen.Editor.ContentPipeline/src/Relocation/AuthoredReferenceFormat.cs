@@ -7,6 +7,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -20,7 +21,7 @@ internal static class AuthoredReferenceFormat
     private const string UriPrefix = "asset://";
 
     private static readonly string[] DescriptorExtensions =
-        [".oscene.json", ".omat.json", ".ogeo.json", ".otex.json", ".opscene.json", ".ocshape.json", ".opmat.json"];
+        [AssetFileTypes.SceneDescriptor, AssetFileTypes.MaterialDescriptor, AssetFileTypes.GeometryDescriptor, AssetFileTypes.TextureDescriptor, AssetFileTypes.PhysicsSceneDescriptor, AssetFileTypes.CollisionShapeDescriptor, AssetFileTypes.PhysicsMaterialDescriptor];
 
     private static readonly JsonSerializerOptions WriteOptions = new()
     {
@@ -214,7 +215,7 @@ internal static class AuthoredReferenceFormat
     private static JsonValue[] EnumerateFileReferences(JsonObject descriptor, string path)
     {
         var nodes = new List<JsonNode?>();
-        if (path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase))
+        if (path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
         {
             nodes.Add(descriptor["source"]);
             if (descriptor["sources"] is JsonArray sources)
@@ -222,7 +223,7 @@ internal static class AuthoredReferenceFormat
                 nodes.AddRange(sources.OfType<JsonObject>().Select(static source => source["file"]));
             }
         }
-        else if (path.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase) && descriptor["buffers"] is JsonArray buffers)
+        else if (path.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase) && descriptor["buffers"] is JsonArray buffers)
         {
             nodes.AddRange(buffers.OfType<JsonObject>().Select(static buffer => buffer["uri"]));
         }

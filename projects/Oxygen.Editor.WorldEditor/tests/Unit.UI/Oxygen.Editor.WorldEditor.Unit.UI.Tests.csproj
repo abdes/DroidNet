@@ -9,7 +9,6 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.WorldEditor/src/Oxygen.Editor.WorldEditor.csproj" />
         <PackageReference Include="Moq" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentBrowser/testsupport/AssetStatusFixture.cs" Link="Fixtures/AssetStatusFixture.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/BuiltinCatalogDiscoveryFixture.cs" Link="Fixtures/BuiltinCatalogDiscoveryFixture.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Fixtures/LooseCookedIndexFixture.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneAuthoringFixture.cs" Link="Support/SceneAuthoringFixture.cs" />

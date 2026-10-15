@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -286,7 +287,7 @@ internal sealed partial class CookSourceAnalyzer(
 
                 if (!Oxygen.Managed.Assets.Filesystem.VirtualPath.IsCanonicalAbsolute(virtualPath)
                     || virtualPath.IndexOf('/', 1) < 2
-                    || !virtualPath.EndsWith(".otex", StringComparison.Ordinal))
+                    || !virtualPath.EndsWith(AssetFileTypes.Texture, StringComparison.Ordinal))
                 {
                     diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, virtualPath, "path is not a canonical named texture", details: null));
                     continue;
@@ -375,7 +376,7 @@ internal sealed partial class CookSourceAnalyzer(
         {
             var path = Uri.UnescapeDataString(uri.AbsolutePath);
             path = path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? path[..^".json".Length] : path;
-            var kind = path.EndsWith(".oscript", StringComparison.OrdinalIgnoreCase) ? "script" : "asset";
+            var kind = path.EndsWith(AssetFileTypes.Script, StringComparison.OrdinalIgnoreCase) ? "script" : "asset";
             return new NativeLogicalDependency(path, kind, ObjectPath: "scripting", Required: true);
         }) ?? [];
 

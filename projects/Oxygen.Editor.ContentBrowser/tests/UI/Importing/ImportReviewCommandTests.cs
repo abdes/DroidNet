@@ -11,7 +11,7 @@ using DroidNet.Mvvm.Converters;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Importing;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
@@ -61,7 +61,7 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
         var windows = new Mock<IWindowManagerService>();
         _ = windows.SetupGet(value => value.ActiveWindow).Returns(managed.Object);
         var dialogs = CreateDialogs(project, source, selectSource, accept);
-        var provider = new Mock<IContentBrowserAssetProvider>();
+        var provider = new Mock<IAssetFeed>();
         using var browser = new AssetsViewModel(
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService>(),
             new ViewModelToView(locator.Object),
@@ -84,7 +84,7 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
         await browser.ImportCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         dialogs.Verify(value => value.ShowAsync(It.IsAny<DialogSpec>(), It.IsAny<CancellationToken>()), selectSource ? Times.Once() : Times.Never());
         pipeline.Verify(value => value.ImportSourceAsync(It.IsAny<SceneImportRequest>(), It.IsAny<CancellationToken>()), accept ? Times.Once() : Times.Never());
-        provider.Verify(value => value.RefreshAsync(AssetBrowserFilter.Default, It.IsAny<CancellationToken>()), accept ? Times.Once() : Times.Never());
+        provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), accept ? Times.Once() : Times.Never());
         if (accept)
         {
             _ = submitted.Should().NotBeNull();

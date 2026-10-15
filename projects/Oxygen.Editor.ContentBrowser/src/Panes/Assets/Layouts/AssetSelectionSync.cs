@@ -8,7 +8,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Windows.System;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;

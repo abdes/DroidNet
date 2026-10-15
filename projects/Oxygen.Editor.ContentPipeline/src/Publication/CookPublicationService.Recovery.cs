@@ -20,6 +20,11 @@ public sealed partial class CookPublicationService
         return await CookPublicationReadLease.OpenUnderGateAsync(project, files, gate, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
+    async Task<ICookPublicationReadLease> ICookPublicationReader.AcquireReadAsync(ProjectContext project, CancellationToken cancellationToken)
+        => await this.AcquireReadAsync(project, cancellationToken).ConfigureAwait(false);
+
+
     /// <summary>Restores interrupted authored-source/configuration changes before a host activates its project context.</summary>
     /// <param name="project">The project being activated.</param>
     /// <param name="cancellationToken">Cancels the recovery.</param>

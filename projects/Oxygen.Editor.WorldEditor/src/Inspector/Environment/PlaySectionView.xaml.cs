@@ -7,7 +7,7 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
@@ -58,7 +58,7 @@ public sealed partial class PlaySectionView
     {
         _ = sender;
         this.AddContextFlyout.Hide();
-        this.ViewModel?.AddContextCommand.Execute(args.ClickedItem as ContentBrowserAssetItem);
+        this.ViewModel?.AddContextCommand.Execute(args.ClickedItem as AssetEntry);
     }
 
     private void OnPriorityStarted(object? sender, NumberBoxEditSessionEventArgs args)

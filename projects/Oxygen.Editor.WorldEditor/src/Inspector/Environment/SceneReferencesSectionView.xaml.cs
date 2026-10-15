@@ -5,7 +5,7 @@
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
@@ -12,9 +13,8 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
@@ -43,7 +43,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
     public Task ImportedModelDetailsShowNamedOutputs(bool tiles, bool light) => EnqueueAsync(async () =>
     {
         var source = CreateImportedSourceRow(configured: false);
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([source]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([source]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState(projects);
@@ -80,18 +80,17 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         _ = names.Should().Contain("Main (Geometry)").And.Contain("Paint (Material)").And.Contain("Crate (Scene)");
         _ = selector.SelectedItem.Should().BeSameAs(selected);
         _ = pane.FindDescendants().OfType<TextBlock>().Should().Contain(text => text.Text == names);
-        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
     });
 
-    /// <summary>Picker content begins empty for source models, then shows only actual geometry and material outputs.</summary>
+    /// <summary>The geometry picker begins empty for a source model, then offers only its geometry output.</summary>
     /// <returns>The asynchronous typed-picker regression.</returns>
     [TestMethod]
     public Task ImportedOutputsPopulateOnlyMatchingPickerTypes() => EnqueueAsync(async () =>
     {
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([CreateImportedSourceRow(configured: false)]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([CreateImportedSourceRow(configured: false)]);
         var provider = CreateQueryProvider(updates);
-        using var materials = new MaterialPickerService(provider.Object);
-        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, materials, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
+        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
         var view = new GeometryView
         {
             ViewModel = geometry,
@@ -106,9 +105,8 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         updates.OnNext([source, .. outputs]);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = content.Items.Should().ContainSingle().Which.Item.Uri.Should().Be(outputs.Single(static item => item.Kind == AssetKind.Geometry).IdentityUri);
-        var material = await materials.ResolveAsync(outputs.Single(static item => item.Kind == AssetKind.Material).IdentityUri, this.TestContext.CancellationToken).ConfigureAwait(true);
-        _ = material!.MaterialUri.Should().NotBe(source.IdentityUri);
-        _ = content.Items.Should().NotContain(row => row.Item.Uri == material.MaterialUri || row.Item.Uri == source.IdentityUri);
+        var material = outputs.Single(static item => item.Kind == AssetKind.Material).IdentityUri;
+        _ = content.Items.Should().NotContain(row => row.Item.Uri == material || row.Item.Uri == source.IdentityUri);
     });
 
     /// <summary>The existing Cook menu offers source navigation and reimport for a selected imported output.</summary>
@@ -118,7 +116,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
     {
         var source = CreateImportedSourceRow(configured: true);
         var output = CreateImportedOutputRows(source).Single(static row => row.Kind == AssetKind.Geometry);
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([source, output]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([source, output]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState(projects);
@@ -173,7 +171,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         await execution()!.ConfigureAwait(true);
     }
 
-    private static ContentBrowserAssetItem CreateImportedSourceRow(bool configured)
+    private static AssetEntry CreateImportedSourceRow(bool configured)
     {
         var uri = new Uri("asset:///Content/SourceMedia/DCC/Crate/model.gltf");
         return new(uri, "model.gltf", AssetKind.ForeignSource, AssetState.Source, DerivedState: null, AssetRuntimeAvailability.NotApplicable, uri.AbsolutePath, "C:/Project/Content/SourceMedia/DCC/Crate/model.gltf", DescriptorPath: null, CookedUri: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true)
@@ -183,7 +181,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         };
     }
 
-    private static ContentBrowserAssetItem[] CreateImportedOutputRows(ContentBrowserAssetItem source)
+    private static AssetEntry[] CreateImportedOutputRows(AssetEntry source)
         => [.. source.CookStatus!.Outputs.Select(
         output =>
         {
@@ -194,7 +192,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
                 _ => AssetKind.Scene,
             };
 
-            return new ContentBrowserAssetItem(
+            return new AssetEntry(
                 output.CookedAssetUri,
                 Path.GetFileNameWithoutExtension(output.VirtualPath),
                 assetKind,

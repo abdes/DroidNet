@@ -5,7 +5,7 @@
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;

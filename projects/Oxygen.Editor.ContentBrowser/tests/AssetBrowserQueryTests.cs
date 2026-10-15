@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
 
@@ -81,10 +81,31 @@ public sealed class AssetBrowserQueryTests
         _ = query.SearchText.Should().BeEmpty();
     }
 
+    /// <summary>A model source with no import settings is found by the not-imported status.</summary>
+    [TestMethod]
+    public void NotImportedStatusFindsModelSourcesWithoutImportSettings()
+    {
+        var model = CreateAsset("model.gltf", AssetKind.ForeignSource, AssetCookFreshness.Current) with { PrimaryState = AssetState.Source, CookStatus = null };
+        var query = new AssetBrowserQuery();
+        Select(query.StatusOptions, "Not imported");
+        _ = query.Matches(model).Should().BeTrue();
+        _ = query.Matches(model with { ImportSourceUri = model.IdentityUri }).Should().BeFalse();
+    }
+
+    /// <summary>Searching a grouped built-in also matches the path of its cooked copy.</summary>
+    [TestMethod]
+    public void SearchMatchesTheCookedCopyOfAGroupedBuiltin()
+    {
+        var origin = CreateAsset("Default", AssetKind.Material, AssetCookFreshness.Current) with { PrimaryState = AssetState.Generated, CookStatus = null };
+        var copy = origin with { IdentityUri = new("asset:///Content/Materials/OxygenEditor_Default.omat"), DisplayPath = "/Content/Materials/OxygenEditor_Default.omat", BuiltinOriginUri = origin.IdentityUri };
+        var grouped = origin with { CookedCompanions = [copy] };
+        _ = new AssetBrowserQuery { SearchText = "OxygenEditor_Default" }.Matches(grouped).Should().BeTrue();
+    }
+
     private static void Select(IReadOnlyList<AssetFilterOption> options, string label)
         => options.Single(option => string.Equals(option.Label, label, StringComparison.Ordinal)).IsSelected = true;
 
-    private static ContentBrowserAssetItem CreateAsset(string name, AssetKind kind, AssetCookFreshness freshness)
+    private static AssetEntry CreateAsset(string name, AssetKind kind, AssetCookFreshness freshness)
     {
         var uri = new Uri("asset:///Content/" + Uri.EscapeDataString(name));
         var current = freshness == AssetCookFreshness.Current;

@@ -8,9 +8,11 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Dialogs;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -24,7 +26,8 @@ namespace Oxygen.Editor.ContentBrowser.Scripts;
 /// <param name="projects">The active project.</param>
 /// <param name="browserState">The Content Browser state, whose selected folder is the default destination.</param>
 /// <param name="codeEditor">The code editor service.</param>
-/// <param name="messenger">The messenger that refreshes and selects the new asset.</param>
+/// <param name="messenger">The messenger that selects the new asset.</param>
+/// <param name="assets">The asset feed, refreshed so the new asset can be selected at once.</param>
 /// <param name="operationResults">The operation-result publisher.</param>
 public sealed class ScriptAssetCreation(
     IDialogService dialogs,
@@ -32,6 +35,7 @@ public sealed class ScriptAssetCreation(
     ContentBrowserState browserState,
     ICodeEditorService codeEditor,
     IMessenger messenger,
+    IAssetFeed assets,
     IOperationResultPublisher operationResults)
 {
     /// <summary>The longest input file name: the template names its mapping context after the file.</summary>
@@ -41,14 +45,14 @@ public sealed class ScriptAssetCreation(
     /// <returns>The new file, or <see langword="null"/> when cancelled or failed.</returns>
     public Task<string?> CreateScriptAsync()
         => this.CreateAsync(
-            new CreationKind("New Script", "Scripts", "NewScript", [ScriptSources.ScriptExtension, ".luau"], ScriptOperationKinds.Create),
+            new CreationKind("New Script", "Scripts", "NewScript", [AssetFileTypes.LuaScript, AssetFileTypes.LuauScript], ScriptOperationKinds.Create),
             static _ => ScriptTemplates.Script);
 
     /// <summary>Asks for a name and folder and creates an input file with one action and one mapping context.</summary>
     /// <returns>The new file, or <see langword="null"/> when cancelled or failed.</returns>
     public Task<string?> CreateInputFileAsync()
         => this.CreateAsync(
-            new CreationKind("New Input File", "Input", "NewInput", [ScriptSources.InputFileSuffix, ScriptSources.InputActionFileSuffix], ScriptOperationKinds.CreateInputFile),
+            new CreationKind("New Input File", "Input", "NewInput", [AssetFileTypes.InputFile, AssetFileTypes.InputActionFile], ScriptOperationKinds.CreateInputFile),
             ScriptTemplates.InputFile);
 
     /// <summary>Gets the folder a new file goes to: the folder being browsed, or the kind's folder at a mount root.</summary>
@@ -164,7 +168,7 @@ public sealed class ScriptAssetCreation(
             _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             await using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
-                var bytes = Encoding.UTF8.GetBytes(template(Path.GetFileName(ScriptSources.StripSourceExtension(path))));
+                var bytes = Encoding.UTF8.GetBytes(template(Path.GetFileName(AssetFileTypes.RemoveSuffix(path))));
                 await stream.WriteAsync(bytes).ConfigureAwait(true);
             }
         }
@@ -187,9 +191,9 @@ public sealed class ScriptAssetCreation(
             return;
         }
 
-        var identity = ScriptSources.IsScriptSource(virtualPath) ? ScriptSources.ToCookedScriptPath(virtualPath) : virtualPath;
+        var identity = AssetFileTypes.Is(virtualPath, AssetFileCategory.Script) ? AssetFileTypes.ToCookedPath(virtualPath)! : virtualPath;
         var uri = new Uri($"{AssetUris.Scheme}://{identity}");
-        _ = messenger.Send(new AssetsChangedMessage(uri));
+        await assets.RefreshAsync().ConfigureAwait(true);
         var request = messenger.Send(new ShowAssetRequestMessage(project, uri));
         if (request.HasReceivedResponse)
         {

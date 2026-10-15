@@ -5,7 +5,7 @@
 using System.ComponentModel;
 using System.Reactive.Concurrency;
 using DroidNet.Controls;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Inspector.Environment;
@@ -33,7 +33,7 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
     public EnvironmentViewModel(
         ISceneDocumentCommandService? commandService = null,
         Func<SceneDocumentCommandContext?>? commandContextProvider = null,
-        IContentBrowserAssetProvider? assetProvider = null,
+        IAssetFeed? assetProvider = null,
         Func<Guid, Task>? inspectSceneNode = null,
         IScheduler? observerScheduler = null,
         Func<Scene, CancellationToken, Task<RuntimeEnvironmentState?>>? observeEnvironment = null,

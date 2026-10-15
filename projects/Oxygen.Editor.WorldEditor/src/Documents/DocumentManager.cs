@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Editor.ContentBrowser.Messages;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
@@ -29,6 +30,7 @@ public sealed partial class DocumentManager : IDisposable
     private readonly WindowId windowId;
     private readonly IProjectManagerService projectManager;
     private readonly Services.ISceneEngineSync sceneEngineSync;
+    private readonly IAssetRelocationService relocation;
     private readonly SemaphoreSlim sceneReplacementGate = new(1, 1);
     private readonly Oxygen.Managed.Core.Diagnostics.IOperationResultPublisher? operationResults;
     private readonly Oxygen.Managed.Core.Diagnostics.IStatusReducer? statusReducer;
@@ -47,6 +49,7 @@ public sealed partial class DocumentManager : IDisposable
     /// <param name="windowId">The identifier of the window associated with this manager.</param>
     /// <param name="projectManager">The project owner used to stage, accept and retire editable scenes.</param>
     /// <param name="sceneEngineSync">The owner of open scene runtime lifetimes.</param>
+    /// <param name="relocation">Reports the files the editor moved or deleted, so open tabs follow.</param>
     /// <param name="loggerFactory">Optional logger factory for logging.</param>
     /// <param name="operationResults">Optional visible operation-result publisher.</param>
     /// <param name="statusReducer">Optional reducer for scene-load diagnostics.</param>
@@ -60,6 +63,7 @@ public sealed partial class DocumentManager : IDisposable
         WindowId windowId,
         IProjectManagerService projectManager,
         Services.ISceneEngineSync sceneEngineSync,
+        IAssetRelocationService relocation,
         ILoggerFactory? loggerFactory = null,
         Oxygen.Managed.Core.Diagnostics.IOperationResultPublisher? operationResults = null,
         Oxygen.Managed.Core.Diagnostics.IStatusReducer? statusReducer = null)
@@ -74,6 +78,7 @@ public sealed partial class DocumentManager : IDisposable
         this.windowId = windowId;
         this.projectManager = projectManager;
         this.sceneEngineSync = sceneEngineSync;
+        this.relocation = relocation;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
 
@@ -97,6 +102,7 @@ public sealed partial class DocumentManager : IDisposable
         this.disposed = true;
         _ = Interlocked.Increment(ref this.sceneRequestId);
         this.messenger.UnregisterAll(this);
+        this.relocation.FilesChanged -= this.OnFilesChanged;
         this.sceneReplacementGate.Dispose();
         GC.SuppressFinalize(this);
     }
@@ -367,7 +373,6 @@ public sealed partial class DocumentManager : IDisposable
         {
             var created = await this.materialDocumentService.CreateAsync(message.MaterialUri).ConfigureAwait(true);
             await this.materialDocumentService.CloseAsync(created.DocumentId, discard: false).ConfigureAwait(true);
-            _ = this.messenger.Send(new AssetsChangedMessage(message.MaterialUri));
             var opened = await this.OpenMaterialAsync(message.MaterialUri, message.Title).ConfigureAwait(true);
             message.Reply(opened);
         }

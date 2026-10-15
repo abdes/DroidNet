@@ -8,7 +8,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
@@ -140,7 +140,7 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
     public Task ClosedSceneRejectsLateDemandLookup() => EnqueueAsync(async () =>
     {
         using var fixture = new DemandFixture();
-        var resolved = new TaskCompletionSource<ContentBrowserAssetItem?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var resolved = new TaskCompletionSource<AssetEntry?>(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = fixture.Assets.Setup(value => value.ResolveAsync(fixture.GeometryUri, It.IsAny<CancellationToken>())).Returns(resolved.Task);
         fixture.Geometry.Geometry = new(fixture.GeometryUri);
         fixture.Activate();

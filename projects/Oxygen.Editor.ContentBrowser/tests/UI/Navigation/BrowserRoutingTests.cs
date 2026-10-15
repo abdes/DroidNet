@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.ContentPipeline.Discovery;
@@ -33,7 +33,7 @@ public sealed partial class BrowserRoutingTests : DroidNet.Tests.VisualUserInter
     public Task ActualBrowserRouterNeverReusesDisposedLayouts() => EnqueueAsync(async () =>
     {
         var asset = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([asset]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([asset]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState(projects);
@@ -74,7 +74,7 @@ public sealed partial class BrowserRoutingTests : DroidNet.Tests.VisualUserInter
 
         var disposed = () => first.OnNavigatedToAsync(null!, null!);
         _ = await disposed.Should().ThrowAsync<ObjectDisposedException>().ConfigureAwait(true);
-        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
     });
 
     private sealed partial class BrowserLayoutOutlet : AbstractOutletContainer

@@ -8,7 +8,7 @@ using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Presentation;
@@ -27,12 +27,12 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
 
     private readonly ISceneDocumentCommandService? commandService;
     private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
-    private readonly IContentBrowserAssetProvider? assetProvider;
+    private readonly IAssetFeed? assetProvider;
     private readonly IScheduler observerScheduler;
     private readonly Func<Uri, InputContextSource> contextSource;
     private readonly Func<Guid, Task>? inspectSceneNode;
     private readonly Func<Uri, Task>? revealAsset;
-    private readonly List<ContentBrowserAssetItem> assets = [];
+    private readonly List<AssetEntry> assets = [];
     private IDisposable? assetSubscription;
     private bool catalogLoaded;
     private Scene? scene;
@@ -55,7 +55,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     internal PlaySectionViewModel(
         ISceneDocumentCommandService? commandService,
         Func<SceneDocumentCommandContext?>? commandContextProvider,
-        IContentBrowserAssetProvider? assetProvider,
+        IAssetFeed? assetProvider,
         IScheduler observerScheduler,
         Func<Uri, InputContextSource>? contextSource,
         Func<Guid, Task>? inspectSceneNode = null,
@@ -98,7 +98,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     public ObservableCollection<StartingInputContextRowViewModel> Contexts { get; } = [];
 
     /// <summary>Gets the mapping contexts that can be added.</summary>
-    public ObservableCollection<ContentBrowserAssetItem> ContextCandidates { get; } = [];
+    public ObservableCollection<AssetEntry> ContextCandidates { get; } = [];
 
     /// <summary>Gets what Add does, or why it is unavailable.</summary>
     [ObservableProperty]
@@ -269,10 +269,10 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     private Task InspectAutomaticCameraAsync()
         => this.automaticCamera is { } camera && this.inspectSceneNode is { } inspect ? inspect(camera) : Task.CompletedTask;
 
-    private bool CanAdd(ContentBrowserAssetItem? candidate) => this.CanEdit && candidate is not null;
+    private bool CanAdd(AssetEntry? candidate) => this.CanEdit && candidate is not null;
 
     [RelayCommand(CanExecute = nameof(CanAdd))]
-    private Task AddContextAsync(ContentBrowserAssetItem? candidate)
+    private Task AddContextAsync(AssetEntry? candidate)
         => candidate is null
             ? Task.CompletedTask
             : this.EditContextsAsync(contexts => [.. contexts, new StartingInputContextData(candidate.IdentityUri)]);
@@ -392,11 +392,9 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     private void RefreshCandidates()
     {
         var listed = this.scene?.Play.StartingInputContexts.Select(static entry => entry.Context).ToHashSet() ?? [];
-        var contexts = this.assets.Where(static asset => asset is { Kind: AssetKind.InputMappingContext, IsSelectable: true }).ToArray();
+        var contexts = AssetRule.For(AssetKind.InputMappingContext).Apply(this.assets);
         var candidates = contexts
             .Where(asset => !listed.Contains(asset.IdentityUri))
-            .OrderBy(static asset => asset.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static asset => asset.DisplayPath, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (!candidates.Select(static asset => asset.IdentityUri).SequenceEqual(this.ContextCandidates.Select(static asset => asset.IdentityUri)))
         {
@@ -407,7 +405,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
             }
         }
 
-        this.AddToolTip = AddToolTipFor(this.catalogLoaded, contexts.Length > 0, candidates.Length > 0);
+        this.AddToolTip = AddToolTipFor(this.catalogLoaded, contexts.Count > 0, candidates.Length > 0);
     }
 
     private void StartAssets()
@@ -422,7 +420,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
             .Subscribe(this.OnAssets, this.OnCatalogFeedError);
     }
 
-    private void OnAssets(IReadOnlyList<ContentBrowserAssetItem> value)
+    private void OnAssets(IReadOnlyList<AssetEntry> value)
     {
         if (this.disposed)
         {

@@ -4,7 +4,7 @@
 
 using DroidNet.Docking;
 using DroidNet.Hosting.WinUI;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Schemas;
@@ -21,7 +21,7 @@ public partial class WorkspaceViewModel
 {
     private CookingPanelViewModel? cookingPanel;
     private HostingContext? cookHosting;
-    private IProjectAssetCatalog? cookedCatalog;
+    private IAssetPublicationTarget? cookedCatalog;
     private IDisposable? publicationRegistration;
 
     /// <inheritdoc />
@@ -102,7 +102,6 @@ public partial class WorkspaceViewModel
                     this.engineService,
                     this.cookHosting,
                     this.cookedCatalog!,
-                    this.messenger,
                     () => this.publicationRegistration is not null && ReferenceEquals(project, this.projectContextService.ActiveProject),
                     () => this.HasContentFailure = false)
                 : null));

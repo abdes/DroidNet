@@ -213,6 +213,39 @@ public sealed class ImportReplacementTests
         }
     }
 
+    /// <summary>Replacing an FBX source publishes the new source under the same output identities.</summary>
+    /// <returns>The asynchronous FBX replacement regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task FbxReplacementPublishesTheNewSourceUnderTheSameOutputs()
+    {
+        using var workspace = new CookWorkspace();
+        var external = Directory.CreateTempSubdirectory("OxygenFbxReplacement-");
+        try
+        {
+            var source = await WriteRetainedModelAsync(workspace, "Model", "fbx", this.TestContext.CancellationToken).ConfigureAwait(false);
+            using var compatibility = EditorNativeCompatibilityService.ForCooking();
+            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
+            var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility, workspace.Publication);
+            var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
+            _ = first.IsPublished.Should().BeTrue();
+
+            var primary = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.fbx");
+            var original = await File.ReadAllTextAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false);
+            var replacement = original.Replace("a: 0,0,0,1,0,0,0,1,0", "a: 0,0,0,2,0,0,0,2,0", StringComparison.Ordinal);
+            _ = replacement.Should().NotBe(original, "the replacement must change the geometry");
+            var incoming = Path.Combine(external.FullName, "model.fbx");
+            await File.WriteAllTextAsync(incoming, replacement, this.TestContext.CancellationToken).ConfigureAwait(false);
+            var review = await SceneImportReplacement.ReviewAsync(workspace.ProjectContext, "Model", this.TestContext.CancellationToken).ConfigureAwait(false);
+            var result = await service.ImportSourceAsync(new SceneImportRequest(workspace.ProjectContext, incoming, "Model", new("asset:///Content/Models")) { Replacement = review }, this.TestContext.CancellationToken).ConfigureAwait(false);
+            await this.AssertReplacementReadyAsync(workspace, service, source, first, result, primary, replacement).ConfigureAwait(false);
+        }
+        finally
+        {
+            external.Delete(recursive: true);
+        }
+    }
+
     /// <summary>A retained source cannot claim unrelated files when the replacement is reviewed.</summary>
     /// <returns>The asynchronous source ownership regression.</returns>
     [TestMethod]

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.World;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -12,8 +13,6 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public sealed partial class SceneDescriptorGenerator
 {
-    private const string ScriptExtension = ".oscript";
-
     /// <summary>Builds the script bindings of a scene from its nodes' slots.</summary>
     /// <param name="scene">The scene.</param>
     /// <param name="scope">The cook scope.</param>
@@ -53,7 +52,7 @@ public sealed partial class SceneDescriptorGenerator
                 }
 
                 var scriptPath = Uri.UnescapeDataString(script.AbsolutePath);
-                if (!scriptPath.EndsWith(ScriptExtension, StringComparison.OrdinalIgnoreCase)
+                if (!scriptPath.EndsWith(AssetFileTypes.Script, StringComparison.OrdinalIgnoreCase)
                     || (CookInputResolver.IsAuthoringUri(scope.Project, script) && CookInputResolver.TryResolveScript(scope.Project, script, ContentCookInputRole.Dependency) is null))
                 {
                     _ = At(parameter: null, DiagnosticSeverity.Error, ScriptDiagnosticCodes.SlotScriptMissing, $"{Capitalize(ScriptSlotDiagnostics.Describe(site))} runs '{scriptPath}', which no longer exists. Pick another script.");

@@ -10,6 +10,16 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// </summary>
 public interface IAssetRelocationService
 {
+    /// <summary>
+    /// Occurs after a relocation or a delete is committed, with the exact files it moved, rewrote or deleted. It is
+    /// raised on the synchronization context of the operation's caller, after open documents followed the change.
+    /// </summary>
+    /// <remarks>
+    /// Only changes made through this service are reported. Files changed outside the editor reach the asset
+    /// catalogs through file watching, which sees a move as a removal and an addition.
+    /// </remarks>
+    public event EventHandler<AssetFilesChangedEventArgs>? FilesChanged;
+
     /// <summary>Registers the owner of open documents, which follows every committed relocation in memory.</summary>
     /// <param name="participant">The owner.</param>
     /// <returns>A registration disposed when the document closes.</returns>

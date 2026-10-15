@@ -171,7 +171,7 @@ public sealed partial class MaterialEditorViewModel
     {
         this.document = this.documentService.GetDocument(documentId);
         this.metadata.IsDirty = this.document.IsDirty;
-        this.IsDirty = this.document.IsDirty;
+        this.IsDirty = this.metadata.IsDirty;
         if (refreshValues)
         {
             this.isLoading = true;

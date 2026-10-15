@@ -35,7 +35,7 @@ public sealed partial class MaterialColorHistoryTests
             var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), resolver.Object, Mock.Of<IMaterialCookService>(), new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(), new NativeAtomicFileStore(new RealFileSystem()));
             var document = await service.CreateAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(true);
             await service.CloseAsync(document.DocumentId, discard: false, this.TestContext.CancellationToken).ConfigureAwait(true);
-            using var model = new MaterialEditorViewModel(new MaterialDocumentMetadata(uri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
+            using var model = new MaterialEditorViewModel(new MaterialDocumentMetadata(uri), service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance);
             await model.PrepareForCloseAsync().ConfigureAwait(true);
             model.ResumeEditing();
             try

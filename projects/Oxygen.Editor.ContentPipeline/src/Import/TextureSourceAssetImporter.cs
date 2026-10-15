@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
@@ -13,10 +14,7 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <summary>Creates a named, project-owned texture descriptor and its source image.</summary>
 public static class TextureSourceAssetImporter
 {
-    private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".png", ".jpg", ".jpeg", ".tga", ".bmp", ".hdr",
-    };
+    private static readonly HashSet<string> ImageExtensions = new(AssetFileTypes.Suffixes(AssetFileCategory.Image), StringComparer.OrdinalIgnoreCase);
 
     private static readonly HashSet<string> Intents = new(StringComparer.Ordinal)
     {
@@ -172,6 +170,38 @@ public static class TextureSourceAssetImporter
 
         static bool IsTrue(JsonElement cube, string name)
             => cube.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
+    }
+
+    /// <summary>Checks whether a texture descriptor names a source image that exists beside it.</summary>
+    /// <param name="descriptorPath">The texture descriptor file.</param>
+    /// <returns><see langword="true"/> when the descriptor's <c>source</c> is a relative path inside its folder and the file exists.</returns>
+    public static bool HasSourceImage(string descriptorPath)
+    {
+        try
+        {
+            using var descriptor = JsonDocument.Parse(File.ReadAllBytes(descriptorPath));
+            if (!descriptor.RootElement.TryGetProperty("source", out var sourceValue)
+                || sourceValue.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(sourceValue.GetString()))
+            {
+                return false;
+            }
+
+            var source = sourceValue.GetString()!;
+            if (Path.IsPathRooted(source) || source.Replace('\\', '/').Split('/').Any(static segment => segment is ".." or "." or ""))
+            {
+                return false;
+            }
+
+            var directory = Path.GetDirectoryName(Path.GetFullPath(descriptorPath))!;
+            var sourcePath = Path.GetFullPath(Path.Combine(directory, source));
+            return sourcePath.StartsWith(directory.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                && File.Exists(sourcePath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Finds the six face files of a cube from any one of them, named as the cooker expects.</summary>
@@ -419,11 +449,11 @@ public sealed record TextureSourceImportTarget(string MountName, string VirtualP
         var imagePaths = (sixFaces ? TextureSourceAssetImporter.FaceSuffixes : [string.Empty])
             .Select(suffix => Path.Combine(physicalFolder, request.Name + suffix + extension))
             .ToArray();
-        var descriptorName = request.Name + ".otex.json";
+        var descriptorName = request.Name + AssetFileTypes.TextureDescriptor;
         var imagePath = imagePaths[0];
         var descriptorPath = Path.Combine(physicalFolder, descriptorName);
         var virtualDirectory = string.Join('/', parts.Skip(1));
-        var virtualPath = "/" + mount.Name + (virtualDirectory.Length == 0 ? string.Empty : "/" + virtualDirectory) + "/" + request.Name + ".otex";
+        var virtualPath = "/" + mount.Name + (virtualDirectory.Length == 0 ? string.Empty : "/" + virtualDirectory) + "/" + request.Name + AssetFileTypes.Texture;
         var assetPath = string.Join('/', new[] { mount.Name }.Concat(parts.Skip(1)).Append(descriptorName).Select(Uri.EscapeDataString));
         return new(mount.Name, virtualPath, imagePath, descriptorPath, new Uri(AssetUris.Scheme + ":///" + assetPath)) { ImagePaths = imagePaths };
     }

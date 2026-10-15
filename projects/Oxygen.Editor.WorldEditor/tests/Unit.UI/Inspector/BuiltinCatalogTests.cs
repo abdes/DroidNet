@@ -8,7 +8,6 @@ using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
-using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.World.Inspector.Geometry;
 using static DroidNet.Tests.UiTestHosting;
 
@@ -27,13 +26,10 @@ internal sealed class BuiltinCatalogTests : DroidNet.Tests.VisualUserInterfaceTe
         var discovery = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         var live = discovery.Snapshot;
         discovery.SetSnapshot(new(live.Catalog, IsLastKnown: true, "Using the last-known engine catalog. Preview unavailable."));
-        var catalog = new Mock<Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider>();
-        _ = catalog.SetupGet(value => value.Items).Returns(Observable.Empty<IReadOnlyList<Oxygen.Editor.ContentBrowser.AssetIdentity.ContentBrowserAssetItem>>());
-        _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<Oxygen.Editor.ContentBrowser.AssetIdentity.AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        var materials = new Mock<IMaterialPickerService>();
-        _ = materials.SetupGet(value => value.Results).Returns(Observable.Return<IReadOnlyList<MaterialPickerResult>>([]));
-        _ = materials.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, materials.Object, discovery, Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
+        var catalog = new Mock<Oxygen.Editor.Assets.IAssetFeed>();
+        _ = catalog.SetupGet(value => value.Items).Returns(Observable.Empty<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>>());
+        _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, discovery, Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
         {
             IsExpanded = true,
         };

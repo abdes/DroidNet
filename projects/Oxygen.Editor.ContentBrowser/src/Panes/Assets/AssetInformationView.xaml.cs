@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Mvvm.Generators;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
 

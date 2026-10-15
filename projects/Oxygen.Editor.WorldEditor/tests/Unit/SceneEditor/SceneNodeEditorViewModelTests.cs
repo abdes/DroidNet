@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Reactive.Linq;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
@@ -10,7 +11,7 @@ using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.TimeMachine;
 using Moq;
-using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
@@ -191,8 +192,7 @@ public sealed class SceneNodeEditorViewModelTests
             new Mock<ISceneDocumentCommandService>().Object,
             documents.Object,
             default,
-            Oxygen.Testing.AssetStatusFixture.EmptyProvider,
-            new Mock<IMaterialPickerService>().Object,
+            Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
             sceneEngineSync,
             selectionService,
             new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(),

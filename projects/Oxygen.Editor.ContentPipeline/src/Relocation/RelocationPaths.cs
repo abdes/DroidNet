@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -18,7 +19,7 @@ public static class RelocationPaths
     public static readonly IReadOnlyList<string> ImportTypeFolders = ["Materials", "Geometry", "Scenes"];
 
     private static readonly string[] CompoundExtensions =
-        [".oscene.json", ".omat.json", ".ogeo.json", ".otex.json", ".opscene.json", ".ocshape.json", ".opmat.json", ".import.json"];
+        [AssetFileTypes.SceneDescriptor, AssetFileTypes.MaterialDescriptor, AssetFileTypes.GeometryDescriptor, AssetFileTypes.TextureDescriptor, AssetFileTypes.PhysicsSceneDescriptor, AssetFileTypes.CollisionShapeDescriptor, AssetFileTypes.PhysicsMaterialDescriptor, AssetFileTypes.ImportSettings];
 
     /// <summary>Gets the asset identity of a virtual path: the path without its <c>.json</c> authoring suffix.</summary>
     /// <param name="virtualPath">A canonical virtual path such as <c>/Content/Materials/Red.omat.json</c>.</param>
@@ -26,7 +27,7 @@ public static class RelocationPaths
     public static string ToIdentity(string virtualPath)
     {
         ArgumentNullException.ThrowIfNull(virtualPath);
-        return virtualPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && !virtualPath.EndsWith(".import.json", StringComparison.OrdinalIgnoreCase)
+        return virtualPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && !virtualPath.EndsWith(AssetFileTypes.ImportSettings, StringComparison.OrdinalIgnoreCase)
             && Path.GetExtension(virtualPath[..^5]).Length > 0
             ? virtualPath[..^5]
             : virtualPath;

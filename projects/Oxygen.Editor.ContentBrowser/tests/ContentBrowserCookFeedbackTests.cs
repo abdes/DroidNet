@@ -33,7 +33,7 @@ public sealed partial class ContentBrowserCookFeedbackTests
             Mock.Of<IProjectManagerService>(),
             Mock.Of<IAuthoringTargetResolver>(),
             pipeline.Object,
-            Mock.Of<Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider>(),
+            Mock.Of<Oxygen.Editor.Assets.IAssetFeed>(),
             Mock.Of<IOperationResultPublisher>(),
             Mock.Of<IStatusReducer>(),
             Mock.Of<DroidNet.Storage.IStorageProvider>(),

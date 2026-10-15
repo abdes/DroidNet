@@ -6,7 +6,7 @@ using System.Reactive.Concurrency;
 using System.Reactive.Subjects;
 using AwesomeAssertions;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.WorldEditor.TestSupport;
 
@@ -18,7 +18,7 @@ public sealed class EnvironmentSchedulingTests
     [TestMethod]
     public async Task BackgroundAssetNotificationsUseTheInjectedSchedulerAndRetainRows()
     {
-        using var source = new Subject<IReadOnlyList<ContentBrowserAssetItem>>();
+        using var source = new Subject<IReadOnlyList<AssetEntry>>();
         var scheduler = new HistoricalScheduler();
         var provider = CreateProvider(source);
         using var fixture = new SceneAuthoringFixture();
@@ -42,13 +42,13 @@ public sealed class EnvironmentSchedulingTests
         scheduler.Start();
         _ = model.Exposure.MeteringMaskRows[0].Should().BeSameAs(row);
         _ = row.Item.Name.Should().Be("Renamed");
-        provider.Verify(value => value.RefreshAsync(AssetBrowserFilter.Default, It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [TestMethod]
     public void DisposingTheModelCancelsQueuedAndFutureAssetNotifications()
     {
-        using var source = new Subject<IReadOnlyList<ContentBrowserAssetItem>>();
+        using var source = new Subject<IReadOnlyList<AssetEntry>>();
         var scheduler = new HistoricalScheduler();
         var provider = CreateProvider(source);
         using var fixture = new SceneAuthoringFixture();
@@ -67,7 +67,7 @@ public sealed class EnvironmentSchedulingTests
     [TestMethod]
     public void StandaloneModelReceivesAssetsWithoutAnyUiScheduler()
     {
-        using var source = new Subject<IReadOnlyList<ContentBrowserAssetItem>>();
+        using var source = new Subject<IReadOnlyList<AssetEntry>>();
         var provider = CreateProvider(source);
         using var fixture = new SceneAuthoringFixture();
         using var model = new EnvironmentViewModel(assetProvider: provider.Object);
@@ -79,15 +79,15 @@ public sealed class EnvironmentSchedulingTests
         _ = model.Exposure.MeteringMaskRows[0].Item.Name.Should().Be("Synchronous");
     }
 
-    private static Mock<IContentBrowserAssetProvider> CreateProvider(IObservable<IReadOnlyList<ContentBrowserAssetItem>> items)
+    private static Mock<IAssetFeed> CreateProvider(IObservable<IReadOnlyList<AssetEntry>> items)
     {
-        var provider = new Mock<IContentBrowserAssetProvider>(MockBehavior.Strict);
+        var provider = new Mock<IAssetFeed>(MockBehavior.Strict);
         _ = provider.SetupGet(value => value.Items).Returns(items);
-        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         return provider;
     }
 
-    private static ContentBrowserAssetItem CreateTexture(string name)
+    private static AssetEntry CreateTexture(string name)
         => new(
             new Uri("asset:///Textures/metering-mask.otex"),
             name,

@@ -339,6 +339,78 @@ public sealed class AssetRelocationTests
             workspace.PathOf("Content/SourceMedia/DCC/Robot"));
     }
 
+    /// <summary>A committed relocation reports the folder it moved and the files whose references it rewrote.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task RelocationReportsItsMovesAndRewrittenFiles()
+    {
+        using var workspace = CreateContent();
+        _ = workspace.Write("Content/Props/mesh.bin", "bin");
+        _ = workspace.Write("Content/Shared/far.otex.json", """{ "virtual_path": "/Content/Shared/far.otex", "source": "../Textures/Wood.png" }""");
+        var reports = new List<AssetFilesChangedEventArgs>();
+        workspace.Service.FilesChanged += (_, args) => reports.Add(args);
+
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Shared", "/Content/Props/Shared"), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var report = reports.Should().ContainSingle().Subject;
+        _ = report.Moves.Should().Contain(move => move.IsDirectory && move.Source == workspace.PathOf("Content/Shared") && move.Target == workspace.PathOf("Content/Props/Shared"));
+        _ = report.RewrittenFiles.Should().Contain(workspace.PathOf("Content/Props/Shared/far.otex.json"));
+        _ = report.DeletedFiles.Should().BeEmpty();
+        _ = report.FoldersChanged.Should().BeTrue();
+    }
+
+    /// <summary>A committed delete reports exactly the files and folders it recycled.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task DeleteReportsTheRecycledFiles()
+    {
+        using var workspace = CreateContent();
+        _ = workspace.WriteModel("Content/SourceMedia/DCC/Robot", "robot.gltf", "Robot");
+        var recycled = new List<string>();
+        var reports = new List<AssetFilesChangedEventArgs>();
+        workspace.Service.FilesChanged += (_, args) => reports.Add(args);
+
+        await workspace.Service.DeleteAsync(
+            ["/Content/Textures/Wood.otex.json", "/Content/SourceMedia/DCC/Robot/robot.gltf"],
+            paths =>
+            {
+                recycled.AddRange(paths);
+                return Task.CompletedTask;
+            },
+            this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var report = reports.Should().ContainSingle().Subject;
+        _ = report.DeletedFiles.Should().BeEquivalentTo(recycled);
+        _ = report.Moves.Should().BeEmpty();
+        _ = report.FoldersChanged.Should().BeTrue("the model's bundle folder was recycled");
+    }
+
+    /// <summary>The report is posted to the synchronization context the operation was started on.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task FilesChangedIsPostedToTheCallersContext()
+    {
+        using var workspace = CreateContent();
+        var context = new RecordingContext();
+        var reported = new TaskCompletionSource<SynchronizationContext?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        workspace.Service.FilesChanged += (_, _) => reported.TrySetResult(SynchronizationContext.Current);
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(context);
+        Task<AssetRelocationPlan> relocation;
+        try
+        {
+            relocation = workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+
+        _ = await relocation.ConfigureAwait(false);
+        _ = (await reported.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeSameAs(context);
+        _ = context.Posts.Should().BePositive();
+    }
+
     /// <summary>Deleting a texture keeps an image that another texture still uses.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
@@ -406,4 +478,30 @@ public sealed class AssetRelocationTests
         => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
             .Where(path => !Path.GetRelativePath(root, path).StartsWith(".build", StringComparison.Ordinal))
             .ToDictionary(path => Path.GetRelativePath(root, path), File.ReadAllText, StringComparer.Ordinal);
+
+    /// <summary>Runs posted work on the thread pool with itself as the current context, counting the posts.</summary>
+    private sealed class RecordingContext : SynchronizationContext
+    {
+        private int posts;
+
+        public int Posts => Volatile.Read(ref this.posts);
+
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            _ = Interlocked.Increment(ref this.posts);
+            _ = ThreadPool.QueueUserWorkItem(_ =>
+            {
+                var previous = Current;
+                SetSynchronizationContext(this);
+                try
+                {
+                    d(state);
+                }
+                finally
+                {
+                    SetSynchronizationContext(previous);
+                }
+            });
+        }
+    }
 }

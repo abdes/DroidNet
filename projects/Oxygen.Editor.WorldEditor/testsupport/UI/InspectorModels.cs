@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Reactive.Linq;
 using Moq;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.World;
@@ -74,7 +76,7 @@ internal static class InspectorModels
         }
     }
 
-    internal static MaterialEditorViewModel CreateMaterialEditor(Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider? assetProvider = null)
+    internal static MaterialEditorViewModel CreateMaterialEditor(IAssetFeed? assetProvider = null)
     {
         var uri = new Uri("asset:///Content/Materials/UI.omat.json");
         var source = new MaterialSource(name: "UI", pbrMetallicRoughness: new MaterialPbrMetallicRoughness(1, 1, 1, 1, 0, 0.5f, baseColorTexture: null, metallicRoughnessTexture: null), normalTexture: null, occlusionTexture: null, alphaMode: MaterialAlphaMode.Opaque, alphaCutoff: 0.5f, doubleSided: false);
@@ -82,7 +84,7 @@ internal static class InspectorModels
         var service = new Mock<IMaterialDocumentService>();
         _ = service.Setup(value => value.OpenAsync(uri, It.IsAny<CancellationToken>())).ReturnsAsync(document);
         _ = service.Setup(value => value.GetDocument(document.DocumentId)).Returns(document);
-        return new(new MaterialDocumentMetadata(uri), service.Object, assetProvider ?? Oxygen.Testing.AssetStatusFixture.EmptyProvider, CreateStatusHosting().DispatcherScheduler);
+        return new(new MaterialDocumentMetadata(uri), service.Object, assetProvider ?? Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()), CreateStatusHosting().DispatcherScheduler);
     }
 
     private static void ReplaceComponent<TBase>(SceneAuthoringFixture fixture, GameComponent replacement)

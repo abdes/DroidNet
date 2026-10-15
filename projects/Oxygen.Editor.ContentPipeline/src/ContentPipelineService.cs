@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -242,16 +243,16 @@ public sealed partial class ContentPipelineService(
         var path = Uri.UnescapeDataString(assetUri.AbsolutePath);
         return path switch
         {
-            _ when path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
-                || path.EndsWith(".otex", StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Texture,
-            _ when path.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
-                || path.EndsWith(".omat", StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Material,
-            _ when path.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
-                || path.EndsWith(".ogeo", StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Geometry,
-            _ when path.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase)
-                || path.EndsWith(".oscene", StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Scene,
-            _ when path.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".glb", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.ForeignSource,
-            _ when InputFileReferences.IsInputFile(path) => ContentCookAssetKind.Input,
+            _ when path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(AssetFileTypes.Texture, StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Texture,
+            _ when path.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(AssetFileTypes.Material, StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Material,
+            _ when path.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(AssetFileTypes.Geometry, StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Geometry,
+            _ when path.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(AssetFileTypes.Scene, StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Scene,
+            _ when AssetFileTypes.Is(path, AssetFileCategory.Model) => ContentCookAssetKind.ForeignSource,
+            _ when AssetFileTypes.Is(path, AssetFileCategory.Input) => ContentCookAssetKind.Input,
             _ => throw new ArgumentException($"Unsupported content cook asset URI '{assetUri}'.", nameof(assetUri)),
         };
     }
@@ -319,12 +320,12 @@ public sealed partial class ContentPipelineService(
     }
 
     private static bool IsCookableDescriptorFile(string path)
-        => path.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
-           || path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
-           || path.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
-           || path.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase)
-           || InputFileReferences.IsInputFile(path)
-           || ((path.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".glb", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase))
+        => path.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
+           || path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
+           || path.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase)
+           || path.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
+           || AssetFileTypes.Is(path, AssetFileCategory.Input)
+           || (AssetFileTypes.Is(path, AssetFileCategory.Model)
                && File.Exists(path + Import.NativeSceneImportSettings.SidecarSuffix));
 
     private static List<ContentCookInput> ResolveFolderInputs(ProjectContext project, Uri folderUri)
@@ -340,7 +341,7 @@ public sealed partial class ContentPipelineService(
         var mountRelativeFolder = slash <= 0 ? string.Empty : path[(slash + 1)..];
         var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase))
                     ?? throw new InvalidOperationException($"Project does not declare authoring mount '{mountName}'.");
-        if (IsDerivedRootMount(mount))
+        if (ProjectOutputFolders.Contains(mount))
         {
             return [];
         }
@@ -375,14 +376,6 @@ public sealed partial class ContentPipelineService(
         var mountRelativePath = Path.GetRelativePath(mountRoot, sourceAbsolutePath).Replace('\\', '/');
         var assetUri = ToAssetUri(mount.Name, mountRelativePath);
         return CookInputResolver.Resolve(project, assetUri, role);
-    }
-
-    private static bool IsDerivedRootMount(ProjectMountPoint mount)
-    {
-        var relativePath = mount.RelativePath.Trim().Replace('\\', '/').Trim('/');
-        return string.Equals(relativePath, ".cooked", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(relativePath, ".imported", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(relativePath, ".build", StringComparison.OrdinalIgnoreCase);
     }
 
     private static ContentImportManifest PruneReusableJobs(ContentCookScope scope, ContentImportManifest manifest, Guid sourceKey)
@@ -454,7 +447,7 @@ public sealed partial class ContentPipelineService(
     private Task<ContentCookResult> CookProjectCoreAsync(ContentCookOperation operation, CancellationToken cancellationToken)
         => this.CookCapturedScopesAsync(
             operation,
-            () => operation.Project.AuthoringMounts.Where(static mount => !IsDerivedRootMount(mount))
+            () => operation.Project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount))
                 .Select(mount => this.CreateScope(operation.Project, ResolveMountInputs(operation.Project, mount), CookTargetKind.Project)).ToArray(),
             CookTargetKind.Project,
             cancellationToken);

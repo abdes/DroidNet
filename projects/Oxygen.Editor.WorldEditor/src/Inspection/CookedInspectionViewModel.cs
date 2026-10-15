@@ -8,7 +8,7 @@ using System.Reactive.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Documents;
@@ -22,7 +22,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
 {
     private readonly CookedInspectionDocumentMetadata metadata;
     private readonly IContentPipelineService pipeline;
-    private readonly IContentBrowserAssetProvider assetProvider;
+    private readonly IAssetFeed assetProvider;
     private readonly IProjectContextService projects;
     private readonly Func<Uri, Task<bool>> showAsset;
     private Func<Task>? cancelInspection;
@@ -40,7 +40,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
     /// <param name="assetProvider">Current shared catalog facts for a specifically opened asset.</param>
     /// <param name="projects">The active project lifetime.</param>
     /// <param name="showAsset">Explicit navigation in the owning workspace.</param>
-    public CookedInspectionViewModel(CookedInspectionDocumentMetadata metadata, IContentPipelineService pipeline, IContentBrowserAssetProvider assetProvider, IProjectContextService projects, Func<Uri, Task<bool>> showAsset)
+    public CookedInspectionViewModel(CookedInspectionDocumentMetadata metadata, IContentPipelineService pipeline, IAssetFeed assetProvider, IProjectContextService projects, Func<Uri, Task<bool>> showAsset)
     {
         this.metadata = metadata;
         this.pipeline = pipeline;
@@ -69,7 +69,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
     [NotifyPropertyChangedFor(nameof(OutputAssetsVisibility))]
     [NotifyPropertyChangedFor(nameof(EmptyAssetsVisibility))]
     [NotifyPropertyChangedFor(nameof(ScopedReferenceText))]
-    public partial ContentBrowserAssetItem? ScopedAsset { get; private set; }
+    public partial AssetEntry? ScopedAsset { get; private set; }
 
     /// <summary>Gets or sets the report-local search text.</summary>
     [ObservableProperty]
@@ -309,7 +309,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
         }
     }
 
-    private async Task<(CookedOutputReport report, ContentBrowserAssetItem? asset)> ReadReportAsync(Task previous, long version, bool validate)
+    private async Task<(CookedOutputReport report, AssetEntry? asset)> ReadReportAsync(Task previous, long version, bool validate)
     {
         using var cancellation = new CancellationTokenSource();
         var cancellationWork = Task.CompletedTask;
@@ -361,7 +361,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
             && string.Equals(project.ProjectRoot, this.metadata.Project.ProjectRoot, StringComparison.OrdinalIgnoreCase)
             ? project : throw new OperationCanceledException("The inspection's project was closed or replaced.");
 
-    private async Task<ContentBrowserAssetItem?> ResolveInspectedAssetAsync(Uri uri, ProjectContext project, CancellationToken cancellationToken)
+    private async Task<AssetEntry?> ResolveInspectedAssetAsync(Uri uri, ProjectContext project, CancellationToken cancellationToken)
     {
         var asset = await this.assetProvider.ResolveAsync(uri, cancellationToken).ConfigureAwait(true);
         if (asset is not null && this.metadata.CookedSource is { } requested)
@@ -369,7 +369,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
             var source = asset.OverriddenCookedSources.Prepend(asset.CookedMetadata).OfType<Oxygen.Managed.Assets.Catalog.CookedAssetMetadata>()
                 .FirstOrDefault(candidate => string.Equals(candidate.RootFolderPath, requested.RootFolderPath, StringComparison.OrdinalIgnoreCase)
                     && string.Equals(candidate.VirtualPath, requested.VirtualPath, StringComparison.Ordinal));
-            return source is null ? null : CookedLibraryProjection.Create(asset, source, project);
+            return source is null ? null : AssetIdentity.FromCookedSource(asset, source, project);
         }
 
         if (asset is not { IsBuiltin: true, BuiltinOriginUri: null })
@@ -378,7 +378,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
         }
 
         var items = await this.assetProvider.Items.FirstAsync().ToTask(cancellationToken).ConfigureAwait(true);
-        return AssetIdentityGrouping.GroupBuiltins(items).FirstOrDefault(row => row.IdentityUri == asset.IdentityUri) ?? asset;
+        return AssetIdentity.GroupBuiltins(items).FirstOrDefault(row => row.IdentityUri == asset.IdentityUri) ?? asset;
     }
 
     private void ApplyReport(CookedOutputReport report)

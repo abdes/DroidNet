@@ -9,14 +9,14 @@ using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserControls;
@@ -80,8 +80,9 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
             };
             var state = new ContentBrowserState(services.Projects);
             state.SetSelectedFolders(["/Content"]);
-            await using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
-            using var provider = new ContentBrowserAssetProvider(catalog, services.Projects, services.Scopes, new AssetIdentityReducer(), services.Pipeline, services.Documents, services.Runs, fixture.Runtime);
+            await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
+            using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
+            using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus);
             using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider, services.Projects, state, CreateStatusHosting(), services.Builtins) : new ListLayoutViewModel(provider, services.Projects, state, CreateStatusHosting(), services.Builtins);
             var query = new AssetQueryView
             {
@@ -133,7 +134,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
         }
     }
 
-    private async Task MeasureCatalogFiltersAsync(ContentBrowserAssetProvider provider, AssetsLayoutViewModel layout, AssetQueryView query, UserControl view, Grid browser, bool tiles, ulong triangles, double scale, CancellationToken cancellationToken)
+    private async Task MeasureCatalogFiltersAsync(AssetFeed provider, AssetsLayoutViewModel layout, AssetQueryView query, UserControl view, Grid browser, bool tiles, ulong triangles, double scale, CancellationToken cancellationToken)
     {
         var watch = Stopwatch.StartNew();
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
@@ -161,7 +162,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
         }
 
         samples.Sort();
-        var configuration = typeof(ContentBrowserAssetProvider).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), inherit: false).Cast<System.Reflection.AssemblyConfigurationAttribute>().Single().Configuration;
+        var configuration = typeof(AssetFeed).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), inherit: false).Cast<System.Reflection.AssemblyConfigurationAttribute>().Single().Configuration;
         this.TestContext.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Rendered catalog: configuration={configuration}; tiles={tiles}; cold={cold.TotalMilliseconds:F2}ms; filter p95={samples[94]:F2}ms; rows={rows.Count}; nodes=100; triangles={triangles}; viewport=1920x1080; scale={scale}"));
         _ = cold.Should().BeLessThanOrEqualTo(TimeSpan.FromSeconds(5));
         _ = samples[94].Should().BeLessThanOrEqualTo(250);

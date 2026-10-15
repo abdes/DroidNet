@@ -11,7 +11,7 @@ using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Moq;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.World.Cooking;
@@ -51,7 +51,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         fixture.Context.Metadata.Title = "Main";
         _ = (await fixture.Commands.SaveSceneAsync(fixture.Context).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         using var services = new CatalogWorkloadServices(fixture);
-        await using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
+        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
         using var publication = fixture.RegisterWorkspacePublication(services, catalog);
         using var document = fixture.RegisterMainCookDocument(services);
         var uri = new Uri("asset:///Content/Scenes/Main.oscene.json");

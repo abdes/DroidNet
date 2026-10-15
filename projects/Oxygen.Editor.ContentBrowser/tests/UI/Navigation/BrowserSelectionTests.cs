@@ -9,7 +9,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
+using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.Shell;
 using static DroidNet.Tests.UiTestHosting;
@@ -32,7 +33,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
     public Task ExplicitBrowserRevealWaitsForViewAndPreservesNewerFocus(bool tiles) => EnqueueAsync(async () =>
     {
         var items = Enumerable.Range(0, 1000).Select(index => CreateNavigationAsset(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"/Content/Materials/M{index}.omat.json"), AssetKind.Material)).ToArray();
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>(items);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>(items);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState(projects);
@@ -74,7 +75,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         _ = search.Focus(FocusState.Programmatic).Should().BeTrue();
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = FocusManager.GetFocusedElement(root.XamlRoot).Should().BeSameAs(search);
-        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
     });
 
     /// <summary>Changing layouts retains the current asset instead of restoring each layout's old selection.</summary>
@@ -84,7 +85,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
     {
         var blue = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
         var red = CreateNavigationAsset("/Content/Materials/Red.omat.json", AssetKind.Material);
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([blue, red]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([blue, red]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState(projects);
@@ -131,7 +132,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         _ = listSelector.SelectedItem.Should().BeSameAs(selectedRow);
         _ = list.SelectedAsset.Should().Be(published);
         _ = FocusManager.GetFocusedElement(listView.XamlRoot).Should().BeSameAs(focused);
-        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
     });
 
     /// <summary>A multi-selection keeps its members and active asset through a re-sort and a switch to the Details table.</summary>
@@ -142,7 +143,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         var blue = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
         var cube = CreateNavigationAsset("/Content/Geometry/Cube.ogeo.json", AssetKind.Geometry);
         var red = CreateNavigationAsset("/Content/Materials/Red.omat.json", AssetKind.Material);
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([blue, cube, red]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([blue, cube, red]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState(projects);
@@ -177,7 +178,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         _ = tableSelector.SelectedItems.OfType<AssetBrowserRow>().Select(static row => row.Item).Should().BeEquivalentTo([blue, red]);
         _ = table.SelectedAsset.Should().Be(red);
         _ = tableView.FindDescendants().OfType<TextBlock>().Should().Contain(text => text.Text == "Location");
-        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
+        provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
     });
 
     /// <summary>Rapid filters and folder navigation cannot restore a hidden command target from an inactive layout.</summary>
@@ -187,7 +188,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
     {
         var blue = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
         var cube = CreateNavigationAsset("/Content/Geometry/Cube.ogeo.json", AssetKind.Geometry);
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([blue, cube]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([blue, cube]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState(projects);

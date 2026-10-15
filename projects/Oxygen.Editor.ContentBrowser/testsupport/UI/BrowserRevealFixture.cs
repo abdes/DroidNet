@@ -15,8 +15,7 @@ using DroidNet.Storage.Native;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
@@ -41,7 +40,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
 {
     public Mock<IContentPipelineService> HistoryPipeline { get; } = new();
 
-    public ContentBrowserAssetItem[] ConfigureHistoryJourney()
+    public AssetEntry[] ConfigureHistoryJourney()
     {
         foreach (var folder in new[]
         {
@@ -73,7 +72,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
         return rows;
     }
 
-    public void PublishHistoryRows(IReadOnlyList<ContentBrowserAssetItem> rows) => this.items.OnNext(rows);
+    public void PublishHistoryRows(IReadOnlyList<AssetEntry> rows) => this.items.OnNext(rows);
 
     public async Task<(string physical, string expected)> ConfigurePhysicalNavigationAsync(string mount, CancellationToken token)
     {
@@ -109,7 +108,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
 
     private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-BrowserReveal-");
     private readonly Container container = new();
-    private readonly BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>> items;
+    private readonly BehaviorSubject<IReadOnlyList<AssetEntry>> items;
     private readonly Mock<ILogger> logger = new();
 
     public BrowserRevealFixture(bool persisted = false, string cookedAlias = "Cooked")
@@ -151,8 +150,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
         this.container.RegisterInstance<ILoggerFactory>(logging.Object);
         this.container.RegisterInstance<IBuiltinCatalogDiscovery>(new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
         this.container.RegisterInstance(this.Dialogs.Object);
-        this.container.RegisterInstance(Mock.Of<IProjectAssetCatalog>());
-        this.container.RegisterInstance(Mock.Of<IAssetCatalog>());
+        this.container.RegisterInstance(Mock.Of<IAssetCatalog>(catalog => catalog.Changes == System.Reactive.Linq.Observable.Never<AssetChange>()));
         this.container.RegisterInstance(Mock.Of<ICookRunService>());
         this.container.RegisterInstance(Mock.Of<IProjectManagerService>());
         this.container.RegisterInstance(Mock.Of<IAuthoringTargetResolver>());
@@ -165,11 +163,11 @@ internal sealed partial class BrowserRevealFixture : IDisposable
 
     public ProjectContextService Projects { get; } = new();
 
-    public ContentBrowserAssetItem Material { get; }
+    public AssetEntry Material { get; }
 
     public ContentBrowserViewModel Browser { get; }
 
-    public Mock<IContentBrowserAssetProvider> Provider { get; }
+    public Mock<IAssetFeed> Provider { get; }
 
     public Mock<IDialogService> Dialogs { get; } = new();
 
@@ -183,7 +181,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
 
     private string? publishedOutputRoot;
 
-    public async Task SetCookedOutputsAsync(IReadOnlyList<ContentBrowserAssetItem> outputs, CancellationToken token)
+    public async Task SetCookedOutputsAsync(IReadOnlyList<AssetEntry> outputs, CancellationToken token)
     {
         var project = this.Projects.ActiveProject!;
         var key = Guid.CreateVersion7();
@@ -223,7 +221,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
         this.items.OnNext(outputs);
     }
 
-    public ContentBrowserAssetItem SetLibraryOutput()
+    public AssetEntry SetLibraryOutput()
     {
         var root = Path.Combine(this.directory.FullName, "Library");
         _ = Directory.CreateDirectory(Path.Combine(root, "Materials"));

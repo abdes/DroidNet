@@ -24,7 +24,7 @@ public sealed partial class ContentPipelineService
         => this.statusReader.ReadAsync(project, assetUris, cancellationToken);
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, Publication.CookPublicationReadLease publication,
+    public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, Publication.ICookPublicationReadLease publication,
         IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
-        => this.statusReader.ReadAsync(project, publication, assetUris, cancellationToken);
+        => this.statusReader.ReadAsync(project, Publication.CookPublicationReadLease.Issued(publication), assetUris, cancellationToken);
 }

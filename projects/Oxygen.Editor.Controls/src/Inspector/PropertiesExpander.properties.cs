@@ -170,12 +170,10 @@ public partial class PropertiesExpander
     }
 
     /// <summary>
-    /// Gets or sets the Content.
+    /// Gets or sets the main content displayed within the expander, or <see langword="null"/> when the
+    /// section shows only its header and items.
     /// </summary>
-    /// <summary>
-    /// Gets or sets the main content displayed within the expander.
-    /// </summary>
-    public object Content
+    public object? Content
     {
         get => this.GetValue(ContentProperty);
         set => this.SetValue(ContentProperty, value);

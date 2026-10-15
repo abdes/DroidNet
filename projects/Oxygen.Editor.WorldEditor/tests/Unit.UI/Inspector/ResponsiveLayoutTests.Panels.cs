@@ -12,7 +12,7 @@ using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
@@ -161,7 +161,7 @@ internal sealed partial class ResponsiveLayoutTests
     [DataRow(360d, 2d)]
     public Task MaterialHeaderKeepsStatusBesideTheTitleAndActionsInside(double width, double rasterizationScale) => EnqueueAsync(async () =>
     {
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([CreateStatusAsset(0) with { IdentityUri = new("asset:///Content/Materials/UI.omat.json") }]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([CreateStatusAsset(0) with { IdentityUri = new("asset:///Content/Materials/UI.omat.json") }]);
         using var model = CreateMaterialEditor(MaterialStatusTests.StatusProvider(updates));
         var view = new MaterialEditorView { ViewModel = model, Width = width, Height = 600 };
         using var scaledHost = new ScaledXamlHost();

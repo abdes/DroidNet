@@ -7,7 +7,7 @@ using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
@@ -22,7 +22,7 @@ namespace Oxygen.Editor.World.Services;
 public sealed partial class SceneContentDemandService : ISceneContentDemandService, IDisposable
 {
     private readonly HostingContext hosting;
-    private readonly IContentBrowserAssetProvider assets;
+    private readonly IAssetFeed assets;
     private readonly IContentPipelineService pipeline;
     private readonly IProjectContextService projects;
     private readonly IDocumentService documents;
@@ -47,7 +47,7 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
     /// <param name="logger">Reports failures to submit preview work.</param>
     public SceneContentDemandService(
         HostingContext hosting,
-        IContentBrowserAssetProvider assets,
+        IAssetFeed assets,
         IContentPipelineService pipeline,
         IProjectContextService projects,
         IDocumentService documents,

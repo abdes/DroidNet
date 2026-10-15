@@ -15,7 +15,7 @@ using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using DroidNet.Storage;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Importing;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
@@ -23,6 +23,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -55,7 +56,7 @@ public partial class AssetsViewModel(
     IProjectManagerService projectManagerService,
     IAuthoringTargetResolver authoringTargetResolver,
     IContentPipelineService contentPipelineService,
-    IContentBrowserAssetProvider assetProvider,
+    IAssetFeed assetProvider,
     IOperationResultPublisher operationResults,
     IStatusReducer statusReducer,
     IStorageProvider storage,
@@ -149,7 +150,6 @@ public partial class AssetsViewModel(
             // Listen for changes to ContentBrowserState selection via PropertyChanged
             contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
 
-            messenger.Register<AssetsChangedMessage>(this, (_, _) => this.OnAssetsChanged());
             messenger.Register<CreateScriptRequestMessage>(this, (_, message) => message.Reply(scripts?.CreateScriptAsync() ?? Task.FromResult<string?>(null)));
             relocation?.Completed += this.OnRelocationCompleted;
 
@@ -373,13 +373,13 @@ public partial class AssetsViewModel(
     private static bool TryNormalizeMaterialName(string materialName, out string normalized)
     {
         normalized = materialName.Trim();
-        if (normalized.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase))
+        if (normalized.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase))
         {
-            normalized = normalized[..^".omat.json".Length];
+            normalized = normalized[..^AssetFileTypes.MaterialDescriptor.Length];
         }
-        else if (normalized.EndsWith(".omat", StringComparison.OrdinalIgnoreCase))
+        else if (normalized.EndsWith(AssetFileTypes.Material, StringComparison.OrdinalIgnoreCase))
         {
-            normalized = normalized[..^".omat".Length];
+            normalized = normalized[..^AssetFileTypes.Material.Length];
         }
 
         if (string.IsNullOrWhiteSpace(normalized)
@@ -469,14 +469,6 @@ public partial class AssetsViewModel(
         return "/" + mountName + "/Textures";
     }
 
-    private void OnAssetsChanged()
-    {
-        if (this.LayoutViewModel is AssetsLayoutViewModel layout)
-        {
-            _ = layout.RefreshAsync();
-        }
-    }
-
     private void OnContentBrowserStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (!this.disposed && e.PropertyName is nameof(ContentBrowserState.SelectedFolders) or nameof(ContentBrowserState.SelectedAssets))
@@ -538,7 +530,7 @@ public partial class AssetsViewModel(
             }
         }
         else if (args.InvokedItem.Kind == AssetKind.Material
-                 && args.InvokedItem.IdentityUri.AbsolutePath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase))
+                 && args.InvokedItem.IdentityUri.AbsolutePath.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase))
         {
             _ = messenger.Send(new OpenMaterialRequestMessage(args.InvokedItem.IdentityUri, args.InvokedItem.DisplayName));
         }
@@ -586,7 +578,7 @@ public partial class AssetsViewModel(
             if (newScene is not null)
             {
                 projectContextService.Activate(ProjectContext.FromProject(newScene.Project));
-                _ = messenger.Send(new AssetsChangedMessage());
+                await assetProvider.RefreshAsync().ConfigureAwait(true);
                 _ = messenger.Send(new OpenSceneRequestMessage(newScene));
             }
 
@@ -659,7 +651,7 @@ public partial class AssetsViewModel(
             return false;
         }
 
-        var path = Path.Combine(project.ProjectRoot, mount.RelativePath, relativeFolder, materialName + ".omat.json");
+        var path = Path.Combine(project.ProjectRoot, mount.RelativePath, relativeFolder, materialName + AssetFileTypes.MaterialDescriptor);
         return File.Exists(path);
     }
 
@@ -788,7 +780,7 @@ public partial class AssetsViewModel(
             ? this.OpenInspectionAsync(validate, asset.IdentityUri, asset) : this.OpenInspectionAsync(validate);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI reports a document-opening failure at its operation boundary.")]
-    private async Task OpenInspectionAsync(bool validate, Uri? assetUri = null, ContentBrowserAssetItem? asset = null)
+    private async Task OpenInspectionAsync(bool validate, Uri? assetUri = null, AssetEntry? asset = null)
     {
         var scopeUri = asset?.CookedMetadata is not null ? new Uri(AssetUris.Scheme + "://" + asset.DisplayPath) : assetUri ?? this.GetSelectedFolderUri();
         try
@@ -988,7 +980,7 @@ public partial class AssetsViewModel(
                 return;
             }
 
-            var modelTypes = new List<string> { ".gltf", ".glb", ".fbx" };
+            var modelTypes = AssetFileTypes.Suffixes(AssetFileCategory.Model).ToList();
             var textureTypes = TextureSourceAssetImporter.SupportedExtensions.ToList();
             var filters = new Dictionary<string, IList<string>>(StringComparer.Ordinal);
             if (models && textures)
@@ -1081,8 +1073,7 @@ public partial class AssetsViewModel(
             var result = await import().ConfigureAwait(true);
             if (ReferenceEquals(projectContextService.ActiveProject, project))
             {
-                await assetProvider.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(true);
-                _ = messenger.Send(new AssetsChangedMessage());
+                await assetProvider.RefreshAsync().ConfigureAwait(true);
                 this.NotifyCookSelection();
             }
 

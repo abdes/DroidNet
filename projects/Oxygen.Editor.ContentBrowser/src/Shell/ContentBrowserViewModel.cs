@@ -16,7 +16,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
@@ -926,7 +926,7 @@ public sealed partial class ContentBrowserViewModel(
                 await projectLayout.RefreshTreeAsync().ConfigureAwait(true);
             }
 
-            await this.childContainer.Resolve<IContentBrowserAssetProvider>().RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(true);
+            await this.childContainer.Resolve<IAssetFeed>().RefreshAsync().ConfigureAwait(true);
         }
         finally
         {

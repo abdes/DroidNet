@@ -12,8 +12,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline;
@@ -70,7 +69,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="documentService">The document service used by scene commands.</param>
     /// <param name="windowId">The WinUI window id used for document operations.</param>
     /// <param name="assetProvider">The shared asset identity and availability feed.</param>
-    /// <param name="materialPickerService">The material picker service for geometry material slots.</param>
     /// <param name="sceneEngineSync">The scene engine-sync service that reports buffered live-sync work.</param>
     /// <param name="selectionService">The authoritative document selection owner, used to hydrate the typed context at startup.</param>
     /// <param name="builtins">The shared native catalog for engine choices.</param>
@@ -92,8 +90,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         ISceneDocumentCommandService commandService,
         IDocumentService documentService,
         WindowId windowId,
-        IContentBrowserAssetProvider assetProvider,
-        IMaterialPickerService materialPickerService,
+        IAssetFeed assetProvider,
         ISceneEngineSync sceneEngineSync,
         ISceneSelectionService selectionService,
         IBuiltinCatalogDiscovery builtins,
@@ -125,7 +122,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.propertyEditorFactories = InspectorEditorFactory.Create(
             hosting,
             assetProvider,
-            materialPickerService,
             builtins,
             contentDemand,
             materialSlots,

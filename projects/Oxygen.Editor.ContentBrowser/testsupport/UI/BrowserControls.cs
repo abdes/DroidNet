@@ -11,7 +11,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
@@ -23,7 +23,7 @@ namespace Oxygen.Editor.ContentBrowser.TestSupport;
 
 internal sealed class BrowserControls : DroidNet.Tests.VisualUserInterfaceTests
 {
-    internal static void AssertBrowserRowState(ListViewBase selector, AssetBrowserRow row, Control container, object? focus, double offset, AssetsLayoutViewModel model, ContentBrowserAssetItem expected)
+    internal static void AssertBrowserRowState(ListViewBase selector, AssetBrowserRow row, Control container, object? focus, double offset, AssetsLayoutViewModel model, AssetEntry expected)
     {
         _ = selector.SelectedItem.Should().BeSameAs(row);
         _ = selector.ContainerFromItem(row).Should().BeSameAs(container);
@@ -74,7 +74,7 @@ internal sealed class BrowserControls : DroidNet.Tests.VisualUserInterfaceTests
         }
     }
 
-    internal static AssetsViewModel CreateBuiltinBrowserModel(IContentBrowserAssetProvider provider, ProjectContextService projects, ContentBrowserState state, AssetsLayoutViewModel layout, FrameworkElement layoutView, IMessenger? messenger = null, IContentPipelineService? pipeline = null)
+    internal static AssetsViewModel CreateBuiltinBrowserModel(IAssetFeed provider, ProjectContextService projects, ContentBrowserState state, AssetsLayoutViewModel layout, FrameworkElement layoutView, IMessenger? messenger = null, IContentPipelineService? pipeline = null)
     {
         var locator = new Mock<DroidNet.Mvvm.IViewLocator>();
         _ = locator.Setup(value => value.ResolveView(layout)).Returns(layoutView);

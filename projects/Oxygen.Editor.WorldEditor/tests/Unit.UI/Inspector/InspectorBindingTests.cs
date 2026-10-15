@@ -351,7 +351,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = scenario.Fixture.Context.History.UndoStack.Should().HaveCount(2);
     });
 
-    /// <summary>The eight design-order sections preserve all 47 scene cards and closed secondary groups.</summary>
+    /// <summary>The design-order sections, Play first, keep every scene card and closed secondary groups.</summary>
     /// <returns>The design-inventory regression task.</returns>
     [TestMethod]
     public Task SceneSectionsFollowDesignInventory() => EnqueueAsync(async () =>
@@ -364,9 +364,9 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             UserControl { Content: StackPanel effects } => effects.Children.OfType<Oxygen.Editor.Controls.PropertiesExpander>(),
             _ => Enumerable.Empty<Oxygen.Editor.Controls.PropertiesExpander>(),
         }).ToArray();
-        _ = sections.Select(section => section.Header).Should().Equal("Scene References", "Atmosphere Lights", "Backdrop", "Sky Atmosphere", "Sky Light", "Fog", "Exposure", "Tone Mapping", "Color Grading", "Bloom");
-        _ = sections.SelectMany(SceneCards).Should().HaveCount(98);
-        _ = sections.Select(section => section.IsExpanded).Should().Equal(true, true, true, true, true, true, true, true, false, false);
+        _ = sections.Select(section => section.Header).Should().Equal("Play", "Scene References", "Atmosphere Lights", "Backdrop", "Sky Atmosphere", "Sky Light", "Fog", "Exposure", "Tone Mapping", "Color Grading", "Bloom");
+        _ = sections.SelectMany(SceneCards).Should().HaveCount(97);
+        _ = sections.Select(section => section.IsExpanded).Should().Equal(true, true, true, true, true, true, true, true, true, false, false);
         var sky = sections.Single(section => Equals(section.Header, "Sky Atmosphere"));
         var skyGroups = sky.Items.OfType<Expander>().ToArray();
         _ = skyGroups.Select(group => group.Header).Should().Equal("Planet & ground", "Scattering", "Aerial perspective");

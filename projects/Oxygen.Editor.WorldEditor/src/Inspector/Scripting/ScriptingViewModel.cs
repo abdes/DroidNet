@@ -10,7 +10,7 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline;
@@ -20,6 +20,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Problems;
 using Oxygen.Editor.World.Scripting;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Scripting;
@@ -35,14 +36,14 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
 
     private readonly ISceneDocumentCommandService? commands;
     private readonly Func<SceneDocumentCommandContext?>? contextProvider;
-    private readonly IContentBrowserAssetProvider? assetProvider;
+    private readonly IAssetFeed? assetProvider;
     private readonly IScriptAnalysisService? analysis;
     private readonly ICodeEditorService? codeEditor;
     private readonly IMessenger? messenger;
     private readonly IProjectContextService? projects;
     private readonly IScriptDeclarationProvider? declarationProvider;
     private readonly Dictionary<Uri, ScriptDeclarations> libraryScripts = [];
-    private readonly List<ContentBrowserAssetItem> assets = [];
+    private readonly List<AssetEntry> assets = [];
     private readonly IDisposable? analysisSubscription;
     private IDisposable? assetSubscription;
     private SceneNode? node;
@@ -64,7 +65,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     public ScriptingViewModel(
         ISceneDocumentCommandService? commands = null,
         Func<SceneDocumentCommandContext?>? contextProvider = null,
-        IContentBrowserAssetProvider? assetProvider = null,
+        IAssetFeed? assetProvider = null,
         IScriptAnalysisService? analysis = null,
         ICodeEditorService? codeEditor = null,
         IMessenger? messenger = null,
@@ -207,7 +208,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
             return;
         }
 
-        var script = new Uri($"{AssetUris.Scheme}://{ScriptSources.ToCookedScriptPath(virtualPath)}");
+        var script = new Uri($"{AssetUris.Scheme}://{AssetFileTypes.ToCookedPath(virtualPath) ?? virtualPath}");
         await this.EditAsync(slots => ScriptSlotEdits.SetScript(slots, slotId, script)).ConfigureAwait(true);
     }
 
@@ -233,8 +234,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <returns>The assets, by name.</returns>
     internal IEnumerable<ScriptAssetChoice> FindAssets(byte assetType)
     {
-        var kind = AssetIdentityReducer.GetCookedKind(assetType);
-        return this.assets.Where(asset => asset.Kind == kind && asset.IsSelectable && (kind == AssetKind.Script || asset.CookedUri is not null))
+        return AssetRule.ForCooked(AssetKinds.FromCookedType(assetType)).Apply(this.assets)
             .Select(static asset => new ScriptAssetChoice(asset.Kind == AssetKind.Script ? asset.IdentityUri : asset.CookedUri ?? asset.IdentityUri, asset.DisplayName, asset.DisplayPath, asset.Kind))
             .DistinctBy(static choice => choice.Uri)
             .OrderBy(static choice => choice.Name, StringComparer.OrdinalIgnoreCase)
@@ -322,7 +322,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         }
     }
 
-    private void OnAssets(IReadOnlyList<ContentBrowserAssetItem> value)
+    private void OnAssets(IReadOnlyList<AssetEntry> value)
     {
         if (this.disposed)
         {

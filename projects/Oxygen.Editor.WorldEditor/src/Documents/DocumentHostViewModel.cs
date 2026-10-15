@@ -12,7 +12,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
@@ -89,6 +89,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         this.DocumentService.DocumentOpened += this.OnDocumentOpened;
         this.DocumentService.DocumentClosed += this.OnDocumentClosed;
         this.DocumentService.DocumentActivated += this.OnDocumentActivated;
+        this.DocumentService.DocumentMetadataChanged += this.OnDocumentMetadataChanged;
 
         this.LogInitialized();
     }
@@ -153,6 +154,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
             this.LogDisposing();
             this.workspaceCloseCoordinator.Dispose();
             this.DocumentService.DocumentOpened -= this.OnDocumentOpened;
+            this.DocumentService.DocumentMetadataChanged -= this.OnDocumentMetadataChanged;
             this.DocumentService.DocumentClosed -= this.OnDocumentClosed;
             this.DocumentService.DocumentActivated -= this.OnDocumentActivated;
 
@@ -234,31 +236,28 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
             this.container.Resolve<SceneCookInputRegistrar>(),
             this.container.Resolve<Oxygen.Editor.World.Workspace.PreviewSettingsService>(),
             this.loggerFactory,
-            conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>());
+            conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>(),
+            catalog: this.container.Resolve<Oxygen.Managed.Assets.Catalog.IAssetCatalog>(DryIoc.IfUnresolved.ReturnDefault));
     }
 
     private MaterialEditorViewModel CreateMaterialEditor(MaterialDocumentMetadata materialMeta)
         => new(
             materialMeta,
             this.container.Resolve<IMaterialDocumentService>(),
-            this.container.Resolve<Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider>(),
+            this.container.Resolve<Oxygen.Editor.Assets.IAssetFeed>(),
             this.container.Resolve<DroidNet.Hosting.WinUI.HostingContext>().DispatcherScheduler,
             this.loggerFactory,
-            assetChanged: uri =>
-            {
-                var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
-                _ = messenger.Send(new AssetsChangedMessage(uri));
-            },
             inputCommitter: this.container.Resolve<IDocumentInputCommitter>(),
             windowId: this.windowId,
             conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>(),
-            relocation: this.container.Resolve<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>(DryIoc.IfUnresolved.ReturnDefault));
+            relocation: this.container.Resolve<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>(DryIoc.IfUnresolved.ReturnDefault),
+            documents: this.DocumentService);
 
     private Inspection.CookedInspectionViewModel CreateInspectionEditor(Inspection.CookedInspectionDocumentMetadata inspection)
         => new(
             inspection,
             this.container.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(),
-            this.container.Resolve<IContentBrowserAssetProvider>(),
+            this.container.Resolve<IAssetFeed>(),
             this.container.Resolve<Oxygen.Editor.Projects.IProjectContextService>(),
             async uri =>
             {
@@ -275,6 +274,11 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
 
         this.closeCoordinator.Unregister(this.windowId, e.Metadata.DocumentId);
         this.LogOnDocumentClosed(e.Metadata.DocumentId);
+        if (e.Metadata.DocumentId == this.activeDocumentId)
+        {
+            this.SetActiveDocument(null);
+        }
+
         if (this.activeEditors.TryGetValue(e.Metadata.DocumentId, out var editor))
         {
             _ = this.activeEditors.Remove(e.Metadata.DocumentId);
@@ -313,6 +317,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         }
 
         this.LogOnDocumentActivated(e.DocumentId);
+        this.SetActiveDocument(e.DocumentId);
 
         if (this.activeEditors.TryGetValue(e.DocumentId, out var editor))
         {

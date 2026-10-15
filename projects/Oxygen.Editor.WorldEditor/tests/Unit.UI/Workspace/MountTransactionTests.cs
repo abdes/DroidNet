@@ -9,7 +9,7 @@ using DroidNet.Storage;
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
@@ -128,13 +128,13 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             var storage = new NativeStorageProvider(new RealFileSystem());
             this.manager = new(storage, atomicFiles: this.Store);
             this.publication = new(this.coordinator, this.Projects, this.Store, this.manager);
-            var catalog = new Mock<IProjectAssetCatalog>();
-            _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+            var catalog = new Mock<IAssetPublicationTarget>();
+            _ = catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             this.Roots = [this.ProjectOutput];
             this.ConfigureEngine();
             var hosting = CreateStatusHosting();
             var context = this.Projects.ActiveProject!;
-            this.registration = this.publication.RegisterPreview(context, () => Task.FromResult<ICookPublicationPreview?>(new WorkspacePublicationPreview(context, this.engine.Object, hosting, catalog.Object, messenger: null, () => ReferenceEquals(context, this.Projects.ActiveProject), static () =>
+            this.registration = this.publication.RegisterPreview(context, () => Task.FromResult<ICookPublicationPreview?>(new WorkspacePublicationPreview(context, this.engine.Object, hosting, catalog.Object, () => ReferenceEquals(context, this.Projects.ActiveProject), static () =>
             {
             })));
             this.Service = new(this.coordinator, this.Projects, this.publication, catalog.Object, hosting);

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.ContentBrowser.Shell;
@@ -27,7 +27,7 @@ public sealed class ContentBrowserPresentationTests
         var bolt = CreateAsset("/Content/Geometry/Bolt.ogeo.json", AssetKind.Geometry, AssetCookFreshness.Current);
         var clay = CreateAsset("/Content/Materials/Clay.omat.json", AssetKind.Material, AssetCookFreshness.OutOfDate);
         var arch = CreateAsset("/Content/Scenes/Arch.oscene.json", AssetKind.Scene, AssetCookFreshness.NeedsCooking);
-        ContentBrowserAssetItem[] items = [bolt, clay, arch];
+        AssetEntry[] items = [bolt, clay, arch];
 
         _ = presentation.Sort(items).Should().Equal(arch, bolt, clay);
         presentation.SortByCommand.Execute(AssetSortField.Name);
@@ -207,11 +207,11 @@ public sealed class ContentBrowserPresentationTests
     [TestMethod]
     public void StatusTonesCoverBrowserBadges()
     {
-        _ = AssetStatusPresentation.GetToneForText("Ready").Should().Be("Success");
-        _ = AssetStatusPresentation.GetToneForText("Unsaved changes").Should().Be("Caution");
-        _ = AssetStatusPresentation.GetToneForText("Overridden").Should().Be("Caution");
-        _ = AssetStatusPresentation.GetToneForText("ERR").Should().Be("Critical");
-        _ = AssetStatusPresentation.GetToneForText("Built-in").Should().Be("Neutral");
+        _ = AssetStatusText.GetToneForText("Ready").Should().Be("Success");
+        _ = AssetStatusText.GetToneForText("Unsaved changes").Should().Be("Caution");
+        _ = AssetStatusText.GetToneForText("Overridden").Should().Be("Caution");
+        _ = AssetStatusText.GetToneForText("ERR").Should().Be("Critical");
+        _ = AssetStatusText.GetToneForText("Built-in").Should().Be("Neutral");
     }
 
     /// <summary>Sizes read like File Explorer's.</summary>
@@ -223,7 +223,7 @@ public sealed class ContentBrowserPresentationTests
         _ = AssetFileFacts.FormatSize((long)(1.5 * 1024 * 1024)).Should().Be(string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{1.5:0.#} MB"));
     }
 
-    private static ContentBrowserAssetItem CreateAsset(string path, AssetKind kind, AssetCookFreshness freshness)
+    private static AssetEntry CreateAsset(string path, AssetKind kind, AssetCookFreshness freshness)
     {
         var uri = new Uri("asset://" + path);
         var current = freshness == AssetCookFreshness.Current;

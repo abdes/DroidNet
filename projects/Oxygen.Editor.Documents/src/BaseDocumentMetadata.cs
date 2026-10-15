@@ -27,9 +27,10 @@ public abstract class BaseDocumentMetadata(Guid? documentId = null) : IDocumentM
     public Uri? IconUri { get; set; }
 
     /// <inheritdoc/>
+    /// <remarks>A document whose file is missing on disk is unsaved even without edits.</remarks>
     public bool IsDirty
     {
-        get => this.ChangeVersion != this.SavedVersion;
+        get => this.ChangeVersion != this.SavedVersion || this.IsMissingOnDisk;
         set
         {
             if (value)
@@ -42,6 +43,12 @@ public abstract class BaseDocumentMetadata(Guid? documentId = null) : IDocumentM
             }
         }
     }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the document's file was deleted or moved outside the editor. The document
+    /// stays open; saving writes the file again at its location, and closing discards it.
+    /// </summary>
+    public bool IsMissingOnDisk { get; set; }
 
     /// <summary>Gets the authoring version used to detect edits arriving during a save.</summary>
     public long ChangeVersion { get; private set; }

@@ -6,8 +6,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
+using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.Relocation;
 using Oxygen.Editor.ContentPipeline.Import;
@@ -32,7 +33,7 @@ public partial class AssetsViewModel
     private IReadOnlyList<AssetTarget>? selectionTargets;
 
     /// <summary>Gets the selected assets of the active layout; the last is the active asset.</summary>
-    public IReadOnlyList<ContentBrowserAssetItem> SelectedAssets => contentBrowserState.SelectedAssets;
+    public IReadOnlyList<AssetEntry> SelectedAssets => contentBrowserState.SelectedAssets;
 
     /// <summary>Gets the shared result order, view and tile size.</summary>
     public AssetBrowserPresentation Presentation => contentBrowserState.Presentation;
@@ -115,7 +116,7 @@ public partial class AssetsViewModel
     /// <summary>Returns the text Copy path places on the clipboard: one logical asset path per line.</summary>
     /// <param name="assets">The selected assets.</param>
     /// <returns>The paths, or an empty string when nothing is selected.</returns>
-    public static string GetCopyPathText(IEnumerable<ContentBrowserAssetItem> assets)
+    public static string GetCopyPathText(IEnumerable<AssetEntry> assets)
     {
         ArgumentNullException.ThrowIfNull(assets);
         return string.Join(Environment.NewLine, assets.Select(static asset => AssetUriHelper.GetVirtualPath(asset.IdentityUri)));
@@ -164,7 +165,7 @@ public partial class AssetsViewModel
         }
     }
 
-    private AssetTarget Describe(ContentBrowserAssetItem asset)
+    private AssetTarget Describe(AssetEntry asset)
     {
         if (projectContextService.ActiveProject is not { } project)
         {

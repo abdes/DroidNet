@@ -21,6 +21,7 @@ namespace Oxygen.Editor.ContentPipeline.Publication;
 /// <param name="logger">Records recovery of interrupted project changes.</param>
 public sealed partial class CookPublicationService(IContentCookCoordinator coordinator, IProjectContextService projects,
     IAtomicFileStore files, IProjectManagerService projectManager, Microsoft.Extensions.Logging.ILogger<CookPublicationService>? logger = null)
+    : ICookPublicationReader
 {
     private readonly Lock sync = new();
     private PreviewRegistration? registration;

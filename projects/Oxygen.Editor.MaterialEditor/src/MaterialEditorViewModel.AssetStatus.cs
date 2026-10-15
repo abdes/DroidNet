@@ -4,7 +4,9 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
+using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.MaterialEditor;
 
@@ -20,7 +22,7 @@ public sealed partial class MaterialEditorViewModel
     [NotifyPropertyChangedFor(nameof(CookStatusText))]
     [NotifyPropertyChangedFor(nameof(CookStatusTone))]
     [NotifyPropertyChangedFor(nameof(CookStatusDescription))]
-    public partial ContentBrowserAssetItem? AssetStatus { get; set; }
+    public partial AssetEntry? AssetStatus { get; set; }
 
     /// <summary>Gets or sets whether the initial shared status query is still pending.</summary>
     [ObservableProperty]
@@ -28,83 +30,45 @@ public sealed partial class MaterialEditorViewModel
     public partial bool IsCheckingCookStatus { get; set; } = true;
 
     /// <summary>Gets the concise source and cook status, including edits newer than the published content.</summary>
-    public string CookStatusText => AssetStatusPresentation.GetText(this.AssetStatus?.CookStatus, this.AssetStatus?.CookActivity, this.IsDirty, this.AssetStatus?.RuntimeAvailability ?? AssetRuntimeAvailability.Unknown)
+    public string CookStatusText => AssetStatusText.GetText(this.AssetStatus?.CookStatus, this.AssetStatus?.CookActivity, this.IsDirty, this.AssetStatus?.RuntimeAvailability ?? AssetRuntimeAvailability.Unknown)
         ?? (this.IsCheckingCookStatus ? "Checking status" : "Status unavailable");
 
     /// <summary>Gets the semantic theme state for the compact cook-status chip.</summary>
-    public string CookStatusTone => AssetStatusPresentation.GetTone(this.AssetStatus?.CookStatus, this.AssetStatus?.CookActivity, this.IsDirty, this.AssetStatus?.RuntimeAvailability ?? AssetRuntimeAvailability.Unknown);
+    public string CookStatusTone => AssetStatusText.GetTone(this.AssetStatus?.CookStatus, this.AssetStatus?.CookActivity, this.IsDirty, this.AssetStatus?.RuntimeAvailability ?? AssetRuntimeAvailability.Unknown);
 
     /// <summary>Gets the next action and previous-output facts for the status tooltip.</summary>
-    public string CookStatusDescription => AssetStatusPresentation.GetDescription(this.AssetStatus?.CookStatus, this.AssetStatus?.CookActivity, this.IsDirty, this.AssetStatus?.RuntimeAvailability ?? AssetRuntimeAvailability.Unknown, this.AssetStatus?.RuntimeReason);
+    public string CookStatusDescription => AssetStatusText.GetDescription(this.AssetStatus?.CookStatus, this.AssetStatus?.CookActivity, this.IsDirty, this.AssetStatus?.RuntimeAvailability ?? AssetRuntimeAvailability.Unknown, this.AssetStatus?.RuntimeReason);
 
-    private void ApplyAssetItems(IReadOnlyList<ContentBrowserAssetItem> items)
+    private void ApplyAssetItems(IReadOnlyList<AssetEntry> items)
     {
         if (!this.isDisposed)
         {
             this.AssetStatus = items.FirstOrDefault(item => item.IdentityUri == this.metadata.MaterialUri || item.CookedUri == this.metadata.MaterialUri);
-            this.availableTextureChoices = items
-                .Select(CreateTextureChoice)
-                .OfType<MaterialTextureChoice>()
-                .Where(static choice => choice.IsAvailable)
+            this.availableTextureChoices = AssetRule.For(AssetKind.Texture).Apply(items)
+                .Where(static item => item.DescriptorPath is { } descriptorPath
+                    && item.IdentityUri.AbsolutePath.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
+                    && TextureSourceAssetImporter.HasSourceImage(descriptorPath))
+                .Select(static item => new MaterialTextureChoice(
+                    Uri.UnescapeDataString(item.IdentityUri.AbsolutePath)[..^AssetFileTypes.DescriptorSuffix.Length],
+                    item.DisplayName,
+                    IsAvailable: true))
                 .DistinctBy(static choice => choice.VirtualPath, StringComparer.Ordinal)
-                .OrderBy(static choice => choice.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             foreach (var channel in this.TextureChannels)
             {
                 channel.Refresh(this.availableTextureChoices, channel.SelectedVirtualPath);
             }
+
+            // The feed republishes when file watching sees the material removed or restored outside the editor.
+            _ = this.RefreshSourcePresenceAsync();
         }
     }
 
-    private static MaterialTextureChoice? CreateTextureChoice(ContentBrowserAssetItem item)
-    {
-        if (item.Kind != AssetKind.Texture
-            || item.DescriptorPath is not { } descriptorPath
-            || !item.IdentityUri.AbsolutePath.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        var virtualPath = Uri.UnescapeDataString(item.IdentityUri.AbsolutePath)[..^".json".Length];
-        var valid = item.PrimaryState is not (AssetState.Broken or AssetState.Missing)
-            && IsTextureDescriptorSourceAvailable(descriptorPath);
-        return new(virtualPath, item.DisplayName, valid);
-    }
-
-    private static bool IsTextureDescriptorSourceAvailable(string descriptorPath)
+    private async Task RefreshAssetStatusAsync(IAssetFeed provider, CancellationToken cancellationToken)
     {
         try
         {
-            using var descriptor = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(descriptorPath));
-            if (!descriptor.RootElement.TryGetProperty("source", out var sourceValue)
-                || sourceValue.ValueKind != System.Text.Json.JsonValueKind.String
-                || string.IsNullOrWhiteSpace(sourceValue.GetString()))
-            {
-                return false;
-            }
-
-            var source = sourceValue.GetString()!;
-            if (Path.IsPathRooted(source) || source.Replace('\\', '/').Split('/').Any(static segment => segment is ".." or "." or ""))
-            {
-                return false;
-            }
-
-            var directory = Path.GetDirectoryName(Path.GetFullPath(descriptorPath))!;
-            var sourcePath = Path.GetFullPath(Path.Combine(directory, source));
-            return sourcePath.StartsWith(directory.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                && File.Exists(sourcePath);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException)
-        {
-            return false;
-        }
-    }
-
-    private async Task RefreshAssetStatusAsync(IContentBrowserAssetProvider provider, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await provider.RefreshAsync(AssetBrowserFilter.Default, cancellationToken).ConfigureAwait(true);
+            await provider.RefreshAsync(cancellationToken).ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

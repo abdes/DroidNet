@@ -8,7 +8,7 @@ using System.Diagnostics;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.World.Inspector.Presentation;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -20,9 +20,9 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
 {
     private readonly ISceneDocumentCommandService? commandService;
     private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
-    private readonly IContentBrowserAssetProvider? assetProvider;
+    private readonly IAssetFeed? assetProvider;
     private readonly IScheduler observerScheduler;
-    private readonly List<ContentBrowserAssetItem> assets = [];
+    private readonly List<AssetEntry> assets = [];
     private IDisposable? assetSubscription;
     private Scene? scene;
     private Task pending = Task.CompletedTask;
@@ -38,7 +38,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
     internal SceneReferencesSectionViewModel(
         ISceneDocumentCommandService? commandService,
         Func<SceneDocumentCommandContext?>? commandContextProvider,
-        IContentBrowserAssetProvider? assetProvider,
+        IAssetFeed? assetProvider,
         IScheduler observerScheduler)
     {
         this.commandService = commandService;
@@ -49,25 +49,25 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
     }
 
     [ObservableProperty]
-    public partial ContentBrowserAssetItem? SelectedScript { get; set; }
+    public partial AssetEntry? SelectedScript { get; set; }
 
     [ObservableProperty]
-    public partial ContentBrowserAssetItem? SelectedInputAction { get; set; }
+    public partial AssetEntry? SelectedInputAction { get; set; }
 
     [ObservableProperty]
-    public partial ContentBrowserAssetItem? SelectedPhysicsSidecar { get; set; }
+    public partial AssetEntry? SelectedPhysicsSidecar { get; set; }
 
     [ObservableProperty]
     public partial string ExtraAssetText { get; set; } = string.Empty;
 
     /// <summary>Gets assignable script assets.</summary>
-    public ObservableCollection<ContentBrowserAssetItem> ScriptCandidates { get; } = [];
+    public ObservableCollection<AssetEntry> ScriptCandidates { get; } = [];
 
     /// <summary>Gets assignable input action assets.</summary>
-    public ObservableCollection<ContentBrowserAssetItem> InputActionCandidates { get; } = [];
+    public ObservableCollection<AssetEntry> InputActionCandidates { get; } = [];
 
     /// <summary>Gets assignable physics scene assets.</summary>
-    public ObservableCollection<ContentBrowserAssetItem> PhysicsSidecarCandidates { get; } = [];
+    public ObservableCollection<AssetEntry> PhysicsSidecarCandidates { get; } = [];
 
     /// <summary>Gets the scene's script references, including unavailable entries.</summary>
     public ObservableCollection<SceneReferenceRow> Scripts { get; } = [];
@@ -269,7 +269,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
 
         try
         {
-            await this.assetProvider.RefreshAsync(AssetBrowserFilter.Default, cancellationToken).ConfigureAwait(true);
+            await this.assetProvider.RefreshAsync(cancellationToken).ConfigureAwait(true);
             this.SetCatalogNotice(string.Empty);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ObjectDisposedException or OperationCanceledException)
@@ -380,7 +380,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
             .Subscribe(this.UpdateAssets, this.OnCatalogFeedError);
     }
 
-    private void UpdateAssets(IReadOnlyList<ContentBrowserAssetItem> value)
+    private void UpdateAssets(IReadOnlyList<AssetEntry> value)
     {
         if (this.disposed)
         {
@@ -398,14 +398,11 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
 
     private void UpdateCandidates(
         AssetKind kind,
-        ObservableCollection<ContentBrowserAssetItem> destination,
-        ContentBrowserAssetItem? selected,
-        Action<ContentBrowserAssetItem?> setSelected)
+        ObservableCollection<AssetEntry> destination,
+        AssetEntry? selected,
+        Action<AssetEntry?> setSelected)
     {
-        var candidates = this.assets.Where(asset => asset.Kind == kind && IsReferenceAssignable(asset))
-            .OrderBy(static asset => asset.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static asset => asset.DisplayPath, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var candidates = AssetRule.ForCooked(kind).Apply(this.assets);
         destination.Clear();
         foreach (var asset in candidates)
         {
@@ -438,15 +435,12 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         foreach (var uri in references)
         {
             var asset = this.assets.FirstOrDefault(candidate => candidate.IdentityUri == uri || candidate.CookedUri == uri);
-            var expected = asset is not null && asset.Kind == kind && IsReferenceAssignable(asset);
+            var expected = asset is not null && AssetRule.ForCooked(kind).Accepts(asset);
             var path = uri.IsAbsoluteUri ? uri.AbsolutePath : uri.OriginalString;
             var label = asset?.DisplayName ?? Path.GetFileNameWithoutExtension(path);
             destination.Add(new(kind, uri, label, path, !expected, this.CanEdit));
         }
     }
-
-    private static bool IsReferenceAssignable(ContentBrowserAssetItem asset)
-        => asset.IsSelectable && (asset.CookedMetadata is not null || asset.CookStatus?.HasAvailableOutput == true);
 
     private void OnSceneChanged(object? sender, PropertyChangedEventArgs args)
     {

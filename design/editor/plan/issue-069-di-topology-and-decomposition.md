@@ -1,6 +1,9 @@
 # Issue #69: DI scope topology and WorldEditor decomposition
 
-Status: `planned` — execution plan, no code changed yet.
+Status: `rework` — Phase 0 is done. The Phase 1 slices below follow the
+superseded section 7 of the design and will be rewritten once
+[editor-module-architecture.md](../review/editor-module-architecture.md) and
+[editor-shell.md](../review/editor-shell.md) are reviewed.
 
 Issue: [#69](https://github.com/abdes/DroidNet/issues/69)
 

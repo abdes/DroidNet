@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -103,7 +104,7 @@ public sealed partial class ContentPipelineService
             return [new(local.Name, local.LibraryPath, split < 0 ? string.Empty : path[(split + 1)..], IsLocal: true)];
         }
 
-        var mounts = project.AuthoringMounts.Where(mount => !IsDerivedRootMount(mount)
+        var mounts = project.AuthoringMounts.Where(mount => !ProjectOutputFolders.Contains(mount)
             && (path.Length == 0 || string.Equals(mountName, "Engine", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(mount.Name, mountName, StringComparison.OrdinalIgnoreCase))).ToArray();
         return mounts.Length == 0 ? throw new InvalidDataException("The inspection scope does not belong to a project content mount.")
@@ -136,10 +137,10 @@ public sealed partial class ContentPipelineService
         }
 
         var nativeScope = root.Scope;
-        if (nativeScope.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
-            || nativeScope.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
-            || nativeScope.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
-            || nativeScope.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase))
+        if (nativeScope.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
+            || nativeScope.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
+            || nativeScope.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase)
+            || nativeScope.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase))
         {
             nativeScope = nativeScope[..^".json".Length];
         }
@@ -163,7 +164,7 @@ public sealed partial class ContentPipelineService
         var roots = (isModel ? [] : ordinary).ToDictionary(static root => root.Name, StringComparer.OrdinalIgnoreCase);
         foreach (var group in outputScopes.GroupBy(static path => path.Trim('/').Split('/')[0], StringComparer.OrdinalIgnoreCase))
         {
-            if (!project.AuthoringMounts.Any(mount => !IsDerivedRootMount(mount) && string.Equals(mount.Name, group.Key, StringComparison.OrdinalIgnoreCase)))
+            if (!project.AuthoringMounts.Any(mount => !ProjectOutputFolders.Contains(mount) && string.Equals(mount.Name, group.Key, StringComparison.OrdinalIgnoreCase)))
             {
                 continue;
             }

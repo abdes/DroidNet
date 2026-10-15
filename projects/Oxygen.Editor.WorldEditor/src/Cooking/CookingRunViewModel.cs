@@ -9,6 +9,7 @@ using DroidNet.Controls.OutputConsole.Model;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core.Diagnostics;
 using Serilog.Events;
 
@@ -40,8 +41,8 @@ public sealed partial class CookingRunViewModel : ObservableObject
         CookTargetKind.Project => "Project",
         CookTargetKind.Folder => "Folder",
         CookTargetKind.CurrentScene => "Scene",
-        _ => this.snapshot.Request.ScopeUri?.AbsolutePath.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase) == true ? "Scene"
-            : this.snapshot.Request.ScopeUri?.AbsolutePath.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase) == true ? "Geometry" : "Material",
+        _ => this.snapshot.Request.ScopeUri?.AbsolutePath.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase) == true ? "Scene"
+            : this.snapshot.Request.ScopeUri?.AbsolutePath.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase) == true ? "Geometry" : "Material",
     };
 
     /// <summary>Gets the secondary list context.</summary>

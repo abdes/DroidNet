@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -39,7 +40,7 @@ public sealed record ContentCookInput(
         // An input file's actions and contexts cook into its own folder; the import report says which file made each.
         ContentCookAssetKind.Input => this.OutputVirtualPath is { } file
             && string.Equals(virtualPath[..(virtualPath.LastIndexOf('/') + 1)], file[..(file.LastIndexOf('/') + 1)], StringComparison.Ordinal)
-            && (virtualPath.EndsWith(".oiact", StringComparison.Ordinal) || virtualPath.EndsWith(".oimap", StringComparison.Ordinal)),
+            && (virtualPath.EndsWith(AssetFileTypes.InputAction, StringComparison.Ordinal) || virtualPath.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.Ordinal)),
         _ => string.Equals(this.OutputVirtualPath, virtualPath, StringComparison.Ordinal),
     };
 }

@@ -200,7 +200,7 @@ public sealed partial class ContentPipelineService
 
     private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, CookPublicationReadLease baseline, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, Import.ImportedSourceIndex imports, CancellationToken cancellationToken)
     {
-        var mounts = operation.Project.AuthoringMounts.Where(static mount => !IsDerivedRootMount(mount))
+        var mounts = operation.Project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount))
             .Select(static mount => mount.Name).Concat(previous.Roots.Select(static root => root.Mount)).Distinct(StringComparer.Ordinal).ToArray();
         var inventories = await CookIncrementalPlanner.ReadInventoriesAsync(baseline, mounts, this.engineContentPipelineApi, cancellationToken, artifacts).ConfigureAwait(false);
         var repair = CookRootRepair.Create(baseline, previous, mounts, inventories, imports.IsRelocated);

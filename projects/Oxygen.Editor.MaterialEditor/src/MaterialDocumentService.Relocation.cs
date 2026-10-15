@@ -49,6 +49,7 @@ public sealed partial class MaterialDocumentService
             if (rewrite is not null)
             {
                 this.fileVersions[documentId] = rewrite.Written;
+                this.ForgetMissingSource(documentId);
             }
 
             var state = this.CreateCookDocumentState(this.documents[documentId]);

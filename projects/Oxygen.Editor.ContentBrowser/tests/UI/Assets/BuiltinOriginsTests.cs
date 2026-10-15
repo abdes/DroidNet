@@ -10,7 +10,7 @@ using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
@@ -54,10 +54,10 @@ public sealed partial class BuiltinOriginsTests : DroidNet.Tests.VisualUserInter
             CookedUri = uri,
             CookStatus = null,
         };
-        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([item]);
-        var provider = new Mock<IContentBrowserAssetProvider>();
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
+        var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
-        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var projects = new ProjectContextService();
         projects.Activate(new ProjectContext { ProjectId = Guid.NewGuid(), ProjectRoot = Path.GetTempPath(), Name = "Built-ins", Category = Category.Games, AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")], LocalFolderMounts = [], Scenes = [] });
         var state = new ContentBrowserState(projects);
@@ -115,7 +115,7 @@ public sealed partial class BuiltinOriginsTests : DroidNet.Tests.VisualUserInter
         }
     });
 
-    private static async Task VerifyBuiltinCookingActionsAsync(AssetsView view, AssetsViewModel browser, ContentBrowserState state, AssetsLayoutViewModel layout, ContentBrowserAssetItem authored)
+    private static async Task VerifyBuiltinCookingActionsAsync(AssetsView view, AssetsViewModel browser, ContentBrowserState state, AssetsLayoutViewModel layout, AssetEntry authored)
     {
         var menu = (MenuFlyout)view.FindDescendant<ToolBarButton>(button => string.Equals(button.Label, "Cook", StringComparison.Ordinal))!.Flyout;
         var assetAction = menu.Items.OfType<MenuFlyoutItem>().Single(action => ReferenceEquals(action.Command, browser.CookSelectedAssetCommand));
