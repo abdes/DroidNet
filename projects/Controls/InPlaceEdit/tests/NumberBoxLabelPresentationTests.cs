@@ -122,7 +122,7 @@ public sealed class NumberBoxLabelPresentationTests : VisualUserInterfaceTests
 
         _ = unit.Text.Should().Be("lux");
         _ = Bounds(unit, number).Left.Should().BeGreaterThanOrEqualTo(Bounds(field, number).Right, "the unit is not part of the edited value");
-        _ = number.UnitWidth.Should().BeApproximately(unit.ActualWidth + unit.Margin.Left, 0.5, "the width includes the unit's gap");
+        _ = number.UnitWidth.Should().BeApproximately(unit.ActualWidth + unit.Margin.Left, 1, "the width includes the unit's gap; layout rounds the laid-out unit to whole pixels");
         _ = number.DisplayText.Should().NotContain("lux");
 
         number.Unit = string.Empty;
@@ -130,6 +130,37 @@ public sealed class NumberBoxLabelPresentationTests : VisualUserInterfaceTests
 
         _ = unit.Visibility.Should().Be(Visibility.Collapsed);
         _ = number.UnitWidth.Should().Be(0);
+    });
+
+    [TestMethod]
+    public Task PreferredWidthHoldsPrefixFieldAndUnitWithoutMeasuringTheBox() => EnqueueAsync(async () =>
+    {
+        var number = new NumberBox { HorizontalAlignment = HorizontalAlignment.Left, Mask = "~.##", NumberValue = 125, Prefix = "1/", Unit = "s" };
+        await LoadTestContentAsync(number).ConfigureAwait(true);
+        var field = number.FindDescendant<Border>(part => string.Equals(part.Name, "PartBackgroundBorder", StringComparison.Ordinal))!;
+        var desired = number.DesiredSize;
+        var fieldDesired = field.DesiredSize;
+
+        var preferred = number.PreferredWidth;
+
+        _ = preferred.Should().BeApproximately(number.ActualWidth, 2, "a box sized to its content is as wide as its preferred width");
+        _ = number.DesiredSize.Should().Be(desired, "reading the preferred width measures nothing");
+        _ = field.DesiredSize.Should().Be(fieldDesired);
+    });
+
+    [TestMethod]
+    public Task ANarrowBoxKeepsItsValueFieldWholeBesideItsPrefixAndUnit() => EnqueueAsync(async () =>
+    {
+        var number = new NumberBox { HorizontalAlignment = HorizontalAlignment.Left, Mask = "~.##", NumberValue = 125, Prefix = "1/", Unit = "s" };
+        await LoadTestContentAsync(number).ConfigureAwait(true);
+        var field = number.FindDescendant<Border>(part => string.Equals(part.Name, "PartBackgroundBorder", StringComparison.Ordinal))!;
+        var wholeField = field.ActualWidth;
+
+        number.Width = 20;
+        number.UpdateLayout();
+        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+
+        _ = field.ActualWidth.Should().BeApproximately(wholeField, 1, "the value column keeps room for the prefix and unit beside the whole field");
     });
 
     private static Rect Bounds(FrameworkElement element, UIElement relativeTo)

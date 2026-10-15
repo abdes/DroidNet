@@ -104,8 +104,8 @@ public partial class ColorBox
     /// <summary>Gets or sets the channel editors' formatting mask.</summary>
     public string ComponentMask { get => (string)this.GetValue(ComponentMaskProperty); set => this.SetValue(ComponentMaskProperty, value); }
 
-    private static DependencyProperty Register<T>(string name, object? defaultValue, PropertyChangedCallback? changed = null)
-        => DependencyProperty.Register(name, typeof(T), typeof(ColorBox), new PropertyMetadata(defaultValue, changed));
+    private static DependencyProperty Register<T>(string propertyName, object? defaultValue, PropertyChangedCallback? changed = null)
+        => DependencyProperty.Register(propertyName, typeof(T), typeof(ColorBox), new PropertyMetadata(defaultValue, changed));
 
     private static void OnColorChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
         => ((ColorBox)sender).OnColorChanged();

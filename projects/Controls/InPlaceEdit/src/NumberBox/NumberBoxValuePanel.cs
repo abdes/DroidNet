@@ -20,8 +20,8 @@ public sealed partial class NumberBoxValuePanel : Panel
 
         var display = this.Children[0];
         display.Measure(availableSize);
-        var width = double.IsPositiveInfinity(availableSize.Width) ? display.DesiredSize.Width : availableSize.Width;
-        this.Children[1].Measure(new Size(width, display.DesiredSize.Height));
+        var editorWidth = double.IsPositiveInfinity(availableSize.Width) ? display.DesiredSize.Width : availableSize.Width;
+        this.Children[1].Measure(new Size(editorWidth, display.DesiredSize.Height));
         return display.DesiredSize;
     }
 

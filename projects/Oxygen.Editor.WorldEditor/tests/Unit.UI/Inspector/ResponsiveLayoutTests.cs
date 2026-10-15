@@ -416,6 +416,27 @@ internal sealed partial class ResponsiveLayoutTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
+    public Task MeasuringARowNeverRearrangesItsStackedVector() => EnqueueAsync(async () =>
+    {
+        var vector = new VectorBox { ComponentLabelPosition = LabelPosition.Left, CompactComponentLabels = true, AutoStackComponents = true, ComponentMask = "~.###" };
+        var card = new PropertyCard { PropertyName = "Position", IsCompound = true, Qualifier = "m", Content = vector };
+        var host = CreateHost(220, card);
+        await LoadTestContentAsync(host).ConfigureAwait(true);
+        var components = vector.FindDescendant<Grid>(part => string.Equals(part.Name, "PartComponentPanel", StringComparison.Ordinal))!;
+        _ = vector.AreComponentsStacked.Should().BeTrue("the row is narrower than the components on one row");
+        var rows = components.RowDefinitions.ToArray();
+        var width = vector.PreferredWidth;
+
+        card.InvalidateMeasure();
+        host.UpdateLayout();
+
+        _ = vector.AreComponentsStacked.Should().BeTrue();
+        _ = components.RowDefinitions.Should().Equal(rows, "the row reads the vector's preferred width instead of measuring it unconstrained");
+        _ = vector.PreferredWidth.Should().Be(width);
+        _ = card.ActualLayout.Should().Be(PropertyLayout.Stacked);
+    });
+
+    [TestMethod]
     public Task TransformAxisErrorsSitBelowTheirRowAndNeverMakeItStack() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();

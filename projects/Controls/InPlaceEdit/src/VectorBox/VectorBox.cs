@@ -9,7 +9,6 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
-using Windows.UI.ViewManagement;
 
 namespace DroidNet.Controls;
 
@@ -62,7 +61,7 @@ namespace DroidNet.Controls;
 [TemplateVisualState(Name = NormalStateName, GroupName = CommonStatesGroupName)]
 [TemplateVisualState(Name = HoverStateName, GroupName = CommonStatesGroupName)]
 [TemplateVisualState(Name = PressedStateName, GroupName = CommonStatesGroupName)]
-public partial class VectorBox : Control
+public partial class VectorBox : Control, IPreferredWidthSource
 {
     private const string RootGridPartName = "PartRootGrid";
     private const string BackgroundBorderPartName = "PartBackgroundBorder";
@@ -78,7 +77,6 @@ public partial class VectorBox : Control
     private const string DefaultComponentMask = "~.#";
     private const string DefaultIndeterminateDisplayText = "-.-";
 
-    private readonly UISettings uiSettings = new();
     private readonly ComponentPart[] parts =
     [
         new(Component.X, XValueProperty, XIsIndeterminateProperty),
@@ -112,10 +110,25 @@ public partial class VectorBox : Control
         this.componentLabelPositions = new(this.UpdateComponentLabelPositions);
         this.componentLabels = new(this.UpdateComponentLabelPositions);
         this.componentLabelForegrounds = new(this.UpdateComponentLabelPositions);
+        TextScale.InvalidateMeasureOnChange(this);
     }
 
     /// <summary>Gets a value indicating whether the current available width requires vertical component editors.</summary>
     public bool AreComponentsStacked => this.stackedComponents == true;
+
+    /// <inheritdoc />
+    /// <remarks>
+    ///     The width keeps every shown component usable on one row, as wide as its editor's own preferred width and at
+    ///     least <see cref="ComponentMinimumWidth"/>, with the label beside them, the component spacing and the padding.
+    /// </remarks>
+    public double PreferredWidth
+    {
+        get
+        {
+            _ = this.ApplyTemplate();
+            return this.componentPanel is Grid grid ? this.SingleRowWidth(grid) : 0;
+        }
+    }
 
     /// <summary>Gets the number of components shown: <see cref="Dimension"/>, limited to the supported range.</summary>
     private int ComponentCount => Math.Clamp(this.Dimension, MinimumDimension, MaximumDimension);
@@ -126,11 +139,11 @@ public partial class VectorBox : Control
     /// <summary>Sets the range user input gives one component, in place of <see cref="Minimum"/> and
     /// <see cref="Maximum"/>, such as 0 to 1 for the alpha of a color whose other channels are unbounded.</summary>
     /// <param name="component">The component.</param>
-    /// <param name="minimum">The smallest value.</param>
-    /// <param name="maximum">The largest value.</param>
-    public void SetComponentRange(Component component, double minimum, double maximum)
+    /// <param name="componentMinimum">The smallest value of the component.</param>
+    /// <param name="componentMaximum">The largest value of the component.</param>
+    public void SetComponentRange(Component component, double componentMinimum, double componentMaximum)
     {
-        this.componentRanges[component] = (minimum, maximum);
+        this.componentRanges[component] = (componentMinimum, componentMaximum);
         this.UpdateComponentRanges();
     }
 
@@ -222,15 +235,15 @@ public partial class VectorBox : Control
 
     /// <inheritdoc />
     /// <remarks>
-    ///     Measured without a width limit, the box asks for one row of usable components, so a container probing its
-    ///     natural width learns where the components would have to stack.
+    ///     The components stack only when <see cref="AutoStackComponents"/> is set and the available width is narrower
+    ///     than <see cref="PreferredWidth"/>. Measured without a width limit, the box asks for that one-row width.
     /// </remarks>
     protected override Size MeasureOverride(Size availableSize)
     {
         var rowWidth = double.NaN;
         if (this.componentPanel is Grid grid && this.FindShownContainers() is { } containers)
         {
-            rowWidth = this.SingleRowWidth(grid, containers);
+            rowWidth = this.SingleRowWidth(grid);
             var stacked = this.AutoStackComponents && availableSize.Width < rowWidth;
             this.ArrangeComponents(grid, containers, stacked);
         }
@@ -240,25 +253,24 @@ public partial class VectorBox : Control
     }
 
     // The width that keeps every shown component usable on one row, including the label beside them and padding.
-    private double SingleRowWidth(Grid grid, (ComponentPart part, Grid container)[] containers)
+    // Computed from the component editors' preferred widths and text metrics; nothing is measured.
+    private double SingleRowWidth(Grid grid)
     {
-        var count = containers.Length;
-        var minimum = this.ComponentMinimumWidth * Math.Max(this.uiSettings.TextScaleFactor, this.FontSize / 14);
-        foreach (var (part, container) in containers)
+        var shown = this.ShownParts;
+        var componentWidth = this.ComponentMinimumWidth * Math.Max(TextScale.Factor, this.FontSize / 14);
+        foreach (var part in shown)
         {
-            minimum = Math.Max(minimum, this.ComponentMinimumWidth * part.Box!.FontSize / 14);
-            container.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            minimum = Math.Max(minimum, container.DesiredSize.Width);
+            if (part.Box is { } box)
+            {
+                componentWidth = Math.Max(componentWidth, this.ComponentMinimumWidth * box.FontSize / 14);
+                componentWidth = Math.Max(componentWidth, box.PreferredWidth + box.Margin.Left + box.Margin.Right);
+            }
         }
 
-        var labelWidth = 0d;
-        if (!string.IsNullOrEmpty(this.Label) && this.LabelPosition is LabelPosition.Left or LabelPosition.Right && this.labelTextBlock is not null)
-        {
-            this.labelTextBlock.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            labelWidth = this.labelTextBlock.DesiredSize.Width + (this.rootGrid?.ColumnSpacing ?? 0);
-        }
-
-        return this.Padding.Left + this.Padding.Right + labelWidth + (minimum * count) + (grid.ColumnSpacing * (count - 1));
+        var labelWidth = !string.IsNullOrEmpty(this.Label) && this.LabelPosition is LabelPosition.Left or LabelPosition.Right && this.labelTextBlock is not null
+            ? TextMeasurer.Width(this.Label, this.labelTextBlock) + (this.rootGrid?.ColumnSpacing ?? 0)
+            : 0;
+        return this.Padding.Left + this.Padding.Right + labelWidth + (componentWidth * shown.Length) + (grid.ColumnSpacing * (shown.Length - 1));
     }
 
     private void ArrangeComponents(Grid grid, (ComponentPart part, Grid container)[] containers, bool stacked)

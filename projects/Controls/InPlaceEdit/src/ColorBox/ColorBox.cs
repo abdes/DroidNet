@@ -41,7 +41,7 @@ namespace DroidNet.Controls;
 [TemplatePart(Name = SwatchAlphaPartName, Type = typeof(UIElement))]
 [TemplatePart(Name = SwatchAlphaFillPartName, Type = typeof(Border))]
 [TemplatePart(Name = ChannelsPartName, Type = typeof(VectorBox))]
-public partial class ColorBox : Control
+public partial class ColorBox : Control, IPreferredWidthSource
 {
     private const string SwatchButtonPartName = "PartSwatchButton";
     private const string SwatchFillPartName = "PartSwatchFill";
@@ -85,6 +85,21 @@ public partial class ColorBox : Control
 
     /// <summary>Gets the red, green, blue and alpha channels.</summary>
     public ColorChannels Channels => new(this.Red, this.Green, this.Blue, this.Alpha);
+
+    /// <inheritdoc />
+    /// <remarks>The width holds the swatch, when the picker shows, and the channels on one row.</remarks>
+    public double PreferredWidth
+    {
+        get
+        {
+            _ = this.ApplyTemplate();
+            var swatch = this.swatchButton is { Visibility: Visibility.Visible } button
+                ? (double.IsNaN(button.Width) ? button.MinWidth : button.Width) + button.Margin.Left + button.Margin.Right
+                : 0;
+            var channelsWidth = this.channels is { } channelBox ? channelBox.PreferredWidth + channelBox.Margin.Left + channelBox.Margin.Right : 0;
+            return Math.Max(this.MinWidth, swatch + channelsWidth);
+        }
+    }
 
     private bool IsMixed => this.RedIsIndeterminate || this.GreenIsIndeterminate || this.BlueIsIndeterminate;
 

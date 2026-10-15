@@ -360,25 +360,25 @@ public partial class VectorBox
         set => this.SetValue(LoggerFactoryProperty, value);
     }
 
-    private static DependencyProperty RegisterComponentValue(string name, Component component)
+    private static DependencyProperty RegisterComponentValue(string propertyName, Component component)
         => DependencyProperty.Register(
-            name,
+            propertyName,
             typeof(double),
             typeof(VectorBox),
             new PropertyMetadata(0.0d, (d, e) => ((VectorBox)d).OnComponentValueChanged(component, (double)e.OldValue, (double)e.NewValue)));
 
-    private static DependencyProperty RegisterComponentIndeterminate(string name, Component component)
+    private static DependencyProperty RegisterComponentIndeterminate(string propertyName, Component component)
         => DependencyProperty.Register(
-            name,
+            propertyName,
             typeof(bool),
             typeof(VectorBox),
             new PropertyMetadata(defaultValue: false, (d, _) => ((VectorBox)d).OnComponentIndeterminateChanged(component)));
 
-    private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory)
+    private void OnLoggerFactoryChanged(ILoggerFactory? factory)
     {
         // Initialize the logger for this VectorBox and propagate the factory to child NumberBox instances.
-        this.logger = loggerFactory?.CreateLogger<VectorBox>() ?? NullLoggerFactory.Instance.CreateLogger<VectorBox>();
-        this.LogLoggerFactoryChanged(loggerFactory is not null);
+        this.logger = factory?.CreateLogger<VectorBox>() ?? NullLoggerFactory.Instance.CreateLogger<VectorBox>();
+        this.LogLoggerFactoryChanged(factory is not null);
         this.ForEachEditor(static (owner, box) => box.LoggerFactory = owner.LoggerFactory);
     }
 }

@@ -6,8 +6,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.Foundation;
-using Windows.UI.ViewManagement;
+using IPreferredWidthSource = DroidNet.Controls.IPreferredWidthSource;
 using NumberBox = DroidNet.Controls.NumberBox;
+using TextMeasurer = DroidNet.Controls.TextMeasurer;
+using TextScale = DroidNet.Controls.TextScale;
 
 namespace Oxygen.Editor.Controls;
 
@@ -66,7 +68,6 @@ public partial class PropertyCard : ContentControl
 
     private const double InlineLabelWidthRatio = 0.4;
 
-    private readonly UISettings uiSettings = new();
     private Grid? layoutRoot;
     private FrameworkElement? header;
     private ContentPresenter? editor;
@@ -81,6 +82,7 @@ public partial class PropertyCard : ContentControl
     public PropertyCard()
     {
         this.DefaultStyleKey = typeof(PropertyCard);
+        TextScale.InvalidateMeasureOnChange(this);
         this.Loaded += (_, _) => this.InvalidateMeasure();
         this.Unloaded += (_, _) => this.LeaveQualifierGroup();
         _ = this.RegisterPropertyChangedCallback(VisibilityProperty, static (d, _) => ((PropertyCard)d).OnVisibilityChanged());
@@ -104,8 +106,9 @@ public partial class PropertyCard : ContentControl
 
     /// <summary>Gets or sets the name of the rows whose editors end at the same right edge; empty for none.</summary>
     /// <remarks>
-    ///     Loaded rows with the same name in the same window reserve the widest qualifier or unit among them after their
-    ///     editor, so rows with different annotations, or none, line up their input fields.
+    ///     Loaded, visible rows with the same name in the same section, the <see cref="PropertiesExpander"/> that shows
+    ///     them or the root of their visual tree outside one, reserve the widest qualifier or unit among them after
+    ///     their editor, so rows with different annotations, or none, line up their input fields.
     /// </remarks>
     public string QualifierGroup { get => (string)this.GetValue(QualifierGroupProperty); set => this.SetValue(QualifierGroupProperty, value); }
 
@@ -149,18 +152,19 @@ public partial class PropertyCard : ContentControl
 
     /// <inheritdoc />
     /// <remarks>
-    ///     The row goes inline when the label column and the editor's natural width both fit. The editor's natural
-    ///     width is its desired width without a limit, so editors that rearrange themselves when narrow, such as
-    ///     vectors, report the width at which they would have to.
+    ///     The row goes inline when the label column and the editor's preferred width both fit. An editor that
+    ///     rearranges itself when narrow, such as a number, vector or color editor, reports that width through
+    ///     <see cref="IPreferredWidthSource"/> without being measured, so the probe never rearranges it for a width it
+    ///     does not get. Other content keeps a fixed natural size and is measured without a width limit.
     /// </remarks>
     protected override Size MeasureOverride(Size availableSize)
     {
         if (this.layoutRoot is not null && this.header is not null && this.editor is not null
             && this.headerQualifier is not null && this.suffix is not null)
         {
-            var scale = Math.Max(this.uiSettings.TextScaleFactor, this.FontSize / 14);
-            this.editor.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            var qualifierWidth = this.MeasureQualifier();
+            var scale = Math.Max(TextScale.Factor, this.FontSize / 14);
+            var editorWidth = this.EditorPreferredWidth();
+            var qualifierWidth = string.IsNullOrEmpty(this.Qualifier) ? 0 : TextMeasurer.Width(this.Qualifier, this.suffix) + this.suffix.Margin.Left;
             if (this.LeadingContent is not null)
             {
                 this.leading?.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -169,69 +173,68 @@ public partial class PropertyCard : ContentControl
             var accessoryWidth = this.LeadingContent is null ? 0 : (this.leading?.DesiredSize.Width ?? 0) + 4;
             var trailingWidth = qualifierWidth + ((this.Content as NumberBox)?.UnitWidth ?? 0);
             var reserve = this.AlignWithQualifierGroup(trailingWidth) - trailingWidth;
-            var minimum = this.editor.DesiredSize.Width + qualifierWidth + accessoryWidth + reserve;
-            var width = availableSize.Width - this.Padding.Left - this.Padding.Right;
-            var layout = this.Layout == PropertyLayout.Auto
-                ? (width >= 12 + Math.Max(this.LabelWidth * scale / InlineLabelWidthRatio, minimum / (1 - InlineLabelWidthRatio))
+            var minimum = editorWidth + qualifierWidth + accessoryWidth + reserve;
+            var rowWidth = availableSize.Width - this.Padding.Left - this.Padding.Right;
+            var chosenLayout = this.Layout == PropertyLayout.Auto
+                ? (rowWidth >= 12 + Math.Max(this.LabelWidth * scale / InlineLabelWidthRatio, minimum / (1 - InlineLabelWidthRatio))
                     ? PropertyLayout.Inline : PropertyLayout.Stacked)
                 : this.Layout;
-            this.ActualLayout = layout;
+            this.ActualLayout = chosenLayout;
             this.header.Visibility = this.IsHeaderVisible ? Visibility.Visible : Visibility.Collapsed;
-            var headerAnnotation = this.IsCompound && layout == PropertyLayout.Stacked && this.IsHeaderVisible;
+            var headerAnnotation = this.IsCompound && chosenLayout == PropertyLayout.Stacked && this.IsHeaderVisible;
             this.headerQualifier.Visibility = headerAnnotation && !string.IsNullOrEmpty(this.Qualifier) ? Visibility.Visible : Visibility.Collapsed;
             this.suffix.Visibility = !headerAnnotation && !string.IsNullOrEmpty(this.Qualifier) ? Visibility.Visible : Visibility.Collapsed;
             this.leading?.Visibility = this.LeadingContent is null ? Visibility.Collapsed : Visibility.Visible;
             var valueGroup = (FrameworkElement)this.editor.Parent;
 
             // A stacked compound row moves its qualifier to the header and spans the row.
-            var margin = new Thickness(0, 0, headerAnnotation ? 0 : reserve, 0);
-            if (valueGroup.Margin != margin)
+            var valueGroupMargin = new Thickness(0, 0, headerAnnotation ? 0 : reserve, 0);
+            if (valueGroup.Margin != valueGroupMargin)
             {
-                valueGroup.Margin = margin;
+                valueGroup.Margin = valueGroupMargin;
             }
 
-            if (layout != this.appliedLayout)
+            if (chosenLayout != this.appliedLayout)
             {
                 this.layoutRoot.ColumnDefinitions.Clear();
                 this.layoutRoot.RowDefinitions.Clear();
-                this.layoutRoot.ColumnSpacing = layout == PropertyLayout.Inline ? 12 : 0;
-                this.layoutRoot.RowSpacing = this.IsHeaderVisible && layout == PropertyLayout.Stacked ? 4 : 0;
-                this.layoutRoot.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(layout == PropertyLayout.Inline ? InlineLabelWidthRatio : 1, GridUnitType.Star) });
-                if (layout == PropertyLayout.Inline)
+                this.layoutRoot.ColumnSpacing = chosenLayout == PropertyLayout.Inline ? 12 : 0;
+                this.layoutRoot.RowSpacing = this.IsHeaderVisible && chosenLayout == PropertyLayout.Stacked ? 4 : 0;
+                this.layoutRoot.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(chosenLayout == PropertyLayout.Inline ? InlineLabelWidthRatio : 1, GridUnitType.Star) });
+                if (chosenLayout == PropertyLayout.Inline)
                 {
                     this.layoutRoot.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - InlineLabelWidthRatio, GridUnitType.Star) });
                 }
 
                 this.layoutRoot.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 this.layoutRoot.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                Grid.SetRow(valueGroup, layout == PropertyLayout.Inline ? 0 : 1);
-                Grid.SetColumn(valueGroup, layout == PropertyLayout.Inline ? 1 : 0);
-                this.appliedLayout = layout;
+                Grid.SetRow(valueGroup, chosenLayout == PropertyLayout.Inline ? 0 : 1);
+                Grid.SetColumn(valueGroup, chosenLayout == PropertyLayout.Inline ? 1 : 0);
+                this.appliedLayout = chosenLayout;
             }
         }
 
         return base.MeasureOverride(availableSize);
     }
 
-    private static DependencyProperty RegisterLayoutProperty(string name, Type type, object? defaultValue)
-        => DependencyProperty.Register(name, type, typeof(PropertyCard), new PropertyMetadata(defaultValue, (d, _) =>
+    private static DependencyProperty RegisterLayoutProperty(string propertyName, Type type, object? defaultValue)
+        => DependencyProperty.Register(propertyName, type, typeof(PropertyCard), new PropertyMetadata(defaultValue, (d, _) =>
         {
             var card = (PropertyCard)d;
             card.appliedLayout = null;
             card.InvalidateMeasure();
         }));
 
-    // The qualifier's width after the editor, including its gap; zero without one.
-    private double MeasureQualifier()
+    // The editor's one-row width with its margin: reported by a responsive editor, measured for fixed-size content.
+    private double EditorPreferredWidth()
     {
-        if (string.IsNullOrEmpty(this.Qualifier))
+        if (this.Content is IPreferredWidthSource source and FrameworkElement element)
         {
-            return 0;
+            return source.PreferredWidth + element.Margin.Left + element.Margin.Right;
         }
 
-        var annotation = new TextBlock { Text = this.Qualifier, FontSize = 12, FontFamily = this.FontFamily };
-        annotation.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        return annotation.DesiredSize.Width + 4;
+        this.editor!.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        return this.editor.DesiredSize.Width;
     }
 
     /// <summary>

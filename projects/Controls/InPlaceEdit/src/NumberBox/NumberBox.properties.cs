@@ -63,7 +63,7 @@ public partial class NumberBox
             nameof(DisplayText),
             typeof(string),
             typeof(NumberBox),
-            new PropertyMetadata(defaultValue: null));
+            new PropertyMetadata(defaultValue: null, static (d, _) => ((NumberBox)d).InvalidateMeasure()));
 
     /// <summary>
     ///     Identifies the <see cref="Label" /> dependency property.
@@ -221,9 +221,12 @@ public partial class NumberBox
     /// </remarks>
     public string Unit { get => (string)this.GetValue(UnitProperty); set => this.SetValue(UnitProperty, value); }
 
-    /// <summary>Gets the width the unit takes after the value field, including its gap, as of the last measure.</summary>
-    /// <remarks>Zero without a unit. Containers use it to line up the value fields of rows with different units.</remarks>
-    public double UnitWidth => this.unitTextBlock is { Visibility: Visibility.Visible } unit ? unit.DesiredSize.Width : 0;
+    /// <summary>Gets the width the unit takes after the value field, including its gap.</summary>
+    /// <remarks>
+    ///     Zero without a unit. Computed from the unit's text metrics, without measuring the unit, so containers can read
+    ///     it while choosing their own layout to line up the value fields of rows with different units.
+    /// </remarks>
+    public double UnitWidth => AnnotationWidth(this.unitTextBlock, this.Unit);
 
     /// <summary>Gets the label placement selected during measurement.</summary>
     public LabelPosition ActualLabelPosition { get; private set; }
@@ -386,8 +389,8 @@ public partial class NumberBox
         set => this.SetValue(LoggerFactoryProperty, value);
     }
 
-    private static DependencyProperty RegisterLabelLayoutProperty(string name, Type type, object defaultValue)
-        => DependencyProperty.Register(name, type, typeof(NumberBox), new PropertyMetadata(defaultValue, static (d, _) => ((NumberBox)d).UpdateLabelPosition()));
+    private static DependencyProperty RegisterLabelLayoutProperty(string propertyName, Type type, object defaultValue)
+        => DependencyProperty.Register(propertyName, type, typeof(NumberBox), new PropertyMetadata(defaultValue, static (d, _) => ((NumberBox)d).UpdateLabelPosition()));
 
     private static void OnValuePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -472,6 +475,6 @@ public partial class NumberBox
     }
 
     // Initialize the logger for this NumberBox. Use the NumberBox type as the category.
-    private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory) =>
-        this.logger = loggerFactory?.CreateLogger<NumberBox>() ?? NullLoggerFactory.Instance.CreateLogger<NumberBox>();
+    private void OnLoggerFactoryChanged(ILoggerFactory? factory) =>
+        this.logger = factory?.CreateLogger<NumberBox>() ?? NullLoggerFactory.Instance.CreateLogger<NumberBox>();
 }

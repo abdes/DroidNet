@@ -10,7 +10,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Windows.Foundation;
 using Windows.System;
 
 namespace DroidNet.Controls;
@@ -138,6 +137,7 @@ public partial class NumberBox : Control
     {
         this.DefaultStyleKey = typeof(NumberBox);
         this.maskParser = new MaskParser("~.#");
+        TextScale.InvalidateMeasureOnChange(this);
 
         this.defaultCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         this.dragCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
@@ -305,16 +305,16 @@ public partial class NumberBox : Control
         Setup(this.labelTextBlock);
         Setup(this.compactLabelTextBlock);
 
-        void Setup(TextBlock? label)
+        void Setup(TextBlock? labelPart)
         {
-            if (label is null)
+            if (labelPart is null)
             {
                 return;
             }
 
-            this.HookScrubHandle(label);
-            label.PointerEntered += this.OnValueTextBlockPointerEntered;
-            label.PointerExited += this.OnValueTextBlockPointerExited;
+            this.HookScrubHandle(labelPart);
+            labelPart.PointerEntered += this.OnValueTextBlockPointerEntered;
+            labelPart.PointerExited += this.OnValueTextBlockPointerExited;
         }
     }
 
@@ -812,9 +812,9 @@ public partial class NumberBox : Control
     {
         if (this.labelTextBlock is not null)
         {
-            if (this.LabelForeground is { } foreground)
+            if (this.LabelForeground is { } labelBrush)
             {
-                this.labelTextBlock.Foreground = foreground;
+                this.labelTextBlock.Foreground = labelBrush;
             }
             else
             {
@@ -824,9 +824,9 @@ public partial class NumberBox : Control
 
         if (this.compactLabelTextBlock is not null)
         {
-            if (this.LabelForeground is { } foreground)
+            if (this.LabelForeground is { } labelBrush)
             {
-                this.compactLabelTextBlock.Foreground = foreground;
+                this.compactLabelTextBlock.Foreground = labelBrush;
             }
             else
             {
@@ -854,17 +854,7 @@ public partial class NumberBox : Control
         }
 
         var sampleText = "-" + this.maskParser.FormatValue(0, withPadding: true, trimTrailingZeros: this.TrimTrailingZeros);
-        var measureTextBlock = new TextBlock
-        {
-            Text = sampleText,
-            FontSize = this.valueTextBlock.FontSize,
-            FontFamily = this.valueTextBlock.FontFamily,
-            FontWeight = this.valueTextBlock.FontWeight,
-            FontStyle = this.valueTextBlock.FontStyle,
-        };
-
-        measureTextBlock.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        this.valueTextBlock.MinWidth = measureTextBlock.DesiredSize.Width;
+        this.valueTextBlock.MinWidth = TextMeasurer.Width(sampleText, this.valueTextBlock);
     }
 
     private void OnWithPaddingChanged() => this.UpdateDisplayText();
@@ -886,20 +876,10 @@ public partial class NumberBox : Control
 
     private void OnIndeterminateDisplayTextChanged() => this.UpdateDisplayText();
 
+    // Setting the alignments invalidates the parts' layout, which the next layout pass applies.
     private void OnHorizontalValueAlignmentChanged()
     {
-        if (this.editTextBox is not null)
-        {
-            this.editTextBox.TextAlignment = this.HorizontalValueAlignment;
-            this.valueTextBlock?.InvalidateMeasure();
-            this.valueTextBlock?.UpdateLayout();
-        }
-
-        if (this.valueTextBlock is not null)
-        {
-            this.valueTextBlock.HorizontalTextAlignment = this.HorizontalValueAlignment;
-            this.valueTextBlock.InvalidateMeasure();
-            this.valueTextBlock.UpdateLayout();
-        }
+        this.editTextBox?.TextAlignment = this.HorizontalValueAlignment;
+        this.valueTextBlock?.HorizontalTextAlignment = this.HorizontalValueAlignment;
     }
 }
