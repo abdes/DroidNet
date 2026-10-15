@@ -378,6 +378,15 @@ internal sealed partial class ResponsiveLayoutTests : VisualUserInterfaceTests
         AssertFeedbackBelow(number, number.ErrorText);
         AssertFeedbackBelow(number, number.ApplicabilityText);
         AssertFeedbackBelow(color, color.ErrorText);
+
+        var error = number.FindDescendants().OfType<TextBlock>().Single(element => string.Equals(element.Text, number.ErrorText, StringComparison.Ordinal));
+        var applicability = number.FindDescendants().OfType<TextBlock>().Single(element => string.Equals(element.Text, number.ApplicabilityText, StringComparison.Ordinal));
+        number.HasError = false;
+        number.ApplicabilityText = string.Empty;
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        _ = error.Visibility.Should().Be(Visibility.Collapsed, "cleared feedback hides as the field's properties change");
+        _ = applicability.Visibility.Should().Be(Visibility.Collapsed);
     });
 
     [TestMethod]
@@ -434,6 +443,62 @@ internal sealed partial class ResponsiveLayoutTests : VisualUserInterfaceTests
         _ = components.RowDefinitions.Should().Equal(rows, "the row reads the vector's preferred width instead of measuring it unconstrained");
         _ = vector.PreferredWidth.Should().Be(width);
         _ = card.ActualLayout.Should().Be(PropertyLayout.Stacked);
+    });
+
+    [TestMethod]
+    public Task QualifierGroupsStayWithinTheirSection() => EnqueueAsync(async () =>
+    {
+        var position = GroupRow("Position", "m");
+        var scale = GroupRow("Scale", string.Empty);
+        var color = GroupRow("Color", "Linear RGBA");
+        var transform = new PropertiesExpander { Header = "Transform", IsExpanded = true };
+        transform.Items.Add(position);
+        transform.Items.Add(scale);
+        var light = new PropertiesExpander { Header = "Light", IsExpanded = true };
+        light.Items.Add(color);
+        var sections = new StackPanel { Spacing = 4 };
+        sections.Children.Add(transform);
+        sections.Children.Add(light);
+        var host = CreateHost(760, sections);
+        await LoadTestContentAsync(host).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        _ = ValueGroup(position).Margin.Right.Should().Be(0, "the widest annotation of its own section reserves nothing more");
+        _ = ValueGroup(scale).Margin.Right.Should().BeGreaterThan(0, "a row without a qualifier reserves its section's widest");
+        _ = ValueGroup(color).Margin.Right.Should().Be(0);
+
+        static PropertyCard GroupRow(string name, string qualifier) => new()
+        {
+            PropertyName = name,
+            IsCompound = true,
+            Layout = PropertyLayout.Inline,
+            Qualifier = qualifier,
+            QualifierGroup = "Transform",
+            Content = new VectorBox { ComponentLabelPosition = LabelPosition.Left, CompactComponentLabels = true, ComponentMask = "~.###" },
+        };
+
+        static Grid ValueGroup(PropertyCard card)
+            => (Grid)card.FindDescendant<ContentPresenter>(part => string.Equals(part.Name, "PropertyEditor", StringComparison.Ordinal))!.Parent;
+    });
+
+    [TestMethod]
+    public Task CollapsedSectionItemsLeaveNoGap() => EnqueueAsync(async () =>
+    {
+        var first = new PropertyCard { PropertyName = "Near plane", Content = new NumberBox { Unit = "m" } };
+        var hidden = new PropertyCard { PropertyName = "Hidden", Content = new NumberBox(), Visibility = Visibility.Collapsed };
+        var last = new PropertyCard { PropertyName = "Far plane", Content = new NumberBox { Unit = "m" } };
+        var section = new PropertiesExpander { Header = "Camera", IsExpanded = true };
+        section.Items.Add(first);
+        section.Items.Add(hidden);
+        section.Items.Add(last);
+        var host = CreateHost(480, section);
+        await LoadTestContentAsync(host).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var spacing = ((PropertyItemsLayout)section.FindDescendant<ItemsRepeater>()!.Layout).Spacing;
+
+        var firstBottom = first.TransformToVisual(section).TransformPoint(default).Y + first.ActualHeight;
+        var lastTop = last.TransformToVisual(section).TransformPoint(default).Y;
+        _ = (lastTop - firstBottom).Should().BeApproximately(spacing, 1, "one gap separates the visible rows around a collapsed one");
     });
 
     [TestMethod]

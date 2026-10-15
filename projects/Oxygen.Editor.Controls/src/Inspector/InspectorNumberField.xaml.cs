@@ -45,12 +45,10 @@ public sealed partial class InspectorNumberField : UserControl
     public static readonly DependencyProperty ErrorTextProperty = Register<string>(nameof(ErrorText), string.Empty);
 
     /// <summary>Identifies whether validation text is shown.</summary>
-    public static readonly DependencyProperty HasErrorProperty = DependencyProperty.Register(
-        nameof(HasError), typeof(bool), typeof(InspectorNumberField), new PropertyMetadata(defaultValue: false, OnFeedbackChanged));
+    public static readonly DependencyProperty HasErrorProperty = Register<bool>(nameof(HasError), defaultValue: false);
 
     /// <summary>Identifies current stored-value applicability text.</summary>
-    public static readonly DependencyProperty ApplicabilityTextProperty = DependencyProperty.Register(
-        nameof(ApplicabilityText), typeof(string), typeof(InspectorNumberField), new PropertyMetadata(string.Empty, OnFeedbackChanged));
+    public static readonly DependencyProperty ApplicabilityTextProperty = Register<string>(nameof(ApplicabilityText), string.Empty);
 
     /// <summary>Identifies the consumer's scoped property-card style.</summary>
     public static readonly DependencyProperty CardStyleProperty = Register<Style>(nameof(CardStyle), defaultValue: null);
@@ -118,15 +116,13 @@ public sealed partial class InspectorNumberField : UserControl
     /// <summary>Gets or sets the consumer's existing numeric style.</summary>
     public Style? NumberStyle { get => (Style?)this.GetValue(NumberStyleProperty); set => this.SetValue(NumberStyleProperty, value); }
 
-    private Visibility ErrorVisibility => this.HasError ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>Shows feedback text only when there is some; the field's x:Bind re-evaluates it as the text changes.</summary>
+    /// <param name="text">The feedback text.</param>
+    /// <returns>Collapsed for null or empty text, otherwise visible.</returns>
+    internal static Visibility CollapsedWhenEmpty(string? text) => string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
 
-    private Visibility ApplicabilityVisibility => string.IsNullOrEmpty(this.ApplicabilityText) ? Visibility.Collapsed : Visibility.Visible;
-
-    private static DependencyProperty Register<T>(string name, object? defaultValue)
-        => DependencyProperty.Register(name, typeof(T), typeof(InspectorNumberField), new PropertyMetadata(defaultValue));
-
-    private static void OnFeedbackChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
-        => ((InspectorNumberField)sender).Bindings.Update();
+    private static DependencyProperty Register<T>(string propertyName, object? defaultValue)
+        => DependencyProperty.Register(propertyName, typeof(T), typeof(InspectorNumberField), new PropertyMetadata(defaultValue));
 
     private void OnEditSessionStarted(object? sender, NumberBoxEditSessionEventArgs args)
         => this.EditSessionStarted?.Invoke(this, args);

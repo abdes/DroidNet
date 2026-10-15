@@ -42,11 +42,11 @@
             Foreground="{ThemeResource SystemFillColorCriticalBrush}"
             Text="{x:Bind ErrorText, Mode=OneWay}"
             TextWrapping="Wrap"
-            Visibility="{x:Bind ErrorVisibility, Mode=OneWay}" />
+            Visibility="{x:Bind HasError, Mode=OneWay}" />
         <TextBlock
             FontSize="12"
             Text="{x:Bind ApplicabilityText, Mode=OneWay}"
             TextWrapping="Wrap"
-            Visibility="{x:Bind ApplicabilityVisibility, Mode=OneWay}" />
+            Visibility="{x:Bind local:InspectorNumberField.CollapsedWhenEmpty(ApplicabilityText), Mode=OneWay}" />
     </StackPanel>
 </UserControl>

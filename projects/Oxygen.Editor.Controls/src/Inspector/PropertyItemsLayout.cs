@@ -10,10 +10,13 @@ namespace Oxygen.Editor.Controls;
 
 /// <summary>Stacks every property item of a <see cref="PropertiesExpander"/> vertically, without virtualization.</summary>
 /// <remarks>
+/// Spacing separates visible items only: a collapsed item takes neither height nor a gap.
+/// <para>
 /// A section holds a small, fixed set of cards whose heights vary widely. A virtualizing stack layout
 /// nested in the inspector's scroll host releases cards outside the viewport and estimates their
 /// height, so the scroll extent changes while scrolling and the view jumps back and forth near the
 /// end. Keeping every card realized keeps the extent exact.
+/// </para>
 /// </remarks>
 public sealed partial class PropertyItemsLayout : NonVirtualizingLayout
 {
@@ -36,17 +39,23 @@ public sealed partial class PropertyItemsLayout : NonVirtualizingLayout
     {
         var width = 0.0;
         var height = 0.0;
+        var visible = 0;
         var children = context.Children;
         for (var index = 0; index < children.Count; ++index)
         {
             var child = children[index];
             child.Measure(new Size(availableSize.Width, double.PositiveInfinity));
+            if (child.Visibility == Visibility.Collapsed)
+            {
+                continue;
+            }
+
             width = Math.Max(width, child.DesiredSize.Width);
             height += child.DesiredSize.Height;
+            ++visible;
         }
 
-        // Like StackLayout, spacing separates every pair of items.
-        height += Math.Max(0, children.Count - 1) * this.Spacing;
+        height += Math.Max(0, visible - 1) * this.Spacing;
         return new Size(width, height);
     }
 
@@ -54,10 +63,19 @@ public sealed partial class PropertyItemsLayout : NonVirtualizingLayout
     protected override Size ArrangeOverride(NonVirtualizingLayoutContext context, Size finalSize)
     {
         var top = 0.0;
+        var gap = 0.0;
         foreach (var child in context.Children)
         {
+            if (child.Visibility == Visibility.Collapsed)
+            {
+                child.Arrange(new Rect(0, top, finalSize.Width, 0));
+                continue;
+            }
+
+            top += gap;
             child.Arrange(new Rect(0, top, finalSize.Width, child.DesiredSize.Height));
-            top += child.DesiredSize.Height + this.Spacing;
+            top += child.DesiredSize.Height;
+            gap = this.Spacing;
         }
 
         return finalSize;
