@@ -709,8 +709,10 @@ auto TextureLoadingService::StartLoadCookedTexture(
          "browser");
     return;
   }
-  // The loader owns decoding and source identity. Unlike synthetic cache-only
-  // keys, this key can reload its resource after an import invalidates caches.
+  // The loader owns decoding and source identity. The key stays reloadable
+  // while this source instance is readable; an import that refreshes the
+  // mounted root revokes it, so callers keep the entry index and request a new
+  // key after a refresh.
   asset_loader_->StartLoadTexture(*key,
     [on_complete = std::move(on_complete), key = *key](
       const std::shared_ptr<data::TextureResource>& texture) mutable -> void {

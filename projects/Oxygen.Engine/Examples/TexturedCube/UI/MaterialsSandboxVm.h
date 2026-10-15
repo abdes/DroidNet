@@ -213,6 +213,10 @@ private:
   auto UpdateImportStatus() -> void;
   auto HandleRefresh() -> void;
   auto UpdateCookedEntries() -> void;
+  //! A mutable refresh of the cooked root revokes the resource keys minted
+  //! before it; mint the keys of the custom textures assigned to the slots
+  //! again from their entry indices.
+  auto ReloadAssignedTextures() -> void;
   auto UpdateCookedMaterialEntries(const std::filesystem::path& cooked_root)
     -> void;
 

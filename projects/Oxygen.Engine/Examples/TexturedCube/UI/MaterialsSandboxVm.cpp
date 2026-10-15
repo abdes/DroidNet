@@ -526,6 +526,32 @@ auto MaterialsSandboxVm::UpdateCookedEntries() -> void
 
   LOG_F(INFO, "TexturedCube: refresh completed entries={} ",
     cooked_entries_.size());
+  ReloadAssignedTextures();
+}
+
+auto MaterialsSandboxVm::ReloadAssignedTextures() -> void
+{
+  const auto reload = [this](TextureSlotState& slot) -> void {
+    if (slot.mode != TextureIndexMode::kCustom) {
+      return;
+    }
+    texture_service_->StartLoadCookedTexture(slot.resource_index,
+      [this, &slot](const TextureLoadingService::LoadResult& result) -> void {
+        if (!result.success) {
+          LOG_F(WARNING,
+            "TexturedCube: assigned texture entry {} cannot be loaded after "
+            "refresh: {}",
+            slot.resource_index, result.status_message);
+          slot.mode = TextureIndexMode::kFallback;
+          slot.resource_key = oxygen::content::ResourceKey { 0U };
+        } else {
+          slot.resource_key = result.resource_key;
+        }
+        cube_needs_rebuild_ = true;
+      });
+  };
+  reload(sphere_texture_);
+  reload(cube_texture_);
 }
 
 auto MaterialsSandboxVm::UpdateCookedMaterialEntries(

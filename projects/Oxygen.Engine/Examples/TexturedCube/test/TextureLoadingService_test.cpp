@@ -82,7 +82,7 @@ auto PublishTextures(const std::filesystem::path& root, const size_t count)
 }
 
 NOLINT_TEST_F(TextureLoadingServiceTest,
-  BrowserRefreshPreservesAssignmentsAndImportKeepsKeysReloadable)
+  BrowserRefreshPreservesAssignmentsAndImportRequiresMintingKeysAgain)
 {
   PublishTextures(temp_dir_, 2U);
   oxygen::co::testing::TestEventLoop loop;
@@ -126,15 +126,18 @@ NOLINT_TEST_F(TextureLoadingServiceTest,
         EXPECT_EQ(loader.GetTexture(assigned.front().resource_key), cube);
         EXPECT_EQ(loader.GetTexture(assigned.back().resource_key), sphere);
 
-        // A subsequent import legitimately refreshes the mounted source. The
-        // renderer must still be able to reload both previously assigned keys.
+        // A subsequent import refreshes the mounted source instance, which
+        // revokes the keys minted before it. Callers keep the entry index and
+        // mint the key again.
         PublishTextures(root, 3U);
         EXPECT_TRUE(service.RefreshCookedTextureEntries(root, &error)) << error;
-        for (const auto& assignment : assigned) {
+        EXPECT_EQ(service.GetCookedTextureEntries().size(), 3U);
+        for (size_t index = 0; index < assigned.size(); ++index) {
           oxygen::co::Event complete;
-          loader.StartLoadTexture(
-            assignment.resource_key, [&](const auto& texture) -> void {
-              EXPECT_NE(texture, nullptr);
+          service.StartLoadCookedTexture(
+            static_cast<uint32_t>(index + 1U), [&](auto result) -> void {
+              EXPECT_TRUE(result.success);
+              EXPECT_NE(loader.GetTexture(result.resource_key), nullptr);
               complete.Trigger();
             });
           co_await complete;
