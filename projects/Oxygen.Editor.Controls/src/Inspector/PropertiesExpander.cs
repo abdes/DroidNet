@@ -5,6 +5,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Windows.Foundation;
 
 namespace Oxygen.Editor.Controls;
 
@@ -17,13 +18,8 @@ namespace Oxygen.Editor.Controls;
 [TemplatePart(Name = DescriptionPresenterPartName, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = HeaderIconPresenterHolderPartName, Type = typeof(Viewbox))]
 [TemplatePart(Name = ItemsRepeaterPartName, Type = typeof(ItemsRepeater))]
-
-[TemplateVisualState(Name = RightState, GroupName = ContentAlignmentStates)]
-[TemplateVisualState(Name = RightWrappedState, GroupName = ContentAlignmentStates)]
-[TemplateVisualState(Name = RightWrappedNoIconState, GroupName = ContentAlignmentStates)]
-
-[TemplateVisualState(Name = VisibleState, GroupName = ContentVisibilityStates)]
-[TemplateVisualState(Name = CollapsedState, GroupName = ContentVisibilityStates)]
+[TemplatePart(Name = ContentPresenterPartName, Type = typeof(ContentPresenter))]
+[TemplatePart(Name = HeaderPanelPartName, Type = typeof(FrameworkElement))]
 
 [TemplateVisualState(Name = NormalState, GroupName = CommonStates)]
 [TemplateVisualState(Name = PointerOverState, GroupName = CommonStates)]
@@ -35,21 +31,21 @@ public partial class PropertiesExpander : Control
     private const string PointerOverState = "PointerOver";
     private const string DisabledState = "Disabled";
 
-    private const string ContentVisibilityStates = "ContentVisibilityStates";
-    private const string VisibleState = "Visible";
-    private const string CollapsedState = "Collapsed";
-
-    private const string ContentAlignmentStates = "ContentAlignmentStates";
-    private const string RightState = "Right";
-    private const string RightWrappedState = "RightWrapped";
-    private const string RightWrappedNoIconState = "RightWrappedNoIcon";
-
     private const string ActionIconPresenterHolderPartName = "PartActionIconPresenterHolder";
     private const string RootGridPartName = "PartRootGrid";
     private const string HeaderPresenterPartName = "PartHeaderPresenter";
     private const string DescriptionPresenterPartName = "PartDescriptionPresenter";
     private const string HeaderIconPresenterHolderPartName = "PartHeaderIconPresenterHolder";
     private const string ItemsRepeaterPartName = "PartItemsRepeater";
+    private const string ContentPresenterPartName = "PartContentPresenter";
+    private const string HeaderPanelPartName = "HeaderPanel";
+
+    // The gap between the title and content shown beside it.
+    private const double HeaderContentGap = 12;
+
+    private ContentPresenter? headerContentPresenter;
+    private FrameworkElement? headerPanel;
+    private FrameworkElement? headerIconHolder;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PropertiesExpander"/> class.
@@ -59,6 +55,7 @@ public partial class PropertiesExpander : Control
         this.DefaultStyleKey = typeof(PropertiesExpander);
 
         this.Items = [];
+        _ = this.RegisterPropertyChangedCallback(HorizontalContentAlignmentProperty, static (d, _) => ((PropertiesExpander)d).InvalidateMeasure());
     }
 
     /// <summary>Expands and realizes a property item before bringing it into its scrolling host's view.</summary>
@@ -91,8 +88,10 @@ public partial class PropertiesExpander : Control
         base.OnApplyTemplate();
         this.IsEnabledChanged -= this.OnIsEnabledChanged;
 
+        this.headerContentPresenter = this.GetTemplateChild(ContentPresenterPartName) as ContentPresenter;
+        this.headerPanel = this.GetTemplateChild(HeaderPanelPartName) as FrameworkElement;
+        this.headerIconHolder = this.GetTemplateChild(HeaderIconPresenterHolderPartName) as FrameworkElement;
         this.OnHeaderChanged();
-        this.OnHeaderIconChanged();
         this.OnDescriptionChanged();
 
         this.CheckInitialVisualState();
@@ -101,6 +100,19 @@ public partial class PropertiesExpander : Control
         this.PointerExited += this.ControlPointerExited;
 
         this.IsEnabledChanged += this.OnIsEnabledChanged;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    ///     The header lays itself out for the width its parent offers: narrower than <see cref="HeaderWrapThreshold"/>,
+    ///     the header content moves under the title; narrower than <see cref="HeaderIconThreshold"/>, the icon hides too.
+    ///     The choice depends on the offered width, never on the width the expander ends up with, so it cannot change the
+    ///     size it is made from, whether the parent stretches the expander or sizes it to its content.
+    /// </remarks>
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        this.LayOutHeader(availableSize.Width);
+        return base.MeasureOverride(availableSize);
     }
 
     private static bool IsNullOrEmptyString(object? obj)
@@ -124,12 +136,28 @@ public partial class PropertiesExpander : Control
     private void OnIsEnabledChanged(object sender, DependencyPropertyChangedEventArgs e)
         => VisualStateManager.GoToState(this, this.IsEnabled ? NormalState : DisabledState, useTransitions: true);
 
-    private void OnHeaderIconChanged()
+    // Places header content beside the title, or under it when narrow, and shows the icon unless very narrow.
+    private void LayOutHeader(double offeredWidth)
     {
-        if (this.GetTemplateChild(HeaderIconPresenterHolderPartName) is FrameworkElement headerIconPresenter)
+        var hasContent = !IsNullOrEmptyString(this.Content);
+        var wrapped = offeredWidth < this.HeaderWrapThreshold;
+        if (this.headerContentPresenter is { } presenter)
         {
-            headerIconPresenter.Visibility = this.HeaderIcon != null ? Visibility.Visible : Visibility.Collapsed;
+            presenter.Visibility = hasContent ? Visibility.Visible : Visibility.Collapsed;
+            Grid.SetRow(presenter, wrapped ? 1 : 0);
+            Grid.SetColumn(presenter, wrapped ? 1 : 2);
+            presenter.HorizontalAlignment = wrapped ? HorizontalAlignment.Stretch : HorizontalAlignment.Right;
+            presenter.HorizontalContentAlignment = wrapped ? HorizontalAlignment.Left : this.HorizontalContentAlignment;
         }
+
+        // The gap separates the title from content beside it; without such content the title takes the space.
+        var titleMargin = new Thickness(0, 0, hasContent && !wrapped ? HeaderContentGap : 0, 0);
+        if (this.headerPanel is { } panel && panel.Margin != titleMargin)
+        {
+            panel.Margin = titleMargin;
+        }
+
+        this.headerIconHolder?.Visibility = this.HeaderIcon is not null && offeredWidth >= this.HeaderIconThreshold ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnDescriptionChanged()

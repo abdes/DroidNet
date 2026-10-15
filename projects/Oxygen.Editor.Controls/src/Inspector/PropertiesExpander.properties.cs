@@ -16,12 +16,13 @@ public partial class PropertiesExpander
     public static readonly DependencyProperty HeaderActionsProperty = DependencyProperty.Register(
         nameof(HeaderActions), typeof(object), typeof(PropertiesExpander), new PropertyMetadata(defaultValue: null));
 
-    /// <summary>Gets or sets independent section actions, such as Reset.</summary>
-    public object? HeaderActions
-    {
-        get => this.GetValue(HeaderActionsProperty);
-        set => this.SetValue(HeaderActionsProperty, value);
-    }
+    /// <summary>Identifies the width below which header content moves under the title.</summary>
+    public static readonly DependencyProperty HeaderWrapThresholdProperty = DependencyProperty.Register(
+        nameof(HeaderWrapThreshold), typeof(double), typeof(PropertiesExpander), new PropertyMetadata(400d, OnHeaderLayoutPropertyChanged));
+
+    /// <summary>Identifies the width below which the header icon hides.</summary>
+    public static readonly DependencyProperty HeaderIconThresholdProperty = DependencyProperty.Register(
+        nameof(HeaderIconThreshold), typeof(double), typeof(PropertiesExpander), new PropertyMetadata(300d, OnHeaderLayoutPropertyChanged));
 
     /// <summary>
     /// The backing <see cref="DependencyProperty"/> for the <see cref="Header"/> property.
@@ -57,7 +58,7 @@ public partial class PropertiesExpander
         nameof(Content),
         typeof(object),
         typeof(PropertiesExpander),
-        new PropertyMetadata(defaultValue: null));
+        new PropertyMetadata(defaultValue: null, OnHeaderLayoutPropertyChanged));
 
     /// <summary>
     /// The backing <see cref="DependencyProperty"/> for the <see cref="IsExpanded"/> property.
@@ -130,6 +131,31 @@ public partial class PropertiesExpander
     //    typeof(bool),
     //    typeof(PropertiesExpander),
     //    new PropertyMetadata(defaultValue: false, (d, e) => ((PropertiesExpander)d).OnIsClickEnabledPropertyChanged((bool)e.OldValue, (bool)e.NewValue)));
+
+    /// <summary>Gets or sets independent section actions, such as Reset.</summary>
+    public object? HeaderActions
+    {
+        get => this.GetValue(HeaderActionsProperty);
+        set => this.SetValue(HeaderActionsProperty, value);
+    }
+
+    /// <summary>Gets or sets the width, in device-independent pixels, below which <see cref="Content"/> moves under
+    /// the title and stretches across the header.</summary>
+    /// <remarks>Compared with the width the parent offers the expander, so the choice never changes that width.</remarks>
+    public double HeaderWrapThreshold
+    {
+        get => (double)this.GetValue(HeaderWrapThresholdProperty);
+        set => this.SetValue(HeaderWrapThresholdProperty, value);
+    }
+
+    /// <summary>Gets or sets the width, in device-independent pixels, below which the <see cref="HeaderIcon"/>
+    /// hides, leaving the title the room.</summary>
+    /// <remarks>Compared with the width the parent offers the expander, so the choice never changes that width.</remarks>
+    public double HeaderIconThreshold
+    {
+        get => (double)this.GetValue(HeaderIconThresholdProperty);
+        set => this.SetValue(HeaderIconThresholdProperty, value);
+    }
 
     /// <summary>
     /// Gets or sets the Header.
@@ -284,7 +310,7 @@ public partial class PropertiesExpander
     /// </summary>
     /// <param name="oldValue">The previous icon value.</param>
     /// <param name="newValue">The new icon value.</param>
-    protected virtual void OnHeaderIconPropertyChanged(IconElement oldValue, IconElement newValue) => this.OnHeaderIconChanged();
+    protected virtual void OnHeaderIconPropertyChanged(IconElement oldValue, IconElement newValue) => this.InvalidateMeasure();
 
     /// <summary>
     /// Called when the <see cref="Header"/> property changes.
@@ -301,4 +327,8 @@ public partial class PropertiesExpander
     protected virtual void OnDescriptionPropertyChanged(object oldValue, object newValue) => this.OnDescriptionChanged();
 
     // protected virtual void OnIsActionIconVisiblePropertyChanged(bool oldValue, bool newValue) => this.OnActionIconChanged();
+
+    // The content and the thresholds decide the header's layout, which the next measure applies.
+    private static void OnHeaderLayoutPropertyChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+        => ((PropertiesExpander)sender).InvalidateMeasure();
 }

@@ -5,7 +5,6 @@
     xmlns:animatedvisuals="using:Microsoft.UI.Xaml.Controls.AnimatedVisuals"
     xmlns:local="using:Oxygen.Editor.Controls"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
-    xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:win="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
 
     <Style BasedOn="{StaticResource DefaultPropertiesExpanderStyle}" TargetType="local:PropertiesExpander" />
@@ -28,6 +27,8 @@
             <Setter Property="FontWeight" Value="Normal" />
             <Setter Property="FontSize" Value="{ThemeResource ControlContentThemeFontSize}" />
             <Setter Property="FocusVisualMargin" Value="-3" />
+            <Setter Property="HeaderWrapThreshold" Value="{ThemeResource PropertiesExpanderWrapThreshold}" />
+            <Setter Property="HeaderIconThreshold" Value="{ThemeResource PropertiesExpanderWrapNoIconThreshold}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="local:PropertiesExpander">
@@ -103,14 +104,15 @@
                                                 </ContentPresenter.Resources>
                                             </ContentPresenter>
                                         </StackPanel>
+                                        <!--  The control places the content beside or under the title, and shows it only when set.  -->
                                         <ContentPresenter
                                             x:Name="PartContentPresenter"
                                             Grid.Row="0"
                                             Grid.Column="2"
                                             HorizontalAlignment="Right"
                                             VerticalAlignment="Center"
-                                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                            Content="{TemplateBinding Content}" />
+                                            Content="{TemplateBinding Content}"
+                                            Visibility="Collapsed" />
                                         <ContentPresenter
                                             x:Name="PartHeaderActionsPresenter"
                                             Grid.Column="3"
@@ -140,58 +142,6 @@
                                     </Grid>
                                 </Expander.Content>
                             </muxc:Expander>
-
-                            <VisualStateManager.VisualStateGroups>
-                                <!--  Collapsing the Content presenter whenever it's empty  -->
-                                <VisualStateGroup x:Name="ContentVisibilityStates">
-                                    <VisualState x:Name="Visible" />
-                                    <VisualState x:Name="Collapsed">
-                                        <VisualState.StateTriggers>
-                                            <ui:IsNullOrEmptyStateTrigger Value="{Binding Path=Content, RelativeSource={RelativeSource Mode=TemplatedParent}}" />
-                                        </VisualState.StateTriggers>
-                                        <VisualState.Setters>
-                                            <Setter Target="PartContentPresenter.Visibility" Value="Collapsed" />
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                </VisualStateGroup>
-
-                                <VisualStateGroup x:Name="ContentAlignmentStates">
-                                    <!--  Default  -->
-                                    <VisualState x:Name="Right" />
-
-                                    <!--  Whenever the control width is less than PropertiesExpanderWrapThreshold, the Content is below the Header/Description  -->
-                                    <VisualState x:Name="RightWrapped">
-                                        <VisualState.StateTriggers>
-                                            <ui:ControlSizeTrigger
-                                                MinWidth="{ThemeResource PropertiesExpanderWrapNoIconThreshold}"
-                                                MaxWidth="{ThemeResource PropertiesExpanderWrapThreshold}"
-                                                TargetElement="{Binding ElementName=PartRootGrid}" />
-                                        </VisualState.StateTriggers>
-                                        <VisualState.Setters>
-                                            <Setter Target="PartContentPresenter.(Grid.Row)" Value="1" />
-                                            <Setter Target="PartContentPresenter.(Grid.Column)" Value="1" />
-                                            <Setter Target="PartContentPresenter.HorizontalAlignment" Value="Stretch" />
-                                            <Setter Target="PartContentPresenter.HorizontalContentAlignment" Value="Left" />
-                                            <Setter Target="HeaderPanel.Margin" Value="0" />
-                                        </VisualState.Setters>
-                                    </VisualState>
-
-                                    <!--  For even smaller widths: the HeaderIcon is collapsed.  -->
-                                    <VisualState x:Name="RightWrappedNoIcon">
-                                        <VisualState.StateTriggers>
-                                            <ui:ControlSizeTrigger MaxWidth="{ThemeResource PropertiesExpanderWrapNoIconThreshold}" TargetElement="{Binding ElementName=PartRootGrid}" />
-                                        </VisualState.StateTriggers>
-                                        <VisualState.Setters>
-                                            <Setter Target="PartContentPresenter.(Grid.Row)" Value="1" />
-                                            <Setter Target="PartContentPresenter.(Grid.Column)" Value="1" />
-                                            <Setter Target="PartContentPresenter.HorizontalAlignment" Value="Stretch" />
-                                            <Setter Target="PartContentPresenter.HorizontalContentAlignment" Value="Left" />
-                                            <Setter Target="HeaderPanel.Margin" Value="0" />
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                </VisualStateGroup>
-
-                            </VisualStateManager.VisualStateGroups>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>

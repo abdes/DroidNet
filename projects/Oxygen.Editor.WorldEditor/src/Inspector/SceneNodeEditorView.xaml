@@ -215,7 +215,11 @@
                     </ItemsRepeater.Layout>
                     <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="local:IDetailsSection">
-                            <ContentPresenter Content="{x:Bind Converter={StaticResource VmToViewConverter}}" Tag="{x:Bind}" />
+                            <!--  Each section fills the inspector's width; sized to its content, a section's width would follow its own layout.  -->
+                            <ContentPresenter
+                                HorizontalContentAlignment="Stretch"
+                                Content="{x:Bind Converter={StaticResource VmToViewConverter}}"
+                                Tag="{x:Bind}" />
                         </DataTemplate>
                     </ItemsRepeater.ItemTemplate>
                 </ItemsRepeater>

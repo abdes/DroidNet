@@ -381,6 +381,41 @@ internal sealed partial class ResponsiveLayoutTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
+    public Task SectionHeadersFollowTheOfferedWidthNotTheirOwn() => EnqueueAsync(async () =>
+    {
+        // A host that sizes the section to its content offers more width than the section ends up with.
+        var reset = new Button { Content = "Reset" };
+        var section = new PropertiesExpander { Header = "Camera", HeaderIcon = new FontIcon { Glyph = "" }, Content = reset };
+        var host = CreateHost(410, new ContentPresenter { HorizontalContentAlignment = HorizontalAlignment.Left, Content = section });
+        await LoadTestContentAsync(host).ConfigureAwait(true);
+        var content = section.FindDescendant<ContentPresenter>(part => string.Equals(part.Name, "PartContentPresenter", StringComparison.Ordinal))!;
+        var title = section.FindDescendant<StackPanel>(part => string.Equals(part.Name, "HeaderPanel", StringComparison.Ordinal))!;
+        var icon = section.FindDescendant<Viewbox>(part => string.Equals(part.Name, "PartHeaderIconPresenterHolder", StringComparison.Ordinal))!;
+        _ = section.ActualWidth.Should().BeLessThan(section.HeaderWrapThreshold, "the host sizes the section to its content");
+
+        _ = Grid.GetRow(content).Should().Be(0, "the offered width, not the section's own, keeps the content beside the title");
+        _ = content.Visibility.Should().Be(Visibility.Visible);
+        _ = title.Margin.Right.Should().Be(12, "content beside the title keeps its gap");
+        _ = icon.Visibility.Should().Be(Visibility.Visible);
+
+        host.Width = 320;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = Grid.GetRow(content).Should().Be(1, "a narrow offer moves the content under the title");
+        _ = title.Margin.Right.Should().Be(0);
+        _ = icon.Visibility.Should().Be(Visibility.Visible);
+
+        host.Width = 280;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = icon.Visibility.Should().Be(Visibility.Collapsed, "a very narrow header gives the title the icon's room");
+
+        section.Content = null;
+        host.Width = 760;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = content.Visibility.Should().Be(Visibility.Collapsed);
+        _ = title.Margin.Right.Should().Be(0, "without content beside it, the title keeps no gap");
+    });
+
+    [TestMethod]
     public Task TransformAxisErrorsSitBelowTheirRowAndNeverMakeItStack() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
