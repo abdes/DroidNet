@@ -12,10 +12,14 @@
 #include <glm/ext/vector_float3.hpp>
 
 #include <Oxygen/Composition/ObjectMetadata.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 #include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Testing/GTest.h>
@@ -28,6 +32,7 @@ using oxygen::scene::SceneFlags;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
+using oxygen::scene::ScriptingComponent;
 using oxygen::scene::detail::TransformComponent;
 
 namespace {
@@ -361,6 +366,109 @@ NOLINT_TEST_F(SceneHierarchyCloningTest,
     std::ranges::find(children, child1.GetHandle()) != children.end());
   EXPECT_TRUE(
     std::ranges::find(children, child2.GetHandle()) != children.end());
+}
+
+//------------------------------------------------------------------------------
+// Script node binding tests
+//------------------------------------------------------------------------------
+class SceneCloningScriptBindingTest : public SceneCloningTestBase {
+protected:
+  static auto Bind(SceneNode& node, const NodeHandle target) -> void
+  {
+    auto& scripting = node.GetImpl()->get().GetComponent<ScriptingComponent>();
+    scripting.AddSlot(std::make_shared<const oxygen::data::ScriptAsset>(
+      oxygen::data::AssetKey {},
+      oxygen::data::pak::scripting::ScriptAssetDesc {}));
+    ASSERT_TRUE(
+      scripting.BindNodeParameter(scripting.Slots().front(), "target", target));
+  }
+
+  static auto Bound(SceneNode& node) -> std::optional<NodeHandle>
+  {
+    const auto& scripting
+      = node.GetImpl()->get().GetComponent<ScriptingComponent>();
+    return scripting.Slots().front().TryGetBoundNode("target");
+  }
+};
+
+NOLINT_TEST_F(SceneCloningScriptBindingTest,
+  CreateHierarchyFrom_InternalBinding_PointsToTheClone)
+{
+  // Arrange
+  auto turret = source_scene_->CreateNode("Turret");
+  auto barrel = source_scene_->CreateChildNode(turret, "Barrel").value();
+  turret.GetImpl()->get().AddComponent<ScriptingComponent>();
+  Bind(turret, barrel.GetHandle());
+
+  // Act
+  auto cloned = source_scene_->CreateHierarchyFrom(turret, "Turret2");
+
+  // Assert
+  auto cloned_barrel = cloned.GetFirstChild();
+  ASSERT_TRUE(cloned_barrel.has_value());
+  EXPECT_EQ(Bound(cloned), cloned_barrel->GetHandle());
+  EXPECT_NE(Bound(cloned), barrel.GetHandle());
+}
+
+NOLINT_TEST_F(SceneCloningScriptBindingTest,
+  CreateHierarchyFrom_ExternalBindingInSameScene_IsKept)
+{
+  // Arrange
+  auto other = source_scene_->CreateNode("Other");
+  auto turret = source_scene_->CreateNode("Turret");
+  turret.GetImpl()->get().AddComponent<ScriptingComponent>();
+  Bind(turret, other.GetHandle());
+
+  // Act
+  auto cloned = source_scene_->CreateHierarchyFrom(turret, "Turret2");
+
+  // Assert
+  EXPECT_EQ(Bound(cloned), other.GetHandle());
+}
+
+NOLINT_TEST_F(SceneCloningScriptBindingTest,
+  CreateHierarchyFrom_AcrossScenes_LeavesNoForeignHandle)
+{
+  // Arrange
+  auto other = source_scene_->CreateNode("Other");
+  auto turret = source_scene_->CreateNode("Turret");
+  auto barrel = source_scene_->CreateChildNode(turret, "Barrel").value();
+  turret.GetImpl()->get().AddComponent<ScriptingComponent>();
+  Bind(turret, barrel.GetHandle());
+  auto& scripting = turret.GetImpl()->get().GetComponent<ScriptingComponent>();
+  ASSERT_TRUE(scripting.BindNodeParameter(
+    scripting.Slots().front(), "outside", other.GetHandle()));
+
+  // Act
+  auto cloned = target_scene_->CreateHierarchyFrom(turret, "Turret2");
+
+  // Assert
+  auto cloned_barrel = cloned.GetFirstChild();
+  ASSERT_TRUE(cloned_barrel.has_value());
+  EXPECT_EQ(Bound(cloned), cloned_barrel->GetHandle());
+  const auto& slot = cloned.GetImpl()
+                       ->get()
+                       .GetComponent<ScriptingComponent>()
+                       .Slots()
+                       .front();
+  EXPECT_FALSE(slot.TryGetBoundNode("outside").has_value());
+}
+
+NOLINT_TEST_F(SceneCloningScriptBindingTest,
+  CreateNodeFrom_AcrossScenes_DropsBindingToTheOriginal)
+{
+  // Arrange
+  auto other = source_scene_->CreateNode("Other");
+  auto turret = source_scene_->CreateNode("Turret");
+  turret.GetImpl()->get().AddComponent<ScriptingComponent>();
+  Bind(turret, other.GetHandle());
+
+  // Act
+  auto cloned = target_scene_->CreateNodeFrom(turret, "Turret2");
+
+  // Assert
+  ASSERT_TRUE(cloned.has_value());
+  EXPECT_FALSE(Bound(*cloned).has_value());
 }
 
 //------------------------------------------------------------------------------

@@ -16,6 +16,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -373,6 +374,15 @@ public:
   //! it to the node created for that index.
   OXGN_SCN_API auto BindNodeParameter(
     const Slot& slot, std::string_view name, NodeHandle node) -> bool;
+
+  //! Re-points the node bindings of a freshly cloned component. A binding whose
+  //! target is a key of `clones` follows it to the clone. Any other binding is
+  //! kept when the clone stays in the scene of its original
+  //! (`same_scene`), and dropped otherwise, so a clone never points into
+  //! another scene. Returns the number of bindings dropped.
+  OXGN_SCN_API auto RemapNodeBindings(
+    const std::unordered_map<NodeHandle, NodeHandle>& clones, bool same_scene)
+    -> size_t;
 
   //! Tries to get a parameter value, checking overrides first, then falling
   //! back to defaults.

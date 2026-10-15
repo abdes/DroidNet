@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -732,6 +733,12 @@ private:
   //! linked to a parent node or added to the roots collection.
   auto CloneNode(SceneNode& original, const std::string& new_name)
     -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>;
+
+  //! Re-points the script node bindings of a freshly cloned node; see
+  //! `ScriptingComponent::RemapNodeBindings()`.
+  static auto RemapClonedScriptBindings(SceneNodeImpl& cloned_impl,
+    const std::unordered_map<NodeHandle, NodeHandle>& clones, bool same_scene)
+    -> void;
 
   //! Clones an entire hierarchy starting from the given original node to create
   //! an orphaned sub-tree, for later being attached to a target scene as a root

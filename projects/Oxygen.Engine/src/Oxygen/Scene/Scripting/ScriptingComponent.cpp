@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -130,6 +131,28 @@ auto ScriptingComponent::BindNodeParameter(
     bindings.emplace_back(std::string(name), std::move(node));
   }
   return true;
+}
+
+auto ScriptingComponent::RemapNodeBindings(
+  const std::unordered_map<NodeHandle, NodeHandle>& clones,
+  const bool same_scene) -> size_t
+{
+  size_t dropped = 0;
+  for (auto& slot : slots_) {
+    for (auto& binding : slot.node_bindings_) {
+      if (const auto it = clones.find(binding.second); it != clones.end()) {
+        binding.second = it->second;
+      } else if (!same_scene) {
+        binding.second = NodeHandle {};
+        ++dropped;
+      }
+    }
+    if (!same_scene) {
+      std::erase_if(slot.node_bindings_,
+        [](const auto& pair) -> bool { return !pair.second.IsValid(); });
+    }
+  }
+  return dropped;
 }
 
 auto ScriptingComponent::TryGetParameter(

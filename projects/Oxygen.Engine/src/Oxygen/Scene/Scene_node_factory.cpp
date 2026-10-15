@@ -68,6 +68,9 @@ using oxygen::scene::SpotLight;
  @see SceneNodeImpl constructor for valid argument combinations
 */
 template <typename... Args>
+// A scene is always owned by a shared_ptr, and a full node table is fatal, so
+// nothing here is recoverable: terminating is the intended failure mode.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 auto Scene::CreateNodeImpl(Args&&... args) noexcept -> SceneNode
 {
   const NodeHandle handle {
@@ -300,7 +303,7 @@ auto Scene::DestroyNode(SceneNode& node) noexcept -> bool
       }
 
       [[maybe_unused]] const auto removed = nodes_->Erase(handle);
-      DCHECK_EQ_F(removed, 1);
+      DCHECK_EQ_F(removed, size_t { 1 });
       node.Invalidate();
       return true;
     });
@@ -385,23 +388,23 @@ auto Scene::DestroyNodes(std::span<SceneNode> nodes) noexcept
  @see DestroyNode() for destroying individual leaf nodes
  @see DestroyNodeHierarchies() for batch destruction of multiple hierarchies
 */
-auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
+auto Scene::DestroyNodeHierarchy(SceneNode& root) noexcept -> bool
 {
   DLOG_SCOPE_F(3, "Destroy Node Hierarchy");
   return SafeCall(
-    NodeIsValidAndMine(starting_node), [&](const SafeCallState& state) -> bool {
-      DCHECK_EQ_F(state.node, &starting_node);
+    NodeIsValidAndMine(root), [&](const SafeCallState& state) -> bool {
+      DCHECK_EQ_F(state.node, &root);
       DCHECK_NOTNULL_F(state.node_impl);
 
       // First, handle the starting node's relationship with its parent/scene
       // before beginning traversal to unlink the entire hierarchy
-      if (starting_node.IsRoot()) {
+      if (root.IsRoot()) {
         // This is an actual scene root node - remove from root nodes
-        RemoveRootNode(starting_node.GetHandle());
+        RemoveRootNode(root.GetHandle());
       } else {
         // This node has a parent - unlink it from its parent
         // Mark parent transform dirty since it's losing a child hierarchy
-        const auto parent_opt = starting_node.GetParent();
+        const auto parent_opt = root.GetParent();
         if (parent_opt.has_value()) {
           const auto parent_impl_opt = GetNodeImpl(*parent_opt);
           if (parent_impl_opt.has_value()) {
@@ -411,7 +414,7 @@ auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
 
         // This is the only unlinking we need since we're destroying the entire
         // subtree
-        UnlinkNode(starting_node.GetHandle(), state.node_impl);
+        UnlinkNode(root.GetHandle(), state.node_impl);
       }
 
       // Use SceneTraversal with post-order to ensure children are destroyed
@@ -420,7 +423,7 @@ auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
       size_t destroyed_count = 0;
 
       const auto traversal_result = traversal.TraverseHierarchy(
-        starting_node,
+        root,
         [&](const auto& node, bool dry_run) -> VisitResult {
           if (dry_run) {
             // During dry-run, we always want to continue to process children
@@ -475,7 +478,7 @@ auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
         traversal_result.nodes_filtered);
 
       // Invalidate the starting node handle since it's been destroyed
-      starting_node.Invalidate();
+      root.Invalidate();
       DLOG_F(2, "Destroyed {} nodes in hierarchy", destroyed_count);
 
       // Return success only if traversal completed without failures and we
@@ -566,6 +569,24 @@ auto Scene::DestroyNodeHierarchies(
  cloned node, and the second item is the corresponding SceneNodeImpl object;
  std::nullopt otherwise.
 */
+auto Scene::RemapClonedScriptBindings(SceneNodeImpl& cloned_impl,
+  const std::unordered_map<NodeHandle, NodeHandle>& clones,
+  const bool same_scene) -> void
+{
+  if (!cloned_impl.HasComponent<ScriptingComponent>()) {
+    return;
+  }
+  const auto dropped
+    = cloned_impl.GetComponent<ScriptingComponent>().RemapNodeBindings(
+      clones, same_scene);
+  if (dropped > 0) {
+    LOG_F(WARNING,
+      "cloned node '{}' lost {} script node binding(s) that pointed into "
+      "another scene",
+      cloned_impl.GetName(), dropped);
+  }
+}
+
 auto Scene::CloneNode(SceneNode& original, const std::string& new_name)
   -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>
 {
@@ -586,7 +607,14 @@ auto Scene::CloneNode(SceneNode& original, const std::string& new_name)
       DCHECK_F(
         cloned_handle.IsValid(), "expecting a valid handle for cloned node");
 
-      return { { cloned_handle, &nodes_->ItemAt(cloned_handle) } };
+      auto& cloned_node_impl = nodes_->ItemAt(cloned_handle);
+      const std::unordered_map<NodeHandle, NodeHandle> clones {
+        { original.GetHandle(), cloned_handle },
+      };
+      RemapClonedScriptBindings(
+        cloned_node_impl, clones, original.GetHandle().BelongsToScene(GetId()));
+
+      return { { cloned_handle, &cloned_node_impl } };
     });
 }
 
@@ -666,6 +694,7 @@ auto Scene::CreateNodeFrom(SceneNode& original, const std::string& new_name)
  @return An optional SceneNode wrapper around the handle of the newly created
  node when successful; std::nullopt otherwise.
 */
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 auto Scene::CreateChildNodeFrom(SceneNode& parent, SceneNode& original,
   const std::string& new_name) -> std::optional<SceneNode>
 {
@@ -830,6 +859,13 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
     TraversalOrder::kPreOrder); // Pre-order guarantees parent visited
                                 // before children
 
+  if (traversal_result.completed && root_cloned) {
+    const auto same_scene = starting_node.GetHandle().BelongsToScene(GetId());
+    for (const auto& handle : cloned_nodes) {
+      RemapClonedScriptBindings(nodes_->ItemAt(handle), handle_map, same_scene);
+    }
+  }
+
   LOG_SCOPE_F(INFO, "Traversal result");
   LOG_F(INFO, "traversal completed: {}", traversal_result.completed);
   LOG_F(INFO, "visited nodes: {}", traversal_result.nodes_visited);
@@ -890,18 +926,18 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
  @see CreateChildHierarchyFrom() for cloning a hierarchy as a child node
 */
 auto Scene::CreateHierarchyFrom(
-  const SceneNode& starting_node, const std::string& new_root_name) -> SceneNode
+  const SceneNode& original_root, const std::string& new_root_name) -> SceneNode
 {
   DLOG_SCOPE_F(3, "Create Hierarchy From");
 
   // Use the private CloneHierarchy method to do the heavy lifting
-  auto clone_result = CloneHierarchy(starting_node);
+  auto clone_result = CloneHierarchy(original_root);
   if (!clone_result.has_value()) {
     // CloneHierarchy failed - this should not happen with a valid hierarchy
     // and sufficient capacity, so terminate the program as documented
     ABORT_F("Failed to clone hierarchy from node '{}' - this indicates either "
             "an invalid source hierarchy or insufficient scene capacity",
-      starting_node.IsValid() ? "unknown" : "invalid");
+      original_root.IsValid() ? "unknown" : "invalid");
   }
   auto [cloned_root_handle, cloned_root_impl] = clone_result.value();
 
