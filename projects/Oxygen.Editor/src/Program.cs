@@ -14,8 +14,6 @@ using DroidNet.Coordinates;
 using DroidNet.Docking.Controls;
 using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
-using DroidNet.Mvvm;
-using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
@@ -26,7 +24,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
@@ -107,25 +104,19 @@ public static partial class Program
                 .Build();
 
             // Final container is now available.
+            // A failure here aborts startup: the editor never runs with a half-configured container.
             var container = bootstrap.Container;
-            try
+            InitializeSettings(container);
+            ConfigureApplicationServices(container);
+            ConfigurePersistentStateDatabase(container);
+
+            var dbPath = container.Resolve<IOxygenPathFinder>().StateDatabasePath;
+            Log.Information("DB path: {DbPath}", dbPath);
+
+            // Apply pending migrations to ensure database schema is up to date
+            using (var persistentState = container.Resolve<PersistentState>())
             {
-                InitializeSettings(container);
-                ConfigureApplicationServices(container);
-                ConfigurePersistentStateDatabase(container);
-
-                var dbPath = container.Resolve<IOxygenPathFinder>().StateDatabasePath;
-                Log.Information("DB path: {DbPath}", dbPath);
-
-                // Apply pending migrations to ensure database schema is up to date
-                using var persistentState = container.Resolve<PersistentState>();
                 persistentState.Database.MigrateAsync().GetAwaiter().GetResult();
-
-                RegisterViewsAndViewModels(container);
-            }
-            catch (Exception ex) when (ex is ContainerException or InvalidOperationException)
-            {
-                // No EditorSettingsManager registered - skip initialization
             }
 
             // Finally start the host. This will block until the application lifetime is terminated
@@ -304,13 +295,6 @@ public static partial class Program
             Reuse.Singleton);
         container.Register<EngineShutdownService>(Reuse.Singleton);
         container.RegisterDelegate<IHostedService>(resolver => resolver.Resolve<EngineShutdownService>(), Reuse.Singleton);
-
-        /*
-         * Set up the view model to view converters. We're using the standard
-         * converter, and a custom one with fall back if the view cannot be located.
-         */
-        container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
-        container.Register<IValueConverter, ViewModelToView>(Reuse.Singleton, serviceKey: "VmToView");
 
         container.Register<DockPanelViewModel>(Reuse.Transient);
         container.Register<DockPanel>(Reuse.Transient);

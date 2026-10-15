@@ -21,10 +21,13 @@ namespace DroidNet.Routing.WinUI;
 /// When configuring routing, the following services are automatically registered:
 /// </para>
 /// <list type="bullet">
-///   <item>View resolution services (<see cref="IViewLocator"/>)</item>
 ///   <item>Core routing services (<see cref="IRouter"/>, <see cref="IRoutes"/>)</item>
 ///   <item>Windowed navigation specific services (<see cref="WindowContextProvider"/>, <see cref="WindowRouteActivator"/>)</item>
 /// </list>
+/// <para>
+/// View resolution (<see cref="IViewLocator"/>) is owned by the MVVM setup and must be registered
+/// separately.
+/// </para>
 /// </remarks>
 ///
 /// <example>
@@ -75,10 +78,13 @@ public static class HostBuilderExtensions
     /// lifetimes. It sets up:
     /// </para>
     /// <list type="bullet">
-    ///   <item>View resolution services (<see cref="IViewLocator"/>)</item>
     ///   <item>Core routing services (<see cref="IRouter"/>, <see cref="IRoutes"/>)</item>
     ///   <item>Windowed navigation specific services (<see cref="WindowContextProvider"/>, <see cref="WindowRouteActivator"/>)</item>
     /// </list>
+    /// <para>
+    /// View resolution (<see cref="IViewLocator"/> and <see cref="ViewModelToView"/>) is not registered
+    /// here; the MVVM setup owns it (for example <c>Bootstrapper.WithMvvm</c>) and must run as well.
+    /// </para>
     /// </remarks>
     ///
     /// <example>
@@ -98,9 +104,6 @@ public static class HostBuilderExtensions
     /// </example>
     public static void ConfigureRouter(this IContainer container, Routes config)
     {
-        container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
-        container.Register<ViewModelToView>(Reuse.Singleton);
-
         container.RegisterInstance<IRoutes>(config);
 
         container.Register<IUrlSerializer, DefaultUrlSerializer>(Reuse.Singleton);
