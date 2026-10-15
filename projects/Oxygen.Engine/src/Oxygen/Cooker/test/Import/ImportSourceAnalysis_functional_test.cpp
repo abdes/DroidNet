@@ -87,10 +87,10 @@ namespace {
 
   class ImportSourceAnalysisTest : public pak::test::TempDirFixture {
   protected:
-    auto Write(const std::string_view name, const std::string_view text)
+    auto Write(const std::filesystem::path& name, const std::string_view text)
       -> std::filesystem::path
     {
-      const auto path = Path(name);
+      const auto path = Root() / name;
       auto file = std::ofstream(path, std::ios::binary);
       file << text;
       file.close();
@@ -120,10 +120,10 @@ namespace {
       temp_.reset();
     }
 
-    static auto WriteFile(const std::string_view name,
+    static auto WriteFile(const std::filesystem::path& name,
       const std::string_view text) -> std::filesystem::path
     {
-      const auto path = temp_->Path() / std::filesystem::path(name);
+      const auto path = temp_->Path() / name;
       auto file = std::ofstream(path, std::ios::binary);
       file << text;
       file.close();
@@ -143,6 +143,7 @@ namespace {
         R"({"version":)" + std::to_string(data::pak::world::kSceneAssetVersion)
           + R"(,"name":"Scene.v2","nodes":[{}],
       "renderables":[{"node":0,"geometry_ref":"/.cooked/Geometry/body.ogeo"}],
+      "starting_input_contexts":[{"context_ref":"/.cooked/Input/Gameplay.oimap","priority":2}],
       "references":{"scripts":["/.cooked/Scripts/move.oscript"]},
       "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/.cooked/Textures/mask.otex"}}})");
       auto manifest = ImportManifest {};
@@ -168,20 +169,48 @@ namespace {
     MixedDescriptorsExposeNativeReferencesAndOutputs)
   {
     ASSERT_TRUE(error_.empty()) << error_;
-    const auto& report = *report_;
+    if (!report_.has_value()) {
+      FAIL() << "Suite setup produced no report";
+    }
+    const auto& report = report_.value();
     ASSERT_TRUE(report.complete) << report.ToJson();
     ASSERT_EQ(report.jobs.size(), 2U);
     EXPECT_EQ(report.jobs.front().references.size(), 2U);
-    EXPECT_EQ(report.jobs.back().references.size(), 3U);
+    EXPECT_EQ(report.jobs.back().references.size(), 4U);
     EXPECT_EQ(report.jobs.back().outputs.front().virtual_path,
       "/.cooked/Scenes/Scene.oscene");
+  }
+
+  //! A scene's starting input contexts must be cooked before it, so they are
+  //! required references like its other assets.
+  NOLINT_TEST_F(MixedDescriptorAnalysisTest,
+    SceneStartingInputContextsAreRequiredReferences)
+  {
+    ASSERT_TRUE(error_.empty()) << error_;
+    if (!report_.has_value()) {
+      FAIL() << "Suite setup produced no report";
+    }
+    const auto& report = report_.value();
+    ASSERT_TRUE(report.complete) << report.ToJson();
+    const auto& references = report.jobs.back().references;
+    const auto context
+      = std::ranges::find_if(references, [](const auto& reference) -> bool {
+          return reference.virtual_path == "/.cooked/Input/Gameplay.oimap";
+        });
+    ASSERT_NE(context, references.end()) << report.ToJson();
+    EXPECT_EQ(context->kind, ImportDependencyKind::kInputMappingContext);
+    EXPECT_EQ(context->object_path, "starting_input_contexts[0].context_ref");
+    EXPECT_TRUE(context->required);
   }
 
   NOLINT_TEST_F(
     MixedDescriptorAnalysisTest, MixedDescriptorsRecordMetadataOnlyReadProofs)
   {
     ASSERT_TRUE(error_.empty()) << error_;
-    const auto& report = *report_;
+    if (!report_.has_value()) {
+      FAIL() << "Suite setup produced no report";
+    }
+    const auto& report = report_.value();
     ASSERT_TRUE(report.complete) << report.ToJson();
     ASSERT_EQ(report.jobs.size(), 2U);
     for (const auto& job : report.jobs) {
@@ -195,7 +224,10 @@ namespace {
     MixedDescriptorAnalysisTest, MixedDescriptorsAnalysisWritesNoCookedOutput)
   {
     ASSERT_TRUE(error_.empty()) << error_;
-    const auto& report = *report_;
+    if (!report_.has_value()) {
+      FAIL() << "Suite setup produced no report";
+    }
+    const auto& report = report_.value();
     ASSERT_TRUE(report.complete) << report.ToJson();
     EXPECT_FALSE(std::filesystem::exists(temp_->Path() / ".cooked"));
   }
@@ -204,7 +236,10 @@ namespace {
     MixedDescriptorAnalysisTest, MixedDescriptorsReportSerializesVersionAndJobs)
   {
     ASSERT_TRUE(error_.empty()) << error_;
-    const auto& report = *report_;
+    if (!report_.has_value()) {
+      FAIL() << "Suite setup produced no report";
+    }
+    const auto& report = report_.value();
     ASSERT_TRUE(report.complete) << report.ToJson();
     const auto serialized = nlohmann::json::parse(report.ToJson());
     EXPECT_EQ(serialized.at("version"), 1);
@@ -215,7 +250,10 @@ namespace {
     MixedDescriptorAnalysisTest, MixedDescriptorsReportValidatesAgainstSchema)
   {
     ASSERT_TRUE(error_.empty()) << error_;
-    const auto& report = *report_;
+    if (!report_.has_value()) {
+      FAIL() << "Suite setup produced no report";
+    }
+    const auto& report = report_.value();
     ASSERT_TRUE(report.complete) << report.ToJson();
     const auto serialized = nlohmann::json::parse(report.ToJson());
     static const auto schema = oxygen::cooker::test::LoadSchema(

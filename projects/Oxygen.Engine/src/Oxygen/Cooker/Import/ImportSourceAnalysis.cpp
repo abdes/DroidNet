@@ -466,6 +466,11 @@ namespace {
         context.Reference(reference.virtual_path, AssetKind(reference.type),
           reference.object_path);
       }
+      // The scene cook resolves each starting context, so each is cooked first.
+      for (const auto& starting : source->starting_input_contexts) {
+        context.Reference(
+          starting.context, Kind::kInputMappingContext, starting.object_path);
+      }
       if (source->fog && source->fog->cubemap) {
         context.Reference(*source->fog->cubemap, Kind::kTexture,
           "environment.fog.inscattering_color_cubemap_ref");
