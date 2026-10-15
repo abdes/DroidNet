@@ -26,6 +26,7 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
         ISceneDocumentCommandService? commandService = null,
         Func<SceneDocumentCommandContext?>? commandContextProvider = null)
     {
+        this.StartingCamera = new(commandService, commandContextProvider);
         if (commandService is not null && commandContextProvider is not null)
         {
             this.edits = new(commandService, commandContextProvider, "Edit Camera", this.RefreshValues);
@@ -41,6 +42,9 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
         this.Register(this.ShutterRate);
         this.Register(this.Iso);
     }
+
+    /// <summary>Gets the Starting camera check box, which edits the scene's starting camera.</summary>
+    public StartingCameraToggle StartingCamera { get; }
 
     /// <summary>Gets the degree-valued FOV binding and its mixed state.</summary>
     public NumberBinding<float> FieldOfView { get; } = new(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegreesDescriptor);
@@ -130,6 +134,7 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
         }
 
         this.edits?.Dispose();
+        this.StartingCamera.Dispose();
     }
 
     /// <inheritdoc />
@@ -140,6 +145,7 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
         var targets = items.Where(node => node.Components.OfType<PerspectiveCamera>().Any())
             .ToDictionary(static node => node.Id, static node => (object?)node.Components.OfType<PerspectiveCamera>().First());
         var nodes = targets.Keys.ToArray();
+        this.StartingCamera.Bind([.. items.Where(node => targets.ContainsKey(node.Id))]);
         foreach (var registration in this.registrations)
         {
             registration.Refresh(nodes, id => targets.GetValueOrDefault(id));

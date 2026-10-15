@@ -45,43 +45,18 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
 
         var sceneInput = FindSceneInput(scope);
         var descriptorPath = GetDerivedSceneDescriptorPath(scope, sceneInput);
-        var descriptorVirtualPath = ContentPipelinePaths.NormalizeSceneOutputPath(ContentPipelinePaths.ToNativeDescriptorPath(sceneInput.AssetUri, ".oscene"));
+        var descriptorVirtualPath = ContentPipelinePaths.ToCookedScenePath(sceneInput.AssetUri);
         var diagnostics = new List<DiagnosticRecord>();
         var operationId = Guid.NewGuid();
         var aerialStart = scene.Environment.SkyAtmosphere.AerialPerspectiveStartDepthMeters;
         var aerialValidation = SceneEnvironmentConstraints.ValidateAerialStart(aerialStart);
+        var site = new PropertySite(operationId, scope, sceneInput, scene, diagnostics);
         if (!aerialValidation.IsValid)
         {
-            diagnostics.Add(new DiagnosticRecord
-            {
-                OperationId = operationId,
-                Domain = FailureDomain.ContentPipeline,
-                Severity = DiagnosticSeverity.Error,
-                Code = ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                Message = aerialValidation.Message,
-                TechnicalMessage = string.Create(CultureInfo.InvariantCulture, $"Scene '{scene.Name}': environment.sky_atmosphere.aerial_perspective_start_depth_m = {aerialStart}."),
-                AffectedPath = sceneInput.SourceAbsolutePath,
-                AffectedVirtualPath = sceneInput.AssetUri.AbsolutePath,
-                AffectedEntity = new AffectedScope
-                {
-                    ProjectId = scope.Project.ProjectId,
-                    SceneId = scene.Id,
-                    SceneName = scene.Name,
-                    AssetVirtualPath = sceneInput.AssetUri.AbsolutePath,
-                    ComponentName = "Environment",
-                },
-                SuggestedAction = new PrimaryAction
-                {
-                    ActionId = "Cook.GoToProperty",
-                    Label = "Go to property",
-                    Kind = PrimaryActionKind.Custom,
-                    Payload = new Dictionary<string, string>(StringComparer.Ordinal)
-                    {
-                        ["AssetUri"] = sceneInput.AssetUri.AbsoluteUri,
-                        ["PropertyPath"] = SceneEnvironmentConstraints.AerialStartPropertyPath,
-                    },
-                },
-            });
+            site.Report(
+                SceneEnvironmentConstraints.AerialStartPropertyPath,
+                aerialValidation.Message,
+                string.Create(CultureInfo.InvariantCulture, $"Scene '{scene.Name}': environment.sky_atmosphere.aerial_perspective_start_depth_m = {aerialStart}."));
             return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
         }
 
@@ -175,6 +150,8 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         }
 
         var (scriptBindings, scriptSites, scriptReferences) = CreateScriptBindings(scene, scope, sceneInput, nodeIndices, operationId, diagnostics);
+        var startingCamera = CreateStartingCamera(scene, nodeIndices, site);
+        var startingInputContexts = CreateStartingInputContexts(scene, scope, site);
         if (diagnostics.Any(static issue => issue.Severity >= DiagnosticSeverity.Error))
         {
             return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
@@ -192,7 +169,6 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                 Materials: materialRefs.Count == 0 ? null : materialRefs.ToArray(),
                 Scripts: authoredReferences?.Scripts,
                 InputActions: authoredReferences?.InputActions,
-                InputMappingContexts: authoredReferences?.InputMappingContexts,
                 PhysicsSidecars: authoredReferences?.PhysicsSidecars,
                 ExtraAssets: authoredReferences?.ExtraAssets);
         var descriptor = new NativeSceneDescriptor(
@@ -200,6 +176,8 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             Version: NativeSceneDescriptorVersion,
             Name: ContentPipelinePaths.NormalizeSceneDescriptorName(Path.GetFileName(sceneInput.SourceRelativePath)),
             Nodes: nodes,
+            StartingCamera: startingCamera,
+            StartingInputContexts: startingInputContexts,
             Renderables: renderables.Count == 0 ? null : renderables,
             Cameras: CreateCameras(cameras, orthographicCameras),
             Lights: lights,
@@ -508,7 +486,6 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         {
             var scripts = ResolveTypedReferences(references.Scripts, ".oscript");
             var inputActions = ResolveTypedReferences(references.InputActions, ".oiact");
-            var inputMappingContexts = ResolveTypedReferences(references.InputMappingContexts, ".oimap");
             var physicsSidecars = ResolveTypedReferences(references.PhysicsSidecars, ".opscene");
             if (references.ExtraAssets.Any(static path => !ContentPipelinePaths.IsCanonicalVirtualPath(path)))
             {
@@ -518,14 +495,13 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             var extraAssets = new SortedSet<string>(references.ExtraAssets, StringComparer.Ordinal).ToArray();
             error = null;
 
-            return scripts.Length == 0 && inputActions.Length == 0 && inputMappingContexts.Length == 0
+            return scripts.Length == 0 && inputActions.Length == 0
                 && physicsSidecars.Length == 0 && extraAssets.Length == 0
                 ? null
                 : new NativeReferences(
                     Materials: null,
                     Scripts: scripts.Length == 0 ? null : scripts,
                     InputActions: inputActions.Length == 0 ? null : inputActions,
-                    InputMappingContexts: inputMappingContexts.Length == 0 ? null : inputMappingContexts,
                     PhysicsSidecars: physicsSidecars.Length == 0 ? null : physicsSidecars,
                     ExtraAssets: extraAssets.Length == 0 ? null : extraAssets);
         }

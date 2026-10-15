@@ -252,7 +252,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         }
 
         var terms = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return scene.AllNodes.Select(static candidate => new ScriptNodeChoice(candidate.Id, candidate.Name, NodePath(candidate)))
+        return scene.AllNodes.Select(static candidate => new ScriptNodeChoice(candidate.Id, candidate.Name, candidate.HierarchyPath()))
             .Where(choice => terms.All(term => choice.Path.Contains(term, StringComparison.OrdinalIgnoreCase)));
     }
 
@@ -265,22 +265,10 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <param name="nodeId">The node.</param>
     /// <returns>The node's hierarchy path, or null when the scene no longer has it.</returns>
     internal string? DescribeNode(Guid nodeId)
-        => this.node?.Scene.AllNodes.FirstOrDefault(candidate => candidate.Id == nodeId) is { } found ? NodePath(found) : null;
+        => this.node?.Scene.AllNodes.FirstOrDefault(candidate => candidate.Id == nodeId) is { } found ? found.HierarchyPath() : null;
 
     /// <inheritdoc />
     protected override void OnInputEnabledChanged(bool enabled) => this.RefreshCanEdit();
-
-    private static string NodePath(SceneNode node)
-    {
-        var names = new List<string>();
-        for (var current = node; current is not null; current = current.Parent)
-        {
-            names.Add(current.Name);
-        }
-
-        names.Reverse();
-        return string.Join('/', names);
-    }
 
     [RelayCommand]
     private Task AddSlotAsync() => this.EditAsync(ScriptSlotEdits.Add);

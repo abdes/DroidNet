@@ -32,6 +32,8 @@ internal static class SceneShortcuts
             (VirtualKey.D, true, false, false) => SceneShortcut.Duplicate,
             (VirtualKey.F2, false, false, false) => SceneShortcut.Rename,
             (VirtualKey.F, true, false, false) => SceneShortcut.FindInExplorer,
+            (VirtualKey.F5, false, false, false) => SceneShortcut.Play,
+            (VirtualKey.F5, false, true, false) => SceneShortcut.StopPlay,
             _ => null,
         };
 }

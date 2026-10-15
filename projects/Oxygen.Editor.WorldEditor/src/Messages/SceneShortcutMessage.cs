@@ -35,6 +35,12 @@ internal enum SceneShortcut
 
     /// <summary>Move keyboard focus to the Scene Explorer's search box.</summary>
     FindInExplorer,
+
+    /// <summary>Play the active scene, or restart its session.</summary>
+    Play,
+
+    /// <summary>Cancel a Play on its way, or end the session and close the player.</summary>
+    StopPlay,
 }
 
 /// <summary>

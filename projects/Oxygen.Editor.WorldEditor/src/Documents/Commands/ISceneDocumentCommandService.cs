@@ -264,6 +264,14 @@ public interface ISceneDocumentCommandService
         SceneDocumentCommandContext context,
         SceneReferencesData references);
 
+    /// <summary>Replaces how the scene starts when played as one undoable edit.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="play">The complete replacement play settings.</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> EditScenePlayAsync(
+        SceneDocumentCommandContext context,
+        ScenePlayData play);
+
     /// <summary>Replaces a node's script slots as one undoable edit.</summary>
     /// <param name="context">The document command context.</param>
     /// <param name="nodeId">The node that owns the scripting component.</param>

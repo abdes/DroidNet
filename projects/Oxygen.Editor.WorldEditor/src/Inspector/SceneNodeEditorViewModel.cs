@@ -14,7 +14,9 @@ using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Scripts;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
@@ -132,7 +134,15 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             commandService,
             this.CreateCommandContext,
             new InspectorScriptServices(scriptAnalysis, codeEditor, scriptDeclarations));
-        this.environmentEditor = new EnvironmentViewModel(commandService, this.CreateCommandContext, assetProvider, this.InspectAtmosphereSource, hosting.DispatcherScheduler, sceneEngineSync.ObserveEnvironmentAsync);
+        this.environmentEditor = new EnvironmentViewModel(
+            commandService,
+            this.CreateCommandContext,
+            assetProvider,
+            this.InspectAtmosphereSource,
+            hosting.DispatcherScheduler,
+            sceneEngineSync.ObserveEnvironmentAsync,
+            context => projectContexts.ActiveProject is { } project ? InputContextSources.Find(project, context) : InputContextSource.External,
+            asset => this.RevealAssetAsync(projectContexts, asset));
         this.renderingEditor = new NodeRenderingViewModel(commandService, this.CreateCommandContext);
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;
@@ -445,6 +455,21 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
     private bool IsEditorInputEnabled(ComponentPropertyEditor editor)
         => this.PropertyEditors.Contains(editor) && this.CanEditSelectedNodes;
+
+    // Ctrl+B's navigation: the Content Browser shows and selects the asset.
+    private async Task RevealAssetAsync(IProjectContextService projectContexts, Uri asset)
+    {
+        if (projectContexts.ActiveProject is not { } project)
+        {
+            return;
+        }
+
+        var request = this.messenger.Send(new ShowAssetRequestMessage(project, asset));
+        if (request.HasReceivedResponse)
+        {
+            _ = await request.Response.ConfigureAwait(true);
+        }
+    }
 
     private async Task InspectAtmosphereSource(Guid nodeId)
     {

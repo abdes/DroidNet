@@ -125,6 +125,11 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         return true;
     }
 
+    /// <summary>Saves every open document with unsaved changes, through the ordinary document commands.</summary>
+    /// <returns>Whether no open document remains unsaved.</returns>
+    public Task<bool> SaveAllAsync()
+        => this.SaveDocumentsAsync([.. this.DocumentService.GetOpenDocuments(this.windowId).Where(static document => document.IsDirty).Select(static document => document.DocumentId)]);
+
     /// <summary>Activates an existing document for an explicit recovery action.</summary>
     /// <param name="documentId">The document identity.</param>
     /// <returns>Whether the document was activated.</returns>

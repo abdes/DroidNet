@@ -48,6 +48,12 @@ public partial class SceneEditorViewModel
             case SceneShortcut.Duplicate:
                 _ = this.RunViewportEditAsync(ViewportEditCommand.Duplicate);
                 return true;
+            case SceneShortcut.Play when this.Play is { } play:
+                _ = play.PlayAsync();
+                return true;
+            case SceneShortcut.StopPlay when this.Play is { } play:
+                _ = play.StopAsync();
+                return true;
             default:
                 return false;
         }

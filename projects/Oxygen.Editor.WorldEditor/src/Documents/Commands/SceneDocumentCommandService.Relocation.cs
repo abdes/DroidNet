@@ -41,6 +41,11 @@ public sealed partial class SceneDocumentCommandService
             scene.SetReferences(references);
         }
 
+        if (SceneReferenceRetargeting.Retarget(scene.Play, change.MapReference) is { } play)
+        {
+            scene.SetPlay(play);
+        }
+
         var environment = SceneReferenceRetargeting.Retarget(scene.Environment, change.MapReference);
         if (environment is not null)
         {

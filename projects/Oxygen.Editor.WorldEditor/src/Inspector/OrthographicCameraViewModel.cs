@@ -26,6 +26,7 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
         ISceneDocumentCommandService? commandService = null,
         Func<SceneDocumentCommandContext?>? commandContextProvider = null)
     {
+        this.StartingCamera = new(commandService, commandContextProvider);
         if (commandService is not null && commandContextProvider is not null)
         {
             this.edits = new(commandService, commandContextProvider, "Edit Camera", this.RefreshValues);
@@ -41,6 +42,9 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
         this.Register(this.ShutterRate);
         this.Register(this.Iso);
     }
+
+    /// <summary>Gets the Starting camera check box, which edits the scene's starting camera.</summary>
+    public StartingCameraToggle StartingCamera { get; }
 
     /// <summary>Gets the half-height binding and its mixed state.</summary>
     public NumberBinding<float> OrthographicSize { get; } = new(SceneDocumentCommandService.OrthographicCamera.OrthographicSizeDescriptor);
@@ -133,6 +137,7 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
         }
 
         this.edits?.Dispose();
+        this.StartingCamera.Dispose();
     }
 
     /// <inheritdoc />
@@ -143,6 +148,7 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
         var nodes = targets.Keys.ToArray();
         this.edits?.Bind(nodes);
         this.selectedItems = items;
+        this.StartingCamera.Bind([.. items.Where(node => targets.ContainsKey(node.Id))]);
         foreach (var registration in this.registrations)
         {
             registration.Refresh(nodes, id => targets.GetValueOrDefault(id));

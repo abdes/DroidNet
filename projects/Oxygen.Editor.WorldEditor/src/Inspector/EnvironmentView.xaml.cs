@@ -7,6 +7,7 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Inspector.Environment;
 using Oxygen.Editor.World.Inspector.Presentation;
@@ -74,6 +75,7 @@ public sealed partial class EnvironmentView
             model.Backdrop.PropertyChanged += this.OnSectionPropertyChanged;
             model.SkyLight.PropertyChanged += this.OnSectionPropertyChanged;
             model.SceneReferences.PropertyChanged += this.OnSectionPropertyChanged;
+            model.Play.PropertyChanged += this.OnSectionPropertyChanged;
             this.ApplyScenePropertyFilter();
             this.FocusPendingField();
         }
@@ -89,13 +91,14 @@ public sealed partial class EnvironmentView
             model.Backdrop.PropertyChanged -= this.OnSectionPropertyChanged;
             model.SkyLight.PropertyChanged -= this.OnSectionPropertyChanged;
             model.SceneReferences.PropertyChanged -= this.OnSectionPropertyChanged;
+            model.Play.PropertyChanged -= this.OnSectionPropertyChanged;
             this.observedModel = null;
         }
     }
 
     private void OnSectionPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (ReferenceEquals(sender, this.observedModel?.SceneReferences))
+        if (ReferenceEquals(sender, this.observedModel?.SceneReferences) || ReferenceEquals(sender, this.observedModel?.Play))
         {
             this.ApplyScenePropertyFilter();
             return;
@@ -118,9 +121,10 @@ public sealed partial class EnvironmentView
         {
             this.propertyScope = selector.SelectedIndex switch
             {
-                1 => InspectorPropertyScope.Environment,
-                2 => InspectorPropertyScope.PostProcessing,
-                3 => InspectorPropertyScope.SceneReferences,
+                1 => InspectorPropertyScope.Play,
+                2 => InspectorPropertyScope.Environment,
+                3 => InspectorPropertyScope.PostProcessing,
+                4 => InspectorPropertyScope.SceneReferences,
                 _ => InspectorPropertyScope.All,
             };
             this.ApplyScenePropertyFilter();
@@ -147,20 +151,41 @@ public sealed partial class EnvironmentView
         var showReferences = (this.propertyScope is InspectorPropertyScope.All or InspectorPropertyScope.SceneReferences)
             && model.SceneReferences.MatchesSearch(this.ScenePropertySearchBox.Text);
         this.SceneReferencesView.Visibility = showReferences ? Visibility.Visible : Visibility.Collapsed;
+        var showPlay = (this.propertyScope is InspectorPropertyScope.All or InspectorPropertyScope.Play)
+            && model.Play.MatchesSearch(this.ScenePropertySearchBox.Text);
+        this.PlayView.Visibility = showPlay ? Visibility.Visible : Visibility.Collapsed;
         this.ClearPropertySearchButton.Visibility = this.search.IsSearching ? Visibility.Visible : Visibility.Collapsed;
-        this.NoScenePropertyMatches.Visibility = this.search.HasNoMatches && !showReferences ? Visibility.Visible : Visibility.Collapsed;
+        this.NoScenePropertyMatches.Visibility = this.search.HasNoMatches && !showReferences && !showPlay ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnFieldFocusRequested(object? sender, EventArgs args) => this.FocusPendingField();
 
     private void FocusPendingField()
     {
-        if (string.Equals(this.observedModel?.PendingFieldFocus, SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal))
+        if (this.observedModel is not { PendingFieldFocus: { } property } model)
         {
-            this.ScenePropertySearchBox.Text = string.Empty;
-            this.ScenePropertyScopeSelector.SelectedIndex = 0;
-            this.ApplyScenePropertyFilter();
+            return;
+        }
+
+        if (string.Equals(property, SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal))
+        {
+            this.ShowAllSceneProperties();
             this.SkyAtmosphereView.FocusAerialStart();
         }
+        else if (ScenePlayPropertyPaths.IsPlayProperty(property))
+        {
+            this.ShowAllSceneProperties();
+            if (this.PlayView.FocusField(property))
+            {
+                model.AcknowledgeFieldFocus();
+            }
+        }
+    }
+
+    private void ShowAllSceneProperties()
+    {
+        this.ScenePropertySearchBox.Text = string.Empty;
+        this.ScenePropertyScopeSelector.SelectedIndex = 0;
+        this.ApplyScenePropertyFilter();
     }
 }

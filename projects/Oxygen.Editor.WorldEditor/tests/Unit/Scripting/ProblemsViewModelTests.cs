@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World.Play;
 using Oxygen.Editor.World.Problems;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
@@ -21,6 +22,7 @@ public sealed class ProblemsViewModelTests
 
     private readonly Subject<ScriptAnalysisSnapshot> changes = new();
     private readonly Mock<ICodeEditorService> codeEditor = new();
+    private readonly FakeRuntimeProblems runtime = new();
 
     [TestMethod]
     public void AnalysisWithProblemsAppearsGroupedByFileWithCountsInTheTitle()
@@ -73,6 +75,44 @@ public sealed class ProblemsViewModelTests
         this.codeEditor.Verify(editor => editor.OpenAsync(MovePath, 12, 3), Times.Once);
     }
 
+    [TestMethod]
+    public void RuntimeProblemsJoinTheirFileAndClearWithTheSession()
+    {
+        using var model = this.CreateModel();
+        this.changes.OnNext(Snapshot(MovePath, Problem(ScriptProblemSeverity.Warning, 4)));
+
+        this.runtime.Report(Problem(ScriptProblemSeverity.Error, 9) with { IsRuntime = true, SlotNode = "Player", SlotIndex = 0 });
+        this.runtime.Report(new ScriptProblem(ScriptProblemSeverity.Warning, "OXE.PLAY.SCENE_ISSUE", "unsupported record", string.Empty, null, null, "rendered", string.Empty) { IsRuntime = true });
+
+        _ = model.Groups.Select(static group => group.DisplayPath).Should().Equal("Content/Player/move.lua", ProblemsViewModel.PlaySessionGroup);
+        _ = model.Groups[0].Entries.Select(static entry => entry.Problem.Line).Should().Equal(4, 9);
+        _ = model.Title.Should().Be("Problems  \u26D4 1  \u26A0 2");
+
+        this.runtime.Clear();
+
+        _ = model.Groups.Should().ContainSingle().Which.Entries.Should().ContainSingle();
+    }
+
+    [TestMethod]
+    public async Task ARuntimeProblemSelectsItsNodeAndOnlyAFileProblemOpens()
+    {
+        using var model = this.CreateModel();
+        var runtimeProblem = new ScriptProblem(ScriptProblemSeverity.Error, "S0701", "attempt to index nil", string.Empty, null, null, "rendered", string.Empty)
+        {
+            IsRuntime = true,
+            SlotNode = "Player",
+            SlotIndex = 0,
+        };
+        this.runtime.Report(runtimeProblem);
+
+        model.Selected = model.Groups[0].Entries[0];
+
+        _ = model.CanSelectNode.Should().BeTrue();
+        _ = model.OpenSelectedCommand.CanExecute(parameter: null).Should().BeFalse("the problem names no project file");
+        await model.SelectNodeCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        _ = this.runtime.Selected.Should().ContainSingle().Which.Should().Be(runtimeProblem);
+    }
+
     private static ScriptProblem Problem(ScriptProblemSeverity severity, int line)
         => new(severity, "S0503", "key 'fnd_one' not found", MovePath, line, 3, "rendered", "explanation");
 
@@ -95,6 +135,35 @@ public sealed class ProblemsViewModelTests
             LocalFolderMounts = [],
             Scenes = [],
         });
-        return new ProblemsViewModel(analysis.Object, this.codeEditor.Object, projects.Object);
+        return new ProblemsViewModel(analysis.Object, this.codeEditor.Object, projects.Object, this.runtime);
+    }
+
+    private sealed class FakeRuntimeProblems : IRuntimeProblemSource
+    {
+        private readonly List<ScriptProblem> problems = [];
+
+        public event EventHandler? RuntimeProblemsChanged;
+
+        public IReadOnlyList<ScriptProblem> RuntimeProblems => this.problems;
+
+        public List<ScriptProblem> Selected { get; } = [];
+
+        public Task<bool> SelectProblemNodeAsync(ScriptProblem problem)
+        {
+            this.Selected.Add(problem);
+            return Task.FromResult(true);
+        }
+
+        public void Report(ScriptProblem problem)
+        {
+            this.problems.Add(problem);
+            this.RuntimeProblemsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void Clear()
+        {
+            this.problems.Clear();
+            this.RuntimeProblemsChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 }

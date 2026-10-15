@@ -32,14 +32,6 @@ public sealed partial class SceneReferencesSectionView
         }
     }
 
-    private async void AddInputMappingContext_Click(object sender, RoutedEventArgs args)
-    {
-        if (this.ViewModel is { } model)
-        {
-            await model.AssignAsync(AssetKind.InputMappingContext);
-        }
-    }
-
     private async void AddPhysicsSidecar_Click(object sender, RoutedEventArgs args)
     {
         if (this.ViewModel is { } model)

@@ -19,7 +19,7 @@
         Description="Typed scene asset references and additional native virtual paths."
         Header="Scene References"
         IsExpanded="True"
-        Tag="Scene References;Scripts;Input Actions;Input Mapping Contexts;Physics Sidecars;Extra Assets">
+        Tag="Scene References;Scripts;Input Actions;Physics Sidecars;Extra Assets">
         <editorcontrols:PropertiesExpander.Items>
             <TextBlock
                 FontSize="12"
@@ -131,60 +131,6 @@
                         Content="Add Input Action"
                         IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" />
                     <ItemsControl ItemsSource="{x:Bind ViewModel.InputActions, Mode=OneWay}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid ColumnSpacing="6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding DisplayName}" />
-                                        <TextBlock
-                                            FontSize="11"
-                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            Text="{Binding StatusText}" />
-                                    </StackPanel>
-                                    <Button
-                                        Grid.Column="1"
-                                        Click="RemoveReference_Click"
-                                        Content="Remove"
-                                        IsEnabled="{Binding CanEdit}"
-                                        Tag="{Binding}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </editorcontrols:PropertyCard>
-
-            <editorcontrols:PropertyCard PropertyName="Input Mapping Context">
-                <StackPanel Spacing="5">
-                    <ComboBox
-                        HorizontalAlignment="Stretch"
-                        AutomationProperties.Name="Input mapping context reference asset"
-                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"
-                        ItemsSource="{x:Bind ViewModel.InputMappingContextCandidates, Mode=OneWay}"
-                        SelectedItem="{x:Bind ViewModel.SelectedInputMappingContext, Mode=TwoWay}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel>
-                                    <TextBlock Text="{Binding DisplayName}" />
-                                    <TextBlock
-                                        FontSize="11"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Text="{Binding DisplayPath}"
-                                        TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <Button
-                        HorizontalAlignment="Right"
-                        Click="AddInputMappingContext_Click"
-                        Content="Add Mapping Context"
-                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" />
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.InputMappingContexts, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Grid ColumnSpacing="6">

@@ -54,8 +54,7 @@ public sealed partial class SceneDocumentCommandService
     private static string? ValidateReferences(SceneReferencesData references)
     {
         if (references.Scripts is null || references.InputActions is null
-            || references.InputMappingContexts is null || references.PhysicsSidecars is null
-            || references.ExtraAssets is null)
+            || references.PhysicsSidecars is null || references.ExtraAssets is null)
         {
             return "Scene reference collections cannot be null.";
         }
@@ -68,11 +67,6 @@ public sealed partial class SceneDocumentCommandService
         if (ValidateTypedReferences(references.InputActions, ".oiact") is { } actions)
         {
             return actions;
-        }
-
-        if (ValidateTypedReferences(references.InputMappingContexts, ".oimap") is { } mappings)
-        {
-            return mappings;
         }
 
         if (ValidateTypedReferences(references.PhysicsSidecars, ".opscene") is { } physics)
@@ -119,7 +113,6 @@ public sealed partial class SceneDocumentCommandService
         {
             Scripts = [.. references.Scripts],
             InputActions = [.. references.InputActions],
-            InputMappingContexts = [.. references.InputMappingContexts],
             PhysicsSidecars = [.. references.PhysicsSidecars],
             ExtraAssets = [.. references.ExtraAssets],
         };
@@ -127,7 +120,6 @@ public sealed partial class SceneDocumentCommandService
     private static bool ReferencesEqual(SceneReferencesData left, SceneReferencesData right)
         => left.Scripts.SequenceEqual(right.Scripts)
             && left.InputActions.SequenceEqual(right.InputActions)
-            && left.InputMappingContexts.SequenceEqual(right.InputMappingContexts)
             && left.PhysicsSidecars.SequenceEqual(right.PhysicsSidecars)
             && left.ExtraAssets.SequenceEqual(right.ExtraAssets, StringComparer.Ordinal);
 

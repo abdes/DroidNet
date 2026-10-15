@@ -24,12 +24,18 @@ internal sealed record NativeSceneDescriptor(
     [property: JsonPropertyName("version")] int Version,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("nodes")] IReadOnlyList<NativeSceneNode> Nodes,
+    [property: JsonPropertyName("starting_camera")] int? StartingCamera,
+    [property: JsonPropertyName("starting_input_contexts")] IReadOnlyList<NativeStartingInputContext>? StartingInputContexts,
     [property: JsonPropertyName("renderables")] IReadOnlyList<NativeRenderable>? Renderables,
     [property: JsonPropertyName("cameras")] NativeCameras? Cameras,
     [property: JsonPropertyName("lights")] NativeLights? Lights,
     [property: JsonPropertyName("environment")] NativeEnvironment? Environment,
     [property: JsonPropertyName("local_fog_volumes")] IReadOnlyList<NativeLocalFogVolume>? LocalFogVolumes,
     [property: JsonPropertyName("references")] NativeReferences? References);
+
+internal sealed record NativeStartingInputContext(
+    [property: JsonPropertyName("context_ref")] string ContextRef,
+    [property: JsonPropertyName("priority")] int Priority);
 
 internal sealed record NativeLocalFogVolume(
     [property: JsonPropertyName("node")] int Node,
@@ -291,6 +297,5 @@ internal sealed record NativeReferences(
     [property: JsonPropertyName("materials")] IReadOnlyList<string>? Materials,
     [property: JsonPropertyName("scripts")] IReadOnlyList<string>? Scripts,
     [property: JsonPropertyName("input_actions")] IReadOnlyList<string>? InputActions,
-    [property: JsonPropertyName("input_mapping_contexts")] IReadOnlyList<string>? InputMappingContexts,
     [property: JsonPropertyName("physics_sidecars")] IReadOnlyList<string>? PhysicsSidecars,
     [property: JsonPropertyName("extra_assets")] IReadOnlyList<string>? ExtraAssets);

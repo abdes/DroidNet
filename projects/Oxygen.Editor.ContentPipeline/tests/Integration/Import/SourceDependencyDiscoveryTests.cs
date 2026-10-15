@@ -70,7 +70,8 @@ public sealed class SourceDependencyDiscoveryTests
         _ = materialOnly.Files.Should().NotContain(input => input.RelativePath.EndsWith(".oscene.json", StringComparison.Ordinal));
     }
 
-    /// <summary>Typed scene references remain cooked identities rather than becoming source jobs.</summary>
+    /// <summary>Typed scene references and starting input contexts remain cooked identities rather than becoming
+    /// source jobs.</summary>
     /// <returns>The asynchronous dependency-discovery operation.</returns>
     [TestMethod]
     public async Task DiscoveryTracksTypedSceneReferencesAsCookedOutputs()
@@ -86,9 +87,10 @@ public sealed class SourceDependencyDiscoveryTests
         {
             Scripts = [scriptOutputUri],
             InputActions = [actionOutputUri],
-            InputMappingContexts = [mappingOutputUri],
             PhysicsSidecars = [physicsOutputUri],
         });
+        workspace.Scene.SetPlay(new ScenePlayData { StartingInputContexts = [new StartingInputContextData(mappingOutputUri)] });
+        workspace.WriteText("Content/Input/Controls.input.json", """{ "contexts": [ { "name": "Gameplay", "priority": 3, "mappings": [] } ] }""");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var discovery = new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
 

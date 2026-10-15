@@ -18,4 +18,7 @@ public enum InspectorPropertyScope
 
     /// <summary>Typed scene asset references and additional native virtual paths.</summary>
     SceneReferences,
+
+    /// <summary>How the scene starts when played: starting camera and starting input contexts.</summary>
+    Play,
 }

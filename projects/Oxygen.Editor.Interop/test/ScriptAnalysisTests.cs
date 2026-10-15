@@ -72,4 +72,53 @@ public sealed class ScriptAnalysisTests
         _ = result.Parameters.Should().BeEmpty();
         _ = result.Diagnostics.Should().Contain(d => d.Code == "S0101" && d.Severity == ScriptDiagnosticSeverity.Error);
     }
+
+    [TestMethod]
+    public void Render_RuntimeDiagnosticJson_RendersItsSourceLineSlotAndCatalogEntry()
+    {
+        const string json = """
+            {
+              "version": 1, "severity": "error", "code": "S0701", "family": "runtime",
+              "message": "attempt to index nil with 'position'",
+              "labels": [ {
+                "span": { "source": "Content/move.lua", "begin": { "line": 10, "column": 9 }, "end": { "line": 10, "column": 13 } },
+                "message": "this is nil", "primary": true } ],
+              "notes": [ "the node was destroyed" ],
+              "slot": { "node": "Player", "slot_index": 1, "hook": "on_gameplay" }
+            }
+            """;
+        var requested = new List<string>();
+
+        var info = ScriptAnalysis.Render(json, source =>
+        {
+            requested.Add(source);
+            return MoveScript;
+        });
+
+        _ = info.Should().NotBeNull();
+        _ = requested.Should().Equal("Content/move.lua");
+        _ = info!.Code.Should().Be("S0701");
+        _ = info.Severity.Should().Be(ScriptDiagnosticSeverity.Error);
+        _ = info.PrimarySpan!.Value.Line.Should().Be(10);
+        _ = info.Rendered.Should().Contain("error[S0701]").And.Contain("fnd_one").And.Contain("the node was destroyed");
+        _ = info.Explanation.Should().NotBeEmpty();
+        _ = (info.SlotNode, info.SlotIndex, info.SlotHook).Should().Be(("Player", 1, "on_gameplay"));
+    }
+
+    [TestMethod]
+    public void Render_UnknownSourceOrMalformedJson_RendersWithoutSourceOrReturnsNull()
+    {
+        const string withoutSource = """
+            { "version": 1, "severity": "warning", "code": "S0701", "family": "runtime", "message": "slow hook",
+              "labels": [ { "span": { "source": "gone.lua", "begin": { "line": 1, "column": 1 }, "end": { "line": 1, "column": 2 } },
+                "message": "here", "primary": true } ], "notes": [] }
+            """;
+
+        var rendered = ScriptAnalysis.Render(withoutSource, static _ => null);
+
+        _ = rendered!.Rendered.Should().StartWith("warning[S0701]: slow hook");
+        _ = rendered.SlotNode.Should().BeNull();
+        _ = ScriptAnalysis.Render("{ not json", static _ => null).Should().BeNull();
+        _ = ScriptAnalysis.Render("""{ "severity": "error", "code": "S9999", "message": "m", "labels": [], "notes": [] }""", static _ => null).Should().BeNull();
+    }
 }

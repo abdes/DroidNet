@@ -29,6 +29,7 @@ public partial class WorkspaceViewModel
         childContainer.Register<ICodeEditorService, CodeEditorService>(Reuse.Singleton);
         childContainer.Register<ProjectScriptTooling>(Reuse.Singleton);
         childContainer.Register<IScriptAnalysisService, ScriptAnalysisService>(Reuse.Singleton);
+        this.RegisterPlayServices(childContainer);
         childContainer.Register<ProblemsViewModel>(Reuse.Singleton);
         childContainer.Register<ProblemsView>(Reuse.Transient);
 

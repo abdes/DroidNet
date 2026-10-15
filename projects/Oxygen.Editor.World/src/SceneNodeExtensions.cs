@@ -26,6 +26,24 @@ public static class SceneNodeExtensions
     }
 
     /// <summary>
+    /// Names a node by its position in the hierarchy, such as <c>Level/Doors/Front</c>.
+    /// </summary>
+    /// <param name="node">The node.</param>
+    /// <returns>The names from the root down to the node, joined by <c>/</c>.</returns>
+    public static string HierarchyPath(this SceneNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        var names = new List<string>();
+        for (var current = node; current is not null; current = current.Parent)
+        {
+            names.Add(current.Name);
+        }
+
+        names.Reverse();
+        return string.Join('/', names);
+    }
+
+    /// <summary>
     /// Flattened descendant enumeration (alias to instance method).
     /// </summary>
     /// <param name="node">The node to enumerate descendants for.</param>

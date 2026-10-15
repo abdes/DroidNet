@@ -306,6 +306,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             this.editingViewMask?.Dispose();
             this.editingViewMask = null;
             this.DisposeScriptServices();
+            this.ShutdownPlayServices();
 
             this.publicationRegistration?.Dispose();
             this.publicationRegistration = null;

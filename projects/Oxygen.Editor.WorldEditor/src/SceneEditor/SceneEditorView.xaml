@@ -10,6 +10,7 @@
     xmlns:local="using:Oxygen.Editor.World.SceneEditor"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:menus="using:DroidNet.Controls.Menus"
+    xmlns:play="using:Oxygen.Editor.World.Play"
     xmlns:seg="using:CommunityToolkit.WinUI.Controls"
     x:Name="Root"
     mc:Ignorable="d">
@@ -105,6 +106,13 @@
                     <FontIconSource Glyph="&#xE909;" />
                 </dnc:ToolBarButton.Icon>
             </dnc:ToolBarButton>
+
+            <dnc:ToolBarSeparator />
+
+            <!--  Play transport: Play or Restart with the player launch settings, Stop, and the Play status.  -->
+            <dnc:ToolBarElementHost>
+                <play:PlayTransportBar VerticalAlignment="Center" ViewModel="{x:Bind ViewModel.Play, Mode=OneWay}" />
+            </dnc:ToolBarElementHost>
 
             <!--  Spacer for center content (if needed)  -->
             <dnc:ToolBarElementHost>

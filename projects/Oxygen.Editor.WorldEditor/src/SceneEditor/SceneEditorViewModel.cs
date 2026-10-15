@@ -120,6 +120,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         // restoration. This avoids creating engine views before the scene exists
         // (prevents "frame context has no scene").
         this.RegisterMessages();
+        this.InitializePlay();
         this.RefreshCookInputRegistration();
         sceneEngineSync.SceneSynchronized += this.OnSceneSynchronized;
         if (this.scene is { } loaded && sceneEngineSync.IsSceneSynchronized(loaded))
@@ -260,6 +261,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
             this.messenger.UnregisterAll(this);
             this.DisposeTransformTools();
+            this.DisposePlay();
 
             foreach (var viewport in this.Viewports)
             {
@@ -290,6 +292,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
                 this.scene = message.Scene;
                 this.sceneReady = false;
                 this.RefreshCookInputRegistration();
+                this.RefreshPlayScene();
             }
         });
         this.messenger.Register<SceneLoadedMessage>(this, (r, m) => ((SceneEditorViewModel)r).OnSceneLoadedMessage(r, m));
@@ -467,6 +470,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     {
         this.scene = readyScene;
         this.sceneReady = false;
+        this.RefreshPlayScene();
         this.LogSceneLoadedReceived(this.CurrentLayout);
 
         // Build the panes now that the scene is ready, as the user left them.

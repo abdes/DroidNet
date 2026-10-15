@@ -42,7 +42,7 @@ public partial class WorkspaceViewModel
             || issue.AffectedEntity?.SceneId is not { } sceneId
             || issue.SuggestedAction?.Payload.TryGetValue("PropertyPath", out var property) != true
             || property is null
-            || (FindScriptSlotNode(issue, property) is null && !string.Equals(property, SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal))
+            || (FindScriptSlotNode(issue, property) is null && !IsSceneProperty(property))
             || this.projectManager.CurrentProject?.Scenes.FirstOrDefault(scene => scene.Id == sceneId) is not { } scene
             || this.documentManager is null
             || issue.AffectedPath is not { } sourcePath || !File.Exists(sourcePath))
@@ -83,6 +83,10 @@ public partial class WorkspaceViewModel
 
         return true;
     }
+
+    private static bool IsSceneProperty(string property)
+        => string.Equals(property, SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal)
+            || Oxygen.Editor.ContentPipeline.ScenePlayPropertyPaths.IsPlayProperty(property);
 
     private static Guid? FindScriptSlotNode(DiagnosticRecord issue, string property)
         => Oxygen.Editor.ContentPipeline.ScriptSlotDiagnostics.TryParsePropertyPath(property, out _, out _)

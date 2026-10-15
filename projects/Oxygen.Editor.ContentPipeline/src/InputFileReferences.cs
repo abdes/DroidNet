@@ -72,6 +72,39 @@ public static class InputFileReferences
         }
     }
 
+    /// <summary>Finds the priority an input file gives a mapping context it declares.</summary>
+    /// <param name="json">The input file text.</param>
+    /// <param name="contextName">The context name.</param>
+    /// <returns>The declared priority, <c>0</c> when the context declares none, or <see langword="null"/> when the
+    /// file does not declare the context or is not valid JSON.</returns>
+    public static int? FindContextPriority(string json, string contextName)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+        ArgumentNullException.ThrowIfNull(contextName);
+        try
+        {
+            using var document = JsonDocument.Parse(json, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("contexts", out var contexts))
+            {
+                return null;
+            }
+
+            foreach (var context in Items(contexts).Where(context => string.Equals(Name(context, "name"), contextName, StringComparison.Ordinal)))
+            {
+                return context.TryGetProperty("priority", out var priority) && priority.ValueKind == JsonValueKind.Number && priority.TryGetInt32(out var value)
+                    ? value
+                    : 0;
+            }
+
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     private static string? Name(JsonElement element, string property)
         => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()

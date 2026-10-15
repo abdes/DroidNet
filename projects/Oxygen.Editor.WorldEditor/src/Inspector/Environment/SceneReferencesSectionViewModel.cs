@@ -55,9 +55,6 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
     public partial ContentBrowserAssetItem? SelectedInputAction { get; set; }
 
     [ObservableProperty]
-    public partial ContentBrowserAssetItem? SelectedInputMappingContext { get; set; }
-
-    [ObservableProperty]
     public partial ContentBrowserAssetItem? SelectedPhysicsSidecar { get; set; }
 
     [ObservableProperty]
@@ -69,9 +66,6 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
     /// <summary>Gets assignable input action assets.</summary>
     public ObservableCollection<ContentBrowserAssetItem> InputActionCandidates { get; } = [];
 
-    /// <summary>Gets assignable input mapping context assets.</summary>
-    public ObservableCollection<ContentBrowserAssetItem> InputMappingContextCandidates { get; } = [];
-
     /// <summary>Gets assignable physics scene assets.</summary>
     public ObservableCollection<ContentBrowserAssetItem> PhysicsSidecarCandidates { get; } = [];
 
@@ -80,9 +74,6 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
 
     /// <summary>Gets the scene's input action references, including unavailable entries.</summary>
     public ObservableCollection<SceneReferenceRow> InputActions { get; } = [];
-
-    /// <summary>Gets the scene's input mapping context references, including unavailable entries.</summary>
-    public ObservableCollection<SceneReferenceRow> InputMappingContexts { get; } = [];
 
     /// <summary>Gets the scene's physics sidecar references, including unavailable entries.</summary>
     public ObservableCollection<SceneReferenceRow> PhysicsSidecars { get; } = [];
@@ -167,10 +158,9 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
             return true;
         }
 
-        var searchable = new List<string> { "Scene References Scripts Input Actions Input Mapping Contexts Physics Sidecars Extra Assets" };
+        var searchable = new List<string> { "Scene References Scripts Input Actions Physics Sidecars Extra Assets" };
         searchable.AddRange(this.Scripts.Select(static row => row.SearchText));
         searchable.AddRange(this.InputActions.Select(static row => row.SearchText));
-        searchable.AddRange(this.InputMappingContexts.Select(static row => row.SearchText));
         searchable.AddRange(this.PhysicsSidecars.Select(static row => row.SearchText));
         searchable.AddRange(this.ExtraAssets.Select(static row => row.Path));
         searchable.AddRange(this.assets.Select(static asset => asset.DisplayName + " " + asset.DisplayPath));
@@ -191,7 +181,6 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         {
             AssetKind.Script => this.SelectedScript,
             AssetKind.InputAction => this.SelectedInputAction,
-            AssetKind.InputMappingContext => this.SelectedInputMappingContext,
             AssetKind.PhysicsScene => this.SelectedPhysicsSidecar,
             _ => null,
         };
@@ -239,7 +228,6 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         {
             Scripts = [.. references.Scripts],
             InputActions = [.. references.InputActions],
-            InputMappingContexts = [.. references.InputMappingContexts],
             PhysicsSidecars = [.. references.PhysicsSidecars],
             ExtraAssets = [.. references.ExtraAssets, path],
         }).ConfigureAwait(true);
@@ -264,7 +252,6 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         {
             Scripts = [.. current.References.Scripts],
             InputActions = [.. current.References.InputActions],
-            InputMappingContexts = [.. current.References.InputMappingContexts],
             PhysicsSidecars = [.. current.References.PhysicsSidecars],
             ExtraAssets = [.. current.References.ExtraAssets.Where(candidate => !string.Equals(candidate, path, StringComparison.Ordinal))],
         });
@@ -333,7 +320,6 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         {
             Scripts = [.. current.Scripts],
             InputActions = [.. current.InputActions],
-            InputMappingContexts = [.. current.InputMappingContexts],
             PhysicsSidecars = [.. current.PhysicsSidecars],
             ExtraAssets = [.. current.ExtraAssets],
         };
@@ -342,7 +328,6 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         {
             AssetKind.Script => result with { Scripts = Update(current.Scripts, uri, add) },
             AssetKind.InputAction => result with { InputActions = Update(current.InputActions, uri, add) },
-            AssetKind.InputMappingContext => result with { InputMappingContexts = Update(current.InputMappingContexts, uri, add) },
             AssetKind.PhysicsScene => result with { PhysicsSidecars = Update(current.PhysicsSidecars, uri, add) },
             _ => result,
         };
@@ -407,7 +392,6 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         this.SetCatalogNotice(string.Empty);
         this.UpdateCandidates(AssetKind.Script, this.ScriptCandidates, this.SelectedScript, item => this.SelectedScript = item);
         this.UpdateCandidates(AssetKind.InputAction, this.InputActionCandidates, this.SelectedInputAction, item => this.SelectedInputAction = item);
-        this.UpdateCandidates(AssetKind.InputMappingContext, this.InputMappingContextCandidates, this.SelectedInputMappingContext, item => this.SelectedInputMappingContext = item);
         this.UpdateCandidates(AssetKind.PhysicsScene, this.PhysicsSidecarCandidates, this.SelectedPhysicsSidecar, item => this.SelectedPhysicsSidecar = item);
         this.RefreshFromScene();
     }
@@ -438,7 +422,6 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         var references = this.scene?.References ?? new SceneReferencesData();
         this.UpdateReferenceRows(AssetKind.Script, references.Scripts, this.Scripts);
         this.UpdateReferenceRows(AssetKind.InputAction, references.InputActions, this.InputActions);
-        this.UpdateReferenceRows(AssetKind.InputMappingContext, references.InputMappingContexts, this.InputMappingContexts);
         this.UpdateReferenceRows(AssetKind.PhysicsScene, references.PhysicsSidecars, this.PhysicsSidecars);
         this.ExtraAssets.Clear();
         foreach (var path in references.ExtraAssets)
@@ -518,11 +501,6 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         for (var index = 0; index < this.InputActions.Count; index++)
         {
             this.InputActions[index] = this.InputActions[index] with { CanEdit = this.CanEdit };
-        }
-
-        for (var index = 0; index < this.InputMappingContexts.Count; index++)
-        {
-            this.InputMappingContexts[index] = this.InputMappingContexts[index] with { CanEdit = this.CanEdit };
         }
 
         for (var index = 0; index < this.PhysicsSidecars.Count; index++)

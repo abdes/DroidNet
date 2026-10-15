@@ -4,6 +4,7 @@
 
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
+using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.World;
 
@@ -47,6 +48,25 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// Gets the scene-level native asset references with read-only collections.
     /// </summary>
     public Serialization.SceneReferencesData References { get; private set; } = NormalizeReferences(null);
+
+    /// <summary>
+    /// Gets how the scene starts when played, with a read-only context list.
+    /// </summary>
+    public Serialization.ScenePlayData Play { get; private set; } = NormalizePlay(null);
+
+    /// <summary>
+    /// Gets the camera node a played scene starts viewing through: the authored starting camera, else the first
+    /// camera in hierarchy order.
+    /// </summary>
+    /// <remarks>
+    /// An authored starting camera that is missing or no longer a camera is returned as <see langword="null"/>;
+    /// the cook reports it.
+    /// </remarks>
+    [JsonIgnore]
+    public SceneNode? EffectiveStartingCamera
+        => this.Play.StartingCamera is { } id
+            ? this.AllNodes.FirstOrDefault(node => node.Id == id && node.Components.OfType<CameraComponent>().Any())
+            : this.AllNodes.FirstOrDefault(static node => node.Components.OfType<CameraComponent>().Any());
 
     /// <summary>
     ///     Gets all nodes in the scene (flattened).
@@ -98,6 +118,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
 
             this.Environment = NormalizeEnvironment(data.Environment);
             this.References = NormalizeReferences(data.References);
+            this.Play = NormalizePlay(data.Play);
         }
     }
 
@@ -119,6 +140,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             RootNodes = [.. this.RootNodes.Select(n => n.Dehydrate())],
             Environment = NormalizeEnvironment(this.Environment),
             References = this.References.IsEmpty ? null : NormalizeReferences(this.References),
+            Play = this.Play.IsEmpty ? null : NormalizePlay(this.Play),
             ExplorerLayout = this.ExplorerLayout,
         };
     }
@@ -162,6 +184,22 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
         }
     }
 
+    /// <summary>
+    /// Replaces how the scene starts when played.
+    /// </summary>
+    /// <param name="play">The new play settings.</param>
+    internal void SetPlay(Serialization.ScenePlayData play)
+    {
+        ArgumentNullException.ThrowIfNull(play);
+        var normalized = NormalizePlay(play);
+        if (!Serialization.ScenePlayData.AreEquivalent(this.Play, normalized))
+        {
+            this.OnPropertyChanging(nameof(this.Play));
+            this.Play = normalized;
+            this.OnPropertyChanged(nameof(this.Play));
+        }
+    }
+
     private static Serialization.SceneEnvironmentData NormalizeEnvironment(Serialization.SceneEnvironmentData? environment)
     {
         environment ??= new();
@@ -186,7 +224,6 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
 
         ArgumentNullException.ThrowIfNull(references.Scripts);
         ArgumentNullException.ThrowIfNull(references.InputActions);
-        ArgumentNullException.ThrowIfNull(references.InputMappingContexts);
         ArgumentNullException.ThrowIfNull(references.PhysicsSidecars);
         ArgumentNullException.ThrowIfNull(references.ExtraAssets);
 
@@ -194,16 +231,25 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
         {
             Scripts = new List<Uri>(references.Scripts).AsReadOnly(),
             InputActions = new List<Uri>(references.InputActions).AsReadOnly(),
-            InputMappingContexts = new List<Uri>(references.InputMappingContexts).AsReadOnly(),
             PhysicsSidecars = new List<Uri>(references.PhysicsSidecars).AsReadOnly(),
             ExtraAssets = new List<string>(references.ExtraAssets).AsReadOnly(),
+        };
+    }
+
+    private static Serialization.ScenePlayData NormalizePlay(Serialization.ScenePlayData? play)
+    {
+        play ??= new();
+        ArgumentNullException.ThrowIfNull(play.StartingInputContexts);
+        return new()
+        {
+            StartingCamera = play.StartingCamera == Guid.Empty ? null : play.StartingCamera,
+            StartingInputContexts = new List<Serialization.StartingInputContextData>(play.StartingInputContexts).AsReadOnly(),
         };
     }
 
     private static bool ReferencesEqual(Serialization.SceneReferencesData left, Serialization.SceneReferencesData right)
         => left.Scripts.SequenceEqual(right.Scripts)
             && left.InputActions.SequenceEqual(right.InputActions)
-            && left.InputMappingContexts.SequenceEqual(right.InputMappingContexts)
             && left.PhysicsSidecars.SequenceEqual(right.PhysicsSidecars)
             && left.ExtraAssets.SequenceEqual(right.ExtraAssets, StringComparer.Ordinal);
 }

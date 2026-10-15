@@ -124,6 +124,12 @@ public static class ContentPipelinePaths
         return "/" + mountName.Trim('/');
     }
 
+    /// <summary>Gets the virtual path a scene cooks to, which the runtime loads it by.</summary>
+    /// <param name="sceneAssetUri">The scene's asset identity, such as <c>asset:///Content/Scenes/Level 1.oscene.json</c>.</param>
+    /// <returns>The cooked scene's virtual path, such as <c>/Content/Scenes/Level_1.oscene</c>.</returns>
+    public static string ToCookedScenePath(Uri sceneAssetUri)
+        => NormalizeSceneOutputPath(ToNativeDescriptorPath(sceneAssetUri, ".oscene"));
+
     internal static string NormalizeSceneOutputPath(string virtualPath)
     {
         var separator = virtualPath.LastIndexOf('/');

@@ -20,7 +20,6 @@ public sealed partial class SceneDocumentCommandServiceTests
         {
             Scripts = [new("asset:///Content/Scripts/Orbit.oscript.json")],
             InputActions = [new("asset:///Content/Input/Jump.oiact")],
-            InputMappingContexts = [new("asset:///Library/Input/Gameplay.oimap")],
             PhysicsSidecars = [new("asset:///Content/Physics/Main.opscene.json")],
             ExtraAssets = ["/.cooked/Extras/lookup.bin"],
         };

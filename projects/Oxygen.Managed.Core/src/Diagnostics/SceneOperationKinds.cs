@@ -137,6 +137,11 @@ public static class SceneOperationKinds
     public const string EditSceneReferences = "Scene.References.Edit";
 
     /// <summary>
+    /// Scene play start-state edit: starting camera and starting input contexts.
+    /// </summary>
+    public const string EditScenePlay = "Scene.Play.Edit";
+
+    /// <summary>
     /// Scene explorer layout folder creation.
     /// </summary>
     public const string ExplorerFolderCreate = "Scene.ExplorerFolder.Create";

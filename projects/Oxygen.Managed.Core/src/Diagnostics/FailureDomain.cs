@@ -138,4 +138,9 @@ public enum FailureDomain
     /// Script assets, script analysis, code-editor launch and hand-written input files.
     /// </summary>
     ScriptAuthoring,
+
+    /// <summary>
+    /// Play sessions: preparing the scene, the external player and its sessions.
+    /// </summary>
+    PlaySession,
 }

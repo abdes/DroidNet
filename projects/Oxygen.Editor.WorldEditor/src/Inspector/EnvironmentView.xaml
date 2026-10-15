@@ -144,6 +144,7 @@
                     </ItemsPanelTemplate>
                 </seg:Segmented.ItemsPanel>
                 <seg:SegmentedItem Content="All" />
+                <seg:SegmentedItem Content="Play" />
                 <seg:SegmentedItem Content="Environment" />
                 <seg:SegmentedItem Content="Post-processing" />
                 <seg:SegmentedItem Content="References" />
@@ -171,6 +172,7 @@
                     Text="No scene properties match this search."
                     TextWrapping="Wrap"
                     Visibility="Collapsed" />
+                <environment:PlaySectionView x:Name="PlayView" ViewModel="{x:Bind ViewModel.Play, Mode=OneWay}" />
                 <environment:SceneReferencesSectionView x:Name="SceneReferencesView" ViewModel="{x:Bind ViewModel.SceneReferences, Mode=OneWay}" />
                 <environment:AtmosphereLightsSectionView x:Name="AtmosphereLightsView" ViewModel="{x:Bind ViewModel.AtmosphereLights, Mode=OneWay}" />
                 <environment:BackdropSectionView x:Name="BackdropView" ViewModel="{x:Bind ViewModel.Backdrop, Mode=OneWay}" />

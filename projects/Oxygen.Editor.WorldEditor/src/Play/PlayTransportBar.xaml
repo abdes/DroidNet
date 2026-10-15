@@ -1,0 +1,431 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Play.PlayTransportBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:dnc="using:DroidNet.Controls"
+    xmlns:local="using:Oxygen.Editor.World.Play"
+    xmlns:scene="using:Oxygen.Editor.World.SceneEditor"
+    xmlns:seg="using:CommunityToolkit.WinUI.Controls"
+    IsTabStop="False">
+
+    <UserControl.Resources>
+        <scene:IntDoubleConverter x:Key="IntDoubleConverter" />
+        <local:PlayerWindowModeIndexConverter x:Key="WindowModeIndexConverter" />
+
+        <!--
+            The capsule's corners and its items' corners are concentric: an item's radius is the capsule's radius
+            less the capsule's padding, so a colored item follows the capsule's curve.
+        -->
+        <Thickness x:Key="CapsulePadding">2</Thickness>
+        <CornerRadius x:Key="CapsuleCornerRadius">8</CornerRadius>
+        <CornerRadius x:Key="CapsuleItemCornerRadius">6</CornerRadius>
+
+        <!--  A state's outline is its color, faint, so it marks the state without a hard edge.  -->
+        <x:Double x:Key="TintOutlineOpacity">0.45</x:Double>
+
+        <!--  The capsule's buttons sit on the capsule's background, like toolbar buttons.  -->
+        <Style x:Key="TransportButtonStyle" TargetType="Button">
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="CornerRadius" Value="{StaticResource CapsuleItemCornerRadius}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+
+        <Style x:Key="SettingLabelStyle" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style
+            x:Key="SettingCaptionStyle"
+            BasedOn="{StaticResource CaptionTextBlockStyle}"
+            TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
+
+    </UserControl.Resources>
+
+    <Grid>
+        <!--  The transport capsule: Play (with the launch settings), Stop, then the status.  -->
+        <Border
+            x:Name="Capsule"
+            Padding="{StaticResource CapsulePadding}"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="{StaticResource CapsuleCornerRadius}">
+            <Grid ColumnSpacing="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!--
+                    Play and the settings arrow are two buttons, so the settings stay open to change while Play is
+                    unavailable.
+                -->
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                    <Grid>
+                        <Button
+                            x:Name="PrimaryButton"
+                            MinHeight="0"
+                            Padding="10,5"
+                            VerticalAlignment="Stretch"
+                            AutomationProperties.Name="{x:Bind ViewModel.PrimaryLabel, Mode=OneWay, FallbackValue='Play'}"
+                            Command="{x:Bind ViewModel.PrimaryCommand, Mode=OneWay}"
+                            CornerRadius="{StaticResource CapsuleItemCornerRadius}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.PrimaryToolTip, Mode=OneWay, FallbackValue=''}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon
+                                    x:Name="PrimaryIcon"
+                                    FontSize="12"
+                                    Glyph="{x:Bind ViewModel.PrimaryGlyph, Mode=OneWay, FallbackValue='&#xE768;'}" />
+                                <!--
+                                    Both labels take their place, the hidden one transparent, so the button is as wide as the
+                                    longer one and Stop and the status never move when Play becomes Restart.
+                                -->
+                                <Grid>
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        Opacity="0"
+                                        Text="Restart" />
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        Opacity="0"
+                                        Text="Play" />
+                                    <TextBlock
+                                        x:Name="PrimaryText"
+                                        HorizontalAlignment="Center"
+                                        Text="{x:Bind ViewModel.PrimaryLabel, Mode=OneWay, FallbackValue='Play'}" />
+                                </Grid>
+                            </StackPanel>
+                        </Button>
+                        <Border
+                            x:Name="PrimaryOutline"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource CapsuleItemCornerRadius}"
+                            IsHitTestVisible="False"
+                            Opacity="{StaticResource TintOutlineOpacity}"
+                            Visibility="Collapsed" />
+                    </Grid>
+                    <Button
+                        Padding="4,5"
+                        AutomationProperties.Name="Player launch settings"
+                        Style="{StaticResource TransportButtonStyle}"
+                        ToolTipService.ToolTip="Player launch settings: display mode, window size, VSync and frame rate. A running player follows every change.">
+                        <FontIcon FontSize="10" Glyph="&#xE70D;" />
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedLeft">
+                                <StackPanel Width="300" Spacing="12">
+                                    <Grid>
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                                            Text="Player launch settings" />
+                                        <Button
+                                            HorizontalAlignment="Right"
+                                            Command="{x:Bind ViewModel.ResetSettingsCommand, Mode=OneWay}"
+                                            Content="Reset"
+                                            Style="{StaticResource TransportButtonStyle}"
+                                            ToolTipService.ToolTip="Return every launch setting to its default" />
+                                    </Grid>
+
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Style="{StaticResource SettingCaptionStyle}" Text="Display mode" />
+                                        <seg:Segmented
+                                            HorizontalAlignment="Stretch"
+                                            AutomationProperties.Name="Display mode"
+                                            SelectedIndex="{x:Bind ViewModel.Settings.WindowMode, Mode=TwoWay, Converter={StaticResource WindowModeIndexConverter}, FallbackValue=0}">
+                                            <seg:SegmentedItem Content="Windowed" ToolTipService.ToolTip="A framed window of the size below" />
+                                            <seg:SegmentedItem Content="Borderless" ToolTipService.ToolTip="Covers its display at the desktop resolution" />
+                                        </seg:Segmented>
+                                    </StackPanel>
+
+                                    <!--  A borderless window covers its display, so its size does not apply.  -->
+                                    <StackPanel Spacing="8">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Style="{StaticResource SettingCaptionStyle}" Text="Window size" />
+                                            <ComboBox
+                                                HorizontalAlignment="Stretch"
+                                                AutomationProperties.Name="Window size"
+                                                DisplayMemberPath="Label"
+                                                IsEnabled="{x:Bind ViewModel.Settings.IsWindowed, Mode=OneWay, FallbackValue=True}"
+                                                ItemsSource="{x:Bind ViewModel.SizeOptions, Mode=OneWay}"
+                                                SelectedItem="{x:Bind ViewModel.Settings.SizeOption, Mode=TwoWay}" />
+                                        </StackPanel>
+                                        <!--  Revealed by Custom; any other entry sets the size itself.  -->
+                                        <Grid ColumnSpacing="8" Visibility="{x:Bind ViewModel.Settings.HasCustomSize, Mode=OneWay, FallbackValue=Collapsed}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <dnc:NumberBox
+                                                HorizontalAlignment="Stretch"
+                                                AutomationProperties.Name="Window width"
+                                                IsEnabled="{x:Bind ViewModel.Settings.IsWindowed, Mode=OneWay, FallbackValue=True}"
+                                                Mask="~."
+                                                Maximum="16384"
+                                                Minimum="64"
+                                                NumberValue="{x:Bind ViewModel.Settings.Width, Mode=TwoWay, Converter={StaticResource IntDoubleConverter}, FallbackValue=1280}"
+                                                Unit="px"
+                                                WithPadding="False" />
+                                            <dnc:NumberBox
+                                                Grid.Column="1"
+                                                HorizontalAlignment="Stretch"
+                                                AutomationProperties.Name="Window height"
+                                                IsEnabled="{x:Bind ViewModel.Settings.IsWindowed, Mode=OneWay, FallbackValue=True}"
+                                                Mask="~."
+                                                Maximum="16384"
+                                                Minimum="64"
+                                                NumberValue="{x:Bind ViewModel.Settings.Height, Mode=TwoWay, Converter={StaticResource IntDoubleConverter}, FallbackValue=720}"
+                                                Unit="px"
+                                                WithPadding="False" />
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <Grid>
+                                        <TextBlock Style="{StaticResource SettingLabelStyle}" Text="VSync" />
+                                        <ToggleSwitch
+                                            AutomationProperties.Name="VSync"
+                                            IsOn="{x:Bind ViewModel.Settings.VSync, Mode=TwoWay, FallbackValue=True}"
+                                            Style="{StaticResource RightAlignedToggleSwitchStyle}" />
+                                    </Grid>
+
+                                    <Grid>
+                                        <TextBlock Style="{StaticResource SettingLabelStyle}" Text="Limit frame rate" />
+                                        <ToggleSwitch
+                                            AutomationProperties.Name="Limit frame rate"
+                                            IsOn="{x:Bind ViewModel.Settings.FrameRateLimited, Mode=TwoWay, FallbackValue=False}"
+                                            Style="{StaticResource RightAlignedToggleSwitchStyle}" />
+                                    </Grid>
+
+                                    <!--  The limit shows while the frame rate is limited.  -->
+                                    <Grid Visibility="{x:Bind ViewModel.Settings.FrameRateLimited, Mode=OneWay, FallbackValue=Collapsed}">
+                                        <TextBlock Style="{StaticResource SettingLabelStyle}" Text="Frames per second" />
+                                        <dnc:NumberBox
+                                            Width="80"
+                                            HorizontalAlignment="Right"
+                                            AutomationProperties.Name="Frames per second"
+                                            Mask="~."
+                                            Maximum="240"
+                                            Minimum="1"
+                                            NumberValue="{x:Bind ViewModel.Settings.FrameRateLimit, Mode=TwoWay, Converter={StaticResource IntDoubleConverter}, FallbackValue=60}"
+                                            WithPadding="False" />
+                                    </Grid>
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </StackPanel>
+
+                <Grid Grid.Column="1">
+                    <Button
+                        x:Name="StopButton"
+                        AutomationProperties.Name="Stop"
+                        Command="{x:Bind ViewModel.StopPlayCommand, Mode=OneWay}"
+                        Style="{StaticResource TransportButtonStyle}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.StopToolTip, Mode=OneWay, FallbackValue='Stop (Shift+F5)'}">
+                        <FontIcon
+                            x:Name="StopIcon"
+                            FontSize="12"
+                            Glyph="&#xE71A;" />
+                    </Button>
+                    <Border
+                        x:Name="StopOutline"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource CapsuleItemCornerRadius}"
+                        IsHitTestVisible="False"
+                        Opacity="{StaticResource TintOutlineOpacity}"
+                        Visibility="Collapsed" />
+                </Grid>
+
+                <Rectangle
+                    Grid.Column="2"
+                    Width="1"
+                    Height="16"
+                    Margin="4,0"
+                    VerticalAlignment="Center"
+                    Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                <!--
+                    The status: a dot, a progress ring or an error icon, then its text. A failure shows as a badge, a
+                    tinted fill under a faint outline of the same color.
+                -->
+                <Grid Grid.Column="3">
+                    <Button
+                        x:Name="StatusButton"
+                        Command="{x:Bind ViewModel.ShowStatusCommand, Mode=OneWay}"
+                        IsHitTestVisible="{x:Bind ViewModel.CanShowStatus, Mode=OneWay, FallbackValue=False}"
+                        IsTabStop="{x:Bind ViewModel.CanShowStatus, Mode=OneWay, FallbackValue=False}"
+                        Style="{StaticResource TransportButtonStyle}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.StatusToolTip, Mode=OneWay, FallbackValue=''}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Grid VerticalAlignment="Center">
+                                <InfoBadge
+                                    x:Name="StatusBadge"
+                                    Width="8"
+                                    Height="8"
+                                    Style="{StaticResource InformationalDotInfoBadgeStyle}" />
+                                <ProgressRing
+                                    x:Name="StatusProgress"
+                                    Width="12"
+                                    Height="12"
+                                    MinWidth="0"
+                                    MinHeight="0"
+                                    IsActive="False"
+                                    Visibility="Collapsed" />
+                            </Grid>
+                            <TextBlock
+                                x:Name="StatusText"
+                                VerticalAlignment="Center"
+                                Text="{x:Bind ViewModel.StatusText, Mode=OneWay, FallbackValue=''}" />
+                            <!--  The failure's error count, in the secondary text color.  -->
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{x:Bind ViewModel.StatusDetail, Mode=OneWay, FallbackValue=''}"
+                                Visibility="{x:Bind ViewModel.HasStatusDetail, Mode=OneWay, FallbackValue=Collapsed}" />
+                            <!--  Shown while a click brings the player window to the front.  -->
+                            <FontIcon
+                                VerticalAlignment="Center"
+                                FontSize="10"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Glyph="&#xE8A7;"
+                                Visibility="{x:Bind ViewModel.StatusRevealsPlayer, Mode=OneWay, FallbackValue=Collapsed}" />
+                        </StackPanel>
+                    </Button>
+                    <Border
+                        x:Name="StatusOutline"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource CapsuleItemCornerRadius}"
+                        IsHitTestVisible="False"
+                        Opacity="{StaticResource TintOutlineOpacity}"
+                        Visibility="Collapsed" />
+                </Grid>
+
+                <!--  An indeterminate line along the capsule's bottom edge while Play is on its way.  -->
+                <ProgressBar
+                    Grid.ColumnSpan="4"
+                    Height="2"
+                    MinHeight="0"
+                    Margin="6,0"
+                    VerticalAlignment="Bottom"
+                    IsIndeterminate="{x:Bind ViewModel.IsBusy, Mode=OneWay, FallbackValue=False}"
+                    Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay, FallbackValue=Collapsed}" />
+            </Grid>
+
+        </Border>
+        <!--  A faint outline of the state's color: amber after the scene changed, red after a failure.  -->
+        <Border
+            x:Name="CapsuleOutline"
+            BorderThickness="1"
+            CornerRadius="{StaticResource CapsuleCornerRadius}"
+            IsHitTestVisible="False"
+            Opacity="{StaticResource TintOutlineOpacity}"
+            Visibility="Collapsed" />
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="PrimaryStates">
+                <VisualState x:Name="Play">
+                    <VisualState.Setters>
+                        <Setter Target="PrimaryIcon.Foreground" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Restart">
+                    <VisualState.Setters>
+                        <Setter Target="PrimaryIcon.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="RestartChanged">
+                    <VisualState.Setters>
+                        <Setter Target="PrimaryIcon.Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                        <Setter Target="PrimaryText.Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                        <Setter Target="PrimaryButton.Background" Value="{ThemeResource SystemFillColorCautionBackgroundBrush}" />
+                        <Setter Target="PrimaryOutline.Visibility" Value="Visible" />
+                        <Setter Target="PrimaryOutline.BorderBrush" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Unavailable">
+                    <VisualState.Setters>
+                        <Setter Target="PrimaryIcon.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <VisualStateGroup x:Name="StopStates">
+                <VisualState x:Name="StopActive">
+                    <VisualState.Setters>
+                        <Setter Target="StopIcon.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                        <Setter Target="StopButton.Background" Value="{ThemeResource SystemFillColorCriticalBackgroundBrush}" />
+                        <Setter Target="StopOutline.Visibility" Value="Visible" />
+                        <Setter Target="StopOutline.BorderBrush" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="StopInactive">
+                    <VisualState.Setters>
+                        <Setter Target="StopIcon.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <VisualStateGroup x:Name="StatusStates">
+                <VisualState x:Name="Neutral">
+                    <VisualState.Setters>
+                        <Setter Target="StatusBadge.Background" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <Setter Target="StatusText.Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Busy">
+                    <VisualState.Setters>
+                        <Setter Target="StatusBadge.Visibility" Value="Collapsed" />
+                        <Setter Target="StatusProgress.Visibility" Value="Visible" />
+                        <Setter Target="StatusProgress.IsActive" Value="True" />
+                        <Setter Target="StatusText.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Success">
+                    <VisualState.Setters>
+                        <Setter Target="StatusBadge.Style" Value="{StaticResource SuccessDotInfoBadgeStyle}" />
+                        <Setter Target="StatusText.Foreground" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+                    </VisualState.Setters>
+                    <!--  The dot breathes while the scene plays.  -->
+                    <Storyboard RepeatBehavior="Forever">
+                        <DoubleAnimation
+                            AutoReverse="True"
+                            Storyboard.TargetName="StatusBadge"
+                            Storyboard.TargetProperty="Opacity"
+                            From="1"
+                            To="0.4"
+                            Duration="0:0:1" />
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="Caution">
+                    <VisualState.Setters>
+                        <Setter Target="StatusBadge.Style" Value="{StaticResource CautionDotInfoBadgeStyle}" />
+                        <Setter Target="StatusText.Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                        <Setter Target="CapsuleOutline.Visibility" Value="Visible" />
+                        <Setter Target="CapsuleOutline.BorderBrush" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Critical">
+                    <VisualState.Setters>
+                        <Setter Target="StatusBadge.Style" Value="{StaticResource CriticalIconInfoBadgeStyle}" />
+                        <Setter Target="StatusBadge.Width" Value="16" />
+                        <Setter Target="StatusBadge.Height" Value="16" />
+                        <Setter Target="StatusText.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                        <Setter Target="StatusText.FontWeight" Value="SemiBold" />
+                        <Setter Target="StatusButton.Background" Value="{ThemeResource SystemFillColorCriticalBackgroundBrush}" />
+                        <Setter Target="StatusOutline.Visibility" Value="Visible" />
+                        <Setter Target="StatusOutline.BorderBrush" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                        <Setter Target="CapsuleOutline.Visibility" Value="Visible" />
+                        <Setter Target="CapsuleOutline.BorderBrush" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+    </Grid>
+</UserControl>

@@ -103,6 +103,7 @@
     </Style>
     <ctkcvt:BoolToVisibilityConverter x:Key="SceneExpandedVisibility" />
     <ctkcvt:BoolToVisibilityConverter x:Key="InspectorDiagnosticVisibility" />
+    <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibility" />
     <Style x:Key="QuietDisclosure" TargetType="Expander">
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="MinHeight" Value="0" />

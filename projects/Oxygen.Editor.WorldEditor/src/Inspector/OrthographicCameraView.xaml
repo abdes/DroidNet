@@ -21,6 +21,24 @@
         HeaderIcon="{ui:FontIcon Glyph='&#xE714;'}"
         IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
         <editorcontrols:PropertiesExpander.Items>
+            <editorcontrols:PropertyCard
+                HorizontalContentAlignment="Stretch"
+                IsEnabled="{x:Bind ViewModel.StartingCamera.IsAvailable, Mode=OneWay}"
+                PropertyName="Starting camera"
+                ToolTipService.ToolTip="{x:Bind ViewModel.StartingCamera.ToolTip, Mode=OneWay}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ToggleSwitch
+                        AutomationProperties.Name="Starting camera"
+                        IsOn="{x:Bind ViewModel.StartingCamera.IsChecked, Mode=TwoWay}"
+                        OffContent=""
+                        OnContent="" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="(automatic)"
+                        Visibility="{x:Bind ViewModel.StartingCamera.IsAutomatic, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+            </editorcontrols:PropertyCard>
             <editorcontrols:InspectorNumberField
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
                 EditSessionCompleted="NumberEditCompleted"

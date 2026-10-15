@@ -151,10 +151,17 @@
                     Header="Explain">
                     <TextBlock Text="{x:Bind ViewModel.Selected.Explanation, Mode=OneWay, FallbackValue=''}" TextWrapping="Wrap" />
                 </Expander>
-                <Button
+                <StackPanel
                     Grid.Row="2"
-                    Command="{x:Bind ViewModel.OpenSelectedCommand}"
-                    Content="Open in code editor" />
+                    Orientation="Horizontal"
+                    Spacing="8">
+                    <Button Command="{x:Bind ViewModel.OpenSelectedCommand}" Content="Open in code editor" />
+                    <Button
+                        Command="{x:Bind ViewModel.SelectNodeCommand}"
+                        Content="Select node"
+                        ToolTipService.ToolTip="Select the node whose script reported this, in the scene that played"
+                        Visibility="{x:Bind ViewModel.CanSelectNode, Mode=OneWay}" />
+                </StackPanel>
             </Grid>
         </Grid>
     </Grid>

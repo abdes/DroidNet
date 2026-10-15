@@ -76,6 +76,13 @@ public:
   //! Full multi-line rendering with source excerpts, labels, notes and help,
   //! in the engine's layout.
   property String ^ Rendered;
+  //! Name of the node whose script slot the diagnostic is about; null for
+  //! diagnostics of a script alone.
+  property String ^ SlotNode;
+  //! Zero-based position of that slot on its node.
+  property Nullable<int> SlotIndex;
+  //! Hook or stage the slot was running, such as `on_gameplay` or `load`.
+  property String ^ SlotHook;
 };
 
 //! One parameter a script declares, with its authoring hints.
@@ -130,6 +137,19 @@ public:
   static auto Analyze(String ^ sourceName, array<Byte> ^ source,
     ScriptAnalysisLevel level, String ^ typeDefinitions)
     -> ScriptAnalysisResult ^;
+
+  //! Renders a diagnostic received in its JSON form, such as one a running
+  //! player published, in the same layout as the analyzer's diagnostics.
+  /*!
+   @param json One diagnostic as `oxygen.script-diagnostic.schema.json`
+     defines it.
+   @param readSource Returns the text of a span's source name, or null when
+     the source is unknown; its lines are then left out of the rendering.
+   @return The diagnostic, or null when the JSON is not a diagnostic of a
+     cataloged code.
+  */
+  static auto Render(String ^ json, Func<String ^, String ^> ^ readSource)
+    -> ScriptDiagnosticInfo ^;
 };
 
 } // namespace Oxygen::Interop::Scripting

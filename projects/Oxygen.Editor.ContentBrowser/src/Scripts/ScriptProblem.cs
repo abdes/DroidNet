@@ -23,4 +23,15 @@ public sealed record ScriptProblem(
     int? Line,
     int? Column,
     string Rendered,
-    string Explanation);
+    string Explanation)
+{
+    /// <summary>Gets the name of the node whose script slot reported the problem while the scene played; null for
+    /// problems the analyzer found.</summary>
+    public string? SlotNode { get; init; }
+
+    /// <summary>Gets the zero-based position of that slot on its node.</summary>
+    public int? SlotIndex { get; init; }
+
+    /// <summary>Gets a value indicating whether the problem happened while the scene played.</summary>
+    public bool IsRuntime { get; init; }
+}

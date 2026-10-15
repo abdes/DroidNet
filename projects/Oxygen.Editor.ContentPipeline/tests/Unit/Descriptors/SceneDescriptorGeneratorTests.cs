@@ -21,7 +21,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Descriptors;
 
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
-public sealed class SceneDescriptorGeneratorTests
+public sealed partial class SceneDescriptorGeneratorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -827,7 +827,6 @@ public sealed class SceneDescriptorGeneratorTests
                 new("asset:///Content/Scripts/A.oscript.json"),
             ],
             InputActions = [new("asset:///Content/Input/Jump.oiact.json")],
-            InputMappingContexts = [new("asset:///Content/Input/Gameplay.oimap.json")],
             PhysicsSidecars = [new("asset:///Content/Physics/Main.opscene.json")],
             ExtraAssets = ["/.cooked/Extras/Z.bin", "/.cooked/Extras/A.bin", "/.cooked/Extras/A.bin"],
         });
@@ -861,8 +860,7 @@ public sealed class SceneDescriptorGeneratorTests
             .Should().Equal("/Content/Scripts/A.oscript", "/Content/Scripts/Z.oscript");
         _ = references.GetProperty("input_actions").EnumerateArray().Select(static path => path.GetString())
             .Should().Equal("/Content/Input/Jump.oiact");
-        _ = references.GetProperty("input_mapping_contexts").EnumerateArray().Select(static path => path.GetString())
-            .Should().Equal("/Content/Input/Gameplay.oimap");
+        _ = references.TryGetProperty("input_mapping_contexts", out _).Should().BeFalse();
         _ = references.GetProperty("physics_sidecars").EnumerateArray().Select(static path => path.GetString())
             .Should().Equal("/Content/Physics/Main.opscene");
         _ = references.GetProperty("extra_assets").EnumerateArray().Select(static path => path.GetString())

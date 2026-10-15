@@ -13,9 +13,6 @@ public sealed record SceneReferencesData
     /// <summary>Gets the scene's input action references.</summary>
     public IList<Uri> InputActions { get; init; } = [];
 
-    /// <summary>Gets the scene's input mapping context references.</summary>
-    public IList<Uri> InputMappingContexts { get; init; } = [];
-
     /// <summary>Gets the scene's physics sidecar references.</summary>
     public IList<Uri> PhysicsSidecars { get; init; } = [];
 
@@ -26,7 +23,6 @@ public sealed record SceneReferencesData
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsEmpty => this.Scripts.Count == 0
         && this.InputActions.Count == 0
-        && this.InputMappingContexts.Count == 0
         && this.PhysicsSidecars.Count == 0
         && this.ExtraAssets.Count == 0;
 }

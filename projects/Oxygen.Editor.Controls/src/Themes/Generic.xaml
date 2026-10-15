@@ -4,5 +4,6 @@
         <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/ThemeResources.xaml" />
         <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/PropertiesExpander.xaml" />
         <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/PropertyCard.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Styles/RightAlignedToggleSwitch.xaml" />
     </ResourceDictionary.MergedDictionaries>
 </ResourceDictionary>

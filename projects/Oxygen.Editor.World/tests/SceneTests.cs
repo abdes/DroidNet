@@ -92,7 +92,6 @@ public class SceneTests
         {
             scene.References.Scripts,
             scene.References.InputActions,
-            scene.References.InputMappingContexts,
             scene.References.PhysicsSidecars,
         })
         {
@@ -265,7 +264,6 @@ public class SceneTests
         {
             Scripts = [new("asset:///Content/Scripts/Orbit.oscript.json")],
             InputActions = [new("asset:///Content/Input/Jump.oiact")],
-            InputMappingContexts = [new("asset:///Library/Input/Gameplay.oimap")],
             PhysicsSidecars = [new("asset:///Content/Physics/Main.opscene")],
             ExtraAssets = ["/.cooked/Extras/lookup.bin"],
         };

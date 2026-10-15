@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <variant>
@@ -138,7 +139,220 @@ namespace {
     }
     result->Summary = ToManaged(native::FormatSummary(diagnostic));
     result->Rendered = ToManaged(native::RenderText(diagnostic, sources));
+    if (diagnostic.slot.has_value()) {
+      result->SlotNode = ToManaged(diagnostic.slot->node);
+      result->SlotIndex
+        = Nullable<int>(static_cast<int>(diagnostic.slot->slot_index));
+      result->SlotHook = ToManaged(diagnostic.slot->hook);
+    }
     return result;
+  }
+
+  using System::Text::Json::JsonElement;
+  using System::Text::Json::JsonValueKind;
+
+  // The JSON form is `oxygen.script-diagnostic.schema.json`; a field of the
+  // wrong kind reads as missing, which leaves the diagnostic unrendered.
+  auto TryGet(JsonElement element, String ^ name, JsonElement % value)
+    -> bool
+  {
+    return element.ValueKind == JsonValueKind::Object
+      && element.TryGetProperty(name, value);
+  }
+
+  auto ReadString(JsonElement element, String ^ name)
+    -> std::optional<std::string>
+  {
+    auto value = JsonElement();
+    if (!TryGet(element, name, value)
+      || value.ValueKind != JsonValueKind::String) {
+      return std::nullopt;
+    }
+    return ToUtf8(value.GetString());
+  }
+
+  auto ReadUnsigned(JsonElement element, String ^ name)
+    -> std::optional<uint32_t>
+  {
+    auto value = JsonElement();
+    auto number = UInt32();
+    if (!TryGet(element, name, value)
+      || value.ValueKind != JsonValueKind::Number
+      || !value.TryGetUInt32(number)) {
+      return std::nullopt;
+    }
+    return static_cast<uint32_t>(number);
+  }
+
+  auto ReadPosition(JsonElement element, String ^ name)
+    -> std::optional<native::SourcePosition>
+  {
+    auto position = JsonElement();
+    if (!TryGet(element, name, position)) {
+      return std::nullopt;
+    }
+    const auto line = ReadUnsigned(position, "line");
+    const auto column = ReadUnsigned(position, "column");
+    if (!line.has_value() || !column.has_value()) {
+      return std::nullopt;
+    }
+    return native::SourcePosition { .line = *line, .column = *column };
+  }
+
+  auto ReadSpan(JsonElement element, String ^ name)
+    -> std::optional<native::SourceSpan>
+  {
+    auto span = JsonElement();
+    if (!TryGet(element, name, span)) {
+      return std::nullopt;
+    }
+    auto source = ReadString(span, "source");
+    const auto begin = ReadPosition(span, "begin");
+    const auto end = ReadPosition(span, "end");
+    if (!source.has_value() || !begin.has_value() || !end.has_value()) {
+      return std::nullopt;
+    }
+    return native::SourceSpan {
+      .source_name = std::move(*source),
+      .begin = *begin,
+      .end = *end,
+    };
+  }
+
+  auto ReadSeverity(const std::string& text)
+    -> std::optional<native::DiagnosticSeverity>
+  {
+    if (text == "error") {
+      return native::DiagnosticSeverity::kError;
+    }
+    if (text == "warning") {
+      return native::DiagnosticSeverity::kWarning;
+    }
+    if (text == "note") {
+      return native::DiagnosticSeverity::kNote;
+    }
+    return std::nullopt;
+  }
+
+  auto ReadLabels(JsonElement root, native::ScriptDiagnostic& diagnostic)
+    -> bool
+  {
+    auto labels = JsonElement();
+    if (!TryGet(root, "labels", labels)
+      || labels.ValueKind != JsonValueKind::Array) {
+      return false;
+    }
+    for (auto index = 0; index < labels.GetArrayLength(); ++index) {
+      auto label = labels[index];
+      auto span = ReadSpan(label, "span");
+      auto message = ReadString(label, "message");
+      auto primary = JsonElement();
+      if (!span.has_value() || !message.has_value()
+        || !TryGet(label, "primary", primary)
+        || (primary.ValueKind != JsonValueKind::True
+          && primary.ValueKind != JsonValueKind::False)) {
+        return false;
+      }
+      diagnostic.labels.push_back({
+        .span = std::move(*span),
+        .message = std::move(*message),
+        .primary = primary.GetBoolean(),
+      });
+    }
+    return true;
+  }
+
+  auto ReadNotes(JsonElement root, native::ScriptDiagnostic& diagnostic)
+    -> bool
+  {
+    auto notes = JsonElement();
+    if (!TryGet(root, "notes", notes)
+      || notes.ValueKind != JsonValueKind::Array) {
+      return false;
+    }
+    for (auto index = 0; index < notes.GetArrayLength(); ++index) {
+      auto note = notes[index];
+      if (note.ValueKind != JsonValueKind::String) {
+        return false;
+      }
+      diagnostic.notes.push_back(ToUtf8(note.GetString()));
+    }
+    return true;
+  }
+
+  auto ReadHelpAndSlot(
+    JsonElement root, native::ScriptDiagnostic& diagnostic) -> void
+  {
+    auto help = JsonElement();
+    if (TryGet(root, "help", help)) {
+      if (auto message = ReadString(help, "message"); message.has_value()) {
+        diagnostic.help = native::Suggestion {
+          .message = std::move(*message),
+          .span = ReadSpan(help, "span"),
+          .replacement = ReadString(help, "replacement"),
+        };
+      }
+    }
+    auto slot = JsonElement();
+    if (TryGet(root, "slot", slot)) {
+      auto node = ReadString(slot, "node");
+      const auto index = ReadUnsigned(slot, "slot_index");
+      auto hook = ReadString(slot, "hook");
+      if (node.has_value() && index.has_value() && hook.has_value()) {
+        diagnostic.slot = native::SlotContext {
+          .node = std::move(*node),
+          .slot_index = *index,
+          .hook = std::move(*hook),
+        };
+      }
+    }
+  }
+
+  auto ReadDiagnostic(JsonElement root)
+    -> std::optional<native::ScriptDiagnostic>
+  {
+    const auto severity_text = ReadString(root, "severity");
+    const auto code_text = ReadString(root, "code");
+    auto message = ReadString(root, "message");
+    if (!severity_text.has_value() || !code_text.has_value()
+      || !message.has_value()) {
+      return std::nullopt;
+    }
+    const auto severity = ReadSeverity(*severity_text);
+    const auto code = native::ParseDiagnosticCode(*code_text);
+    if (!severity.has_value() || !code.has_value()) {
+      return std::nullopt;
+    }
+    auto diagnostic = native::ScriptDiagnostic {
+      .severity = *severity,
+      .code = *code,
+      .message = std::move(*message),
+    };
+    if (!ReadLabels(root, diagnostic) || !ReadNotes(root, diagnostic)) {
+      return std::nullopt;
+    }
+    ReadHelpAndSlot(root, diagnostic);
+    return diagnostic;
+  }
+
+  //! Loads the text of every source the diagnostic's spans name.
+  auto LoadSources(const native::ScriptDiagnostic& diagnostic,
+    Func<String ^, String ^> ^ readSource) -> native::SourceTextCache
+  {
+    auto names = std::set<std::string> {};
+    for (const auto& label : diagnostic.labels) {
+      names.insert(label.span.source_name);
+    }
+    if (diagnostic.help.has_value() && diagnostic.help->span.has_value()) {
+      names.insert(diagnostic.help->span->source_name);
+    }
+    auto sources = native::SourceTextCache();
+    for (const auto& name : names) {
+      if (String ^ text = readSource(ToManaged(name)); text != nullptr) {
+        sources.Add(name, ToUtf8(text));
+      }
+    }
+    return sources;
   }
 
 } // namespace
@@ -182,6 +396,28 @@ auto ScriptAnalysis::Analyze(String ^ sourceName, array<Byte> ^ source,
       analysis.diagnostics.at(static_cast<std::size_t>(index)), sources);
   }
   return result;
+}
+
+auto ScriptAnalysis::Render(String ^ json,
+  Func<String ^, String ^> ^ readSource) -> ScriptDiagnosticInfo ^
+{
+  ArgumentNullException::ThrowIfNull(json, "json");
+  ArgumentNullException::ThrowIfNull(readSource, "readSource");
+
+  System::Text::Json::JsonDocument ^ document = nullptr;
+  try {
+    document = System::Text::Json::JsonDocument::Parse(
+      json, System::Text::Json::JsonDocumentOptions());
+    const auto diagnostic = ReadDiagnostic(document->RootElement);
+    if (!diagnostic.has_value()) {
+      return nullptr;
+    }
+    return ToManaged(*diagnostic, LoadSources(*diagnostic, readSource));
+  } catch (System::Text::Json::JsonException ^) {
+    return nullptr;
+  } finally {
+    delete document;
+  }
 }
 
 } // namespace Oxygen::Interop::Scripting

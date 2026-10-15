@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Reactive.Concurrency;
 using DroidNet.Controls;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Inspector.Environment;
 using Oxygen.Editor.World.Serialization;
@@ -27,13 +28,17 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
     /// <param name="inspectSceneNode">The existing hierarchy navigation operation.</param>
     /// <param name="observerScheduler">The injected catalog-notification scheduler.</param>
     /// <param name="observeEnvironment">Reads the runtime environment that renders a scene.</param>
+    /// <param name="inputContextSource">Reads what the project says about a mapping context.</param>
+    /// <param name="revealAsset">Shows an asset in the Content Browser.</param>
     public EnvironmentViewModel(
         ISceneDocumentCommandService? commandService = null,
         Func<SceneDocumentCommandContext?>? commandContextProvider = null,
         IContentBrowserAssetProvider? assetProvider = null,
         Func<Guid, Task>? inspectSceneNode = null,
         IScheduler? observerScheduler = null,
-        Func<Scene, CancellationToken, Task<RuntimeEnvironmentState?>>? observeEnvironment = null)
+        Func<Scene, CancellationToken, Task<RuntimeEnvironmentState?>>? observeEnvironment = null,
+        Func<Uri, InputContextSource>? inputContextSource = null,
+        Func<Uri, Task>? revealAsset = null)
     {
         this.observeEnvironment = observeEnvironment;
         this.EditOwner = new(commandService, commandContextProvider, this.RefreshFromScene, this.ValidationFeedback);
@@ -47,6 +52,7 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         this.PostProcessing = new(this.EditOwner);
         this.AtmosphereLights = new(this.EditOwner, commandService, commandContextProvider, inspectSceneNode);
         this.SceneReferences = new(commandService, commandContextProvider, assetProvider, observerScheduler ?? ImmediateScheduler.Instance);
+        this.Play = new(commandService, commandContextProvider, assetProvider, scheduler, inputContextSource, inspectSceneNode, revealAsset);
     }
 
     /// <summary>Occurs when diagnostic navigation requests realization and focus.</summary>
@@ -76,6 +82,9 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
     /// <summary>Gets the owned source role and observation policy.</summary>
     public AtmosphereLightsSectionViewModel AtmosphereLights { get; }
 
+    /// <summary>Gets the owned section that says how the scene starts when played.</summary>
+    public PlaySectionViewModel Play { get; }
+
     /// <summary>Gets the owned typed scene-reference authoring section.</summary>
     public SceneReferencesSectionViewModel SceneReferences { get; }
 
@@ -95,7 +104,7 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
     internal string? PendingFieldFocus { get; private set; }
 
     /// <summary>Gets completion of scene and source-role edits.</summary>
-    internal Task PendingEdits => Task.WhenAll(this.EditOwner.Pending, this.AtmosphereLights.Pending, this.SceneReferences.Pending);
+    internal Task PendingEdits => Task.WhenAll(this.EditOwner.Pending, this.AtmosphereLights.Pending, this.SceneReferences.Pending, this.Play.Pending);
 
     /// <inheritdoc />
     internal override InspectorFieldDiagnostics? ValidationFeedback { get; } = new();
@@ -118,6 +127,7 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         this.scene = value;
         this.AtmosphereLights.Bind(value);
         this.SceneReferences.Bind(value);
+        this.Play.Bind(value);
         this.Exposure.StartAssets();
         this.Backdrop.StartAssets();
         this.SkyLight.StartAssets();
@@ -168,6 +178,7 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
 
         this.AtmosphereLights.Dispose();
         this.SceneReferences.Dispose();
+        this.Play.Dispose();
         this.Exposure.Dispose();
         this.Backdrop.Dispose();
         this.SkyLight.Dispose();
@@ -192,6 +203,7 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         this.EditOwner.SetInputEnabled(enabled);
         this.AtmosphereLights.SetInputEnabled(enabled);
         this.SceneReferences.SetInputEnabled(enabled);
+        this.Play.SetInputEnabled(enabled);
     }
 
     private void RefreshFromScene()
@@ -211,6 +223,9 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
             this.Exposure.Refresh(value.PostProcess ?? new());
             this.PostProcessing.Refresh(value.PostProcess ?? new());
         });
+
+        // Cameras may have been added, renamed or removed while nodes were inspected.
+        this.Play.Refresh();
 
         // Each authored change can alter the rendered sky light, which settles a few frames later.
         this.SkyLight.WatchRuntime(this.scene is { } current && this.observeEnvironment is { } observe

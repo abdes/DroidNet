@@ -15,7 +15,7 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 
 /// <summary>
 /// Re-points a scene's asset references through an identity mapping, in place: geometry, material slots (component
-/// and targeted), slot targets, script slots, scene references and the environment's metering mask. Used when an open scene follows
+/// and targeted), slot targets, script slots, scene references, starting input contexts and the environment's metering mask. Used when an open scene follows
 /// a relocation, and when undo, redo or paste restores references captured before a relocation.
 /// </summary>
 internal static class SceneReferenceRetargeting
@@ -134,7 +134,6 @@ internal static class SceneReferenceRetargeting
         {
             Scripts = Uris(references.Scripts),
             InputActions = Uris(references.InputActions),
-            InputMappingContexts = Uris(references.InputMappingContexts),
             PhysicsSidecars = Uris(references.PhysicsSidecars),
             ExtraAssets = [.. references.ExtraAssets.Select(value =>
             {
@@ -148,6 +147,28 @@ internal static class SceneReferenceRetargeting
             })],
         };
         return changed ? result : null;
+    }
+
+    /// <summary>Re-points the starting input contexts.</summary>
+    /// <param name="play">The play settings.</param>
+    /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
+    /// <returns>The re-pointed play settings, or null when nothing changed.</returns>
+    public static ScenePlayData? Retarget(ScenePlayData play, Func<Uri, Uri?> map)
+    {
+        ArgumentNullException.ThrowIfNull(play);
+        ArgumentNullException.ThrowIfNull(map);
+        var changed = false;
+        var contexts = play.StartingInputContexts.Select(entry =>
+        {
+            if (map(entry.Context) is not { } moved)
+            {
+                return entry;
+            }
+
+            changed = true;
+            return entry with { Context = moved };
+        }).ToList();
+        return changed ? play with { StartingInputContexts = contexts } : null;
     }
 
     /// <summary>Re-points the environment's metering mask and sky cubemaps.</summary>
