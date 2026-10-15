@@ -118,11 +118,12 @@
                 FontSize="14"
                 HasError="{x:Bind ViewModel.ShutterRateDiagnostic.HasError, Mode=OneWay}"
                 IsMixed="{x:Bind ViewModel.ShutterRate.IsMixed, Mode=OneWay}"
-                Label="Shutter rate"
+                Label="Shutter speed"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.ShutterRate.Number, Mode=TwoWay}"
+                Prefix="1/"
                 Tag="ShutterRate"
-                Unit="1/s" />
+                Unit="s" />
             <editorcontrols:InspectorNumberField
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
                 EditSessionCompleted="NumberEditCompleted"

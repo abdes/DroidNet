@@ -168,10 +168,10 @@ internal sealed class PerspectiveCameraDescriptors
                 "perspective_camera.aperture_f"),
             shutterRate: FloatDescriptor(
                 "/shutter_rate",
-                "Shutter Rate",
+                "Shutter Speed",
                 static camera => camera.ShutterRate,
                 static (camera, value) => camera.ShutterRate = value,
-                Positive("Shutter rate must be greater than zero."),
+                Positive("Shutter speed must be greater than zero."),
                 "perspective_camera.shutter_rate"),
             iso: FloatDescriptor(
                 "/iso",

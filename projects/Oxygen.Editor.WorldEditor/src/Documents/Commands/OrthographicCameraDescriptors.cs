@@ -145,10 +145,10 @@ internal sealed class OrthographicCameraDescriptors
                 Positive(SceneDiagnosticCodes.CameraExposureNonPositive, "Aperture must be greater than zero.")),
             shutterRate: FloatDescriptor(
                 "/shutter_rate",
-                "Shutter Rate",
+                "Shutter Speed",
                 static camera => camera.ShutterRate,
                 static (camera, value) => camera.ShutterRate = value,
-                Positive(SceneDiagnosticCodes.CameraExposureNonPositive, "Shutter rate must be greater than zero.")),
+                Positive(SceneDiagnosticCodes.CameraExposureNonPositive, "Shutter speed must be greater than zero.")),
             iso: FloatDescriptor(
                 "/iso",
                 "ISO",
