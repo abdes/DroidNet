@@ -4,8 +4,8 @@
 
 namespace Oxygen.Editor.Documents;
 
-/// <summary>Matches file names against the suffixes of document kinds.</summary>
-internal static class DocumentKinds
+/// <summary>Matches file names against the suffixes of document kinds, and names a document after its file.</summary>
+public static class DocumentKinds
 {
     /// <summary>Gets the longest suffix of a kind that ends a file's name.</summary>
     /// <param name="kind">The kind.</param>

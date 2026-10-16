@@ -2,10 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Windowing;
+using DroidNet.Documents;
 using DroidNet.Tests;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
@@ -38,7 +40,7 @@ public sealed class DocumentConflictControlTests : VisualUserInterfaceTests
         var dialogs = new Mock<IDialogService>();
         _ = dialogs.Setup(value => value.ShowAsync(It.IsAny<DialogSpec>(), windowId, It.IsAny<CancellationToken>())).Returns(closed.Task);
         var prompt = new DocumentConflictPrompt(dialogs.Object, windows.Object);
-        var metadata = new SceneDocumentMetadata(Guid.NewGuid());
+        var metadata = new TestMetadata();
         var participant = Mock.Of<IDocumentConflictParticipant>();
 
         var first = prompt.ShowAsync(windowId, metadata, participant);
@@ -61,7 +63,7 @@ public sealed class DocumentConflictControlTests : VisualUserInterfaceTests
     [TestMethod]
     public Task InlineReloadRequiresDiscardConfirmation() => EnqueueAsync(async () =>
     {
-        var metadata = new SceneDocumentMetadata(Guid.NewGuid()) { IsDirty = true, Title = "Unsaved scene" };
+        var metadata = new TestMetadata { IsDirty = true, Title = "Unsaved scene" };
         var participant = new Mock<IDocumentConflictParticipant>();
         _ = participant.SetupGet(value => value.HasSaveConflict).Returns(value: true);
         _ = participant.Setup(value => value.ReloadFromDiskAsync()).Returns(() =>
@@ -91,7 +93,7 @@ public sealed class DocumentConflictControlTests : VisualUserInterfaceTests
     [TestMethod]
     public Task InlineCopyWaitsForIoAndKeepsTheOriginalUnsaved() => EnqueueAsync(async () =>
     {
-        var metadata = new SceneDocumentMetadata(Guid.NewGuid()) { IsDirty = true };
+        var metadata = new TestMetadata { IsDirty = true };
         var completed = new TaskCompletionSource<DocumentConflictResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var participant = new Mock<IDocumentConflictParticipant>();
         _ = participant.SetupGet(value => value.HasSaveConflict).Returns(value: true);
@@ -124,5 +126,33 @@ public sealed class DocumentConflictControlTests : VisualUserInterfaceTests
         var invoke = (IInvokeProvider)new ButtonAutomationPeer(button).GetPattern(PatternInterface.Invoke);
         invoke.Invoke();
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+    }
+
+    /// <summary>A document's tab state that the test sets.</summary>
+    private sealed class TestMetadata : IDocumentMetadata
+    {
+        private bool isDirty;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public DocumentId DocumentId { get; } = DocumentId.New();
+
+        public string Title { get; init; } = "Scene";
+
+        public Uri? IconUri => null;
+
+        public bool IsDirty
+        {
+            get => this.isDirty;
+            set
+            {
+                this.isDirty = value;
+                this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.IsDirty)));
+            }
+        }
+
+        public bool IsClosable => true;
+
+        public bool IsPinnedHint => false;
     }
 }

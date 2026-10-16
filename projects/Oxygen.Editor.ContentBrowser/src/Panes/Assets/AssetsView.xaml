@@ -62,7 +62,7 @@
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem
                                     AccessKey="M"
-                                    Click="OnCreateMaterialClicked"
+                                    Command="{x:Bind ViewModel.CreateNewMaterialWithPromptCommand}"
                                     Text="Material">
                                     <MenuFlyoutItem.Icon>
                                         <FontIcon Glyph="&#xE8B9;" />
@@ -460,7 +460,7 @@
                                 Text="Folder"
                                 ToolTipService.ToolTip="{x:Bind ViewModel.CreateFolderToolTip, Mode=OneWay}" />
                             <MenuFlyoutItem Command="{x:Bind ViewModel.CreateNewSceneWithPromptCommand}" Text="Scene" />
-                            <MenuFlyoutItem Click="OnCreateMaterialClicked" Text="Material" />
+                            <MenuFlyoutItem Command="{x:Bind ViewModel.CreateNewMaterialWithPromptCommand}" Text="Material" />
                         </MenuFlyoutSubItem>
                         <MenuFlyoutSeparator />
                         <MenuFlyoutItem

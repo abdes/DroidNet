@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 
@@ -116,7 +117,7 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
                         new ExplorerEntryData
                         {
                             Type = "Folder",
-                            FolderId = Guid.NewGuid(),
+                            FolderId = FolderId.New(),
                             Name = "Group",
                             Children = [],
                         },
@@ -127,7 +128,7 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
 
     private static async Task AssertNativeLocalTrsAsync(
         NativeSceneFixture fixture,
-        Guid nodeId,
+        NodeId nodeId,
         IReadOnlyDictionary<(ushort component, ushort field), float> expected,
         CancellationToken cancellationToken)
     {

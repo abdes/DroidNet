@@ -3,15 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Documents;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets.Catalog;
@@ -26,14 +25,13 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
     private readonly IAssetFeed assets;
     private readonly IContentPipelineService pipeline;
     private readonly IProjectContextService projects;
-    private readonly IDocumentService documents;
+    private readonly IDocumentArea documentArea;
     private readonly ISceneEngineSync sceneSync;
     private readonly IMessenger messenger;
-    private readonly WindowId windowId;
     private readonly ILogger<SceneContentDemandService> logger;
     private readonly List<Demand> demands = [];
     private Scene? scene;
-    private SceneDocumentMetadata? metadata;
+    private Document? document;
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="SceneContentDemandService"/> class.</summary>
@@ -41,30 +39,27 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
     /// <param name="assets">Shared typed identities and verified cook status.</param>
     /// <param name="pipeline">The saved-input cooking transaction.</param>
     /// <param name="projects">The current project lifetime.</param>
-    /// <param name="documents">Document activation, closure and authoring changes.</param>
+    /// <param name="documentArea">The window's document area, whose active scene document the demand follows.</param>
     /// <param name="sceneSync">The already loaded scene registry.</param>
     /// <param name="messenger">Scene load and selection notifications.</param>
-    /// <param name="windowId">The owning workspace window.</param>
     /// <param name="logger">Reports failures to submit preview work.</param>
     public SceneContentDemandService(
         HostingContext hosting,
         IAssetFeed assets,
         IContentPipelineService pipeline,
         IProjectContextService projects,
-        IDocumentService documents,
+        IDocumentArea documentArea,
         ISceneEngineSync sceneSync,
         IMessenger messenger,
-        WindowId windowId,
         ILogger<SceneContentDemandService> logger)
     {
         this.hosting = hosting;
         this.assets = assets;
         this.pipeline = pipeline;
         this.projects = projects;
-        this.documents = documents;
+        this.documentArea = documentArea;
         this.sceneSync = sceneSync;
         this.messenger = messenger;
-        this.windowId = windowId;
         this.logger = logger;
         this.Subscribe();
     }
@@ -188,8 +183,7 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
     private bool IsCurrent(Demand demand)
     {
         if (this.disposed || !ReferenceEquals(this.scene, demand.Scene) || !ReferenceEquals(this.projects.ActiveProject, demand.Project)
-            || this.documents.GetActiveDocumentId(this.windowId) != this.metadata?.DocumentId
-            || !this.documents.GetOpenDocuments(this.windowId).Any(document => ReferenceEquals(document, this.metadata)))
+            || this.document is null || !ReferenceEquals(this.documentArea.ActiveDocument, this.document))
         {
             return false;
         }

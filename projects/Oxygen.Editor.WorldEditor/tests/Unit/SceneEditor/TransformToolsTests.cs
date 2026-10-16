@@ -16,6 +16,7 @@ using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.SceneEditor;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
 
@@ -28,7 +29,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
 [TestCategory("Viewport Tools")]
 public sealed class TransformToolsTests
 {
-    private static readonly Guid NodeId = Guid.NewGuid();
+    private static readonly NodeId TargetNode = NodeId.New();
 
     [TestMethod]
     public void Tools_StartWithMoveAndEachCommandPicksItsTool()
@@ -124,12 +125,12 @@ public sealed class TransformToolsTests
     [TestMethod]
     public void GizmoEdits_ChangeOnlyWhatTheToolMoves()
     {
-        var target = new RuntimeGizmoTarget(NodeId, new Vector3(1, 2, 3), Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2), new Vector3(2, 3, 4));
+        var target = new RuntimeGizmoTarget(TargetNode, new Vector3(1, 2, 3), Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2), new Vector3(2, 3, 4));
         var transform = SceneDocumentCommandService.Transform;
 
-        var move = SceneEditorViewModel.BuildGizmoEdits(RuntimeTransformTool.Translate, [target])[NodeId];
-        var rotate = SceneEditorViewModel.BuildGizmoEdits(RuntimeTransformTool.Rotate, [target])[NodeId];
-        var scale = SceneEditorViewModel.BuildGizmoEdits(RuntimeTransformTool.Scale, [target])[NodeId];
+        var move = SceneEditorViewModel.BuildGizmoEdits(RuntimeTransformTool.Translate, [target])[TargetNode];
+        var rotate = SceneEditorViewModel.BuildGizmoEdits(RuntimeTransformTool.Rotate, [target])[TargetNode];
+        var scale = SceneEditorViewModel.BuildGizmoEdits(RuntimeTransformTool.Scale, [target])[TargetNode];
 
         _ = move.Ids.Should().BeEquivalentTo([transform.PositionX.Id, transform.PositionY.Id, transform.PositionZ.Id]);
         _ = rotate.Count.Should().Be(6);

@@ -14,19 +14,19 @@ namespace Oxygen.Editor.Documents;
 /// <param name="operationResults">The visible operation-result publisher.</param>
 public sealed partial class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOperationResultPublisher operationResults)
 {
-    private readonly Dictionary<(WindowId window, Guid document), IDocumentCloseParticipant> participants = [];
+    private readonly Dictionary<(WindowId window, DocumentId document), IDocumentCloseParticipant> participants = [];
 
     /// <summary>Registers the authoring owner of an open document.</summary>
     /// <param name="windowId">The owner window.</param>
     /// <param name="documentId">The tab identity, which may differ from the authoring-service identity.</param>
     /// <param name="participant">The authoring owner.</param>
-    public void Register(WindowId windowId, Guid documentId, IDocumentCloseParticipant participant)
+    public void Register(WindowId windowId, DocumentId documentId, IDocumentCloseParticipant participant)
         => this.participants.Add((windowId, documentId), participant);
 
     /// <summary>Unregisters a closed document.</summary>
     /// <param name="windowId">The owner window.</param>
     /// <param name="documentId">The tab identity.</param>
-    public void Unregister(WindowId windowId, Guid documentId)
+    public void Unregister(WindowId windowId, DocumentId documentId)
         => this.participants.Remove((windowId, documentId));
 
     /// <summary>Prepares authoring owners and collects decisions without destroying documents.</summary>
@@ -114,7 +114,7 @@ public sealed partial class DocumentCloseCoordinator(IDocumentClosePrompt prompt
         }
     }
 
-    private async Task<bool> CommitAsync(IReadOnlyList<ParticipantEntry> prepared, HashSet<Guid> discards)
+    private async Task<bool> CommitAsync(IReadOnlyList<ParticipantEntry> prepared, HashSet<DocumentId> discards)
     {
         var changed = prepared.FirstOrDefault(entry => entry.Metadata.IsDirty && !discards.Contains(entry.Metadata.DocumentId));
         if (changed is not null)
@@ -137,16 +137,15 @@ public sealed partial class DocumentCloseCoordinator(IDocumentClosePrompt prompt
     {
         try
         {
-            var version = (entry.Metadata as BaseDocumentMetadata)?.ChangeVersion;
+            // A save marks saved only what it captured, so an edit made while it wrote keeps the document dirty.
             var saved = await entry.Participant.SaveForCloseAsync().ConfigureAwait(true);
-            if (entry.Metadata is BaseDocumentMetadata metadata && metadata.ChangeVersion != version)
+            if (saved && entry.Metadata.IsDirty)
             {
-                metadata.IsDirty = true;
-                this.PublishFailure(metadata, "Document.Save", "The document changed while saving. Save again before closing.");
+                this.PublishFailure(entry.Metadata, "Document.Save", "The document changed while saving. Save again before closing.");
                 return false;
             }
 
-            return saved && !entry.Metadata.IsDirty;
+            return saved;
         }
         catch (OperationCanceledException)
         {
@@ -162,7 +161,7 @@ public sealed partial class DocumentCloseCoordinator(IDocumentClosePrompt prompt
     private void PublishFailure(IDocumentMetadata? metadata, string operationKind, string message)
     {
         var operationId = Guid.NewGuid();
-        var scope = new AffectedScope { DocumentId = metadata?.DocumentId, DocumentName = metadata?.Title };
+        var scope = new AffectedScope { DocumentId = metadata?.DocumentId.Value, DocumentName = metadata?.Title };
         operationResults.Publish(new OperationResult
         {
             OperationId = operationId,

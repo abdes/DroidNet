@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Documents;
 using Oxygen.Managed.Core;
@@ -325,9 +326,9 @@ public partial class SceneExplorerViewModel
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
         Message = "Scene explorer switching to active document {DocumentId}")]
-    private static partial void LogDocumentActivated(ILogger logger, System.Guid documentId);
+    private static partial void LogDocumentActivated(ILogger logger, DroidNet.Documents.DocumentId documentId);
 
-    private void LogDocumentActivated(System.Guid documentId)
+    private void LogDocumentActivated(DroidNet.Documents.DocumentId documentId)
         => LogDocumentActivated(this.logger, documentId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Scene '{Scene}' was not renamed to '{Name}': {Reason}")]

@@ -27,6 +27,23 @@ public sealed class OpenDocumentsTests : DocumentTestBase
     }
 
     [TestMethod]
+    public async Task Find_ByIdOrAsset_FindsTheOpenDocument()
+    {
+        var (wood, _) = await this.OpenNoteAsync("Wood").ConfigureAwait(false);
+        var (stone, _) = await this.OpenNoteAsync("Stone").ConfigureAwait(false);
+
+        _ = this.Documents.Find(wood.Id).Should().BeSameAs(wood);
+        _ = this.Documents.FindByAsset(new Uri("asset:///Content/Stone" + NoteKind.Suffix)).Should().BeSameAs(stone);
+        _ = this.Documents.Find(DroidNet.Documents.DocumentId.New()).Should().BeNull();
+        _ = this.Documents.FindByAsset(UriOf("Glass")).Should().BeNull();
+
+        this.Documents.Close(wood);
+
+        _ = this.Documents.Find(wood.Id).Should().BeNull();
+        _ = this.Documents.FindByAsset(UriOf("Wood")).Should().BeNull();
+    }
+
+    [TestMethod]
     public async Task OpenAsync_RequestedTwiceAtOnce_OpensOneDocument()
     {
         this.WriteNote("Wood", "first");

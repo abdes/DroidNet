@@ -21,6 +21,7 @@ using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.SceneExplorer;
 
@@ -49,7 +50,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         _ = command.CanExecute(parameter: null).Should().BeFalse();
         _ = dismissed.Should().BeTrue();
         harness.Commands.Verify(value => value.DeleteItemsAsync(
-            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<IReadOnlyList<Guid>>()), Times.Never);
+            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<IReadOnlyList<FolderId>>()), Times.Never);
     });
 
     [TestMethod]
@@ -59,7 +60,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         var second = new SceneNode(scene) { Name = "Second" };
         scene.RootNodes.Add(second);
         _ = harness.Commands.Setup(value => value.DeleteItemsAsync(
-            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<IReadOnlyList<Guid>>()))
+            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<IReadOnlyList<FolderId>>()))
             .ReturnsAsync(SceneCommandResult.Success);
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
@@ -72,8 +73,8 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
 
         harness.Commands.Verify(value => value.DeleteItemsAsync(
             It.IsAny<SceneDocumentCommandContext>(),
-            It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 2 && ids.Contains(node.Id) && ids.Contains(second.Id)),
-            It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 0)), Times.Once);
+            It.Is<IReadOnlyList<NodeId>>(ids => ids.Count == 2 && ids.Contains(node.Id) && ids.Contains(second.Id)),
+            It.Is<IReadOnlyList<FolderId>>(ids => ids.Count == 0)), Times.Once);
         _ = menu.Items.Select(item => item.Text).Should().NotContain("Rename");
     });
 
@@ -160,7 +161,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
     public Task ContextMenuFolderCopyAndPasteRoutesWholePayloadThroughAtomicOwner() => EnqueueAsync(async () =>
     {
         var harness = new AuthoringHarness(out var scene, out var node);
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
         scene.SetExplorerLayout(
         [
             new ExplorerEntryData
@@ -171,8 +172,8 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         ]);
         var payload = new SceneExplorerClipboard(scene.ExplorerLayout!.ToArray(), [node.Dehydrate()]);
         _ = harness.Commands.Setup(value => value.CaptureExplorerClipboard(
-            It.IsAny<SceneDocumentCommandContext>(), It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 0),
-            It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { folderId }))))
+            It.IsAny<SceneDocumentCommandContext>(), It.Is<IReadOnlyList<NodeId>>(ids => ids.Count == 0),
+            It.Is<IReadOnlyList<FolderId>>(ids => ids.SequenceEqual(new[] { folderId }))))
             .Returns(SceneCommandResults.Success(payload));
         _ = harness.Commands.Setup(value => value.ValidateExplorerPaste(
             It.IsAny<SceneDocumentCommandContext>(), payload, cut: false, parentNodeId: null, parentFolderId: null, preserveWorld: false)).Returns((string?)null);
@@ -197,7 +198,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
     {
         var harness = new AuthoringHarness(out var scene, out var node);
         _ = harness.Commands.Setup(value => value.ReparentNodesAsync(
-            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), newParentNodeId: null, preserveWorldTransform: false, insertAfterNodeId: null))
+            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), newParentNodeId: null, preserveWorldTransform: false, insertAfterNodeId: null))
             .ReturnsAsync(SceneCommandResult.Success);
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
@@ -207,7 +208,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         await GetMenuCommand(explorer.BuildContextMenuSource(anchor: null), "Paste at scene root").ExecuteAsync(parameter: null).ConfigureAwait(true);
 
         harness.Commands.Verify(value => value.ReparentNodesAsync(
-            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), newParentNodeId: null, preserveWorldTransform: false, insertAfterNodeId: null), Times.Once);
+            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), newParentNodeId: null, preserveWorldTransform: false, insertAfterNodeId: null), Times.Once);
     });
 
     [TestMethod]
@@ -226,7 +227,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
 
         _ = command.CanExecute(parameter: null).Should().BeFalse();
         harness.Commands.Verify(value => value.DeleteItemsAsync(
-            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<IReadOnlyList<Guid>>()), Times.Never);
+            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<IReadOnlyList<FolderId>>()), Times.Never);
     });
 
     [TestMethod]
@@ -316,22 +317,23 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
     private sealed class AuthoringHarness
     {
         private readonly Scene scene;
-        private readonly List<SceneDocumentMetadata> openDocuments = [];
+        private readonly List<SceneTab> openDocuments = [];
 
         public AuthoringHarness(out Scene scene, out SceneNode node)
         {
             var project = new Project(new ProjectInfo("Authoring", Category.Games, @"H:\AuthoringTreeTests", "preview.png")) { Name = "Authoring" };
-            scene = new Scene(project) { Name = "Scene" };
-            node = new SceneNode(scene) { Name = "Node" };
-            scene.RootNodes.Add(node);
-            this.scene = scene;
+            var built = new Scene(project) { Name = "Scene" };
+            var builtNode = new SceneNode(built) { Name = "Node" };
+            built.RootNodes.Add(builtNode);
             this.Manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
             _ = this.Manager.SetupGet(value => value.CurrentProject).Returns(project);
-            this.Documents = new Mock<IDocumentService>();
-            var metadata = SceneTabs.Open(scene);
+            this.Documents = new TestDocumentArea();
+            var metadata = SceneTabs.Open(built);
+            scene = metadata.Scene;
+            node = metadata.NodeOf(builtNode);
+            this.scene = scene;
             this.openDocuments.Add(metadata);
-            _ = this.Documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns(() => this.openDocuments);
-            _ = this.Documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
+            this.Documents.Activate(metadata.Document);
             this.Sync = new Mock<ISceneEngineSync>();
             _ = this.Sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
             _ = this.Sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata.DocumentId)).Returns(value: true);
@@ -341,7 +343,10 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
 
         public Mock<IProjectManagerService> Manager { get; }
 
-        public Mock<IDocumentService> Documents { get; }
+        public TestDocumentArea Documents { get; }
+
+        /// <summary>Gets the open documents that hold the harness's first scene.</summary>
+        public Oxygen.Editor.Documents.OpenDocuments OpenDocuments => this.openDocuments[0].Documents;
 
         public Mock<ISceneEngineSync> Sync { get; }
 
@@ -353,14 +358,17 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         {
             var added = new Scene(this.scene.Project) { Name = name };
             var metadata = SceneTabs.Open(added);
+            added = metadata.Scene;
             this.openDocuments.Add(metadata);
+            this.Documents.Add(metadata.Document);
             _ = this.Sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(added);
             _ = this.Sync.Setup(value => value.RegisterDocument(added, metadata.DocumentId)).Returns(value: true);
             return added;
         }
 
         public SceneExplorerViewModel Build()
-            => new(this.Manager.Object, this.Messenger, Mock.Of<IRouter>(), this.Documents.Object,
+            => new(this.Manager.Object, this.Messenger, Mock.Of<IRouter>(), this.Documents,
+                this.OpenDocuments,
                 default, this.Sync.Object, new SceneSelectionService(), this.Commands.Object);
     }
 }

@@ -353,7 +353,7 @@ public partial class SceneEditorViewModel
                 Severity = DiagnosticSeverity.Warning,
                 Title = "Transform gizmo failed",
                 Message = "The runtime could not show the transform gizmo of the selection.",
-                AffectedScope = new AffectedScope { DocumentId = this.Metadata.DocumentId, DocumentName = this.Metadata.Title },
+                AffectedScope = new AffectedScope { DocumentId = this.Document.Id.Value, DocumentName = this.Document.Title },
                 CompletedAt = DateTimeOffset.UtcNow,
             });
         }

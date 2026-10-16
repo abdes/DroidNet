@@ -4,11 +4,13 @@
 
 using System.Numerics;
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.WorldEditor.SceneEditor;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
@@ -21,7 +23,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
 [TestCategory("Viewport Camera")]
 public sealed class ViewportViewLifetimeTests
 {
-    private static readonly SceneCameraChoice MainCamera = new(Guid.Parse("6c2e8b1f-3a4d-4f5e-9b6c-7d8e9f0a1b02"), "Main");
+    private static readonly SceneCameraChoice MainCamera = new(NodeId.FromValue(Guid.Parse("6c2e8b1f-3a4d-4f5e-9b6c-7d8e9f0a1b02")), "Main");
     private static readonly Guid Surface = Guid.Parse("0f1e2d3c-4b5a-4968-8776-655443322110");
     private static readonly RuntimeEditorCamera MovedCamera = new(
         new Vector3(4, -6, 9),
@@ -115,7 +117,7 @@ public sealed class ViewportViewLifetimeTests
         var engine = new FakeEngine();
         using var sut = CreateViewport(engine.Service.Object);
         await sut.CreateViewAsync(Surface, "Pane", 640, 480).ConfigureAwait(false);
-        var piloting = new List<(ViewportViewModel Pane, Guid Camera, bool PilotSent)>();
+        var piloting = new List<(ViewportViewModel Pane, NodeId Camera, bool PilotSent)>();
         sut.PilotStarting = (pane, camera) =>
         {
             piloting.Add((pane, camera, sut.IsPilotingSceneCamera));
@@ -131,7 +133,7 @@ public sealed class ViewportViewLifetimeTests
     private static ViewportViewModel CreateViewport(IEngineService engine)
     {
         return new ViewportViewModel(
-            Guid.NewGuid(),
+            DocumentId.New(),
             engine,
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer(),
@@ -168,7 +170,7 @@ public sealed class ViewportViewLifetimeTests
             _ = this.Service.Setup(service => service.SetViewCameraControlModeAsync(It.IsAny<RuntimeViewId>(), It.IsAny<CameraControlMode>())).ReturnsAsync(value: true);
             _ = this.Service.Setup(service => service.SetViewCameraMovementSpeedAsync(It.IsAny<RuntimeViewId>(), It.IsAny<float>())).ReturnsAsync(value: true);
             _ = this.Service.Setup(service => service.SetViewCameraSettingsAsync(It.IsAny<RuntimeViewId>(), It.IsAny<float>(), It.IsAny<float>(), It.IsAny<float>())).ReturnsAsync(value: true);
-            _ = this.Service.Setup(service => service.SetViewSceneCameraAsync(It.IsAny<RuntimeViewId>(), It.IsAny<Guid?>())).ReturnsAsync(value: true);
+            _ = this.Service.Setup(service => service.SetViewSceneCameraAsync(It.IsAny<RuntimeViewId>(), It.IsAny<NodeId?>())).ReturnsAsync(value: true);
             _ = this.Service.Setup(service => service.SetViewScenePilotAsync(It.IsAny<RuntimeViewId>(), It.IsAny<bool>())).ReturnsAsync(value: true);
         }
 

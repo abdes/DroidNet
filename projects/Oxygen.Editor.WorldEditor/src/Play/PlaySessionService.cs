@@ -4,7 +4,6 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Controls.OutputConsole.Model;
-using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,6 +12,7 @@ using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Player;
 using Oxygen.Managed.Core.Compatibility;
@@ -34,7 +34,7 @@ public sealed partial class PlaySessionService : ObservableObject, IRuntimeProbl
     private readonly IContentPipelineService pipeline;
     private readonly CookPublicationService publication;
     private readonly CookedContentMountService mountService;
-    private readonly IDocumentService documents;
+    private readonly OpenDocuments documents;
     private readonly IOperationResultPublisher operationResults;
     private readonly OutputLogBuffer output;
     private readonly DispatcherQueue dispatcher;
@@ -55,7 +55,7 @@ public sealed partial class PlaySessionService : ObservableObject, IRuntimeProbl
     /// <param name="publication">The cooked content publication the player mounts.</param>
     /// <param name="mountService">Validates and holds the cooked roots while the player reads them.</param>
     /// <param name="settings">The play session preferences.</param>
-    /// <param name="documents">The document service, whose edits make a running session stale.</param>
+    /// <param name="documents">The open documents, whose edits make a running session stale.</param>
     /// <param name="operationResults">Publishes Play failures.</param>
     /// <param name="output">The Output panel's buffer, which receives the player's log.</param>
     /// <param name="hosting">The UI thread that player events are marshalled to.</param>
@@ -66,7 +66,7 @@ public sealed partial class PlaySessionService : ObservableObject, IRuntimeProbl
         CookPublicationService publication,
         CookedContentMountService mountService,
         PlaySessionSettingsService settings,
-        IDocumentService documents,
+        OpenDocuments documents,
         IOperationResultPublisher operationResults,
         OutputLogBuffer output,
         HostingContext hosting,
@@ -91,7 +91,12 @@ public sealed partial class PlaySessionService : ObservableObject, IRuntimeProbl
 #else
             "Release").PlayerPath;
 #endif
-        this.documents.DocumentMetadataChanged += this.OnDocumentMetadataChanged;
+        this.documents.Opened += this.OnDocumentOpened;
+        this.documents.Closed += this.OnDocumentClosed;
+        foreach (var document in this.documents.Documents)
+        {
+            document.StateChanged += this.OnDocumentStateChanged;
+        }
     }
 
     /// <inheritdoc />
@@ -229,7 +234,12 @@ public sealed partial class PlaySessionService : ObservableObject, IRuntimeProbl
         }
 
         this.disposed = true;
-        this.documents.DocumentMetadataChanged -= this.OnDocumentMetadataChanged;
+        this.documents.Opened -= this.OnDocumentOpened;
+        this.documents.Closed -= this.OnDocumentClosed;
+        foreach (var document in this.documents.Documents)
+        {
+            document.StateChanged -= this.OnDocumentStateChanged;
+        }
 
         // The player ends when its owner's connection closes, so releasing the connection ends it too.
         _ = this.EndAsync();
@@ -347,10 +357,14 @@ public sealed partial class PlaySessionService : ObservableObject, IRuntimeProbl
         }
     }
 
-    private void OnDocumentMetadataChanged(object? sender, DocumentMetadataChangedEventArgs args)
+    private void OnDocumentOpened(object? sender, DocumentEventArgs args) => args.Document.StateChanged += this.OnDocumentStateChanged;
+
+    private void OnDocumentClosed(object? sender, DocumentEventArgs args) => args.Document.StateChanged -= this.OnDocumentStateChanged;
+
+    private void OnDocumentStateChanged(object? sender, EventArgs args)
     {
         // Play saved every document, so any document with unsaved changes was edited after the session started.
-        if (this.Status is { IsRunning: true, IsStale: false } && args.NewMetadata.IsDirty)
+        if (this.Status is { IsRunning: true, IsStale: false } && sender is Document { IsDirty: true })
         {
             this.Status = this.Status with { IsStale = true };
         }

@@ -9,6 +9,7 @@ using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Workspace;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
@@ -20,14 +21,14 @@ public sealed partial class SceneDocumentCommandServiceTests
     public async Task WorkspaceInteractionService_RestoreAsync_LoadsStoredHiddenAndLock()
     {
         var project = ProjectContext.FromProjectInfo(SlotTestProjectInfo);
-        var sceneId = Guid.NewGuid();
-        var hidden = Guid.NewGuid();
-        var locked = Guid.NewGuid();
+        var sceneId = SceneId.New();
+        var hidden = NodeId.New();
+        var locked = NodeId.New();
 
         var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
         var stored = new WorkspaceInteractionService.ProjectInteraction(
             project.ProjectId,
-            new Dictionary<Guid, WorkspaceInteractionService.SceneInteraction>
+            new Dictionary<SceneId, WorkspaceInteractionService.SceneInteraction>
             {
                 [sceneId] = new([hidden], [locked], SceneCategories.All),
             });
@@ -71,8 +72,8 @@ public sealed partial class SceneDocumentCommandServiceTests
     public async Task WorkspaceInteractionService_RestoreAsync_IgnoresAnotherProjectsRecord()
     {
         var project = ProjectContext.FromProjectInfo(SlotTestProjectInfo);
-        var sceneId = Guid.NewGuid();
-        var hidden = Guid.NewGuid();
+        var sceneId = SceneId.New();
+        var hidden = NodeId.New();
 
         var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
 
@@ -80,7 +81,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         // copied project must not inherit a stranger's hidden set.
         var stored = new WorkspaceInteractionService.ProjectInteraction(
             Guid.NewGuid(),
-            new Dictionary<Guid, WorkspaceInteractionService.SceneInteraction>
+            new Dictionary<SceneId, WorkspaceInteractionService.SceneInteraction>
             {
                 [sceneId] = new([hidden], [], SceneCategories.All),
             });
@@ -102,10 +103,10 @@ public sealed partial class SceneDocumentCommandServiceTests
     public async Task WorkspaceInteractionService_SceneSwitchAndRestart_PreservesIndependentStates()
     {
         var project = ProjectContext.FromProjectInfo(SlotTestProjectInfo);
-        var sceneA = Guid.NewGuid();
-        var sceneB = Guid.NewGuid();
-        var nodeA = Guid.NewGuid();
-        var nodeB = Guid.NewGuid();
+        var sceneA = SceneId.New();
+        var sceneB = SceneId.New();
+        var nodeA = NodeId.New();
+        var nodeB = NodeId.New();
         WorkspaceInteractionService.ProjectInteraction? stored = null;
         var settings = new Mock<IEditorSettingsManager>();
         _ = settings.Setup(value => value.LoadSettingAsync(
@@ -163,7 +164,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var results = new CapturingOperationResultPublisher();
         var service = new WorkspaceInteractionService(settings.Object, results, new OperationStatusReducer());
 
-        await service.RestoreAsync(project, Guid.NewGuid()).ConfigureAwait(false);
+        await service.RestoreAsync(project, SceneId.New()).ConfigureAwait(false);
 
         _ = service.HiddenNodeIds().Should().BeEmpty();
         _ = service.Categories.Should().Be(SceneCategories.All);
@@ -175,8 +176,8 @@ public sealed partial class SceneDocumentCommandServiceTests
     public async Task WorkspaceInteractionService_StaleRestoreAfterClear_DoesNotReapplyPriorState()
     {
         var project = ProjectContext.FromProjectInfo(SlotTestProjectInfo);
-        var sceneId = Guid.NewGuid();
-        var hidden = Guid.NewGuid();
+        var sceneId = SceneId.New();
+        var hidden = NodeId.New();
         var load = new TaskCompletionSource<WorkspaceInteractionService.ProjectInteraction?>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         var settings = new Mock<IEditorSettingsManager>();
@@ -191,14 +192,14 @@ public sealed partial class SceneDocumentCommandServiceTests
         service.ClearActiveScene();
         load.SetResult(new WorkspaceInteractionService.ProjectInteraction(
             project.ProjectId,
-            new Dictionary<Guid, WorkspaceInteractionService.SceneInteraction>
+            new Dictionary<SceneId, WorkspaceInteractionService.SceneInteraction>
             {
                 [sceneId] = new([hidden], [], new SceneCategories(false, false, false)),
             }));
 
         await restoration.ConfigureAwait(false);
 
-        _ = service.ActiveSceneId.Should().Be(Guid.Empty);
+        _ = service.ActiveSceneId.Should().Be(SceneId.Empty);
         _ = service.IsHidden(hidden).Should().BeFalse();
         _ = service.Categories.Should().Be(SceneCategories.All);
     }
@@ -208,12 +209,12 @@ public sealed partial class SceneDocumentCommandServiceTests
     {
         var settings = new Mock<IEditorSettingsManager>();
         var service = new WorkspaceInteractionService(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
-        await service.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), Guid.NewGuid()).ConfigureAwait(false);
+        await service.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), SceneId.New()).ConfigureAwait(false);
         service.SetCategories(new SceneCategories(false, false, false));
 
         service.ClearActiveScene();
 
-        _ = service.ActiveSceneId.Should().Be(Guid.Empty);
+        _ = service.ActiveSceneId.Should().Be(SceneId.Empty);
         _ = service.Categories.Should().Be(SceneCategories.All);
         _ = service.HiddenNodeIds().Should().BeEmpty();
     }
@@ -228,19 +229,19 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         using var mask = new EditingViewMaskService(interaction, results, new OperationStatusReducer()).Start();
 
-        var sceneA = Guid.NewGuid();
+        var sceneA = SceneId.New();
         await interaction.RestoreAsync(project, sceneA).ConfigureAwait(false);
 
         // First change on the active scene reports the pending native suppression once (Q2), even
         // though several hidden entries follow within the same activation.
-        interaction.SetHidden(Guid.NewGuid(), isHidden: true);
-        interaction.SetHidden(Guid.NewGuid(), isHidden: true);
+        interaction.SetHidden(NodeId.New(), isHidden: true);
+        interaction.SetHidden(NodeId.New(), isHidden: true);
         _ = MaskWarnings(results).Should().Be(1, "one mask per scene activation (Q3)");
 
         // A different scene activation is allowed to warn again.
-        var sceneB = Guid.NewGuid();
+        var sceneB = SceneId.New();
         await interaction.RestoreAsync(project, sceneB).ConfigureAwait(false);
-        interaction.SetHidden(Guid.NewGuid(), isHidden: true);
+        interaction.SetHidden(NodeId.New(), isHidden: true);
         _ = MaskWarnings(results).Should().Be(2, "a new activation re-reports");
     }
 

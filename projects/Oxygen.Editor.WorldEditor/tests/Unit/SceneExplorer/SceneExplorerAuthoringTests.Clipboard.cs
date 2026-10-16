@@ -12,6 +12,7 @@ using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Documents.Commands;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -32,7 +33,7 @@ public sealed partial class SceneExplorerAuthoringTests
         var pasted = new List<string>();
         _ = harness.Commands
             .Setup(value => value.DuplicateNodesFromDataAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<SceneNodeData>>(), null, null, null))
-            .Callback<SceneDocumentCommandContext, IReadOnlyList<SceneNodeData>, Guid?, Guid?, Guid?>((context, data, _, _, _) =>
+            .Callback<SceneDocumentCommandContext, IReadOnlyList<SceneNodeData>, NodeId?, FolderId?, NodeId?>((context, data, _, _, _) =>
             {
                 _ = context.Scene.Should().BeSameAs(scene);
                 pasted.Add(JsonSerializer.Serialize(data, ClipboardJsonOptions));
@@ -62,7 +63,7 @@ public sealed partial class SceneExplorerAuthoringTests
         _ = explorer.CurrentClipboardState.Should().Be(ClipboardState.Copied);
         _ = explorer.PasteCommand.CanExecute(null).Should().BeTrue();
         _ = explorer.UndoStack.Should().BeEmpty("capture and the mocked routing boundary do not author a source transaction");
-        _ = harness.Documents.Object.GetOpenDocuments(default).Single().IsDirty.Should().BeFalse();
+        _ = harness.Documents.Documents.Single().IsDirty.Should().BeFalse();
         harness.Commands.Verify(
             value => value.DuplicateNodesFromDataAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<SceneNodeData>>(), null, null, null),
             Times.Exactly(2));
@@ -79,7 +80,7 @@ public sealed partial class SceneExplorerAuthoringTests
         SceneNodeData? pasted = null;
         _ = harness.Commands
             .Setup(value => value.DuplicateNodesFromDataAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<SceneNodeData>>(), null, null, null))
-            .Callback<SceneDocumentCommandContext, IReadOnlyList<SceneNodeData>, Guid?, Guid?, Guid?>((context, data, _, _, _) =>
+            .Callback<SceneDocumentCommandContext, IReadOnlyList<SceneNodeData>, NodeId?, FolderId?, NodeId?>((context, data, _, _, _) =>
             {
                 pasteContext = context;
                 pasted = data.Single();
@@ -102,13 +103,13 @@ public sealed partial class SceneExplorerAuthoringTests
 
         _ = pasteContext.Should().NotBeNull();
         _ = pasteContext!.Scene.Should().BeSameAs(destination);
-        _ = pasteContext.DocumentId.Should().Be(harness.Documents.Object.GetOpenDocuments(default).OfType<SceneDocumentMetadata>().Single(metadata => ReferenceEquals(metadata.Scene, destination)).DocumentId);
+        _ = pasteContext.DocumentId.Should().Be(harness.Documents.Documents.Single(document => ReferenceEquals(((SceneContent)document.Content).Scene, destination)).Id);
         _ = pasted.Should().NotBeNull();
         _ = pasted!.Name.Should().Be("Node");
         AssertClipboardWorldPose(destination, pasted, capturedWorld);
         _ = sourceHistory.Should().BeEmpty();
         _ = explorer.UndoStack.Should().BeEmpty("the mock proves routing; destination authoring history is verified by the command tests");
-        _ = harness.Documents.Object.GetOpenDocuments(default).Should().OnlyContain(metadata => !metadata.IsDirty);
+        _ = harness.Documents.Documents.Should().OnlyContain(document => !document.IsDirty);
         harness.Commands.Verify(
             value => value.DuplicateNodesFromDataAsync(
                 It.Is<SceneDocumentCommandContext>(context => context.Scene == sourceScene),
@@ -132,7 +133,7 @@ public sealed partial class SceneExplorerAuthoringTests
         IReadOnlyList<SceneNodeData>? pasted = null;
         _ = harness.Commands
             .Setup(value => value.DuplicateNodesFromDataAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<SceneNodeData>>(), null, null, null))
-            .Callback<SceneDocumentCommandContext, IReadOnlyList<SceneNodeData>, Guid?, Guid?, Guid?>((_, data, _, _, _) => pasted = data)
+            .Callback<SceneDocumentCommandContext, IReadOnlyList<SceneNodeData>, NodeId?, FolderId?, NodeId?>((_, data, _, _, _) => pasted = data)
             .ReturnsAsync(SceneCommandResults.Success<IReadOnlyList<SceneNode>>([]));
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
@@ -182,8 +183,8 @@ public sealed partial class SceneExplorerAuthoringTests
         _ = JsonSerializer.Serialize(scene.Dehydrate(), ClipboardJsonOptions).Should().Be(before);
         _ = explorer.UndoStack.Should().BeEmpty();
         _ = explorer.RedoStack.Should().BeEmpty();
-        _ = harness.Documents.Object.GetOpenDocuments(default).Single().IsDirty.Should().BeFalse();
-        harness.Commands.VerifyNoOtherCalls();
+        _ = harness.Documents.Documents.Single().IsDirty.Should().BeFalse();
+        _ = harness.Commands.Invocations.Where(static call => !call.Method.IsSpecialName).Should().BeEmpty("only the explorer's event subscriptions reach the command service");
     }
 
     private static TransformComponent ArrangeParentedClipboardSource(Scene scene, SceneNode source)

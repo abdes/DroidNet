@@ -9,6 +9,7 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
 using Testably.Abstractions;
 
@@ -131,6 +132,24 @@ public sealed class AssetAuthoringTests : IDisposable
         _ = intro.RootElement.GetProperty("Name").GetString().Should().Be("Intro");
         _ = intro.RootElement.GetProperty("RootNodes").GetArrayLength().Should().Be(0);
         _ = intro.RootElement.GetProperty("Id").GetGuid().Should().NotBe(outro.RootElement.GetProperty("Id").GetGuid());
+    }
+
+    /// <summary>A new material goes to the Materials folder at a mount root, as a source the material reader reads, named after its file.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task MaterialIsWrittenAsAReadableSourceNamedAfterItsFile()
+    {
+        var proposal = await this.Authoring.ProposeAsync(this.Project, AuthoredAssetKind.Material, "/Content", this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = proposal.Should().Be(new AssetProposal("/Content/Materials", "NewMaterial1"));
+        _ = Directory.CreateDirectory(Path.Combine(this.root, "Content", "Materials"));
+
+        var path = await this.Authoring.CreateAsync(this.Project, AuthoredAssetKind.Material, "Wood", "/Content/Materials", this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = path.Should().Be(Path.Combine(this.root, "Content", "Materials", "Wood.omat.json"));
+        var source = MaterialSourceReader.Read(await File.ReadAllBytesAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false));
+        _ = source.Name.Should().Be("Wood");
+        _ = source.AlphaMode.Should().Be(MaterialAlphaMode.Opaque);
+        _ = source.DoubleSided.Should().BeFalse();
     }
 
     /// <summary>A file the catalog has not seen yet is never overwritten.</summary>

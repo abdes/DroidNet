@@ -15,19 +15,17 @@ internal static class TabItemExtensions
     /// <summary>
     ///     Creates a <see cref="Controls.TabItem"/> that represents the supplied app metadata. The
     ///     created TabItem is a UI snapshot and is safe to add to the TabStrip's Items collection.
-    ///     The caller is responsible for ensuring the <paramref name="contentId"/> equals the
-    ///     document id when the tab represents a document.
+    ///     Its <see cref="Controls.TabItem.ContentId"/> is the document's id.
     /// </summary>
-    /// <param name="contentId">
-    ///     The UI content identifier for the tab (equal to DocumentId for document tabs).
-    /// </param>
+    /// <param name="documentId">The id of the document the tab shows.</param>
     /// <param name="metadata">The optional app-provided metadata to populate the TabItem.</param>
     /// <returns>A new TabItem matching the supplied metadata.</returns>
-    public static Controls.TabItem CreateTabItemFromMetadata(Guid contentId, IDocumentMetadata? metadata)
+    public static Controls.TabItem CreateTabItemFromMetadata(DocumentId documentId, IDocumentMetadata? metadata)
     {
+        // The strip control compares tabs by a Guid; a document's tab carries the document's id.
         var tab = new Controls.TabItem
         {
-            ContentId = contentId,
+            ContentId = documentId.Value,
             Header = metadata?.Title ?? string.Empty,
             IsClosable = metadata?.IsClosable ?? true,
             IsPinned = metadata?.IsPinnedHint ?? false,

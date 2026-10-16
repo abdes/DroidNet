@@ -22,8 +22,8 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null,
     private readonly ILogger logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<EditorDocumentService>();
 
     // Store documents per window
-    private readonly Dictionary<WindowId, Dictionary<Guid, IDocumentMetadata>> windowDocs = [];
-    private readonly Dictionary<WindowId, Guid> activeDocuments = [];
+    private readonly Dictionary<WindowId, Dictionary<DocumentId, IDocumentMetadata>> windowDocs = [];
+    private readonly Dictionary<WindowId, DocumentId> activeDocuments = [];
     private readonly HashSet<WindowId> closingWindows = [];
 
     /// <inheritdoc/>
@@ -36,32 +36,36 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null,
     public event EventHandler<DocumentClosedEventArgs>? DocumentClosed;
 
     /// <inheritdoc/>
-    public event EventHandler<DocumentDetachedEventArgs>? DocumentDetached;
+    /// <remarks>Never raised: every detach is refused until the editor has document windows to receive a tab.</remarks>
+    public event EventHandler<DocumentDetachedEventArgs>? DocumentDetached
+    {
+        add { }
+        remove { }
+    }
 
     /// <inheritdoc/>
     public event EventHandler<DocumentAttachedEventArgs>? DocumentAttached;
 
     /// <inheritdoc/>
-    public event EventHandler<DocumentMetadataChangedEventArgs>? DocumentMetadataChanged;
-
-    /// <inheritdoc/>
     public event EventHandler<DocumentActivatedEventArgs>? DocumentActivated;
 
     /// <inheritdoc/>
-    public async Task<Guid> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
+    /// <remarks>A document has at most one tab: opening a tab for a document that has one, in any window, is refused.</remarks>
+    public Task<bool> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
+        ArgumentNullException.ThrowIfNull(metadata);
         if (this.closingWindows.Contains(windowId))
         {
-            return Guid.Empty;
+            return Task.FromResult(false);
         }
 
         var documentId = metadata.DocumentId;
         this.LogOpenDocumentCalled(windowId.Value, documentId);
 
-        if (!await this.EnsureSingleNonClosableDocumentAsync(windowId, metadata).ConfigureAwait(true))
+        if (this.HasTab(documentId))
         {
             this.LogDocumentOpenAborted(windowId.Value, documentId);
-            return Guid.Empty;
+            return Task.FromResult(false);
         }
 
         var docs = this.GetDocumentsForWindow(windowId);
@@ -75,11 +79,11 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null,
             this.DocumentActivated?.Invoke(this, new DocumentActivatedEventArgs(windowId, documentId));
         }
 
-        return documentId;
+        return Task.FromResult(true);
     }
 
     /// <inheritdoc/>
-    public async Task<bool> CloseDocumentAsync(WindowId windowId, Guid documentId, bool force = false)
+    public async Task<bool> CloseDocumentAsync(WindowId windowId, DocumentId documentId, bool force = false)
     {
         this.LogCloseDocumentCalled(windowId.Value, documentId, force);
         if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.TryGetValue(documentId, out var metadata))
@@ -97,10 +101,27 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null,
         => this.PrepareCloseAsync(windowId, this.GetOpenDocuments(windowId), isWorkspaceClose: true, force: false);
 
     /// <inheritdoc/>
-    public Task<DocumentCloseTransaction?> PrepareCloseDocumentAsync(WindowId windowId, Guid documentId)
-        => this.windowDocs.TryGetValue(windowId, out var documents) && documents.TryGetValue(documentId, out var metadata)
-            ? this.PrepareCloseAsync(windowId, [metadata], isWorkspaceClose: false, force: false)
+    public Task<DocumentCloseTransaction?> PrepareCloseDocumentsAsync(WindowId windowId, IReadOnlyList<DocumentId> documentIds)
+    {
+        ArgumentNullException.ThrowIfNull(documentIds);
+        return this.windowDocs.TryGetValue(windowId, out var documents) && documentIds.All(documents.ContainsKey)
+            ? this.PrepareCloseAsync(windowId, [.. documentIds.Distinct().Select(id => documents[id])], isWorkspaceClose: false, force: false)
             : Task.FromResult<DocumentCloseTransaction?>(null);
+    }
+
+    /// <inheritdoc/>
+    public WindowId? FindWindow(DocumentId documentId)
+    {
+        foreach (var (window, documents) in this.windowDocs)
+        {
+            if (documents.ContainsKey(documentId))
+            {
+                return window;
+            }
+        }
+
+        return null;
+    }
 
     /// <inheritdoc/>
     public async Task<DocumentCloseTransaction?> PrepareCloseAllWindowsAsync()
@@ -146,51 +167,32 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null,
     }
 
     /// <inheritdoc/>
-    public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, Guid documentId)
+    /// <remarks>
+    ///     Always refused: a torn-out tab needs a document window to receive it, which the editor does not have yet. The
+    ///     tab stays where it is.
+    /// </remarks>
+    public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, DocumentId documentId)
     {
-        if (this.closingWindows.Contains(windowId))
-        {
-            return Task.FromResult<IDocumentMetadata?>(null);
-        }
-
-        this.LogDetachDocumentCalled(windowId.Value, documentId);
-
-        if (this.windowDocs.TryGetValue(windowId, out var docs) && docs.TryGetValue(documentId, out var metadata))
-        {
-            _ = docs.Remove(documentId);
-            if (docs.Count == 0)
-            {
-                _ = this.windowDocs.Remove(windowId);
-            }
-
-            if (this.activeDocuments.TryGetValue(windowId, out var activeId) && activeId == documentId)
-            {
-                _ = this.activeDocuments.Remove(windowId);
-            }
-
-            this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(windowId, metadata));
-            this.LogDetached(windowId.Value, documentId);
-            return Task.FromResult<IDocumentMetadata?>(metadata);
-        }
-
-        this.LogDetachDocumentNotFound(windowId.Value, documentId);
+        this.LogDetachRefused(windowId.Value, documentId);
         return Task.FromResult<IDocumentMetadata?>(null);
     }
 
     /// <inheritdoc/>
-    public async Task<bool> AttachDocumentAsync(WindowId targetWindowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
+    /// <remarks>A document has at most one tab: attaching a document that has one, in any window, is refused.</remarks>
+    public Task<bool> AttachDocumentAsync(WindowId targetWindowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
+        ArgumentNullException.ThrowIfNull(metadata);
         if (this.closingWindows.Contains(targetWindowId))
         {
-            return false;
+            return Task.FromResult(false);
         }
 
         this.LogAttachDocumentCalled(targetWindowId.Value, metadata.DocumentId);
 
-        if (!await this.EnsureSingleNonClosableDocumentAsync(targetWindowId, metadata).ConfigureAwait(true))
+        if (this.HasTab(metadata.DocumentId))
         {
             this.LogAttachDocumentAborted(targetWindowId.Value, metadata.DocumentId);
-            return false;
+            return Task.FromResult(false);
         }
 
         var docs = this.GetDocumentsForWindow(targetWindowId);
@@ -205,28 +207,11 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null,
 
         this.DocumentAttached?.Invoke(this, new DocumentAttachedEventArgs(targetWindowId, metadata, indexHint));
         this.LogAttached(targetWindowId.Value, metadata.DocumentId);
-        return true;
-    }
-
-    /// <inheritdoc/>
-    public Task<bool> UpdateMetadataAsync(WindowId windowId, Guid documentId, IDocumentMetadata metadata)
-    {
-        this.LogUpdateMetadataCalled(windowId.Value, documentId);
-
-        if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.ContainsKey(documentId))
-        {
-            this.LogUpdateMetadataFailed(windowId.Value, documentId);
-            return Task.FromResult(false);
-        }
-
-        docs[documentId] = metadata;
-        this.DocumentMetadataChanged?.Invoke(this, new DocumentMetadataChangedEventArgs(windowId, metadata));
-        this.LogUpdateMetadataSuccess(windowId.Value, documentId);
         return Task.FromResult(true);
     }
 
     /// <inheritdoc/>
-    public Task<bool> SelectDocumentAsync(WindowId windowId, Guid documentId)
+    public Task<bool> SelectDocumentAsync(WindowId windowId, DocumentId documentId)
     {
         if (this.closingWindows.Contains(windowId))
         {
@@ -254,8 +239,8 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null,
             : docs.Values.ToList();
 
     /// <inheritdoc/>
-    public Guid? GetActiveDocumentId(WindowId windowId)
-        => this.activeDocuments.TryGetValue(windowId, out var documentId) && documentId != Guid.Empty
+    public DocumentId? GetActiveDocumentId(WindowId windowId)
+        => this.activeDocuments.TryGetValue(windowId, out var documentId) && !documentId.IsEmpty
             ? documentId
             : null;
 
@@ -356,53 +341,9 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null,
         this.LogDocumentClosed(windowId.Value, documentId);
     }
 
-    private async Task<bool> EnsureSingleNonClosableDocumentAsync(WindowId windowId, IDocumentMetadata metadata)
-    {
-        // Ensure only one non-closable document of the same type is open per window. If the
-        // incoming metadata is non-closable, attempt to close any existing non-closable document of
-        // the same type in this window before opening the new one. If the close is vetoed, abort.
-        if (metadata.IsClosable)
-        {
-            return true;
-        }
+    private bool HasTab(DocumentId documentId) => this.FindWindow(documentId) is not null;
 
-        var docs = this.GetDocumentsForWindow(windowId);
-        Guid? existingId = null;
-        foreach (var kv in docs)
-        {
-            var existing = kv.Value;
-            if (existing.IsClosable)
-            {
-                continue;
-            }
-
-            // Match by DocumentType if both are BaseDocumentMetadata, otherwise by C# type
-            var isMatch = (metadata, existing) switch
-            {
-                (BaseDocumentMetadata b1, BaseDocumentMetadata b2) => string.Equals(b1.DocumentType, b2.DocumentType, StringComparison.Ordinal),
-                _ => metadata.GetType() == existing.GetType(),
-            };
-
-            if (isMatch)
-            {
-                existingId = kv.Key;
-                break;
-            }
-        }
-
-        if (existingId.HasValue)
-        {
-            var closed = await this.CloseDocumentAsync(windowId, existingId.Value, force: false).ConfigureAwait(true);
-            if (!closed)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private Dictionary<Guid, IDocumentMetadata> GetDocumentsForWindow(WindowId windowId)
+    private Dictionary<DocumentId, IDocumentMetadata> GetDocumentsForWindow(WindowId windowId)
     {
         if (!this.windowDocs.TryGetValue(windowId, out var docs))
         {

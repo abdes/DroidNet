@@ -157,6 +157,7 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
         private static readonly Template Script = new("Scripts", "NewScript", [AssetFileTypes.LuaScript, AssetFileTypes.LuauScript], static _ => AssetTemplates.Script);
         private static readonly Template Input = new("Input", "NewInput", [AssetFileTypes.InputFile, AssetFileTypes.InputActionFile], AssetTemplates.InputFile);
         private static readonly Template Scene = new("Scenes", "NewScene", [AssetFileTypes.SceneDescriptor], AssetTemplates.Scene);
+        private static readonly Template Material = new("Materials", "NewMaterial", [AssetFileTypes.MaterialDescriptor], AssetTemplates.Material);
 
         public static Template Of(AuthoredAssetKind kind)
             => kind switch
@@ -164,6 +165,7 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
                 AuthoredAssetKind.Script => Script,
                 AuthoredAssetKind.InputFile => Input,
                 AuthoredAssetKind.Scene => Scene,
+                AuthoredAssetKind.Material => Material,
                 _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown authored asset kind."),
             };
     }

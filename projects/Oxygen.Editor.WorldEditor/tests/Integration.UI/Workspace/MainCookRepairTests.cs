@@ -143,7 +143,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         await fixture.Model.PendingEdits.ConfigureAwait(true);
         _ = fixture.Document.IsDirty.Should().BeTrue();
         var retry = panel.RetryCommand.ExecuteAsync(parameter: null);
-        await WaitForBlockedMaterialAsync(panel, fixture.Context.DocumentId, cancellationToken).ConfigureAwait(true);
+        await WaitForBlockedMaterialAsync(panel, fixture.Document.File.Path, cancellationToken).ConfigureAwait(true);
         var resumedId = panel.SelectedRun!.Snapshot.OperationId;
         await InvokeCookingSaveAsync(panel, cooking, cancellationToken).ConfigureAwait(true);
         await retry.WaitAsync(cancellationToken).ConfigureAwait(true);

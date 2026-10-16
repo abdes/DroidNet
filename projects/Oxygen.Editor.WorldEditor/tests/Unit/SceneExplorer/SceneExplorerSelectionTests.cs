@@ -21,6 +21,7 @@ using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -236,7 +237,7 @@ public sealed class SceneExplorerSelectionTests
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var baseline = harness.Received.Count;
-        var unaddressable = Guid.NewGuid();
+        var unaddressable = NodeId.New();
 
         var applied = await explorer.SetSelectedNodes([unaddressable]).ConfigureAwait(false);
 
@@ -283,7 +284,7 @@ public sealed class SceneExplorerSelectionTests
             new SceneSelectionContext(SceneSelectionKind.Node, [late.Id], [], late.Id, null),
             "Command");
 
-        harness.Messenger.Send(new SceneNodeAddedMessage([late]));
+        harness.Commands.Raise(value => value.NodesAdded += null, harness.Commands.Object, new SceneNodesChangedEventArgs([late]));
         await Task.Yield();
 
         var adapter = await explorer.FindAdapterByNodeIdAsync(late.Id).ConfigureAwait(false);
@@ -301,7 +302,7 @@ public sealed class SceneExplorerSelectionTests
         var added = new SceneNode(scene) { Name = "Added" };
         scene.RootNodes.Add(added);
 
-        harness.Messenger.Send(new SceneNodeAddedMessage([added]));
+        harness.Commands.Raise(value => value.NodesAdded += null, harness.Commands.Object, new SceneNodesChangedEventArgs([added]));
         await Task.Yield();
 
         var context = harness.SelectionService.GetContext(harness.DocumentIdOf(scene));
@@ -314,7 +315,7 @@ public sealed class SceneExplorerSelectionTests
     public async Task StoredNestedFolderSelection_RevealsCollapsedAncestors()
     {
         var harness = new SelectionHarness(out var scene, out _, out var outerId);
-        var innerId = Guid.NewGuid();
+        var innerId = FolderId.New();
         var outer = new ExplorerEntryData
         {
             Type = "Folder",
@@ -414,12 +415,9 @@ public sealed class SceneExplorerSelectionTests
     private sealed class SelectionHarness
     {
         private readonly Scene sceneA;
-        private readonly List<SceneDocumentMetadata> openDocuments = [];
+        private readonly List<SceneTab> openDocuments = [];
 
-        /// <summary>Gets the identity of the document that edits a scene of the harness.</summary>
-        public Guid DocumentIdOf(Scene scene) => this.openDocuments.Single(metadata => ReferenceEquals(metadata.Scene, scene)).DocumentId;
-
-        public SelectionHarness(out Scene scene, out SceneNode freeNode, out Guid folderId)
+        public SelectionHarness(out Scene scene, out SceneNode freeNode, out FolderId folderId)
         {
             var project = new Project(new ProjectInfo("Selection", Category.Games, "H:/SelectionTests", "preview.png")) { Name = "Selection" };
             scene = new Scene(project) { Name = "Scene A" };
@@ -430,7 +428,7 @@ public sealed class SceneExplorerSelectionTests
             scene.RootNodes.Add(folderNode);
             scene.RootNodes.Add(freeNode);
 
-            folderId = Guid.NewGuid();
+            folderId = FolderId.New();
             scene.SetExplorerLayout(
                 [
                     new ExplorerEntryData
@@ -448,11 +446,13 @@ public sealed class SceneExplorerSelectionTests
             _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
             this.Manager = manager;
 
-            var documents = new Mock<IDocumentService>();
+            var documents = new TestDocumentArea();
             var metadata = SceneTabs.Open(scene);
+            scene = metadata.Scene;
+            freeNode = metadata.NodeOf(freeNode);
+            this.sceneA = scene;
             this.openDocuments.Add(metadata);
-            _ = documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns(() => this.openDocuments);
-            _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
+            documents.Activate(metadata.Document);
             this.Documents = documents;
 
             var sync = new Mock<ISceneEngineSync>();
@@ -469,7 +469,10 @@ public sealed class SceneExplorerSelectionTests
 
         public Mock<IProjectManagerService> Manager { get; }
 
-        public Mock<IDocumentService> Documents { get; }
+        public TestDocumentArea Documents { get; }
+
+        /// <summary>Gets the open documents that hold the harness's first scene.</summary>
+        public Oxygen.Editor.Documents.OpenDocuments OpenDocuments => this.openDocuments[0].Documents;
 
         public Mock<ISceneEngineSync> Sync { get; }
 
@@ -485,7 +488,9 @@ public sealed class SceneExplorerSelectionTests
         {
             var added = new Scene(this.sceneA.Project) { Name = name };
             var metadata = SceneTabs.Open(added);
+            added = metadata.Scene;
             this.openDocuments.Add(metadata);
+            this.Documents.Add(metadata.Document);
             _ = this.Sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(added);
             _ = this.Sync.Setup(value => value.RegisterDocument(added, metadata.DocumentId)).Returns(value: true);
             return added;
@@ -496,10 +501,16 @@ public sealed class SceneExplorerSelectionTests
                 this.Manager.Object,
                 this.Messenger,
                 Mock.Of<IRouter>(),
-                this.Documents.Object,
+                this.Documents,
+                this.OpenDocuments,
                 default,
                 this.Sync.Object,
                 this.SelectionService,
                 this.Commands.Object);
+
+        /// <summary>Gets the identity of the document that edits a scene of the harness.</summary>
+        /// <param name="scene">The scene.</param>
+        /// <returns>The document's identity.</returns>
+        public DocumentId DocumentIdOf(Scene scene) => this.openDocuments.Single(tab => ReferenceEquals(tab.Scene, scene)).DocumentId;
     }
 }

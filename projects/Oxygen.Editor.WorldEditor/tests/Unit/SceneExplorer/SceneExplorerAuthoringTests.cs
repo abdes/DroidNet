@@ -51,7 +51,7 @@ public sealed partial class SceneExplorerAuthoringTests
         var harness = new AuthoringHarness(out var scene, out _);
         _ = harness.Commands
             .Setup(value => value.CreateFolderAsync(It.IsAny<SceneDocumentCommandContext>(), null, null, "New Folder"))
-            .ReturnsAsync(SceneCommandResults.Success(Guid.NewGuid()));
+            .ReturnsAsync(SceneCommandResults.Success(FolderId.New()));
         using var explorer = harness.Build();
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
@@ -120,7 +120,7 @@ public sealed partial class SceneExplorerAuthoringTests
         var scene = new Scene(project) { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Node" };
         var nodeAdapter = new SceneNodeAdapter(node);
-        var folderAdapter = new FolderAdapter(Guid.NewGuid(), "Folder");
+        var folderAdapter = new FolderAdapter(FolderId.New(), "Folder");
         var sceneAdapter = new SceneAdapter(scene) { IsRoot = true };
 
         _ = SceneExplorerViewModel.BuildSelectionContext([nodeAdapter]).Kind.Should().Be(SceneSelectionKind.Node);
@@ -160,25 +160,26 @@ public sealed partial class SceneExplorerAuthoringTests
     private sealed class AuthoringHarness
     {
         private readonly Scene scene;
-        private readonly List<SceneDocumentMetadata> openDocuments = [];
+        private readonly List<SceneTab> openDocuments = [];
 
         public AuthoringHarness(out Scene scene, out SceneNode node)
         {
             var project = new Project(new ProjectInfo("Authoring", Category.Games, "H:/AuthoringTreeTests", "preview.png")) { Name = "Authoring" };
-            scene = new Scene(project) { Name = "Scene" };
-            node = new SceneNode(scene) { Name = "Node" };
-            scene.RootNodes.Add(node);
-            this.scene = scene;
+            var built = new Scene(project) { Name = "Scene" };
+            var builtNode = new SceneNode(built) { Name = "Node" };
+            built.RootNodes.Add(builtNode);
 
             var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
             _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
             this.Manager = manager;
 
-            var documents = new Mock<IDocumentService>();
-            var metadata = SceneTabs.Open(scene);
+            var documents = new TestDocumentArea();
+            var metadata = SceneTabs.Open(built);
+            scene = metadata.Scene;
+            node = metadata.NodeOf(builtNode);
+            this.scene = scene;
             this.openDocuments.Add(metadata);
-            _ = documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns(() => this.openDocuments);
-            _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
+            documents.Activate(metadata.Document);
             this.Documents = documents;
 
             var sync = new Mock<ISceneEngineSync>();
@@ -192,7 +193,10 @@ public sealed partial class SceneExplorerAuthoringTests
 
         public Mock<IProjectManagerService> Manager { get; }
 
-        public Mock<IDocumentService> Documents { get; }
+        public TestDocumentArea Documents { get; }
+
+        /// <summary>Gets the open documents that hold the harness's first scene.</summary>
+        public Oxygen.Editor.Documents.OpenDocuments OpenDocuments => this.openDocuments[0].Documents;
 
         public Mock<ISceneEngineSync> Sync { get; }
 
@@ -202,7 +206,9 @@ public sealed partial class SceneExplorerAuthoringTests
         {
             var added = new Scene(this.scene.Project) { Name = name };
             var metadata = SceneTabs.Open(added);
+            added = metadata.Scene;
             this.openDocuments.Add(metadata);
+            this.Documents.Add(metadata.Document);
             _ = this.Sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(added);
             _ = this.Sync.Setup(value => value.RegisterDocument(added, metadata.DocumentId)).Returns(value: true);
             return added;
@@ -216,7 +222,8 @@ public sealed partial class SceneExplorerAuthoringTests
                 this.Manager.Object,
                 new StrongReferenceMessenger(),
                 Mock.Of<IRouter>(),
-                this.Documents.Object,
+                this.Documents,
+                this.OpenDocuments,
                 default,
                 this.Sync.Object,
                 new SceneSelectionService(),

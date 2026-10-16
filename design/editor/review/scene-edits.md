@@ -391,6 +391,12 @@ authoring one: `Document` gains `AcquireReadLease()`, which defers content
 replacement until the lease is released. `SceneCookInputRegistrar` uses it in
 place of `SceneAuthoringGate.TryEnter`.
 
+A lease does not defer a save. The cook opens the files it reads with
+`FileShare.Read | FileShare.Delete`: in-place writes stay excluded, and a save's
+atomic replace proceeds. The cook keeps reading the replaced file, whose bytes
+match the saved state it captured under the lease, and the save is a change of
+its own that the cook reads again.
+
 ## 4. Edit catalogue
 
 Types used below:
@@ -547,6 +553,10 @@ TimeMachine and Documents test their changes in their own projects. The World
 Editor's tests keep testing the views against a real `SceneAuthoring`.
 
 ## 9. Order of work
+
+Tasks 1 and 2 are done, and so is the document identity design
+([document-identity.md](document-identity.md)) that came between tasks 2 and 3.
+The next task is 3.
 
 Each task builds, passes its tests, and deletes the code it replaces. The old
 service and `SceneAuthoringGate` keep working until their last caller moves, so

@@ -2,51 +2,43 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
+
 namespace DroidNet.Documents;
 
 /// <summary>
-///     Represents the minimal, app-provided metadata required by Aura to render a document in the
-///     UI. This is the only DTO that crosses the Aura boundary — concrete metadata implementations
-///     are app-owned and may include more fields.
+///     What a tab shows for an open document. The application owns the state behind it; the tab reads it and follows
+///     <see cref="INotifyPropertyChanged.PropertyChanged"/>, which may be raised on any thread.
 /// </summary>
-public interface IDocumentMetadata
+public interface IDocumentMetadata : INotifyPropertyChanged
 {
     /// <summary>
-    ///     Gets the stable document identifier assigned by the application. A valid document
-    ///     metadata must always have a valid (non empty) document identifier.
+    ///     Gets the id of the document, which is also its tab's key. It is never <see cref="DocumentId.Empty"/>.
     /// </summary>
-    public Guid DocumentId { get; }
+    public DocumentId DocumentId { get; }
 
     /// <summary>
-    ///     Gets or sets the UI-facing title to display for this document. The app may update this
-    ///     property to reflect renames and changes.
+    ///     Gets the title the tab shows.
     /// </summary>
-    public string Title { get; set; }
+    public string Title { get; }
 
     /// <summary>
-    ///     Gets or sets optional URI of an icon to display alongside the tab header. The app
-    ///     provides a URI string; Aura will attempt to resolve it to an <see
-    ///     cref="Microsoft.UI.Xaml.Controls.IconSource"/>.
+    ///     Gets the URI of the icon the tab shows, if any.
     /// </summary>
-    public Uri? IconUri { get; set; }
+    public Uri? IconUri { get; }
 
     /// <summary>
-    ///     Gets or sets a value indicating whether hints whether the document has unsaved changes.
-    ///     This is used by UI to render an unsaved or dirty indicator if the application exposes
-    ///     such behavior.
+    ///     Gets a value indicating whether the document has unsaved changes, which the tab marks.
     /// </summary>
-    public bool IsDirty { get; set; }
+    public bool IsDirty { get; }
 
     /// <summary>
-    ///     Gets or sets a value indicating whether a hint indicating whether the document should be
-    ///     pinned by default. This serves as an application-provided preference and is not
-    ///     authoritative UI state.
+    ///     Gets a value indicating whether the user can close the tab.
     /// </summary>
-    public bool IsPinnedHint { get; set; }
+    public bool IsClosable { get; }
 
     /// <summary>
-    ///     Gets or sets a value indicating whether the document can be closed by the user.
-    ///     If false, the close button will be hidden or disabled.
+    ///     Gets a value indicating whether the tab should be pinned by default. It is a preference, not the tab's state.
     /// </summary>
-    public bool IsClosable { get; set; }
+    public bool IsPinnedHint { get; }
 }

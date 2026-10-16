@@ -31,6 +31,7 @@ using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
@@ -86,10 +87,10 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         };
         var path = Path.Combine(directory, "Content", "Scenes", "Background.oscene.json");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var data = new SceneData { Id = Guid.NewGuid(), Name = "Background", Environment = new SceneEnvironmentData { AtmosphereEnabled = true } };
+        var data = new SceneData { Id = SceneId.New(), Name = "Background", Environment = new SceneEnvironmentData { AtmosphereEnabled = true } };
         await File.WriteAllBytesAsync(path, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData), cancellationToken).ConfigureAwait(true);
         var file = new DocumentFile(path, new Uri("asset:///Content/Scenes/Background.oscene.json"));
-        var commands = new SceneDocumentCommandService(new SceneSelectionService(), sync, new StrongReferenceMessenger(), results, new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>(), Moq.Mock.Of<ISceneMutator>(), Moq.Mock.Of<ISceneOrganizer>());
+        var commands = new SceneDocumentCommandService(new SceneSelectionService(), sync, results, new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>(), Moq.Mock.Of<ISceneMutator>(), Moq.Mock.Of<ISceneOrganizer>());
         var projects = new Mock<IProjectManagerService>();
         _ = projects.SetupGet(value => value.CurrentProject).Returns(project);
         using var scenes = new OpenDocuments([new SceneDocumentKind(projects.Object, commands)], new NativeAtomicFileStore(new RealFileSystem()));
@@ -118,9 +119,9 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         var ready = new TaskCompletionSource<RuntimeSceneTarget>(TaskCreationOptions.RunContinuationsAsynchronously);
         void OnSynchronized(object? sender, SceneSynchronizationCompletedEventArgs args)
         {
-            if (args.DocumentId == document.Id)
+            if (args.DocumentId == document.Id && sync.GetSynchronizedTarget(args.DocumentId) is { } target)
             {
-                _ = ready.TrySetResult(sync.GetSynchronizedTarget(args.DocumentId)!);
+                _ = ready.TrySetResult(target);
             }
         }
 

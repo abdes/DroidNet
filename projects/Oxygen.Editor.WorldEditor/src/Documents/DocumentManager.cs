@@ -10,23 +10,21 @@ using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Inspection;
+using Oxygen.Editor.Shell.Documents;
 
 namespace Oxygen.Editor.World.Documents;
 
 /// <summary>
-/// Manages the lifecycle of documents in the World Editor, handling requests to open or create documents.
+/// Opens the documents a window's open requests name, and places scenes: a window shows one scene at a time.
 /// </summary>
 public sealed partial class DocumentManager : IDisposable
 {
     private readonly ILogger logger;
-    private readonly IEditorDocumentService documentService;
+    private readonly IDocumentArea documentArea;
     private readonly IMessenger messenger;
     private readonly IProjectContextService projectContextService;
     private readonly IProjectUsageService projectUsage;
-    private readonly IMaterialDocumentService materialDocumentService;
     private readonly WindowId windowId;
     private readonly OpenDocuments documents;
     private readonly Services.ISceneEngineSync sceneEngineSync;
@@ -38,28 +36,24 @@ public sealed partial class DocumentManager : IDisposable
     private (Guid projectId, string projectRoot, Uri sceneUri)? previousSavedScene;
     private bool disposed;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="DocumentManager"/> class.
-    /// </summary>
-    /// <param name="documentService">The service used to manage documents.</param>
-    /// <param name="messenger">The messenger for inter-component communication.</param>
-    /// <param name="projectContextService">The active project and its activation lifetime.</param>
-    /// <param name="projectUsage">The workspace's recent-scene persistence.</param>
-    /// <param name="materialDocumentService">The material authoring service.</param>
-    /// <param name="windowId">The identifier of the window associated with this manager.</param>
-    /// <param name="documents">The open documents, which open each scene file once.</param>
-    /// <param name="sceneEngineSync">The owner of open scene runtime lifetimes.</param>
-    /// <param name="relocation">Reports the files the editor moved or deleted, so open tabs follow.</param>
-    /// <param name="loggerFactory">Optional logger factory for logging.</param>
-    /// <param name="operationResults">Optional visible operation-result publisher.</param>
-    /// <param name="statusReducer">Optional reducer for scene-load diagnostics.</param>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "MA0147:Avoid async void method for delegate", Justification = "messenger handlers reply to the requester once the awaited open or creation completes")]
+    /// <summary>Initializes a new instance of the <see cref="DocumentManager"/> class.</summary>
+    /// <param name="documentArea">The document area of the window whose requests this manager answers.</param>
+    /// <param name="messenger">The messenger that carries open requests and the window's scene messages.</param>
+    /// <param name="projectContextService">The active project, which resolves assets to files.</param>
+    /// <param name="projectUsage">Remembers the project's last opened scene.</param>
+    /// <param name="windowId">The window, which the scene messages name.</param>
+    /// <param name="documents">The open documents of the session.</param>
+    /// <param name="sceneEngineSync">The engine projection of the open scenes.</param>
+    /// <param name="relocation">The relocation workflow, whose deletes close open documents.</param>
+    /// <param name="loggerFactory">The logger factory, if any.</param>
+    /// <param name="operationResults">Publishes scene load failures, if present.</param>
+    /// <param name="statusReducer">Reduces the published failures, if present.</param>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "MA0147:Avoid async void method for delegate", Justification = "messenger handlers reply to the requester once the awaited open completes")]
     public DocumentManager(
-        IEditorDocumentService documentService,
+        IDocumentArea documentArea,
         IMessenger messenger,
         IProjectContextService projectContextService,
         IProjectUsageService projectUsage,
-        IMaterialDocumentService materialDocumentService,
         WindowId windowId,
         OpenDocuments documents,
         Services.ISceneEngineSync sceneEngineSync,
@@ -70,11 +64,10 @@ public sealed partial class DocumentManager : IDisposable
     {
         this.logger = loggerFactory?.CreateLogger<DocumentManager>() ?? NullLoggerFactory.Instance.CreateLogger<DocumentManager>();
 
-        this.documentService = documentService;
+        this.documentArea = documentArea;
         this.messenger = messenger;
         this.projectContextService = projectContextService;
         this.projectUsage = projectUsage;
-        this.materialDocumentService = materialDocumentService;
         this.windowId = windowId;
         this.documents = documents;
         this.sceneEngineSync = sceneEngineSync;
@@ -84,8 +77,6 @@ public sealed partial class DocumentManager : IDisposable
 
         this.messenger.Register<OpenSceneRequestMessage>(this, this.OnOpenSceneRequested);
         this.messenger.Register<OpenMaterialRequestMessage>(this, this.OnOpenMaterialRequested);
-        this.messenger.Register<CreateMaterialRequestMessage>(this, this.OnCreateMaterialRequested);
-        this.messenger.Register<OpenCookedInspectionRequestMessage>(this, (_, message) => message.Reply(this.OpenInspectionAsync(message)));
         this.RegisterRelocationMessages();
         this.messenger.Register<ReloadPreviousSceneRequestMessage>(this, (_, message) =>
         {
@@ -96,7 +87,6 @@ public sealed partial class DocumentManager : IDisposable
         });
     }
 
-    /// <inheritdoc/>
     public void Dispose()
     {
         this.disposed = true;
@@ -169,41 +159,28 @@ public sealed partial class DocumentManager : IDisposable
         }
     }
 
-    /// <summary>
-    /// Opens or activates the specified material document for this workspace.
-    /// </summary>
-    /// <param name="materialUri">The material source asset URI.</param>
-    /// <param name="title">The document title.</param>
-    /// <returns><see langword="true"/> when the material document is open and selected.</returns>
-    public async Task<bool> OpenMaterialAsync(Uri materialUri, string title)
+    /// <summary>Opens the document of a material and shows it in this window.</summary>
+    /// <param name="materialUri">The material's asset URI.</param>
+    /// <param name="cancellationToken">Cancels the open.</param>
+    /// <returns>Whether the material's document is shown.</returns>
+    public async Task<bool> OpenMaterialAsync(Uri materialUri, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(materialUri);
-
-        if (this.windowId.Value == 0)
+        if (this.projectContextService.ActiveProject is not { } project
+            || project.FindByAssetUri(materialUri) is not { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location)
         {
             return false;
         }
 
-        var openDocs = this.documentService.GetOpenDocuments(this.windowId);
-        var existing = openDocs
-            .OfType<MaterialDocumentMetadata>()
-            .FirstOrDefault(d => UriValuesEqual(d.MaterialUri, materialUri));
-        if (existing is not null)
+        var opened = await this.documents.OpenAsync(new DocumentFile(location.FilePath, location.AssetUri), cancellationToken).ConfigureAwait(true);
+        if (opened.Document is not { } document)
         {
-            return await this.documentService.SelectDocumentAsync(this.windowId, existing.DocumentId).ConfigureAwait(true);
+            this.LogDocumentNotOpened(location.FilePath, opened.Problem ?? "it could not be read");
+            return false;
         }
 
-        var metadata = new MaterialDocumentMetadata(materialUri)
-        {
-            Title = string.IsNullOrWhiteSpace(title) ? Path.GetFileNameWithoutExtension(materialUri.AbsolutePath) : title,
-        };
-
-        var openedId = await this.documentService.OpenDocumentAsync(this.windowId, metadata).ConfigureAwait(true);
-        return openedId != Guid.Empty;
+        return await this.documentArea.ShowAsync(document).ConfigureAwait(true);
     }
-
-    private static bool UriValuesEqual(Uri left, Uri right)
-        => string.Equals(left.ToString(), right.ToString(), StringComparison.OrdinalIgnoreCase);
 
     private async Task FinishSceneReplacementAsync(DocumentFile file, SceneReplacement replacement)
     {
@@ -211,11 +188,13 @@ public sealed partial class DocumentManager : IDisposable
         {
             if (!replacement.Installed && replacement.Incoming is { } incoming)
             {
-                _ = await this.documentService.CloseDocumentAsync(this.windowId, incoming.DocumentId, force: true).ConfigureAwait(true);
-                if (incoming.Document is { } document)
+                // Closing the tab closes the document; a document that never got a tab is closed directly.
+                if (this.documentArea.Documents.Contains(incoming))
                 {
-                    this.documents.Close(document);
+                    _ = await this.documentArea.CloseAsync(incoming, force: true).ConfigureAwait(true);
                 }
+
+                this.documents.Close(incoming);
             }
         }
         finally
@@ -236,11 +215,11 @@ public sealed partial class DocumentManager : IDisposable
             return false;
         }
 
-        var openScenes = this.documentService.GetOpenDocuments(this.windowId).OfType<SceneDocumentMetadata>().ToArray();
-        var existing = openScenes.FirstOrDefault(metadata => metadata.Document?.File.IsAt(file.Path) == true);
-        if (existing is not null && this.sceneEngineSync.GetDocumentScene(existing.SceneDocumentId) is { } current)
+        var openScenes = this.documentArea.Documents.Where(static document => document.Content is SceneContent).ToArray();
+        var existing = openScenes.FirstOrDefault(document => document.File.IsAt(file.Path));
+        if (existing is not null && this.sceneEngineSync.GetDocumentScene(existing.Id) is { } current)
         {
-            var selected = await this.documentService.SelectDocumentAsync(this.windowId, existing.DocumentId).ConfigureAwait(true);
+            var selected = await this.documentArea.ShowAsync(existing).ConfigureAwait(true);
             if (selected)
             {
                 await this.MarkSceneActivatedAsync(current).ConfigureAwait(true);
@@ -282,7 +261,7 @@ public sealed partial class DocumentManager : IDisposable
     }
 
     private async Task<bool> RetireOpenScenesAsync(
-        SceneDocumentMetadata[] openScenes,
+        Document[] openScenes,
         ProjectContext project,
         long requestId,
         SceneReplacement replacement,
@@ -290,8 +269,8 @@ public sealed partial class DocumentManager : IDisposable
     {
         foreach (var previous in openScenes)
         {
-            var file = previous.Document?.File;
-            using var closing = await this.documentService.PrepareCloseDocumentAsync(this.windowId, previous.DocumentId).ConfigureAwait(true);
+            var file = previous.File;
+            using var closing = await this.documentArea.PrepareCloseAsync([previous]).ConfigureAwait(true);
             cancellationToken.ThrowIfCancellationRequested();
             if (closing is null || requestId != Volatile.Read(ref this.sceneRequestId)
                 || !ReferenceEquals(project, this.projectContextService.ActiveProject)
@@ -300,10 +279,7 @@ public sealed partial class DocumentManager : IDisposable
                 return false;
             }
 
-            if (file is not null)
-            {
-                this.previousSavedScene = (project.ProjectId, project.ProjectRoot, file.AssetUri);
-            }
+            this.previousSavedScene = (project.ProjectId, project.ProjectRoot, file.AssetUri);
 
             replacement.Retired = true;
         }
@@ -314,21 +290,18 @@ public sealed partial class DocumentManager : IDisposable
     private async Task<bool> InstallSceneAsync(Document document, ProjectContext project, SceneReplacement replacement)
     {
         var scene = ((SceneContent)document.Content).Scene;
-        var incoming = SceneDocumentMetadata.For(document);
-        replacement.Incoming = incoming;
+        replacement.Incoming = document;
         SceneAuthoringGate.BeginInstall(scene);
-        var openedId = await this.documentService.OpenDocumentAsync(this.windowId, incoming, shouldSelect: false).ConfigureAwait(true);
-        if (openedId == Guid.Empty
-            || !await this.documentService.SelectDocumentAsync(this.windowId, incoming.DocumentId).ConfigureAwait(true))
+        if (!await this.documentArea.ShowAsync(document).ConfigureAwait(true))
         {
             return false;
         }
 
-        var installation = this.messenger.Send(new InstallSceneRequestMessage(this.windowId, scene, incoming));
+        var installation = this.messenger.Send(new InstallSceneRequestMessage(this.windowId, scene, document));
         if (!installation.HasReceivedResponse || !await installation.Response.ConfigureAwait(true)
             || !ReferenceEquals(project, this.projectContextService.ActiveProject)
-            || !this.documentService.GetOpenDocuments(this.windowId).Contains(incoming)
-            || !ReferenceEquals(this.sceneEngineSync.GetDocumentScene(incoming.SceneDocumentId), scene))
+            || !this.documentArea.Documents.Contains(document)
+            || !ReferenceEquals(this.sceneEngineSync.GetDocumentScene(document.Id), scene))
         {
             return false;
         }
@@ -343,55 +316,8 @@ public sealed partial class DocumentManager : IDisposable
     private void OnOpenSceneRequested(object recipient, OpenSceneRequestMessage message)
         => message.Reply(this.OpenSceneAsync(message.SceneUri));
 
-    private async Task<bool> OpenInspectionAsync(OpenCookedInspectionRequestMessage request)
-    {
-        if (this.windowId.Value == 0 || !ReferenceEquals(request.Project, this.projectContextService.ActiveProject))
-        {
-            return false;
-        }
-
-        var existing = this.documentService.GetOpenDocuments(this.windowId).OfType<CookedInspectionDocumentMetadata>()
-            .FirstOrDefault(document => document.Project.ProjectId == request.Project.ProjectId
-                && string.Equals(document.Project.ProjectRoot, request.Project.ProjectRoot, StringComparison.OrdinalIgnoreCase)
-                && document.ScopeUri == request.ScopeUri && document.AssetUri == request.AssetUri
-                && string.Equals(document.CookedSource?.RootFolderPath, request.CookedSource?.RootFolderPath, StringComparison.OrdinalIgnoreCase));
-        if (existing is not null)
-        {
-            existing.RequestRefresh(request.Validate);
-            return await this.documentService.SelectDocumentAsync(this.windowId, existing.DocumentId).ConfigureAwait(true);
-        }
-
-        var name = request.DisplayName ?? (request.ScopeUri is null ? request.Project.Name : Path.GetFileName(Uri.UnescapeDataString(request.ScopeUri.AbsolutePath).TrimEnd('/')));
-        var metadata = new CookedInspectionDocumentMetadata(request.Project, request.ScopeUri, request.Validate)
-        {
-            AssetUri = request.AssetUri,
-            CookedSource = request.CookedSource,
-            Title = "Inspect · " + (string.IsNullOrEmpty(name) || string.Equals(name, "Cooked", StringComparison.OrdinalIgnoreCase) ? request.Project.Name : name),
-        };
-        return await this.documentService.OpenDocumentAsync(this.windowId, metadata).ConfigureAwait(true) != Guid.Empty;
-    }
-
     private async void OnOpenMaterialRequested(object recipient, OpenMaterialRequestMessage message)
-    {
-        var opened = await this.OpenMaterialAsync(message.MaterialUri, message.Title).ConfigureAwait(true);
-        message.Reply(opened);
-    }
-
-    private async void OnCreateMaterialRequested(object recipient, CreateMaterialRequestMessage message)
-    {
-        try
-        {
-            var created = await this.materialDocumentService.CreateAsync(message.MaterialUri).ConfigureAwait(true);
-            await this.materialDocumentService.CloseAsync(created.DocumentId, discard: false).ConfigureAwait(true);
-            var opened = await this.OpenMaterialAsync(message.MaterialUri, message.Title).ConfigureAwait(true);
-            message.Reply(opened);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            this.LogMaterialCreationFailed(ex, message.MaterialUri);
-            message.Reply(response: false);
-        }
-    }
+        => message.Reply(await this.OpenMaterialAsync(message.MaterialUri).ConfigureAwait(true));
 
     private async Task MarkSceneActivatedAsync(World.Scene scene)
     {
@@ -416,7 +342,7 @@ public sealed partial class DocumentManager : IDisposable
 
     private sealed class SceneReplacement
     {
-        public SceneDocumentMetadata? Incoming { get; set; }
+        public Document? Incoming { get; set; }
 
         public bool Installed { get; set; }
 

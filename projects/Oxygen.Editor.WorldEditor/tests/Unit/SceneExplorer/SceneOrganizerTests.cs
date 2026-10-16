@@ -8,6 +8,7 @@ using Moq;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -60,7 +61,7 @@ public class SceneOrganizerTests
         scene.RootNodes.Add(retained);
         scene.SetExplorerLayout([new ExplorerEntryData { NodeId = removed.Id }, new ExplorerEntryData { NodeId = retained.Id }]);
 
-        _ = this.organizer.RemoveNodeFromLayout(entryExists ? removed.Id : Guid.NewGuid(), scene);
+        _ = this.organizer.RemoveNodeFromLayout(entryExists ? removed.Id : NodeId.New(), scene);
 
         _ = scene.ExplorerLayout.Should().HaveCount(entryExists ? 1 : 2);
         _ = scene.ExplorerLayout.Should().OnlyContain(entry => entry.Children == null, "removing a node must not materialize omitted children on unrelated entries");
@@ -75,7 +76,7 @@ public class SceneOrganizerTests
 
     private static Oxygen.Editor.World.Serialization.ExplorerEntryData? FindFolder(
         IList<Oxygen.Editor.World.Serialization.ExplorerEntryData> entries,
-        Guid folderId)
+        FolderId folderId)
     {
         foreach (var entry in entries)
         {

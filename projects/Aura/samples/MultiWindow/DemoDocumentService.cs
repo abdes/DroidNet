@@ -11,14 +11,14 @@ namespace DroidNet.Samples.Aura.MultiWindow;
 
 /// <summary>
 ///     Minimal in-sample document service for the MultiWindow demo. Implements enough of the
-///     IDocumentService contract to support opening, selecting, updating and closing documents;
+///     IDocumentService contract to support opening, selecting and closing documents;
 ///     it's intentionally small and not intended for production.
 /// </summary>
 [SuppressMessage("Usage", "CA1812:AvoidUninstantiatedInternalClasses", Justification = "Instantiated via DI")]
 internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceState
 {
-    private readonly Dictionary<WindowId, Dictionary<Guid, IDocumentMetadata>> windowDocs = [];
-    private readonly Dictionary<WindowId, Guid> activeDocuments = [];
+    private readonly Dictionary<WindowId, Dictionary<DocumentId, IDocumentMetadata>> windowDocs = [];
+    private readonly Dictionary<WindowId, DocumentId> activeDocuments = [];
 
     /// <inheritdoc/>
     public event EventHandler<DocumentOpenedEventArgs>? DocumentOpened;
@@ -36,32 +36,28 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
     public event EventHandler<DocumentAttachedEventArgs>? DocumentAttached;
 
     /// <inheritdoc/>
-    public event EventHandler<DocumentMetadataChangedEventArgs>? DocumentMetadataChanged;
-
-    /// <inheritdoc/>
     public event EventHandler<DocumentActivatedEventArgs>? DocumentActivated;
 
     /// <inheritdoc/>
-    public Task<Guid> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
+    public Task<bool> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
-        var id = metadata?.DocumentId ?? Guid.NewGuid();
-        var meta = metadata ?? new DemoDocumentMetadata { DocumentId = id, Title = "Untitled" };
-        var assigned = meta.DocumentId == Guid.Empty ? id : meta.DocumentId;
+        ArgumentNullException.ThrowIfNull(metadata);
+        var id = metadata.DocumentId;
         var docs = this.GetOrCreateWindowDocuments(windowId);
-        docs[assigned] = meta;
+        docs[id] = metadata;
 
-        Debug.WriteLine($"DemoDocumentService.OpenDocumentAsync: window={windowId.Value}, DocumentId={assigned}, Title='{meta.Title}', ShouldSelect={shouldSelect}");
-        this.DocumentOpened?.Invoke(this, new DocumentOpenedEventArgs(windowId, meta, indexHint, shouldSelect));
+        Debug.WriteLine($"DemoDocumentService.OpenDocumentAsync: window={windowId.Value}, DocumentId={id}, Title='{metadata.Title}', ShouldSelect={shouldSelect}");
+        this.DocumentOpened?.Invoke(this, new DocumentOpenedEventArgs(windowId, metadata, indexHint, shouldSelect));
         if (shouldSelect)
         {
-            this.activeDocuments[windowId] = assigned;
+            this.activeDocuments[windowId] = id;
         }
 
-        return Task.FromResult(assigned);
+        return Task.FromResult(true);
     }
 
     /// <inheritdoc/>
-    public async Task<bool> CloseDocumentAsync(WindowId windowId, Guid documentId, bool force = false)
+    public async Task<bool> CloseDocumentAsync(WindowId windowId, DocumentId documentId, bool force = false)
     {
         Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId}, Force={force}");
 
@@ -103,7 +99,7 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
     }
 
     /// <inheritdoc/>
-    public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, Guid documentId)
+    public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, DocumentId documentId)
     {
         if (this.windowDocs.TryGetValue(windowId, out var docs) && docs.TryGetValue(documentId, out var metadata))
         {
@@ -140,22 +136,7 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
     }
 
     /// <inheritdoc/>
-    public Task<bool> UpdateMetadataAsync(WindowId windowId, Guid documentId, IDocumentMetadata metadata)
-    {
-        if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.ContainsKey(documentId))
-        {
-            return Task.FromResult(false);
-        }
-
-        docs[documentId] = metadata;
-
-        // For sample, raise DocumentMetadataChanged with the provided window.
-        this.DocumentMetadataChanged?.Invoke(this, new DocumentMetadataChangedEventArgs(windowId, metadata));
-        return Task.FromResult(true);
-    }
-
-    /// <inheritdoc/>
-    public Task<bool> SelectDocumentAsync(WindowId windowId, Guid documentId)
+    public Task<bool> SelectDocumentAsync(WindowId windowId, DocumentId documentId)
     {
         if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.ContainsKey(documentId))
         {
@@ -174,12 +155,12 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
             : docs.Values.ToList();
 
     /// <inheritdoc/>
-    public Guid? GetActiveDocumentId(WindowId windowId)
-        => this.activeDocuments.TryGetValue(windowId, out var documentId) && documentId != Guid.Empty
+    public DocumentId? GetActiveDocumentId(WindowId windowId)
+        => this.activeDocuments.TryGetValue(windowId, out var documentId) && !documentId.IsEmpty
             ? documentId
             : null;
 
-    private Dictionary<Guid, IDocumentMetadata> GetOrCreateWindowDocuments(WindowId windowId)
+    private Dictionary<DocumentId, IDocumentMetadata> GetOrCreateWindowDocuments(WindowId windowId)
     {
         if (!this.windowDocs.TryGetValue(windowId, out var docs))
         {
@@ -188,21 +169,5 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
         }
 
         return docs;
-    }
-
-    // Minimal metadata type used only by the sample
-    private sealed class DemoDocumentMetadata : IDocumentMetadata
-    {
-        public Guid DocumentId { get; set; } = Guid.NewGuid();
-
-        public string Title { get; set; } = string.Empty;
-
-        public Uri? IconUri { get; set; }
-
-        public bool IsDirty { get; set; }
-
-        public bool IsPinnedHint { get; set; }
-
-        public bool IsClosable { get; set; } = true;
     }
 }

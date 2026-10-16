@@ -247,10 +247,11 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         _ = node.AddComponent(new GeometryComponent { Name = "Geometry" });
         scene.RootNodes.Add(node);
         var metadata = SceneTabs.Open(scene);
-        _ = fixture.Documents.Setup(service => service.GetOpenDocuments(It.IsAny<Microsoft.UI.WindowId>())).Returns([fixture.Tab, metadata]);
-        _ = fixture.Documents.Setup(service => service.GetActiveDocumentId(It.IsAny<Microsoft.UI.WindowId>())).Returns(metadata.DocumentId);
+        scene = metadata.Scene;
+        node = metadata.NodeOf(node);
         _ = fixture.Sync.Setup(service => service.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-        _ = fixture.Messenger.Send(new SceneAuthoringLoadedMessage(scene, metadata));
+        fixture.Area.Activate(metadata.Document);
+        _ = fixture.Messenger.Send(new SceneAuthoringLoadedMessage(scene, metadata.Document));
         _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([node]));
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.IsAllComponentsSelected.Should().BeTrue();
@@ -258,7 +259,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         _ = model.PropertyEditors.Select(static editor => editor.GetType()).Should().Equal(
             typeof(TransformViewModel), typeof(GeometryViewModel), typeof(NodeRenderingViewModel));
         _ = model.ComponentFilters.Should().NotContain(option => option.ComponentType == typeof(PerspectiveCamera));
-        _ = metadata.IsDirty.Should().BeFalse();
+        _ = metadata.Document.IsDirty.Should().BeFalse();
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
     });
 

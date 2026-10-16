@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
@@ -11,6 +12,7 @@ using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Services;
@@ -97,7 +99,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, Guid.NewGuid());
+        _ = sut.RegisterDocument(scene, DocumentId.New());
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         var entries = new[] { CreateTransformEntry(42.0f) };
@@ -142,7 +144,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Faulted);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, Guid.NewGuid());
+        _ = sut.RegisterDocument(scene, DocumentId.New());
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         var entries = new[] { CreateTransformEntry(42.0f) };
@@ -222,7 +224,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, Guid.NewGuid());
+        _ = sut.RegisterDocument(scene, DocumentId.New());
 
         var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -240,7 +242,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.WorldCommands).Returns((IRuntimeWorldCommands)null!);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, Guid.NewGuid());
+        _ = sut.RegisterDocument(scene, DocumentId.New());
 
         var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -296,7 +298,7 @@ public sealed partial class SceneEngineSyncTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
-        var sceneId = Guid.NewGuid();
+        var sceneId = SceneId.New();
         var nodeId = Guid.NewGuid();
         var start = DateTimeOffset.Parse("2026-04-27T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal);
         var previewCount = 0;

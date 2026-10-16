@@ -13,7 +13,9 @@ using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
@@ -29,7 +31,7 @@ public sealed partial class SceneDocumentCommandServiceTests
     public async Task OpenedSceneIsNamedAfterItsFile()
     {
         using var scenes = new SceneDocumentFiles(CreateFixture().Sut);
-        scenes.Write("Intro", SceneDocumentFiles.Data(Guid.NewGuid(), "Recorded name"));
+        scenes.Write("Intro", SceneDocumentFiles.Data(SceneId.New(), "Recorded name"));
 
         var (document, content) = await scenes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -48,7 +50,7 @@ public sealed partial class SceneDocumentCommandServiceTests
     public async Task FileThatIsNotASceneDoesNotOpen(string defect, string problem)
     {
         using var scenes = new SceneDocumentFiles(CreateFixture().Sut);
-        var valid = SceneDocumentFiles.Data(Guid.NewGuid(), "Broken", "A");
+        var valid = SceneDocumentFiles.Data(SceneId.New(), "Broken", "A");
         switch (defect)
         {
             case "json":
@@ -58,7 +60,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                 scenes.Write("Broken", valid with { RootNodes = [valid.RootNodes[0], valid.RootNodes[0]] });
                 break;
             default:
-                scenes.Write("Broken", valid with { ExplorerLayout = [new ExplorerEntryData { NodeId = Guid.NewGuid() }] });
+                scenes.Write("Broken", valid with { ExplorerLayout = [new ExplorerEntryData { NodeId = NodeId.New() }] });
                 break;
         }
 
@@ -75,7 +77,7 @@ public sealed partial class SceneDocumentCommandServiceTests
     {
         var fixture = CreateFixture();
         using var scenes = new SceneDocumentFiles(fixture.Sut);
-        scenes.Write("Main", SceneDocumentFiles.Data(Guid.NewGuid(), "Main", "Node"));
+        scenes.Write("Main", SceneDocumentFiles.Data(SceneId.New(), "Main", "Node"));
         var (document, content) = await scenes.OpenAsync("Main", this.TestContext.CancellationToken).ConfigureAwait(false);
         var scene = content.Scene;
         var node = scene.RootNodes[0];
@@ -108,7 +110,7 @@ public sealed partial class SceneDocumentCommandServiceTests
     {
         var fixture = CreateFixture();
         using var scenes = new SceneDocumentFiles(fixture.Sut);
-        var id = Guid.NewGuid();
+        var id = SceneId.New();
         scenes.Write("Main", SceneDocumentFiles.Data(id, "Main"));
         var (document, content) = await scenes.OpenAsync("Main", this.TestContext.CancellationToken).ConfigureAwait(false);
         var context = new SceneDocumentCommandContext(document.Id, content.Scene, document.History);
@@ -132,7 +134,7 @@ public sealed partial class SceneDocumentCommandServiceTests
     public async Task RetiredSceneIsNotSaved()
     {
         using var scenes = new SceneDocumentFiles(CreateFixture().Sut);
-        scenes.Write("Main", SceneDocumentFiles.Data(Guid.NewGuid(), "Main"));
+        scenes.Write("Main", SceneDocumentFiles.Data(SceneId.New(), "Main"));
         var (document, content) = await scenes.OpenAsync("Main", this.TestContext.CancellationToken).ConfigureAwait(false);
         document.History.AddChange("Edit", static () => { });
         SceneAuthoringGate.Retire(content.Scene);
@@ -151,12 +153,15 @@ public sealed partial class SceneDocumentCommandServiceTests
     public async Task OpenSceneFollowsRelocationWithoutHistory()
     {
         var fixture = CreateFixture();
-        var scene = CreateScene();
-        var red = AddSlotGeometry(scene, "Red", "Cube");
-        var plain = AddSlotGeometry(scene, "Plain", "Sphere");
-        AssignSlot(red, RedMaterial);
+        var built = CreateScene();
+        AssignSlot(AddSlotGeometry(built, "Red", "Cube"), RedMaterial);
+        _ = AddSlotGeometry(built, "Plain", "Sphere");
+        var tab = SceneTabs.Open(built, fixture.Sut);
+        var scene = tab.Scene;
+        var red = scene.RootNodes.Single(node => node.Name == "Red");
+        var plain = scene.RootNodes.Single(node => node.Name == "Plain");
         var context = CreateContext(scene);
-        using var content = new SceneContent(scene, fixture.Sut);
+        var content = (SceneContent)tab.Document.Content;
         _ = fixture.Sync.Setup(value => value.GetDocumentScene(context.DocumentId)).Returns(scene);
         SceneRelocatedEventArgs? relocated = null;
         content.Relocated += (_, args) => relocated = args;
@@ -184,14 +189,15 @@ public sealed partial class SceneDocumentCommandServiceTests
     public async Task OpenSceneStartingInputContextsFollowRelocation()
     {
         var fixture = CreateFixture();
-        var scene = CreateScene();
+        var tab = SceneTabs.Open(CreateScene(), fixture.Sut);
+        var scene = tab.Scene;
         var context = CreateContext(scene);
         _ = await fixture.Sut.EditScenePlayAsync(context, new ScenePlayData
         {
             StartingInputContexts = [new StartingInputContextData(GameplayInputContext, Priority: 4), new StartingInputContextData(MenuContext)],
         }).ConfigureAwait(false);
         context.History.Clear();
-        using var content = new SceneContent(scene, fixture.Sut);
+        var content = (SceneContent)tab.Document.Content;
         var renamed = new Uri("asset:///Content/Controls/Gameplay.oimap");
 
         content.ApplyRelocation(Relocation("C:/scene.oscene.json", GameplayInputContext, renamed));

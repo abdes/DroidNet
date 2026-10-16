@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Scripting;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 
@@ -36,7 +37,7 @@ public sealed class ScriptSlotEditsTests
     [TestMethod]
     public void ResetAndNullRemoveAReference()
     {
-        var node = Guid.NewGuid();
+        var node = NodeId.New();
         ImmutableArray<ScriptSlot> slots = [new ScriptSlot().WithOverride("target", ScriptValue.FromNode(node))];
 
         _ = ScriptSlotEdits.SetValue(slots, slots[0].Id, Target, value: null)[0].Overrides.Should().BeEmpty();
@@ -49,7 +50,7 @@ public sealed class ScriptSlotEditsTests
         var slot = new ScriptSlot()
             .WithOverride("speed", ScriptValue.FromInt(3))
             .WithOverride("gone", ScriptValue.FromBool(value: true))
-            .WithOverride("target", ScriptValue.FromNode(Guid.NewGuid()));
+            .WithOverride("target", ScriptValue.FromNode(NodeId.New()));
 
         var stale = ScriptSlotEdits.FindStale(slot, [Speed, Target]);
         var cleaned = ScriptSlotEdits.RemoveStale([slot], slot.Id, [Speed, Target]);

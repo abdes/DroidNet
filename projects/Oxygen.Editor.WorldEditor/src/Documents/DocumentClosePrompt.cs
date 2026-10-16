@@ -11,7 +11,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.MaterialEditor;
+using Oxygen.Editor.Shell.Documents;
 
 namespace Oxygen.Editor.World.Documents;
 
@@ -41,9 +41,9 @@ public sealed class DocumentClosePrompt(IDialogService dialogs, IWindowManagerSe
         selection.Checked += (_, _) => item.IsSelected = true;
         selection.Unchecked += (_, _) => item.IsSelected = false;
         content.Children.Add(selection);
-        if (isWorkspaceClose && item.Metadata is MaterialDocumentMetadata material)
+        if (isWorkspaceClose && item.Metadata is DocumentTab tab)
         {
-            content.Children.Add(new TextBlock { Text = material.MaterialUri.ToString(), TextWrapping = TextWrapping.Wrap });
+            content.Children.Add(new TextBlock { Text = tab.Document.File.AssetUri.ToString(), TextWrapping = TextWrapping.Wrap });
         }
 
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };

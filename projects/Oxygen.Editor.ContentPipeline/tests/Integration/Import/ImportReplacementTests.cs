@@ -193,7 +193,7 @@ public sealed class ImportReplacementTests
 
             var original = await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false);
             var dirty = false;
-            var state = new global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(primary, "Model", 1, 1, IsDirty: true, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(original)));
+            var state = new global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(primary, "Model", IsDirty: true, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(original)));
             using var registration = workspace.Documents.Register(primary, _ => Task.FromResult<global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentReadLease?>(dirty ? new(state, static () =>
 { }) : null));
             runner.BeforeBatch = () =>

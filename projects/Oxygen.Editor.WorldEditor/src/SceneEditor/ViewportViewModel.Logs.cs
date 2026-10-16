@@ -17,7 +17,7 @@ public partial class ViewportViewModel
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "ViewportViewModel initialized. DocumentId: {DocumentId}")]
-    private static partial void LogInitialized(ILogger logger, Oxygen.Editor.Documents.DocumentId documentId);
+    private static partial void LogInitialized(ILogger logger, DroidNet.Documents.DocumentId documentId);
 
     [Conditional("DEBUG")]
     private void LogInitialized()

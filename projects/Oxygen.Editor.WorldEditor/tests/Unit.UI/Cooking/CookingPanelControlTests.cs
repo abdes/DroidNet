@@ -237,7 +237,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     [TestMethod]
     public Task UnsavedRecoveryKeepsItsActionInlineAndNamesNavigable() => EnqueueAsync(async () =>
     {
-        var document = new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState("C:\\Project\\Content\\NewScene2.oscene.json", "NewScene2", Revision: 2, SavedRevision: 1, IsDirty: true, SavedContentHash: string.Empty);
+        var document = new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState("C:\\Project\\Content\\NewScene2.oscene.json", "NewScene2", IsDirty: true, SavedContentHash: string.Empty);
         var actions = new Mock<ICookingWorkspaceActions>();
         _ = actions.Setup(value => value.OpenDocumentAsync(document.SourcePath)).ReturnsAsync(value: true);
         using var model = CreateModel(actions.Object, document);

@@ -325,7 +325,7 @@ public sealed partial class ContentPipelineService
             {
                 if (!streams.ContainsKey(input.SourcePath))
                 {
-                    streams.Add(input.SourcePath, new(input.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous));
+                    streams.Add(input.SourcePath, new(input.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous));
                 }
             }
 

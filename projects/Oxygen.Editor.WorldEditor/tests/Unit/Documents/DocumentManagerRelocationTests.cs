@@ -4,15 +4,13 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Storage;
 using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -23,11 +21,9 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 [TestClass]
 public sealed class DocumentManagerRelocationTests
 {
-    private const string Root = "C:/Relocation";
-
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>A deleted material's document closes; a moved one stays open and its tab refreshes.</summary>
+    /// <summary>A deleted material's document closes; a moved one keeps its tab.</summary>
     /// <param name="deleted">Whether the material was deleted rather than moved.</param>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
@@ -35,82 +31,75 @@ public sealed class DocumentManagerRelocationTests
     [DataRow(false)]
     public async Task MaterialDocumentClosesOnlyWhenDeleted(bool deleted)
     {
-        var window = new WindowId(91);
-        var messenger = new StrongReferenceMessenger();
-        var projects = new ProjectContextService();
-        projects.Activate(new ProjectContext
-        {
-            ProjectId = Guid.NewGuid(),
-            Name = "Relocation",
-            Category = Category.Games,
-            ProjectRoot = Root,
-            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-            LocalFolderMounts = [],
-        });
-        var documents = new EditorDocumentService();
+        using var files = new SceneDocumentFiles(Mock.Of<ISceneDocumentCommandService>());
+        var opening = await files.Documents.OpenAsync(files.WriteMaterial("Red"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var material = opening.Document!;
         var relocation = new Mock<IAssetRelocationService>();
-        using var files = new OpenDocuments([], Mock.Of<IAtomicFileStore>());
-        using var manager = new DocumentManager(
-            documents,
-            messenger,
-            projects,
-            Mock.Of<IProjectUsageService>(),
-            Mock.Of<IMaterialDocumentService>(),
-            window,
-            files,
-            Mock.Of<ISceneEngineSync>(),
-            relocation.Object);
-        var metadata = new MaterialDocumentMetadata(new Uri("asset:///Content/Materials/Red.omat.json")) { Title = "Red" };
-        _ = await documents.OpenDocumentAsync(window, metadata).ConfigureAwait(false);
-        var source = Path.GetFullPath(Path.Combine(Root, "Content/Materials/Red.omat.json"));
-        var target = Path.GetFullPath(Path.Combine(Root, "Content/Materials/Blue.omat.json"));
-        var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        documents.DocumentClosed += (_, _) => _ = settled.TrySetResult();
-        documents.DocumentMetadataChanged += (_, _) => _ = settled.TrySetResult();
-
-        if (!deleted)
-        {
-            // The material editor, as a relocation participant, re-pointed its tab before the service reports the move.
-            metadata.MaterialUri = new Uri("asset:///Content/Materials/Blue.omat.json");
-        }
+        var (tabs, area) = CreateArea(files, new WindowId(91));
+        using var manager = CreateManager(files, area, relocation.Object);
+        _ = (await area.ShowAsync(material).ConfigureAwait(false)).Should().BeTrue();
+        var source = material.File.Path;
+        var target = Path.Combine(Path.GetDirectoryName(source)!, "Blue.omat.json");
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        tabs.DocumentClosed += (_, _) => _ = closed.TrySetResult();
 
         relocation.Raise(value => value.FilesChanged += null, deleted
             ? new AssetFilesChangedEventArgs([], [], [source], foldersChanged: false)
             : new AssetFilesChangedEventArgs([new RelocationFileMove(source, target, IsDirectory: false)], [], [], foldersChanged: false));
-        await settled.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+        if (deleted)
+        {
+            await closed.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+        }
 
-        _ = documents.GetOpenDocuments(window).OfType<MaterialDocumentMetadata>().Should().HaveCount(deleted ? 0 : 1);
+        _ = area.Documents.Should().HaveCount(deleted ? 0 : 1);
+        area.Dispose();
     }
 
-    /// <summary>Deleting a scene's file in the editor closes its tab; the delete already asked about it.</summary>
+    /// <summary>Deleting a scene's folder in the editor closes the scene's tab; the delete already asked about it.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task SceneDocumentClosesWhenItsFileIsDeleted()
     {
-        var window = new WindowId(92);
-        using var scenes = new SceneDocumentFiles(Mock.Of<ISceneDocumentCommandService>());
-        var (document, _) = await scenes.CreateAsync("Main", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var projects = new ProjectContextService();
-        projects.Activate(scenes.Context);
-        var documents = new EditorDocumentService();
+        using var files = new SceneDocumentFiles(Mock.Of<ISceneDocumentCommandService>());
+        var (document, _) = await files.CreateAsync("Main", this.TestContext.CancellationToken).ConfigureAwait(false);
         var relocation = new Mock<IAssetRelocationService>();
-        using var manager = new DocumentManager(
-            documents,
-            new StrongReferenceMessenger(),
-            projects,
-            Mock.Of<IProjectUsageService>(),
-            Mock.Of<IMaterialDocumentService>(),
-            window,
-            scenes.Documents,
-            Mock.Of<ISceneEngineSync>(),
-            relocation.Object);
-        _ = await documents.OpenDocumentAsync(window, SceneDocumentMetadata.For(document)).ConfigureAwait(false);
+        var (tabs, area) = CreateArea(files, new WindowId(92));
+        using var manager = CreateManager(files, area, relocation.Object);
+        _ = (await area.ShowAsync(document).ConfigureAwait(false)).Should().BeTrue();
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        documents.DocumentClosed += (_, _) => _ = closed.TrySetResult();
+        tabs.DocumentClosed += (_, _) => _ = closed.TrySetResult();
 
         relocation.Raise(value => value.FilesChanged += null, new AssetFilesChangedEventArgs([], [], [Path.GetDirectoryName(document.File.Path)!], foldersChanged: true));
         await closed.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = documents.GetOpenDocuments(window).Should().BeEmpty();
+        _ = area.Documents.Should().BeEmpty();
+        area.Dispose();
+    }
+
+    private static (EditorDocumentService Tabs, DocumentArea Area) CreateArea(SceneDocumentFiles files, WindowId window)
+    {
+        var tabs = new EditorDocumentService();
+        var area = new DocumentArea(
+            tabs,
+            files.Documents,
+            files.Documents.Kinds.Select(static kind => new DocumentEditorDescriptor(kind, static _ => new object())),
+            window,
+            static _ => { });
+        return (tabs, area);
+    }
+
+    private static DocumentManager CreateManager(SceneDocumentFiles files, DocumentArea area, IAssetRelocationService relocation)
+    {
+        var projects = new ProjectContextService();
+        projects.Activate(files.Context);
+        return new DocumentManager(
+            area,
+            new StrongReferenceMessenger(),
+            projects,
+            Mock.Of<IProjectUsageService>(),
+            new WindowId(90),
+            files.Documents,
+            Mock.Of<ISceneEngineSync>(),
+            relocation);
     }
 }

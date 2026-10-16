@@ -19,6 +19,7 @@ using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -36,16 +37,18 @@ public sealed class SceneExplorerSearchTests
         parent.AddChild(child);
         scene.RootNodes.Add(parent);
         var metadata = SceneTabs.Open(scene);
+        scene = metadata.Scene;
+        parent = metadata.NodeOf(parent);
+        child = metadata.NodeOf(child);
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
         _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
-        var documents = new Mock<IDocumentService>();
-        _ = documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns([metadata]);
-        _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
+        var documents = new TestDocumentArea();
+        documents.Activate(metadata.Document);
         var sync = new Mock<ISceneEngineSync>();
         _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
         _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata.DocumentId)).Returns(value: true);
         _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
-        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents.Object, default, sync.Object, new SceneSelectionService(), Mock.Of<ISceneDocumentCommandService>());
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService(), Mock.Of<ISceneDocumentCommandService>());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
 
@@ -67,8 +70,8 @@ public sealed class SceneExplorerSearchTests
         var scene = harness.Scene;
         var node = new SceneNode(scene) { Name = "FindMe" };
         scene.RootNodes.Add(node);
-        var outerId = Guid.NewGuid();
-        var innerId = Guid.NewGuid();
+        var outerId = FolderId.New();
+        var innerId = FolderId.New();
         scene.SetExplorerLayout(
             [
                 new ExplorerEntryData
@@ -119,9 +122,9 @@ public sealed class SceneExplorerSearchTests
     {
         var harness = CreateHarness();
         var scene = harness.Scene;
-        var collapsedFolderId = Guid.NewGuid();
-        var matchingFolderId = Guid.NewGuid();
-        var unresolvedFolderId = Guid.NewGuid();
+        var collapsedFolderId = FolderId.New();
+        var matchingFolderId = FolderId.New();
+        var unresolvedFolderId = FolderId.New();
         scene.SetExplorerLayout(
             [
                 new ExplorerEntryData
@@ -138,7 +141,7 @@ public sealed class SceneExplorerSearchTests
                 new ExplorerEntryData
                 {
                     Type = "Node",
-                    NodeId = Guid.NewGuid(), // unknown to the scene graph: this seat never realizes
+                    NodeId = NodeId.New(), // unknown to the scene graph: this seat never realizes
                     Children =
                     [
                         new ExplorerEntryData { Type = "Folder", FolderId = unresolvedFolderId, Name = "ZebraAuthored" },
@@ -173,9 +176,9 @@ public sealed class SceneExplorerSearchTests
         var second = new SceneNode(scene) { Name = "FindTwo" };
         scene.RootNodes.Add(first);
         scene.RootNodes.Add(second);
-        var collapsedId = Guid.NewGuid();
-        var expandedId = Guid.NewGuid();
-        var nestedId = Guid.NewGuid();
+        var collapsedId = FolderId.New();
+        var expandedId = FolderId.New();
+        var nestedId = FolderId.New();
         scene.SetExplorerLayout(
             [
                 new ExplorerEntryData
@@ -230,7 +233,7 @@ public sealed class SceneExplorerSearchTests
         _ = nested.IsExpanded.Should().BeFalse("clearing search should restore nested collapsed state");
         _ = expanded.IsExpanded.Should().BeTrue("clearing search must not collapse folders the search did not expand");
         _ = JsonSerializer.Serialize(scene.ExplorerLayout).Should().Be(layoutBefore, "search must not write authored layout state");
-        _ = harness.Metadata.Document!.IsDirty.Should().BeFalse("search must not dirty the document");
+        _ = harness.Metadata.Document.IsDirty.Should().BeFalse("search must not dirty the document");
     }
 
     [TestMethod]
@@ -272,7 +275,7 @@ public sealed class SceneExplorerSearchTests
         var other = new SceneNode(scene) { Name = "Other" };
         scene.RootNodes.Add(find);
         scene.RootNodes.Add(other);
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
         scene.SetExplorerLayout(
             [
                 new ExplorerEntryData
@@ -309,7 +312,7 @@ public sealed class SceneExplorerSearchTests
 
         _ = rebuiltFolder.IsExpanded.Should().BeFalse("clearing after a rebuild restores the prior collapsed view through the live adapter");
         _ = JsonSerializer.Serialize(scene.ExplorerLayout).Should().Be(layoutBefore, "clearing after a rebuild must still author nothing");
-        _ = harness.Metadata.Document!.IsDirty.Should().BeFalse();
+        _ = harness.Metadata.Document.IsDirty.Should().BeFalse();
     }
 
     private static Harness CreateHarness()
@@ -324,20 +327,19 @@ public sealed class SceneExplorerSearchTests
         public Harness(Project project, Scene scene)
         {
             this.Project = project;
-            this.Scene = scene;
             this.Metadata = SceneTabs.Open(scene);
+            this.Scene = this.Metadata.Scene;
 
             var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
             _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
             this.Manager = manager;
 
-            var documents = new Mock<IDocumentService>();
-            _ = documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns([this.Metadata]);
-            _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(this.Metadata.DocumentId);
+            var documents = new TestDocumentArea();
+            documents.Activate(this.Metadata.Document);
             this.Documents = documents;
 
             var sync = new Mock<ISceneEngineSync>();
-            _ = sync.Setup(value => value.GetDocumentScene(this.Metadata.DocumentId)).Returns(scene);
+            _ = sync.Setup(value => value.GetDocumentScene(this.Metadata.DocumentId)).Returns(this.Scene);
             _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), this.Metadata.DocumentId)).Returns(value: true);
             _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             this.Sync = sync;
@@ -349,11 +351,14 @@ public sealed class SceneExplorerSearchTests
 
         public Scene Scene { get; }
 
-        public SceneDocumentMetadata Metadata { get; }
+        public SceneTab Metadata { get; }
 
         public Mock<IProjectManagerService> Manager { get; }
 
-        public Mock<IDocumentService> Documents { get; }
+        public TestDocumentArea Documents { get; }
+
+        /// <summary>Gets the open documents that hold the harness's first scene.</summary>
+        public Oxygen.Editor.Documents.OpenDocuments OpenDocuments => this.Metadata.Documents;
 
         public Mock<ISceneEngineSync> Sync { get; }
 
@@ -364,7 +369,8 @@ public sealed class SceneExplorerSearchTests
                 this.Manager.Object,
                 new StrongReferenceMessenger(),
                 Mock.Of<IRouter>(),
-                this.Documents.Object,
+                this.Documents,
+                this.OpenDocuments,
                 default,
                 this.Sync.Object,
                 new SceneSelectionService(),

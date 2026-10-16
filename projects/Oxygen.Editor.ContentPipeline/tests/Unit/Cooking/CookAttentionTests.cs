@@ -32,7 +32,7 @@ public sealed class CookAttentionTests
                 _ = needsSave.TrySetResult(change);
             }
         };
-        var document = new global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(Path.Combine(Path.GetTempPath(), "Main.oscene.json"), "Main", Revision: 2, SavedRevision: 1, IsDirty: true, SavedContentHash: "saved");
+        var document = new global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(Path.Combine(Path.GetTempPath(), "Main.oscene.json"), "Main", IsDirty: true, SavedContentHash: "saved");
         var work = coordinator.RunCookAsync<int>(new(CookTargetKind.Project, ScopeUri: null, IsAutomatic: automatic), (_, _) => throw new CookInputsNeedSaveException([document]), CancellationToken.None);
         var blocked = await needsSave.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = blocked.Reveal.Should().Be(!automatic);

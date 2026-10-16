@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Documents;
 using DryIoc;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LevelEditor;
@@ -127,8 +128,6 @@ public partial class SceneEditorViewModel
 
     private void UpdateLayout(SceneViewLayout targetLayout, IReadOnlyList<ViewportPaneState>? restoredPanes = null)
     {
-        var metadata = this.Metadata ?? throw new InvalidOperationException("Scene metadata is not initialized.");
-        metadata.Layout = targetLayout;
         this.MaximizedViewport = null;
 
         var requiredCount = SceneLayoutHelpers.GetPlacements(targetLayout).Count;

@@ -140,7 +140,7 @@ public sealed class SavedSourceCookTests
         {
             if (++acquireCount == 2)
             {
-                state = state with { IsDirty = true, Revision = 2 };
+                state = state with { IsDirty = true };
             }
 
             return Task.FromResult<CookDocumentReadLease?>(new(state, static () => { }));
@@ -160,7 +160,7 @@ public sealed class SavedSourceCookTests
         _ = generator.Scene.Should().BeNull();
         MarkVersion(workspace, "Explicitly saved");
         await workspace.WriteSceneAsync(relative).ConfigureAwait(false);
-        state = SavedState(path) with { Revision = 2, SavedRevision = 2 };
+        state = SavedState(path);
         _ = workspace.CookCoordinator.ResumeAfterSave(runId).Should().BeTrue();
         _ = (await cook.ConfigureAwait(false)).Status.Should().Be(OperationStatus.Succeeded);
         _ = VersionOf(generator.Scene!).Should().Be("Explicitly saved");

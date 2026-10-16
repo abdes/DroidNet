@@ -52,7 +52,6 @@ public partial class AssetsViewModel(
     ViewModelToView vmToViewConverter,
     ContentBrowserState contentBrowserState,
     IProjectContextService projectContextService,
-    IAuthoringTargetResolver authoringTargetResolver,
     IContentPipelineService contentPipelineService,
     IAssetFeed assetProvider,
     IOperationResultPublisher operationResults,
@@ -95,45 +94,6 @@ public partial class AssetsViewModel(
     [ObservableProperty]
     public partial InfoBarSeverity OperationResultSeverity { get; set; } = InfoBarSeverity.Informational;
 
-    /// <summary>Maps a browser folder to an authored material destination.</summary>
-    /// <param name="selected">The selected folder.</param>
-    /// <param name="project">Optional project mount declarations.</param>
-    /// <returns>The normalized virtual material folder.</returns>
-    public static string NormalizeMaterialFolder(string? selected, ProjectContext? project = null)
-    {
-        if (string.IsNullOrWhiteSpace(selected))
-        {
-            return "/Content/Materials";
-        }
-
-        var normalized = selected.Replace('\\', '/').Trim();
-        normalized = normalized.TrimEnd('/');
-        var normalizedNoRoot = normalized.TrimStart('/');
-
-        if (TryMapSelectedAuthoringFolder(project, normalizedNoRoot, out var mapped))
-        {
-            return mapped;
-        }
-
-        if (normalized.StartsWith('/'))
-        {
-            return normalized.Equals("/Content", StringComparison.OrdinalIgnoreCase)
-                ? "/Content/Materials"
-                : normalized.Equals("/Content/Materials", StringComparison.OrdinalIgnoreCase)
-                  || normalized.StartsWith("/Content/Materials/", StringComparison.OrdinalIgnoreCase)
-                ? normalized
-                : "/Content/Materials";
-        }
-
-        normalized = normalized.TrimStart('/');
-        return normalized.Equals("Content", StringComparison.OrdinalIgnoreCase)
-            ? "/Content/Materials"
-            : normalized.Equals("Content/Materials", StringComparison.OrdinalIgnoreCase)
-              || normalized.StartsWith("Content/Materials/", StringComparison.OrdinalIgnoreCase)
-                ? "/" + normalized
-                : "/Content/Materials";
-    }
-
     /// <inheritdoc />
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
@@ -158,72 +118,6 @@ public partial class AssetsViewModel(
         }
 
         // Asset indexing runs automatically in background with file watching
-    }
-
-    /// <summary>Requests an authored material in the resolved destination.</summary>
-    /// <param name="materialName">The proposed material name.</param>
-    /// <param name="virtualFolder">The selected virtual folder.</param>
-    /// <returns>The creation request dispatch.</returns>
-    public Task CreateNewMaterialAsync(string materialName, string virtualFolder)
-    {
-        if (!TryNormalizeMaterialName(materialName, out var normalizedName))
-        {
-            Debug.WriteLine($"[AssetsViewModel] Rejected invalid material name '{materialName}'.");
-            return Task.CompletedTask;
-        }
-
-        var folder = this.ResolveMaterialFolder(virtualFolder);
-        var materialUri = new Uri($"{AssetUris.Scheme}://{folder.TrimEnd('/')}/{normalizedName}.omat.json");
-        _ = messenger.Send(new CreateMaterialRequestMessage(materialUri, normalizedName));
-        Debug.WriteLine($"[AssetsViewModel] Requested material creation {materialUri}");
-        return Task.CompletedTask;
-    }
-
-    /// <summary>Chooses an unused material name in the resolved folder.</summary>
-    /// <param name="virtualFolder">The selected virtual folder.</param>
-    /// <returns>An available default material name.</returns>
-    public string CreateDefaultMaterialName(string virtualFolder)
-    {
-        var folder = this.ResolveMaterialFolder(virtualFolder);
-        var count = this.LayoutViewModel is AssetsLayoutViewModel layout
-            ? layout.Assets.Count(asset => asset.Kind == AssetKind.Material)
-            : 0;
-        var start = Math.Max(1, count + 1);
-        for (var i = start; i < start + 1000; i++)
-        {
-            var candidate = string.Create(CultureInfo.InvariantCulture, $"NewMaterial{i}");
-            if (!this.MaterialSourceExists(folder, candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return $"NewMaterial{Guid.NewGuid():N}";
-    }
-
-    /// <summary>Gets the authoring destination for a new material.</summary>
-    /// <returns>The resolved virtual folder.</returns>
-    public string GetSelectedMaterialFolder()
-        => this.ResolveMaterialFolder(contentBrowserState.SelectedFolders.FirstOrDefault());
-
-    /// <summary>Retains the selected local mount when resolving a creation target.</summary>
-    /// <param name="activeProject">The active project.</param>
-    /// <param name="selected">The current folder selection.</param>
-    /// <returns>The authoring target selection.</returns>
-    internal static ContentBrowserSelection CreateMaterialTargetSelection(ProjectContext activeProject, string? selected)
-    {
-        var normalized = selected?.Replace('\\', '/').Trim().Trim('/');
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return new ContentBrowserSelection(selected);
-        }
-
-        var firstSlash = normalized.IndexOf('/', StringComparison.Ordinal);
-        var root = firstSlash < 0 ? normalized : normalized[..firstSlash];
-        var localMount = activeProject.LocalFolderMounts.FirstOrDefault(mount =>
-            string.Equals(mount.Name, root, StringComparison.OrdinalIgnoreCase));
-
-        return new ContentBrowserSelection(selected, localMount?.Name);
     }
 
     /// <summary>Combines an operation summary with its diagnostic details.</summary>
@@ -334,68 +228,6 @@ public partial class AssetsViewModel(
         }
 
         base.Dispose(disposing);
-    }
-
-    private static bool TryMapSelectedAuthoringFolder(ProjectContext? project, string normalizedNoRoot, out string virtualFolder)
-    {
-        virtualFolder = string.Empty;
-        if (project is null || string.IsNullOrWhiteSpace(normalizedNoRoot))
-        {
-            return false;
-        }
-
-        foreach (var mount in project.AuthoringMounts.OrderByDescending(static mount => mount.RelativePath.Length))
-        {
-            var mountFolder = mount.RelativePath.Replace('\\', '/').Trim('/');
-            if (string.IsNullOrWhiteSpace(mountFolder))
-            {
-                continue;
-            }
-
-            if (normalizedNoRoot.Equals(mountFolder, StringComparison.OrdinalIgnoreCase))
-            {
-                virtualFolder = "/" + mount.Name + "/Materials";
-                return true;
-            }
-
-            if (normalizedNoRoot.StartsWith(mountFolder + "/", StringComparison.OrdinalIgnoreCase))
-            {
-                var mountRelative = normalizedNoRoot[(mountFolder.Length + 1)..];
-                virtualFolder = mountRelative.Equals("Materials", StringComparison.OrdinalIgnoreCase)
-                                || mountRelative.StartsWith("Materials/", StringComparison.OrdinalIgnoreCase)
-                    ? "/" + mount.Name + "/" + mountRelative
-                    : "/" + mount.Name + "/Materials";
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool TryNormalizeMaterialName(string materialName, out string normalized)
-    {
-        normalized = materialName.Trim();
-        if (normalized.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase))
-        {
-            normalized = normalized[..^AssetFileTypes.MaterialDescriptor.Length];
-        }
-        else if (normalized.EndsWith(AssetFileTypes.Material, StringComparison.OrdinalIgnoreCase))
-        {
-            normalized = normalized[..^AssetFileTypes.Material.Length];
-        }
-
-        if (string.IsNullOrWhiteSpace(normalized)
-            || normalized.Contains('/', StringComparison.Ordinal)
-            || normalized.Contains('\\', StringComparison.Ordinal)
-            || string.Equals(normalized, ".", StringComparison.Ordinal)
-            || string.Equals(normalized, "..", StringComparison.Ordinal)
-            || normalized.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-        {
-            normalized = string.Empty;
-            return false;
-        }
-
-        return true;
     }
 
     private static List<DiagnosticRecord> NormalizeDiagnostics(
@@ -553,6 +385,19 @@ public partial class AssetsViewModel(
     }
 
     /// <summary>
+    ///     Asks for a name and folder, creates a new material there and opens it.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [RelayCommand]
+    private async Task CreateNewMaterialWithPromptAsync()
+    {
+        if (creation is not null)
+        {
+            _ = await creation.CreateMaterialAsync().ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
     ///     Asks for a name and folder, creates an empty scene there and opens it.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
@@ -599,21 +444,6 @@ public partial class AssetsViewModel(
         }
     }
 
-    private string ResolveMaterialFolder(string? selected)
-    {
-        var activeProject = projectContextService.ActiveProject;
-        if (activeProject is null)
-        {
-            return NormalizeMaterialFolder(selected);
-        }
-
-        var target = authoringTargetResolver.ResolveCreateTarget(
-            activeProject,
-            AuthoringAssetKind.Material,
-            CreateMaterialTargetSelection(activeProject, selected));
-        return target.FolderAssetUri.AbsolutePath;
-    }
-
     private void OnLayoutViewModelChanging(object? sender, PropertyChangingEventArgs args)
     {
         if (args.PropertyName?.Equals(nameof(this.LayoutViewModel), StringComparison.Ordinal) == true
@@ -622,32 +452,6 @@ public partial class AssetsViewModel(
             layoutViewModel.ItemInvoked -= this.OnAssetItemInvoked;
             layoutViewModel.PropertyChanged -= this.OnAssetSelectionChanged;
         }
-    }
-
-    private bool MaterialSourceExists(string virtualFolder, string materialName)
-    {
-        if (projectContextService.ActiveProject is not { } project || string.IsNullOrWhiteSpace(project.ProjectRoot))
-        {
-            return false;
-        }
-
-        var normalized = virtualFolder.Trim('/').Replace('\\', '/');
-        var slash = normalized.IndexOf('/', StringComparison.Ordinal);
-        if (slash <= 0)
-        {
-            return false;
-        }
-
-        var mountName = normalized[..slash];
-        var relativeFolder = normalized[(slash + 1)..];
-        var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase));
-        if (mount is null)
-        {
-            return false;
-        }
-
-        var path = Path.Combine(project.ProjectRoot, mount.RelativePath, relativeFolder, materialName + AssetFileTypes.MaterialDescriptor);
-        return File.Exists(path);
     }
 
     private void OnLayoutViewModelChanged(object? sender, PropertyChangedEventArgs args)

@@ -23,8 +23,8 @@ public sealed partial class SceneDocumentCommandServiceTests
         var second = new SceneNode(scene) { Name = "Standalone" };
         scene.RootNodes.Add(first);
         scene.RootNodes.Add(second);
-        var folderId = Guid.NewGuid();
-        var nestedId = Guid.NewGuid();
+        var folderId = FolderId.New();
+        var nestedId = FolderId.New();
         scene.SetExplorerLayout(
         [
             new ExplorerEntryData
@@ -80,7 +80,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         oldParent.AddChild(grouped);
         scene.RootNodes.Add(oldParent);
         scene.RootNodes.Add(newParent);
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
         scene.SetExplorerLayout(
         [
             new ExplorerEntryData
@@ -123,7 +123,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
         scene.SetExplorerLayout([new ExplorerEntryData { NodeId = node.Id },
             new ExplorerEntryData { Type = "Folder", FolderId = folderId, Name = "Empty" }]);
         var context = CreateContext(scene);
@@ -144,8 +144,8 @@ public sealed partial class SceneDocumentCommandServiceTests
     {
         var fixture = CreateFixture();
         var scene = CreateScene();
-        var parentId = Guid.NewGuid();
-        var childId = Guid.NewGuid();
+        var parentId = FolderId.New();
+        var childId = FolderId.New();
         scene.SetExplorerLayout(
         [
             new ExplorerEntryData
@@ -176,7 +176,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var second = new SceneNode(scene) { Name = "Second" };
         scene.RootNodes.Add(first);
         scene.RootNodes.Add(second);
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
         scene.SetExplorerLayout(
         [
             new ExplorerEntryData { NodeId = first.Id },
@@ -231,7 +231,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var fixture = CreateFixture();
         ConfigureHierarchySync(fixture);
         var scene = CreateScene();
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
         scene.SetExplorerLayout([new ExplorerEntryData { Type = "Folder", FolderId = folderId, Name = "Empty" }]);
         var context = CreateContext(scene);
         var payload = fixture.Sut.CaptureExplorerClipboard(context, [], [folderId]).Value!;

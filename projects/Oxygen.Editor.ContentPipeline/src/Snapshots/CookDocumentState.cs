@@ -4,17 +4,13 @@
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
-/// <summary>Immutable owner-reported authoring revision and acknowledged saved-file identity.</summary>
+/// <summary>What an open document's owner reports to the cook: whether its file has unsaved edits, and the saved file's identity.</summary>
 /// <param name="SourcePath">The canonical source file path.</param>
 /// <param name="DisplayName">The user-visible document name.</param>
-/// <param name="Revision">The current authoring revision.</param>
-/// <param name="SavedRevision">The acknowledged saved revision.</param>
-/// <param name="IsDirty">Whether the document has unsaved changes.</param>
+/// <param name="IsDirty">Whether the document has unsaved changes or an edit in progress.</param>
 /// <param name="SavedContentHash">The saved file hash known to the document owner.</param>
 public sealed record CookDocumentState(
     string SourcePath,
     string DisplayName,
-    long Revision,
-    long SavedRevision,
     bool IsDirty,
     string SavedContentHash);

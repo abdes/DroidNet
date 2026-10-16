@@ -14,6 +14,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
@@ -24,8 +25,6 @@ internal sealed partial class SceneAuthoringFixture
     {
         IList<SceneNode> selection = string.Equals(kind, "Environment", StringComparison.Ordinal) ? [] : [this.Node];
         this.Messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
-        _ = this.Documents.Setup(service => service.GetOpenDocuments(It.IsAny<WindowId>())).Returns([this.Tab]);
-        _ = this.Documents.Setup(service => service.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(this.Tab.DocumentId);
         _ = this.Sync.Setup(service => service.GetDocumentScene(this.Tab.DocumentId)).Returns(this.Scene);
         var locator = new Mock<IViewLocator>();
         if (realizeViews)
@@ -37,17 +36,17 @@ internal sealed partial class SceneAuthoringFixture
         _ = catalog.SetupGet(value => value.Items).Returns(System.Reactive.Linq.Observable.Empty<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>>());
         _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
-        return new(new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) }, new ViewModelToView(locator.Object), this.Messenger, commandService ?? this.Commands, this.Documents.Object, default, assetProvider ?? catalog.Object, this.Sync.Object, this.Selection, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.Slots.Object, this.Projects, interaction: this.interaction);
+        return new(new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) }, new ViewModelToView(locator.Object), this.Messenger, commandService ?? this.Commands, this.Area, default, assetProvider ?? catalog.Object, this.Sync.Object, this.Selection, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.Slots.Object, this.Projects, interaction: this.interaction);
     }
 
     public void ConfigureObservedSync(SceneEngineSync throttle, List<DateTimeOffset> previews, Action terminal)
     {
-        _ = this.Sync.Setup(value => value.TryPreviewSyncAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<DateTimeOffset>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>())).Returns((Guid sceneId, Guid nodeId, DateTimeOffset now, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => throttle.TryPreviewSyncAsync(sceneId, nodeId, now, ct =>
+        _ = this.Sync.Setup(value => value.TryPreviewSyncAsync(It.IsAny<SceneId>(), It.IsAny<Guid>(), It.IsAny<DateTimeOffset>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>())).Returns((SceneId sceneId, Guid nodeId, DateTimeOffset now, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => throttle.TryPreviewSyncAsync(sceneId, nodeId, now, ct =>
         {
             previews.Add(now);
             return action(ct);
         }, token));
-        _ = this.Sync.Setup(value => value.CompleteTerminalSyncAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>())).Returns((Guid sceneId, Guid nodeId, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => throttle.CompleteTerminalSyncAsync(sceneId, nodeId, ct =>
+        _ = this.Sync.Setup(value => value.CompleteTerminalSyncAsync(It.IsAny<SceneId>(), It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>())).Returns((SceneId sceneId, Guid nodeId, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => throttle.CompleteTerminalSyncAsync(sceneId, nodeId, ct =>
         {
             terminal();
             return action(ct);

@@ -19,6 +19,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 using static DroidNet.Tests.UiTestHosting;
 
@@ -114,7 +115,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             var info = new ProjectInfo("Transaction", Category.Games, this.directory.FullName)
             {
                 AuthoringMounts = [new("Content", "Content")],
-                DefaultSceneId = withDefaultScene ? Guid.NewGuid() : null,
+                DefaultSceneId = withDefaultScene ? SceneId.New() : null,
             };
             this.Projects.Activate(ProjectContext.FromProjectInfo(info));
             this.Candidate = new ProjectInfo(info.Id, info.Name, info.Category, info.Location)

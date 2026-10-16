@@ -28,7 +28,7 @@ public partial class SceneExplorerViewModel
 
     private void RegisterSceneLifetime()
     {
-        this.documentService.DocumentClosed += this.OnSceneDocumentClosed;
+        this.openDocuments.Closed += this.OnSceneDocumentClosed;
         this.messenger.Register<InstallSceneRequestMessage>(this, (_, message) =>
         {
             if (!this.isDisposed && message.WindowId == this.windowId && !message.HasReceivedResponse)
@@ -50,16 +50,16 @@ public partial class SceneExplorerViewModel
     private async Task<bool> InstallAcceptedSceneAsync(InstallSceneRequestMessage request)
     {
         if (this.Scene is not null || !ReferenceEquals(this.projectManager.CurrentProject, request.Scene.Project)
-            || !this.documentService.GetOpenDocuments(this.windowId).Contains(request.Metadata))
+            || !this.documentArea.Documents.Contains(request.Document))
         {
             return false;
         }
 
         var ct = await this.BeginSceneLoadAsync().ConfigureAwait(true);
-        this.loadingDocumentId = request.Metadata.DocumentId;
+        this.loadingDocumentId = request.Document.Id;
         try
         {
-            if (!await this.InstallLoadedSceneAsync(request.Scene, request.Metadata, ct).ConfigureAwait(true))
+            if (!await this.InstallLoadedSceneAsync(request.Scene, request.Document, ct).ConfigureAwait(true))
             {
                 return false;
             }
@@ -71,17 +71,18 @@ public partial class SceneExplorerViewModel
         }
         finally
         {
-            this.loadingDocumentId = Guid.Empty;
+            this.loadingDocumentId = DocumentId.Empty;
         }
     }
 
-    private void OnSceneDocumentClosed(object? sender, DocumentClosedEventArgs args)
+    private void OnSceneDocumentClosed(object? sender, DocumentEventArgs args)
     {
-        if (args.WindowId != this.windowId || args.Metadata is not SceneDocumentMetadata closed
-            || !ReferenceEquals(this.sceneDocument, closed))
+        if (!ReferenceEquals(this.sceneDocument, args.Document))
         {
             return;
         }
+
+        var closed = args.Document;
 
         this.loadSceneCts?.Cancel();
         this.selectionApplyGeneration++;
@@ -101,7 +102,7 @@ public partial class SceneExplorerViewModel
             this.searchExpandedFolderIds.Clear();
             this.searchExpandedNodeIds.Clear();
             this.interaction?.ClearActiveScene();
-            _ = this.messenger.Send(new SceneAuthoringUnloadedMessage(closed.SceneDocumentId));
+            _ = this.messenger.Send(new SceneAuthoringUnloadedMessage(closed.Id));
         }
         finally
         {

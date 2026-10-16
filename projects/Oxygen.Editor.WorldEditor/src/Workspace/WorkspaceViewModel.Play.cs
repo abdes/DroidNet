@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Docking;
+using DroidNet.Documents;
 using DryIoc;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.World.Documents;

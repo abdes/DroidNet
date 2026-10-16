@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Services;
@@ -36,7 +37,7 @@ public sealed partial class SceneEditorConflictTests
         fixture.Sync.Raise(
             value => value.SceneSynchronized += null,
             fixture.Sync.Object,
-            new SceneSynchronizationCompletedEventArgs(fixture.Scene, fixture.Metadata.DocumentId, new RuntimeSceneTarget(Guid.NewGuid(), fixture.Scene.Id, Guid.NewGuid(), Guid.NewGuid())));
+            new SceneSynchronizationCompletedEventArgs(fixture.Scene, fixture.Tab.DocumentId));
 
         _ = fixture.Editor.Viewports.Should().ContainSingle();
     }
@@ -51,7 +52,7 @@ public sealed partial class SceneEditorConflictTests
         fixture.Sync.Raise(
             value => value.SceneSynchronized += null,
             fixture.Sync.Object,
-            new SceneSynchronizationCompletedEventArgs(fixture.Scene, Guid.NewGuid(), new RuntimeSceneTarget(Guid.NewGuid(), fixture.Scene.Id, Guid.NewGuid(), Guid.NewGuid())));
+            new SceneSynchronizationCompletedEventArgs(fixture.Scene, DocumentId.New()));
 
         _ = fixture.Editor.Viewports.Should().BeEmpty();
     }

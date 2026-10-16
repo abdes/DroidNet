@@ -180,12 +180,12 @@ public sealed class SourceDependencyDiscoveryTests
         AddGeometryNode(workspace, new("asset:///Content/Geometry/AuthoredCube.ogeo.json"), "Uses red");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var scene = CookInputResolver.Resolve(workspace.ProjectContext, new("asset:///Content/Scenes/Main.oscene.json"), ContentCookInputRole.Primary);
-        var dirtyScene = SavedState(scene.SourceAbsolutePath) with { IsDirty = true, Revision = 2 };
+        var dirtyScene = SavedState(scene.SourceAbsolutePath) with { IsDirty = true };
         using var sceneRegistration = workspace.Documents.Register(scene.SourceAbsolutePath, _ => Task.FromResult<CookDocumentReadLease?>(new(dirtyScene, static () => { })));
         var discovery = new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
         var graph = await discovery.DiscoverAsync(workspace.ProjectContext, [material], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = graph.Assets.Should().ContainSingle();
-        var dirtyMaterial = SavedState(material.SourceAbsolutePath) with { IsDirty = true, Revision = 2 };
+        var dirtyMaterial = SavedState(material.SourceAbsolutePath) with { IsDirty = true };
         using var materialRegistration = workspace.Documents.Register(material.SourceAbsolutePath, _ => Task.FromResult<CookDocumentReadLease?>(new(dirtyMaterial, static () => { })));
         var geometry = CookInputResolver.Resolve(workspace.ProjectContext, new("asset:///Content/Geometry/AuthoredCube.ogeo.json"), ContentCookInputRole.Primary);
         Func<Task> discover = () => discovery.DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken);

@@ -380,18 +380,23 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
 
 - **D1. Material save and cook repeat as if dirty.** Status: open, not
   investigated.
-- **D2. Integration test hangs.** Status: open.
-  `ClosingProjectCancelsCookAndReopensPriorNativePublication` waits for a
-  cook-on-change run that a material save never starts; cause unknown.
+- **D2. Integration test hangs.** Status: fixed, awaiting closure. The automatic
+  cook waits for the cook writer to be idle before it reads statuses and queues
+  a run. `ClosingProjectCancelsCookAndReopensPriorNativePublication` and
+  `CancelledWorkspaceCookRetainsMaterialUntilRetry` held the writer and waited
+  for that run, so they waited on themselves. Both now hold the automatic cook
+  at preview capture instead; a change still waiting for the writer is checked
+  to leave no run when the project closes. The World Editor integration suite
+  passes.
 - **D3. Fixes not checked in the editor.** Status: open. Viewport camera state
   keyed by scene id; the material tab told when it becomes dirty or is saved;
   selection keyed by document id (explorer, Inspector,
   `SceneLoadedMessage.DocumentId`); the last opened scene stored by id; the
   reload warning about the tree.
-- **D4. Test projects do not build.** Status: open. Task 1 kept every other test
-  project building; the World Editor's test projects were not built. The
-  callers' test projects do not compile against the moved code, and
-  `Oxygen.Editor.Scenes.Tests` does not exist.
+- **D4. Test projects do not build.** Status: fixed, awaiting closure. The World
+  Editor's Unit, Unit.UI, Integration.UI and Benchmarks.UI projects build, and
+  their suites pass. `Oxygen.Editor.Scenes.Tests` does not exist yet; task 4
+  creates it.
 - **D5. This document is stale.** Status: open. Decision 13 and section 5
   describe the old commit order, not the split; `document-kinds.md` and the #69
   plan need the same revision.

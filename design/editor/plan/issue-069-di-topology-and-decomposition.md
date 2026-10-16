@@ -323,15 +323,22 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   and `DocumentManager`: it opens a file once, places the document, owns the
   per-document histories beside the global one of S1.4a, the Undo and Redo
   commands, the confirmations of documents design 2.9, the missing and conflict
-  banner, and following relocated files. Aura's contract in `DroidNet.Documents`
-  is renamed `IDocumentTabSource`. The other contracts land in their target
-  shape (decision 4): contributions (panel and editor descriptors,
-  `IDocumentEditorProvider`), part services (placement, commands, close and
-  exit) and desktop integration (`CodeEditorService`, `IAssetShell`). Their
-  first implementations adapt today's Aura, Docking and Routing; the library
-  changes of shell design section 9 come in Phase 5. Notifications, menus, the
-  status bar and the command palette are not part of #69 (shell design section
-  8). Gate: Shell tests and the reviewer's editor build.
+  banner, and following relocated files. The close coordinator, the close and
+  conflict prompts, `DocumentCloseItem` and the input committer move into the
+  Shell with it: they take the `DocumentTab` instead of `IDocumentMetadata` and
+  lose their `WindowId`, and the close prompt's check that a tab is a
+  `DocumentTab` goes. The refusal of every detach moves from
+  `EditorDocumentService` into the Shell's document service, which allows detach
+  once document windows can receive a tab (document-identity.md 3.5). Aura's
+  contract in `DroidNet.Documents` is renamed `IDocumentTabSource`. The other
+  contracts land in their target shape (decision 4): contributions (panel and
+  editor descriptors, `IDocumentEditorProvider`), part services (placement,
+  commands, close and exit) and desktop integration (`CodeEditorService`,
+  `IAssetShell`). Their first implementations adapt today's Aura, Docking and
+  Routing; the library changes of shell design section 9 come in Phase 5.
+  Notifications, menus, the status bar and the command palette are not part of
+  #69 (shell design section 8). Gate: Shell tests and the reviewer's editor
+  build.
 - **S1.11 Unsaved documents** (documents design 4.3). `Oxygen.Editor.Documents`
   declares `IUnsavedDocuments`, the Shell's document service implements it and
   ContentPipeline consumes it. Play, Cook and relocation ask before they run.

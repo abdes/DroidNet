@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Runtime.CompilerServices;
+using DroidNet.Documents;
 using DroidNet.TimeMachine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -22,7 +23,7 @@ internal static class SceneContexts
     {
         var history = new HistoryKeeper(scene);
         SavedPositions.AddOrUpdate(history, new(history.Position));
-        return new(Guid.NewGuid(), scene, history);
+        return new(DocumentId.New(), scene, history);
     }
 
     /// <summary>Tells whether the scene changed since it was saved.</summary>

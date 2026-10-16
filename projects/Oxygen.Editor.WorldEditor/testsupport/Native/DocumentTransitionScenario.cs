@@ -9,7 +9,7 @@ using Microsoft.UI;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Inspection;
+using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
@@ -25,7 +25,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
 
     /// <summary>Document activation drains each old viewport and recreates the scene view without stale native resources.</summary>
     /// <param name="targetFps">The native cadence, including slow debugging-like frames.</param>
-    /// <param name="cycles">The number of complete Main/Inspect/Main transitions.</param>
+    /// <param name="cycles">The number of complete scene/material/scene transitions.</param>
     /// <returns>The asynchronous document-transition regression.</returns>
     public Task RunAsync(uint targetFps, int cycles) => EnqueueAsync(async () =>
     {
@@ -38,6 +38,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         var sceneUri = new Uri("asset:///Content/Scenes/" + Uri.EscapeDataString(fixture.Source.Name) + ".oscene.json");
         _ = (await services.Pipeline.CookCurrentSceneAsync(sceneUri, timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
+        var (material, _) = await fixture.CookTestMaterialAsync("Transition", timeout.Token).ConfigureAwait(true);
         await fixture.RefreshCookedRootsAsync().ConfigureAwait(true);
         fixture.Runtime.TargetFps = targetFps;
         var container = new Container();
@@ -46,7 +47,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         var window = VisualUserInterfaceTestsApp.MainWindow.AppWindow;
         var originalSize = window.Size;
         using var host = fixture.CreateDocumentTransitionHost(container, documents, services, window.Id);
-        using var manager = fixture.CreateTransitionDocumentManager(documents, services.Projects, window.Id);
+        using var manager = fixture.CreateTransitionDocumentManager(services.Projects, window.Id);
         var root = new DocumentHostView
         {
             ViewModel = host,
@@ -57,12 +58,12 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         window.Resize(new((int)(root.Width * root.XamlRoot.RasterizationScale) + 60, (int)(root.Height * root.XamlRoot.RasterizationScale) + 100));
         try
         {
-            _ = await documents.OpenDocumentAsync(window.Id, fixture.Tab).ConfigureAwait(true);
+            _ = await fixture.TransitionArea!.ShowAsync(fixture.Document).ConfigureAwait(true);
             await fixture.NotifyTransitionSceneReadyAsync(timeout.Token).ConfigureAwait(true);
             await WaitForDocumentViewportAsync(host, fixture, timeout.Token).ConfigureAwait(true);
             await fixture.SuspendCookedContentAsync().ConfigureAwait(true);
             await fixture.RefreshCookedRootsAsync().ConfigureAwait(true);
-            await this.RunInspectionTransitionsAsync(fixture, host, documents, services, window.Id, cycles, timeout.Token).ConfigureAwait(true);
+            await RunMaterialTransitionsAsync(fixture, host, manager, documents, material, window.Id, cycles, timeout.Token).ConfigureAwait(true);
         }
         finally
         {
@@ -90,20 +91,19 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         await ObserveRenderedFramesAsync(fixture, cancellationToken).ConfigureAwait(true);
     }
 
-    private async Task RunInspectionTransitionsAsync(NativeSceneFixture fixture, DocumentHostViewModel host, EditorDocumentService documents, CatalogWorkloadServices services, WindowId windowId, int cycles, CancellationToken cancellationToken)
+    private static async Task RunMaterialTransitionsAsync(NativeSceneFixture fixture, DocumentHostViewModel host, DocumentManager manager, EditorDocumentService documents, Uri material, WindowId windowId, int cycles, CancellationToken cancellationToken)
     {
         var mainId = fixture.Context.DocumentId;
         for (var cycle = 0; cycle < cycles; ++cycle)
         {
             var viewport = ((SceneEditorViewModel)host.ActiveEditor!).Viewports.Single();
             var oldView = viewport.AssignedViewId;
-            _ = (await fixture.OpenTransitionInspectionAsync(services.Projects.ActiveProject!).ConfigureAwait(true)).Should().BeTrue();
-            while (host.ActiveEditorView is not CookedInspectionView { IsLoaded: true })
+            _ = (await manager.OpenMaterialAsync(material, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
+            while (host.ActiveEditorView is not MaterialEditorView { IsLoaded: true })
             {
                 await Task.Delay(20, cancellationToken).ConfigureAwait(true);
             }
 
-            await ((CookedInspectionViewModel)host.ActiveEditor!).CurrentWork.ConfigureAwait(true);
             _ = fixture.Runtime.ActiveSurfaceCount.Should().Be(0);
             _ = viewport.AssignedViewId.IsValid.Should().BeFalse();
             _ = documents.GetOpenDocuments(windowId).Should().HaveCount(2);

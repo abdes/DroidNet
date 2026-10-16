@@ -2,6 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text;
+using Oxygen.Managed.Assets.Authoring.Materials;
+
 namespace Oxygen.Editor.ContentPipeline.Authoring;
 
 /// <summary>
@@ -71,4 +74,30 @@ public static class AssetTemplates
             }
 
             """;
+
+    /// <summary>Makes a new material's source: white, opaque and single-sided, named after its file.</summary>
+    /// <param name="materialName">The material's name, which is its file's name.</param>
+    /// <returns>The material's descriptor JSON, as the material writer writes it.</returns>
+    public static string Material(string materialName)
+    {
+        var source = new MaterialSource(
+            name: materialName,
+            pbrMetallicRoughness: new MaterialPbrMetallicRoughness(
+                baseColorR: 1.0f,
+                baseColorG: 1.0f,
+                baseColorB: 1.0f,
+                baseColorA: 1.0f,
+                metallicFactor: 0.0f,
+                roughnessFactor: 0.5f,
+                baseColorTexture: null,
+                metallicRoughnessTexture: null),
+            normalTexture: null,
+            occlusionTexture: null,
+            alphaMode: MaterialAlphaMode.Opaque,
+            alphaCutoff: 0.5f,
+            doubleSided: false);
+        using var memory = new MemoryStream();
+        MaterialSourceWriter.Write(memory, source);
+        return Encoding.UTF8.GetString(memory.ToArray());
+    }
 }

@@ -4,6 +4,7 @@
 
 using DroidNet.Controls;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.MaterialEditor;
@@ -23,7 +24,12 @@ public sealed partial class MaterialEditorViewModel
     /// <inheritdoc/>
     public Task<DocumentConflictResult> ReloadFromDiskAsync() => this.ResolveConflictAsync(async current =>
     {
-        _ = await this.documentService.ReloadAsync(current.DocumentId, CancellationToken.None).ConfigureAwait(true);
+        var reloaded = await current.ReloadAsync(CancellationToken.None).ConfigureAwait(true);
+        if (!reloaded.Succeeded)
+        {
+            return new(Succeeded: false, $"The file could not be reloaded. {reloaded.Problem}");
+        }
+
         this.HasSaveConflict = false;
         return new(Succeeded: true, "Reloaded from disk. Unsaved changes and Undo/Redo history were discarded.");
     });
@@ -37,16 +43,28 @@ public sealed partial class MaterialEditorViewModel
             return Task.FromResult(new DocumentConflictResult(Succeeded: false, "Enter a valid file name for the new copy."));
         }
 
-        var target = new Uri(this.metadata.MaterialUri, Uri.EscapeDataString(normalized) + AssetFileTypes.MaterialDescriptor);
+        var target = new Uri(this.document.File.AssetUri, Uri.EscapeDataString(normalized) + AssetFileTypes.MaterialDescriptor);
+        if (this.projects.ActiveProject?.FindByAssetUri(target) is not { IsMountRoot: false } location)
+        {
+            return Task.FromResult(new DocumentConflictResult(Succeeded: false, "The copy would be outside the project's folders."));
+        }
+
         return this.ResolveConflictAsync(async current =>
         {
-            _ = await this.documentService.SaveCopyAsync(current.DocumentId, target, CancellationToken.None).ConfigureAwait(true);
+            var saved = await current.SaveCopyAsync(new DocumentFile(location.FilePath, location.AssetUri), CancellationToken.None).ConfigureAwait(true);
+            if (!saved.Succeeded)
+            {
+                return new(Succeeded: false, saved.Outcome == DocumentSaveOutcome.Conflict
+                    ? $"A file named “{normalized}” already exists. Choose another name."
+                    : $"The copy was not saved. {saved.Message}");
+            }
+
             await this.assets.RefreshAsync().ConfigureAwait(true);
             return new(Succeeded: true, $"Saved “{normalized}” as a separate asset. The original is still unsaved; keep it open or explicitly discard its changes.");
         });
     }
 
-    private Task<DocumentConflictResult> ResolveConflictAsync(Func<MaterialDocument, Task<DocumentConflictResult>> action)
+    private Task<DocumentConflictResult> ResolveConflictAsync(Func<Document, Task<DocumentConflictResult>> action)
     {
         if (this.isDisposed || this.isResolvingConflict)
         {
@@ -59,14 +77,13 @@ public sealed partial class MaterialEditorViewModel
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A recovery failure must be returned to the inline prompt without losing document ownership or escaping the UI event.")]
-    private async Task<DocumentConflictResult> ResolveConflictCoreAsync(Func<MaterialDocument, Task<DocumentConflictResult>> action, Task<bool>? priorSave)
+    private async Task<DocumentConflictResult> ResolveConflictCoreAsync(Func<Document, Task<DocumentConflictResult>> action, Task<bool>? priorSave)
     {
         this.isResolvingConflict = true;
         this.EndEditSession(NumberBoxEditCompletionKind.Commit);
         this.RefreshHistoryCommands();
         try
         {
-            await this.loadTask.ConfigureAwait(true);
             if (priorSave is not null)
             {
                 _ = await priorSave.ConfigureAwait(true);
@@ -75,12 +92,12 @@ public sealed partial class MaterialEditorViewModel
             await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
             try
             {
-                if (this.isDisposed || this.document is not { } current)
+                if (this.isDisposed)
                 {
                     return new(Succeeded: false, "The material document is no longer open.");
                 }
 
-                var result = await action(current).ConfigureAwait(true);
+                var result = await action(this.document).ConfigureAwait(true);
                 this.StatusText = result.Message;
                 return result;
             }
@@ -96,9 +113,9 @@ public sealed partial class MaterialEditorViewModel
         }
         finally
         {
-            if (!this.isDisposed && this.document is { } current)
+            if (!this.isDisposed)
             {
-                this.RefreshDocument(current.DocumentId);
+                this.RefreshFromDocument();
             }
 
             this.isResolvingConflict = false;

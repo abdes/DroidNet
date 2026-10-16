@@ -7,6 +7,7 @@ using Moq;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
 
@@ -14,9 +15,9 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
 [TestClass]
 public sealed class WorkspaceInitialSceneTests
 {
-    private static readonly Guid AlphaId = Guid.NewGuid();
-    private static readonly Guid BetaId = Guid.NewGuid();
-    private static readonly Guid GammaId = Guid.NewGuid();
+    private static readonly SceneId AlphaId = SceneId.New();
+    private static readonly SceneId BetaId = SceneId.New();
+    private static readonly SceneId GammaId = SceneId.New();
 
     [TestMethod]
     public async Task ResolveSceneByNameOrId_MatchesByNameFileNameOrId()
@@ -25,7 +26,7 @@ public sealed class WorkspaceInitialSceneTests
 
         _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(scenes.Context, "Alpha").ConfigureAwait(false))!.FilePath.Should().Be(scenes.PathOf("Alpha"));
         _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(scenes.Context, "Beta.oscene.json").ConfigureAwait(false))!.FilePath.Should().Be(scenes.PathOf("Beta"));
-        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(scenes.Context, GammaId.ToString("D")).ConfigureAwait(false))!.FilePath.Should().Be(scenes.PathOf("Levels/Gamma"));
+        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(scenes.Context, GammaId.Value.ToString("D")).ConfigureAwait(false))!.FilePath.Should().Be(scenes.PathOf("Levels/Gamma"));
     }
 
     [TestMethod]
@@ -64,7 +65,7 @@ public sealed class WorkspaceInitialSceneTests
     {
         using var scenes = CreateScenes();
 
-        _ = (await WorkspaceViewModel.ResolveInitialSceneAsync(scenes.Context with { DefaultSceneId = Guid.NewGuid() }).ConfigureAwait(false)).Should().BeNull();
+        _ = (await WorkspaceViewModel.ResolveInitialSceneAsync(scenes.Context with { DefaultSceneId = SceneId.New() }).ConfigureAwait(false)).Should().BeNull();
         _ = (await WorkspaceViewModel.ResolveInitialSceneAsync(scenes.Context).ConfigureAwait(false)).Should().BeNull();
     }
 

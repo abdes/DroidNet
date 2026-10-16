@@ -346,7 +346,7 @@ public sealed class AssetRelocationTests
         using var workspace = CreateContent();
         var path = workspace.PathOf("Content/Scenes/Main.oscene.json");
         using var registration = workspace.Documents.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(null));
-        registration.UpdateState(new(path, "Main", Revision: 2, SavedRevision: 1, IsDirty: true, SavedContentHash: string.Empty));
+        registration.UpdateState(new(path, "Main", IsDirty: true, SavedContentHash: string.Empty));
 
         Func<Task> work = () => workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
 
@@ -630,9 +630,9 @@ public sealed class AssetRelocationTests
     {
         using var workspace = CreateContent();
         using var scene = workspace.Documents.Register(workspace.PathOf("Content/Scenes/Main.oscene.json"), _ => Task.FromResult<CookDocumentReadLease?>(null));
-        scene.UpdateState(new CookDocumentState(workspace.PathOf("Content/Scenes/Main.oscene.json"), "Main", 2, 1, IsDirty: true, string.Empty));
+        scene.UpdateState(new CookDocumentState(workspace.PathOf("Content/Scenes/Main.oscene.json"), "Main", IsDirty: true, string.Empty));
         using var material = workspace.Documents.Register(workspace.PathOf("Content/Materials/Red.omat.json"), _ => Task.FromResult<CookDocumentReadLease?>(null));
-        material.UpdateState(new CookDocumentState(workspace.PathOf("Content/Materials/Red.omat.json"), "Red", 1, 1, IsDirty: false, string.Empty));
+        material.UpdateState(new CookDocumentState(workspace.PathOf("Content/Materials/Red.omat.json"), "Red", IsDirty: false, string.Empty));
 
         var open = workspace.Service.FindOpenDocuments(["/Content/Scenes"]);
 

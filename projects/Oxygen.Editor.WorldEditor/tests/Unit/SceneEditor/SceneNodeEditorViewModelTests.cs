@@ -22,6 +22,8 @@ using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
@@ -56,7 +58,6 @@ public sealed class SceneNodeEditorViewModelTests
         var scene = CreateScene();
         var parent = new SceneNode(scene) { Name = "Locked Parent" };
         var child = new SceneNode(scene) { Name = "Child" };
-        child.Components.Clear();
         parent.AddChild(child);
         scene.RootNodes.Add(parent);
         var interaction = new WorkspaceInteractionService(
@@ -70,7 +71,7 @@ public sealed class SceneNodeEditorViewModelTests
 
         using var sut = CreateSut(Mock.Of<ISceneEngineSync>(), [child], interaction);
 
-        _ = sut.SelectedNode.Should().BeSameAs(child);
+        _ = sut.SelectedNode!.Id.Should().Be(child.Id);
         _ = sut.HasLockedSelection.Should().BeTrue();
         _ = sut.CanEditSelectedNodes.Should().BeFalse();
     }
@@ -127,7 +128,7 @@ public sealed class SceneNodeEditorViewModelTests
 
         sync.Raise(
             service => service.PendingPropertySyncCountChanged += null,
-            new PendingPropertySyncCountChangedEventArgs(Guid.NewGuid(), pendingCount: 0));
+            new PendingPropertySyncCountChangedEventArgs(SceneId.New(), pendingCount: 0));
 
         _ = sut.PendingLiveSyncEditCount.Should().Be(1);
         _ = sut.HasPendingLiveSyncEdits.Should().BeTrue();
@@ -140,14 +141,14 @@ public sealed class SceneNodeEditorViewModelTests
         var node = CreateDirectionalLightNode(scene);
         var context = CreateContext(scene);
         var commandService = new Mock<ISceneDocumentCommandService>();
-        var editCompletion = new TaskCompletionSource<IReadOnlyDictionary<Guid, PropertyEdit>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var editCompletion = new TaskCompletionSource<IReadOnlyDictionary<NodeId, PropertyEdit>>(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = commandService
             .Setup(service => service.EditPropertiesForTargetsAsync(
                 context,
-                It.IsAny<IReadOnlyDictionary<Guid, PropertyEdit>>(),
+                It.IsAny<IReadOnlyDictionary<NodeId, PropertyEdit>>(),
                 It.IsAny<string>(),
                 It.IsAny<EditSessionToken>()))
-            .Callback<SceneDocumentCommandContext, IReadOnlyDictionary<Guid, PropertyEdit>, string, EditSessionToken>(
+            .Callback<SceneDocumentCommandContext, IReadOnlyDictionary<NodeId, PropertyEdit>, string, EditSessionToken>(
                 (_, edits, _, _) => editCompletion.SetResult(edits))
             .ReturnsAsync(SceneCommandResult.Success);
 
@@ -165,20 +166,22 @@ public sealed class SceneNodeEditorViewModelTests
         IList<SceneNode> selectedNodes,
         WorkspaceInteractionService? interaction = null)
     {
+        // The document edits its own copy of the scene, so the selection holds the document's nodes. They show no
+        // components: the component editors need a window.
+        var tab = SceneTabs.Open(selectedNodes[0].Scene);
+        var nodes = selectedNodes.Select(tab.NodeOf).ToArray();
+        foreach (var node in nodes)
+        {
+            node.Components.Clear();
+        }
         var messenger = new StrongReferenceMessenger();
         messenger.Register<SceneNodeSelectionRequestMessage>(
             recipient: new object(),
-            handler: (_, message) => message.Reply(selectedNodes));
+            handler: (_, message) => message.Reply(nodes));
 
-        var scene = selectedNodes[0].Scene;
-        var metadata = new SceneDocumentMetadata(scene.Id) { Title = scene.Name };
-        var documents = new Mock<IDocumentService>();
-        _ = documents.Setup(service => service.GetOpenDocuments(It.IsAny<Microsoft.UI.WindowId>()))
-            .Returns(new IDocumentMetadata[] { metadata });
-        _ = documents.Setup(service => service.GetActiveDocumentId(It.IsAny<Microsoft.UI.WindowId>()))
-            .Returns(metadata.DocumentId);
+        var documents = new TestDocumentArea(tab.Document);
         var selectionService = new Oxygen.Editor.WorldEditor.Documents.Selection.SceneSelectionService();
-        selectionService.SetSelection(scene.Id, selectedNodes.ToArray(), "Test");
+        selectionService.SetSelection(tab.DocumentId, nodes, "Test");
 
         return new SceneNodeEditorViewModel(
             new HostingContext
@@ -190,7 +193,7 @@ public sealed class SceneNodeEditorViewModelTests
             new ViewModelToView(new Mock<IViewLocator>().Object),
             messenger,
             new Mock<ISceneDocumentCommandService>().Object,
-            documents.Object,
+            documents,
             default,
             Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
             sceneEngineSync,
@@ -208,12 +211,11 @@ public sealed class SceneNodeEditorViewModelTests
         return new Scene(project) { Name = "Test Scene" };
     }
 
-    private static SceneDocumentCommandContext CreateContext(Scene scene) => new(Guid.NewGuid(), scene, new HistoryKeeper(scene));
+    private static SceneDocumentCommandContext CreateContext(Scene scene) => new(DocumentId.New(), scene, new HistoryKeeper(scene));
 
     private static SceneNode CreateNode(Scene scene)
     {
         var node = new SceneNode(scene) { Name = "Cube" };
-        node.Components.Clear();
         scene.RootNodes.Add(node);
         return node;
     }

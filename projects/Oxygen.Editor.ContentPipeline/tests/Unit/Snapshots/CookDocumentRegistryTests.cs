@@ -125,9 +125,9 @@ public sealed class CookDocumentRegistryTests
         registry.StateChanged += (_, change) => latest = change;
         var initial = State(path);
         owner.UpdateState(initial);
-        owner.UpdateState(initial with { Revision = 2, IsDirty = true });
+        owner.UpdateState(initial with { IsDirty = true });
         _ = latest!.SavedSourceChanged.Should().BeFalse();
-        owner.UpdateState(initial with { Revision = 2, SavedRevision = 2, SavedContentHash = "new saved bytes" });
+        owner.UpdateState(initial with { SavedContentHash = "new saved bytes" });
         _ = latest!.SavedSourceChanged.Should().BeTrue();
         var version = registry.GetState().Version;
         Action invalidSource = () => owner.UpdateState(initial with { SourcePath = path + ".other" });
@@ -207,5 +207,5 @@ public sealed class CookDocumentRegistryTests
         _ = released.Should().BeTrue();
     }
 
-    private static CookDocumentState State(string path) => new(path, "Material", 1, 1, IsDirty: false, "saved hash");
+    private static CookDocumentState State(string path) => new(path, "Material", IsDirty: false, "saved hash");
 }

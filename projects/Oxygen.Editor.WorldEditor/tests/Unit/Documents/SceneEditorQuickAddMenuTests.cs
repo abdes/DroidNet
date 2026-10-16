@@ -67,19 +67,15 @@ public sealed class SceneEditorQuickAddMenuTests
     private sealed class Fixture : IDisposable
     {
         private readonly Container container = new();
-        private readonly OpenDocuments documents = new([], Mock.Of<DroidNet.Storage.IAtomicFileStore>());
 
         public Fixture()
         {
             this.Metadata = SceneTabs.Open(new Scene(Mock.Of<IProject>()) { Name = "Quick Add" });
-            var documents = new Mock<IDocumentService>();
-            _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(this.Metadata.DocumentId);
             var input = new Mock<IDocumentInputCommitter>();
             _ = input.Setup(value => value.CommitAsync(It.IsAny<WindowId>())).Returns(Task.CompletedTask);
             this.Editor = new(
-                this.Metadata,
-                documents.Object,
-                this.documents,
+                this.Metadata.Tab,
+                new TestDocumentArea(this.Metadata.Document),
                 default,
                 Mock.Of<IEngineService>(),
                 Mock.Of<ISceneEngineSync>(),
@@ -90,9 +86,6 @@ public sealed class SceneEditorQuickAddMenuTests
                 Mock.Of<IContentPipelineService>(),
                 this.container,
                 this.Messenger,
-                new SceneCookInputRegistrar(
-                    new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(),
-                    new DroidNet.Hosting.WinUI.HostingContext { Dispatcher = null!, Application = null!, DispatcherScheduler = null! }),
                 new Oxygen.Editor.World.Workspace.PreviewSettingsService(
                     Mock.Of<IEngineService>(),
                     Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(),
@@ -101,7 +94,7 @@ public sealed class SceneEditorQuickAddMenuTests
                     new OperationStatusReducer()));
         }
 
-        public SceneDocumentMetadata Metadata { get; }
+        public SceneTab Metadata { get; }
 
         public SceneEditorViewModel Editor { get; }
 
@@ -112,7 +105,7 @@ public sealed class SceneEditorQuickAddMenuTests
             this.Editor.Dispose();
             this.Messenger.Reset();
             this.container.Dispose();
-            this.documents.Dispose();
+            this.Metadata.Documents.Dispose();
         }
     }
 }

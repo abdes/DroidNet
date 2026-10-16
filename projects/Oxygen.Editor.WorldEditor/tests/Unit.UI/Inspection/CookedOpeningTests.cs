@@ -58,16 +58,16 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
             };
             var provider = new Mock<IAssetFeed>();
             _ = provider.Setup(value => value.ResolveAsync(uri, It.IsAny<CancellationToken>())).ReturnsAsync(effective);
-            var metadata = new CookedInspectionDocumentMetadata(projects.ActiveProject!, new("asset:///Library/Shared.omat"), validate: false)
+            var scope = new CookedInspectionScope(projects.ActiveProject!, new("asset:///Library/Shared.omat"), Validate: false)
             {
                 AssetUri = uri,
                 CookedSource = low,
             };
             var inspection = new CookInspectionResult(directory.FullName, Succeeded: true, low.SourceIdentity, [new(uri.AbsolutePath, ContentCookAssetKind.Material)], [], []);
-            var report = new CookedOutputReport(projects.ActiveProject!.ProjectId, metadata.ScopeUri, DateTimeOffset.UtcNow, [new("Library", IsPresent: true, inspection, Validation: null, [])]);
+            var report = new CookedOutputReport(projects.ActiveProject!.ProjectId, scope.ScopeUri, DateTimeOffset.UtcNow, [new("Library", IsPresent: true, inspection, Validation: null, [])]);
             var pipeline = new Mock<IContentPipelineService>();
-            _ = pipeline.Setup(value => value.InspectCookedOutputAsync(metadata.ScopeUri, It.IsAny<CancellationToken>(), validate: false, projects.ActiveProject)).ReturnsAsync(report);
-            using var model = new CookedInspectionViewModel(metadata, pipeline.Object, provider.Object, projects, _ => Task.FromResult(true));
+            _ = pipeline.Setup(value => value.InspectCookedOutputAsync(scope.ScopeUri, It.IsAny<CancellationToken>(), validate: false, projects.ActiveProject)).ReturnsAsync(report);
+            using var model = new CookedInspectionViewModel(pipeline.Object, provider.Object, projects, _ => Task.FromResult(true));
             var view = new CookedInspectionView
             {
                 ViewModel = model,
@@ -80,7 +80,7 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
             };
             root.Children.Add(view);
             await LoadTestContentAsync(root).ConfigureAwait(true);
-            await model.CurrentWork.ConfigureAwait(true);
+            await model.InspectAsync(scope).ConfigureAwait(true);
             await WaitForRenderAsync().ConfigureAwait(true);
             _ = model.ScopedAsset!.CookedMetadata.Should().Be(low);
             _ = model.SelectedAsset!.ResolutionText.Should().Contain("project output");
@@ -164,11 +164,11 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
         var provider = CreateQueryProvider(items);
         _ = provider.Setup(value => value.ResolveAsync(uri, It.IsAny<CancellationToken>())).ReturnsAsync(item);
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
-        var metadata = new CookedInspectionDocumentMetadata(projects.ActiveProject!, uri, validate: false)
+        var scope = new CookedInspectionScope(projects.ActiveProject!, uri, Validate: false)
         {
             AssetUri = uri,
         };
-        using var model = new CookedInspectionViewModel(metadata, pipeline.Object, provider.Object, projects, _ => Task.FromResult(true));
+        using var model = new CookedInspectionViewModel(pipeline.Object, provider.Object, projects, _ => Task.FromResult(true));
         var view = new CookedInspectionView
         {
             ViewModel = model,
@@ -181,14 +181,13 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
         };
         root.Children.Add(view);
         await LoadTestContentAsync(root).ConfigureAwait(true);
-        await model.CurrentWork.ConfigureAwait(true);
+        await model.InspectAsync(scope).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.AssetInformationVisibility.Should().Be(Visibility.Visible);
         _ = model.StatusText.Should().Be("Built-in");
         _ = model.ValidationVisibility.Should().Be(Visibility.Collapsed);
         AssertIdleInspectionCommands(view, Visibility.Collapsed);
         _ = view.FindDescendant<AssetInformationView>()!.ViewModel!.Description.Should().Contain("No separate cooking is needed");
-        _ = metadata.IsDirty.Should().BeFalse();
         pipeline.VerifyNoOtherCalls();
         var copyUri = new Uri(geometry ? "asset:///Content/Geometry/Cube.ogeo" : "asset:///Content/Materials/Default.omat");
         var copy = item with

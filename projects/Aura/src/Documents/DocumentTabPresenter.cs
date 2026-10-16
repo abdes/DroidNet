@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Windowing;
@@ -14,9 +15,10 @@ namespace DroidNet.Aura.Documents;
 /// <summary>
 ///     Presents documents inside a <see cref="Controls.TabStrip"/> by translating <see
 ///     cref="IDocumentService"/> lifecycle events into tab operations and mirroring user actions
-///     back to the service. It optionally hydrates existing documents when the service also
-///     implements <see cref="IDocumentServiceState"/>, otherwise it starts empty and waits for new
-///     events.
+///     back to the service. Each tab follows its metadata's
+///     <see cref="System.ComponentModel.INotifyPropertyChanged.PropertyChanged"/>, raised on any thread, until the tab
+///     closes or detaches or the presenter is disposed. It optionally hydrates existing documents when the service also
+///     implements <see cref="IDocumentServiceState"/>, otherwise it starts empty and waits for new events.
 /// </summary>
 public sealed partial class DocumentTabPresenter : IDisposable
 {
@@ -25,7 +27,8 @@ public sealed partial class DocumentTabPresenter : IDisposable
     private readonly IManagedWindow hostWindow;
     private readonly DispatcherQueue dispatcher;
     private readonly ILogger logger;
-    private readonly Dictionary<Guid, Controls.TabItem> tabMap = [];
+    private readonly Dictionary<DocumentId, Controls.TabItem> tabMap = [];
+    private readonly Dictionary<DocumentId, IDocumentMetadata> observed = [];
     private bool isUpdatingSelectionFromService;
 
     /// <summary>
@@ -57,7 +60,6 @@ public sealed partial class DocumentTabPresenter : IDisposable
         this.documentService.DocumentClosed += this.OnDocumentClosed;
         this.documentService.DocumentDetached += this.OnDocumentDetached;
         this.documentService.DocumentAttached += this.OnDocumentAttached;
-        this.documentService.DocumentMetadataChanged += this.OnDocumentMetadataChanged;
         this.documentService.DocumentActivated += this.OnDocumentActivated;
 
         this.tabStrip.TabCloseRequested += this.TabStrip_TabCloseRequested;
@@ -74,13 +76,18 @@ public sealed partial class DocumentTabPresenter : IDisposable
         this.documentService.DocumentClosed -= this.OnDocumentClosed;
         this.documentService.DocumentDetached -= this.OnDocumentDetached;
         this.documentService.DocumentAttached -= this.OnDocumentAttached;
-        this.documentService.DocumentMetadataChanged -= this.OnDocumentMetadataChanged;
         this.documentService.DocumentActivated -= this.OnDocumentActivated;
 
         this.tabStrip.TabCloseRequested -= this.TabStrip_TabCloseRequested;
         this.tabStrip.TabDetachRequested -= this.TabStrip_TabDetachRequested;
         this.tabStrip.SelectionChanged -= this.TabStrip_SelectionChanged;
 
+        foreach (var metadata in this.observed.Values)
+        {
+            metadata.PropertyChanged -= this.OnMetadataPropertyChanged;
+        }
+
+        this.observed.Clear();
         this.tabStrip.Items.Clear();
         this.tabMap.Clear();
     }
@@ -97,7 +104,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
             return;
         }
 
-        _ = this.documentService.SelectDocumentAsync(this.hostWindow.Id, newItem.ContentId);
+        _ = this.documentService.SelectDocumentAsync(this.hostWindow.Id, DocumentId.FromValue(newItem.ContentId));
     }
 
     private async void TabStrip_TabCloseRequested(object? sender, Controls.TabCloseRequestedEventArgs e)
@@ -112,7 +119,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
             return;
         }
 
-        var id = item.ContentId;
+        var id = DocumentId.FromValue(item.ContentId);
         this.LogDocumentCloseRequested(id);
         var closed = await this.documentService.CloseDocumentAsync(this.hostWindow.Id, id, force: false).ConfigureAwait(true);
         this.LogDocumentCloseVerdict(id, closed);
@@ -130,7 +137,8 @@ public sealed partial class DocumentTabPresenter : IDisposable
             return;
         }
 
-        var id = item.ContentId;
+        // A refused detach raises no event, so the tab stays where it is.
+        var id = DocumentId.FromValue(item.ContentId);
         this.LogDocumentDetachRequested(id);
         _ = await this.documentService.DetachDocumentAsync(this.hostWindow.Id, id).ConfigureAwait(true);
     }
@@ -144,7 +152,6 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
         _ = this.dispatcher.TryEnqueue(() =>
         {
-            var docId = e.Metadata.DocumentId;
             var insertAt = this.ClampInsertIndex(e.IndexHint);
             this.AddOrUpdateTab(e.Metadata, insertAt);
 
@@ -181,17 +188,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
         _ = this.dispatcher.TryEnqueue(() =>
         {
-            var docId = e.Metadata?.DocumentId ?? Guid.Empty;
-            if (docId == Guid.Empty)
-            {
-                return;
-            }
-
-            if (this.tabMap.TryGetValue(docId, out var tab))
-            {
-                _ = this.tabStrip.Items.Remove(tab);
-                _ = this.tabMap.Remove(docId);
-            }
+            this.RemoveTab(e.Metadata.DocumentId);
         });
     }
 
@@ -205,39 +202,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
         _ = this.dispatcher.TryEnqueue(() =>
         {
-            var docId = e.Metadata?.DocumentId ?? Guid.Empty;
-            if (docId == Guid.Empty)
-            {
-                return;
-            }
-
-            if (this.tabMap.TryGetValue(docId, out var tab))
-            {
-                _ = this.tabStrip.Items.Remove(tab);
-                _ = this.tabMap.Remove(docId);
-            }
-        });
-    }
-
-    private void OnDocumentMetadataChanged(object? sender, DocumentMetadataChangedEventArgs e)
-    {
-        if (e.WindowId != this.hostWindow.Id)
-        {
-            return;
-        }
-
-        _ = this.dispatcher.TryEnqueue(() =>
-        {
-            var docId = e.NewMetadata?.DocumentId ?? Guid.Empty;
-            if (docId == Guid.Empty)
-            {
-                return;
-            }
-
-            if (this.tabMap.TryGetValue(docId, out var tab))
-            {
-                TabItemExtensions.ApplyMetadataToTab(tab, e.NewMetadata);
-            }
+            this.RemoveTab(e.Metadata.DocumentId);
         });
     }
 
@@ -284,8 +249,9 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
     private void AddOrUpdateTab(IDocumentMetadata metadata, int insertAt)
     {
-        Debug.Assert(metadata.DocumentId != Guid.Empty, "Metadata must contain a valid DocumentId.");
+        Debug.Assert(!metadata.DocumentId.IsEmpty, "Metadata must contain a valid DocumentId.");
         var docId = metadata.DocumentId;
+        this.Observe(metadata);
         if (this.tabMap.TryGetValue(docId, out var existing))
         {
             TabItemExtensions.ApplyMetadataToTab(existing, metadata);
@@ -301,22 +267,70 @@ public sealed partial class DocumentTabPresenter : IDisposable
         this.tabMap[docId] = tab;
     }
 
-    private int ClampInsertIndex(int index)
-        => index < 0 || index > this.tabStrip.Items.Count ? this.tabStrip.Items.Count : index;
-
-    private void ApplyActiveSelection(Guid? documentId)
+    private void RemoveTab(DocumentId documentId)
     {
-        if (documentId is null || documentId == Guid.Empty)
+        if (this.observed.Remove(documentId, out var metadata))
+        {
+            metadata.PropertyChanged -= this.OnMetadataPropertyChanged;
+        }
+
+        if (this.tabMap.Remove(documentId, out var tab))
+        {
+            _ = this.tabStrip.Items.Remove(tab);
+        }
+    }
+
+    // A tab follows its metadata from the moment it is added until it closes or detaches.
+    private void Observe(IDocumentMetadata metadata)
+    {
+        if (this.observed.TryGetValue(metadata.DocumentId, out var current))
+        {
+            if (ReferenceEquals(current, metadata))
+            {
+                return;
+            }
+
+            current.PropertyChanged -= this.OnMetadataPropertyChanged;
+        }
+
+        this.observed[metadata.DocumentId] = metadata;
+        metadata.PropertyChanged += this.OnMetadataPropertyChanged;
+    }
+
+    // The metadata may change on any thread; the tab is updated on the strip's.
+    private void OnMetadataPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is not IDocumentMetadata metadata)
         {
             return;
         }
 
-        this.ApplySelection(documentId.Value);
+        _ = this.dispatcher.TryEnqueue(() =>
+        {
+            if (this.observed.TryGetValue(metadata.DocumentId, out var current) && ReferenceEquals(current, metadata)
+                && this.tabMap.TryGetValue(metadata.DocumentId, out var tab))
+            {
+                TabItemExtensions.ApplyMetadataToTab(tab, metadata);
+            }
+        });
     }
 
-    private void ApplySelection(Guid documentId)
+    private int ClampInsertIndex(int index)
+        => index < 0 || index > this.tabStrip.Items.Count ? this.tabStrip.Items.Count : index;
+
+    private void ApplyActiveSelection(DocumentId? documentId)
     {
-        if (documentId == Guid.Empty)
+        if (documentId is not { IsEmpty: false } id)
+        {
+            return;
+        }
+
+        this.ApplySelection(id);
+    }
+
+    private void ApplySelection(DocumentId documentId)
+    {
+        if (documentId.IsEmpty)
         {
             return;
         }

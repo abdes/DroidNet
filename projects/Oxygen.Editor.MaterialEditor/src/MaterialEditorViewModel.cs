@@ -4,6 +4,8 @@
 
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls;
@@ -13,32 +15,39 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor.PropertyPipeline;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Assets.Catalog;
 using Windows.ApplicationModel.DataTransfer;
 using WindowId = Microsoft.UI.WindowId;
 
 namespace Oxygen.Editor.MaterialEditor;
 
 /// <summary>
-/// View model for the scalar material editor document.
+/// View model for the editor of a material document. It edits the document's <see cref="MaterialContent"/> through
+/// <see cref="MaterialEdits"/>, and follows the document's state, reloads and relocations.
 /// </summary>
 public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDocumentConflictParticipant, IDisposable
 {
-    private readonly MaterialDocumentMetadata metadata;
-    private readonly IMaterialDocumentService documentService;
+    private readonly DocumentTab tab;
+    private readonly Document document;
+    private readonly MaterialEdits edits;
+    private readonly IMaterialCookService cookService;
+    private readonly IProjectContextService projects;
     private readonly ILogger logger;
     private readonly IAssetFeed assets;
     private readonly IDocumentInputCommitter? inputCommitter;
     private readonly WindowId windowId;
     private readonly IDocumentConflictPrompt? conflictPrompt;
-    private readonly IDocumentService? documents;
     private readonly SemaphoreSlim editGate = new(1, 1);
-    private readonly Task loadTask;
     private Task<bool>? pendingSave;
-    private MaterialDocument? document;
+    private MaterialContent? observedContent;
+    private bool isApplyingOwnEdit;
     private bool isLoading;
     private bool isDisposed;
     private bool isApplyingBaseColor;
@@ -50,37 +59,45 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// <summary>
     /// Initializes a new instance of the <see cref="MaterialEditorViewModel"/> class.
     /// </summary>
-    /// <param name="metadata">The material document metadata.</param>
-    /// <param name="documentService">The material document service.</param>
+    /// <param name="tab">The material document's tab.</param>
+    /// <param name="edits">Edits material documents and records their history.</param>
     /// <param name="assetProvider">The shared source, publication and cooking status feed.</param>
     /// <param name="uiScheduler">Marshals status updates to the document's UI thread.</param>
+    /// <param name="cookService">Cooks the material on request.</param>
+    /// <param name="projects">The active project, which locates the material's file for a cook or a copy.</param>
     /// <param name="loggerFactory">Optional logger factory.</param>
     /// <param name="inputCommitter">Completes the focused numeric control before snapshot capture.</param>
-    /// <param name="windowId">The owner window.</param>
+    /// <param name="windowId">The owner window, for its input and prompts.</param>
     /// <param name="conflictPrompt">Presents recovery actions after an ordinary Save conflict.</param>
     /// <param name="relocation">Keeps the open material in step with asset relocations; optional.</param>
-    /// <param name="documents">The host's documents, told when the material's file goes missing on disk or returns; optional.</param>
+    /// <param name="catalog">Reports when the material's file changes, goes or returns outside the editor; optional.</param>
     public MaterialEditorViewModel(
-        MaterialDocumentMetadata metadata,
-        IMaterialDocumentService documentService,
+        DocumentTab tab,
+        MaterialEdits edits,
         IAssetFeed assetProvider,
         IScheduler uiScheduler,
+        IMaterialCookService cookService,
+        IProjectContextService projects,
         ILoggerFactory? loggerFactory = null,
         IDocumentInputCommitter? inputCommitter = null,
         WindowId windowId = default,
         IDocumentConflictPrompt? conflictPrompt = null,
         Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation = null,
-        IDocumentService? documents = null)
+        IAssetCatalog? catalog = null)
     {
-        this.metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
-        this.documentService = documentService ?? throw new ArgumentNullException(nameof(documentService));
+        this.tab = tab ?? throw new ArgumentNullException(nameof(tab));
+        this.document = tab.Document.Content is MaterialContent
+            ? tab.Document
+            : throw new ArgumentException($"'{tab.Title}' is not a material document.", nameof(tab));
+        this.edits = edits ?? throw new ArgumentNullException(nameof(edits));
+        this.cookService = cookService ?? throw new ArgumentNullException(nameof(cookService));
+        this.projects = projects ?? throw new ArgumentNullException(nameof(projects));
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<MaterialEditorViewModel>();
         this.assets = assetProvider ?? throw new ArgumentNullException(nameof(assetProvider));
         this.inputCommitter = inputCommitter;
         this.windowId = windowId;
         this.conflictPrompt = conflictPrompt;
-        this.documents = documents;
-        this.MaterialUriText = metadata.MaterialUri.ToString();
+        this.MaterialUriText = this.document.File.AssetUri.ToString();
         this.TextureChannels =
         [
             new("base_color", "Base color", this.OnTextureSelectionChanged),
@@ -100,8 +117,12 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.assetStatusSubscription = assetProvider.Items.ObserveOn(uiScheduler)
             .Subscribe(this.ApplyAssetItems, this.OnAssetStatusFailed);
         this.assetStatusRefresh = this.RefreshAssetStatusAsync(assetProvider, this.assetStatusLifetime.Token);
-        this.loadTask = this.LoadAsync();
+        this.document.StateChanged += this.OnDocumentStateChanged;
+        this.document.ContentReplaced += this.OnDocumentContentReplaced;
+        this.ObserveContent();
+        this.ReadFromContent();
         this.relocationParticipant = relocation?.AddParticipant(new RelocationParticipant(this, Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()));
+        this.WatchSourcePresence(catalog);
     }
 
     /// <summary>
@@ -112,8 +133,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// <summary>Gets all native material texture channels and their current assignment choices.</summary>
     public IReadOnlyList<MaterialTextureChannel> TextureChannels { get; }
 
-    /// <summary>Gets a value indicating whether the document's authored values have finished loading.</summary>
-    public bool IsLoaded => this.document is not null && !this.isLoading;
+    /// <summary>Gets a value indicating whether the editor shows the document's authored values.</summary>
+    public bool IsLoaded => !this.isLoading;
 
     /// <summary>Gets the linear base color factor: red, green, blue and alpha.</summary>
     public ColorChannels BaseColor => new(this.BaseColorR, this.BaseColorG, this.BaseColorB, this.BaseColorA);
@@ -206,6 +227,10 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
 
         this.isDisposed = true;
+        this.document.StateChanged -= this.OnDocumentStateChanged;
+        this.document.ContentReplaced -= this.OnDocumentContentReplaced;
+        this.ObserveContent(null);
+        this.StopWatchingSourcePresence();
         this.relocationParticipant?.Dispose();
         this.assetStatusSubscription.Dispose();
         this.assetStatusLifetime.Cancel();
@@ -227,7 +252,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.EndEditSession(NumberBoxEditCompletionKind.Commit);
         this.isClosing = true;
         await this.pendingConflict.ConfigureAwait(true);
-        await this.loadTask.ConfigureAwait(true);
         if (this.pendingSave is { } save)
         {
             _ = await save.ConfigureAwait(true);
@@ -242,15 +266,11 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     public Task<bool> SaveForCloseAsync() => this.SaveCoreAsync();
 
     /// <inheritdoc />
+    /// <remarks>The document area closes the document once its tab has closed; a discarded gesture ends here.</remarks>
     public async Task CloseAsync(bool discard)
     {
         await this.pendingConflict.ConfigureAwait(true);
-        await this.loadTask.ConfigureAwait(true);
-        if (this.document is { } current)
-        {
-            await this.documentService.CloseAsync(current.DocumentId, discard, CancellationToken.None).ConfigureAwait(true);
-            this.document = null;
-        }
+        this.EndEditSession(discard ? NumberBoxEditCompletionKind.Cancel : NumberBoxEditCompletionKind.Commit);
     }
 
     /// <inheritdoc />
@@ -319,7 +339,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         try
         {
             await this.assetStatusRefresh.ConfigureAwait(true);
-            await this.loadTask.ConfigureAwait(true);
             if (this.pendingSave is { } save)
             {
                 _ = await save.ConfigureAwait(true);
@@ -364,14 +383,14 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             _ = await this.SaveCoreAsync().ConfigureAwait(true);
             if (this.HasSaveConflict && !this.isClosing && !this.isDisposed && this.conflictPrompt is not null)
             {
-                await this.conflictPrompt.ShowAsync(this.windowId, this.metadata, this).ConfigureAwait(true);
+                await this.conflictPrompt.ShowAsync(this.windowId, this.tab, this).ConfigureAwait(true);
             }
         }
     }
 
     private void OnTextureSelectionChanged(MaterialTextureChannel channel, string? virtualPath)
     {
-        if (!this.isLoading && !this.isClosing && !this.isDisposed && !this.isResolvingConflict && this.acceptsInput && this.document is not null)
+        if (!this.isLoading && !this.isClosing && !this.isDisposed && !this.isResolvingConflict && this.acceptsInput)
         {
             _ = this.ApplyTextureReferenceAsync(channel, virtualPath);
         }
@@ -380,26 +399,16 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1308:Normalize strings to uppercase", Justification = "the channel name is lowered for display in a sentence, not normalized for comparison")]
     private async Task ApplyTextureReferenceAsync(MaterialTextureChannel channel, string? virtualPath)
     {
-        var current = this.document;
-        if (current is null)
-        {
-            return;
-        }
-
         await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
-            if (this.isDisposed || this.document?.DocumentId != current.DocumentId)
+            if (this.isDisposed)
             {
                 return;
             }
 
-            var result = await this.documentService.EditTextureAsync(
-                current.DocumentId,
-                channel.Channel,
-                virtualPath,
-                CancellationToken.None).ConfigureAwait(true);
-            this.RefreshDocument(current.DocumentId);
+            var result = this.ApplyOwnEdit(() => this.edits.SetTexture(this.document, channel.Channel, virtualPath));
+            this.RefreshFromDocument();
             this.StatusText = result.Succeeded
                 ? string.Empty
                 : $"The {channel.DisplayName.ToLowerInvariant()} texture change was rejected.";
@@ -431,45 +440,50 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
 
         this.EndEditSession(NumberBoxEditCompletionKind.Commit);
-        await this.loadTask.ConfigureAwait(true);
         await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
-        var current = this.document;
         _ = this.editGate.Release();
-        if (current is null)
-        {
-            this.StatusText = "The material is not loaded and cannot be saved.";
-            return false;
-        }
-
-        var result = await this.documentService.SaveAsync(current.DocumentId, CancellationToken.None).ConfigureAwait(true);
+        var result = await this.document.SaveAsync(CancellationToken.None).ConfigureAwait(true);
         if (this.isDisposed)
         {
-            return result.Succeeded && !result.HasUnsavedChanges;
+            return result.Succeeded && !this.document.IsDirty;
         }
 
         if (!result.Succeeded)
         {
-            this.HasSaveConflict |= result.IsConflict;
-            this.StatusText = result.IsConflict ? "The file changed outside this document. Reload it or save a separate copy." : "Save failed. Your changes are still open.";
+            this.HasSaveConflict |= result.Outcome == DocumentSaveOutcome.Conflict;
+            this.StatusText = result.Outcome switch
+            {
+                DocumentSaveOutcome.Conflict => "The file changed outside this document. Reload it or save a separate copy.",
+                _ => $"Save failed. Your changes are still open. {result.Message}",
+            };
             return false;
         }
 
-        this.RefreshDocument(current.DocumentId);
+        this.RefreshFromDocument();
         this.HasSaveConflict = false;
-        await this.RefreshSourcePresenceAsync().ConfigureAwait(true);
         this.StatusText = this.IsDirty ? "Saved; newer changes remain unsaved" : string.Empty;
         return !this.IsDirty;
     }
 
+    // The cook reads the saved file; the catalog status shows its result and whether unsaved edits remain.
     [RelayCommand]
     private async Task CookAsync()
     {
-        if (this.document is null)
+        var asset = this.document.File.AssetUri;
+        if (this.projects.ActiveProject is not { } project
+            || project.FindByAssetUri(asset) is not { IsMountRoot: false } location)
         {
+            this.StatusText = "The material is not in the active project and cannot be cooked.";
             return;
         }
 
-        _ = await this.documentService.CookAsync(this.document.DocumentId, CancellationToken.None).ConfigureAwait(true);
+        // An authoring mount's file is named from the project root; a local folder mount's file from its mount.
+        var relativePath = location.MountKind == ProjectMountKind.Authoring
+            ? Path.GetRelativePath(project.ProjectRoot, location.FilePath).Replace('\\', '/')
+            : location.MountRelativePath;
+        _ = await this.cookService.CookMaterialAsync(
+            new MaterialCookRequest(asset, project.ProjectRoot, location.MountName, relativePath),
+            CancellationToken.None).ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -488,52 +502,58 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.StatusText = statusText;
     }
 
-    private async Task LoadAsync()
+    // A material's GUID is derived from its asset URI, as the cooker derives it.
+    private static Guid GuidOf(Uri materialUri)
     {
+        var text = materialUri.AbsoluteUri.ToUpperInvariant();
+        Span<byte> hash = stackalloc byte[32];
+        _ = SHA256.HashData(Encoding.UTF8.GetBytes(text), hash);
+
+        Span<byte> bytes = stackalloc byte[16];
+        hash[..16].CopyTo(bytes);
+
+        bytes[7] = (byte)((bytes[7] & 0x0F) | 0x50);
+        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
+        return new Guid(bytes);
+    }
+
+    private void ReadFromContent()
+    {
+        this.isLoading = true;
         try
         {
-            this.isLoading = true;
-            this.document = await this.documentService.OpenAsync(this.metadata.MaterialUri, CancellationToken.None).ConfigureAwait(true);
-            this.ReadFromDocument(this.document);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogMaterialOpenFailed(this.logger, ex, this.metadata.MaterialUri);
-            this.StatusText = "The material could not be opened.";
+            var source = ((MaterialContent)this.document.Content).Source;
+            var pbr = source.PbrMetallicRoughness;
+
+            this.DisplayName = this.document.Title;
+            this.MaterialUriText = this.document.File.AssetUri.ToString();
+            this.MaterialGuidText = GuidOf(this.document.File.AssetUri).ToString("D");
+            this.BaseColorR = pbr.BaseColorR;
+            this.BaseColorG = pbr.BaseColorG;
+            this.BaseColorB = pbr.BaseColorB;
+            this.BaseColorA = pbr.BaseColorA;
+            this.MetallicFactor = pbr.MetallicFactor;
+            this.RoughnessFactor = pbr.RoughnessFactor;
+            this.NormalScale = source.NormalScale;
+            this.OcclusionStrength = source.OcclusionStrength;
+            this.AlphaMode = ToDisplayAlphaMode(source.AlphaMode);
+            this.AlphaCutoff = source.AlphaCutoff;
+            this.DoubleSided = source.DoubleSided;
+            foreach (var channel in this.TextureChannels)
+            {
+                _ = source.TextureReferences.TryGetValue(channel.Channel, out var virtualPath);
+                channel.Refresh(this.availableTextureChoices, virtualPath);
+            }
+
+            this.IsDirty = this.document.IsDirty;
+            this.OnPropertyChanged(nameof(this.BaseColorBrush));
         }
         finally
         {
             this.isLoading = false;
             this.OnPropertyChanged(nameof(this.IsLoaded));
         }
-    }
 
-    private void ReadFromDocument(MaterialDocument value)
-    {
-        var source = value.Source;
-        var pbr = source.PbrMetallicRoughness;
-
-        this.DisplayName = value.DisplayName;
-        this.MaterialGuidText = value.MaterialGuid.ToString("D");
-        this.BaseColorR = pbr.BaseColorR;
-        this.BaseColorG = pbr.BaseColorG;
-        this.BaseColorB = pbr.BaseColorB;
-        this.BaseColorA = pbr.BaseColorA;
-        this.MetallicFactor = pbr.MetallicFactor;
-        this.RoughnessFactor = pbr.RoughnessFactor;
-        this.NormalScale = source.NormalScale;
-        this.OcclusionStrength = source.OcclusionStrength;
-        this.AlphaMode = ToDisplayAlphaMode(source.AlphaMode);
-        this.AlphaCutoff = source.AlphaCutoff;
-        this.DoubleSided = source.DoubleSided;
-        foreach (var channel in this.TextureChannels)
-        {
-            _ = source.TextureReferences.TryGetValue(channel.Channel, out var virtualPath);
-            channel.Refresh(this.availableTextureChoices, virtualPath);
-        }
-
-        this.IsDirty = value.IsDirty;
-        this.OnPropertyChanged(nameof(this.BaseColorBrush));
         this.RefreshHistoryCommands();
     }
 
@@ -550,7 +570,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     private void ApplyEdit(PropertyEdit edit)
     {
-        if (this.isLoading || this.isClosing || this.isDisposed || this.isResolvingConflict || !this.acceptsInput || this.document is null)
+        if (this.isLoading || this.isClosing || this.isDisposed || this.isResolvingConflict || !this.acceptsInput)
         {
             return;
         }
@@ -558,34 +578,29 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         _ = this.ApplyEditAsync(edit, this.activeGesture);
     }
 
-    private async Task ApplyEditAsync(PropertyEdit edit, MaterialGesture? gesture)
+    private async Task ApplyEditAsync(PropertyEdit edit, EditGesture? gesture)
     {
-        var current = this.document;
-        if (current is null)
-        {
-            return;
-        }
-
         await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
-            if (this.isDisposed || this.document?.DocumentId != current.DocumentId)
+            if (this.isDisposed)
             {
                 return;
             }
 
-            MaterialEditResult result;
-            if (gesture is not null)
+            var result = this.ApplyOwnEdit(() =>
             {
-                gesture.Session ??= this.documentService.BeginEditSession(current.DocumentId, gesture.Field);
-                result = await this.documentService.PreviewPropertiesAsync(gesture.Session.Value, edit, CancellationToken.None).ConfigureAwait(true);
-            }
-            else
-            {
-                result = await this.documentService.EditPropertiesAsync(current.DocumentId, edit, CancellationToken.None).ConfigureAwait(true);
-            }
+                if (gesture is null)
+                {
+                    return this.edits.Apply(this.document, edit);
+                }
 
-            this.RefreshDocument(current.DocumentId, refreshValues: !result.Succeeded);
+                gesture.Session ??= this.edits.BeginEditSession(this.document, gesture.Field);
+                return this.edits.Preview(this.document, gesture.Session.Value, edit);
+            });
+
+            // A rejected edit shows the values the material kept.
+            this.RefreshFromDocument(refreshValues: !result.Succeeded);
             this.StatusText = result.Succeeded
                 ? string.Empty
                 : "The value was rejected. The previous value has been restored.";

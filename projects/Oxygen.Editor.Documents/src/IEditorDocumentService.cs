@@ -19,9 +19,14 @@ public interface IEditorDocumentService : IDocumentService
     /// <returns>A transaction retaining all old documents until committed, or null when any guard vetoes replacement.</returns>
     public Task<DocumentCloseTransaction?> PrepareCloseAllWindowsAsync();
 
-    /// <summary>Prepares a document for replacement without retiring it until the caller commits.</summary>
-    /// <param name="windowId">The owning workspace.</param>
-    /// <param name="documentId">The document being replaced.</param>
-    /// <returns>The guarded close transaction, or null when unavailable or vetoed.</returns>
-    public Task<DocumentCloseTransaction?> PrepareCloseDocumentAsync(WindowId windowId, Guid documentId);
+    /// <summary>Prepares closing some tabs of a window without closing them until the caller commits.</summary>
+    /// <param name="windowId">The window that has the tabs.</param>
+    /// <param name="documentIds">The documents whose tabs close.</param>
+    /// <returns>The guarded close transaction, or null when a document has no tab in the window or the close is vetoed.</returns>
+    public Task<DocumentCloseTransaction?> PrepareCloseDocumentsAsync(WindowId windowId, IReadOnlyList<DocumentId> documentIds);
+
+    /// <summary>Finds the window that has a document's tab.</summary>
+    /// <param name="documentId">The document.</param>
+    /// <returns>The window, or <see langword="null"/> when the document has no tab.</returns>
+    public WindowId? FindWindow(DocumentId documentId);
 }

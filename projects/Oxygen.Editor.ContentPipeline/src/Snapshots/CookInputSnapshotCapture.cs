@@ -130,7 +130,7 @@ public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry docum
             {
                 if (!streams.ContainsKey(input.SourcePath))
                 {
-                    streams.Add(input.SourcePath, new FileStream(input.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan));
+                    streams.Add(input.SourcePath, new FileStream(input.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan));
                 }
             }
 

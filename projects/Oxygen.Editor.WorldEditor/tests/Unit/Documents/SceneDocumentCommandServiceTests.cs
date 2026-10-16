@@ -1279,7 +1279,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         fixture.Sync.Verify(
             sync => sync.TryPreviewSyncAsync(
                 scene.Id,
-                node.Id,
+                node.Id.Value,
                 It.IsAny<DateTimeOffset>(),
                 It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
                 It.IsAny<CancellationToken>()),
@@ -1287,7 +1287,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         fixture.Sync.Verify(
             sync => sync.CompleteTerminalSyncAsync(
                 scene.Id,
-                node.Id,
+                node.Id.Value,
                 It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
                 It.IsAny<CancellationToken>()),
             Times.Exactly(3)); // Gesture commit, undo and redo each publish one terminal state.
@@ -1332,19 +1332,19 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = fixture.Sync
             .Setup(sync => sync.TryPreviewSyncAsync(
                 scene.Id,
-                node.Id,
+                node.Id.Value,
                 It.IsAny<DateTimeOffset>(),
                 It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
                 It.IsAny<CancellationToken>()))
-            .Returns<Guid, Guid, DateTimeOffset, Func<CancellationToken, Task<SyncOutcome>>, CancellationToken>(
+            .Returns<SceneId, Guid, DateTimeOffset, Func<CancellationToken, Task<SyncOutcome>>, CancellationToken>(
                 async (_, _, _, sync, cancellationToken) => (SyncOutcome?)await sync(cancellationToken).ConfigureAwait(false));
         _ = fixture.Sync
             .Setup(sync => sync.CompleteTerminalSyncAsync(
                 scene.Id,
-                node.Id,
+                node.Id.Value,
                 It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
                 It.IsAny<CancellationToken>()))
-            .Returns<Guid, Guid, Func<CancellationToken, Task<SyncOutcome>>, CancellationToken>(
+            .Returns<SceneId, Guid, Func<CancellationToken, Task<SyncOutcome>>, CancellationToken>(
                 (_, _, sync, cancellationToken) => sync(cancellationToken));
     }
 
@@ -1385,7 +1385,6 @@ public sealed partial class SceneDocumentCommandServiceTests
         var sut = new SceneDocumentCommandService(
             new SceneSelectionService(),
             synchronization ?? sync.Object,
-            WeakReferenceMessenger.Default,
             results,
             new OperationStatusReducer(),
             inventories.Object,

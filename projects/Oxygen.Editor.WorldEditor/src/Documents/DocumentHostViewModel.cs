@@ -4,56 +4,48 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Windowing;
 using DroidNet.Documents;
 using DroidNet.Mvvm;
-using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
-using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.SceneEditor;
-using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Documents;
 
 /// <summary>
 /// The ViewModel for the <see cref="Oxygen.Editor.World.Documents.DocumentHostView"/> view.
-/// Orchestrates the interaction between the <see cref="IDocumentService"/> and the editor content.
+/// It shows the editor of the active tab of its window, and creates each tab's editor from the tab's descriptor.
 /// </summary>
 public partial class DocumentHostViewModel : ObservableObject, IDisposable // TODO: refactor to use IAsyncDisposable
 {
     private readonly ILogger logger;
-    private readonly ILoggerFactory? loggerFactory;
     private readonly IEngineService engineService;
-    private readonly IOperationResultPublisher operationResults;
-    private readonly IStatusReducer statusReducer;
-    private readonly IContainer container;
+    private readonly IEditorDocumentService tabs;
+    private readonly IDocumentArea documentArea;
+    private readonly OpenDocuments documents;
     private readonly WindowId windowId;
     private readonly DocumentCloseCoordinator closeCoordinator;
     private readonly WorkspaceCloseCoordinator workspaceCloseCoordinator;
 
     private readonly IViewLocator viewLocator;
-    private readonly Dictionary<Guid, object> activeEditors = [];
+    private readonly Dictionary<DocumentId, object> activeEditors = [];
     private readonly SemaphoreSlim activeEditorViewGate = new(initialCount: 1, maxCount: 1);
     private long activeEditorViewRequestId;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DocumentHostViewModel" /> class.
     /// </summary>
-    /// <param name="documentService">The document service used to manage documents.</param>
+    /// <param name="tabs">The service that holds the tabs of every window.</param>
+    /// <param name="documentArea">The document area of the host's window.</param>
+    /// <param name="documents">The open documents, by which saves and recovery actions find a document.</param>
     /// <param name="viewLocator">The view locator used to resolve views for editor view models.</param>
     /// <param name="engineService">Coordinates the shared engine lifecycle.</param>
-    /// <param name="operationResults">The visible operation-result publisher.</param>
-    /// <param name="statusReducer">The diagnostic status reducer.</param>
-    /// <param name="container">The dependency injection container used to resolve services and manage editor lifetimes.</param>
     /// <param name="closeCoordinator">The shared authoring close coordinator.</param>
     /// <param name="windowManager">The window lifecycle service.</param>
     /// <param name="windowId">The window identifier.</param>
@@ -62,34 +54,31 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     ///     process. If <see langword="null" />, logging is disabled.
     /// </param>
     public DocumentHostViewModel(
-        IEditorDocumentService documentService,
+        IEditorDocumentService tabs,
+        IDocumentArea documentArea,
+        OpenDocuments documents,
         IViewLocator viewLocator,
         IEngineService engineService,
-        IOperationResultPublisher operationResults,
-        IStatusReducer statusReducer,
-        IContainer container,
         DocumentCloseCoordinator closeCoordinator,
         IWindowManagerService windowManager,
         WindowId windowId,
         ILoggerFactory? loggerFactory = null)
     {
-        this.loggerFactory = loggerFactory;
         this.logger = loggerFactory?.CreateLogger<DocumentHostViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<DocumentHostViewModel>();
 
-        this.container = container;
-        this.DocumentService = documentService;
+        this.tabs = tabs;
+        this.documentArea = documentArea;
+        this.documents = documents;
         this.viewLocator = viewLocator;
         this.engineService = engineService;
-        this.operationResults = operationResults;
-        this.statusReducer = statusReducer;
         this.windowId = windowId;
         this.closeCoordinator = closeCoordinator;
-        this.workspaceCloseCoordinator = new WorkspaceCloseCoordinator(windowManager, documentService, windowId);
+        this.workspaceCloseCoordinator = new WorkspaceCloseCoordinator(windowManager, tabs, windowId);
 
-        this.DocumentService.DocumentOpened += this.OnDocumentOpened;
-        this.DocumentService.DocumentClosed += this.OnDocumentClosed;
-        this.DocumentService.DocumentActivated += this.OnDocumentActivated;
-        this.DocumentService.DocumentMetadataChanged += this.OnDocumentMetadataChanged;
+        this.tabs.DocumentOpened += this.OnDocumentOpened;
+        this.tabs.DocumentClosed += this.OnDocumentClosed;
+        this.tabs.DocumentActivated += this.OnDocumentActivated;
+        this.documentArea.ActiveDocumentChanged += this.OnActiveDocumentChanged;
 
         this.LogInitialized();
     }
@@ -98,68 +87,37 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     [NotifyCanExecuteChangedFor(nameof(SaveActiveDocumentCommand))]
     public partial object? ActiveEditor { get; set; }
 
-    /// <summary>
-    /// Gets the document service used to manage documents.
-    /// </summary>
-    public IDocumentService DocumentService { get; }
-
     [ObservableProperty]
     public partial object? ActiveEditorView { get; private set; }
 
-    /// <summary>Saves the open documents of an explicit list of assets through the ordinary document commands.</summary>
+    /// <summary>Saves the open documents of an explicit list of assets through their editors.</summary>
     /// <param name="assets">The assets whose open documents the user authorized saving.</param>
     /// <returns>Whether no listed open document remains unsaved.</returns>
     public Task<bool> SaveDocumentsAsync(IReadOnlyList<Uri> assets)
-        => this.SaveTabsAsync([.. assets.Select(this.FindTab).OfType<Guid>()]);
+        => this.SaveAsync([.. assets.Select(this.documents.FindByAsset).OfType<Document>()]);
 
-    /// <summary>Saves every open document with unsaved changes, through the ordinary document commands.</summary>
-    /// <returns>Whether no open document remains unsaved.</returns>
+    /// <summary>Saves every document of the window with unsaved changes, through their editors.</summary>
+    /// <returns>Whether no document of the window remains unsaved.</returns>
     public Task<bool> SaveAllAsync()
-        => this.SaveTabsAsync([.. this.DocumentService.GetOpenDocuments(this.windowId).Where(static document => document.IsDirty).Select(static document => document.DocumentId)]);
+        => this.SaveAsync([.. this.documentArea.Documents.Where(static document => document.IsDirty)]);
 
-    /// <summary>Activates the open document of an asset for an explicit recovery action.</summary>
-    /// <param name="asset">The asset whose open document is activated.</param>
-    /// <returns>Whether the document was activated.</returns>
+    /// <summary>Shows the open document of an asset for an explicit recovery action.</summary>
+    /// <param name="asset">The asset whose open document is shown.</param>
+    /// <returns>Whether the document was shown.</returns>
     public Task<bool> SelectDocumentAsync(Uri asset)
-        => this.FindTab(asset) is { } tab ? this.DocumentService.SelectDocumentAsync(this.windowId, tab) : Task.FromResult(false);
+        => this.documents.FindByAsset(asset) is { } document ? this.documentArea.ShowAsync(document) : Task.FromResult(false);
 
-    /// <summary>Activates an open document.</summary>
-    /// <param name="document">The document to activate.</param>
-    /// <returns>Whether the document was activated.</returns>
+    /// <summary>Shows an open document.</summary>
+    /// <param name="document">The id of the document to show.</param>
+    /// <returns>Whether the document was shown.</returns>
     public Task<bool> SelectDocumentAsync(DocumentId document)
-        => this.DocumentService.SelectDocumentAsync(this.windowId, document.Value); // A document's tab carries its id.
+        => this.documents.Find(document) is { } open ? this.documentArea.ShowAsync(open) : Task.FromResult(false);
 
     /// <inheritdoc/>
     public void Dispose()
     {
         this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
-    }
-
-    // The tab of the open document that edits the asset; tabs are keyed by the document service's own ids.
-    private Guid? FindTab(Uri asset)
-        => this.DocumentService.GetOpenDocuments(this.windowId).FirstOrDefault(metadata => metadata switch
-        {
-            SceneDocumentMetadata { Document: { } document } => document.File.AssetUri == asset,
-            MaterialDocumentMetadata material => material.MaterialUri == asset,
-            _ => false,
-        })?.DocumentId;
-
-    private async Task<bool> SaveTabsAsync(IReadOnlyList<Guid> documentIds)
-    {
-        foreach (var id in documentIds)
-        {
-            if (this.activeEditors.TryGetValue(id, out var editor) && editor is IAsyncSaveable saveable)
-            {
-                await saveable.SaveAsync().ConfigureAwait(true);
-                if (this.DocumentService.GetOpenDocuments(this.windowId).Any(document => document.DocumentId == id && document.IsDirty))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
     }
 
     /// <summary>
@@ -172,10 +130,11 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         {
             this.LogDisposing();
             this.workspaceCloseCoordinator.Dispose();
-            this.DocumentService.DocumentOpened -= this.OnDocumentOpened;
-            this.DocumentService.DocumentMetadataChanged -= this.OnDocumentMetadataChanged;
-            this.DocumentService.DocumentClosed -= this.OnDocumentClosed;
-            this.DocumentService.DocumentActivated -= this.OnDocumentActivated;
+            this.tabs.DocumentOpened -= this.OnDocumentOpened;
+            this.tabs.DocumentClosed -= this.OnDocumentClosed;
+            this.tabs.DocumentActivated -= this.OnDocumentActivated;
+            this.documentArea.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
+            this.ObserveActiveDocument(null);
 
             foreach (var documentId in this.activeEditors.Keys.ToArray())
             {
@@ -192,6 +151,24 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         }
     }
 
+    // Each editor saves its own document, so its input commit, conflict handling and prompts run.
+    private async Task<bool> SaveAsync(IReadOnlyList<Document> documents)
+    {
+        foreach (var document in documents)
+        {
+            if (this.activeEditors.TryGetValue(document.Id, out var editor) && editor is IAsyncSaveable saveable)
+            {
+                await saveable.SaveAsync().ConfigureAwait(true);
+                if (document.IsDirty)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e)
     {
         if (e.WindowId != this.windowId)
@@ -200,90 +177,26 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         }
 
         this.LogOnDocumentOpened(e.Metadata.DocumentId, e.Metadata.GetType().Name);
-
-        var editor = this.CreateEditor(e.Metadata);
-        if (editor != null)
+        if (e.Metadata is not DocumentTab tab)
         {
-            this.activeEditors[e.Metadata.DocumentId] = editor;
-            this.closeCoordinator.Register(this.windowId, e.Metadata.DocumentId, editor);
-
-            if (e.ShouldSelect)
-            {
-                this.LogSelectingEditor(e.Metadata.DocumentId);
-                this.ActiveEditor = editor;
-            }
+            this.LogUnknownMetadataType(e.Metadata.GetType().Name);
+            return;
         }
-        else
-        {
-            this.LogFailedToCreateEditor(e.Metadata.DocumentId);
-        }
-    }
 
-    private IDocumentCloseParticipant? CreateEditor(IDocumentMetadata metadata)
-    {
-        // Create the editor ViewModel based on metadata type
-        switch (metadata)
+        if (tab.Editor.CreateEditor(tab) is not IDocumentCloseParticipant editor)
         {
-            case SceneDocumentMetadata sceneMeta:
-                return this.CreateSceneEditor(sceneMeta);
-            case MaterialDocumentMetadata materialMeta:
-                return this.CreateMaterialEditor(materialMeta);
-            case Inspection.CookedInspectionDocumentMetadata inspection:
-                return this.CreateInspectionEditor(inspection);
-            default:
-                this.LogUnknownMetadataType(metadata.GetType().Name);
-                return null;
+            this.LogFailedToCreateEditor(tab.DocumentId);
+            return;
+        }
+
+        this.activeEditors[tab.DocumentId] = editor;
+        this.closeCoordinator.Register(this.windowId, tab.DocumentId, editor);
+        if (e.ShouldSelect)
+        {
+            this.LogSelectingEditor(tab.DocumentId);
+            this.ActiveEditor = editor;
         }
     }
-
-    private SceneEditorViewModel CreateSceneEditor(SceneDocumentMetadata sceneMeta)
-    {
-        var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
-        return new SceneEditorViewModel(
-            sceneMeta,
-            this.DocumentService,
-            this.container.Resolve<Oxygen.Editor.Documents.OpenDocuments>(),
-            this.windowId,
-            this.engineService,
-            this.container.Resolve<ISceneEngineSync>(),
-            this.container.Resolve<IDocumentInputCommitter>(),
-            this.operationResults,
-            this.statusReducer,
-            this.container.Resolve<ISceneDocumentCommandService>(),
-            this.container.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(),
-            this.container,
-            messenger,
-            this.container.Resolve<SceneCookInputRegistrar>(),
-            this.container.Resolve<Oxygen.Editor.World.Workspace.PreviewSettingsService>(),
-            this.loggerFactory,
-            conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>(),
-            catalog: this.container.Resolve<Oxygen.Managed.Assets.Catalog.IAssetCatalog>(DryIoc.IfUnresolved.ReturnDefault));
-    }
-
-    private MaterialEditorViewModel CreateMaterialEditor(MaterialDocumentMetadata materialMeta)
-        => new(
-            materialMeta,
-            this.container.Resolve<IMaterialDocumentService>(),
-            this.container.Resolve<Oxygen.Editor.Assets.IAssetFeed>(),
-            this.container.Resolve<DroidNet.Hosting.WinUI.HostingContext>().DispatcherScheduler,
-            this.loggerFactory,
-            inputCommitter: this.container.Resolve<IDocumentInputCommitter>(),
-            windowId: this.windowId,
-            conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>(),
-            relocation: this.container.Resolve<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>(DryIoc.IfUnresolved.ReturnDefault),
-            documents: this.DocumentService);
-
-    private Inspection.CookedInspectionViewModel CreateInspectionEditor(Inspection.CookedInspectionDocumentMetadata inspection)
-        => new(
-            inspection,
-            this.container.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(),
-            this.container.Resolve<IAssetFeed>(),
-            this.container.Resolve<Oxygen.Editor.Projects.IProjectContextService>(),
-            async uri =>
-            {
-                var request = this.container.Resolve<IMessenger>().Send(new ShowAssetRequestMessage(inspection.Project, uri));
-                return request.HasReceivedResponse && await request.Response.ConfigureAwait(true);
-            });
 
     private void OnDocumentClosed(object? sender, DocumentClosedEventArgs e)
     {
@@ -292,31 +205,47 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
             return;
         }
 
-        this.closeCoordinator.Unregister(this.windowId, e.Metadata.DocumentId);
-        this.LogOnDocumentClosed(e.Metadata.DocumentId);
-        if (e.Metadata.DocumentId == this.activeDocumentId)
+        var documentId = e.Metadata.DocumentId;
+        this.closeCoordinator.Unregister(this.windowId, documentId);
+        this.LogOnDocumentClosed(documentId);
+        if (this.activeEditors.Remove(documentId, out var editor))
         {
-            this.SetActiveDocument(null);
-        }
-
-        if (this.activeEditors.TryGetValue(e.Metadata.DocumentId, out var editor))
-        {
-            _ = this.activeEditors.Remove(e.Metadata.DocumentId);
             if (ReferenceEquals(this.ActiveEditor, editor))
             {
-                // Log that ActiveEditor is being cleared for this document
                 this.ActiveEditor = null;
             }
 
             if (editor is IDisposable disposable)
             {
                 disposable.Dispose();
-                this.LogEditorDisposed(e.Metadata.DocumentId);
+                this.LogEditorDisposed(documentId);
             }
 
-            _ = this.ReleaseDocumentSurfacesAsync(e.Metadata.DocumentId);
+            _ = this.ReleaseDocumentSurfacesAsync(documentId);
         }
     }
+
+    private void OnDocumentActivated(object? sender, DocumentActivatedEventArgs e)
+    {
+        if (e.WindowId != this.windowId)
+        {
+            return;
+        }
+
+        this.LogOnDocumentActivated(e.DocumentId);
+        if (this.activeEditors.TryGetValue(e.DocumentId, out var editor))
+        {
+            this.ActiveEditor = editor;
+            this.SaveActiveDocumentCommand.NotifyCanExecuteChanged();
+        }
+        else
+        {
+            this.LogOnDocumentActivatedEditorNotFound(e.DocumentId);
+        }
+    }
+
+    private async Task ReleaseDocumentSurfacesAsync(DocumentId documentId)
+        => await this.engineService.ReleaseDocumentSurfacesAsync(documentId.Value).ConfigureAwait(true);
 
     [RelayCommand(CanExecute = nameof(CanSaveActiveDocument))]
     private async Task SaveActiveDocument()
@@ -328,31 +257,6 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     }
 
     private bool CanSaveActiveDocument() => this.ActiveEditor is IAsyncSaveable;
-
-    private void OnDocumentActivated(object? sender, DocumentActivatedEventArgs e)
-    {
-        if (e.WindowId != this.windowId)
-        {
-            return;
-        }
-
-        this.LogOnDocumentActivated(e.DocumentId);
-        this.SetActiveDocument(e.DocumentId);
-
-        if (this.activeEditors.TryGetValue(e.DocumentId, out var editor))
-        {
-            // Log that ActiveEditor is being set due to activation
-            this.ActiveEditor = editor;
-            this.SaveActiveDocumentCommand.NotifyCanExecuteChanged();
-        }
-        else
-        {
-            this.LogOnDocumentActivatedEditorNotFound(e.DocumentId);
-        }
-    }
-
-    private async Task ReleaseDocumentSurfacesAsync(Guid documentId)
-        => await this.engineService.ReleaseDocumentSurfacesAsync(documentId).ConfigureAwait(true);
 
     partial void OnActiveEditorChanged(object? value)
     {

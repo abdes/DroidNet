@@ -22,7 +22,7 @@ public sealed class SnapshotCaptureTests
     {
         using var workspace = new CaptureWorkspace();
         var input = workspace.WriteInput("Content/material.omat.json", "saved material");
-        var state = State(input) with { Revision = 2, IsDirty = true };
+        var state = State(input) with { IsDirty = true };
         var released = false;
         using var registration = workspace.Documents.Register(
             input.SourcePath,
@@ -80,7 +80,7 @@ public sealed class SnapshotCaptureTests
         await File.WriteAllTextAsync(input.SourcePath, "later saved material", CancellationToken.None).ConfigureAwait(false);
 
         _ = (await File.ReadAllTextAsync(Path.Combine(snapshot.InputRoot, input.RelativePath), CancellationToken.None).ConfigureAwait(false)).Should().Be("saved material");
-        _ = snapshot.Documents.Should().ContainSingle().Which.SavedRevision.Should().Be(1);
+        _ = snapshot.Documents.Should().ContainSingle();
         _ = snapshot.Inputs.Should().ContainSingle().Which.SourcePath.Should().Be(input.SourcePath);
     }
 
@@ -223,5 +223,5 @@ public sealed class SnapshotCaptureTests
     }
 
     private static CookDocumentState State(CookSnapshotInput input)
-        => new(input.SourcePath, "Material", 1, 1, IsDirty: false, input.DiscoveryHash);
+        => new(input.SourcePath, "Material", IsDirty: false, input.DiscoveryHash);
 }

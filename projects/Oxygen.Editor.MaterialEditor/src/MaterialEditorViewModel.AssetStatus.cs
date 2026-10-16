@@ -43,7 +43,8 @@ public sealed partial class MaterialEditorViewModel
     {
         if (!this.isDisposed)
         {
-            this.AssetStatus = items.FirstOrDefault(item => item.IdentityUri == this.metadata.MaterialUri || item.CookedUri == this.metadata.MaterialUri);
+            var asset = this.document.File.AssetUri;
+            this.AssetStatus = items.FirstOrDefault(item => item.IdentityUri == asset || item.CookedUri == asset);
             this.availableTextureChoices = AssetRule.For(AssetKind.Texture).Apply(items)
                 .Where(static item => item.DescriptorPath is { } descriptorPath
                     && item.IdentityUri.AbsolutePath.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
@@ -59,8 +60,6 @@ public sealed partial class MaterialEditorViewModel
                 channel.Refresh(this.availableTextureChoices, channel.SelectedVirtualPath);
             }
 
-            // The feed republishes when file watching sees the material removed or restored outside the editor.
-            _ = this.RefreshSourcePresenceAsync();
         }
     }
 
@@ -92,7 +91,7 @@ public sealed partial class MaterialEditorViewModel
         if (!this.isDisposed)
         {
             this.AssetStatus = null;
-            this.LogAssetStatusFailed(exception, this.metadata.MaterialUri);
+            this.LogAssetStatusFailed(exception, this.document.File.AssetUri);
         }
     }
 

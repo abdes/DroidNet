@@ -32,8 +32,8 @@ public partial class DocumentManager
     private void LogOpenedNewScene(World.Scene scene)
         => LogOpenedNewScene(this.logger, scene.Name, scene.Id, this.windowId);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to create material {MaterialUri}.")]
-    private partial void LogMaterialCreationFailed(Exception exception, Uri materialUri);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Did not open '{Path}': {Reason}.")]
+    private partial void LogDocumentNotOpened(string path, string reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to persist last opened scene {SceneName} for project {ProjectName}.")]
     private partial void LogSceneUsageUpdateFailed(Exception exception, string sceneName, string projectName);

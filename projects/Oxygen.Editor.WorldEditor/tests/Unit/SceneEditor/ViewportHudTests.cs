@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.LevelEditor;
@@ -282,7 +283,7 @@ public sealed class ViewportHudTests
 
     private static ViewportViewModel CreateViewport(IEngineService engine, IOperationResultPublisher? results = null)
         => new(
-            Guid.NewGuid(),
+            DocumentId.New(),
             engine,
             results ?? Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer(),

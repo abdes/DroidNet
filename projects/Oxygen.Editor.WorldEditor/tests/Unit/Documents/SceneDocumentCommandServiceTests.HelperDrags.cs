@@ -8,6 +8,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
@@ -64,14 +65,14 @@ public sealed partial class SceneDocumentCommandServiceTests
         return (node, light);
     }
 
-    private static async Task<Dictionary<Guid, PropertyEdit>> DragOuterConeAsync(
+    private static async Task<Dictionary<NodeId, PropertyEdit>> DragOuterConeAsync(
         Fixture fixture,
         SceneDocumentCommandContext context,
         SceneNode node,
         EditSessionToken session,
         float radians)
     {
-        var edits = new Dictionary<Guid, PropertyEdit>
+        var edits = new Dictionary<NodeId, PropertyEdit>
         {
             [node.Id] = SceneEditorViewModel.BuildHelperEdit(node, RuntimeHelperHandle.OuterCone, radians)!,
         };

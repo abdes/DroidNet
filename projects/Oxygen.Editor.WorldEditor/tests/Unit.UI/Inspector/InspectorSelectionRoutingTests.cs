@@ -4,9 +4,12 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Documents;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
@@ -28,7 +31,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
     {
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Environment");
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
         _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage(
             [],
             new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId)));
@@ -48,7 +51,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
     {
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Transform");
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
         _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage(
             [fixture.Node],
             new SceneSelectionContext(SceneSelectionKind.Mixed, [fixture.Node.Id], [folderId], fixture.Node.Id, PrimaryFolderId: null)));
@@ -97,14 +100,14 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
     public Task SelectionMessageForAnotherDocumentDoesNotChangeInspector() => EnqueueAsync(() =>
     {
         using var fixture = new SceneAuthoringFixture();
-        fixture.Selection.SetSelection(fixture.Scene.Id, [fixture.Node], "test");
+        fixture.Selection.SetSelection(fixture.Tab.DocumentId, [fixture.Node], "test");
         using var host = fixture.CreateInspectorHost("Transform");
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
 
         _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage(
             [],
             new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId),
-            Guid.NewGuid()));
+            DocumentId.New()));
 
         _ = host.SelectedNode.Should().BeSameAs(fixture.Node);
         _ = host.HasSelectionSummary.Should().BeFalse();
@@ -115,13 +118,13 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
     public Task SupersededSelectionMessageDoesNotReplaceCurrentSelection() => EnqueueAsync(() =>
     {
         using var fixture = new SceneAuthoringFixture();
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
         var previous = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId);
-        fixture.Selection.Publish(fixture.Scene.Id, previous, "test");
-        fixture.Selection.SetSelection(fixture.Scene.Id, [fixture.Node], "test");
+        fixture.Selection.Publish(fixture.Tab.DocumentId, previous, "test");
+        fixture.Selection.SetSelection(fixture.Tab.DocumentId, [fixture.Node], "test");
         using var host = fixture.CreateInspectorHost("Transform");
 
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([], previous, fixture.Scene.Id));
+        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([], previous, fixture.Tab.DocumentId));
 
         _ = host.SelectedNode.Should().BeSameAs(fixture.Node);
         _ = host.InspectorTitle.Should().Be("Component Inspector");
@@ -133,11 +136,11 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
     {
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Transform");
-        var missingNodeId = Guid.NewGuid();
+        var missingNodeId = NodeId.New();
         var context = new SceneSelectionContext(SceneSelectionKind.Node, [missingNodeId], [], missingNodeId, PrimaryFolderId: null);
-        fixture.Selection.Publish(fixture.Scene.Id, context, "test");
+        fixture.Selection.Publish(fixture.Tab.DocumentId, context, "test");
 
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([], context, fixture.Scene.Id));
+        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([], context, fixture.Tab.DocumentId));
 
         _ = host.HasEnvironmentView.Should().BeFalse();
         _ = host.PropertyEditors.Should().BeEmpty();
@@ -152,15 +155,15 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
     {
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Transform");
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
         var folderContext = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId);
-        fixture.Selection.Publish(fixture.Scene.Id, folderContext, "test");
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([], folderContext, fixture.Scene.Id));
+        fixture.Selection.Publish(fixture.Tab.DocumentId, folderContext, "test");
+        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([], folderContext, fixture.Tab.DocumentId));
         _ = host.PropertyEditors.Should().BeEmpty();
 
-        fixture.Selection.SetSelection(fixture.Scene.Id, [fixture.Node], "test");
+        fixture.Selection.SetSelection(fixture.Tab.DocumentId, [fixture.Node], "test");
         _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage(
-            [fixture.Node], fixture.Selection.GetContext(fixture.Scene.Id), fixture.Scene.Id));
+            [fixture.Node], fixture.Selection.GetContext(fixture.Tab.DocumentId), fixture.Tab.DocumentId));
 
         _ = host.SelectedNode.Should().BeSameAs(fixture.Node);
         _ = host.PropertyEditors.Should().NotBeEmpty();

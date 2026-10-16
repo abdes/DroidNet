@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Documents;
 using DroidNet.Routing;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
@@ -13,8 +14,8 @@ using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneExplorer;
@@ -23,6 +24,7 @@ using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
 
@@ -90,7 +92,7 @@ public sealed class DocumentManagerSceneLifetimeTests
     public async Task OpenSceneAsync_NewerRequestRejectsOlderReadBeforeRetirement()
     {
         using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
-        fixture.Files.Write("Third", SceneDocumentFiles.Data(Guid.NewGuid(), "Third"));
+        fixture.Files.Write("Third", SceneDocumentFiles.Data(SceneId.New(), "Third"));
         var reading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         fixture.Store.BeforeRead = async path =>
@@ -110,8 +112,8 @@ public sealed class DocumentManagerSceneLifetimeTests
         _ = (await newer.ConfigureAwait(false)).Should().BeTrue();
 
         _ = fixture.Explorer.Scene!.AttachedObject.Name.Should().Be("Third");
-        _ = fixture.Documents.GetOpenDocuments(fixture.Window).OfType<SceneDocumentMetadata>().Should().ContainSingle()
-            .Which.Document!.File.Path.Should().Be(fixture.Files.PathOf("Third"));
+        _ = fixture.Area.Documents.Should().ContainSingle()
+            .Which.File.Path.Should().Be(fixture.Files.PathOf("Third"));
         _ = fixture.Files.Documents.Documents.Should().ContainSingle("the older request closed the document it read");
     }
 
@@ -182,7 +184,7 @@ public sealed class DocumentManagerSceneLifetimeTests
     {
         using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
 
-        _ = (await fixture.Manager.OpenMaterialAsync(new Uri("asset:///Content/Materials/Test.omat.json"), "Test").ConfigureAwait(false)).Should().BeTrue();
+        _ = (await fixture.Manager.OpenMaterialAsync(fixture.Files.WriteMaterial("Test").AssetUri).ConfigureAwait(false)).Should().BeTrue();
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.PasteCommand.CanExecute(null).Should().BeTrue();
@@ -195,7 +197,7 @@ public sealed class DocumentManagerSceneLifetimeTests
     {
         using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
 
-        fixture.Contexts.Activate(fixture.Files.Context with { DefaultSceneId = Guid.NewGuid() });
+        fixture.Contexts.Activate(fixture.Files.Context with { DefaultSceneId = SceneId.New() });
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Cut);
@@ -266,14 +268,14 @@ public sealed class DocumentManagerSceneLifetimeTests
     /// </summary>
     private sealed class LifetimeFixture : IDisposable
     {
-        private readonly Dictionary<Guid, Scene> registrations = [];
+        private readonly Dictionary<DocumentId, Scene> registrations = [];
         private readonly StrongReferenceMessenger messenger = new();
         private readonly DocumentCloseCoordinator close;
 
         private LifetimeFixture()
         {
-            _ = this.Sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), It.IsAny<Guid>()))
-                .Returns((Scene scene, Guid documentId) =>
+            _ = this.Sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), It.IsAny<DocumentId>()))
+                .Returns((Scene scene, DocumentId documentId) =>
                 {
                     if (string.Equals(scene.Name, this.RefusedScene, StringComparison.Ordinal))
                     {
@@ -283,10 +285,10 @@ public sealed class DocumentManagerSceneLifetimeTests
                     this.registrations[documentId] = scene;
                     return true;
                 });
-            _ = this.Sync.Setup(value => value.GetDocumentScene(It.IsAny<Guid>()))
-                .Returns((Guid documentId) => this.registrations.GetValueOrDefault(documentId));
-            _ = this.Sync.Setup(value => value.CloseDocument(It.IsAny<Guid>()))
-                .Callback<Guid>(documentId => this.registrations.Remove(documentId));
+            _ = this.Sync.Setup(value => value.GetDocumentScene(It.IsAny<DocumentId>()))
+                .Returns((DocumentId documentId) => this.registrations.GetValueOrDefault(documentId));
+            _ = this.Sync.Setup(value => value.CloseDocument(It.IsAny<DocumentId>()))
+                .Callback<DocumentId>(documentId => this.registrations.Remove(documentId));
             _ = this.Sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             var prompt = new Mock<IDocumentClosePrompt>();
             _ = prompt.Setup(value => value.ConfirmAsync(It.IsAny<WindowId>(), It.IsAny<IReadOnlyList<DocumentCloseItem>>(), It.IsAny<bool>()))
@@ -312,19 +314,25 @@ public sealed class DocumentManagerSceneLifetimeTests
             this.Documents = new EditorDocumentService(closeCoordinator: this.close);
             var selection = new SceneSelectionService();
             var commands = new SceneDocumentCommandService(
-                selection, this.Sync.Object, this.messenger, Mock.Of<IOperationResultPublisher>(),
+                selection, this.Sync.Object, Mock.Of<IOperationResultPublisher>(),
                 new OperationStatusReducer(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(),
                 this.Contexts, new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance));
             this.Files = new SceneDocumentFiles(commands, this.Store);
             this.Contexts.Activate(this.Files.Context);
-            this.Files.Write("First", SceneDocumentFiles.Data(Guid.NewGuid(), "First", "Node"));
-            this.Files.Write("Second", SceneDocumentFiles.Data(Guid.NewGuid(), "Second", "Destination"));
+            this.Files.Write("First", SceneDocumentFiles.Data(SceneId.New(), "First", "Node"));
+            this.Files.Write("Second", SceneDocumentFiles.Data(SceneId.New(), "Second", "Destination"));
+            this.Area = new DocumentArea(
+                this.Documents,
+                this.Files.Documents,
+                this.Files.Documents.Kinds.Select(static kind => new DocumentEditorDescriptor(kind, static _ => new object())),
+                this.Window,
+                static _ => { });
             this.Explorer = new SceneExplorerViewModel(
-                this.Files.ProjectManager, this.messenger, Mock.Of<IRouter>(), this.Documents, this.Window, this.Sync.Object,
+                this.Files.ProjectManager, this.messenger, Mock.Of<IRouter>(), this.Area, this.Files.Documents, this.Window, this.Sync.Object,
                 selection, commands, projectContexts: this.Contexts);
             this.Manager = new DocumentManager(
-                this.Documents, this.messenger, this.Contexts, Mock.Of<IProjectUsageService>(),
-                Mock.Of<IMaterialDocumentService>(), this.Window, this.Files.Documents, this.Sync.Object, Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+                this.Area, this.messenger, this.Contexts, Mock.Of<IProjectUsageService>(),
+                this.Window, this.Files.Documents, this.Sync.Object, Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
             this.Participant = new SceneParticipant(this);
         }
 
@@ -340,13 +348,13 @@ public sealed class DocumentManagerSceneLifetimeTests
 
         public Scene First => ((SceneContent)this.FirstDocument.Content).Scene;
 
-        public SceneDocumentMetadata FirstTab => this.Documents.GetOpenDocuments(this.Window).OfType<SceneDocumentMetadata>().Single(tab => ReferenceEquals(tab.Document, this.FirstDocument));
-
         public ProjectContextService Contexts { get; } = new();
 
         public Mock<ISceneEngineSync> Sync { get; } = new();
 
         public EditorDocumentService Documents { get; }
+
+        public DocumentArea Area { get; }
 
         public SceneExplorerViewModel Explorer { get; }
 
@@ -391,6 +399,7 @@ public sealed class DocumentManagerSceneLifetimeTests
         {
             this.Manager.Dispose();
             this.Explorer.Dispose();
+            this.Area.Dispose();
             this.Files.Dispose();
         }
     }
@@ -417,17 +426,12 @@ public sealed class DocumentManagerSceneLifetimeTests
                 this.PendingEdit = false;
             }
 
-            // The scene editor keeps its tab showing the document's state.
-            _ = fixture.FirstTab.Refresh();
-
             return Task.CompletedTask;
         }
 
         public async Task<bool> SaveForCloseAsync()
         {
-            var saved = this.SaveSucceeds && (await fixture.FirstDocument.SaveAsync().ConfigureAwait(false)).Succeeded;
-            _ = fixture.FirstTab.Refresh();
-            return saved;
+            return this.SaveSucceeds && (await fixture.FirstDocument.SaveAsync().ConfigureAwait(false)).Succeeded;
         }
 
         public Task CloseAsync(bool discard)

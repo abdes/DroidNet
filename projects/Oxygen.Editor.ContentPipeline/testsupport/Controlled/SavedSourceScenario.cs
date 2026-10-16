@@ -11,7 +11,7 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal static class SavedSourceScenario
 {
-    internal static CookDocumentState SavedState(string path) => new(path, Path.GetFileName(path), 1, 1, IsDirty: false, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))));
+    internal static CookDocumentState SavedState(string path) => new(path, Path.GetFileName(path), IsDirty: false, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))));
 
     internal static CapturingEngineContentPipelineApi CreateSuccessfulApi(
         CookWorkspace workspace,

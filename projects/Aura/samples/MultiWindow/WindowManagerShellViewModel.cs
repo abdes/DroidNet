@@ -43,8 +43,8 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     private readonly IWindowManagerService windowManager;
     private readonly DispatcherQueue dispatcherQueue;
     private readonly IDocumentService? documentService;
-    private readonly Dictionary<Guid, IDocumentMetadata> documents = [];
-    private readonly Dictionary<WindowId, Guid> windowActiveDocument = [];
+    private readonly Dictionary<DocumentId, IDocumentMetadata> documents = [];
+    private readonly Dictionary<WindowId, DocumentId> windowActiveDocument = [];
     private readonly IDisposable windowEventsSubscription;
 
     private bool isDisposed;
@@ -87,7 +87,6 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         {
             this.documentService.DocumentOpened += this.OnDocOpened;
             this.documentService.DocumentClosing += this.OnDocClosing;
-            this.documentService.DocumentMetadataChanged += this.OnDocMetadataChanged;
             this.documentService.DocumentActivated += this.OnDocActivated;
             this.documentService.DocumentClosed += this.OnDocClosed;
         }
@@ -173,10 +172,16 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
             {
                 this.documentService.DocumentOpened -= this.OnDocOpened;
                 this.documentService.DocumentClosing -= this.OnDocClosing;
-                this.documentService.DocumentMetadataChanged -= this.OnDocMetadataChanged;
                 this.documentService.DocumentActivated -= this.OnDocActivated;
                 this.documentService.DocumentClosed -= this.OnDocClosed;
             }
+
+            foreach (var metadata in this.documents.Values)
+            {
+                metadata.PropertyChanged -= this.OnDocPropertyChanged;
+            }
+
+            this.documents.Clear();
         }
 
         this.isDisposed = true;
@@ -226,7 +231,6 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
                 {
                     var md = new SampleDocumentMetadata
                     {
-                        DocumentId = Guid.NewGuid(),
                         Title = $"Document {window.AppWindow.Id.Value}",
                         IsDirty = false,
                     };
@@ -410,7 +414,11 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         Task OnDocOpenedAsync(DocumentOpenedEventArgs args)
         {
             Debug.WriteLine($"OnDocOpened: DocId={args.Metadata.DocumentId}, Title='{args.Metadata.Title}', Window={args.WindowId.Value}, ShouldSelect={args.ShouldSelect}");
-            this.documents[args.Metadata.DocumentId] = args.Metadata;
+            if (this.documents.TryAdd(args.Metadata.DocumentId, args.Metadata))
+            {
+                args.Metadata.PropertyChanged += this.OnDocPropertyChanged;
+            }
+
             if (args.ShouldSelect)
             {
                 this.windowActiveDocument[args.WindowId] = args.Metadata.DocumentId;
@@ -426,30 +434,24 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         }
     }
 
-    private void OnDocMetadataChanged(object? sender, DocumentMetadataChangedEventArgs e)
+    // A document's metadata changes by itself; the active document's title and dirty state follow it.
+    private void OnDocPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e is null || e.NewMetadata is null)
+        if (sender is not IDocumentMetadata metadata)
         {
             return;
         }
 
-        var dq = this.windowManager.GetWindow(e.WindowId)?.Window?.DispatcherQueue ?? this.dispatcherQueue;
-        _ = dq.TryEnqueue(() => _ = OnDocMetadataChangedAsync(e));
-
-        Task OnDocMetadataChangedAsync(DocumentMetadataChangedEventArgs args)
+        _ = this.dispatcherQueue.TryEnqueue(() =>
         {
-            Debug.WriteLine($"OnDocMetadataChanged: DocId={args.NewMetadata.DocumentId}, Title='{args.NewMetadata.Title}', IsDirty={args.NewMetadata.IsDirty}, Window={args.WindowId.Value}");
-
-            this.documents[args.NewMetadata.DocumentId] = args.NewMetadata;
-
-            if (args.WindowId == this.windowManager.ActiveWindow?.Id)
+            Debug.WriteLine($"OnDocPropertyChanged: DocId={metadata.DocumentId}, Title='{metadata.Title}', IsDirty={metadata.IsDirty}");
+            if (this.windowManager.ActiveWindow is { } active
+                && this.windowActiveDocument.TryGetValue(active.Id, out var activeId) && activeId == metadata.DocumentId)
             {
-                this.ActiveDocumentTitle = args.NewMetadata.Title;
-                this.ActiveDocumentIsDirty = args.NewMetadata.IsDirty;
+                this.ActiveDocumentTitle = metadata.Title;
+                this.ActiveDocumentIsDirty = metadata.IsDirty;
             }
-
-            return Task.CompletedTask;
-        }
+        });
     }
 
     private void OnDocActivated(object? sender, DocumentActivatedEventArgs e)
@@ -561,7 +563,11 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         {
             Debug.WriteLine($"OnDocClosed: DocId={args.Metadata.DocumentId}, Title='{args.Metadata.Title}', Window={args.WindowId.Value}");
 
-            _ = this.documents.Remove(args.Metadata.DocumentId);
+            if (this.documents.Remove(args.Metadata.DocumentId, out var closed))
+            {
+                closed.PropertyChanged -= this.OnDocPropertyChanged;
+            }
+
             if (args.WindowId == this.windowManager.ActiveWindow?.Id)
             {
                 this.ActiveDocumentTitle = null;

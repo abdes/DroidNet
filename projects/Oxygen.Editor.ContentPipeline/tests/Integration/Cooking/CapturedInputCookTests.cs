@@ -166,7 +166,7 @@ public sealed class CapturedInputCookTests
         {
             BeforeImport = (_, _) =>
             {
-                state = state with { Revision = 2, IsDirty = true };
+                state = state with { IsDirty = true };
                 return Task.CompletedTask;
             },
             SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
@@ -176,10 +176,9 @@ public sealed class CapturedInputCookTests
         var result = await service.CookAssetAsync(new("asset:///" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Status.Should().Be(OperationStatus.Succeeded);
-        _ = result.InputSnapshot!.Documents.Should().ContainSingle().Which.SavedRevision.Should().Be(1);
+        _ = result.InputSnapshot!.Documents.Should().ContainSingle();
         _ = result.InputsAreCurrent.Should().BeFalse();
         _ = state.IsDirty.Should().BeTrue();
-        _ = state.Revision.Should().Be(2);
     }
 
     /// <summary>The material facade keeps the shared captured operation and its later-change status.</summary>
@@ -197,7 +196,7 @@ public sealed class CapturedInputCookTests
         {
             BeforeImport = (_, _) =>
             {
-                state = state with { Revision = 2, IsDirty = true };
+                state = state with { IsDirty = true };
                 return Task.CompletedTask;
             },
             SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,

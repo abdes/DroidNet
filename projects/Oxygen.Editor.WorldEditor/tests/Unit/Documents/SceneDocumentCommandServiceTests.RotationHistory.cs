@@ -8,6 +8,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
@@ -33,7 +34,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         if (gesture)
         {
             token.Commit();
-            _ = await fixture.Sut.EditPropertiesForTargetsAsync(context, new Dictionary<Guid, PropertyEdit> { [node.Id] = PropertyEdit.Empty }, "Rotate", token).ConfigureAwait(false);
+            _ = await fixture.Sut.EditPropertiesForTargetsAsync(context, new Dictionary<NodeId, PropertyEdit> { [node.Id] = PropertyEdit.Empty }, "Rotate", token).ConfigureAwait(false);
         }
 
         var edited = transform.LocalRotation;

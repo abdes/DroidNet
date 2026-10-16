@@ -4,28 +4,15 @@
 
 using System.Reactive.Linq;
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
-using DroidNet.Aura.Windowing;
-using DroidNet.Documents;
-using DroidNet.Mvvm;
-using DryIoc;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Editor.Data.Services;
-using Oxygen.Editor.Documents;
-using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspection;
-using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspection;
@@ -35,22 +22,22 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Assets, root files, search, source links and validation remain usable at wide and narrow document widths.</summary>
+    /// <summary>Assets, root files, search, source links and validation remain usable at wide and narrow panel widths.</summary>
     /// <param name="width">The report width in DIPs.</param>
     /// <param name="light">Whether to use the light theme.</param>
     /// <returns>The rendered inspection journey.</returns>
     [TestMethod]
     [DataRow(960d, false)]
     [DataRow(560d, true)]
-    public Task InspectionDocumentShowsScopedAssetsFilesAndSourceLinks(double width, bool light) => EnqueueAsync(async () =>
+    public Task InspectionShowsScopedAssetsFilesAndSourceLinks(double width, bool light) => EnqueueAsync(async () =>
     {
         var projects = CreateQueryProject();
         var project = projects.ActiveProject!;
-        var metadata = new CookedInspectionDocumentMetadata(project, new("asset:///Content"), validate: false);
+        var scope = new CookedInspectionScope(project, new("asset:///Content"), Validate: false);
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
-        _ = pipeline.Setup(value => value.InspectCookedOutputAsync(metadata.ScopeUri, It.IsAny<CancellationToken>(), It.IsAny<bool>(), project)).Returns((Uri? _, CancellationToken _, bool validate, ProjectContext? _) => Task.FromResult(CreateInspectionReport(project, validate)));
+        _ = pipeline.Setup(value => value.InspectCookedOutputAsync(scope.ScopeUri, It.IsAny<CancellationToken>(), It.IsAny<bool>(), project)).Returns((Uri? _, CancellationToken _, bool validate, ProjectContext? _) => Task.FromResult(CreateInspectionReport(project, validate)));
         Uri? navigated = null;
-        using var model = new CookedInspectionViewModel(metadata, pipeline.Object, Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()), projects, uri =>
+        using var model = new CookedInspectionViewModel(pipeline.Object, NoAssets(), projects, uri =>
         {
             navigated = uri;
             return Task.FromResult(true);
@@ -67,12 +54,11 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
         };
         root.Children.Add(view);
         await LoadTestContentAsync(root).ConfigureAwait(true);
-        await model.CurrentWork.ConfigureAwait(true);
+        await model.InspectAsync(scope).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.Assets.Should().HaveCount(2);
         var toolbar = view.FindDescendant<DroidNet.Controls.ToolBar>()!;
         _ = toolbar.OverflowButtonVisibility.Should().Be(Visibility.Collapsed);
-        _ = metadata.IsDirty.Should().BeFalse();
         model.SearchText = "Red";
         _ = model.Assets.Should().ContainSingle().Which.Name.Should().Be("Red");
         _ = model.SelectedAsset!.Origin.Should().NotBeNull();
@@ -90,92 +76,87 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
         await model.ValidateCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         _ = model.StatusText.Should().Be("Output validated");
         _ = model.SelectedAsset!.Name.Should().Be("Red");
-        _ = metadata.IsDirty.Should().BeFalse();
-        pipeline.Verify(value => value.InspectCookedOutputAsync(metadata.ScopeUri, It.IsAny<CancellationToken>(), It.IsAny<bool>(), project), Times.Exactly(2));
+        pipeline.Verify(value => value.InspectCookedOutputAsync(scope.ScopeUri, It.IsAny<CancellationToken>(), It.IsAny<bool>(), project), Times.Exactly(2));
         pipeline.VerifyNoOtherCalls();
     });
 
-    /// <summary>Superseded and closed report requests drain without displaying late results or starting overlapping reads.</summary>
-    /// <returns>The asynchronous document-lifetime regression.</returns>
+    /// <summary>Superseded and disposed report requests drain without displaying late results or starting overlapping reads.</summary>
+    /// <returns>The asynchronous panel-lifetime regression.</returns>
     [TestMethod]
-    public Task InspectionDocumentDrainsSupersededAndClosedRequests() => EnqueueAsync(async () =>
+    public Task InspectionDrainsSupersededAndDisposedRequests() => EnqueueAsync(async () =>
     {
         var projects = CreateQueryProject();
         var project = projects.ActiveProject!;
-        var metadata = new CookedInspectionDocumentMetadata(project, scopeUri: null, validate: false);
+        var scope = new CookedInspectionScope(project, ScopeUri: null, Validate: false);
         var first = new TaskCompletionSource<CookedOutputReport>(TaskCreationOptions.RunContinuationsAsynchronously);
         var second = new TaskCompletionSource<CookedOutputReport>(TaskCreationOptions.RunContinuationsAsynchronously);
         var calls = 0;
         var pipeline = new Mock<IContentPipelineService>();
-        _ = pipeline.Setup(value => value.InspectCookedOutputAsync(It.Is<Uri?>(scope => scope == null), It.IsAny<CancellationToken>(), It.IsAny<bool>(), project)).Returns(() => ++calls == 1 ? first.Task : second.Task);
-        using var model = new CookedInspectionViewModel(metadata, pipeline.Object, Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()), projects, _ => Task.FromResult(false));
-        var original = model.InitializeAsync();
-        metadata.RequestRefresh(validate: true);
+        _ = pipeline.Setup(value => value.InspectCookedOutputAsync(It.Is<Uri?>(uri => uri == null), It.IsAny<CancellationToken>(), It.IsAny<bool>(), project)).Returns(() => ++calls == 1 ? first.Task : second.Task);
+        var model = new CookedInspectionViewModel(pipeline.Object, NoAssets(), projects, _ => Task.FromResult(false));
+        var original = model.InspectAsync(scope);
+        var refresh = model.InspectAsync(scope with { Validate = true });
         _ = calls.Should().Be(1);
         first.SetResult(CreateInspectionReport(project, validate: false));
         await original.ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = calls.Should().Be(2);
         _ = model.Report.Should().BeNull();
-        var close = model.CloseAsync(discard: false);
-        _ = close.IsCompleted.Should().BeFalse();
+        model.Dispose();
+        _ = refresh.IsCompleted.Should().BeFalse();
         second.SetResult(CreateInspectionReport(project, validate: true));
-        await close.ConfigureAwait(true);
+        await refresh.ConfigureAwait(true);
         _ = model.Report.Should().BeNull();
         _ = model.IsBusy.Should().BeFalse();
-        metadata.RequestRefresh(validate: false);
+        _ = model.InspectAsync(scope);
         _ = calls.Should().Be(2);
     });
 
-    /// <summary>The real document host creates the report editor, disables Save, and reuses the same scope's tab.</summary>
-    /// <returns>The asynchronous document-routing regression.</returns>
+    /// <summary>The panel starts with nothing inspected, and nothing to refresh or validate.</summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
-    public Task InspectionRequestOpensReadOnlyDocumentAndReusesItsTab() => EnqueueAsync(async () =>
+    public Task InspectionStartsEmpty() => EnqueueAsync(() =>
+    {
+        var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
+        using var model = new CookedInspectionViewModel(pipeline.Object, NoAssets(), CreateQueryProject(), _ => Task.FromResult(false));
+
+        _ = model.Scope.Should().Be("Nothing inspected");
+        _ = model.Report.Should().BeNull();
+        _ = model.Assets.Should().BeEmpty();
+        _ = model.RefreshCommand.CanExecute(parameter: null).Should().BeFalse();
+        _ = model.ValidateCommand.CanExecute(parameter: null).Should().BeFalse();
+        pipeline.VerifyNoOtherCalls();
+        return Task.CompletedTask;
+    });
+
+    /// <summary>A scope replaces the shown one, and a repeated request for the shown scope inspects it again.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public Task InspectionTakesAScopeAndRefreshesOnARepeatedRequest() => EnqueueAsync(async () =>
     {
         var projects = CreateQueryProject();
         var project = projects.ActiveProject!;
-        var messenger = new StrongReferenceMessenger();
+        var materials = new CookedInspectionScope(project, new("asset:///Content/Materials"), Validate: false);
+        var scenes = new CookedInspectionScope(project, new("asset:///Content/Scenes"), Validate: false);
         var pipeline = new Mock<IContentPipelineService>();
         _ = pipeline.Setup(value => value.InspectCookedOutputAsync(It.IsAny<Uri?>(), It.IsAny<CancellationToken>(), It.IsAny<bool>(), project)).Returns((Uri? _, CancellationToken _, bool validate, ProjectContext? _) => Task.FromResult(CreateInspectionReport(project, validate)));
-        var container = new Container();
-        await using var containerLifetime = container.ConfigureAwait(true);
-        container.RegisterInstance(pipeline.Object);
-        container.RegisterInstance<IProjectContextService>(projects);
-        container.RegisterInstance(Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()));
-        container.RegisterInstance<IMessenger>(messenger);
-        var windowId = new WindowId(501);
-        var open = new List<IDocumentMetadata>();
-        var documents = new Mock<IEditorDocumentService>();
-        _ = documents.Setup(value => value.GetOpenDocuments(windowId)).Returns(open);
-        _ = documents.Setup(value => value.OpenDocumentAsync(windowId, It.IsAny<IDocumentMetadata>(), -1, It.Is<bool>(select => select))).Returns((WindowId _, IDocumentMetadata metadata, int index, bool select) =>
-        {
-            open.Add(metadata);
-            documents.Raise(value => value.DocumentOpened += null, new DocumentOpenedEventArgs(windowId, metadata, index, select));
-            return Task.FromResult(metadata.DocumentId);
-        });
-        _ = documents.Setup(value => value.SelectDocumentAsync(windowId, It.IsAny<Guid>())).ReturnsAsync(value: true);
-        var views = new Mock<IViewLocator>();
-        _ = views.Setup(value => value.ResolveView(It.IsAny<object>())).Returns(() => new CookedInspectionView());
-        var results = Mock.Of<IOperationResultPublisher>();
-        var engine = new Mock<IEngineService>();
-        _ = engine.Setup(value => value.ReleaseDocumentSurfacesAsync(It.IsAny<Guid>())).Returns(ValueTask.CompletedTask);
-        using var host = new DocumentHostViewModel(documents.Object, views.Object, engine.Object, results, Mock.Of<IStatusReducer>(), container, new DocumentCloseCoordinator(Mock.Of<IDocumentClosePrompt>(), results), Mock.Of<IWindowManagerService>(), windowId);
-        using var scenes = new Oxygen.Editor.Documents.OpenDocuments([], Mock.Of<DroidNet.Storage.IAtomicFileStore>());
-        using var manager = new DocumentManager(documents.Object, messenger, projects, Mock.Of<IProjectUsageService>(), Mock.Of<IMaterialDocumentService>(), windowId, scenes, Mock.Of<Oxygen.Editor.World.Services.ISceneEngineSync>(), Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
-        await LoadTestContentAsync(new DocumentHostView { ViewModel = host }).ConfigureAwait(true);
-        var scope = new Uri("asset:///Content/Materials");
-        _ = (await messenger.Send(new OpenCookedInspectionRequestMessage(project, scope, validate: false)).Response.ConfigureAwait(true)).Should().BeTrue();
-        await WaitForRenderAsync().ConfigureAwait(true);
-        var model = host.ActiveEditor.Should().BeOfType<CookedInspectionViewModel>().Subject;
-        await model.CurrentWork.ConfigureAwait(true);
-        _ = host.ActiveEditorView.Should().BeOfType<CookedInspectionView>();
-        _ = host.SaveActiveDocumentCommand.CanExecute(parameter: null).Should().BeFalse();
-        _ = (await messenger.Send(new OpenCookedInspectionRequestMessage(project, scope, validate: true)).Response.ConfigureAwait(true)).Should().BeTrue();
-        await model.CurrentWork.ConfigureAwait(true);
-        _ = open.Should().ContainSingle().Which.IsDirty.Should().BeFalse();
-        _ = host.ActiveEditor.Should().BeSameAs(model);
+        using var model = new CookedInspectionViewModel(pipeline.Object, NoAssets(), projects, _ => Task.FromResult(false));
+
+        await model.InspectAsync(materials).ConfigureAwait(true);
+        _ = model.Scope.Should().EndWith("/Content/Materials");
+        var report = model.Report;
+        _ = report.Should().NotBeNull();
+        await model.InspectAsync(materials with { Validate = true }).ConfigureAwait(true);
+        _ = model.Report.Should().NotBeSameAs(report, "a repeated request inspects the shown scope again");
         _ = model.StatusText.Should().Be("Output validated");
+        await model.InspectAsync(scenes).ConfigureAwait(true);
+        _ = model.Scope.Should().EndWith("/Content/Scenes");
+
+        pipeline.Verify(value => value.InspectCookedOutputAsync(materials.ScopeUri, It.IsAny<CancellationToken>(), It.IsAny<bool>(), project), Times.Exactly(2));
+        pipeline.Verify(value => value.InspectCookedOutputAsync(scenes.ScopeUri, It.IsAny<CancellationToken>(), It.IsAny<bool>(), project), Times.Once);
     });
+
+    private static IAssetFeed NoAssets() => Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>());
 
     private static CookedOutputReport CreateInspectionReport(ProjectContext project, bool validate)
     {

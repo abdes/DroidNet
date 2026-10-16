@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Inspector.Environment;
+using Oxygen.Editor.World.Services;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 
@@ -12,29 +12,29 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 public sealed class SkyLightRuntimeStatusTests
 {
     [TestMethod]
-    [DataRow(RuntimeSkyLightUnavailableReason.MissingCubemap, "No cubemap is selected")]
-    [DataRow(RuntimeSkyLightUnavailableReason.ResourceResolveFailed, "failed to load")]
-    [DataRow(RuntimeSkyLightUnavailableReason.NotTextureCube, "is not a cubemap")]
-    [DataRow(RuntimeSkyLightUnavailableReason.UnsupportedFormat, "float (HDR)")]
-    [DataRow(RuntimeSkyLightUnavailableReason.ProcessingFailed, "failed to process")]
-    [DataRow(RuntimeSkyLightUnavailableReason.GpuProductsPending, "Loading the cubemap")]
-    public void UnavailableSkyLightNamesItsCause(RuntimeSkyLightUnavailableReason reason, string cause)
-        => _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { SkyLightUnavailableReason = reason })
+    [DataRow(SceneSkyLightUnavailableReason.MissingCubemap, "No cubemap is selected")]
+    [DataRow(SceneSkyLightUnavailableReason.ResourceResolveFailed, "failed to load")]
+    [DataRow(SceneSkyLightUnavailableReason.NotTextureCube, "is not a cubemap")]
+    [DataRow(SceneSkyLightUnavailableReason.UnsupportedFormat, "float (HDR)")]
+    [DataRow(SceneSkyLightUnavailableReason.ProcessingFailed, "failed to process")]
+    [DataRow(SceneSkyLightUnavailableReason.GpuProductsPending, "Loading the cubemap")]
+    public void UnavailableSkyLightNamesItsCause(SceneSkyLightUnavailableReason reason, string cause)
+        => _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { UnavailableReason = reason })
             .Should().Contain(cause);
 
     [TestMethod]
     public void EmptyCaptureAsksForSomethingToCapture()
-        => _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { SkyLightUsable = true, SkyLightEmptyCapture = true })
+        => _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { EmptyCapture = true })
             .Should().StartWith("Nothing to capture");
 
     [TestMethod]
     public void WorkingDisabledOrUnrenderedSkyLightsSayNothing()
     {
-        _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { SkyLightUsable = true }).Should().BeNull();
-        _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { SkyLightEnabled = false, SkyLightUnavailableReason = RuntimeSkyLightUnavailableReason.MissingCubemap }).Should().BeNull();
-        _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { SkyLightObserved = false, SkyLightUnavailableReason = RuntimeSkyLightUnavailableReason.MissingCubemap }).Should().BeNull();
+        _ = SkyLightSectionViewModel.DescribeRuntime(Rendered()).Should().BeNull();
+        _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { Enabled = false, UnavailableReason = SceneSkyLightUnavailableReason.MissingCubemap }).Should().BeNull();
+        _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { Observed = false, UnavailableReason = SceneSkyLightUnavailableReason.MissingCubemap }).Should().BeNull();
         _ = SkyLightSectionViewModel.DescribeRuntime(state: null).Should().BeNull();
     }
 
-    private static RuntimeEnvironmentState Rendered() => new() { SkyLightObserved = true, SkyLightEnabled = true };
+    private static SceneSkyLightObservation Rendered() => new(Observed: true, Enabled: true, SceneSkyLightUnavailableReason.None, EmptyCapture: false);
 }

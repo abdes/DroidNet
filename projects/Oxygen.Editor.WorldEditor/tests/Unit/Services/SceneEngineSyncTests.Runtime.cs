@@ -3,11 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Services;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Services;
 
@@ -27,7 +29,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
         using var sut = new SceneEngineSync(engine.Object);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, Guid.NewGuid());
+        _ = sut.RegisterDocument(scene, DocumentId.New());
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         _ = (await sut.SyncSceneAsync(scene, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
@@ -70,7 +72,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
         using var sut = new SceneEngineSync(engine.Object);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, Guid.NewGuid());
+        _ = sut.RegisterDocument(scene, DocumentId.New());
         var node = new SceneNode(scene) { Name = "Camera" };
         scene.RootNodes.Add(node);
         node.Components.Add(new PerspectiveCamera { Name = "Perspective Camera", FieldOfView = 60, AspectMode = aspectMode, AspectRatio = 1.5f, NearPlane = 0.25f, FarPlane = 500 });
@@ -105,7 +107,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
         using var sut = new SceneEngineSync(engine.Object);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, Guid.NewGuid());
+        _ = sut.RegisterDocument(scene, DocumentId.New());
         var parent = new SceneNode(scene) { Name = "Hidden parent", IsVisible = false, CastsShadows = true, ReceivesShadows = false };
         var child = new SceneNode(scene) { Name = "Shown child", IsVisible = true };
         parent.AddChild(child);
@@ -132,7 +134,7 @@ public sealed partial class SceneEngineSyncTests
         _ = Flags(parent.Id).Should().Equal(0f, 1f, 0f);
         _ = Flags(child.Id).Should().Equal(1f, child.CastsShadows ? 1f : 0f, child.ReceivesShadows ? 1f : 0f);
 
-        IEnumerable<float> Flags(Guid nodeId)
+        IEnumerable<float> Flags(NodeId nodeId)
             => requests.Select(value => value.Command).OfType<RuntimeSetProperties>()
                 .Where(command => command.NodeId == nodeId)
                 .SelectMany(command => command.Entries)
@@ -157,7 +159,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
         using var sync = new SceneEngineSync(engine.Object);
         var scene = CreateScene();
-        _ = sync.RegisterDocument(scene, Guid.NewGuid());
+        _ = sync.RegisterDocument(scene, DocumentId.New());
         var node = new SceneNode(scene) { Name = "Saved geometry" };
         scene.RootNodes.Add(node);
         var target = new Oxygen.Editor.World.Slots.MaterialSlotTarget(

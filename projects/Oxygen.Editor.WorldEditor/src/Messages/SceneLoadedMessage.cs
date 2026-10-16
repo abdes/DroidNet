@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.Documents;
+using DroidNet.Documents;
 
 namespace Oxygen.Editor.World.Messages;
 

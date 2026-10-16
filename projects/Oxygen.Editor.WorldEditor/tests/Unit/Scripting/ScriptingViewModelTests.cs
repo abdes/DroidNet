@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Numerics;
 using System.Reactive.Subjects;
 using AwesomeAssertions;
+using DroidNet.Documents;
 using DroidNet.TimeMachine;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Scripts;
@@ -15,6 +16,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector.Scripting;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 
@@ -208,10 +210,10 @@ public sealed class ScriptingViewModelTests : IDisposable
 
     private ScriptingViewModel CreateModel(Action? onEdit = null, IScriptDeclarationProvider? declarations = null)
     {
-        var context = new SceneDocumentCommandContext(Guid.NewGuid(), this.scene, new HistoryKeeper(this.scene));
+        var context = new SceneDocumentCommandContext(DocumentId.New(), this.scene, new HistoryKeeper(this.scene));
         var commands = new Mock<ISceneDocumentCommandService>();
         _ = commands.Setup(service => service.EditScriptSlotsAsync(context, this.player.Id, It.IsAny<ImmutableArray<ScriptSlot>>()))
-            .Returns((SceneDocumentCommandContext _, Guid _, ImmutableArray<ScriptSlot> slots) =>
+            .Returns((SceneDocumentCommandContext _, NodeId _, ImmutableArray<ScriptSlot> slots) =>
             {
                 onEdit?.Invoke();
                 this.scripting.Slots = slots;

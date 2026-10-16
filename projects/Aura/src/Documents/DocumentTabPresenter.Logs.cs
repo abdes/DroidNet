@@ -18,29 +18,29 @@ public partial class DocumentTabPresenter
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Requesting the document service to close document with Id={DocumentId}.")]
-    private static partial void LogDocumentCloseRequested(ILogger logger, Guid documentId);
+    private static partial void LogDocumentCloseRequested(ILogger logger, DocumentId documentId);
 
     [Conditional("DEBUG")]
-    private void LogDocumentCloseRequested(Guid documentId)
+    private void LogDocumentCloseRequested(DocumentId documentId)
         => LogDocumentCloseRequested(this.logger, documentId);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Document close request, Id={DocumentId}, finished with verdict: {Verdict}.")]
-    private static partial void LogDocumentCloseVerdict(ILogger logger, Guid documentId, bool verdict);
+    private static partial void LogDocumentCloseVerdict(ILogger logger, DocumentId documentId, bool verdict);
 
     [Conditional("DEBUG")]
-    private void LogDocumentCloseVerdict(Guid documentId, bool verdict)
+    private void LogDocumentCloseVerdict(DocumentId documentId, bool verdict)
         => LogDocumentCloseVerdict(this.logger, documentId, verdict);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Requesting the document service to detach document with Id={DocumentId}.")]
-    private static partial void LogDocumentDetachRequested(ILogger logger, Guid documentId);
+    private static partial void LogDocumentDetachRequested(ILogger logger, DocumentId documentId);
 
     [Conditional("DEBUG")]
-    private void LogDocumentDetachRequested(Guid documentId)
+    private void LogDocumentDetachRequested(DocumentId documentId)
         => LogDocumentDetachRequested(this.logger, documentId);
 }

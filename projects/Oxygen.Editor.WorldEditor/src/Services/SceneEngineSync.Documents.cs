@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Runtime.Engine;

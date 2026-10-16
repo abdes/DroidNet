@@ -8,6 +8,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
 
 namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Inspector;
@@ -79,7 +80,7 @@ public sealed partial class ComponentLifetimeTests : DroidNet.Tests.VisualUserIn
             .Should().BeEquivalentTo(Enum.GetValues<TransformField>().Select(static field => (ushort)field), "the denied removal must leave the native transform intact");
     }
 
-    private static async Task AssertComponentPresenceAsync(NativeSceneFixture fixture, SceneNodeEditorViewModel host, Guid nodeId, bool camera, bool present, CancellationToken cancellationToken)
+    private static async Task AssertComponentPresenceAsync(NativeSceneFixture fixture, SceneNodeEditorViewModel host, NodeId nodeId, bool camera, bool present, CancellationToken cancellationToken)
     {
         var componentId = camera ? EngineComponentId.PerspectiveCamera : EngineComponentId.DirectionalLight;
         var native = await fixture.ReadNodeAsync(nodeId, cancellationToken).ConfigureAwait(true);

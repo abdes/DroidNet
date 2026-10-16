@@ -9,6 +9,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
@@ -57,7 +58,7 @@ public sealed partial class MissingAssetRecoveryTests : DroidNet.Tests.VisualUse
         _ = (await fixture.ReadNodeAsync(node.Id, timeout.Token).ConfigureAwait(true)).GeometryKey.Should().BeEmpty();
     });
 
-    private static async Task AssertMissingGeometryFailureAsync(NativeSceneFixture fixture, Guid nodeId, CancellationToken cancellationToken)
+    private static async Task AssertMissingGeometryFailureAsync(NativeSceneFixture fixture, NodeId nodeId, CancellationToken cancellationToken)
     {
         while (!fixture.Results.Any(result => string.Equals(result.OperationKind, SceneOperationKinds.EditGeometry, StringComparison.Ordinal) && result.Severity == DiagnosticSeverity.Error))
         {
@@ -67,7 +68,7 @@ public sealed partial class MissingAssetRecoveryTests : DroidNet.Tests.VisualUse
         var failure = fixture.Results.Last(result => string.Equals(result.OperationKind, SceneOperationKinds.EditGeometry, StringComparison.Ordinal));
         _ = failure.Status.Should().Be(OperationStatus.PartiallySucceeded);
         _ = failure.AffectedScope.NodeId.Should().Be(nodeId);
-        _ = failure.AffectedScope.DocumentId.Should().Be(fixture.Context.DocumentId);
+        _ = failure.AffectedScope.DocumentId.Should().Be(fixture.Context.DocumentId.Value);
         _ = failure.AffectedScope.AssetVirtualPath.Should().Contain("DoesNotExist.ogeo");
         _ = failure.Diagnostics.Should().ContainSingle().Which.Code.Should().Be(LiveSyncDiagnosticCodes.GeometryUnresolvedAtRuntime);
         _ = failure.Message.Should().NotBeNullOrEmpty();

@@ -14,6 +14,7 @@ using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
@@ -61,12 +62,12 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = ConfigureGestureSync(fixture, scene);
         var token = EditSessionToken.Begin([node.Id], "FieldOfView");
         var edit = PropertyEdit.SingleEdit(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegrees, 90f);
-        _ = await fixture.Sut.EditPropertiesForTargetsAsync(context, new Dictionary<Guid, PropertyEdit> { [node.Id] = edit }, "Edit Camera", token).ConfigureAwait(false);
+        _ = await fixture.Sut.EditPropertiesForTargetsAsync(context, new Dictionary<NodeId, PropertyEdit> { [node.Id] = edit }, "Edit Camera", token).ConfigureAwait(false);
         token.Commit();
-        _ = await fixture.Sut.EditPropertiesForTargetsAsync(context, new Dictionary<Guid, PropertyEdit> { [node.Id] = PropertyEdit.Empty }, "Edit Camera", token).ConfigureAwait(false);
+        _ = await fixture.Sut.EditPropertiesForTargetsAsync(context, new Dictionary<NodeId, PropertyEdit> { [node.Id] = PropertyEdit.Empty }, "Edit Camera", token).ConfigureAwait(false);
 
         var late = PropertyEdit.SingleEdit(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegrees, 100f);
-        _ = await fixture.Sut.EditPropertiesForTargetsAsync(context, new Dictionary<Guid, PropertyEdit> { [node.Id] = late }, "Edit Camera", token).ConfigureAwait(false);
+        _ = await fixture.Sut.EditPropertiesForTargetsAsync(context, new Dictionary<NodeId, PropertyEdit> { [node.Id] = late }, "Edit Camera", token).ConfigureAwait(false);
 
         _ = node.Components.OfType<PerspectiveCamera>().Single().FieldOfView.Should().Be(90);
         _ = context.History.UndoStack.Should().ContainSingle();
@@ -86,12 +87,12 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         var emptyResult = await fixture.Sut.EditPropertiesForTargetsAsync(
             context,
-            new Dictionary<Guid, PropertyEdit> { [node.Id] = PropertyEdit.Empty },
+            new Dictionary<NodeId, PropertyEdit> { [node.Id] = PropertyEdit.Empty },
             "Edit Camera",
             EditSessionToken.OneShot).ConfigureAwait(false);
         var result = await fixture.Sut.EditPropertiesForTargetsAsync(
             context,
-            new Dictionary<Guid, PropertyEdit> { [node.Id] = edit },
+            new Dictionary<NodeId, PropertyEdit> { [node.Id] = edit },
             "Edit Camera",
             EditSessionToken.OneShot).ConfigureAwait(false);
 
@@ -351,15 +352,15 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = fixture.Sync.Setup(value => value.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal)));
         _ = fixture.Sync.Setup(value => value.TryPreviewSyncAsync(scene.Id, It.IsAny<Guid>(), It.IsAny<DateTimeOffset>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>()))
-            .Returns((Guid _, Guid _, DateTimeOffset _, Func<CancellationToken, Task<SyncOutcome>> sync, CancellationToken cancellationToken) => Preview(sync, cancellationToken));
+            .Returns((SceneId _, Guid _, DateTimeOffset _, Func<CancellationToken, Task<SyncOutcome>> sync, CancellationToken cancellationToken) => Preview(sync, cancellationToken));
         _ = fixture.Sync.Setup(value => value.CompleteTerminalSyncAsync(scene.Id, It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>()))
-            .Returns((Guid _, Guid node, Func<CancellationToken, Task<SyncOutcome>> sync, CancellationToken cancellationToken) =>
+            .Returns((SceneId _, Guid node, Func<CancellationToken, Task<SyncOutcome>> sync, CancellationToken cancellationToken) =>
             {
                 terminal.Add(node);
                 return sync(cancellationToken);
             });
         _ = fixture.Sync.Setup(value => value.CancelPreviewSyncAsync(scene.Id, It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>()))
-            .Returns((Guid _, Guid _, Func<CancellationToken, Task<SyncOutcome>> sync, CancellationToken cancellationToken) => sync(cancellationToken));
+            .Returns((SceneId _, Guid _, Func<CancellationToken, Task<SyncOutcome>> sync, CancellationToken cancellationToken) => sync(cancellationToken));
         return terminal;
 
         static async Task<SyncOutcome?> Preview(Func<CancellationToken, Task<SyncOutcome>> sync, CancellationToken cancellationToken)

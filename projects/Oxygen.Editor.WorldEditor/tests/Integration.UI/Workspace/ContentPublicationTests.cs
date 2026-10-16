@@ -65,8 +65,14 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             _ = fixture.Runtime.State.Should().Be(EngineServiceState.Running);
         }));
 
-    /// <summary>Closing a project cancels its cook, releases native readers and preserves the prior publication for reopening.</summary>
-    /// <param name="captured">Whether native output has completed and preview capture is pending.</param>
+    /// <summary>
+    /// Closing a project cancels its automatic cook, or drops a change still waiting for the writer, and preserves the
+    /// prior publication for reopening.
+    /// </summary>
+    /// <param name="captured">
+    /// Whether the change's automatic cook has started and waits in preview capture; otherwise the change waits for a
+    /// held writer and has no run yet.
+    /// </param>
     /// <returns>The project-lifetime integration check.</returns>
     [TestMethod]
     [DataRow(false)]
@@ -93,21 +99,37 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         });
         try
         {
-            var releaseWriter = QueueCookOnChange(services, cancellationToken);
-            await SetPublicationMaterialColorAsync(scenario.Materials, scenario.Material.DocumentId, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
-            _ = await WaitForProjectCookAsync(services, prior, completed: false, cancellationToken).ConfigureAwait(true);
             if (captured)
             {
-                await releaseWriter().ConfigureAwait(true);
+                // The automatic cook of the change runs until its preview capture waits.
+                SetCookOnChange(services, enabled: true);
+                await SetPublicationMaterialColorAsync(scenario.Materials, scenario.Material, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
                 await entered.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
+                _ = await WaitForProjectCookAsync(services, prior, completed: false, cancellationToken).ConfigureAwait(true);
+            }
+            else
+            {
+                // With the writer held, the automatic cook service notes the change and waits for the writer, without a run.
+                var noted = WaitForCatalogChangeAsync(scenario, scenario.Material.File.AssetUri, cancellationToken);
+                _ = QueueCookOnChange(services, cancellationToken);
+                await SetPublicationMaterialColorAsync(scenario.Materials, scenario.Material, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
+                await noted.ConfigureAwait(true);
             }
 
             services.Projects.Close();
             registration.Dispose();
             await fixture.Runtime.ShutdownAsync().AsTask().WaitAsync(cancellationToken).ConfigureAwait(true);
             _ = release.TrySetResult();
-            var cancelled = await WaitForProjectCookAsync(services, prior, completed: true, cancellationToken).ConfigureAwait(true);
-            _ = cancelled.State.Should().Be(CookRunState.Cancelled);
+            if (captured)
+            {
+                var cancelled = await WaitForProjectCookAsync(services, prior, completed: true, cancellationToken).ConfigureAwait(true);
+                _ = cancelled.State.Should().Be(CookRunState.Cancelled);
+            }
+            else
+            {
+                _ = services.Runs.Runs.Where(run => !prior.Contains(run.OperationId)).Should().BeEmpty("a change still waiting for the writer has no run to cancel");
+            }
+
             _ = services.Projects.ActiveProject.Should().BeNull();
             await scenario.Feed.RefreshAsync(cancellationToken).ConfigureAwait(true);
             _ = ReadPublishedHashes(fixture.ProjectRoot).Should().BeEquivalentTo(hashes);
@@ -137,6 +159,20 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         }
     }
 
+    // The automatic cook service subscribed to the catalog first, so it has noted the change when this one completes.
+    private static async Task WaitForCatalogChangeAsync(PublicationScenario scenario, Uri asset, CancellationToken cancellationToken)
+    {
+        var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = scenario.Catalog.Changes.Subscribe(change =>
+        {
+            if (change.Uri == asset)
+            {
+                _ = changed.TrySetResult();
+            }
+        });
+        await changed.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
+    }
+
     private static async Task ReopenCancelledProjectAsync(PublicationScenario scenario, ProjectContext project, Guid previousRunId, CancellationToken cancellationToken)
     {
         var fixture = scenario.SceneAuthoringFixture;
@@ -155,7 +191,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             _ = await WaitForNodeAsync(fixture, node.Id, value => value.MaterialBaseColors.Length == 1 && value.MaterialBaseColors[0] == new Vector4(1, 0, 0, 1), cancellationToken).ConfigureAwait(true);
         }
 
-        var result = await services.Pipeline.CookAssetAsync(scenario.Material.MaterialUri, cancellationToken).ConfigureAwait(true);
+        var result = await services.Pipeline.CookAssetAsync(scenario.Material.File.AssetUri, cancellationToken).ConfigureAwait(true);
         _ = result.IsPublished.Should().BeTrue();
         _ = result.IsMounted.Should().BeTrue();
         foreach (var node in fixture.Source.RootNodes)
@@ -210,7 +246,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         var nodes = fixture.Source.RootNodes.ToArray();
         var prior = scenario.Services.Runs.Runs.Select(static run => run.OperationId).ToHashSet();
         var releaseWriter = QueueCookOnChange(scenario.Services, cancellationToken);
-        await SetPublicationMaterialColorAsync(scenario.Materials, scenario.Material.DocumentId, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
+        await SetPublicationMaterialColorAsync(scenario.Materials, scenario.Material, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
         if (string.Equals(action, "Undo", StringComparison.Ordinal))
         {
             await fixture.Context.History.UndoAsync(cancellationToken).ConfigureAwait(true);
@@ -252,7 +288,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
 
     private static Task<ContentCookResult> CookPublicationScopeAsync(PublicationScenario scenario, CookTargetKind scope, CancellationToken cancellationToken) => scope switch
     {
-        CookTargetKind.Asset => scenario.Services.Pipeline.CookAssetAsync(scenario.Material.MaterialUri, cancellationToken),
+        CookTargetKind.Asset => scenario.Services.Pipeline.CookAssetAsync(scenario.Material.File.AssetUri, cancellationToken),
         CookTargetKind.Folder => scenario.Services.Pipeline.CookFolderAsync(new("asset:///Content/Materials"), cancellationToken),
         CookTargetKind.CurrentScene => scenario.Services.Pipeline.CookCurrentSceneAsync(new("asset:///Content/Scenes/" + Uri.EscapeDataString(scenario.SceneAuthoringFixture.Source.Name) + ".oscene.json"), cancellationToken),
         _ => scenario.Services.Pipeline.CookProjectAsync(cancellationToken),
@@ -277,29 +313,47 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
     private static async Task CheckCancelledWorkspaceCookAsync(PublicationScenario scenario, CancellationToken cancellationToken)
     {
         var services = scenario.Services;
+        var fixture = scenario.SceneAuthoringFixture;
+        var project = services.Projects.ActiveProject!;
         var prior = services.Runs.Runs.Select(static run => run.OperationId).ToHashSet();
-        var content = scenario.SceneAuthoringFixture.Runtime.ContentStatus;
-        var releaseWriter = QueueCookOnChange(services, cancellationToken);
-        await SetPublicationMaterialColorAsync(scenario.Materials, scenario.Material.DocumentId, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
-        CookRunSnapshot? queued;
-        while ((queued = services.Runs.Runs.FirstOrDefault(run => !prior.Contains(run.OperationId))) is null)
+        var content = fixture.Runtime.ContentStatus;
+
+        // The automatic cook of the change runs until its preview capture waits, and is cancelled there.
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = services.Publication.RegisterPreview(project, async () =>
         {
-            await Task.Delay(20, cancellationToken).ConfigureAwait(true);
+            var preview = await fixture.CreateWorkspacePreviewAsync(services, scenario.Catalog, project).ConfigureAwait(false);
+            _ = entered.TrySetResult();
+            await release.Task.ConfigureAwait(false);
+            return preview;
+        });
+        try
+        {
+            SetCookOnChange(services, enabled: true);
+            await SetPublicationMaterialColorAsync(scenario.Materials, scenario.Material, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
+            await entered.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
+            SetCookOnChange(services, enabled: false);
+            var running = services.Runs.Runs.Single(run => !prior.Contains(run.OperationId));
+            _ = running.Request.IsAutomatic.Should().BeTrue();
+            await services.Runs.CancelAsync(running.OperationId).ConfigureAwait(true);
+            _ = release.TrySetResult();
+            while (!services.Runs.Runs.Single(run => run.OperationId == running.OperationId).IsCompleted)
+            {
+                await Task.Delay(20, cancellationToken).ConfigureAwait(true);
+            }
+
+            _ = services.Runs.Runs.Single(run => run.OperationId == running.OperationId).State.Should().Be(CookRunState.Cancelled);
+        }
+        finally
+        {
+            _ = release.TrySetResult();
         }
 
-        _ = queued.State.Should().Be(CookRunState.Queued);
-        await services.Runs.CancelAsync(queued.OperationId).ConfigureAwait(true);
-        while (!services.Runs.Runs.Single(run => run.OperationId == queued.OperationId).IsCompleted)
-        {
-            await Task.Delay(20, cancellationToken).ConfigureAwait(true);
-        }
-
-        _ = services.Runs.Runs.Single(run => run.OperationId == queued.OperationId).State.Should().Be(CookRunState.Cancelled);
-        await releaseWriter().ConfigureAwait(true);
-        _ = scenario.SceneAuthoringFixture.Runtime.ContentStatus.Should().Be(content);
-        var before = await scenario.SceneAuthoringFixture.ReadNodeAsync(scenario.SceneAuthoringFixture.Source.RootNodes[0].Id, cancellationToken).ConfigureAwait(true);
+        _ = fixture.Runtime.ContentStatus.Should().Be(content);
+        var before = await fixture.ReadNodeAsync(fixture.Source.RootNodes[0].Id, cancellationToken).ConfigureAwait(true);
         _ = before.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(new Vector4(1, 0, 0, 1));
-        var retried = await services.Pipeline.CookAssetAsync(scenario.Material.MaterialUri, cancellationToken).ConfigureAwait(true);
+        var retried = await services.Pipeline.CookAssetAsync(scenario.Material.File.AssetUri, cancellationToken).ConfigureAwait(true);
         _ = retried.IsPublished.Should().BeTrue();
         _ = retried.IsMounted.Should().BeTrue();
         var after = await scenario.SceneAuthoringFixture.ReadNodeAsync(scenario.SceneAuthoringFixture.Source.RootNodes[0].Id, cancellationToken).ConfigureAwait(true);
@@ -323,7 +377,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         var oldNodes = fixture.Source.RootNodes.Select(static node => node.Id).ToArray();
         var prior = scenario.Services.Runs.Runs.Select(static run => run.OperationId).ToHashSet();
         var releaseWriter = QueueCookOnChange(scenario.Services, cancellationToken);
-        await SetPublicationMaterialColorAsync(scenario.Materials, scenario.Material.DocumentId, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
+        await SetPublicationMaterialColorAsync(scenario.Materials, scenario.Material, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
         await fixture.SwitchToNewSceneAsync(1, cancellationToken).ConfigureAwait(true);
         var current = fixture.Source;
         var node = current.RootNodes[0];
@@ -350,10 +404,10 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
     private static async Task CheckPublicationSourceConflictAsync(PublicationScenario scenario, CancellationToken cancellationToken)
     {
         var material = scenario.Material;
-        var original = await File.ReadAllBytesAsync(material.SourcePath, cancellationToken).ConfigureAwait(true);
+        var original = await File.ReadAllBytesAsync(material.File.Path, cancellationToken).ConfigureAwait(true);
         var content = scenario.SceneAuthoringFixture.Runtime.ContentStatus;
-        await File.WriteAllTextAsync(material.SourcePath, "{}", cancellationToken).ConfigureAwait(true);
-        var failed = await scenario.Services.Pipeline.CookAssetAsync(material.MaterialUri, cancellationToken).ConfigureAwait(true);
+        await File.WriteAllTextAsync(material.File.Path, "{}", cancellationToken).ConfigureAwait(true);
+        var failed = await scenario.Services.Pipeline.CookAssetAsync(material.File.AssetUri, cancellationToken).ConfigureAwait(true);
         _ = failed.Status.Should().Be(OperationStatus.Failed);
         _ = failed.IsPublished.Should().BeFalse();
         _ = failed.Diagnostics.Should().Contain(issue => issue.Severity == DiagnosticSeverity.Error);
@@ -364,9 +418,9 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             _ = retained.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(new Vector4(1, 0, 0, 1));
         }
 
-        await File.WriteAllBytesAsync(material.SourcePath, original, cancellationToken).ConfigureAwait(true);
-        await SetPublicationMaterialColorAsync(scenario.Materials, material.DocumentId, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
-        var recovered = await scenario.Services.Pipeline.CookAssetAsync(material.MaterialUri, cancellationToken).ConfigureAwait(true);
+        await File.WriteAllBytesAsync(material.File.Path, original, cancellationToken).ConfigureAwait(true);
+        await SetPublicationMaterialColorAsync(scenario.Materials, material, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
+        var recovered = await scenario.Services.Pipeline.CookAssetAsync(material.File.AssetUri, cancellationToken).ConfigureAwait(true);
         _ = recovered.IsPublished.Should().BeTrue();
         _ = recovered.IsMounted.Should().BeTrue();
         foreach (var node in scenario.SceneAuthoringFixture.Source.RootNodes)

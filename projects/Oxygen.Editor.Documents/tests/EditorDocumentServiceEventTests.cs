@@ -146,7 +146,8 @@ public class EditorDocumentServiceEventTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
         var eventRaised = false;
 
         this.service.DocumentClosing += (sender, args) => eventRaised = true;
@@ -166,7 +167,8 @@ public class EditorDocumentServiceEventTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
         bool? capturedForce = null;
 
         this.service.DocumentClosing += (sender, args) => capturedForce = args.Force;
@@ -187,7 +189,8 @@ public class EditorDocumentServiceEventTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
         var eventRaised = false;
 
         this.service.DocumentClosing += (sender, args) =>
@@ -211,7 +214,8 @@ public class EditorDocumentServiceEventTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
         var eventRaised = false;
 
         this.service.DocumentClosed += (sender, args) => eventRaised = true;
@@ -231,7 +235,8 @@ public class EditorDocumentServiceEventTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
         IDocumentMetadata? capturedMetadata = null;
 
         this.service.DocumentClosed += (sender, args) => capturedMetadata = args.Metadata;
@@ -252,7 +257,8 @@ public class EditorDocumentServiceEventTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
         var closedEventRaised = false;
 
         this.service.DocumentClosing += (sender, args)
@@ -268,60 +274,19 @@ public class EditorDocumentServiceEventTests
     }
 
     /// <summary>
-    /// Test that DocumentDetached event is raised when detaching a document.
+    /// Test that a refused detach raises no DocumentDetached event.
     /// </summary>
     [TestMethod]
-    public async Task DetachDocumentAsync_RaisesDocumentDetachedEvent()
+    public async Task DetachDocumentAsync_IsRefusedWithoutAnEvent()
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
         var eventRaised = false;
-
         this.service.DocumentDetached += (sender, args) => eventRaised = true;
 
         // Act
-        _ = await this.service.DetachDocumentAsync(this.testWindowId, docId).ConfigureAwait(false);
-
-        // Assert
-        _ = eventRaised.Should().BeTrue();
-    }
-
-    /// <summary>
-    /// Test that DocumentDetached event contains correct metadata.
-    /// </summary>
-    [TestMethod]
-    public async Task DetachDocumentAsync_DocumentDetachedEvent_ContainsCorrectMetadata()
-    {
-        // Arrange
-        var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
-        IDocumentMetadata? capturedMetadata = null;
-
-        this.service.DocumentDetached += (sender, args) => capturedMetadata = args.Metadata;
-
-        // Act
-        _ = await this.service.DetachDocumentAsync(this.testWindowId, docId).ConfigureAwait(false);
-
-        // Assert
-        _ = capturedMetadata.Should().NotBeNull();
-        _ = capturedMetadata!.DocumentId.Should().Be(docId);
-    }
-
-    /// <summary>
-    /// Test that DocumentDetached event is NOT raised for non-existent document.
-    /// </summary>
-    [TestMethod]
-    public async Task DetachDocumentAsync_WithNonExistentDocument_DoesNotRaiseEvent()
-    {
-        // Arrange
-        var nonExistentId = Guid.NewGuid();
-        var eventRaised = false;
-
-        this.service!.DocumentDetached += (sender, args) => eventRaised = true;
-
-        // Act
-        _ = await this.service.DetachDocumentAsync(this.testWindowId, nonExistentId).ConfigureAwait(false);
+        _ = await this.service.DetachDocumentAsync(this.testWindowId, metadata.DocumentId).ConfigureAwait(false);
 
         // Assert
         _ = eventRaised.Should().BeFalse();
@@ -397,80 +362,6 @@ public class EditorDocumentServiceEventTests
     }
 
     /// <summary>
-    /// Test that DocumentMetadataChanged event is raised when updating metadata.
-    /// </summary>
-    [TestMethod]
-    public async Task UpdateMetadataAsync_RaisesDocumentMetadataChangedEvent()
-    {
-        // Arrange
-        var metadata = new TestDocumentMetadata { Title = "Original Title" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
-        var eventRaised = false;
-
-        this.service.DocumentMetadataChanged += (sender, args) => eventRaised = true;
-
-        var updatedMetadata = new TestDocumentMetadata(docId)
-        {
-            Title = "Updated Title",
-        };
-
-        // Act
-        _ = await this.service.UpdateMetadataAsync(this.testWindowId, docId, updatedMetadata).ConfigureAwait(false);
-
-        // Assert
-        _ = eventRaised.Should().BeTrue();
-    }
-
-    /// <summary>
-    /// Test that DocumentMetadataChanged event contains new metadata.
-    /// </summary>
-    [TestMethod]
-    public async Task UpdateMetadataAsync_DocumentMetadataChangedEvent_ContainsNewMetadata()
-    {
-        // Arrange
-        var metadata = new TestDocumentMetadata { Title = "Original Title" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
-        IDocumentMetadata? capturedMetadata = null;
-
-        this.service.DocumentMetadataChanged += (sender, args) => capturedMetadata = args.NewMetadata;
-
-        var updatedMetadata = new TestDocumentMetadata(docId)
-        {
-            Title = "Updated Title",
-        };
-
-        // Act
-        _ = await this.service.UpdateMetadataAsync(this.testWindowId, docId, updatedMetadata).ConfigureAwait(false);
-
-        // Assert
-        _ = capturedMetadata.Should().NotBeNull();
-        _ = capturedMetadata!.Title.Should().Be("Updated Title");
-    }
-
-    /// <summary>
-    /// Test that DocumentMetadataChanged event is NOT raised for non-existent document.
-    /// </summary>
-    [TestMethod]
-    public async Task UpdateMetadataAsync_WithNonExistentDocument_DoesNotRaiseEvent()
-    {
-        // Arrange
-        var nonExistentId = Guid.NewGuid();
-        var metadata = new TestDocumentMetadata(nonExistentId)
-        {
-            Title = "Test",
-        };
-        var eventRaised = false;
-
-        this.service!.DocumentMetadataChanged += (sender, args) => eventRaised = true;
-
-        // Act
-        _ = await this.service.UpdateMetadataAsync(this.testWindowId, nonExistentId, metadata).ConfigureAwait(false);
-
-        // Assert
-        _ = eventRaised.Should().BeFalse();
-    }
-
-    /// <summary>
     /// Test that DocumentActivated event is raised when selecting a document.
     /// </summary>
     [TestMethod]
@@ -478,7 +369,8 @@ public class EditorDocumentServiceEventTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: false).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: false).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
         var eventRaised = false;
 
         this.service.DocumentActivated += (sender, args) => eventRaised = true;
@@ -498,8 +390,9 @@ public class EditorDocumentServiceEventTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: false).ConfigureAwait(false);
-        Guid? capturedDocId = null;
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: false).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
+        DocumentId? capturedDocId = null;
 
         this.service.DocumentActivated += (sender, args) => capturedDocId = args.DocumentId;
 
@@ -518,7 +411,7 @@ public class EditorDocumentServiceEventTests
     public async Task SelectDocumentAsync_WithNonExistentDocument_DoesNotRaiseEvent()
     {
         // Arrange
-        var nonExistentId = Guid.NewGuid();
+        var nonExistentId = DocumentId.New();
         var eventRaised = false;
 
         this.service!.DocumentActivated += (sender, args) => eventRaised = true;

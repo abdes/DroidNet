@@ -90,7 +90,7 @@ public sealed class MaterialRequestTests
             published,
             verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing,
             [],
-            dirty ? [new CookDocumentState(source, "Material", 2, 1, IsDirty: true, new string('A', 64))] : [],
+            dirty ? [new CookDocumentState(source, "Material", IsDirty: true, new string('A', 64))] : [],
             []);
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
         _ = pipeline.Setup(service => service.ReadAsync(projects.ActiveProject!, It.Is<IReadOnlyList<Uri>>(uris => uris.Count == 1 && uris[0] == uri), It.IsAny<CancellationToken>()))

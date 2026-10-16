@@ -29,7 +29,7 @@ internal static class NativeSceneAssertions
         }
     }
 
-    internal static async Task<RuntimeNodeState> AssertGeometryAsync(NativeSceneFixture fixture, Guid nodeId, string shape, CancellationToken cancellationToken)
+    internal static async Task<RuntimeNodeState> AssertGeometryAsync(NativeSceneFixture fixture, NodeId nodeId, string shape, CancellationToken cancellationToken)
     {
         var geometry = fixture.Source.RootNodes.Single(node => node.Id == nodeId).Components.OfType<GeometryComponent>().Single();
         _ = geometry.Geometry.Should().NotBeNull();
@@ -41,7 +41,7 @@ internal static class NativeSceneAssertions
         return native;
     }
 
-    internal static async Task<RuntimeNodeState> WaitForNodeAsync(NativeSceneFixture fixture, Guid nodeId, Func<RuntimeNodeState, bool> expected, CancellationToken cancellationToken)
+    internal static async Task<RuntimeNodeState> WaitForNodeAsync(NativeSceneFixture fixture, NodeId nodeId, Func<RuntimeNodeState, bool> expected, CancellationToken cancellationToken)
     {
         RuntimeNodeState? state = null;
         for (var attempt = 0; attempt < 150; attempt++)
@@ -86,7 +86,7 @@ internal static class NativeSceneAssertions
 
     internal static Uri? ReadMaterialUri(SceneNode node) => node.Components.OfType<GeometryComponent>().Single().OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault()?.Material.Uri;
 
-    internal static async Task AssertMaterialAsync(NativeSceneFixture fixture, Guid nodeId, string expected, CancellationToken cancellationToken)
+    internal static async Task AssertMaterialAsync(NativeSceneFixture fixture, NodeId nodeId, string expected, CancellationToken cancellationToken)
     {
         var state = await WaitForNodeAsync(fixture, nodeId, value => value.MaterialKeys.Length == 1 && string.Equals(value.MaterialKeys[0], expected, StringComparison.OrdinalIgnoreCase), cancellationToken).ConfigureAwait(true);
         _ = state.MaterialKeys.Should().ContainSingle().Which.Should().BeEquivalentTo(expected);

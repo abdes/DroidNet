@@ -22,6 +22,7 @@ using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
@@ -227,7 +228,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
             ProjectRoot = root.Location,
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
             LocalFolderMounts = [new("Library", "D:/Library")],
-            DefaultSceneId = Guid.NewGuid(),
+            DefaultSceneId = SceneId.New(),
         };
         projects.Activate(project);
         var messenger = new StrongReferenceMessenger();

@@ -13,6 +13,7 @@
         <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Fixtures/LooseCookedIndexFixture.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneAuthoringFixture.cs" Link="Support/SceneAuthoringFixture.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneTabs.cs" Link="Support/SceneTabs.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/TestDocumentArea.cs" Link="Support/TestDocumentArea.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneTestData.cs" Link="Support/SceneTestData.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentBrowser/testsupport/UI/BrowserControls.cs" Link="Support/BrowserControls.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentBrowser/testsupport/UI/BrowserQuerySupport.cs" Link="Support/BrowserQuerySupport.cs" />

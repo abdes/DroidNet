@@ -31,7 +31,7 @@ public sealed class PreviewCookTests
         var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
         var materialUri = new Uri("asset:///Content/Materials/Blue.omat.json");
         var scenePath = Path.Combine(workspace.Root, "Content", "Scenes", "Main.oscene.json");
-        var scene = SavedState(scenePath) with { Revision = 2, IsDirty = true };
+        var scene = SavedState(scenePath) with { IsDirty = true };
         using var registration = workspace.Documents.Register(scenePath, _ => Task.FromResult<CookDocumentReadLease?>(new(scene, static () => { })));
         var hold = WriterHold.Take(workspace.CookCoordinator, this.TestContext.CancellationToken);
         var saved = pipeline.CookSavedAssetAsync(materialUri, workspace.ProjectContext, this.TestContext.CancellationToken);

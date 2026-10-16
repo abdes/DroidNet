@@ -7,6 +7,7 @@ using Moq;
 using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Services;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Services;
 
@@ -72,7 +73,7 @@ public sealed class AssetRuntimeStatusSourceTests
             Request(RunId, ProjectId, "/Content/Materials/Red.omat", succeeded: false, "Material rejected"),
             Request(Guid.NewGuid(), ProjectId, "/Content/Materials/OldRun.omat", succeeded: false),
             Request(RunId, Guid.NewGuid(), "/Content/Materials/OtherProject.omat", succeeded: false),
-            new(new(Guid.NewGuid(), new(RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()) { ProjectId = ProjectId }, new RuntimeDeselectNode(Guid.NewGuid())), 1, Succeeded: true),
+            new(new(Guid.NewGuid(), new(RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid()) { ProjectId = ProjectId }, new RuntimeDeselectNode(NodeId.New())), 1, Succeeded: true),
         ];
         using var source = new AssetRuntimeStatusSource(engine.Object);
 
@@ -99,7 +100,7 @@ public sealed class AssetRuntimeStatusSourceTests
 
     private static RuntimeAssetRequestStatus Request(Guid runId, Guid projectId, string materialPath, bool? succeeded, string? reason = null)
         => new(
-            new(Guid.NewGuid(), new(runId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()) { ProjectId = projectId }, new RuntimeSetMaterialOverride(Guid.NewGuid(), "/Content/Mesh.ogeo", Guid.NewGuid(), new string('0', 64), materialPath, MaterialSlotAssignmentIntent.ObservedEdit)),
+            new(Guid.NewGuid(), new(runId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid()) { ProjectId = projectId }, new RuntimeSetMaterialOverride(NodeId.New(), "/Content/Mesh.ogeo", Guid.NewGuid(), new string('0', 64), materialPath, MaterialSlotAssignmentIntent.ObservedEdit)),
             1,
             succeeded,
             reason);

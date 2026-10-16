@@ -2,39 +2,109 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Microsoft.UI.Dispatching;
+using Oxygen.Editor.Documents;
+using Oxygen.Managed.Assets.Catalog;
+
 namespace Oxygen.Editor.MaterialEditor;
 
-/// <summary>Marks the open material when its file is deleted or moved outside the editor, and clears the mark when it returns.</summary>
+/// <content>Follows the material document's file and state.</content>
 public sealed partial class MaterialEditorViewModel
 {
-    private async Task RefreshSourcePresenceAsync()
+    private IDisposable? sourceChanges;
+
+    // File watching reports the material's file through the catalog: changed, removed, renamed away, or added back.
+    private void WatchSourcePresence(IAssetCatalog? catalog)
     {
-        if (this.isDisposed || this.document is not { } current)
+        if (catalog is null || DispatcherQueue.GetForCurrentThread() is not { } dispatcher)
         {
             return;
         }
 
-        bool missing;
+        this.sourceChanges = catalog.Changes.Subscribe(change => _ = dispatcher.TryEnqueue(() => this.OnSourceChanged(change)));
+    }
+
+    private void StopWatchingSourcePresence()
+    {
+        this.sourceChanges?.Dispose();
+        this.sourceChanges = null;
+    }
+
+    private void OnSourceChanged(AssetChange change)
+    {
+        var uri = this.document.File.AssetUri;
+        if (!this.isDisposed && (change.Uri == uri || change.PreviousUri == uri))
+        {
+            _ = this.CheckSourceAsync();
+        }
+    }
+
+    private async Task CheckSourceAsync()
+    {
         try
         {
-            missing = await this.documentService.RefreshSourcePresenceAsync(current.DocumentId, CancellationToken.None).ConfigureAwait(true);
+            _ = await this.document.CheckFileAsync().ConfigureAwait(true);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or KeyNotFoundException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // The file is unreadable or the document closed meanwhile; the next change checks again.
+            // The file is unreadable right now; the next change checks again.
+        }
+    }
+
+    // Dirty, missing and the file's name and place follow the document.
+    private void OnDocumentStateChanged(object? sender, EventArgs args)
+    {
+        if (this.isDisposed)
+        {
             return;
         }
 
-        if (this.isDisposed || missing == this.metadata.IsMissingOnDisk)
+        this.IsDirty = this.document.IsDirty;
+        this.DisplayName = this.document.Title;
+        this.MaterialUriText = this.document.File.AssetUri.ToString();
+        this.RefreshHistoryCommands();
+    }
+
+    // A reload replaced the content: the editor shows the file's values, and its history was cleared with it.
+    private void OnDocumentContentReplaced(object? sender, DocumentContentReplacedEventArgs args)
+    {
+        if (this.isDisposed)
         {
             return;
         }
 
-        this.metadata.IsMissingOnDisk = missing;
-        this.IsDirty = this.metadata.IsDirty;
-        if (this.documents is { } host)
+        this.ObserveContent();
+        this.HasSaveConflict = false;
+        this.ReadFromContent();
+    }
+
+    private void ObserveContent() => this.ObserveContent(this.document.Content as MaterialContent);
+
+    private void ObserveContent(MaterialContent? content)
+    {
+        if (ReferenceEquals(this.observedContent, content))
         {
-            _ = await host.UpdateMetadataAsync(this.windowId, this.metadata.DocumentId, this.metadata).ConfigureAwait(true);
+            return;
+        }
+
+        if (this.observedContent is { } previous)
+        {
+            previous.SourceChanged -= this.OnContentSourceChanged;
+        }
+
+        this.observedContent = content;
+        if (content is not null)
+        {
+            content.SourceChanged += this.OnContentSourceChanged;
+        }
+    }
+
+    // Undo, redo and relocations change the source behind the controls; the controls show the new values.
+    private void OnContentSourceChanged(object? sender, EventArgs args)
+    {
+        if (!this.isDisposed && !this.isApplyingOwnEdit && !this.isLoading)
+        {
+            this.ReadFromContent();
         }
     }
 }

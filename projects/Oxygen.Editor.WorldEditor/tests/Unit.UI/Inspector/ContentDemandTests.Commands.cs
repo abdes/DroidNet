@@ -12,6 +12,7 @@ using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
@@ -141,12 +142,12 @@ public sealed partial class ContentDemandTests
     private static void ConfigureStructuralSync(DemandFixture fixture)
     {
         var accepted = new SyncOutcome(SyncStatus.Accepted, "Structural command", AffectedScope.Empty);
-        _ = fixture.Authoring.Sync.Setup(value => value.RenameNodeAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<string>())).ReturnsAsync(accepted);
+        _ = fixture.Authoring.Sync.Setup(value => value.RenameNodeAsync(It.IsAny<Scene>(), It.IsAny<NodeId>(), It.IsAny<string>())).ReturnsAsync(accepted);
         _ = fixture.Authoring.Sync.Setup(value => value.UpdateNodeTransformAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
-        _ = fixture.Authoring.Sync.Setup(value => value.DetachGeometryAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
-        _ = fixture.Authoring.Sync.Setup(value => value.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<Guid?>())).Returns(Task.CompletedTask);
-        _ = fixture.Authoring.Sync.Setup(value => value.RemoveNodeHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<Guid>>())).Returns(Task.CompletedTask);
-        _ = fixture.Authoring.Sync.Setup(value => value.ReparentNodeAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
-        _ = fixture.Authoring.Sync.Setup(value => value.ReparentHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<Guid?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
+        _ = fixture.Authoring.Sync.Setup(value => value.DetachGeometryAsync(It.IsAny<Scene>(), It.IsAny<NodeId>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
+        _ = fixture.Authoring.Sync.Setup(value => value.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<NodeId?>())).Returns(Task.CompletedTask);
+        _ = fixture.Authoring.Sync.Setup(value => value.RemoveNodeHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<NodeId>>())).Returns(Task.CompletedTask);
+        _ = fixture.Authoring.Sync.Setup(value => value.ReparentNodeAsync(It.IsAny<Scene>(), It.IsAny<NodeId>(), It.IsAny<NodeId?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
+        _ = fixture.Authoring.Sync.Setup(value => value.ReparentHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<NodeId?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
     }
 }

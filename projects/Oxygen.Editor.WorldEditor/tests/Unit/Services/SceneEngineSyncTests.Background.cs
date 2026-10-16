@@ -4,6 +4,7 @@
 
 using System.Numerics;
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Documents;
@@ -23,7 +24,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
         using var sut = new SceneEngineSync(engine.Object);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, Guid.NewGuid());
+        _ = sut.RegisterDocument(scene, DocumentId.New());
         _ = await sut.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         var sent = new List<RuntimeSetEnvironment>();
         _ = commands.Setup(value => value.Execute(It.Is<RuntimeWorldRequest>(request => request.Command is RuntimeSetEnvironment), It.IsAny<CancellationToken>()))

@@ -16,6 +16,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.SceneEditor;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
@@ -29,8 +30,8 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
 [SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes.")]
 public sealed class ViewportStateServiceTests
 {
-    private static readonly Guid SceneA = Guid.Parse("a1000000-0000-0000-0000-000000000001");
-    private static readonly Guid SceneB = Guid.Parse("b2000000-0000-0000-0000-000000000002");
+    private static readonly SceneId SceneA = SceneId.FromValue(Guid.Parse("a1000000-0000-0000-0000-000000000001"));
+    private static readonly SceneId SceneB = SceneId.FromValue(Guid.Parse("b2000000-0000-0000-0000-000000000002"));
 
     private static readonly SceneViewportState FourPanes = new(
         SceneViewLayout.FourQuad,
@@ -38,7 +39,7 @@ public sealed class ViewportStateServiceTests
         [
             new(CameraType.Perspective, CameraControlMode.OrbitTrackball, ViewportCameraState.From(new RuntimeEditorCamera(new Vector3(1, 2, 3), Quaternion.CreateFromAxisAngle(Vector3.UnitZ, 0.5f), new Vector3(0, 0, 1), 10)), SceneCameraId: null),
             new(CameraType.Top, CameraControlMode.OrbitTurntable, ViewportCameraState.From(new RuntimeEditorCamera(new Vector3(0, 0, 50), Quaternion.Identity, Vector3.Zero, 25)), SceneCameraId: null),
-            new(CameraType.Perspective, CameraControlMode.OrbitTrackball, EditorCamera: null, Guid.Parse("c3000000-0000-0000-0000-000000000003")),
+            new(CameraType.Perspective, CameraControlMode.OrbitTrackball, EditorCamera: null, NodeId.FromValue(Guid.Parse("c3000000-0000-0000-0000-000000000003"))),
             new(CameraType.Front, CameraControlMode.OrbitTurntable, EditorCamera: null, SceneCameraId: null),
         ]);
 
@@ -104,7 +105,7 @@ public sealed class ViewportStateServiceTests
 
         var restoring = service.RestoreAsync(fixture.Project, SceneA);
         service.Update(fixture.Project, SceneA, OnePane);
-        loaded.SetResult(new(fixture.Project.ProjectId, ViewportStateService.CurrentVersion, new Dictionary<Guid, SceneViewportState>
+        loaded.SetResult(new(fixture.Project.ProjectId, ViewportStateService.CurrentVersion, new Dictionary<SceneId, SceneViewportState>
         {
             [SceneA] = FourPanes,
             [SceneB] = FourPanes,
@@ -123,7 +124,7 @@ public sealed class ViewportStateServiceTests
         await using var lifetime = fixture.ConfigureAwait(false);
         await fixture.Store.SaveSettingAsync(
             ViewportStateService.Key,
-            new ViewportStateService.ProjectViewports(fixture.Project.ProjectId, ViewportStateService.CurrentVersion + 1, new Dictionary<Guid, SceneViewportState> { [SceneA] = FourPanes }),
+            new ViewportStateService.ProjectViewports(fixture.Project.ProjectId, ViewportStateService.CurrentVersion + 1, new Dictionary<SceneId, SceneViewportState> { [SceneA] = FourPanes }),
             fixture.Context).ConfigureAwait(false);
 
         var restored = await fixture.CreateService().RestoreAsync(fixture.Project, SceneA).ConfigureAwait(false);

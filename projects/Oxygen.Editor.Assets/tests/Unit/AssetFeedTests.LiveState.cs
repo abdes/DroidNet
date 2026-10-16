@@ -30,7 +30,7 @@ public sealed partial class AssetFeedTests
         var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]);
         var documents = new CookDocumentRegistry();
         using var owner = documents.Register(path, _ => throw new InvalidOperationException("Presentation must not acquire the source."));
-        var initial = new CookDocumentState(path, "Red", 1, 1, IsDirty: false, new string('A', 64));
+        var initial = new CookDocumentState(path, "Red", IsDirty: false, new string('A', 64));
         owner.UpdateState(initial);
         var reads = 0;
         var sourceHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false)));
@@ -117,9 +117,9 @@ public sealed partial class AssetFeedTests
         cookService.Raise(service => service.RunChanged += null, new CookRunChangedEventArgs(run));
         _ = rows.Count(row => string.Equals(row.PrimaryBadge, "Queued", StringComparison.Ordinal)).Should().Be(affected);
         var queuedNotifications = notifications;
-        cookService.Raise(service => service.RunChanged += null, new CookRunChangedEventArgs(run with { Revision = 2 }));
+        cookService.Raise(service => service.RunChanged += null, new CookRunChangedEventArgs(run));
         _ = notifications.Should().Be(queuedNotifications);
-        run = run with { State = CookRunState.Cooking, Revision = 3 };
+        run = run with { State = CookRunState.Cooking };
         runs = [run];
         cookService.Raise(service => service.RunChanged += null, new CookRunChangedEventArgs(run));
         _ = rows.Count(row => string.Equals(row.PrimaryBadge, "Cooking", StringComparison.Ordinal)).Should().Be(affected);
@@ -138,7 +138,7 @@ public sealed partial class AssetFeedTests
         var uri = new Uri("asset:///Content/Materials/Red.omat.json");
         var documents = new CookDocumentRegistry();
         using var owner = documents.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(null));
-        var original = new CookDocumentState(path, "Red", 1, 1, IsDirty: false, "old");
+        var original = new CookDocumentState(path, "Red", IsDirty: false, "old");
         owner.UpdateState(original);
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -170,7 +170,7 @@ public sealed partial class AssetFeedTests
         }),
             this.TestContext.CancellationToken);
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        owner.UpdateState(original with { Revision = 2, SavedRevision = 2, SavedContentHash = "new" });
+        owner.UpdateState(original with { SavedContentHash = "new" });
         _ = rows.Single().PrimaryBadge.Should().Be("Out of date");
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         release.SetResult();

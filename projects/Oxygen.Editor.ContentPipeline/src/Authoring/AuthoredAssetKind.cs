@@ -4,7 +4,7 @@
 
 namespace Oxygen.Editor.ContentPipeline.Authoring;
 
-/// <summary>The kinds of file New Script, New Input File and New Scene create.</summary>
+/// <summary>The kinds of file New Script, New Input File, New Scene and New Material create.</summary>
 public enum AuthoredAssetKind
 {
     /// <summary>A Lua script with one example parameter and the two most common hooks.</summary>
@@ -15,4 +15,7 @@ public enum AuthoredAssetKind
 
     /// <summary>An empty scene with an identity of its own, named after its file.</summary>
     Scene,
+
+    /// <summary>A white, opaque, single-sided material named after its file.</summary>
+    Material,
 }

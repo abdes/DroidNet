@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
 
@@ -34,7 +35,7 @@ public sealed partial class GeometrySynchronizationTests : DroidNet.Tests.Visual
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         var nodes = fixture.Source.RootNodes.Select(static node => (node.Id, Shape: node.Name)).ToArray();
-        var original = new Dictionary<Guid, RuntimeNodeState>();
+        var original = new Dictionary<NodeId, RuntimeNodeState>();
         foreach (var (id, shape) in nodes)
         {
             original[id] = await AssertGeometryAsync(fixture, id, shape, timeout.Token).ConfigureAwait(true);

@@ -20,6 +20,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
@@ -44,7 +45,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly IMessenger messenger;
     private readonly IRouter router;
     private readonly IProjectManagerService projectManager;
-    private readonly IDocumentService documentService;
+    private readonly IDocumentArea documentArea;
+    private readonly OpenDocuments openDocuments;
     private readonly WindowId windowId;
     private readonly ISceneEngineSync sceneEngineSync;
     private readonly ISceneSelectionService selectionService;
@@ -81,10 +83,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private bool searchLifetimeStopped;
     private bool searchGateDisposed;
     private CancellationTokenSource? loadSceneCts;
-    private Guid loadingDocumentId = Guid.Empty;
+    private DocumentId loadingDocumentId = DocumentId.Empty;
 
     // The scene document the explorer shows: its scene, its history and its tab.
-    private SceneDocumentMetadata? sceneDocument;
+    private Document? sceneDocument;
     private bool suppressNodeMessages;
 
     // Set while the Explorer itself writes selection or applies a foreign selection, so the
@@ -119,8 +121,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="projectManager">The project manager service.</param>
     /// <param name="messenger">The messenger service used for cross-component communication.</param>
     /// <param name="router">The router service used for navigation events.</param>
-    /// <param name="documentService">The document service for handling document operations.</param>
-    /// <param name="windowId">The window identifier for the associated window.</param>
+    /// <param name="documentArea">The window's document area, whose active scene document the explorer shows.</param>
+    /// <param name="openDocuments">The open documents, whose closing ends the shown scene.</param>
+    /// <param name="windowId">The window, which the explorer's window-scoped messages name.</param>
     /// <param name="sceneEngineSync">The scene-engine synchronization service.</param>
     /// <param name="selectionService">The document selection service.</param>
     /// <param name="commandService">The document command service.</param>
@@ -143,7 +146,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         IProjectManagerService projectManager,
         IMessenger messenger,
         IRouter router,
-        IDocumentService documentService,
+        IDocumentArea documentArea,
+        OpenDocuments openDocuments,
         WindowId windowId,
         ISceneEngineSync sceneEngineSync,
         ISceneSelectionService selectionService,
@@ -174,7 +178,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.projectManager = projectManager;
         this.messenger = messenger;
         this.router = router;
-        this.documentService = documentService;
+        this.documentArea = documentArea;
+        this.openDocuments = openDocuments;
         this.windowId = windowId;
         this.sceneEngineSync = sceneEngineSync;
         this.sceneEngineSync.SceneSynchronized += this.OnSceneSynchronized;
@@ -207,7 +212,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         messenger.Register<SceneShortcutMessage>(this, (_, message) =>
         {
             if (!this.isDisposed && !message.HasReceivedResponse && this.Scene is { } scene
-                && SceneDocumentTabs.Active(this.documentService, this.windowId) == this.SceneDocumentId
+                && ReferenceEquals(this.documentArea.ActiveDocument, this.sceneDocument)
                 && this.RunShortcut(message.Shortcut))
             {
                 message.Reply(response: true);
@@ -221,7 +226,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         messenger.Register<SceneReloadedMessage>(this, (_, message) =>
         {
             if (!this.isDisposed && message.WindowId == this.windowId
-                && this.documentService.GetActiveDocumentId(this.windowId) == message.Metadata.DocumentId
+                && ReferenceEquals(this.documentArea.ActiveDocument, message.Document)
                 && !message.HasReceivedResponse)
             {
                 message.Reply(this.ApplyReloadedSceneAsync(message));
@@ -231,9 +236,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // Default selection mode for Scene Explorer is multiple selection.
         this.SelectionMode = SelectionMode.Multiple;
 
-        // Subscribe to document events to load scene when a scene document is opened
-        documentService.DocumentOpened += this.OnDocumentOpened;
-        documentService.DocumentActivated += this.OnDocumentActivated;
+        // The explorer shows the window's active scene document.
+        documentArea.ActiveDocumentChanged += this.OnActiveDocumentChanged;
         this.RegisterSceneLifetime();
     }
 
@@ -396,10 +400,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     internal void ReportSearchFailure(Exception exception, string query)
         => LogSearchFailed(this.logger, exception, query);
 
-    private HistoryKeeper History => this.sceneDocument?.Document?.History ?? UndoRedo.Default[this];
+    private HistoryKeeper History => this.sceneDocument?.History ?? UndoRedo.Default[this];
 
     // Selection, edit requests and frame requests name the scene's document, not the scene.
-    private DocumentId SceneDocumentId => this.sceneDocument?.SceneDocumentId ?? DocumentId.Empty;
+    private DocumentId SceneDocumentId => this.sceneDocument?.Id ?? DocumentId.Empty;
 
     /// <inheritdoc />
     [RelayCommand(CanExecute = nameof(CanRemoveContextItems))]
@@ -449,7 +453,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     // the global history; its document follows the file.
     private async Task<SceneCommandResult> RenameSceneAssetAsync(string name)
     {
-        if (this.relocation is null || this.histories is null || this.sceneDocument?.Document is not { } document
+        if (this.relocation is null || this.histories is null || this.sceneDocument is not { } document
             || this.projectContexts?.ActiveProject?.FindByFilePath(document.File.Path) is not { } location)
         {
             return new(Succeeded: false) { ValidationMessage = "The scene's file cannot be renamed here." };
@@ -579,9 +583,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.commandService.ComponentAdded -= this.OnComponentAdded;
             this.commandService.ComponentRemoved -= this.OnComponentRemoved;
             this.commandService.SelectionChanged -= this.OnCommandSelectionChanged;
-            this.documentService.DocumentOpened -= this.OnDocumentOpened;
-            this.documentService.DocumentActivated -= this.OnDocumentActivated;
-            this.documentService.DocumentClosed -= this.OnSceneDocumentClosed;
+            this.documentArea.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
+            this.openDocuments.Closed -= this.OnSceneDocumentClosed;
             this.projectClipboardSubscription?.Dispose();
             if (this.interaction is { } service)
             {
@@ -1049,7 +1052,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             DiagnosticCodes.ScenePrefix + "CLIPBOARD_INVALIDATED",
             "Clipboard was cleared",
             reason,
-            new AffectedScope { DocumentId = this.sceneDocument?.DocumentId });
+            new AffectedScope { DocumentId = this.sceneDocument?.Id.Value });
     }
 
     private async Task RemoveFromFolderAsync(ITreeItem anchor)
@@ -1098,28 +1101,22 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
     }
 
-    private async void OnDocumentActivated(object? sender, DocumentActivatedEventArgs e)
+    private async void OnActiveDocumentChanged(object? sender, EventArgs e)
     {
-        if (e.WindowId.Value != this.windowId.Value)
-        {
-            return;
-        }
-
-        // Only react to scene documents
-        var document = this.documentService.GetOpenDocuments(this.windowId).FirstOrDefault(d => d.DocumentId == e.DocumentId);
-        if (document is not SceneDocumentMetadata { Document: { } sceneDocument, Scene: { } scene } sceneMetadata
+        // Only scene documents replace the shown scene; another document leaves it in place.
+        if (this.documentArea.ActiveDocument is not { Content: SceneContent { Scene: var scene } } sceneDocument
             || SceneAuthoringGate.IsInstalling(scene))
         {
             return;
         }
 
         // If we're already showing this scene, or already loading it, do nothing
-        if (ReferenceEquals(this.sceneDocument, sceneMetadata) || this.loadingDocumentId == sceneMetadata.DocumentId)
+        if (ReferenceEquals(this.sceneDocument, sceneDocument) || this.loadingDocumentId == sceneDocument.Id)
         {
             return;
         }
 
-        this.LogDocumentActivated(e.DocumentId);
+        this.LogDocumentActivated(sceneDocument.Id);
 
         // Scene replacement belongs to the document owner; tab activation must not bypass its
         // close guards or previous-graph retirement.
@@ -1128,15 +1125,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             _ = await request.Response.ConfigureAwait(true);
         }
-    }
-
-    private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e)
-    {
-        // Background document opens must not load scenes; OnDocumentActivated drives the
-        // active-scene load. Material/inspection tabs and background opens leave the current
-        // loaded scene untouched.
-        _ = sender;
-        _ = e;
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
@@ -1239,20 +1227,19 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Scene loading reports failures without terminating the editor.")]
     private async Task<bool> LoadSceneAsync(Scene scene)
     {
-        var documentMetadata = this.documentService.GetOpenDocuments(this.windowId)
-            .OfType<SceneDocumentMetadata>()
-            .FirstOrDefault(document => ReferenceEquals(document.Scene, scene));
-        if (documentMetadata is null)
+        var sceneDocument = this.documentArea.Documents
+            .FirstOrDefault(document => document.Content is SceneContent content && ReferenceEquals(content.Scene, scene));
+        if (sceneDocument is null)
         {
             return false;
         }
 
-        this.loadingDocumentId = documentMetadata.DocumentId;
+        this.loadingDocumentId = sceneDocument.Id;
         try
         {
             var ct = await this.BeginSceneLoadAsync().ConfigureAwait(true);
 
-            var loadedScene = this.sceneEngineSync.GetDocumentScene(documentMetadata.SceneDocumentId) ?? scene;
+            var loadedScene = this.sceneEngineSync.GetDocumentScene(sceneDocument.Id) ?? scene;
 
             // Trace: scene data successfully loaded from project storage
             this.LogSceneLoaded(loadedScene.Id, loadedScene.Name ?? "<unnamed>");
@@ -1260,7 +1247,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.nextEntityIndex = loadedScene.AllNodes.Count();
 
             return !ct.IsCancellationRequested
-                && await this.InstallLoadedSceneAsync(loadedScene, documentMetadata, ct).ConfigureAwait(true);
+                && await this.InstallLoadedSceneAsync(loadedScene, sceneDocument, ct).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -1273,9 +1260,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
         finally
         {
-            if (this.loadingDocumentId == documentMetadata.DocumentId)
+            if (this.loadingDocumentId == sceneDocument.Id)
             {
-                this.loadingDocumentId = Guid.Empty;
+                this.loadingDocumentId = DocumentId.Empty;
             }
         }
     }
@@ -1283,9 +1270,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private void OnSceneSynchronized(object? sender, SceneSynchronizationCompletedEventArgs args)
     {
         if (this.isDisposed || this.loadSceneCts?.IsCancellationRequested == true
-            || SceneDocumentTabs.Active(this.documentService, this.windowId) != args.DocumentId
-            || !ReferenceEquals(this.Scene?.AttachedObject, args.Scene)
-            || !this.documentService.GetOpenDocuments(this.windowId).Any(metadata => metadata is SceneDocumentMetadata scene && scene.SceneDocumentId == args.DocumentId))
+            || this.documentArea.ActiveDocument is not { Content: SceneContent } active || active.Id != args.DocumentId
+            || !ReferenceEquals(this.Scene?.AttachedObject, args.Scene))
         {
             return;
         }
@@ -2177,7 +2163,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         var scene = this.Scene.AttachedObject;
-        return SceneAuthoringGate.IsInstalling(scene) || this.sceneDocument?.Document is not { } document
+        return SceneAuthoringGate.IsInstalling(scene) || this.sceneDocument is not { } document
             ? null
             : new SceneDocumentCommandContext(document.Id, scene, document.History);
     }
@@ -2207,14 +2193,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         return SceneAuthoringGate.TryEnter(scene);
     }
 
-    private async Task<bool> InstallLoadedSceneAsync(Scene loadedScene, SceneDocumentMetadata documentMetadata, CancellationToken ct)
+    private async Task<bool> InstallLoadedSceneAsync(Scene loadedScene, Document sceneDocument, CancellationToken ct)
     {
-        if (!this.sceneEngineSync.RegisterDocument(loadedScene, documentMetadata.SceneDocumentId))
+        if (!this.sceneEngineSync.RegisterDocument(loadedScene, sceneDocument.Id))
         {
             return false;
         }
 
-        this.sceneDocument = documentMetadata;
+        this.sceneDocument = sceneDocument;
 
         await this.InitializeLoadedSceneAsync(loadedScene).ConfigureAwait(true);
 
@@ -2223,15 +2209,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return false;
         }
 
-        _ = this.messenger.Send(new SceneAuthoringLoadedMessage(loadedScene, documentMetadata));
+        _ = this.messenger.Send(new SceneAuthoringLoadedMessage(loadedScene, sceneDocument));
         _ = await this.sceneEngineSync.SyncSceneWhenReadyAsync(loadedScene, ct).ConfigureAwait(true);
         return !ct.IsCancellationRequested
-            && this.documentService.GetOpenDocuments(this.windowId).Any(metadata => ReferenceEquals(metadata, documentMetadata))
+            && this.documentArea.Documents.Contains(sceneDocument)
             && ReferenceEquals(this.Scene?.AttachedObject, loadedScene);
     }
 
     private async Task<bool> ApplyReloadedSceneAsync(SceneReloadedMessage message)
-        => ReferenceEquals(this.sceneEngineSync.GetDocumentScene(message.Metadata.SceneDocumentId), message.Scene)
+        => ReferenceEquals(this.sceneEngineSync.GetDocumentScene(message.Document.Id), message.Scene)
             && await this.LoadSceneAsync(message.Scene).ConfigureAwait(true)
             && ReferenceEquals(this.Scene?.AttachedObject, message.Scene);
 
@@ -2686,6 +2672,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             DiagnosticCodes.SettingsPrefix + "WORKSPACE_STATE_UNAVAILABLE",
             action + " is unavailable",
             "The workspace interaction service is not composed in this window, so " + action.ToLowerInvariant() + " did nothing.",
-            new AffectedScope { DocumentId = this.sceneDocument?.DocumentId });
+            new AffectedScope { DocumentId = this.sceneDocument?.Id.Value });
     }
 }

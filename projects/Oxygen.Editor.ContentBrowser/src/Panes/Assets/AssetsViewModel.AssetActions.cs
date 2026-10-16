@@ -464,7 +464,6 @@ public partial class AssetsViewModel
     /// <param name="VirtualPath">The writable authoring path, or null for read-only and cooked-only rows.</param>
     /// <param name="PhysicalPath">The file or folder.</param>
     /// <param name="IsFolder">Whether the row is a folder.</param>
-    /// <param name="IsEditorScene">Whether the row is one of the project's named scenes.</param>
     /// <param name="IsImportedOutput">Whether the row is a cooked-only output of a model import.</param>
     /// <param name="ModelSourcePath">The model source the row is, or was imported from.</param>
     private readonly record struct AssetTarget(string? VirtualPath, string? PhysicalPath, bool IsFolder, bool IsImportedOutput, string? ModelSourcePath);

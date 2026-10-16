@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Specialized;
+using DroidNet.Documents;
 using DroidNet.Storage;
 using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;

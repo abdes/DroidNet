@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer.Operations;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -188,7 +189,7 @@ public class SceneMutatorTests
     public void RemoveNode_ThrowsWhenNotFound()
     {
         var scene = CreateScene();
-        Action act = () => _ = this.mutator.RemoveNode(Guid.NewGuid(), scene);
+        Action act = () => _ = this.mutator.RemoveNode(NodeId.New(), scene);
 
         _ = act.Should().Throw<InvalidOperationException>();
     }

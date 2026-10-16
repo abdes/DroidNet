@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI;
 using Moq;
@@ -39,13 +40,13 @@ public class EditorDocumentServiceTests
     }
 
     /// <summary>
-    /// Test that opening a document with valid metadata returns the correct document ID.
+    /// Test that opening a document keys its tab by the metadata's document id.
     /// </summary>
     [TestMethod]
-    public async Task OpenDocumentAsync_WithValidMetadata_ReturnsDocumentId()
+    public async Task OpenDocumentAsync_WithValidMetadata_KeysTheTabByItsDocumentId()
     {
         // Arrange
-        var expectedId = Guid.NewGuid();
+        var expectedId = DocumentId.New();
         var metadata = new TestDocumentMetadata(expectedId)
         {
             Title = "Test Document",
@@ -59,26 +60,8 @@ public class EditorDocumentServiceTests
             shouldSelect: true).ConfigureAwait(false);
 
         // Assert
-        _ = result.Should().Be(expectedId);
-    }
-
-    /// <summary>
-    /// Test that opening a document with empty GUID generates a new GUID.
-    /// </summary>
-    [TestMethod]
-    public async Task OpenDocumentAsync_WithEmptyGuid_GeneratesNewGuid()
-    {
-        // Arrange
-        var metadata = new TestDocumentMetadata
-        {
-            Title = "Test Document",
-        };
-
-        // Act
-        var result = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
-
-        // Assert
-        _ = result.Should().NotBe(Guid.Empty);
+        _ = result.Should().BeTrue();
+        _ = this.service.GetActiveDocumentId(this.testWindowId).Should().Be(expectedId);
     }
 
     /// <summary>
@@ -91,7 +74,8 @@ public class EditorDocumentServiceTests
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
 
         // Act
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
 
         // Assert
         var openDocs = this.service.GetOpenDocuments(this.testWindowId);
@@ -109,10 +93,11 @@ public class EditorDocumentServiceTests
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
 
         // Act
-        var docId = await this.service!.OpenDocumentAsync(
+        _ = await this.service!.OpenDocumentAsync(
             this.testWindowId,
             metadata,
             shouldSelect: true).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
 
         // Assert
         var activeId = this.service.GetActiveDocumentId(this.testWindowId);
@@ -141,54 +126,6 @@ public class EditorDocumentServiceTests
     }
 
     /// <summary>
-    /// Test that opening a second non-closable document of the same type closes the first one.
-    /// </summary>
-    [TestMethod]
-    public async Task OpenDocumentAsync_WithSecondNonClosableDocument_ClosesFirstOne()
-    {
-        // Arrange
-        var first = new TestDocumentMetadata { Title = "Doc 1", IsClosable = false };
-        var second = new TestDocumentMetadata { Title = "Doc 2", IsClosable = false };
-
-        _ = await this.service!.OpenDocumentAsync(this.testWindowId, first).ConfigureAwait(false);
-
-        // Act
-        var secondId = await this.service.OpenDocumentAsync(this.testWindowId, second).ConfigureAwait(false);
-
-        // Assert
-        var openDocs = this.service.GetOpenDocuments(this.testWindowId);
-        _ = openDocs.Count.Should().Be(1);
-        _ = openDocs[0].Title.Should().Be("Doc 2");
-        _ = openDocs[0].DocumentId.Should().Be(secondId);
-    }
-
-    /// <summary>
-    /// Test that opening a second non-closable document when first close is vetoed returns Guid.Empty.
-    /// </summary>
-    [TestMethod]
-    public async Task OpenDocumentAsync_WhenFirstNonClosableCloseVetoed_ReturnsEmptyGuid()
-    {
-        // Arrange
-        var first = new TestDocumentMetadata { Title = "Doc 1", IsClosable = false };
-        var second = new TestDocumentMetadata { Title = "Doc 2", IsClosable = false };
-
-        _ = await this.service!.OpenDocumentAsync(this.testWindowId, first).ConfigureAwait(false);
-
-        // Add veto handler
-        this.service.DocumentClosing += (sender, args)
-            => args.AddVetoTask(Task.FromResult(false));
-
-        // Act
-        var result = await this.service.OpenDocumentAsync(this.testWindowId, second).ConfigureAwait(false);
-
-        // Assert
-        _ = result.Should().Be(Guid.Empty);
-        var openDocs = this.service.GetOpenDocuments(this.testWindowId);
-        _ = openDocs.Count.Should().Be(1);
-        _ = openDocs[0].Title.Should().Be("Doc 1");
-    }
-
-    /// <summary>
     /// Test that closing an existing document returns true.
     /// </summary>
     [TestMethod]
@@ -196,7 +133,8 @@ public class EditorDocumentServiceTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
 
         // Act
         var result = await this.service.CloseDocumentAsync(this.testWindowId, docId).ConfigureAwait(false);
@@ -213,7 +151,8 @@ public class EditorDocumentServiceTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
 
         // Act
         _ = await this.service.CloseDocumentAsync(this.testWindowId, docId).ConfigureAwait(false);
@@ -230,7 +169,7 @@ public class EditorDocumentServiceTests
     public async Task CloseDocumentAsync_WithNonExistentDocument_ReturnsFalse()
     {
         // Arrange
-        var nonExistentId = Guid.NewGuid();
+        var nonExistentId = DocumentId.New();
 
         // Act
         var result = await this.service!.CloseDocumentAsync(this.testWindowId, nonExistentId).ConfigureAwait(false);
@@ -247,7 +186,8 @@ public class EditorDocumentServiceTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
 
         this.service.DocumentClosing += (sender, args) => args.AddVetoTask(Task.FromResult(false));
 
@@ -268,7 +208,8 @@ public class EditorDocumentServiceTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
 
         this.service.DocumentClosing += (sender, args)
             => args.AddVetoTask(Task.FromResult(false));
@@ -290,7 +231,8 @@ public class EditorDocumentServiceTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: true).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: true).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
 
         // Act
         _ = await this.service.CloseDocumentAsync(this.testWindowId, docId).ConfigureAwait(false);
@@ -301,55 +243,64 @@ public class EditorDocumentServiceTests
     }
 
     /// <summary>
-    /// Test that detaching an existing document returns its metadata.
+    /// Test that a document has one tab: a second tab for it is refused, in its window or another.
     /// </summary>
     [TestMethod]
-    public async Task DetachDocumentAsync_WithExistingDocument_ReturnsMetadata()
+    public async Task OpenDocumentAsync_ForADocumentWithATab_IsRefused()
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
 
         // Act
-        var result = await this.service.DetachDocumentAsync(this.testWindowId, docId).ConfigureAwait(false);
+        var again = await this.service.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        var elsewhere = await this.service.OpenDocumentAsync(new WindowId(2), metadata).ConfigureAwait(false);
+        var attached = await this.service.AttachDocumentAsync(new WindowId(2), metadata).ConfigureAwait(false);
 
         // Assert
-        _ = result.Should().NotBeNull();
-        _ = result!.DocumentId.Should().Be(docId);
+        _ = again.Should().BeFalse();
+        _ = elsewhere.Should().BeFalse();
+        _ = attached.Should().BeFalse();
+        _ = this.service.GetOpenDocuments(this.testWindowId).Should().ContainSingle();
+        _ = this.service.GetOpenDocuments(new WindowId(2)).Should().BeEmpty();
     }
 
     /// <summary>
-    /// Test that detaching a document removes it from the collection.
+    /// Test that two documents may both have tabs that cannot be closed: the editors decide what each window shows.
     /// </summary>
     [TestMethod]
-    public async Task DetachDocumentAsync_RemovesDocumentFromCollection()
+    public async Task OpenDocumentAsync_WithSecondNonClosableDocument_KeepsBoth()
+    {
+        // Arrange
+        var first = new TestDocumentMetadata { Title = "Doc 1", IsClosable = false };
+        var second = new TestDocumentMetadata { Title = "Doc 2", IsClosable = false };
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, first).ConfigureAwait(false);
+
+        // Act
+        var opened = await this.service.OpenDocumentAsync(this.testWindowId, second).ConfigureAwait(false);
+
+        // Assert
+        _ = opened.Should().BeTrue();
+        _ = this.service.GetOpenDocuments(this.testWindowId).Should().HaveCount(2);
+    }
+
+    /// <summary>
+    /// Test that detaching a tab is refused and leaves it in its window: no window can receive a torn-out tab yet.
+    /// </summary>
+    [TestMethod]
+    public async Task DetachDocumentAsync_IsRefusedAndKeepsTheTab()
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: true).ConfigureAwait(false);
 
         // Act
-        _ = await this.service.DetachDocumentAsync(this.testWindowId, docId).ConfigureAwait(false);
-
-        // Assert
-        var openDocs = this.service.GetOpenDocuments(this.testWindowId);
-        _ = openDocs.Count.Should().Be(0);
-    }
-
-    /// <summary>
-    /// Test that detaching a non-existent document returns null.
-    /// </summary>
-    [TestMethod]
-    public async Task DetachDocumentAsync_WithNonExistentDocument_ReturnsNull()
-    {
-        // Arrange
-        var nonExistentId = Guid.NewGuid();
-
-        // Act
-        var result = await this.service!.DetachDocumentAsync(this.testWindowId, nonExistentId).ConfigureAwait(false);
+        var result = await this.service.DetachDocumentAsync(this.testWindowId, metadata.DocumentId).ConfigureAwait(false);
 
         // Assert
         _ = result.Should().BeNull();
+        _ = this.service.GetOpenDocuments(this.testWindowId).Should().ContainSingle().Which.Should().BeSameAs(metadata);
+        _ = this.service.GetActiveDocumentId(this.testWindowId).Should().Be(metadata.DocumentId);
     }
 
     /// <summary>
@@ -378,7 +329,7 @@ public class EditorDocumentServiceTests
     public async Task AttachDocumentAsync_AddsDocumentToCollection()
     {
         // Arrange
-        var docId = Guid.NewGuid();
+        var docId = DocumentId.New();
         var metadata = new TestDocumentMetadata(docId)
         {
             Title = "Test Document",
@@ -394,128 +345,6 @@ public class EditorDocumentServiceTests
     }
 
     /// <summary>
-    /// Test that attaching a non-closable document when one of the same type exists closes the existing one.
-    /// </summary>
-    [TestMethod]
-    public async Task AttachDocumentAsync_WithExistingNonClosable_ClosesExistingOne()
-    {
-        // Arrange
-        var first = new TestDocumentMetadata
-        {
-            Title = "Doc 1",
-            IsClosable = false,
-        };
-        var second = new TestDocumentMetadata
-        {
-            Title = "Doc 2",
-            IsClosable = false,
-        };
-
-        _ = await this.service!.OpenDocumentAsync(this.testWindowId, first).ConfigureAwait(false);
-
-        // Act
-        _ = await this.service.AttachDocumentAsync(this.testWindowId, second).ConfigureAwait(false);
-
-        // Assert
-        var openDocs = this.service.GetOpenDocuments(this.testWindowId);
-        _ = openDocs.Count.Should().Be(1);
-        _ = openDocs[0].Title.Should().Be("Doc 2");
-    }
-
-    /// <summary>
-    /// Test that attaching when existing non-closable close is vetoed returns false.
-    /// </summary>
-    [TestMethod]
-    public async Task AttachDocumentAsync_WhenExistingNonClosableCloseVetoed_ReturnsFalse()
-    {
-        // Arrange
-        var first = new TestDocumentMetadata { Title = "Doc 1", IsClosable = false };
-        var second = new TestDocumentMetadata
-        {
-            Title = "Doc 2",
-            IsClosable = false,
-        };
-
-        _ = await this.service!.OpenDocumentAsync(this.testWindowId, first).ConfigureAwait(false);
-
-        this.service.DocumentClosing += (sender, args)
-            => args.AddVetoTask(Task.FromResult(false));
-
-        // Act
-        var result = await this.service.AttachDocumentAsync(this.testWindowId, second).ConfigureAwait(false);
-
-        // Assert
-        _ = result.Should().BeFalse();
-        var openDocs = this.service.GetOpenDocuments(this.testWindowId);
-        _ = openDocs.Count.Should().Be(1);
-    }
-
-    /// <summary>
-    /// Test that updating metadata for an existing document returns true.
-    /// </summary>
-    [TestMethod]
-    public async Task UpdateMetadataAsync_WithExistingDocument_ReturnsTrue()
-    {
-        // Arrange
-        var metadata = new TestDocumentMetadata { Title = "Original Title" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
-
-        var updatedMetadata = new TestDocumentMetadata(docId)
-        {
-            Title = "Updated Title",
-        };
-
-        // Act
-        var result = await this.service.UpdateMetadataAsync(this.testWindowId, docId, updatedMetadata).ConfigureAwait(false);
-
-        // Assert
-        _ = result.Should().BeTrue();
-    }
-
-    /// <summary>
-    /// Test that updating metadata actually updates the stored metadata.
-    /// </summary>
-    [TestMethod]
-    public async Task UpdateMetadataAsync_UpdatesStoredMetadata()
-    {
-        // Arrange
-        var metadata = new TestDocumentMetadata { Title = "Original Title" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
-
-        var updatedMetadata = new TestDocumentMetadata(docId)
-        {
-            Title = "Updated Title",
-        };
-
-        // Act
-        _ = await this.service.UpdateMetadataAsync(this.testWindowId, docId, updatedMetadata).ConfigureAwait(false);
-
-        // Assert
-        var openDocs = this.service.GetOpenDocuments(this.testWindowId);
-        _ = openDocs[0].Title.Should().Be("Updated Title");
-    }
-
-    /// <summary>
-    /// Test that updating metadata for a non-existent document returns false.
-    /// </summary>
-    [TestMethod]
-    public async Task UpdateMetadataAsync_WithNonExistentDocument_ReturnsFalse()
-    {
-        // Arrange
-        var nonExistentId = Guid.NewGuid();
-        var metadata = new TestDocumentMetadata(nonExistentId)
-        {
-            Title = "Test",
-        };
-
-        // Act
-        var result = await this.service!.UpdateMetadataAsync(this.testWindowId, nonExistentId, metadata).ConfigureAwait(false);
-
-        // Assert
-        _ = result.Should().BeFalse();
-    }
-
-    /// <summary>
     /// Test that selecting an existing document returns true.
     /// </summary>
     [TestMethod]
@@ -523,7 +352,8 @@ public class EditorDocumentServiceTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: false).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: false).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
 
         // Act
         var result = await this.service.SelectDocumentAsync(this.testWindowId, docId).ConfigureAwait(false);
@@ -540,7 +370,8 @@ public class EditorDocumentServiceTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: false).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: false).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
 
         // Act
         _ = await this.service.SelectDocumentAsync(this.testWindowId, docId).ConfigureAwait(false);
@@ -558,7 +389,7 @@ public class EditorDocumentServiceTests
     public async Task SelectDocumentAsync_WithNonExistentDocument_ReturnsFalse()
     {
         // Arrange
-        var nonExistentId = Guid.NewGuid();
+        var nonExistentId = DocumentId.New();
 
         // Act
         var result = await this.service!.SelectDocumentAsync(this.testWindowId, nonExistentId).ConfigureAwait(false);
@@ -619,7 +450,8 @@ public class EditorDocumentServiceTests
     {
         // Arrange
         var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: true).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: true).ConfigureAwait(false);
+        var docId = metadata.DocumentId;
 
         // Act
         var result = this.service.GetActiveDocumentId(this.testWindowId);

@@ -3,14 +3,20 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using DroidNet.Storage;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Authoring;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
+using Oxygen.Editor.Projects;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Model;
 using static DroidNet.Tests.UiTestHosting;
 
@@ -78,13 +84,23 @@ internal static class InspectorModels
 
     internal static MaterialEditorViewModel CreateMaterialEditor(IAssetFeed? assetProvider = null)
     {
-        var uri = new Uri("asset:///Content/Materials/UI.omat.json");
-        var source = new MaterialSource(name: "UI", pbrMetallicRoughness: new MaterialPbrMetallicRoughness(1, 1, 1, 1, 0, 0.5f, baseColorTexture: null, metallicRoughnessTexture: null), normalTexture: null, occlusionTexture: null, alphaMode: MaterialAlphaMode.Opaque, alphaCutoff: 0.5f, doubleSided: false);
-        var document = new MaterialDocument(Guid.NewGuid(), uri, Guid.NewGuid(), "C:/UI.omat.json", "UI", source, new MaterialAsset { Uri = uri, Source = source }, IsDirty: false, MaterialCookState.NotCooked);
-        var service = new Mock<IMaterialDocumentService>();
-        _ = service.Setup(value => value.OpenAsync(uri, It.IsAny<CancellationToken>())).ReturnsAsync(document);
-        _ = service.Setup(value => value.GetDocument(document.DocumentId)).Returns(document);
-        return new(new MaterialDocumentMetadata(uri), service.Object, assetProvider ?? Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()), CreateStatusHosting().DispatcherScheduler);
+        // The file is held in memory, so the material opens at once.
+        var validation = new MaterialValidation();
+        var kind = new MaterialDocumentKind(validation);
+        var files = new MemoryFiles(Encoding.UTF8.GetBytes(AssetTemplates.Material("UI")));
+        var opening = new OpenDocuments([kind], files).OpenAsync(new DocumentFile("C:/UI/Content/Materials/UI.omat.json", new Uri("asset:///Content/Materials/UI.omat.json")));
+        if (!opening.IsCompletedSuccessfully || opening.Result.Document is not { } document)
+        {
+            throw new InvalidOperationException("An in-memory material opens at once.");
+        }
+
+        return new(
+            new DocumentTab(document, new DocumentEditorDescriptor(kind, static _ => new object())),
+            new MaterialEdits(validation),
+            assetProvider ?? Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
+            CreateStatusHosting().DispatcherScheduler,
+            Mock.Of<IMaterialCookService>(),
+            Mock.Of<IProjectContextService>());
     }
 
     private static void ReplaceComponent<TBase>(SceneAuthoringFixture fixture, GameComponent replacement)
@@ -96,5 +112,20 @@ internal static class InspectorModels
         }
 
         fixture.Node.Components.Add(replacement);
+    }
+
+    /// <summary>Holds one file's bytes in memory, whatever its path.</summary>
+    private sealed class MemoryFiles(byte[] content) : IAtomicFileStore
+    {
+        public Task<FileSnapshot> ReadAsync(string path, CancellationToken cancellationToken = default)
+            => Task.FromResult(new FileSnapshot([.. content], VersionOf(content)));
+
+        public Task<FileVersion> WriteAsync(string path, ReadOnlyMemory<byte> written, FileVersion expected, CancellationToken cancellationToken = default)
+        {
+            content = written.ToArray();
+            return Task.FromResult(VersionOf(content));
+        }
+
+        private static FileVersion VersionOf(byte[] bytes) => new(Exists: true, Convert.ToHexString(SHA256.HashData(bytes)));
     }
 }

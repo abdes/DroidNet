@@ -4,55 +4,60 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Documents;
 using Oxygen.Editor.Documents;
 
 namespace Oxygen.Editor.World.Documents;
 
-/// <summary>Tells the user when the active document's file was deleted or moved outside the editor, and offers the choice.</summary>
+/// <content>The banner of an active document whose file is missing on disk.</content>
 public partial class DocumentHostViewModel
 {
-    private Guid? activeDocumentId;
+    private Document? observedDocument;
 
-    /// <summary>Gets a value indicating whether the active document's file is missing on disk.</summary>
     [ObservableProperty]
     public partial bool IsActiveDocumentMissingOnDisk { get; private set; }
 
-    /// <summary>Gets the explanation shown while the active document's file is missing on disk.</summary>
     [ObservableProperty]
     public partial string MissingOnDiskNotice { get; private set; } = string.Empty;
 
     [RelayCommand]
     private async Task CloseActiveDocument()
     {
-        if (this.activeDocumentId is { } id)
+        if (this.documentArea.ActiveDocument is { } active)
         {
-            _ = await this.DocumentService.CloseDocumentAsync(this.windowId, id).ConfigureAwait(true);
+            _ = await this.documentArea.CloseAsync(active).ConfigureAwait(true);
         }
     }
 
-    private void OnDocumentMetadataChanged(object? sender, DocumentMetadataChangedEventArgs e)
-    {
-        if (e.WindowId == this.windowId && e.NewMetadata.DocumentId == this.activeDocumentId)
-        {
-            this.RefreshMissingOnDiskNotice();
-        }
-    }
+    private void OnActiveDocumentChanged(object? sender, EventArgs e) => this.ObserveActiveDocument(this.documentArea.ActiveDocument);
 
-    private void SetActiveDocument(Guid? documentId)
+    // The banner follows the active document's state until another document becomes active.
+    private void ObserveActiveDocument(Document? document)
     {
-        this.activeDocumentId = documentId;
+        if (!ReferenceEquals(this.observedDocument, document))
+        {
+            if (this.observedDocument is { } previous)
+            {
+                previous.StateChanged -= this.OnActiveDocumentStateChanged;
+            }
+
+            this.observedDocument = document;
+            if (document is not null)
+            {
+                document.StateChanged += this.OnActiveDocumentStateChanged;
+            }
+        }
+
         this.RefreshMissingOnDiskNotice();
     }
 
+    private void OnActiveDocumentStateChanged(object? sender, EventArgs e) => this.RefreshMissingOnDiskNotice();
+
     private void RefreshMissingOnDiskNotice()
     {
-        var metadata = this.activeDocumentId is { } id
-            ? this.DocumentService.GetOpenDocuments(this.windowId).FirstOrDefault(document => document.DocumentId == id) as BaseDocumentMetadata
-            : null;
-        this.IsActiveDocumentMissingOnDisk = metadata?.IsMissingOnDisk == true;
-        this.MissingOnDiskNotice = metadata is { IsMissingOnDisk: true }
-            ? $"“{metadata.Title}” was deleted or moved outside the editor. Save writes it again at its location; Close discards it."
+        var document = this.observedDocument;
+        this.IsActiveDocumentMissingOnDisk = document?.IsMissingOnDisk == true;
+        this.MissingOnDiskNotice = document is { IsMissingOnDisk: true }
+            ? $"“{document.Title}” was deleted or moved outside the editor. Save writes it again at its location; Close discards it."
             : string.Empty;
     }
 }

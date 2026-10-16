@@ -52,6 +52,11 @@ public sealed class AuthoredAssetCreation(
     public Task<string?> CreateSceneAsync()
         => this.CreateAsync(new CreationKind("New Scene", AuthoredAssetKind.Scene, SceneOperationKinds.Create, SceneDiagnosticCodes.CreateFailed, FailureDomain.Document), this.OpenSceneAsync);
 
+    /// <summary>Asks for a name and folder, creates a new material there and opens it.</summary>
+    /// <returns>The new material's path, or <see langword="null"/> when nothing was created.</returns>
+    public Task<string?> CreateMaterialAsync()
+        => this.CreateAsync(new CreationKind("New Material", AuthoredAssetKind.Material, MaterialOperationKinds.Create, MaterialDiagnosticCodes.NameInvalid, FailureDomain.MaterialAuthoring), this.OpenMaterialAsync);
+
     private static string ReadFolder(TextBox folderBox) => "/" + folderBox.Text.Trim().Replace('\\', '/').Trim('/');
 
     private async Task<string?> CreateAsync(CreationKind kind, Func<ProjectContext, string, Task> open)
@@ -122,6 +127,16 @@ public sealed class AuthoredAssetCreation(
         {
             _ = await request.Response.ConfigureAwait(true);
         }
+    }
+
+    private Task OpenMaterialAsync(ProjectContext project, string path)
+    {
+        if (project.FindByFilePath(path) is { } location)
+        {
+            _ = messenger.Send(new OpenMaterialRequestMessage(location.AssetUri, Path.GetFileNameWithoutExtension(path)));
+        }
+
+        return Task.CompletedTask;
     }
 
     private async Task RevealAsync(ProjectContext project, string path)

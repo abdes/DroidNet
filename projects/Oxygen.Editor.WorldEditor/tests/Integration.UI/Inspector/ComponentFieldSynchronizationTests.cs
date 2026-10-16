@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldControls;
@@ -134,7 +135,7 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
         _ = fixture.Context.History.UndoStack.Should().ContainSingle();
     }
 
-    private static async Task AssertNodeValuesAsync(NativeSceneFixture fixture, Guid nodeId, Dictionary<(ushort component, ushort field), float> expected, IPropertyEditor<SceneNode> model, CancellationToken cancellationToken)
+    private static async Task AssertNodeValuesAsync(NativeSceneFixture fixture, NodeId nodeId, Dictionary<(ushort component, ushort field), float> expected, IPropertyEditor<SceneNode> model, CancellationToken cancellationToken)
     {
         var source = SourceNodeProperties(fixture.Source.RootNodes.Single(node => node.Id == nodeId));
         var native = await fixture.ReadNodeAsync(nodeId, cancellationToken).ConfigureAwait(true);

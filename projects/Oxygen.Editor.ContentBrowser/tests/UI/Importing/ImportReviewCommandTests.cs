@@ -66,8 +66,6 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
             new ViewModelToView(locator.Object),
             CreateSceneFolderImportState(projects),
             projects,
-            Mock.Of<IProjectManagerService>(),
-            Mock.Of<IAuthoringTargetResolver>(),
             pipeline.Object,
             provider.Object,
             Mock.Of<IOperationResultPublisher>(),

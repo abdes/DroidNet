@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
@@ -53,7 +54,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         var moved = new TransformData { Name = "Transform", Position = new Vector3(5, 0, 0), Rotation = Quaternion.Identity, Scale = new Vector3(2) };
 
-        var result = await fixture.Sut.DuplicateNodesInPlaceAsync(context, [source.Id], new Dictionary<Guid, TransformData> { [source.Id] = moved }).ConfigureAwait(false);
+        var result = await fixture.Sut.DuplicateNodesInPlaceAsync(context, [source.Id], new Dictionary<NodeId, TransformData> { [source.Id] = moved }).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         var copy = result.Value!.Single().Components.OfType<TransformComponent>().Single();
@@ -89,7 +90,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var scene = CreateScene();
         var source = new SceneNode(scene) { Name = "Source" };
         scene.RootNodes.Add(source);
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
         scene.SetExplorerLayout(
         [
             new ExplorerEntryData

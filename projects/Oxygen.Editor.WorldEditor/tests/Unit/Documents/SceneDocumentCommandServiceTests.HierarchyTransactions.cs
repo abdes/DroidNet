@@ -10,6 +10,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
@@ -30,7 +31,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var child = new SceneNode(scene) { Name = "Child" };
         node.AddChild(child);
         scene.RootNodes.Add(node);
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
         scene.SetExplorerLayout(
             [
                 new ExplorerEntryData
@@ -47,8 +48,8 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         var result = await fixture.Sut.DeleteItemsAsync(
             context,
-            staleNode ? [node.Id, Guid.NewGuid()] : [node.Id],
-            staleNode ? [folderId] : [folderId, Guid.NewGuid()]).ConfigureAwait(false);
+            staleNode ? [node.Id, NodeId.New()] : [node.Id],
+            staleNode ? [folderId] : [folderId, FolderId.New()]).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = SerializeHierarchy(scene).Should().Be(before);
@@ -57,7 +58,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = context.History.UndoStack.Should().BeEmpty();
         _ = context.History.RedoStack.Should().BeEmpty();
         fixture.Sync.Verify(
-            sync => sync.RemoveNodeHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<Guid>>()),
+            sync => sync.RemoveNodeHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<NodeId>>()),
             Times.Never);
     }
 
@@ -277,7 +278,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                         new ExplorerEntryData
                         {
                             Type = "Folder",
-                            FolderId = Guid.NewGuid(),
+                            FolderId = FolderId.New(),
                             Name = "Group",
                             IsExpanded = false,
                             Children = [new ExplorerEntryData { NodeId = moved.Id }],
@@ -294,7 +295,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         return (scene, source, destination, moved);
     }
 
-    private static (Scene scene, SceneNode scope, SceneNode moved, Guid destinationFolderId) CreateGroupingTransactionScene(bool crossScope)
+    private static (Scene scene, SceneNode scope, SceneNode moved, FolderId destinationFolderId) CreateGroupingTransactionScene(bool crossScope)
     {
         var scene = CreateScene();
         var scope = new SceneNode(scene) { Name = "Scope" };
@@ -307,8 +308,8 @@ public sealed partial class SceneDocumentCommandServiceTests
         scene.RootNodes.Add(afterSibling);
         scene.RootNodes.Add(scope);
         SetTransactionTransform(moved);
-        var sourceFolderId = Guid.NewGuid();
-        var destinationFolderId = Guid.NewGuid();
+        var sourceFolderId = FolderId.New();
+        var destinationFolderId = FolderId.New();
         var destinationFolder = new ExplorerEntryData
         {
             Type = "Folder",
@@ -365,23 +366,23 @@ public sealed partial class SceneDocumentCommandServiceTests
         transform.LocalScale = new Vector3(1f, 2f, 3f);
     }
 
-    private static List<(Guid? parentId, TransformData transform)> CaptureTransactionSync(Fixture fixture, Scene scene, SceneNode node)
+    private static List<(NodeId? parentId, TransformData transform)> CaptureTransactionSync(Fixture fixture, Scene scene, SceneNode node)
     {
-        var synchronized = new List<(Guid? parentId, TransformData transform)>();
+        var synchronized = new List<(NodeId? parentId, TransformData transform)>();
         TransformData? published = null;
         _ = fixture.Sync.Setup(sync => sync.UpdateNodeTransformAsync(scene, node, It.IsAny<CancellationToken>()))
             .Callback<Scene, SceneNode, CancellationToken>((_, value, _) => published = ReadTransactionTransform(value))
             .ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditTransform, AffectedScope.Empty));
-        _ = fixture.Sync.Setup(sync => sync.ReparentHierarchiesAsync(scene, It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<Guid?>(), false))
-            .Callback<Scene, IReadOnlyList<Guid>, Guid?, bool>((_, ids, parentId, _) =>
+        _ = fixture.Sync.Setup(sync => sync.ReparentHierarchiesAsync(scene, It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<NodeId?>(), false))
+            .Callback<Scene, IReadOnlyList<NodeId>, NodeId?, bool>((_, ids, parentId, _) =>
             {
                 _ = ids.Should().Equal(node.Id);
                 _ = published.Should().NotBeNull();
                 synchronized.Add((parentId, published!));
             })
             .Returns(Task.CompletedTask);
-        _ = fixture.Sync.Setup(sync => sync.ReparentNodeAsync(scene, node.Id, It.IsAny<Guid?>(), false))
-            .Callback<Scene, Guid, Guid?, bool>((_, _, parentId, _) =>
+        _ = fixture.Sync.Setup(sync => sync.ReparentNodeAsync(scene, node.Id, It.IsAny<NodeId?>(), false))
+            .Callback<Scene, NodeId, NodeId?, bool>((_, _, parentId, _) =>
             {
                 _ = published.Should().NotBeNull();
                 synchronized.Add((parentId, published!));

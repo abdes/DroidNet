@@ -19,6 +19,7 @@ using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -32,7 +33,7 @@ public sealed class SceneExplorerDropTests
         var harness = CreateHarness(out var scene, out var parent, out var child);
         var commands = harness.Commands;
         _ = commands
-            .Setup(value => value.ReparentNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), parent.Id, false))
+            .Setup(value => value.ReparentNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), parent.Id, false))
             .ReturnsAsync(SceneCommandResult.Success);
         using var explorer = harness.Build();
 
@@ -47,7 +48,7 @@ public sealed class SceneExplorerDropTests
         commands.Verify(
             value => value.ReparentNodesAsync(
                 It.IsAny<SceneDocumentCommandContext>(),
-                It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { child.Id })),
+                It.Is<IReadOnlyList<NodeId>>(ids => ids.SequenceEqual(new[] { child.Id })),
                 parent.Id,
                 false),
             Times.Once);
@@ -56,7 +57,7 @@ public sealed class SceneExplorerDropTests
     [TestMethod]
     public async Task CommitDropAsync_RoutesNodeDropIntoFolderThroughGroupCommand()
     {
-        var harness = CreateHarness(out var scene, out var parent, out var child, folderId: Guid.NewGuid());
+        var harness = CreateHarness(out var scene, out var parent, out var child, folderId: FolderId.New());
         scene.SetExplorerLayout(
             [
                 new ExplorerEntryData { Type = "Node", NodeId = parent.Id },
@@ -70,7 +71,7 @@ public sealed class SceneExplorerDropTests
             ]);
         var commands = harness.Commands;
         _ = commands
-            .Setup(value => value.MoveNodesToFolderAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), harness.FolderId))
+            .Setup(value => value.MoveNodesToFolderAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), harness.FolderId))
             .ReturnsAsync(SceneCommandResult.Success);
         using var explorer = harness.Build();
 
@@ -84,7 +85,7 @@ public sealed class SceneExplorerDropTests
         commands.Verify(
             value => value.MoveNodesToFolderAsync(
                 It.IsAny<SceneDocumentCommandContext>(),
-                It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { parent.Id })),
+                It.Is<IReadOnlyList<NodeId>>(ids => ids.SequenceEqual(new[] { parent.Id })),
                 harness.FolderId),
             Times.Once);
     }
@@ -94,7 +95,7 @@ public sealed class SceneExplorerDropTests
     {
         var harness = CreateHarness(out var scene, out _, out var child);
         _ = harness.Commands
-            .Setup(value => value.DuplicateNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), null, null))
+            .Setup(value => value.DuplicateNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), null, null))
             .ReturnsAsync(SceneCommandResults.Success<IReadOnlyList<SceneNode>>([child]));
         using var explorer = harness.Build();
 
@@ -105,14 +106,14 @@ public sealed class SceneExplorerDropTests
 
         _ = result.Succeeded.Should().BeTrue();
         harness.Commands.Verify(
-            value => value.DuplicateNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { child.Id })), null, null),
+            value => value.DuplicateNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.Is<IReadOnlyList<NodeId>>(ids => ids.SequenceEqual(new[] { child.Id })), null, null),
             Times.Once);
     }
 
     [TestMethod]
     public async Task FindFolderAdapterAsync_ReturnsIndexedFolderWithoutForceLoading()
     {
-        var harness = CreateHarness(out var scene, out var parent, out var child, folderId: Guid.NewGuid());
+        var harness = CreateHarness(out var scene, out var parent, out var child, folderId: FolderId.New());
         scene.SetExplorerLayout(
             [
                 new ExplorerEntryData
@@ -134,7 +135,7 @@ public sealed class SceneExplorerDropTests
         _ = folder!.Id.Should().Be(harness.FolderId);
     }
 
-    private static Harness CreateHarness(out Scene scene, out SceneNode parent, out SceneNode child, Guid? folderId = null)
+    private static Harness CreateHarness(out Scene scene, out SceneNode parent, out SceneNode child, FolderId? folderId = null)
     {
         var project = new Project(new ProjectInfo("Drop", Category.Games, "H:/DropTreeTests", "preview.png")) { Name = "Drop" };
         scene = new Scene(project) { Name = "Scene" };
@@ -142,29 +143,32 @@ public sealed class SceneExplorerDropTests
         child = new SceneNode(scene) { Name = "Child" };
         scene.RootNodes.Add(parent);
         scene.RootNodes.Add(child);
-        return new Harness(project, scene, folderId ?? Guid.NewGuid());
+        var harness = new Harness(project, scene, folderId ?? FolderId.New());
+        scene = harness.Scene;
+        parent = harness.Metadata.NodeOf(parent);
+        child = harness.Metadata.NodeOf(child);
+        return harness;
     }
 
     private sealed class Harness
     {
-        public Harness(Project project, Scene scene, Guid folderId)
+        public Harness(Project project, Scene scene, FolderId folderId)
         {
             this.Project = project;
-            this.Scene = scene;
             this.FolderId = folderId;
             this.Metadata = SceneTabs.Open(scene);
+            this.Scene = this.Metadata.Scene;
 
             var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
             _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
             this.Manager = manager;
 
-            var documents = new Mock<IDocumentService>();
-            _ = documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns([this.Metadata]);
-            _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(this.Metadata.DocumentId);
+            var documents = new TestDocumentArea();
+            documents.Activate(this.Metadata.Document);
             this.Documents = documents;
 
             var sync = new Mock<ISceneEngineSync>();
-            _ = sync.Setup(value => value.GetDocumentScene(this.Metadata.DocumentId)).Returns(scene);
+            _ = sync.Setup(value => value.GetDocumentScene(this.Metadata.DocumentId)).Returns(this.Scene);
             _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), this.Metadata.DocumentId)).Returns(value: true);
             _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             this.Sync = sync;
@@ -176,13 +180,16 @@ public sealed class SceneExplorerDropTests
 
         public Scene Scene { get; }
 
-        public Guid FolderId { get; }
+        public FolderId FolderId { get; }
 
-        public SceneDocumentMetadata Metadata { get; }
+        public SceneTab Metadata { get; }
 
         public Mock<IProjectManagerService> Manager { get; }
 
-        public Mock<IDocumentService> Documents { get; }
+        public TestDocumentArea Documents { get; }
+
+        /// <summary>Gets the open documents that hold the harness's first scene.</summary>
+        public Oxygen.Editor.Documents.OpenDocuments OpenDocuments => this.Metadata.Documents;
 
         public Mock<ISceneEngineSync> Sync { get; }
 
@@ -196,7 +203,8 @@ public sealed class SceneExplorerDropTests
                 this.Manager.Object,
                 new StrongReferenceMessenger(),
                 Mock.Of<IRouter>(),
-                this.Documents.Object,
+                this.Documents,
+                this.OpenDocuments,
                 default,
                 this.Sync.Object,
                 new SceneSelectionService(),

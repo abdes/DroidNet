@@ -40,7 +40,7 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
         fixture.Activate();
         fixture.NotifyEdited();
         _ = fixture.Requests.Should().HaveCount(2);
-        fixture.SwitchDocument(Guid.NewGuid());
+        fixture.SwitchAway();
         _ = fixture.Requests.Should().OnlyContain(request => request.token.IsCancellationRequested);
         await WaitForRenderAsync().ConfigureAwait(true);
     });
@@ -144,7 +144,7 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
         _ = fixture.Assets.Setup(value => value.ResolveAsync(fixture.GeometryUri, It.IsAny<CancellationToken>())).Returns(resolved.Task);
         fixture.Geometry.Geometry = new(fixture.GeometryUri);
         fixture.Activate();
-        fixture.Authoring.Documents.Raise(value => value.DocumentClosed += null, new DocumentClosedEventArgs(default, fixture.Authoring.Tab));
+        _ = await fixture.Authoring.Area.CloseAsync(fixture.Authoring.Document).ConfigureAwait(true);
         resolved.SetResult(fixture.GeometryAsset);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = fixture.Requests.Should().BeEmpty();
@@ -174,7 +174,7 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
         fixture.Activate();
         var completed = new TaskCompletionSource<SceneCommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var commands = new Mock<ISceneDocumentCommandService>();
-        _ = commands.Setup(value => value.EditPropertiesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<PropertyEdit>(), It.IsAny<string>(), It.IsAny<EditSessionToken>())).Returns(completed.Task);
+        _ = commands.Setup(value => value.EditPropertiesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<PropertyEdit>(), It.IsAny<string>(), It.IsAny<EditSessionToken>())).Returns(completed.Task);
         using var host = fixture.Authoring.CreateInspectorHost("Geometry", commandService: commands.Object, contentDemand: fixture.Service, assetProvider: fixture.Assets.Object);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         var choice = model.Groups.Single(group => string.Equals(group.Key, "Content", StringComparison.Ordinal)).Items.Single().Item;
@@ -203,7 +203,7 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
         fixture.Activate();
         var completed = new TaskCompletionSource<SceneCommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var commands = new Mock<ISceneDocumentCommandService>();
-        _ = commands.Setup(value => value.EditPropertiesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<PropertyEdit>(), It.IsAny<string>(), It.IsAny<EditSessionToken>())).Returns(completed.Task);
+        _ = commands.Setup(value => value.EditPropertiesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<PropertyEdit>(), It.IsAny<string>(), It.IsAny<EditSessionToken>())).Returns(completed.Task);
         using var host = fixture.Authoring.CreateInspectorHost("Geometry", commandService: commands.Object, contentDemand: fixture.Service, assetProvider: fixture.Assets.Object);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         var choice = model.Groups.Single(group => string.Equals(group.Key, "Content", StringComparison.Ordinal)).Items.Single().Item;

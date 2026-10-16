@@ -109,7 +109,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
             await LoadTestContentAsync(root).ConfigureAwait(true);
             var request = new ViewportSurfaceRequest
             {
-                DocumentId = fixture.Source.Id,
+                DocumentId = fixture.Context.DocumentId.Value,
                 ViewportId = Guid.NewGuid(),
                 ViewportIndex = 0,
                 IsPrimary = true,

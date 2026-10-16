@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Reactive.Concurrency;
 using System.Reactive.Subjects;
 using AwesomeAssertions;
 using Moq;
@@ -20,15 +19,15 @@ public sealed partial class MaterialEditorViewModelTests
     [TestMethod]
     public async Task SharedStatusPreservesAuthoredValuesAndSaveErrors()
     {
-        var service = new RecordingDocumentService(CreateDocument());
-        var item = CreateStatusItem(service.Document.MaterialUri);
+        using var materials = new MaterialDocuments();
+        var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var item = CreateStatusItem(document.File.AssetUri);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
         var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        using var editor = new MaterialEditorViewModel(new(service.Document.MaterialUri), service, provider.Object, ImmediateScheduler.Instance);
-        await WaitForLoadAsync(editor).ConfigureAwait(false);
-        _ = editor.CookStatusText.Should().Be("Cooked", "the document's older local cook enum cannot replace shared status");
+        using var editor = materials.EditorOf(document, provider.Object);
+        _ = editor.CookStatusText.Should().Be("Cooked");
         foreach (var (state, text) in new[] { (CookRunState.Queued, "Queued"), (CookRunState.Cooking, "Cooking"), (CookRunState.Publishing, "Updating preview"), (CookRunState.Failed, "Cook failed"), (CookRunState.Cancelled, "Cooked") })
         {
             updates.OnNext([item with { CookActivity = new(Guid.NewGuid(), state) }]);
@@ -37,13 +36,13 @@ public sealed partial class MaterialEditorViewModelTests
         }
 
         editor.RoughnessFactor = 0.73f;
-        await WaitForEditAsync(service, expectedCount: 1).ConfigureAwait(false);
+        await WaitForEditsAsync(document, entries: 1).ConfigureAwait(false);
         editor.StatusText = "The file changed outside this document.";
         updates.OnNext([item with { CookActivity = new(Guid.NewGuid(), CookRunState.Succeeded) }]);
         _ = editor.CookStatusText.Should().Be("Unsaved changes");
         _ = editor.RoughnessFactor.Should().Be(0.73f);
         _ = editor.StatusText.Should().Be("The file changed outside this document.");
-        _ = service.PropertyEditCount.Should().Be(1);
+        _ = document.History.UndoStack.Should().ContainSingle();
         editor.Dispose();
         _ = updates.HasObservers.Should().BeFalse();
         updates.OnNext([]);
@@ -55,7 +54,8 @@ public sealed partial class MaterialEditorViewModelTests
     [TestMethod]
     public async Task ClosingMaterialDetachesPendingStatusWait()
     {
-        var service = new RecordingDocumentService(CreateDocument());
+        using var materials = new MaterialDocuments();
+        var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([]);
         var provider = new Mock<IAssetFeed>();
         var detached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -72,13 +72,12 @@ public sealed partial class MaterialEditorViewModelTests
                     detached.SetResult();
                 }
             });
-        using var editor = new MaterialEditorViewModel(new(service.Document.MaterialUri), service, provider.Object, ImmediateScheduler.Instance);
-        await WaitForLoadAsync(editor).ConfigureAwait(false);
+        using var editor = materials.EditorOf(document, provider.Object);
         _ = editor.CookStatusText.Should().Be("Checking status");
         editor.Dispose();
         await detached.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = updates.HasObservers.Should().BeFalse();
-        updates.OnNext([CreateStatusItem(service.Document.MaterialUri)]);
+        updates.OnNext([CreateStatusItem(document.File.AssetUri)]);
         _ = editor.AssetStatus.Should().BeNull();
     }
 

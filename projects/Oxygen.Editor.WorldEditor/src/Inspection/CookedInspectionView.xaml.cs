@@ -16,7 +16,6 @@ public sealed partial class CookedInspectionView
     public CookedInspectionView()
     {
         this.InitializeComponent();
-        this.Loaded += (_, _) => _ = this.ViewModel?.InitializeAsync();
     }
 
     private void OnSectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)

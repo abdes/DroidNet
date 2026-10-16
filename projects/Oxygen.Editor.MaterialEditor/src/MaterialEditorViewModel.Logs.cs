@@ -20,9 +20,6 @@ public sealed partial class MaterialEditorViewModel
     private void LogFollowedRelocation(Uri material)
         => LogFollowedRelocation(this.logger, material);
 
-    [LoggerMessage(EventId = 0, Level = LogLevel.Warning, Message = "Failed to open material document {MaterialUri}.")]
-    private static partial void LogMaterialOpenFailed(ILogger logger, Exception exception, Uri materialUri);
-
     [LoggerMessage(Level = LogLevel.Warning, Message = "Pending material work failed while disposing the editor.")]
     private partial void LogPendingWorkFailedDuringDispose(Exception exception);
 }

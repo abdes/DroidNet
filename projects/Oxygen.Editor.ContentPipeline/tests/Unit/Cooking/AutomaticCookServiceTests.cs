@@ -113,7 +113,7 @@ public sealed class AutomaticCookServiceTests
             {
                 OperationId = operationId, ProjectId = project.ProjectId, ProjectRoot = project.ProjectRoot,
                 DisplayName = "Project", Request = new(CookTargetKind.Project, ScopeUri: null), State = CookRunState.NeedsSave,
-                UnsavedDocuments = [new(fixture.SourcePath(Main), "Main", 1, 0, true, "old")],
+                UnsavedDocuments = [new(fixture.SourcePath(Main), "Main", true, "old")],
             },
         ];
         _ = fixture.Runs.Setup(value => value.ResumeAfterSave(operationId)).Callback(resumed.SetResult).Returns(value: true);

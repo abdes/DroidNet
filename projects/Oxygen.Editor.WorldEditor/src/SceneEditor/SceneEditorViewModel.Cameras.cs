@@ -80,7 +80,7 @@ public partial class SceneEditorViewModel
     }
 
     private bool IsActiveDocument()
-        => this.documentService.GetActiveDocumentId(this.windowId) == this.Metadata.DocumentId;
+        => ReferenceEquals(this.documentArea.ActiveDocument, this.Document);
 
     private ViewportViewModel? GetActiveViewport()
         => this.Viewports.FirstOrDefault(viewport => viewport.ViewportId == this.FocusedViewportId)

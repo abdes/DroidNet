@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
@@ -35,7 +36,7 @@ public sealed partial class SceneEngineSyncTests
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(results.Add);
         using var sut = new SceneEngineSync(engine.Object, operationResults: publisher.Object);
         var scene = CreateScene();
-        var documentId = Guid.NewGuid();
+        var documentId = DocumentId.New();
         _ = sut.RegisterDocument(scene, documentId);
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
@@ -54,7 +55,7 @@ public sealed partial class SceneEngineSyncTests
         _ = result.OperationId.Should().Be(failure.Request.OperationId);
         _ = result.AffectedScope.NodeId.Should().Be(node.Id);
         _ = result.AffectedScope.SceneId.Should().Be(scene.Id);
-        _ = result.AffectedScope.DocumentId.Should().Be(documentId);
+        _ = result.AffectedScope.DocumentId.Should().Be(documentId.Value);
         _ = result.AffectedScope.DocumentLifetime.Should().Be(failure.Request.Target.DocumentLifetime);
         _ = result.Diagnostics.Should().ContainSingle().Which.Domain.Should().Be(FailureDomain.LiveSync);
         _ = result.Message.Should().Be(failure.Message);

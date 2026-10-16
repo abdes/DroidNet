@@ -9,7 +9,9 @@ namespace DroidNet.Documents;
 /// <summary>
 ///     Application-facing document service contract. The app implements this interface and raises
 ///     events using <see cref="IDocumentMetadata"/>. Aura (the UI layer) subscribes to the events
-///     to drive the TabStrip UI and maintain window document lists.
+///     to drive the TabStrip UI and maintain window document lists, and follows each open tab's
+///     <see cref="System.ComponentModel.INotifyPropertyChanged.PropertyChanged"/> for its title,
+///     icon and dirty state.
 /// </summary>
 /// <remarks>
 ///     <para><b>Threading and event contract:</b></para>
@@ -26,7 +28,7 @@ namespace DroidNet.Documents;
 ///         langword="false"/>.</item>
 ///       <item>
 ///         When the UI raises a close for a tab (TabStrip.TabCloseRequested), the UI should call
-///         <see cref="CloseDocumentAsync(WindowId,Guid,bool)"/>. Aura does not attempt to close
+///         <see cref="CloseDocumentAsync(WindowId,DocumentId,bool)"/>. Aura does not attempt to close
 ///         windows - app is responsible for deciding and implementing the policy to close windows
 ///         or detach documents as needed.</item>
 ///     </list>
@@ -62,26 +64,20 @@ public interface IDocumentService
     public event EventHandler<DocumentAttachedEventArgs>? DocumentAttached;
 
     /// <summary>
-    ///     Raised when app-provided metadata for a document changed (title, icon, dirty, etc).
-    /// </summary>
-    public event EventHandler<DocumentMetadataChangedEventArgs>? DocumentMetadataChanged;
-
-    /// <summary>
     ///     Raised when the app activated a document in a window (selection).
     /// </summary>
     public event EventHandler<DocumentActivatedEventArgs>? DocumentActivated;
 
     /// <summary>
-    ///     Opens a document on the specified window. Returns the created document id
-    ///     (which may equal <see cref="IDocumentMetadata.DocumentId"/> when the
-    ///     application supplies it).
+    ///     Opens a document's tab on the specified window. The tab's key is
+    ///     <see cref="IDocumentMetadata.DocumentId"/>.
     /// </summary>
     /// <param name="windowId">The ID of the window to add the document to.</param>
     /// <param name="metadata">The document metadata supplied by the application.</param>
     /// <param name="indexHint">Preferred insertion index; -1 to append.</param>
     /// <param name="shouldSelect">When true the document will be selected after open.</param>
-    /// <returns>The created document identifier.</returns>
-    public Task<Guid> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true);
+    /// <returns><see langword="true"/> when the tab opened; <see langword="false"/> when the service refused it.</returns>
+    public Task<bool> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true);
 
     /// <summary>
     ///     Requests close of the specified document. Returns true when the document
@@ -91,16 +87,17 @@ public interface IDocumentService
     /// <param name="documentId">The document identifier.</param>
     /// <param name="force">When true, bypasses app-level checks and forces closure.</param>
     /// <returns>True when the document closed; false if the app vetoed the close.</returns>
-    public Task<bool> CloseDocumentAsync(WindowId windowId, Guid documentId, bool force = false);
+    public Task<bool> CloseDocumentAsync(WindowId windowId, DocumentId documentId, bool force = false);
 
     /// <summary>
     ///     Detaches a document from its host window as part of a tear-out flow.
-    ///     Returns the document metadata when the detach succeeds or null if it fails.
+    ///     Returns the document metadata when the detach succeeds. A <see langword="null"/> result
+    ///     means the service refused: it raises no event, and the tab stays where it is.
     /// </summary>
     /// <param name="windowId">The ID of the window from which the document is being detached.</param>
     /// <param name="documentId">The document identifier to detach.</param>
-    /// <returns>The document metadata when detached, or null on failure.</returns>
-    public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, Guid documentId);
+    /// <returns>The document metadata when detached, or <see langword="null"/> when refused.</returns>
+    public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, DocumentId documentId);
 
     /// <summary>
     ///     Attaches an app-provided document to a target window.
@@ -113,21 +110,12 @@ public interface IDocumentService
     public Task<bool> AttachDocumentAsync(WindowId targetWindowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true);
 
     /// <summary>
-    ///     Updates the metadata for an existing document.
-    /// </summary>
-    /// <param name="windowId">The ID of the window where the metadata update originates from.</param>
-    /// <param name="documentId">The id of the document to update.</param>
-    /// <param name="metadata">The new metadata content.</param>
-    /// <returns>True when the operation succeeded.</returns>
-    public Task<bool> UpdateMetadataAsync(WindowId windowId, Guid documentId, IDocumentMetadata metadata);
-
-    /// <summary>
     ///     Requests activation (selection) of the document in the specified window.
     /// </summary>
     /// <param name="windowId">The ID of the window that should host the document selection.</param>
     /// <param name="documentId">The id of the document to select.</param>
     /// <returns>True when the selection was successful.</returns>
-    public Task<bool> SelectDocumentAsync(WindowId windowId, Guid documentId);
+    public Task<bool> SelectDocumentAsync(WindowId windowId, DocumentId documentId);
 
     /// <summary>
     ///     Gets a list of all open documents for the specified window.
@@ -141,5 +129,5 @@ public interface IDocumentService
     /// </summary>
     /// <param name="windowId">The ID of the window to get the active document for.</param>
     /// <returns>The ID of the active document, or null if no document is active.</returns>
-    public Guid? GetActiveDocumentId(WindowId windowId);
+    public DocumentId? GetActiveDocumentId(WindowId windowId);
 }

@@ -438,7 +438,6 @@ public static partial class Program
         container.RegisterMapping<IContentCookCoordinator, ContentCookCoordinator>();
         container.RegisterMapping<ContentPipeline.Cooking.ICookRunService, ContentCookCoordinator>();
         container.Register<ContentPipeline.Snapshots.ICookDocumentRegistry, ContentPipeline.Snapshots.CookDocumentRegistry>(Reuse.Singleton);
-        container.Register<World.SceneEditor.SceneCookInputRegistrar>(Reuse.Singleton);
         container.RegisterDelegate<IContentPipelineService>(
             resolver => new ContentPipelineService(
             resolver.Resolve<IProjectContextService>(),
@@ -461,8 +460,7 @@ public static partial class Program
         container.RegisterMapping<ContentPipeline.Publication.ICookPublicationReader, ContentPipeline.Publication.CookPublicationService>();
         container.Register<ContentPipeline.Mounting.CookedContentMountService>(Reuse.Singleton);
         container.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
-        container.Register<IMaterialSourcePathResolver, ProjectMaterialSourcePathResolver>(Reuse.Singleton);
-        container.Register<IMaterialDocumentService, MaterialDocumentService>(Reuse.Singleton);
+        container.Register<MaterialValidation>(Reuse.Singleton);
 
         // The session's asset relocations, resolved by undo, redo and paste in every open document. Created here, so
         // a workspace child container never creates a second instance that the root's services would not see.

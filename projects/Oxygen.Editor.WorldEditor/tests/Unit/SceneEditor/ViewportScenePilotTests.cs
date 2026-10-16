@@ -4,11 +4,13 @@
 
 using System.Numerics;
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.WorldEditor.SceneEditor;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
@@ -21,7 +23,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
 [TestCategory("Viewport Camera")]
 public sealed class ViewportScenePilotTests
 {
-    private static readonly SceneCameraChoice MainCamera = new(Guid.Parse("4b1d7a9e-2f0c-4c7e-8d3a-6a9f0e5b1c01"), "Main");
+    private static readonly SceneCameraChoice MainCamera = new(NodeId.FromValue(Guid.Parse("4b1d7a9e-2f0c-4c7e-8d3a-6a9f0e5b1c01")), "Main");
     private static readonly RuntimeViewId ViewId = new(61);
     private static readonly RuntimeViewCameraPose Pose = new(new Vector3(1, 2, 3), new Vector3(10, 20, 30), Vector3.One, OrthographicSize: null);
 
@@ -53,7 +55,7 @@ public sealed class ViewportScenePilotTests
     public async Task PilotGesture_ShouldCommitOnceAfterInputIsReleased()
     {
         var engine = CreateEngine();
-        var commits = new List<(Guid NodeId, RuntimeViewCameraPose Pose)>();
+        var commits = new List<(NodeId NodeId, RuntimeViewCameraPose Pose)>();
         using var sut = CreateViewport(engine.Object, commits);
         await sut.PilotCameraAsync(MainCamera).ConfigureAwait(false);
 
@@ -70,7 +72,7 @@ public sealed class ViewportScenePilotTests
     public async Task StopPiloting_ShouldCommitThePendingGestureFirst()
     {
         var engine = CreateEngine();
-        var commits = new List<(Guid NodeId, RuntimeViewCameraPose Pose)>();
+        var commits = new List<(NodeId NodeId, RuntimeViewCameraPose Pose)>();
         using var sut = CreateViewport(engine.Object, commits);
         sut.PilotCommitDelay = TimeSpan.FromHours(1);
         await sut.PilotCameraAsync(MainCamera).ConfigureAwait(false);
@@ -88,7 +90,7 @@ public sealed class ViewportScenePilotTests
     public async Task ReturnToEditorCamera_WhilePiloting_ShouldCommitAndEndThePilot()
     {
         var engine = CreateEngine();
-        var commits = new List<(Guid NodeId, RuntimeViewCameraPose Pose)>();
+        var commits = new List<(NodeId NodeId, RuntimeViewCameraPose Pose)>();
         using var sut = CreateViewport(engine.Object, commits);
         sut.PilotCommitDelay = TimeSpan.FromHours(1);
         await sut.PilotCameraAsync(MainCamera).ConfigureAwait(false);
@@ -105,7 +107,7 @@ public sealed class ViewportScenePilotTests
     public async Task NavigationWithoutPilot_ShouldNotCommit()
     {
         var engine = CreateEngine();
-        var commits = new List<(Guid NodeId, RuntimeViewCameraPose Pose)>();
+        var commits = new List<(NodeId NodeId, RuntimeViewCameraPose Pose)>();
         using var sut = CreateViewport(engine.Object, commits);
         sut.PilotCommitDelay = TimeSpan.Zero;
         await sut.LookThroughCameraAsync(MainCamera).ConfigureAwait(false);
@@ -114,14 +116,14 @@ public sealed class ViewportScenePilotTests
         await Task.Delay(50).ConfigureAwait(false);
 
         _ = commits.Should().BeEmpty();
-        engine.Verify(service => service.GetViewCameraPoseAsync(It.IsAny<RuntimeViewId>(), It.IsAny<Guid>()), Times.Never);
+        engine.Verify(service => service.GetViewCameraPoseAsync(It.IsAny<RuntimeViewId>(), It.IsAny<NodeId>()), Times.Never);
     }
 
     [TestMethod]
     public async Task AlignCameraToView_ShouldCommitTheEditorCameraPose()
     {
         var engine = CreateEngine();
-        var commits = new List<(Guid NodeId, RuntimeViewCameraPose Pose)>();
+        var commits = new List<(NodeId NodeId, RuntimeViewCameraPose Pose)>();
         using var sut = CreateViewport(engine.Object, commits);
         sut.SelectedCameraProvider = () => MainCamera;
 
@@ -137,7 +139,7 @@ public sealed class ViewportScenePilotTests
     public async Task AlignCameraToView_WhileLookingThroughACamera_ShouldDoNothing()
     {
         var engine = CreateEngine();
-        var commits = new List<(Guid NodeId, RuntimeViewCameraPose Pose)>();
+        var commits = new List<(NodeId NodeId, RuntimeViewCameraPose Pose)>();
         using var sut = CreateViewport(engine.Object, commits);
         sut.SelectedCameraProvider = () => MainCamera;
         await sut.LookThroughCameraAsync(MainCamera).ConfigureAwait(false);
@@ -154,7 +156,7 @@ public sealed class ViewportScenePilotTests
     public async Task LockedCamera_ShouldNotBePilotedOrAligned()
     {
         var engine = CreateEngine();
-        var commits = new List<(Guid NodeId, RuntimeViewCameraPose Pose)>();
+        var commits = new List<(NodeId NodeId, RuntimeViewCameraPose Pose)>();
         using var sut = CreateViewport(engine.Object, commits);
         sut.CameraLockProvider = _ => true;
         sut.SelectedCameraProvider = () => MainCamera;
@@ -171,17 +173,17 @@ public sealed class ViewportScenePilotTests
     private static Mock<IEngineService> CreateEngine()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
-        _ = engine.Setup(service => service.SetViewSceneCameraAsync(It.IsAny<RuntimeViewId>(), It.IsAny<Guid?>())).ReturnsAsync(value: true);
+        _ = engine.Setup(service => service.SetViewSceneCameraAsync(It.IsAny<RuntimeViewId>(), It.IsAny<NodeId?>())).ReturnsAsync(value: true);
         _ = engine.Setup(service => service.SetViewScenePilotAsync(It.IsAny<RuntimeViewId>(), It.IsAny<bool>())).ReturnsAsync(value: true);
         _ = engine.Setup(service => service.SetViewCameraPresetAsync(It.IsAny<RuntimeViewId>(), It.IsAny<CameraViewPreset>())).ReturnsAsync(value: true);
-        _ = engine.Setup(service => service.GetViewCameraPoseAsync(It.IsAny<RuntimeViewId>(), It.IsAny<Guid>())).ReturnsAsync(Pose);
+        _ = engine.Setup(service => service.GetViewCameraPoseAsync(It.IsAny<RuntimeViewId>(), It.IsAny<NodeId>())).ReturnsAsync(Pose);
         return engine;
     }
 
-    private static ViewportViewModel CreateViewport(IEngineService engine, List<(Guid NodeId, RuntimeViewCameraPose Pose)>? commits = null)
+    private static ViewportViewModel CreateViewport(IEngineService engine, List<(NodeId NodeId, RuntimeViewCameraPose Pose)>? commits = null)
     {
         var viewport = new ViewportViewModel(
-            Guid.NewGuid(),
+            DocumentId.New(),
             engine,
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer(),

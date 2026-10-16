@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -80,7 +81,7 @@ internal sealed class ViewportHudViewTests : DroidNet.Tests.VisualUserInterfaceT
             .Setup(service => service.AttachViewportAsync(It.IsAny<ViewportSurfaceRequest>(), It.IsAny<SwapChainPanel>(), It.IsAny<CancellationToken>()))
             .Returns(ValueTask.FromCanceled<IViewportSurfaceLease>(new CancellationToken(canceled: true)));
         return new ViewportViewModel(
-            Guid.NewGuid(),
+            DocumentId.New(),
             engine.Object,
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer(),

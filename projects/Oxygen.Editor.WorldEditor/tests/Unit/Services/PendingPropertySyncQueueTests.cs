@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.World.Services;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Services;
@@ -96,13 +97,13 @@ public sealed class PendingPropertySyncQueueTests
         _ = queue.Count(scene).Should().Be(2, "reading a replay batch does not acknowledge it");
     }
 
-    private static (PendingPropertySyncQueue queue, Guid scene, Guid lifetime, Guid node) Create()
+    private static (PendingPropertySyncQueue queue, SceneId scene, Guid lifetime, NodeId node) Create()
     {
         var queue = new PendingPropertySyncQueue();
-        var scene = Guid.NewGuid();
+        var scene = SceneId.New();
         var lifetime = Guid.NewGuid();
         queue.Register(scene, lifetime);
-        return (queue, scene, lifetime, Guid.NewGuid());
+        return (queue, scene, lifetime, NodeId.New());
     }
 
     private static EnginePropertyValueEntry Entry(TransformField field, float value)

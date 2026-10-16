@@ -11,6 +11,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
+using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
@@ -146,6 +147,10 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
                 {
                     Outlet = ProblemsDockId, Path = ProblemsDockId, MatchMethod = PathMatch.Full, ViewModelType = typeof(Oxygen.Editor.World.Problems.ProblemsViewModel),
                 },
+                new Route
+                {
+                    Outlet = InspectorDockId, Path = InspectorDockId, MatchMethod = PathMatch.Full, ViewModelType = typeof(Oxygen.Editor.World.Inspection.CookedInspectionViewModel),
+                },
             ]),
         },
     ]);
@@ -157,6 +162,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         if (DroidNet.Docking.Dockable.FromId("cook") is { } cookingDock)
         {
             cookingDock.Title = "Cooking";
+        }
+
+        if (DroidNet.Docking.Dockable.FromId(InspectorDockId) is { } inspectorDock)
+        {
+            inspectorDock.Title = "Cooked Inspector";
         }
 
         this.OnScriptingNavigated();
@@ -248,19 +258,15 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         // Resolve messenger instance from the child container so the view model can use it.
         this.messenger = childContainer.Resolve<IMessenger>();
         this.messenger.Register<ShowAssetRequestMessage>(this, (_, message) => message.Reply(this.ShowInspectionAssetAsync(message)));
+        this.messenger.Register<OpenCookedInspectionRequestMessage>(this, (_, message) => message.Reply(this.OpenInspectionAsync(message)));
         this.messenger.Register<ChangeContentMountsRequestMessage>(this, (_, message) => message.Reply(this.ChangeContentMountsAsync(message)));
         this.messenger.Register<ShowCookingJobsRequestMessage>(this, (_, _) => this.OnCookingRevealRequested(this, EventArgs.Empty));
 
-        // DocumentHostViewModel must be registered and resolved first to ensure it subscribes to
-        // IDocumentService events before DocumentManager starts handling open requests.
+        // The window's open documents, their kinds and editors, and its document area.
+        RegisterDocuments(childContainer);
         childContainer.Register<DocumentHostViewModel>(Reuse.Singleton);
         childContainer.Register<DocumentHostView>(Reuse.Singleton);
 
-        // Resolve DocumentHostViewModel immediately to ensure it subscribes to document events
-        _ = childContainer.Resolve<DocumentHostViewModel>();
-
-        // DocumentManager must be a singleton and resolved immediately to ensure it is always listening for messages
-        // even if the router hasn't navigated to any editor yet.
         RegisterContentServices(childContainer);
 
         // Register scene-engine synchronization service
@@ -268,18 +274,16 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<ISceneMutator, SceneMutator>(Reuse.Singleton);
         childContainer.Register<ISceneOrganizer, SceneOrganizer>(Reuse.Singleton);
         childContainer.Register<ISceneContentDemandService, SceneContentDemandService>(Reuse.Singleton);
-        _ = childContainer.Resolve<ISceneContentDemandService>();
         childContainer.Register<ISceneSelectionService, SceneSelectionService>(Reuse.Singleton);
         childContainer.Register<ISceneDocumentCommandService, SceneDocumentCommandService>(Reuse.Singleton);
 
-        // The workspace's open documents: each scene file opens once, as a document of the scene kind.
-        childContainer.Register<SceneDocumentKind>(Reuse.Singleton);
-        childContainer.RegisterDelegate(
-            resolver => new Oxygen.Editor.Documents.OpenDocuments(
-                [resolver.Resolve<SceneDocumentKind>()],
-                resolver.Resolve<DroidNet.Storage.IAtomicFileStore>(),
-                resolver.Resolve<Microsoft.Extensions.Logging.ILoggerFactory>(IfUnresolved.ReturnDefault)),
-            Reuse.Singleton);
+        // Everything the documents need is registered: the cook and the content demand follow them from now on.
+        _ = childContainer.Resolve<OpenDocumentCookInputs>();
+        _ = childContainer.Resolve<ISceneContentDemandService>();
+
+        // The host subscribes to the window's tabs before DocumentManager starts handling open requests, and the
+        // manager listens for them even before the router has navigated to an editor.
+        _ = childContainer.Resolve<DocumentHostViewModel>();
         childContainer.Register<DocumentManager>(Reuse.Singleton);
         this.documentManager = childContainer.Resolve<DocumentManager>();
 
@@ -294,14 +298,14 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<SceneNodeEditorView>(Reuse.Transient);
         childContainer.Register<SceneEditorView>(Reuse.Transient);
         childContainer.Register<MaterialEditorView>(Reuse.Transient);
-        childContainer.Register<Oxygen.Editor.World.Inspection.CookedInspectionView>(Reuse.Transient);
+        this.RegisterCookedInspector(childContainer);
         RegisterInspectorEditors(childContainer);
     }
 
     /// <inheritdoc />
     protected override Task OnInitialNavigationAsync(ILocalRouterContext context)
         => context.LocalRouter.NavigateAsync(
-            "/(renderer:dx//se:se;right;w=350//props:props;bottom=se//cb:cb;bottom;h=340//log:log;with=cb//cook:cook;with=cb//problems:problems;with=cb)");
+            "/(renderer:dx//se:se;right;w=350//props:props;bottom=se//cb:cb;bottom;h=340//log:log;with=cb//cook:cook;with=cb//problems:problems;with=cb//inspect:inspect;with=cb)");
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)

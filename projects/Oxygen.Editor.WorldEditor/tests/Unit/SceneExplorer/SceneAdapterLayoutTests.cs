@@ -7,6 +7,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -48,7 +49,7 @@ public sealed class SceneAdapterLayoutTests
     public async Task Children_LayoutReferencingSameFolderTwice_RealizesSingleAdapter()
     {
         var scene = CreateScene();
-        var folderId = Guid.NewGuid();
+        var folderId = FolderId.New();
         scene.SetExplorerLayout(
             [
                 new ExplorerEntryData { Type = "Folder", FolderId = folderId, Name = "First" },
@@ -57,7 +58,7 @@ public sealed class SceneAdapterLayoutTests
                     Type = "Folder",
                     FolderId = folderId,
                     Name = "Duplicate",
-                    Children = [new ExplorerEntryData { Type = "Folder", FolderId = Guid.NewGuid(), Name = "Nested" }],
+                    Children = [new ExplorerEntryData { Type = "Folder", FolderId = FolderId.New(), Name = "Nested" }],
                 },
             ]);
         var adapter = SceneAdapter.BuildLayoutTree(scene);
@@ -82,8 +83,8 @@ public sealed class SceneAdapterLayoutTests
         scene.RootNodes.Add(nodeA);
         scene.RootNodes.Add(nodeC);
         nodeA.AddChild(nodeB);
-        var folderId = Guid.NewGuid();
-        var nestedFolderId = Guid.NewGuid();
+        var folderId = FolderId.New();
+        var nestedFolderId = FolderId.New();
         scene.SetExplorerLayout(
             [
                 new ExplorerEntryData
@@ -103,7 +104,7 @@ public sealed class SceneAdapterLayoutTests
                         new ExplorerEntryData { Type = "Node", NodeId = nodeA.Id },
                     ],
                 },
-                new ExplorerEntryData { Type = "Node", NodeId = Guid.NewGuid() },
+                new ExplorerEntryData { Type = "Node", NodeId = NodeId.New() },
                 new ExplorerEntryData { Type = "Node", NodeId = nodeC.Id },
             ]);
         var adapter = SceneAdapter.BuildLayoutTree(scene);

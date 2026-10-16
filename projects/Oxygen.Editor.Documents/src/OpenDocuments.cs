@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Documents;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -67,6 +68,20 @@ public sealed partial class OpenDocuments : IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         return this.documents.FirstOrDefault(document => document.File.IsAt(path));
+    }
+
+    /// <summary>Finds an open document by its id.</summary>
+    /// <param name="id">The document's id.</param>
+    /// <returns>The document, or <see langword="null"/> when no open document has that id.</returns>
+    public Document? Find(DocumentId id) => this.documents.FirstOrDefault(document => document.Id == id);
+
+    /// <summary>Finds the open document that edits an asset.</summary>
+    /// <param name="asset">The asset's URI, in the catalog's form, as every <see cref="DocumentFile"/> holds it.</param>
+    /// <returns>The document, or <see langword="null"/> when the asset is not open.</returns>
+    public Document? FindByAsset(Uri asset)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+        return this.documents.FirstOrDefault(document => document.File.AssetUri == asset);
     }
 
     /// <summary>Opens a file, or finds the document that already edits it.</summary>

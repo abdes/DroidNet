@@ -12,9 +12,10 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 
 internal sealed class CookingScenario : DroidNet.Tests.VisualUserInterfaceTests
 {
-    internal static async Task WaitForBlockedMaterialAsync(CookingPanelViewModel panel, Guid documentId, CancellationToken cancellationToken)
+    internal static async Task WaitForBlockedMaterialAsync(CookingPanelViewModel panel, string sourcePath, CancellationToken cancellationToken)
     {
-        while (panel.SelectedRun?.Snapshot is not { State: CookRunState.NeedsSave } run || !run.UnsavedDocuments.Any(document => document.DocumentId == documentId))
+        while (panel.SelectedRun?.Snapshot is not { State: CookRunState.NeedsSave } run
+            || !run.UnsavedDocuments.Any(document => string.Equals(document.SourcePath, sourcePath, StringComparison.OrdinalIgnoreCase)))
         {
             await Task.Delay(20, cancellationToken).ConfigureAwait(true);
         }

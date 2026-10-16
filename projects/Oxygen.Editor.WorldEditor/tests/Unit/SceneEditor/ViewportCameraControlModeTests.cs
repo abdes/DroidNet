@@ -3,11 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.WorldEditor.SceneEditor;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
@@ -16,8 +18,8 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
 [TestCategory("Viewport Camera")]
 public sealed partial class ViewportCameraControlModeTests
 {
-    private static readonly SceneCameraChoice MainCamera = new(Guid.Parse("8d0f3a52-5c1e-4b8e-9a51-3f2b1c6d7e01"), "Main");
-    private static readonly SceneCameraChoice MapCamera = new(Guid.Parse("8d0f3a52-5c1e-4b8e-9a51-3f2b1c6d7e02"), "Map");
+    private static readonly SceneCameraChoice MainCamera = new(NodeId.FromValue(Guid.Parse("8d0f3a52-5c1e-4b8e-9a51-3f2b1c6d7e01")), "Main");
+    private static readonly SceneCameraChoice MapCamera = new(NodeId.FromValue(Guid.Parse("8d0f3a52-5c1e-4b8e-9a51-3f2b1c6d7e02")), "Map");
 
     [TestMethod]
     public void CameraFlyout_ShouldOfferPerspectiveModesAndOrthographicDirections()
@@ -155,7 +157,7 @@ public sealed partial class ViewportCameraControlModeTests
         _ = sut.CanFly.Should().BeFalse("orthographic views do not fly");
 
         sut.CameraType = CameraType.Perspective;
-        sut.SceneCamera = new SceneCameraChoice(Guid.NewGuid(), "Shot");
+        sut.SceneCamera = new SceneCameraChoice(NodeId.New(), "Shot");
         _ = sut.CanFly.Should().BeFalse("looking through a scene camera does not move it");
     }
 
@@ -302,7 +304,7 @@ public sealed partial class ViewportCameraControlModeTests
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new RuntimeViewId(53);
         _ = engine
-            .Setup(service => service.SetViewSceneCameraAsync(It.Is<RuntimeViewId>(id => id.Value == viewId.Value), It.IsAny<Guid?>()))
+            .Setup(service => service.SetViewSceneCameraAsync(It.Is<RuntimeViewId>(id => id.Value == viewId.Value), It.IsAny<NodeId?>()))
             .ReturnsAsync(value: true);
         List<SceneCameraChoice> cameras = [MainCamera, MapCamera];
         using var sut = CreateViewportViewModel(engine.Object);
@@ -346,7 +348,7 @@ public sealed partial class ViewportCameraControlModeTests
         IEngineService engineService,
         IOperationResultPublisher? operationResults = null)
         => new(
-            Guid.NewGuid(),
+            DocumentId.New(),
             engineService,
             operationResults ?? new CapturingOperationResultPublisher(),
             new OperationStatusReducer(),

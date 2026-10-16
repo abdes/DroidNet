@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
@@ -48,7 +49,7 @@ public sealed partial class SceneEngineSyncTests
         var scene = new Scene(project) { Name = "Masked scene" };
         var mask = new Uri($"asset:///{mount}/Textures/Meter.otex.json");
         scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { AutoExposureMeteringMask = mask } });
-        _ = sut.RegisterDocument(scene, Guid.NewGuid());
+        _ = sut.RegisterDocument(scene, DocumentId.New());
 
         _ = (await sut.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
 

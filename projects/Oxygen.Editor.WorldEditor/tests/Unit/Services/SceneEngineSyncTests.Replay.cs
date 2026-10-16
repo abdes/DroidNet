@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using System.Numerics;
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
@@ -146,7 +147,6 @@ public sealed partial class SceneEngineSyncTests
 
         _ = synchronized.Scene.Should().BeSameAs(scene);
         _ = synchronized.DocumentId.Should().Be(documentId);
-        _ = synchronized.Target.RunId.Should().Be(runId);
         _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeSetLocalTransform>().Should().ContainSingle().Which.Position.X.Should().Be(9);
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
         fixture.Engine.Verify(value => value.StartAsync(), Times.Never);
@@ -269,7 +269,7 @@ public sealed partial class SceneEngineSyncTests
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(1);
         var failure = fixture.Results.Should().ContainSingle().Which;
         _ = failure.Message.Should().Be("Controlled property rejection");
-        _ = failure.AffectedScope.DocumentId.Should().Be(documentId);
+        _ = failure.AffectedScope.DocumentId.Should().Be(documentId.Value);
         fixture.RejectedPropertyComponent = null;
         fixture.ResumeNodeCreation();
         _ = (await fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
@@ -344,7 +344,7 @@ public sealed partial class SceneEngineSyncTests
         var old = fixture.Sync.CaptureRevision(scene);
         fixture.Sync.CloseDocument(oldDocumentId);
         _ = fixture.Sync.RegisterDocument(scene, oldDocumentId).Should().BeFalse();
-        var reopened = Guid.NewGuid();
+        var reopened = DocumentId.New();
         _ = fixture.Sync.RegisterDocument(scene, reopened).Should().BeTrue();
         SetPosition(fixture.Sync, node, 9);
         var current = fixture.Sync.CaptureRevision(scene);
@@ -413,13 +413,13 @@ public sealed partial class SceneEngineSyncTests
 
         public void Dispose() => this.Sync.Dispose();
 
-        public (Scene scene, SceneNode node, Guid documentId) RegisterScene(float x)
+        public (Scene scene, SceneNode node, DocumentId documentId) RegisterScene(float x)
         {
             var scene = CreateScene();
             var node = new SceneNode(scene) { Name = "Cube" };
             scene.RootNodes.Add(node);
             node.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(x, 0, 0);
-            var documentId = Guid.NewGuid();
+            var documentId = DocumentId.New();
             _ = this.Sync.RegisterDocument(scene, documentId);
             return (scene, node, documentId);
         }

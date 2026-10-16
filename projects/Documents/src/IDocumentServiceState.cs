@@ -27,6 +27,6 @@ public interface IDocumentServiceState
     ///     Returns the currently active document for the specified window, if any.
     /// </summary>
     /// <param name="windowId">The window identifier.</param>
-    /// <returns>The active document identifier, or <see langword="null"/> when no document is active.</returns>
-    public Guid? GetActiveDocumentId(WindowId windowId);
+    /// <returns>The active document's id, or <see langword="null"/> when no document is active.</returns>
+    public DocumentId? GetActiveDocumentId(WindowId windowId);
 }

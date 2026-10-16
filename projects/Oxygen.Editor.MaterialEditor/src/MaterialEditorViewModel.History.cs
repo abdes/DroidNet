@@ -11,7 +11,7 @@ namespace Oxygen.Editor.MaterialEditor;
 /// <summary>Routes control sessions and history commands to this material document only.</summary>
 public sealed partial class MaterialEditorViewModel
 {
-    private MaterialGesture? activeGesture;
+    private EditGesture? activeGesture;
     private bool acceptsInput = true;
 
     /// <summary>Begins a numeric or color gesture in this document.</summary>
@@ -19,7 +19,7 @@ public sealed partial class MaterialEditorViewModel
     /// <param name="interaction">The input interaction.</param>
     public void BeginEditSession(string field, NumberBoxEditInteractionKind interaction)
     {
-        if (this.isDisposed || this.isClosing || this.isResolvingConflict || !this.acceptsInput || this.document is null)
+        if (this.isDisposed || this.isClosing || this.isResolvingConflict || !this.acceptsInput)
         {
             return;
         }
@@ -78,9 +78,9 @@ public sealed partial class MaterialEditorViewModel
     public void Activate()
     {
         this.acceptsInput = true;
-        if (!this.isDisposed && this.document is { } current)
+        if (!this.isDisposed)
         {
-            this.RefreshDocument(current.DocumentId);
+            this.RefreshFromDocument();
         }
         else
         {
@@ -88,9 +88,9 @@ public sealed partial class MaterialEditorViewModel
         }
     }
 
-    private bool CanUndo() => this.acceptsInput && !this.isDisposed && !this.isClosing && !this.isResolvingConflict && this.document is { } current && this.documentService.CanUndo(current.DocumentId);
+    private bool CanUndo() => this.acceptsInput && !this.isDisposed && !this.isClosing && !this.isResolvingConflict && this.edits.CanUndo(this.document);
 
-    private bool CanRedo() => this.acceptsInput && !this.isDisposed && !this.isClosing && !this.isResolvingConflict && this.document is { } current && this.documentService.CanRedo(current.DocumentId);
+    private bool CanRedo() => this.acceptsInput && !this.isDisposed && !this.isClosing && !this.isResolvingConflict && this.edits.CanRedo(this.document);
 
     [RelayCommand(CanExecute = nameof(CanUndo))]
     private Task UndoAsync() => this.ApplyHistoryAsync(undo: true);
@@ -106,14 +106,14 @@ public sealed partial class MaterialEditorViewModel
         await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
-            if (this.isDisposed || this.isClosing || this.isResolvingConflict || !this.acceptsInput || this.document is not { } current)
+            if (this.isDisposed || this.isClosing || this.isResolvingConflict || !this.acceptsInput)
             {
                 return;
             }
 
             var result = cancellingGesture ? new MaterialEditResult(Succeeded: true, OperationId: null)
-                : undo ? this.documentService.Undo(current.DocumentId) : this.documentService.Redo(current.DocumentId);
-            this.RefreshDocument(current.DocumentId);
+                : this.ApplyOwnEdit(() => undo ? this.edits.Undo(this.document) : this.edits.Redo(this.document));
+            this.RefreshFromDocument();
             this.StatusText = result.Succeeded ? string.Empty : "The history change was rejected.";
         }
         finally
@@ -122,17 +122,21 @@ public sealed partial class MaterialEditorViewModel
         }
     }
 
-    private async Task CompleteGestureAsync(MaterialGesture gesture, bool commit)
+    private async Task CompleteGestureAsync(EditGesture gesture, bool commit)
     {
         await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             if (gesture.Session is { } session)
             {
-                _ = this.documentService.CompleteEditSession(session, commit);
-                if (!this.isDisposed && this.document?.DocumentId == session.DocumentId)
+                _ = this.ApplyOwnEdit(() =>
                 {
-                    this.RefreshDocument(session.DocumentId);
+                    this.edits.CompleteEditSession(this.document, session, commit);
+                    return new MaterialEditResult(Succeeded: true, OperationId: null);
+                });
+                if (!this.isDisposed)
+                {
+                    this.RefreshFromDocument();
                 }
             }
         }
@@ -142,7 +146,7 @@ public sealed partial class MaterialEditorViewModel
         }
     }
 
-    private async Task CompleteAfterIdleAsync(MaterialGesture gesture, CancellationTokenSource idle)
+    private async Task CompleteAfterIdleAsync(EditGesture gesture, CancellationTokenSource idle)
     {
         try
         {
@@ -167,31 +171,29 @@ public sealed partial class MaterialEditorViewModel
         }
     }
 
-    private void RefreshDocument(Guid documentId, bool refreshValues = true)
+    // The editor's own edits change the source too; the values the controls hold already show them.
+    private MaterialEditResult ApplyOwnEdit(Func<MaterialEditResult> edit)
     {
-        this.document = this.documentService.GetDocument(documentId);
-        var wasDirty = this.metadata.IsDirty;
-        this.metadata.IsDirty = this.document.IsDirty;
-        this.IsDirty = this.metadata.IsDirty;
-
-        // The tab shows the document's dirtiness only when it is told; edits, undo, saves and reloads all pass here.
-        if (wasDirty != this.metadata.IsDirty && this.documents is { } host)
+        this.isApplyingOwnEdit = true;
+        try
         {
-            _ = host.UpdateMetadataAsync(this.windowId, this.metadata.DocumentId, this.metadata);
+            return edit();
         }
+        finally
+        {
+            this.isApplyingOwnEdit = false;
+        }
+    }
+
+    private void RefreshFromDocument(bool refreshValues = true)
+    {
         if (refreshValues)
         {
-            this.isLoading = true;
-            try
-            {
-                this.ReadFromDocument(this.document);
-            }
-            finally
-            {
-                this.isLoading = false;
-            }
+            this.ReadFromContent();
+            return;
         }
 
+        this.IsDirty = this.document.IsDirty;
         this.RefreshHistoryCommands();
     }
 
@@ -201,7 +203,7 @@ public sealed partial class MaterialEditorViewModel
         this.RedoCommand.NotifyCanExecuteChanged();
     }
 
-    private sealed class MaterialGesture(string field, NumberBoxEditInteractionKind interaction)
+    private sealed class EditGesture(string field, NumberBoxEditInteractionKind interaction)
     {
         public string Field { get; } = field;
 

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using DroidNet.Documents;
 using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -13,7 +14,7 @@ public sealed partial class SceneNodeEditorViewModel
     private readonly HashSet<ComponentPropertyEditor> boundEditors = [];
     private SceneNode[] filterNodes = [];
     private Scene? filterScene;
-    private Guid? filterDocument;
+    private DocumentId? filterDocument;
     private Type? selectedComponentType;
 
     /// <summary>Occurs before changing sections so the view can complete pending text input.</summary>
@@ -110,7 +111,7 @@ public sealed partial class SceneNodeEditorViewModel
 
     private void ReconcileComponentFilters()
     {
-        var document = this.documentService.GetActiveDocumentId(this.windowId);
+        var document = this.documentArea.ActiveDocument?.Id;
         var selectedType = this.selectedComponentType;
         if (!ReferenceEquals(this.filterScene, this.activeScene) || this.filterDocument != document
             || this.filterNodes.Length != this.items.Count

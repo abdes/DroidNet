@@ -186,7 +186,6 @@ public sealed class AssetsViewModelCommandTests
             new DroidNet.Mvvm.Converters.ViewModelToView(Mock.Of<DroidNet.Mvvm.IViewLocator>()),
             state,
             projects,
-            Mock.Of<IAuthoringTargetResolver>(),
             Mock.Of<IContentPipelineService>(),
             Mock.Of<IAssetFeed>(),
             Mock.Of<IOperationResultPublisher>(),

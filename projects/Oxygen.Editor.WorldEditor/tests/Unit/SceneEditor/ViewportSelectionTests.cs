@@ -3,10 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
@@ -20,9 +22,9 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
 public sealed class ViewportSelectionTests
 {
     private static readonly RuntimeViewId ViewId = new(83);
-    private static readonly Guid A = Guid.NewGuid();
-    private static readonly Guid B = Guid.NewGuid();
-    private static readonly Guid C = Guid.NewGuid();
+    private static readonly NodeId A = NodeId.New();
+    private static readonly NodeId B = NodeId.New();
+    private static readonly NodeId C = NodeId.New();
 
     [TestMethod]
     public void Combine_Replace_ShouldSelectThePickedNodes()
@@ -122,7 +124,7 @@ public sealed class ViewportSelectionTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         _ = engine
-            .Setup(service => service.FrameViewAsync(ViewId, It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { A, B }))))
+            .Setup(service => service.FrameViewAsync(ViewId, It.Is<IReadOnlyList<NodeId>>(ids => ids.SequenceEqual(new[] { A, B }))))
             .ReturnsAsync(RuntimeFramingOutcome.Framed);
         using var sut = CreateViewport(engine.Object);
         sut.SelectedNodesProvider = () => [A, B];
@@ -149,7 +151,7 @@ public sealed class ViewportSelectionTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         _ = engine
-            .Setup(service => service.FrameViewAsync(ViewId, It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 0)))
+            .Setup(service => service.FrameViewAsync(ViewId, It.Is<IReadOnlyList<NodeId>>(ids => ids.Count == 0)))
             .ReturnsAsync(RuntimeFramingOutcome.ViewingSceneCamera);
         using var sut = CreateViewport(engine.Object);
 
@@ -159,7 +161,7 @@ public sealed class ViewportSelectionTests
         _ = sut.Notice.Should().Contain("editor camera");
     }
 
-    private static RuntimePickHit Hit(Guid node, float centerDistance) => new(node, Depth: 0.5f, GeometrySlot: 0, centerDistance);
+    private static RuntimePickHit Hit(NodeId node, float centerDistance) => new(node, Depth: 0.5f, GeometrySlot: 0, centerDistance);
 
     private static Mock<IEngineService> PickingEngine(RuntimePickResult result)
     {
@@ -170,7 +172,7 @@ public sealed class ViewportSelectionTests
 
     private static ViewportViewModel CreateViewport(IEngineService engine)
         => new(
-            Guid.NewGuid(),
+            DocumentId.New(),
             engine,
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer(),

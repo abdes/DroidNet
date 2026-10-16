@@ -211,7 +211,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             .ReturnsAsync(accepted);
         _ = fixture.Sync
             .Setup(sync => sync.CompleteTerminalSyncAsync(scene.Id, It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>()))
-            .Returns((Guid _, Guid _, Func<CancellationToken, Task<SyncOutcome>> sync, CancellationToken cancellationToken) => sync(cancellationToken));
+            .Returns((SceneId _, Guid _, Func<CancellationToken, Task<SyncOutcome>> sync, CancellationToken cancellationToken) => sync(cancellationToken));
         return synced;
     }
 }

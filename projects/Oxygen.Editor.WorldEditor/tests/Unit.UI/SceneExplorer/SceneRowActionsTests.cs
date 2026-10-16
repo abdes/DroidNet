@@ -6,6 +6,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
+using DroidNet.Documents;
 using DroidNet.Routing;
 using DroidNet.Tests;
 using Microsoft.UI;
@@ -170,7 +171,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         host.Actions.SetRowHovered(hovered: false);
         AssertSlot(Button(host.Actions, "EyeButton"), suppressed: false, hovered: false);
         AssertSlot(Button(host.Actions, "LockButton"), locked, hovered: false);
-        host.Fixture.Sync.Verify(value => value.GetDocumentScene(It.IsAny<Guid>()), Times.AtLeastOnce);
+        host.Fixture.Sync.Verify(value => value.GetDocumentScene(It.IsAny<DocumentId>()), Times.AtLeastOnce);
         host.Fixture.Sync.VerifyNoOtherCalls();
     });
 
@@ -368,7 +369,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         _ = Button(rootActions, "EyeButton").Visibility.Should().Be(Visibility.Collapsed);
         _ = Button(rootActions, "LockButton").Visibility.Should().Be(Visibility.Collapsed);
         _ = rootActions.ActualWidth.Should().Be(64);
-        host.Actions.DataContext = new FolderAdapter(Guid.NewGuid(), "Folder");
+        host.Actions.DataContext = new FolderAdapter(FolderId.New(), "Folder");
         host.Actions.SetRowHovered(hovered: true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = Button(host.Actions, "EyeButton").Visibility.Should().Be(Visibility.Collapsed);
@@ -474,8 +475,6 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             scene.RootNodes.Add(secondaryNode);
             fixture.Node.AddChild(childNode);
             var metadata = fixture.Tab;
-            _ = fixture.Documents.Setup(service => service.GetOpenDocuments(It.IsAny<WindowId>())).Returns([metadata]);
-            _ = fixture.Documents.Setup(service => service.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
             _ = fixture.Sync.Setup(service => service.GetDocumentScene(metadata.DocumentId)).Returns(scene);
             _ = fixture.Sync.Setup(service => service.RegisterDocument(scene, metadata.DocumentId)).Returns(value: true);
             _ = fixture.Sync.Setup(service => service.SyncSceneWhenReadyAsync(scene, It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
@@ -483,7 +482,8 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
                 Mock.Of<IProjectManagerService>(),
                 fixture.Messenger,
                 Mock.Of<IRouter>(),
-                fixture.Documents.Object,
+                fixture.Area,
+                metadata.Documents,
                 default,
                 fixture.Sync.Object,
                 new SceneSelectionService(),

@@ -138,25 +138,28 @@ argument types that include window context and insertion/selection hints, and su
 asynchronous veto pattern from `DocumentClosing` so applications may cancel close flows (for example
 to prompt the user to save changes). UI presenters (such as `DocumentTabPresenter`) handle event
 wiring, translate metadata into TabStrip `TabItem`s, marshal UI updates to the dispatcher, and
-forward user interactions (selection, close, detach) back to the document service. Where needed, the
-module exposes helpers to convert metadata to UI-friendly items and maintains an internal mapping
-between document ids and tab content ids.
+forward user interactions (selection, close, detach) back to the document service. Each tab follows
+its metadata's `PropertyChanged` until the tab closes or detaches. A tab's content id is its
+document's id.
 
 The module also coordinates tear-out flows: the app can detach a document (removing it from a host
 window) and reattach it to another window, with the event payloads offering index hints and
-selection flags so the UI can preserve or restore ordering and selection.
+selection flags so the UI can preserve or restore ordering and selection. An app that refuses a
+detach returns `null` and raises no event, and the tab stays where it is.
 
 Key public interfaces and types include:
 
-- **`IDocumentService`** (`IDocumentService.cs`) — The application-facing contract used to open, close, attach, detach, select and update documents. Includes lifecycle events applications raise (`DocumentOpened`, `DocumentClosing`, `DocumentClosed`, `DocumentDetached`, `DocumentAttached`, `DocumentMetadataChanged`, `DocumentActivated`) and asynchronous methods that the UI calls in response to user actions (`OpenDocumentAsync`, `CloseDocumentAsync`, `DetachDocumentAsync`, `AttachDocumentAsync`, `UpdateMetadataAsync`, `SelectDocumentAsync`). The interface specifies threading expectations (events may be raised from any thread) and the `DocumentClosing` veto pattern.
+- **`IDocumentService`** (`IDocumentService.cs`) — The application-facing contract used to open, close, attach, detach and select documents, keyed by `DocumentId`. Includes lifecycle events applications raise (`DocumentOpened`, `DocumentClosing`, `DocumentClosed`, `DocumentDetached`, `DocumentAttached`, `DocumentActivated`) and asynchronous methods that the UI calls in response to user actions (`OpenDocumentAsync`, `CloseDocumentAsync`, `DetachDocumentAsync`, `AttachDocumentAsync`, `SelectDocumentAsync`). The interface specifies threading expectations (events may be raised from any thread) and the `DocumentClosing` veto pattern.
 
-- **`IDocumentMetadata`** (`IDocumentMetadata.cs`) — The minimal, app-provided metadata DTO used by Aura for UI rendering and state hints. Contains a stable `DocumentId` plus UI fields: `Title`, `IconUri`, `IsDirty`, and `IsPinnedHint`.
+- **`DocumentId`** (`DocumentId.cs`) — The identity of an open document and of its one tab.
+
+- **`IDocumentMetadata`** (`IDocumentMetadata.cs`) — What a tab shows, read-only and observable through `INotifyPropertyChanged`: the `DocumentId` plus `Title`, `IconUri`, `IsDirty`, `IsClosable` and `IsPinnedHint`. The app raises `PropertyChanged` when its document changes; the presenter updates the tab on the UI thread.
 
 - **`DocumentTabPresenter`** (`DocumentTabPresenter.cs`) — UI presenter that subscribes to `IDocumentService` events for a specific `WindowContext`, updates the TabStrip items (create, update, remove), applies metadata to `TabItem`s, marshals operations to the UI dispatcher, and forwards user interactions (selection changes, close and detach requests) back to `IDocumentService`.
 
-- Event argument types (`DocumentOpenedEventArgs`, `DocumentClosingEventArgs`, `DocumentClosedEventArgs`, `DocumentDetachedEventArgs`, `DocumentAttachedEventArgs`, `DocumentMetadataChangedEventArgs`, `DocumentActivatedEventArgs`) — Strongly typed event payloads that include the originating `WindowContext`, `IDocumentMetadata`, document id, index hints and selection hints, and (for `DocumentClosingEventArgs`) support for registering async veto tasks, and a helper to wait for veto results.
+- Event argument types (`DocumentOpenedEventArgs`, `DocumentClosingEventArgs`, `DocumentClosedEventArgs`, `DocumentDetachedEventArgs`, `DocumentAttachedEventArgs`, `DocumentActivatedEventArgs`) — Strongly typed event payloads that include the originating `WindowContext`, `IDocumentMetadata`, document id, index hints and selection hints, and (for `DocumentClosingEventArgs`) support for registering async veto tasks, and a helper to wait for veto results.
 
-Note: Several helper types exist but are intentionally internal to Aura (not part of the public boundary): `DocumentDescriptor` (internal mapping of document id to UI content id) and `TabItemExtensions` (converts `IDocumentMetadata` into UI-friendly `TabItem` instances and updates tab state). These are used by presenters and controls and are not required to be used by applications directly.
+Note: `TabItemExtensions` is internal to Aura (not part of the public boundary): it converts `IDocumentMetadata` into UI-friendly `TabItem` instances and updates tab state. These are used by presenters and controls and are not required to be used by applications directly.
 
 ### Drag/Tab System
 

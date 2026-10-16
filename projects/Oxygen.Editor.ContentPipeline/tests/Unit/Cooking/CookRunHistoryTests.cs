@@ -224,7 +224,7 @@ public sealed class CookRunHistoryTests
         };
         var dirty = true;
         var captures = 0;
-        var document = new global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(Path.Combine(Path.GetTempPath(), "Main.oscene.json"), "Main", 2, 1, IsDirty: true, "saved");
+        var document = new global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(Path.Combine(Path.GetTempPath(), "Main.oscene.json"), "Main", IsDirty: true, "saved");
         var waiting = coordinator.RunCookAsync(
             new(CookTargetKind.Project, ScopeUri: null),
             (_, _) =>

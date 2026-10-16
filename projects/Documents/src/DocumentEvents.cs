@@ -174,23 +174,9 @@ public sealed class DocumentAttachedEventArgs(WindowId windowId, IDocumentMetada
 }
 
 /// <summary>
-///     Event arguments raised when application-provided metadata for a document changes.
-/// </summary>
-public sealed class DocumentMetadataChangedEventArgs(WindowId windowId, IDocumentMetadata newMetadata) : EventArgs
-{
-    /// <summary>
-    ///     Gets the ID of the window (in which the document is open) where the metadata change occurred.
-    /// </summary>
-    public WindowId WindowId { get; } = windowId;
-
-    /// <summary>Gets the updated metadata content.</summary>
-    public IDocumentMetadata NewMetadata { get; } = newMetadata;
-}
-
-/// <summary>
 ///     Event arguments raised when the application activates (selects) a document in a window.
 /// </summary>
-public sealed class DocumentActivatedEventArgs(WindowId windowId, Guid documentId) : EventArgs
+public sealed class DocumentActivatedEventArgs(WindowId windowId, DocumentId documentId) : EventArgs
 {
     /// <summary>
     ///     Gets the ID of the window (in which the document is open) where the activation occurred.
@@ -198,5 +184,5 @@ public sealed class DocumentActivatedEventArgs(WindowId windowId, Guid documentI
     public WindowId WindowId { get; } = windowId;
 
     /// <summary>Gets the identifier of the document that was activated.</summary>
-    public Guid DocumentId { get; } = documentId;
+    public DocumentId DocumentId { get; } = documentId;
 }

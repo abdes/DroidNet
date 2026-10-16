@@ -11,16 +11,17 @@ using Microsoft.UI.Xaml;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Inspection;
 
-/// <summary>Owns a read-only report and drains superseded inspection work through the ordinary document lifecycle.</summary>
-public sealed partial class CookedInspectionViewModel : ObservableObject, IDocumentCloseParticipant, IDisposable
+/// <summary>
+/// The Cooked Inspector panel: a read-only report of the cooked output of one scope, which each inspection request
+/// replaces. A request for the scope it already shows inspects it again.
+/// </summary>
+public sealed partial class CookedInspectionViewModel : ObservableObject, IDisposable
 {
-    private readonly CookedInspectionDocumentMetadata metadata;
     private readonly IContentPipelineService pipeline;
     private readonly IAssetFeed assetProvider;
     private readonly IProjectContextService projects;
@@ -28,31 +29,30 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
     private Func<Task>? cancelInspection;
     private Task currentWork = Task.CompletedTask;
     private long requestVersion;
-    private bool initialized;
-    private bool closing;
+    private CookedInspectionScope? scope;
     private bool closed;
     private InspectionAssetRow[] allAssets = [];
     private InspectionFileRow[] allFiles = [];
 
     /// <summary>Initializes a new instance of the <see cref="CookedInspectionViewModel"/> class.</summary>
-    /// <param name="metadata">The captured request and document identity.</param>
     /// <param name="pipeline">The shared read-only pipeline boundary.</param>
     /// <param name="assetProvider">Current shared catalog facts for a specifically opened asset.</param>
     /// <param name="projects">The active project lifetime.</param>
     /// <param name="showAsset">Explicit navigation in the owning workspace.</param>
-    public CookedInspectionViewModel(CookedInspectionDocumentMetadata metadata, IContentPipelineService pipeline, IAssetFeed assetProvider, IProjectContextService projects, Func<Uri, Task<bool>> showAsset)
+    public CookedInspectionViewModel(IContentPipelineService pipeline, IAssetFeed assetProvider, IProjectContextService projects, Func<Uri, Task<bool>> showAsset)
     {
-        this.metadata = metadata;
         this.pipeline = pipeline;
         this.assetProvider = assetProvider;
         this.projects = projects;
         this.showAsset = showAsset;
-        metadata.RefreshRequested += this.OnRefreshRequested;
     }
 
-    /// <summary>Gets the scope displayed in the report.</summary>
-    public string Scope => this.metadata.ScopeUri is { } scope
-        ? this.metadata.Project.Name + " · " + Oxygen.Managed.Assets.Catalog.AssetUriHelper.GetVirtualPath(scope) : this.metadata.Project.Name;
+    /// <summary>Gets the inspected scope's name, or what to do when nothing is inspected yet.</summary>
+    public string Scope => this.scope is not { } current
+        ? "Nothing inspected"
+        : current.ScopeUri is { } uri
+            ? current.Project.Name + " · " + Oxygen.Managed.Assets.Catalog.AssetUriHelper.GetVirtualPath(uri)
+            : current.Project.Name;
 
     /// <summary>Gets the current read operation for lifecycle and workflow tests.</summary>
     public Task CurrentWork => this.currentWork;
@@ -99,7 +99,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
 
     /// <summary>Gets the current operation summary.</summary>
     [ObservableProperty]
-    public partial string StatusText { get; private set; } = "Inspection pending";
+    public partial string StatusText { get; private set; } = "Inspect a folder or an asset in the Content Browser, or a cook run in the Cooking panel, to see its cooked output here.";
 
     /// <summary>Gets the captured report time and counts.</summary>
     [ObservableProperty]
@@ -169,62 +169,57 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
     /// <summary>Gets validation visibility when there is a published output to check.</summary>
     public Visibility ValidationVisibility => this.Report is { } report && !report.Roots.Any(static root => root.IsPresent) ? Visibility.Collapsed : Visibility.Visible;
 
-    /// <summary>Starts only the first inspection when the document view is first loaded.</summary>
-    /// <returns>The first or currently active inspection.</returns>
-    public Task InitializeAsync()
+    /// <summary>Inspects a scope: replaces the shown scope with it, or inspects the shown scope again.</summary>
+    /// <param name="request">The scope to inspect.</param>
+    /// <returns>The inspection.</returns>
+    public Task InspectAsync(CookedInspectionScope request)
     {
-        if (!this.initialized)
+        ArgumentNullException.ThrowIfNull(request);
+        if (!request.IsSameOutput(this.scope))
         {
-            this.initialized = true;
-            return this.RequestInspectionAsync(this.metadata.ValidateRequested);
+            _ = this.cancelInspection?.Invoke();
+            this.Report = null;
+            this.ScopedAsset = null;
+            this.allAssets = [];
+            this.allFiles = [];
+            this.Assets = [];
+            this.Files = [];
+            this.Issues = [];
+            this.Summary = string.Empty;
         }
 
-        return this.currentWork;
-    }
-
-    /// <inheritdoc />
-    public Task PrepareForCloseAsync()
-    {
-        this.closing = true;
-        _ = this.cancelInspection?.Invoke();
-        return this.currentWork;
-    }
-
-    /// <inheritdoc />
-    public Task<bool> SaveForCloseAsync() => Task.FromResult(true);
-
-    /// <inheritdoc />
-    public async Task CloseAsync(bool discard)
-    {
-        this.closed = true;
-        this.metadata.RefreshRequested -= this.OnRefreshRequested;
-        await this.PrepareForCloseAsync().ConfigureAwait(true);
-    }
-
-    /// <inheritdoc />
-    public void ResumeEditing()
-    {
-        this.closing = false;
+        this.scope = request;
+        this.OnPropertyChanged(nameof(this.Scope));
         this.RefreshCommand.NotifyCanExecuteChanged();
         this.ValidateCommand.NotifyCanExecuteChanged();
+        return this.RequestInspectionAsync(request.Validate);
     }
 
-    /// <inheritdoc />
-    public void Dispose() => _ = this.CloseAsync(discard: false);
+    /// <summary>Cancels the running inspection; the panel inspects nothing more.</summary>
+    public void Dispose()
+    {
+        this.closed = true;
+        _ = this.cancelInspection?.Invoke();
+    }
 
     partial void OnSearchTextChanged(string value) => this.Filter();
 
-    private bool CanInspect() => !this.closed && !this.closing && !this.IsBusy;
+    private bool CanInspect() => this.scope is not null && !this.closed && !this.IsBusy;
 
     private bool CanValidate() => this.CanInspect() && this.ValidationVisibility == Visibility.Visible;
 
     [RelayCommand(CanExecute = nameof(CanInspect))]
-    private Task RefreshAsync() => this.RequestInspectionAsync(this.metadata.ValidateRequested);
+    private Task RefreshAsync() => this.scope is { } current ? this.RequestInspectionAsync(current.Validate) : Task.CompletedTask;
 
     [RelayCommand(CanExecute = nameof(CanValidate))]
     private Task ValidateAsync()
     {
-        this.metadata.RequestRefresh(validate: true);
+        if (this.scope is { } current)
+        {
+            this.scope = current with { Validate = true };
+            _ = this.RequestInspectionAsync(validate: true);
+        }
+
         return this.currentWork;
     }
 
@@ -253,33 +248,30 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
         }
     }
 
-    private void OnRefreshRequested(object? sender, EventArgs args) => _ = this.RequestInspectionAsync(this.metadata.ValidateRequested);
-
     private Task RequestInspectionAsync(bool validate)
     {
-        if (this.closed || this.closing)
+        if (this.closed || this.scope is not { } request)
         {
             return this.currentWork;
         }
 
         _ = this.cancelInspection?.Invoke();
-        this.initialized = true;
         var previous = this.currentWork;
         var version = ++this.requestVersion;
         this.IsBusy = true;
         this.Message = string.Empty;
         this.StatusText = validate ? "Validating output…" : "Inspecting output…";
-        this.currentWork = this.RunAfterAsync(previous, version, validate);
+        this.currentWork = this.RunAfterAsync(previous, version, request, validate);
         return this.currentWork;
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The report document owns the read operation and presents failures without unobserved tasks.")]
-    private async Task RunAfterAsync(Task previous, long version, bool validate)
+    private async Task RunAfterAsync(Task previous, long version, CookedInspectionScope request, bool validate)
     {
         try
         {
-            var (report, asset) = await this.ReadReportAsync(previous, version, validate).ConfigureAwait(true);
-            if (version == this.requestVersion && !this.closing && !this.closed)
+            var (report, asset) = await this.ReadReportAsync(previous, version, request, validate).ConfigureAwait(true);
+            if (version == this.requestVersion && !this.closed)
             {
                 this.ScopedAsset = asset;
                 this.ApplyReport(report);
@@ -309,7 +301,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
         }
     }
 
-    private async Task<(CookedOutputReport report, AssetEntry? asset)> ReadReportAsync(Task previous, long version, bool validate)
+    private async Task<(CookedOutputReport report, AssetEntry? asset)> ReadReportAsync(Task previous, long version, CookedInspectionScope request, bool validate)
     {
         using var cancellation = new CancellationTokenSource();
         var cancellationWork = Task.CompletedTask;
@@ -326,19 +318,19 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
         {
             await previous.ConfigureAwait(true);
             cancellation.Token.ThrowIfCancellationRequested();
-            var project = this.GetCurrentProject();
-            var asset = this.metadata.AssetUri is { } uri ? await this.ResolveInspectedAssetAsync(uri, project, cancellation.Token).ConfigureAwait(true) : null;
+            var project = this.GetCurrentProject(request);
+            var asset = request.AssetUri is { } uri ? await this.ResolveInspectedAssetAsync(uri, project, request, cancellation.Token).ConfigureAwait(true) : null;
             var isUncopiedBuiltin = asset is { IsBuiltin: true, CookedUri: null, CookedCompanions.Count: 0 };
             var report = isUncopiedBuiltin
-                ? new CookedOutputReport(this.metadata.Project.ProjectId, this.metadata.ScopeUri, DateTimeOffset.UtcNow, [])
-                : await this.pipeline.InspectCookedOutputAsync(this.metadata.ScopeUri, cancellation.Token, validate, project).ConfigureAwait(true);
+                ? new CookedOutputReport(request.Project.ProjectId, request.ScopeUri, DateTimeOffset.UtcNow, [])
+                : await this.pipeline.InspectCookedOutputAsync(request.ScopeUri, cancellation.Token, validate, project).ConfigureAwait(true);
             cancellation.Token.ThrowIfCancellationRequested();
             if (!ReferenceEquals(project, this.projects.ActiveProject))
             {
                 throw new OperationCanceledException("The project configuration changed during inspection.");
             }
 
-            if (this.metadata.CookedSource is not null && !report.Roots.Any(static root => root.Inspection.Assets.Count > 0))
+            if (request.CookedSource is not null && !report.Roots.Any(static root => root.Inspection.Assets.Count > 0))
             {
                 asset = null;
             }
@@ -356,15 +348,15 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
         }
     }
 
-    private ProjectContext GetCurrentProject()
-        => this.projects.ActiveProject is { } project && project.ProjectId == this.metadata.Project.ProjectId
-            && string.Equals(project.ProjectRoot, this.metadata.Project.ProjectRoot, StringComparison.OrdinalIgnoreCase)
+    private ProjectContext GetCurrentProject(CookedInspectionScope request)
+        => this.projects.ActiveProject is { } project && project.ProjectId == request.Project.ProjectId
+            && string.Equals(project.ProjectRoot, request.Project.ProjectRoot, StringComparison.OrdinalIgnoreCase)
             ? project : throw new OperationCanceledException("The inspection's project was closed or replaced.");
 
-    private async Task<AssetEntry?> ResolveInspectedAssetAsync(Uri uri, ProjectContext project, CancellationToken cancellationToken)
+    private async Task<AssetEntry?> ResolveInspectedAssetAsync(Uri uri, ProjectContext project, CookedInspectionScope request, CancellationToken cancellationToken)
     {
         var asset = await this.assetProvider.ResolveAsync(uri, cancellationToken).ConfigureAwait(true);
-        if (asset is not null && this.metadata.CookedSource is { } requested)
+        if (asset is not null && request.CookedSource is { } requested)
         {
             var source = asset.OverriddenCookedSources.Prepend(asset.CookedMetadata).OfType<Oxygen.Managed.Assets.Catalog.CookedAssetMetadata>()
                 .FirstOrDefault(candidate => string.Equals(candidate.RootFolderPath, requested.RootFolderPath, StringComparison.OrdinalIgnoreCase)

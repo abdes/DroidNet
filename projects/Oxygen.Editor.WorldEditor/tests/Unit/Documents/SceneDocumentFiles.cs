@@ -7,17 +7,20 @@ using AwesomeAssertions;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
 using Moq;
+using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
-/// <summary>Scene files in the Content mount of a temporary project, opened as documents of the scene kind.</summary>
+/// <summary>Scene and material files in the Content mount of a temporary project, opened as documents of their kinds.</summary>
 internal sealed class SceneDocumentFiles : IDisposable
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "OxygenSceneDocumentTests", Guid.NewGuid().ToString("N"));
@@ -44,7 +47,9 @@ internal sealed class SceneDocumentFiles : IDisposable
         var projects = new Mock<IProjectManagerService>();
         _ = projects.SetupGet(value => value.CurrentProject).Returns(this.Project);
         this.ProjectManager = projects.Object;
-        this.Documents = new OpenDocuments([new SceneDocumentKind(projects.Object, commands)], store ?? new NativeAtomicFileStore(new RealFileSystem()));
+        this.Documents = new OpenDocuments(
+            [new SceneDocumentKind(projects.Object, commands), new MaterialDocumentKind(new MaterialValidation())],
+            store ?? new NativeAtomicFileStore(new RealFileSystem()));
     }
 
     /// <summary>Gets the project manager, whose current project is <see cref="Project"/>.</summary>
@@ -74,7 +79,7 @@ internal sealed class SceneDocumentFiles : IDisposable
     /// <param name="name">The name the file records.</param>
     /// <param name="nodes">The names of the scene's root nodes.</param>
     /// <returns>What the file records.</returns>
-    public static SceneData Data(Guid id, string name, params string[] nodes)
+    public static SceneData Data(SceneId id, string name, params string[] nodes)
     {
         var scene = new Scene(Mock.Of<IProject>()) { Name = name };
         foreach (var node in nodes)
@@ -94,6 +99,17 @@ internal sealed class SceneDocumentFiles : IDisposable
         File.WriteAllBytes(this.PathOf(name), JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData));
     }
 
+    /// <summary>Writes a new material file below the Content mount.</summary>
+    /// <param name="name">The material's name.</param>
+    /// <returns>The material's file.</returns>
+    public DocumentFile WriteMaterial(string name)
+    {
+        var path = Path.GetFullPath(Path.Combine(this.root, "Content", "Materials", name + ".omat.json"));
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, AssetTemplates.Material(name));
+        return new DocumentFile(path, new Uri($"asset:///Content/Materials/{name}.omat.json"));
+    }
+
     /// <summary>Writes a file that may not be a scene.</summary>
     /// <param name="name">The scene's name.</param>
     /// <param name="text">The file's text.</param>
@@ -111,7 +127,7 @@ internal sealed class SceneDocumentFiles : IDisposable
     /// <returns>The document and its scene content.</returns>
     public Task<(Document Document, SceneContent Content)> CreateAsync(string name, CancellationToken cancellationToken)
     {
-        this.Write(name, Data(Guid.NewGuid(), name));
+        this.Write(name, Data(SceneId.New(), name));
         return this.OpenAsync(name, cancellationToken);
     }
 

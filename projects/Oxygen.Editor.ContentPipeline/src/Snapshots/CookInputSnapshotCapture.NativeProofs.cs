@@ -21,7 +21,7 @@ public sealed partial class CookInputSnapshotCapture
         var captured = ImmutableArray.CreateBuilder<NativeCapturedInput>();
         foreach (var source in sources.DistinctBy(static input => input.SourceAbsolutePath, StringComparer.OrdinalIgnoreCase))
         {
-            var stream = new FileStream(source.SourceAbsolutePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous);
+            var stream = new FileStream(source.SourceAbsolutePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous);
             await using var lifetime = stream.ConfigureAwait(false);
             var metadata = ReadNativeMetadata(source.SourceAbsolutePath, stream);
             var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
@@ -104,7 +104,7 @@ public sealed partial class CookInputSnapshotCapture
     private static async Task<string> HashRangeAsync(string path, NativeSourceReadProof read, CancellationToken cancellationToken)
     {
         const int bufferSize = 64 * 1024;
-        var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, bufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan);
         await using var lifetime = stream.ConfigureAwait(false);
         stream.Position = (long)Math.Min(read.Offset, (ulong)stream.Length);
         var remaining = (ulong)(stream.Length - stream.Position);

@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Services;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Services;
 
@@ -20,7 +21,7 @@ internal static class RuntimePropertyRequests
     /// <returns>The dispatched entries.</returns>
     public static IEnumerable<RuntimePropertyValue> PropertyEntries(
         this IEnumerable<RuntimeWorldRequest> requests,
-        Guid nodeId,
+        NodeId nodeId,
         EngineComponentId component)
         => requests
             .Select(static request => request.Command)

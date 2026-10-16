@@ -10,6 +10,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
@@ -28,7 +29,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         scene.RootNodes.Add(node);
         var context = CreateContext(scene);
 
-        var result = await fixture.Sut.RenameNodeAsync(context, Guid.NewGuid(), "Renamed").ConfigureAwait(false);
+        var result = await fixture.Sut.RenameNodeAsync(context, NodeId.New(), "Renamed").ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = node.Name.Should().Be("Cube");
@@ -129,7 +130,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         _ = scene.ExplorerLayout.Should().BeNull();
 
-        var result = await fixture.Sut.CreateFolderAsync(context, parentFolderId: Guid.NewGuid(), parentNodeId: null, "Folder").ConfigureAwait(false);
+        var result = await fixture.Sut.CreateFolderAsync(context, parentFolderId: FolderId.New(), parentNodeId: null, "Folder").ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = result.OperationResultId.Should().NotBeNull("a user-triggered folder creation failure must publish an operation result");
@@ -154,7 +155,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         _ = scene.ExplorerLayout.Should().BeNull();
 
-        var result = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: Guid.NewGuid(), "Folder").ConfigureAwait(false);
+        var result = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: NodeId.New(), "Folder").ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = result.OperationResultId.Should().NotBeNull("a user-triggered folder creation failure must publish an operation result");
@@ -563,7 +564,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         _ = scene.ExplorerLayout.Should().BeNull();
 
-        var result = await fixture.Sut.DeleteItemsAsync(context, [node.Id], [Guid.NewGuid()]).ConfigureAwait(false);
+        var result = await fixture.Sut.DeleteItemsAsync(context, [node.Id], [FolderId.New()]).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = result.ValidationCode.Should().Be(DiagnosticCodes.ScenePrefix + "STALE_TARGET");
@@ -907,7 +908,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var result = await fixture.Sut.DuplicateNodesAsync(context, [source.Id], newParentNodeId: null, newParentFolderId: null).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        fixture.Sync.Verify(sync => sync.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<Guid?>()), Times.Exactly(2));
+        fixture.Sync.Verify(sync => sync.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<NodeId?>()), Times.Exactly(2));
     }
 
     [TestMethod]
@@ -922,7 +923,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         scene.RootNodes.Add(b);
         var context = CreateContext(scene);
 
-        var result = await fixture.Sut.DuplicateNodesAsync(context, [a.Id, Guid.NewGuid()], newParentNodeId: null, newParentFolderId: null).ConfigureAwait(false);
+        var result = await fixture.Sut.DuplicateNodesAsync(context, [a.Id, NodeId.New()], newParentNodeId: null, newParentFolderId: null).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = scene.RootNodes.Should().HaveCount(2, "no clone may be committed when any source is stale");
@@ -938,7 +939,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var scene = CreateScene();
         var context = CreateContext(scene);
 
-        var result = await fixture.Sut.DuplicateNodesAsync(context, [Guid.NewGuid()], newParentNodeId: null, newParentFolderId: null).ConfigureAwait(false);
+        var result = await fixture.Sut.DuplicateNodesAsync(context, [NodeId.New()], newParentNodeId: null, newParentFolderId: null).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = result.OperationResultId.Should().NotBeNull("a user-triggered duplication failure must publish an operation result");
@@ -961,7 +962,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         scene.RootNodes.Add(source);
         var context = CreateContext(scene);
 
-        var result = await fixture.Sut.DuplicateNodesFromDataAsync(context, [source.Dehydrate()], Guid.NewGuid(), newParentFolderId: null).ConfigureAwait(false);
+        var result = await fixture.Sut.DuplicateNodesFromDataAsync(context, [source.Dehydrate()], NodeId.New(), newParentFolderId: null).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = result.OperationResultId.Should().NotBeNull("a user-triggered paste failure must publish an operation result");
@@ -990,7 +991,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = scene.RootNodes.Should().ContainSingle().Which.Children.Should().ContainSingle();
-        fixture.Sync.Verify(sync => sync.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<Guid?>()), Times.Exactly(2));
+        fixture.Sync.Verify(sync => sync.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<NodeId?>()), Times.Exactly(2));
     }
 
     [TestMethod]
@@ -1061,11 +1062,11 @@ public sealed partial class SceneDocumentCommandServiceTests
 
     private static void ConfigureHierarchySync(Fixture fixture)
     {
-        _ = fixture.Sync.Setup(sync => sync.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<Guid?>())).Returns(Task.CompletedTask);
-        _ = fixture.Sync.Setup(sync => sync.RemoveNodeHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<Guid>>())).Returns(Task.CompletedTask);
-        _ = fixture.Sync.Setup(sync => sync.ReparentNodeAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
-        _ = fixture.Sync.Setup(sync => sync.ReparentHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<Guid?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
-        _ = fixture.Sync.Setup(sync => sync.RenameNodeAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<string>())).ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.NodeRename, AffectedScope.Empty));
+        _ = fixture.Sync.Setup(sync => sync.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<NodeId?>())).Returns(Task.CompletedTask);
+        _ = fixture.Sync.Setup(sync => sync.RemoveNodeHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<NodeId>>())).Returns(Task.CompletedTask);
+        _ = fixture.Sync.Setup(sync => sync.ReparentNodeAsync(It.IsAny<Scene>(), It.IsAny<NodeId>(), It.IsAny<NodeId?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
+        _ = fixture.Sync.Setup(sync => sync.ReparentHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<NodeId?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
+        _ = fixture.Sync.Setup(sync => sync.RenameNodeAsync(It.IsAny<Scene>(), It.IsAny<NodeId>(), It.IsAny<string>())).ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.NodeRename, AffectedScope.Empty));
         _ = fixture.Sync.Setup(sync => sync.UpdateNodeTransformAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<CancellationToken>())).ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditTransform, AffectedScope.Empty));
     }
 
@@ -1077,7 +1078,7 @@ public sealed partial class SceneDocumentCommandServiceTests
            && MathF.Abs(left.M31 - right.M31) <= MatrixTolerance && MathF.Abs(left.M32 - right.M32) <= MatrixTolerance
            && MathF.Abs(left.M33 - right.M33) <= MatrixTolerance;
 
-    private static ExplorerEntryData? FindFolderEntry(IList<ExplorerEntryData>? entries, Guid folderId)
+    private static ExplorerEntryData? FindFolderEntry(IList<ExplorerEntryData>? entries, FolderId folderId)
     {
         if (entries is null)
         {

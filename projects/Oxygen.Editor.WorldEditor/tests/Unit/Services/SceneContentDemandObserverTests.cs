@@ -20,6 +20,7 @@ using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Services;
@@ -270,29 +271,28 @@ public sealed class SceneContentDemandObserverTests
         return new Scene(project.Object) { Name = "Observer Scene" };
     }
 
-    private static SceneDocumentCommandContext CreateContext(Scene scene) => new(Guid.NewGuid(), scene, new HistoryKeeper(scene));
+    private static SceneDocumentCommandContext CreateContext(Scene scene) => new(DocumentId.New(), scene, new HistoryKeeper(scene));
 
     private static Fixture CreateFixture()
     {
         var sync = new Mock<ISceneEngineSync>();
-        _ = sync.Setup(value => value.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<Guid?>())).Returns(Task.CompletedTask);
-        _ = sync.Setup(value => value.RemoveNodeHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<Guid>>())).Returns(Task.CompletedTask);
-        _ = sync.Setup(value => value.ReparentNodeAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
-        _ = sync.Setup(value => value.ReparentHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<Guid?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
-        _ = sync.Setup(value => value.RenameNodeAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<string>()))
+        _ = sync.Setup(value => value.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<NodeId?>())).Returns(Task.CompletedTask);
+        _ = sync.Setup(value => value.RemoveNodeHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<NodeId>>())).Returns(Task.CompletedTask);
+        _ = sync.Setup(value => value.ReparentNodeAsync(It.IsAny<Scene>(), It.IsAny<NodeId>(), It.IsAny<NodeId?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
+        _ = sync.Setup(value => value.ReparentHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<NodeId?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
+        _ = sync.Setup(value => value.RenameNodeAsync(It.IsAny<Scene>(), It.IsAny<NodeId>(), It.IsAny<string>()))
             .ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.NodeRename, AffectedScope.Empty));
         _ = sync.Setup(value => value.UpdateNodeTransformAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditTransform, AffectedScope.Empty));
         _ = sync.Setup(value => value.AttachGeometryAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.AddComponent, AffectedScope.Empty));
-        _ = sync.Setup(value => value.DetachGeometryAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        _ = sync.Setup(value => value.DetachGeometryAsync(It.IsAny<Scene>(), It.IsAny<NodeId>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.RemoveComponent, AffectedScope.Empty));
         var projects = new ProjectContextService();
         projects.Activate(ProjectContext.FromProjectInfo(ObserverTestProjectInfo));
         var sut = new SceneDocumentCommandService(
             new SceneSelectionService(),
             sync.Object,
-            new StrongReferenceMessenger(),
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer(),
             Mock.Of<IGeometryMaterialSlotProvider>(),

@@ -11,7 +11,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Reads acknowledged saved bytes without retaining live authoring objects.</summary>
 internal static partial class CookSavedSourceReader
 {
-    /// <summary>Reads one source while excluding saves and unacknowledged external changes.</summary>
+    /// <summary>Reads one saved source while excluding in-place writes and unacknowledged external changes.</summary>
     /// <param name="documents">Registered source owners.</param>
     /// <param name="sourcePath">The absolute source path.</param>
     /// <param name="cancellationToken">Cancels the protected read.</param>
@@ -78,7 +78,7 @@ internal static partial class CookSavedSourceReader
         return Convert.ToHexString(await SHA256.HashDataAsync(source, cancellationToken).ConfigureAwait(false));
     }
 
-    /// <summary>Copies and hashes one saved source while excluding saves and external replacement.</summary>
+    /// <summary>Copies and hashes one saved source while excluding in-place writes.</summary>
     /// <param name="documents">Registered source owners.</param>
     /// <param name="sourcePath">The original absolute source path.</param>
     /// <param name="destinationPath">A new private discovery copy.</param>
@@ -149,8 +149,10 @@ internal static partial class CookSavedSourceReader
             throw new CookInputsNeedSaveException(dirty);
         }
 
-        // Keep external writes and replacement excluded for the complete read/copy.
-        var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        // In-place writes stay excluded for the complete read/copy. An atomic replace, as a save makes, proceeds: this
+        // handle keeps reading the replaced file, whose bytes match the saved state captured under the read leases, and
+        // the replacement is a change of its own that is read again.
+        var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
         await using var lifetime = source.ConfigureAwait(false);
         var (value, hash) = await read(source, cancellationToken).ConfigureAwait(false);
         foreach (var document in reads.Documents)

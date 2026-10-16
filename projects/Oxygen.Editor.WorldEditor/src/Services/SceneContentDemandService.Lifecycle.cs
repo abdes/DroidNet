@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Documents;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 
@@ -14,7 +14,7 @@ public sealed partial class SceneContentDemandService
 {
     private void Subscribe()
     {
-        this.messenger.Register<SceneAuthoringLoadedMessage>(this, (_, message) => this.Dispatch(() => this.Activate(message.Scene, message.Metadata)));
+        this.messenger.Register<SceneAuthoringLoadedMessage>(this, (_, message) => this.Dispatch(() => this.Activate(message.Scene, message.Document)));
         this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
         {
             var selection = message.SelectedEntities.Select(static node => node.Id).ToHashSet();
@@ -26,31 +26,27 @@ public sealed partial class SceneContentDemandService
                 }
             });
         });
-        this.documents.DocumentActivated += this.OnActivated;
-        this.documents.DocumentClosed += this.OnClosed;
-        this.documents.DocumentMetadataChanged += this.OnMetadataChanged;
+        this.documentArea.ActiveDocumentChanged += this.OnActiveDocumentChanged;
     }
 
     private void Unsubscribe()
     {
         this.messenger.UnregisterAll(this);
-        this.documents.DocumentActivated -= this.OnActivated;
-        this.documents.DocumentClosed -= this.OnClosed;
-        this.documents.DocumentMetadataChanged -= this.OnMetadataChanged;
+        this.documentArea.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
+        this.Follow(null);
     }
 
-    private void Activate(Scene candidate, SceneDocumentMetadata owner)
+    private void Activate(Scene candidate, Document owner)
     {
-        if (this.documents.GetActiveDocumentId(this.windowId) != owner.DocumentId
-            || !this.documents.GetOpenDocuments(this.windowId).Any(document => ReferenceEquals(document, owner))
-            || (ReferenceEquals(this.scene, candidate) && ReferenceEquals(this.metadata, owner)))
+        if (!ReferenceEquals(this.documentArea.ActiveDocument, owner)
+            || (ReferenceEquals(this.scene, candidate) && ReferenceEquals(this.document, owner)))
         {
             return;
         }
 
         this.Reset();
         this.scene = candidate;
-        this.metadata = owner;
+        this.Follow(owner);
         this.ObserveReferences();
         foreach (var (uri, kind) in References(candidate).Select(static reference => (reference.uri, reference.kind)).Distinct())
         {
@@ -58,48 +54,20 @@ public sealed partial class SceneContentDemandService
         }
     }
 
-    private void OnActivated(object? sender, DocumentActivatedEventArgs args)
-    {
-        if (args.WindowId != this.windowId)
+    // The demand follows the window's active scene document; another document, or none, retires it.
+    private void OnActiveDocumentChanged(object? sender, EventArgs args)
+        => this.Dispatch(() =>
         {
-            return;
-        }
-
-        this.Dispatch(() =>
-        {
-            var owner = this.documents.GetOpenDocuments(this.windowId).OfType<SceneDocumentMetadata>().FirstOrDefault(document => document.DocumentId == args.DocumentId);
-            if (owner is not null && this.sceneSync.GetDocumentScene(owner.SceneDocumentId) is { } loaded)
+            this.InvalidateObsoleteDemands();
+            if (this.documentArea.ActiveDocument is { Content: SceneContent } active && this.sceneSync.GetDocumentScene(active.Id) is { } loaded)
             {
-                this.Activate(loaded, owner);
+                this.Activate(loaded, active);
             }
             else
             {
                 this.Reset();
             }
         });
-    }
-
-    private void OnClosed(object? sender, DocumentClosedEventArgs args)
-    {
-        if (args.WindowId == this.windowId)
-        {
-            this.Dispatch(() =>
-            {
-                if (ReferenceEquals(args.Metadata, this.metadata))
-                {
-                    this.Reset();
-                }
-            });
-        }
-    }
-
-    private void OnMetadataChanged(object? sender, DocumentMetadataChangedEventArgs args)
-    {
-        if (args.WindowId == this.windowId)
-        {
-            this.Dispatch(this.InvalidateObsoleteDemands);
-        }
-    }
 
     private void InvalidateObsoleteDemands()
     {
@@ -118,8 +86,30 @@ public sealed partial class SceneContentDemandService
         }
 
         this.scene = null;
-        this.metadata = null;
+        this.Follow(null);
     }
+
+    // An edit of the followed document may drop a reference a demand was for.
+    private void Follow(Document? owner)
+    {
+        if (ReferenceEquals(this.document, owner))
+        {
+            return;
+        }
+
+        if (this.document is { } previous)
+        {
+            previous.StateChanged -= this.OnDocumentStateChanged;
+        }
+
+        this.document = owner;
+        if (owner is not null)
+        {
+            owner.StateChanged += this.OnDocumentStateChanged;
+        }
+    }
+
+    private void OnDocumentStateChanged(object? sender, EventArgs args) => this.Dispatch(this.InvalidateObsoleteDemands);
 
     private void Dispatch(Action action)
     {

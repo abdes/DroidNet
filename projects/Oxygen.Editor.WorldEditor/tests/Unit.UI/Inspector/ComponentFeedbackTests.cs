@@ -15,6 +15,7 @@ using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
 using NumberBox = DroidNet.Controls.NumberBox;
@@ -73,7 +74,7 @@ internal sealed class ComponentFeedbackTests : DroidNet.Tests.VisualUserInterfac
         using var fixture = new SceneAuthoringFixture();
         var pending = new TaskCompletionSource<SceneCommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var commands = new Mock<ISceneDocumentCommandService>();
-        _ = commands.Setup(service => service.EditPropertiesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<PropertyEdit>(), It.IsAny<string>(), It.IsAny<EditSessionToken>())).Returns(pending.Task);
+        _ = commands.Setup(service => service.EditPropertiesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<PropertyEdit>(), It.IsAny<string>(), It.IsAny<EditSessionToken>())).Returns(pending.Task);
         using var host = fixture.CreateInspectorHost("Camera", commandService: commands.Object);
         var camera = host.PropertyEditors.OfType<PerspectiveCameraViewModel>().Single();
         camera.NearPlane.Value = 2;

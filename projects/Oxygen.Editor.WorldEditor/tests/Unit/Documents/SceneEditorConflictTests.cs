@@ -13,6 +13,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
@@ -20,6 +21,8 @@ using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
@@ -52,7 +55,7 @@ public sealed partial class SceneEditorConflictTests
 
         _ = reload.Succeeded.Should().BeTrue(reload.Message);
         _ = fixture.Editor.HasSaveConflict.Should().BeFalse();
-        var current = fixture.Editor.Metadata.Scene;
+        var current = ((SceneContent)fixture.Editor.Document.Content).Scene;
         _ = current.Should().NotBeSameAs(fixture.Scene);
         _ = current!.RootNodes.Should().ContainSingle().Which.Name.Should().Be("Outside");
         _ = reloaded.Should().Equal(current);
@@ -124,14 +127,14 @@ public sealed partial class SceneEditorConflictTests
             this.Commands = commands;
             this.Files = files;
             this.Scene = ((SceneContent)document.Content).Scene;
-            this.Metadata = SceneDocumentMetadata.For(document);
+            this.Tab = new DocumentTab(document, new DocumentEditorDescriptor(document.Kind, static _ => new object()) { IsClosable = false });
         }
 
         public SceneDocumentFiles Files { get; }
 
         public Scene Scene { get; }
 
-        public SceneDocumentMetadata Metadata { get; }
+        public DocumentTab Tab { get; }
 
         public SceneEditorViewModel Editor { get; private set; } = null!;
 
@@ -157,7 +160,7 @@ public sealed partial class SceneEditorConflictTests
             var commands = new Mock<ISceneDocumentCommandService>();
             _ = commands.Setup(value => value.CompleteEditSessionsAsync(It.IsAny<Scene>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
             var files = new SceneDocumentFiles(commands.Object);
-            var id = Guid.NewGuid();
+            var id = SceneId.New();
             files.Write("Main", SceneDocumentFiles.Data(id, "Main"));
             var (document, _) = await files.OpenAsync("Main", test.CancellationToken).ConfigureAwait(false);
             document.History.AddChange("Edit", static () => { });
@@ -180,17 +183,20 @@ public sealed partial class SceneEditorConflictTests
             var projects = new ProjectContextService();
             projects.Activate(this.Files.Context);
             this.container.RegisterInstance<IProjectContextService>(projects);
-            _ = this.Sync.Setup(value => value.GetDocumentScene(this.Metadata.DocumentId)).Returns(this.Scene);
+            _ = this.Sync.Setup(value => value.GetDocumentScene(this.Tab.DocumentId)).Returns(this.Scene);
             _ = this.Sync.Setup(value => value.IsSceneSynchronized(this.Scene)).Returns(synchronized);
             _ = this.Prompt.Setup(value => value.ShowAsync(It.IsAny<WindowId>(), It.IsAny<IDocumentMetadata>(), It.IsAny<IDocumentConflictParticipant>())).Returns(Task.CompletedTask);
-            var documents = new Mock<IDocumentService>();
-            _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(active ? this.Metadata.DocumentId : Guid.NewGuid());
+            var documents = new TestDocumentArea(this.Tab.Document);
+            if (!active)
+            {
+                documents.Activate(document: null);
+            }
+
             var input = new Mock<IDocumentInputCommitter>();
             _ = input.Setup(value => value.CommitAsync(It.IsAny<WindowId>())).Callback(() => commitInput?.Invoke()).Returns(Task.CompletedTask);
             this.Editor = new(
-                this.Metadata,
-                documents.Object,
-                this.Files.Documents,
+                this.Tab,
+                documents,
                 default,
                 Mock.Of<IEngineService>(),
                 this.Sync.Object,
@@ -201,9 +207,6 @@ public sealed partial class SceneEditorConflictTests
                 Mock.Of<IContentPipelineService>(),
                 this.container,
                 this.Messenger,
-                new SceneCookInputRegistrar(
-                    new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(),
-                    new DroidNet.Hosting.WinUI.HostingContext { Dispatcher = null!, Application = null!, DispatcherScheduler = null! }),
                 previewSettings ?? new Oxygen.Editor.World.Workspace.PreviewSettingsService(
                     Mock.Of<IEngineService>(),
                     Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(),

@@ -31,7 +31,7 @@ public sealed partial class ViewportCameraControlModeTests
         _ = engine.SetupGet(value => value.InputCommands).Returns(input.Object);
         var results = new CapturingOperationResultPublisher();
         using var sut = CreateViewportViewModel(engine.Object, results);
-        var target = new RuntimeViewTarget(Guid.NewGuid(), sut.DocumentId, sut.ViewportId, Guid.NewGuid(), 43);
+        var target = new RuntimeViewTarget(Guid.NewGuid(), sut.DocumentId.Value, sut.ViewportId, Guid.NewGuid(), 43);
         var motion = new RuntimeMouseMotionEvent(new Vector2(2, -3), new Vector2(2560, 1440), DateTime.UtcNow);
 
         sut.ForwardInput(target, motion);

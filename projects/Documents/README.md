@@ -15,8 +15,9 @@ DroidNet.Documents provides the core interfaces and event contracts for document
 
 ## Features
 
+- **DocumentId**: The identity of an open document and of its one tab.
 - **IDocumentService**: Main contract for document lifecycle events (open, close, activate).
-- **IDocumentMetadata**: Minimal DTO for document identity, title, icon, and dirty state.
+- **IDocumentMetadata**: What a tab shows: identity, title, icon and dirty state, read-only and observable through `INotifyPropertyChanged`.
 - **IDocumentServiceState**: Query open/active documents per window.
 - **Event Args**: Rich event argument types for document operations, including async close veto.
 
@@ -26,7 +27,7 @@ DroidNet.Documents provides the core interfaces and event contracts for document
 
 1. **Implement `IDocumentService`** in your app to manage document state and raise events.
 2. **Subscribe** to events in the UI layer (Aura) to update tab strips and window lists.
-3. **Use `IDocumentMetadata`** to provide document info for UI rendering.
+3. **Implement `IDocumentMetadata`** over your document's state and raise `PropertyChanged` when it changes; the tab follows it.
 4. **Support async close** by handling veto tasks in `DocumentClosingEventArgs`.
 
 ```csharp
@@ -40,6 +41,7 @@ public class MyDocumentService : IDocumentService, IDocumentServiceState
 
 ## API Surface
 
+- `DocumentId`
 - `IDocumentService`
 - `IDocumentMetadata`
 - `IDocumentServiceState`
@@ -51,7 +53,7 @@ See [src/](src/) for full interface definitions.
 
 ## Integration
 
-- **Target Framework**: `net9.0-windows10.0.26100.0`
+- **Target Framework**: `net10.0-windows10.0.26100.0`
 - **NuGet Packages**: Microsoft.WindowsAppSDK, Microsoft.Windows.SDK.BuildTools
 - **Tags**: winui, documents, document-management, editor
 

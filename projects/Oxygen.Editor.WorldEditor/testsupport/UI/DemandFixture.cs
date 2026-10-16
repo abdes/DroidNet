@@ -28,7 +28,6 @@ internal sealed partial class DemandFixture : IDisposable
 {
     private readonly ProjectContextService projects = new();
     private readonly Mock<IContentPipelineService> pipeline = new();
-    private Guid activeDocument;
 
     public DemandFixture()
     {
@@ -42,16 +41,6 @@ internal sealed partial class DemandFixture : IDisposable
             Geometry = new(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
         };
         _ = this.Authoring.Node.AddComponent(this.Geometry);
-        this.activeDocument = this.Authoring.Tab.DocumentId;
-        _ = this.Authoring.Documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(() => this.activeDocument);
-        _ = this.Authoring.Documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns([this.Authoring.Tab]);
-
-        // The scene editor tells the tabs when its document's state changes; this fixture has no editor.
-        this.Authoring.Document.StateChanged += (_, _) =>
-        {
-            _ = this.Authoring.Tab.Refresh();
-            this.NotifyEdited();
-        };
         var accepted = new SyncOutcome(SyncStatus.Accepted, "Demand assignment", AffectedScope.Empty);
         _ = this.Authoring.Sync.Setup(value => value.AttachGeometryAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
         _ = this.Authoring.Sync.Setup(value => value.UpdateMaterialSlotAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<Oxygen.Editor.World.Slots.MaterialSlotTarget>(), It.IsAny<Uri?>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
@@ -78,7 +67,7 @@ internal sealed partial class DemandFixture : IDisposable
             this.Requests.Add((uri, token));
             return new TaskCompletionSource<ContentCookResult>(TaskCreationOptions.RunContinuationsAsynchronously).Task.WaitAsync(token);
         });
-        this.Service = new(CreateStatusHosting(), this.Assets.Object, this.pipeline.Object, this.projects, this.Authoring.Documents.Object, this.Authoring.Sync.Object, this.Authoring.Messenger, default, NullLogger<SceneContentDemandService>.Instance);
+        this.Service = new(CreateStatusHosting(), this.Assets.Object, this.pipeline.Object, this.projects, this.Authoring.Area, this.Authoring.Sync.Object, this.Authoring.Messenger, NullLogger<SceneContentDemandService>.Instance);
 
         // Demand assertions run without a visual tree; WaitForRenderAsync only completes while a
         // window produces composition frames, so realize the shared test window up front.
@@ -101,15 +90,13 @@ internal sealed partial class DemandFixture : IDisposable
 
     public List<(Uri uri, CancellationToken token)> Requests { get; } = [];
 
-    public void Activate() => _ = this.Authoring.Messenger.Send(new SceneAuthoringLoadedMessage(this.Authoring.Scene, this.Authoring.Tab));
+    public void Activate() => _ = this.Authoring.Messenger.Send(new SceneAuthoringLoadedMessage(this.Authoring.Scene, this.Authoring.Document));
 
-    public void NotifyEdited() => this.Authoring.Documents.Raise(value => value.DocumentMetadataChanged += null, new DocumentMetadataChangedEventArgs(default, this.Authoring.Tab));
+    /// <summary>Records an edit in the scene's document, which makes it dirty, as an authoring command does.</summary>
+    public void NotifyEdited() => this.Authoring.Document.History.AddChange(new DroidNet.TimeMachine.Changes.SimpleAction(static () => { }) { Key = "edit" });
 
-    public void SwitchDocument(Guid documentId)
-    {
-        this.activeDocument = documentId;
-        this.Authoring.Documents.Raise(value => value.DocumentActivated += null, new DocumentActivatedEventArgs(default, documentId));
-    }
+    /// <summary>Makes another document, or none, the window's active document.</summary>
+    public void SwitchAway() => this.Authoring.Area.Activate(null);
 
     public void Dispose()
     {
