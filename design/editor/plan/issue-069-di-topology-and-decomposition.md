@@ -211,11 +211,11 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   makes the next search read the files again, so no caller invalidates it. It
   also reviews a delete (`IAssetRelocationService.FindReferrersOutsideAsync`):
   the files outside the deleted items that use them, read again first.
-  ContentPipeline's `Authoring/IScriptAssetAuthoring` proposes the folder and
-  the first free name of a new script or input file, checks a chosen name
-  against the asset catalog, and writes the template through `IAtomicFileStore`
-  only where no file exists, so a file the catalog has not seen yet is never
-  overwritten; `ScriptTemplates` moves with it. Both services report the files
+  ContentPipeline's `Authoring/IAssetAuthoring` proposes the folder and the
+  first free name of a new script or input file, checks a chosen name against
+  the asset catalog, and writes the template through `IAtomicFileStore` only
+  where no file exists, so a file the catalog has not seen yet is never
+  overwritten; `AssetTemplates` moves with it. Both services report the files
   the editor changed as `FilesChanged`, the relocation service now including the
   files and folders a copy creates, and script authoring each file it creates
   before `CreateAsync` returns. The asset feed follows both reports and reads
@@ -274,31 +274,39 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   Projects uses it; those parts wait for S1.6. `Oxygen.Editor.Runtime` loses its
   unused reference to Documents. Gate: TimeMachine, Documents and Projects tests
   and the tests of the modules whose copies are replaced.
-- **S1.6 Scenes** (C1, C2, C3 model side, C4 contract, C7, C15). Design first.
-  `Oxygen.Editor.Scenes` takes the command service, edit sessions, selection,
-  the organizer and mutator model, the scene preferences (behind interfaces),
-  the clipboard model, `ScriptSlotEdits` and the scene-specific parts of
-  Projects; it implements the scene document type (S1.5) and declares
-  `ISceneEngineSync`. Command and content-demand services lose their `WindowId`;
-  multi-node actions become TimeMachine transactions (documents design decision
-  1). Renaming, duplicating and deleting a scene asset, sent today as
-  `SceneAssetCommandMessage` to whichever scene workspace is open, become Scenes
-  operations; they report the files they change like the relocation service
-  does, the asset feed follows that report, and the Content Browser's refresh
-  after a scene command goes. Gate: Scenes tests without the WinUI host, and the
-  World Editor tests that cover the callers.
+- **S1.6 Scenes** (C1, C2, C3 model side, C4 contract, C7, C15;
+  [scenes-module.md](../review/scenes-module.md)). `Oxygen.Editor.Scenes`, a
+  class library with no WinUI, takes the command service with its edit sessions,
+  results, edit records and descriptors, selection, the mutator and the
+  organizer without its unused adapter code, node lock and visibility behind an
+  interface, and the `ISceneEngineSync` port with value types of its own; it
+  implements the scene document kind (S1.5). The command service loses its
+  `WindowId` and its messages, which become .NET events. Scenes become
+  documents: the World Editor opens them through `OpenDocuments`, and Projects'
+  scene members, versions and snapshots go. A scene's name is its file name,
+  scenes live in any folder of an authoring mount, and the relocation service
+  renames, moves, copies and deletes them like any asset, with file reports and
+  global undo for all but delete; `SceneAssetCommandMessage`,
+  `SceneAssetRenameOperation` and the project's scene list go. New Scene and the
+  scene rules of the relocation service live in ContentPipeline. The ten change
+  sets become TimeMachine transactions. Three commits: scenes as documents and
+  scene assets through the relocation service, in the World Editor; the module
+  and the move; transactions. Gate: Scenes tests without the WinUI host, the
+  tests of the callers, the reviewer's editor build and acceptance of the first
+  commit in the running editor.
 - **S1.7 LivePreview** (C4 implementation, C11, C13, Play). Design first.
-  `Oxygen.Editor.LivePreview` takes engine sync, content demand, mount changes,
-  the runtime session start taken out of `WorkspaceViewModel`, the Play services
-  and the runtime problem source, and the adapters for the ports of Scenes and
-  Assets. It is the only domain module that references `Oxygen.Editor.Runtime`
-  and `Oxygen.Interop`. Gate: LivePreview tests and the reviewer's editor build.
+  `Oxygen.Editor.LivePreview` takes engine sync, content demand (without its
+  `WindowId`), mount changes, the runtime session start taken out of
+  `WorkspaceViewModel`, the Play services and the runtime problem source, and
+  the adapters for the ports of Scenes and Assets. It is the only domain module
+  that references `Oxygen.Editor.Runtime` and `Oxygen.Interop`. Gate:
+  LivePreview tests and the reviewer's editor build.
 - **S1.8 Models in World.** Design first. World gains `Material` over
   `MaterialSource`, `Texture`, `InputMappingContext` and `InputAction`, and
   `Script` with its source and declared parameters, each with its problems
   (documents design decision 7); the editing part of `MaterialDocumentService`
-  moves into `Material` and the Material Editor. Gate: World and Material Editor
-  tests.
+  moves into `Material` and the Material Editor, and `ScriptSlotEdits` moves to
+  Scenes over `Script`. Gate: World, Scenes and Material Editor tests.
 - **S1.9 Script and input checks** (documents design 4.2, and rules 1 to 3 of
   4.6). ContentPipeline takes the input file check and the script check, and
   produces the problems of the World models; script analysis runs through a port
@@ -335,16 +343,17 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 - **S1.12 Features**, a move commit and a rename commit each, with the feature's
   module, theme dictionary and tests, in this order: `Output`, `Problems`,
   `Cooking`, `CookedInspector` (from `Inspection`), `SceneExplorer` (C3 explorer
-  side), `SceneEditor` (C14, Play UI), `SceneInspector` (from `Inspector`); then
-  the Material Editor registers its editor provider, the Content Browser becomes
-  `ContentExplorer` (its left pane, `ProjectExplorer` today, becomes
-  `ContentFolders`) and the Project Browser becomes `ProjectExplorer`. The new
-  `TextureEditor` replaces the Content Browser's texture import dialog, and the
-  new `History` panel (documents design decision 1) comes last, as a passive
-  panel over the Shell's histories. After each, the workspace stops registering
-  that feature's types and the document host stops constructing it. Gate: that
-  feature's tests; UI test failures go to the reviewer; visible changes wait for
-  the reviewer's acceptance (decision 8).
+  side), `SceneEditor` (C14, Play UI, and its preview, viewport and transform
+  tool settings), `SceneInspector` (from `Inspector`); then the Material Editor
+  registers its editor provider, the Content Browser becomes `ContentExplorer`
+  (its left pane, `ProjectExplorer` today, becomes `ContentFolders`) and the
+  Project Browser becomes `ProjectExplorer`. The new `TextureEditor` replaces
+  the Content Browser's texture import dialog, and the new `History` panel
+  (documents design decision 1) comes last, as a passive panel over the Shell's
+  histories. After each, the workspace stops registering that feature's types
+  and the document host stops constructing it. Gate: that feature's tests; UI
+  test failures go to the reviewer; visible changes wait for the reviewer's
+  acceptance (decision 8).
 - **S1.13 Dissolve the World Editor.** Nothing is left in
   `Oxygen.Editor.WorldEditor`; the project and its test projects are deleted,
   `Oxygen.Editor.World` drops its internals grant to it, and the application

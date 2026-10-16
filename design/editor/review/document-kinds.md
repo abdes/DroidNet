@@ -148,7 +148,8 @@ The same behavior, over that state:
   - If the file still has the version the document holds, the change was the
     document's own save, and nothing happens.
   - A clean document reloads.
-  - A dirty document is marked changed on disk.
+  - A dirty document, or one with an edit in progress such as a drag, is marked
+    changed on disk.
   - A document whose file is gone is marked missing.
 - **Reload:** decode the file again and replace the content. Clear the history,
   because its entries refer to the content that was replaced.
@@ -172,10 +173,11 @@ A kind does only the work that needs to know its format or its model:
   anywhere. A capture may refuse with a message, as a material's validation does
   today. A capture for a copy takes the new asset's identity, because a scene
   file holds its own id.
-- **Finish its edits in progress,** such as an open drag or an open edit
-  session, as one history entry each.
-- **Apply a relocation to its model:** its own new identity, and the old-to-new
-  asset URIs of the references it holds.
+- **Tell whether an edit is in progress,** and **finish its edits in progress,**
+  such as an open drag or an open edit session, as one history entry each.
+- **Apply a relocation to its model:** its new file, and a mapping that gives
+  each moved reference its new value. A mapping, not a list of URIs, because a
+  moved folder moves every reference inside it.
 
 A kind holds no file version and no history. It never reads or writes a file
 itself.
@@ -216,7 +218,7 @@ is computed. It rejects:
 
 Every copy listed in stiffness 7 uses it, and the cook-specific derivations
 (native virtual paths, descriptor suffixes, writable mounts) are built on it.
-The scene-specific parts of Projects move to Scenes in S1.6, as the plan says.
+The scene-specific parts of Projects go in S1.6, as the plan says.
 
 ### 3.5 The history's position
 
@@ -226,7 +228,9 @@ and redoing the entry returns it to the position after. Undo and redo record a
 new inverse change each time, so a position cannot be the identity of the entry
 on top of the stack: TimeMachine's `HistoryKeeper` keeps the positions with its
 stacks and exposes the current one. Clearing a history moves it to a new
-position.
+position. An entry that changes only how the document is shown, such as hiding a
+node in the scene editor, keeps the position, so it does not make the document
+dirty.
 
 ### 3.6 Keep Mine
 
@@ -260,8 +264,8 @@ marked changed on disk.
    covers only file-backed documents.
 6. **Deleting, in the editor, an asset that is open closes its document as part
    of the delete.** The delete confirmation names the open documents ("Wood is
-   open and will close"), and a dirty one is discarded. Undoing the delete
-   restores the file but does not reopen it. A delete outside the editor keeps
+   open and will close"), and a dirty one is discarded. A delete moves the files
+   to the Recycle Bin and has no undo entry. A delete outside the editor keeps
    the document open and marks it missing (scenario 2.3 of the documents
    design).
 7. **A document edits exactly one file.** A future kind that needs several files
