@@ -7,6 +7,12 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>Prioritizes explicit and preview work while retaining one project writer.</summary>
+/// <remarks>
+/// When foreground work waits while a cook on change holds the writer, the cook on change is cancelled. It stops at its
+/// next cancellation point, which never publishes a partial result, ends as stopped and reports
+/// <see cref="CookPreemptedException"/> to its callers, which cook the source again after the foreground work if it is
+/// still stale. A cook already publishing is left to finish.
+/// </remarks>
 public sealed partial class ContentCookCoordinator
 {
     private readonly List<WriterRequest> waitingWriters = [];
@@ -53,7 +59,13 @@ public sealed partial class ContentCookCoordinator
             }
         }
 
-        if (this.activeOperation is not null || this.waitingWriters.Count == 0)
+        if (this.activeOperation is not null)
+        {
+            this.PreemptAutomaticWriter();
+            return;
+        }
+
+        if (this.waitingWriters.Count == 0)
         {
             return;
         }
@@ -73,6 +85,21 @@ public sealed partial class ContentCookCoordinator
         }
 
         _ = granted.Granted.TrySetResult();
+    }
+
+    // Called under stateLock.
+    private void PreemptAutomaticWriter()
+    {
+        if (this.activeOperation is not { } active || !this.waitingWriters.Exists(static waiting => waiting.IsForeground)
+            || !this.runs.TryGetValue(active.OperationId, out var run) || run.Preempted
+            || run.Snapshot is not { Request: { IsAutomatic: true, IsDemand: false }, IsCompleted: false }
+            || run.Snapshot.State is CookRunState.Publishing or CookRunState.Cancelling)
+        {
+            return;
+        }
+
+        run.Preempted = true;
+        _ = run.Cancellation.CancelAsync();
     }
 
     private sealed class WriterRequest(ContentCookOperation operation, CookRunRequest? request, SharedCook? shared, CancellationToken cancellationToken)

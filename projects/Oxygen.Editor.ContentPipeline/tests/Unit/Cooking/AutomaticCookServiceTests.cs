@@ -237,6 +237,56 @@ public sealed class AutomaticCookServiceTests
         _ = (await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)).AssetUri.Should().Be(Main);
     }
 
+    /// <summary>A cook stopped for a requested cook is cooked again when that cook did not cover it.</summary>
+    /// <returns>The asynchronous stopped-cook regression.</returns>
+    [TestMethod]
+    public async Task StoppedCookIsCookedAgainWhileStale()
+    {
+        using var fixture = new Fixture();
+        var stopped = new TaskCompletionSource<ContentCookResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Result = stopped.Task;
+        using var service = fixture.CreateService();
+        fixture.Change(AssetChangeKind.Updated, Wood);
+        fixture.Time.Advance(AutomaticCookService.QuietWindow);
+        _ = await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false);
+
+        fixture.Result = Task.FromResult(Succeeded());
+        stopped.SetException(new CookPreemptedException());
+
+        _ = (await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)).AssetUri.Should().Be(Wood);
+    }
+
+    /// <summary>A cook stopped for a requested cook that covered it is not cooked again.</summary>
+    /// <returns>The asynchronous covered stopped-cook regression.</returns>
+    [TestMethod]
+    public async Task StoppedCookCoveredByTheRequestedCookIsNotCookedAgain()
+    {
+        using var fixture = new Fixture();
+        var project = fixture.Projects.ActiveProject!;
+        var stopped = new TaskCompletionSource<ContentCookResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Result = stopped.Task;
+        using var service = fixture.CreateService();
+        fixture.Change(AssetChangeKind.Updated, Wood);
+        fixture.Time.Advance(AutomaticCookService.QuietWindow);
+        _ = await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false);
+
+        var requested = new CookRunSnapshot
+        {
+            OperationId = Guid.NewGuid(), ProjectId = project.ProjectId, ProjectRoot = project.ProjectRoot,
+            DisplayName = "Materials", Request = new(CookTargetKind.Folder, new Uri("asset:///Content/Materials")), State = CookRunState.Cooking,
+        };
+        fixture.InProgress = [requested];
+        fixture.Result = Task.FromResult(Succeeded());
+        fixture.Fresh.Add(Wood);
+        stopped.SetException(new CookPreemptedException());
+        fixture.InProgress = [];
+        fixture.Runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(requested with { State = CookRunState.Succeeded, CompletedAt = DateTimeOffset.UtcNow }));
+
+        fixture.Change(AssetChangeKind.Updated, Main);
+        fixture.Time.Advance(AutomaticCookService.QuietWindow);
+        _ = (await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)).AssetUri.Should().Be(Main, "the requested cook covered the stopped one");
+    }
+
     private static ContentCookResult Succeeded() => new(Guid.NewGuid(), CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null);
 
     private sealed class Fixture : IDisposable

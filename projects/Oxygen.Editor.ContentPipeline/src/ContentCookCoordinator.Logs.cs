@@ -35,6 +35,12 @@ public sealed partial class ContentCookCoordinator
     [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Name} cancelled after {Seconds:F1} s.")]
     private partial void LogRunCancelled(string name, double seconds);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Name} stopped after {Seconds:F1} s so that a requested cook could run first.")]
+    private partial void LogRunStopped(string name, double seconds);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Scope} joined the queued cook of {Name}.")]
+    private partial void LogRunJoined(string scope, string name);
+
     [LoggerMessage(Level = LogLevel.Error, Message = "Cook of {Name} failed after {Seconds:F1} s: {Error}")]
     private partial void LogRunFailed(string name, double seconds, string? error);
 
@@ -52,7 +58,17 @@ public sealed partial class ContentCookCoordinator
         }
     }
 
-    private void LogRunFinished(CookRunSnapshot run)
+    private void LogRunJoined(CookRunRequest request, string name)
+    {
+        if (this.logger.IsEnabled(LogLevel.Information))
+        {
+#pragma warning disable CA1873 // Guarded by explicit IsEnabled check above.
+            this.LogRunJoined(DescribeScope(request), name);
+#pragma warning restore CA1873
+        }
+    }
+
+    private void LogRunFinished(CookRunSnapshot run, bool stopped)
     {
         var seconds = ((run.CompletedAt ?? DateTimeOffset.UtcNow) - run.StartedAt).TotalSeconds;
         var updated = run.Assets.Values.Count(static asset => asset.State == CookAssetState.Updated);
@@ -64,6 +80,9 @@ public sealed partial class ContentCookCoordinator
                 break;
             case CookRunState.SucceededWithWarnings:
                 this.LogRunWarned(run.DisplayName, seconds, updated, reused, run.Diagnostics.FirstOrDefault(static issue => issue.Severity == DiagnosticSeverity.Warning)?.Message);
+                break;
+            case CookRunState.Cancelled when stopped:
+                this.LogRunStopped(run.DisplayName, seconds);
                 break;
             case CookRunState.Cancelled:
                 this.LogRunCancelled(run.DisplayName, seconds);

@@ -45,6 +45,64 @@ public sealed class CookPriorityTests
                 this.TestContext.CancellationToken);
     }
 
+    /// <summary>A cook the user asks for stops a running cook on change, which ends as stopped and tells its caller.</summary>
+    /// <returns>The asynchronous foreground regression.</returns>
+    [TestMethod]
+    public async Task RequestedCookStopsARunningCookOnChange()
+    {
+        var context = CreateContextService();
+        using var coordinator = CreateCoordinator(context);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var automatic = coordinator.RunCookAsync(
+            new(CookTargetKind.Asset, new Uri("asset:///Content/Saved.omat.json"), IsAutomatic: true) { CoalescePending = true },
+            async (_, token) =>
+            {
+                started.SetResult();
+                await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
+                return 1;
+            },
+            this.TestContext.CancellationToken);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var requested = coordinator.RunCookAsync(
+            new(CookTargetKind.Asset, new Uri("asset:///Content/Other.omat.json")) { CoalescePending = true },
+            (_, _) => Task.FromResult(2),
+            this.TestContext.CancellationToken);
+
+        Func<Task> stopped = async () => await automatic.ConfigureAwait(false);
+        _ = await stopped.Should().ThrowAsync<CookPreemptedException>().ConfigureAwait(false);
+        _ = (await requested.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(2);
+        _ = coordinator.Runs.Single(run => run.Request.IsAutomatic).State.Should().Be(CookRunState.Cancelled);
+    }
+
+    /// <summary>Only a requested cook stops a cook on change; neither another cook on change nor a preview one is stopped.</summary>
+    /// <returns>The asynchronous non-preemption regression.</returns>
+    [TestMethod]
+    public async Task PreviewAndCookOnChangeAreNotStoppedByEachOther()
+    {
+        var context = CreateContextService();
+        using var coordinator = CreateCoordinator(context);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var preview = coordinator.RunCookAsync(
+            new(CookTargetKind.Asset, new Uri("asset:///Content/Preview.omat.json"), IsAutomatic: true) { IsDemand = true },
+            async (_, token) =>
+            {
+                started.SetResult(token);
+                await release.Task.ConfigureAwait(false);
+                return 1;
+            },
+            this.TestContext.CancellationToken);
+        var token = await started.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var saved = coordinator.RunCookAsync(new(CookTargetKind.Asset, new Uri("asset:///Content/Saved.omat.json"), IsAutomatic: true), (_, _) => Task.FromResult(2), this.TestContext.CancellationToken);
+        var requested = coordinator.RunCookAsync(new(CookTargetKind.Asset, new Uri("asset:///Content/Other.omat.json")), (_, _) => Task.FromResult(3), this.TestContext.CancellationToken);
+
+        _ = token.IsCancellationRequested.Should().BeFalse();
+        release.SetResult();
+        _ = (await Task.WhenAll(preview, saved, requested).WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(1, 2, 3);
+    }
+
     /// <summary>Removing a cancelled priority waiter allows the next save to acquire the writer.</summary>
     /// <returns>The asynchronous cancellation regression.</returns>
     [TestMethod]

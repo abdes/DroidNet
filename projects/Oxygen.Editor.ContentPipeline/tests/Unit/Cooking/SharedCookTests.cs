@@ -47,7 +47,7 @@ public sealed class SharedCookTests
         }
     }
 
-    /// <summary>An explicit caller promotes an equivalent queued automatic scope.</summary>
+    /// <summary>An explicit caller promotes an equivalent queued automatic cook, which then does the explicit work.</summary>
     /// <returns>The asynchronous promotion regression.</returns>
     [TestMethod]
     public async Task ExplicitRequestPromotesSharedQueuedSaveAndRevealsItsRun()
@@ -60,10 +60,32 @@ public sealed class SharedCookTests
         var save = coordinator.RunCookAsync(SharedAssetRequest(), (_, _) => Task.FromResult(1), this.TestContext.CancellationToken);
         var explicitCook = coordinator.RunCookAsync(SharedAssetRequest() with { IsAutomatic = false }, (_, _) => Task.FromResult(2), this.TestContext.CancellationToken);
         await hold.ReleaseAsync().ConfigureAwait(false);
-        _ = (await save.ConfigureAwait(false)).Should().Be(1);
-        _ = (await explicitCook.ConfigureAwait(false)).Should().Be(1);
+        _ = (await save.ConfigureAwait(false)).Should().Be(2, "an automatic cook does only part of an explicit cook's work");
+        _ = (await explicitCook.ConfigureAwait(false)).Should().Be(2);
         _ = coordinator.Runs.Should().ContainSingle().Which.Request.IsAutomatic.Should().BeFalse();
         _ = revealed.Should().BeTrue();
+    }
+
+    /// <summary>A request joins a pending folder cook that covers it; one outside the folder, or a reimport, does not.</summary>
+    /// <returns>The asynchronous covering-join regression.</returns>
+    [TestMethod]
+    public async Task RequestJoinsAPendingCookThatCoversIt()
+    {
+        var context = CreateContextService();
+        using var coordinator = CreateCoordinator(context);
+        var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
+        var folder = Queue(new(CookTargetKind.Folder, new Uri("asset:///Content/Materials")), 1);
+        var asset = Queue(new(CookTargetKind.Asset, new Uri("asset:///Content/Materials/Wood.omat.json")), 2);
+        var automatic = Queue(new(CookTargetKind.Asset, new Uri("asset:///Content/Materials/Stone.omat.json"), IsAutomatic: true), 3);
+        var outside = Queue(new(CookTargetKind.Asset, new Uri("asset:///Content/MaterialsOld/Wood.omat.json")), 4);
+        var reimport = Queue(new(CookTargetKind.Asset, new Uri("asset:///Content/Materials/Crate.glb")) { IsReimport = true }, 5);
+
+        _ = coordinator.Runs.Should().HaveCount(3);
+        await hold.ReleaseAsync().ConfigureAwait(false);
+        _ = (await Task.WhenAll(folder, asset, automatic, outside, reimport).ConfigureAwait(false)).Should().Equal(1, 1, 1, 4, 5);
+
+        Task<int> Queue(CookRunRequest request, int result)
+            => coordinator.RunCookAsync(request with { CoalescePending = true }, (_, _) => Task.FromResult(result), this.TestContext.CancellationToken);
     }
 
     /// <summary>Later saved inputs do not join a running capture and instead get one follow-up run.</summary>

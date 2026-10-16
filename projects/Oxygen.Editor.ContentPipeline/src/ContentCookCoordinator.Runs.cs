@@ -137,6 +137,24 @@ public sealed partial class ContentCookCoordinator
         return request.TargetKind == CookTargetKind.Folder ? name : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(name));
     }
 
+    private static string FinishMessage(CookRunState state, bool stopped)
+        => stopped ? "Stopped so that a requested cook could run first. Cook on change cooks this again after it if it is still out of date." : state switch
+        {
+            CookRunState.Succeeded => "Cook complete.",
+            CookRunState.SucceededWithWarnings => "Cook completed with warnings.",
+            CookRunState.UpToDate => "Already up to date.",
+            CookRunState.Cancelled => "Cook cancelled. Owned work has stopped.",
+            _ => "Cook failed.",
+        };
+
+    private bool IsPreempted(Guid operationId)
+    {
+        lock (this.stateLock)
+        {
+            return this.runs.TryGetValue(operationId, out var run) && run.Preempted;
+        }
+    }
+
     private Task BlockRun(Guid operationId, ImmutableArray<CookDocumentState> documents)
     {
         CookRunSnapshot snapshot;
@@ -271,6 +289,7 @@ public sealed partial class ContentCookCoordinator
     {
         CookRunSnapshot snapshot;
         CookRunSnapshot? queueOutcome = null;
+        bool stopped;
         lock (this.stateLock)
         {
             if (!this.runs.TryGetValue(operationId, out var run) || run.Snapshot.IsCompleted)
@@ -278,6 +297,7 @@ public sealed partial class ContentCookCoordinator
                 return;
             }
 
+            stopped = run.Preempted && state == CookRunState.Cancelled;
             snapshot = run.Snapshot;
             foreach (var diagnostic in diagnostics)
             {
@@ -312,20 +332,12 @@ public sealed partial class ContentCookCoordinator
                 }));
             }
 
-            var message = state switch
-            {
-                CookRunState.Succeeded => "Cook complete.",
-                CookRunState.SucceededWithWarnings => "Cook completed with warnings.",
-                CookRunState.UpToDate => "Already up to date.",
-                CookRunState.Cancelled => "Cook cancelled. Owned work has stopped.",
-                _ => "Cook failed.",
-            };
-            snapshot = Append(snapshot, new(message));
+            snapshot = Append(snapshot, new(FinishMessage(state, stopped)));
             run.Snapshot = snapshot = snapshot with { State = state, CompletedAt = DateTimeOffset.UtcNow };
             queueOutcome = this.TakeCompletedQueueOutcome();
         }
 
-        this.LogRunFinished(snapshot);
+        this.LogRunFinished(snapshot, stopped);
         this.PublishCompletedQueue(snapshot, queueOutcome);
     }
 
@@ -388,6 +400,8 @@ public sealed partial class ContentCookCoordinator
         internal TaskCompletionSource? Resume { get; set; }
 
         internal FileStream? RetryOwnership { get; set; }
+
+        internal bool Preempted { get; set; }
     }
 
     private sealed class RunProgress(ContentCookCoordinator owner, Guid operationId) : IProgress<CookRunProgress>

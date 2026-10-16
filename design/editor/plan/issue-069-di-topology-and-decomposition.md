@@ -172,11 +172,18 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   cook. Gate: Managed.Assets, Projects, Assets and ContentPipeline tests, the
   tests of the callers, the reviewer's editor build and acceptance of the
   toggle.
-- **S1.3 Foreground cooks** (rules 4 to 6 of documents design 4.6). A running
-  automatic run stops at its next safe point when the user cooks or plays, and
-  its unfinished inputs return to the waiting automatic run; an explicit request
-  joins a pending one that is identical or covers it; Play waits for a running
-  foreground cook that covers its inputs. Gate: ContentPipeline tests.
+- **S1.3 Foreground cooks** (rules 4 to 6 of documents design 4.6). When any
+  foreground work waits for the writer, a running cook on change is cancelled
+  and stops at its next cancellation point, which never publishes a partial
+  result; one already publishing finishes. It ends as stopped, and cook on
+  change checks its asset again after the foreground work, cooking it only if it
+  is still stale. A run cannot simply run again: its operation folder holds the
+  stopped attempt's snapshots and journal. A request joins a pending cook of the
+  same scope or of a folder or project that covers it, never a reimport and
+  never a run that has started. A foreground request that joins a pending cook
+  on change of the same scope gives it its own work, so an explicit cook or
+  reimport is no longer reduced to the automatic one. Every stop and join is
+  logged. Gate: ContentPipeline tests.
 - **S1.4 Pipeline workflows out of UI** (architecture section 6). The operations
   and undo of `AssetRelocationWorkflow`, and the name and folder validation and
   template writing of `ScriptAssetCreation`, move to ContentPipeline; the

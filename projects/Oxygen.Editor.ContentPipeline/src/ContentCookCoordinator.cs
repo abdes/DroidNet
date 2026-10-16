@@ -141,6 +141,13 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         ((IObserver<ProjectContext?>)this).OnNext(value: null);
     }
 
+    private static bool IsInOperationFolder(string path, ContentCookOperation operation)
+    {
+        var folder = Path.GetFullPath(Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")));
+        return Path.GetFullPath(path).StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed", Justification = "ReleaseAfterDrain takes ownership of the request cancellation and the operation lease and disposes them when the drain ends; this method no longer uses or disposes them.")]
     private async Task<T> RunCoreAsync<T>(Func<ContentCookOperation, CancellationToken, Task<T>> work, CookRunRequest? request, CancellationToken cancellationToken, SharedCook? shared = null, bool verifyCurrentAfterWork = true)
     {
         ArgumentNullException.ThrowIfNull(work);
@@ -158,19 +165,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             {
                 await this.AcquireWriterAsync(operation, request, shared, requestCancellation.Token).ConfigureAwait(false);
                 acquired = true;
-                if (request is not null)
-                {
-                    this.LogRunStarted(operation.OperationId);
-                }
-
-                if (progress is not null)
-                {
-                    // Cached I/O can complete synchronously; a cook must not run its whole closure on the UI caller.
-                    await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
-                }
-
-                requestCancellation.Token.ThrowIfCancellationRequested();
-                this.VerifyCurrent(operation);
+                await this.BeginWorkAsync(operation, progress, requestCancellation.Token).ConfigureAwait(false);
                 operationOwnership ??= CookOutputLease.AcquireOperation(operation.Project.ProjectRoot, operation.OperationId);
                 progress?.Report(new(Message: "Checking saved inputs and dependencies.", State: CookRunState.Preparing));
                 try
@@ -190,29 +185,57 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         catch (ContentPipelineTerminationException ex) when (acquired)
         {
             retained = true;
-            progress?.Report(new(Message: "Unable to stop owned work yet. Waiting for it to drain.", State: CookRunState.Cancelling));
-            var drain = this.ReleaseAfterDrain(operation, requestCancellation, operationOwnership, ex);
+            var drain = this.ReleaseAfterDrain(operation, requestCancellation, operationOwnership, ex, progress);
             operationOwnership = null;
             throw new ContentPipelineTerminationException(ex.InnerException ?? ex, drain);
         }
         catch (Exception ex)
         {
             this.FailRun(operation.OperationId, ex);
+            if (this.ToPreempted(operation.OperationId, ex) is { } stopped)
+            {
+                throw stopped;
+            }
+
             throw;
         }
         finally
         {
             if (!retained)
             {
-                try
-                {
-                    this.RetainRetryInputOrRelease(operation, operationOwnership);
-                }
-                finally
-                {
-                    this.CompleteRequest(acquired, requestCancellation);
-                }
+                this.EndRequest(operation, operationOwnership, acquired, requestCancellation);
             }
+        }
+    }
+
+    private async Task BeginWorkAsync(ContentCookOperation operation, IProgress<CookRunProgress>? progress, CancellationToken cancellationToken)
+    {
+        if (progress is not null)
+        {
+            this.LogRunStarted(operation.OperationId);
+
+            // Cached I/O can complete synchronously; a cook must not run its whole closure on the UI caller.
+            await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        this.VerifyCurrent(operation);
+    }
+
+    private CookPreemptedException? ToPreempted(Guid operationId, Exception exception)
+        => exception is OperationCanceledException && this.IsPreempted(operationId)
+            ? new CookPreemptedException("The cook on change stopped so that a requested cook could run first.", exception)
+            : null;
+
+    private void EndRequest(ContentCookOperation operation, FileStream? ownership, bool acquired, CancellationTokenSource requestCancellation)
+    {
+        try
+        {
+            this.RetainRetryInputOrRelease(operation, ownership);
+        }
+        finally
+        {
+            this.CompleteRequest(acquired, requestCancellation);
         }
     }
 
@@ -232,8 +255,10 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         return this.CompleteRunAsync(operation, result, cancellationToken);
     }
 
-    private Task ReleaseAfterDrain(ContentCookOperation operation, CancellationTokenSource cancellation, FileStream? ownership, ContentPipelineTerminationException failure)
-        => failure.DrainCompletion.ContinueWith(
+    private Task ReleaseAfterDrain(ContentCookOperation operation, CancellationTokenSource cancellation, FileStream? ownership, ContentPipelineTerminationException failure, IProgress<CookRunProgress>? progress)
+    {
+        progress?.Report(new(Message: "Unable to stop owned work yet. Waiting for it to drain.", State: CookRunState.Cancelling));
+        return failure.DrainCompletion.ContinueWith(
             completed =>
             {
                 _ = completed.Exception;
@@ -243,19 +268,13 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
                 }
                 finally
                 {
-                    try
-                    {
-                        this.RetainRetryInputOrRelease(operation, ownership);
-                    }
-                    finally
-                    {
-                        this.CompleteRequest(acquired: true, cancellation);
-                    }
+                    this.EndRequest(operation, ownership, acquired: true, cancellation);
                 }
             },
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
+    }
 
     private (ContentCookOperation operation, CancellationTokenSource cancellation) CreateRequest(CancellationToken cancellationToken, SharedCook? shared = null)
     {
@@ -306,9 +325,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
                     && this.runs.TryGetValue(operation.OperationId, out var run)
                     && run.Snapshot.State is CookRunState.Failed or CookRunState.Cancelled
                     && run.Snapshot.Request.Import?.ReplacementCandidatePath is { } candidate
-                    && Path.GetFullPath(candidate).StartsWith(
-                        Path.GetFullPath(Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")))
-                        + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    && IsInOperationFolder(candidate, operation))
                 {
                     run.RetryOwnership = CookOutputLease.TryAcquireRetryInput(operation.Project.ProjectRoot, operation.OperationId)
                         ?? throw new CookOutputBusyException("The retry input is already owned.");

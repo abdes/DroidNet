@@ -315,11 +315,15 @@ Proposed:
    follow-up run only cooks what changed again.
 4. **Foreground work goes first.** When the user cooks or plays while an
    automatic run is running, the automatic run stops at its next point where it
-   can stop without publishing a partial result; its unfinished inputs return to
-   the waiting automatic run, and the foreground run takes the writer.
-5. **Repeated explicit requests.** A request identical to a pending one joins
-   it, and a request whose inputs a pending request already covers (cook an
-   asset inside a folder already queued) joins that one. Neither joins a run
-   that has started; it queues once behind it.
-6. **Play** is foreground and needs only the scene's inputs: it waits for a
-   running foreground cook that covers them, rather than cooking them twice.
+   can stop without publishing a partial result, and the foreground run takes
+   the writer. After it, the stopped inputs that are still stale return to the
+   waiting automatic run; those the foreground run covered are not cooked again.
+5. **Repeated requests.** A request identical to a pending one joins it, and a
+   request whose inputs a pending request already covers (cook an asset inside a
+   folder already queued) joins that one. Neither joins a run that has started;
+   it queues once behind it. When a request joins a pending automatic run, that
+   run does the request's work.
+6. **Play** is foreground and needs only the scene's inputs. Behind a running
+   cook it queues like any request: that cook read its inputs before Play's
+   save, so Play cooks after it, and incremental cooking reuses everything the
+   running cook already produced.

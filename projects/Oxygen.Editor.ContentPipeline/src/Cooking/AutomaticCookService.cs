@@ -20,7 +20,8 @@ namespace Oxygen.Editor.ContentPipeline.Cooking;
 /// sources to be saved resumes. Otherwise, while Cook on change is on, the service waits until no cook of the project is
 /// in progress and cooks each changed source whose published output does not match what is on disk; a cook that ran
 /// after the change, such as Play's, already covered it. A source has at most one cook in flight, and a change while it
-/// runs cooks the source once more when it ends.
+/// runs cooks the source once more when it ends. A cook stopped for a cook the user asked for goes through the same check
+/// again, so it is cooked after that cook only if that cook did not cover it.
 /// </remarks>
 public sealed partial class AutomaticCookService : IAutomaticCookService, IDisposable
 {
@@ -244,7 +245,6 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         }
     }
 
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The timer owns this task; a failed status read cooks the sources instead of leaving them stale.")]
     private async Task CloseWindowAsync()
     {
         KeyValuePair<Uri, string>[] closed;
@@ -265,18 +265,22 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         }
 
         var changedSources = closed.Where(item => !this.ResumeWaitingRuns(current, item.Value)).Select(static item => item.Key).ToList();
-        if (changedSources.Count == 0)
+        if (changedSources.Count != 0)
         {
-            return;
+            await this.CookStaleAsync(current, changedSources, lifetime).ConfigureAwait(false);
         }
+    }
 
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A failed status read cooks the sources instead of leaving them stale.")]
+    private async Task CookStaleAsync(ProjectContext current, List<Uri> changedSources, CancellationToken lifetime)
+    {
         if (!this.CookOnChange)
         {
             this.LogNotCooked(changedSources.Count);
             return;
         }
 
-        IReadOnlyCollection<Uri> stale = changedSources;
+        var stale = changedSources;
         try
         {
             await this.WaitForProjectCooksAsync(current, lifetime).ConfigureAwait(false);
@@ -314,8 +318,8 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     {
         while (true)
         {
-            var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            void OnRunChanged(object? sender, CookRunChangedEventArgs args) => changed.TrySetResult();
+            var runChanged = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnRunChanged(object? sender, CookRunChangedEventArgs args) => runChanged.TrySetResult();
             this.runs.RunChanged += OnRunChanged;
             try
             {
@@ -324,7 +328,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
                     return;
                 }
 
-                await changed.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                await runChanged.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -372,6 +376,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Background cook failures are recorded in Cooking and logged; they must not escape onto the catalog.")]
     private async Task CookAsync(SourceCook cook)
     {
+        CancellationToken? recheck = null;
         try
         {
             while (true)
@@ -386,9 +391,14 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
                     cook.Again = false;
                 }
 
+                var preempted = false;
                 try
                 {
                     _ = await this.pipeline.CookSavedAssetAsync(cook.AssetUri, cook.Project, cook.Cancellation.Token).ConfigureAwait(false);
+                }
+                catch (CookPreemptedException)
+                {
+                    preempted = true;
                 }
                 catch (OperationCanceledException)
                 {
@@ -401,14 +411,16 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
 
                 lock (this.sync)
                 {
-                    if (!this.IsCurrent(cook) || !cook.Again)
+                    var current = this.IsCurrent(cook);
+                    if (!current || preempted || !cook.Again)
                     {
-                        if (this.cooks.TryGetValue(cook.AssetUri, out var current) && ReferenceEquals(current, cook))
+                        if (this.cooks.TryGetValue(cook.AssetUri, out var owned) && ReferenceEquals(owned, cook))
                         {
                             _ = this.cooks.Remove(cook.AssetUri);
                         }
 
-                        return;
+                        recheck = current && preempted ? this.projectLifetime.Token : null;
+                        break;
                     }
                 }
             }
@@ -416,6 +428,11 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         finally
         {
             await this.ReleaseAsync(cook).ConfigureAwait(false);
+        }
+
+        if (recheck is { } lifetime)
+        {
+            await this.CookStaleAsync(cook.Project, [cook.AssetUri], lifetime).ConfigureAwait(false);
         }
     }
 
