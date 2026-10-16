@@ -451,6 +451,30 @@ public partial class TabStripItemTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
+    public Task CloseButtonRequestsCloseWithoutRunningTheTabCommand_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange - the tab's command activates it, as a document tab's command selects its document
+        var commandRan = false;
+        var closeRequested = false;
+        var (tabStripItem, _) = await SetupTabStripItemWithData(new TabItem
+        {
+            Header = "Closable Tab",
+            IsClosable = true,
+            Command = new CommunityToolkit.Mvvm.Input.RelayCommand(() => commandRan = true),
+        }).ConfigureAwait(true);
+        tabStripItem.CloseRequested += (s, e) => closeRequested = true;
+        var closeButton = tabStripItem.FindDescendant<Button>(button => string.Equals(button.Name, "PartCloseButton", StringComparison.Ordinal));
+        _ = closeButton.Should().NotBeNull();
+
+        // Act - invoke the button as a click does, without system input
+        new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(closeButton!).Invoke();
+
+        // Assert
+        _ = closeRequested.Should().BeTrue();
+        _ = commandRan.Should().BeFalse("closing a tab must not activate it");
+    });
+
+    [TestMethod]
     public Task OnCloseClicked_WithNullItem_DoesNotRaiseEvent_Async() => EnqueueAsync(async () =>
     {
         // Arrange
