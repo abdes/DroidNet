@@ -258,11 +258,19 @@ public partial class TabStripItem : ContentControl
         this.closeButton.Click -= CloseButton_Click;
         this.closeButton.Click += CloseButton_Click;
 
+        // The strip activates a tab when the tab is tapped, and a button's tap still reaches its tab after its click.
+        // Each button keeps its tap, so closing a tab never also selects the document it just closed.
+        this.pinButton.Tapped -= KeepTap;
+        this.pinButton.Tapped += KeepTap;
+        this.closeButton.Tapped -= KeepTap;
+        this.closeButton.Tapped += KeepTap;
+
         this.UpdateMinWidth();
         this.UpdateVisualStates(useTransitions: false);
 
         void PinButton_Click(object sender, RoutedEventArgs e) => this.OnPinClicked();
         void CloseButton_Click(object sender, RoutedEventArgs e) => this.OnCloseClicked();
+        static void KeepTap(object sender, TappedRoutedEventArgs e) => e.Handled = true;
     }
 
     /// <summary>
