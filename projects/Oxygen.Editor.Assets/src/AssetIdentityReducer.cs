@@ -146,20 +146,9 @@ internal sealed class AssetIdentityReducer
                 : path;
     }
 
+    // Only the files of authoring mounts are project sources.
     private static string? TryResolveSourcePath(ProjectContext project, Uri uri)
-    {
-        var relative = Uri.UnescapeDataString(uri.AbsolutePath).TrimStart('/');
-        var slash = relative.IndexOf('/', StringComparison.Ordinal);
-        if (slash <= 0)
-        {
-            return null;
-        }
-
-        var mountName = relative[..slash];
-        var mountRelativePath = relative[(slash + 1)..];
-        var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase));
-        return mount is null ? null : Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath, mountRelativePath));
-    }
+        => project.FindByAssetUri(uri) is { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location ? location.FilePath : null;
 
     private static string GetDisplayPath(AssetRecord selected, ProjectContext project)
     {

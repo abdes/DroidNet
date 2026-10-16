@@ -8,7 +8,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.MaterialEditor;
 
 /// <summary>
-/// Resolves material source URIs against the active project authoring mounts.
+/// Resolves material source URIs against the active project's mounts.
 /// </summary>
 public sealed class ProjectMaterialSourcePathResolver : IMaterialSourcePathResolver
 {
@@ -35,78 +35,19 @@ public sealed class ProjectMaterialSourcePathResolver : IMaterialSourcePathResol
 
         var project = this.projectContextService.ActiveProject
             ?? throw new InvalidOperationException("No active project is available for material source resolution.");
+        var location = project.FindByAssetUri(materialUri) is { IsMountRoot: false } found
+            ? found
+            : throw new InvalidOperationException($"Material URI '{materialUri}' does not name a file in one of the project's mounts.");
 
-        var path = Uri.UnescapeDataString(materialUri.AbsolutePath).TrimStart('/');
-        var slash = path.IndexOf('/', StringComparison.Ordinal);
-        if (slash <= 0)
-        {
-            throw new InvalidOperationException($"Material URI '{materialUri}' does not include an authoring mount.");
-        }
-
-        var mountName = path[..slash];
-        var mountRelativePath = path[(slash + 1)..];
-        if (string.IsNullOrWhiteSpace(mountRelativePath)
-            || Path.IsPathRooted(mountRelativePath)
-            || mountRelativePath.Split('/', '\\').Any(static segment => segment is ".." or "."))
-        {
-            throw new InvalidOperationException($"Material URI '{materialUri}' contains an invalid material path.");
-        }
-
-        var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase));
-        if (mount is null)
-        {
-            return ResolveLocalMount(project, materialUri, mountName, mountRelativePath);
-        }
-
-        var sourceRelativePath = NormalizeRelativePath(Path.Combine(mount.RelativePath, mountRelativePath));
-        var mountRoot = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath));
-        var sourcePath = Path.GetFullPath(Path.Combine(project.ProjectRoot, sourceRelativePath));
-        if (!IsUnderRoot(sourcePath, mountRoot))
-        {
-            throw new InvalidOperationException($"Material URI '{materialUri}' resolves outside authoring mount '{mountName}'.");
-        }
-
+        // An authoring mount's file is named from the project root; a local folder mount's file from its mount.
+        var relativePath = location.MountKind == ProjectMountKind.Authoring
+            ? Path.GetRelativePath(project.ProjectRoot, location.FilePath).Replace('\\', '/')
+            : location.MountRelativePath;
         return new MaterialSourceLocation(
             MaterialUri: materialUri,
             ProjectRoot: project.ProjectRoot,
-            MountName: mount.Name,
-            SourcePath: sourcePath,
-            SourceRelativePath: sourceRelativePath);
-    }
-
-    private static MaterialSourceLocation ResolveLocalMount(
-        ProjectContext project,
-        Uri materialUri,
-        string mountName,
-        string mountRelativePath)
-    {
-        var mount = project.LocalFolderMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException($"Material URI '{materialUri}' targets unknown mount '{mountName}'.");
-
-        var mountRoot = Path.GetFullPath(mount.AbsolutePath);
-        var sourcePath = Path.GetFullPath(Path.Combine(mountRoot, mountRelativePath));
-        if (!IsUnderRoot(sourcePath, mountRoot))
-        {
-            throw new InvalidOperationException($"Material URI '{materialUri}' resolves outside local mount '{mountName}'.");
-        }
-
-        return new MaterialSourceLocation(
-            MaterialUri: materialUri,
-            ProjectRoot: project.ProjectRoot,
-            MountName: mount.Name,
-            SourcePath: sourcePath,
-            SourceRelativePath: NormalizeRelativePath(mountRelativePath));
-    }
-
-    private static string NormalizeRelativePath(string path)
-        => path.Replace('\\', '/').TrimStart('/');
-
-    private static bool IsUnderRoot(string path, string root)
-    {
-        var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                             + Path.DirectorySeparatorChar;
-        var normalizedPath = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                             + Path.DirectorySeparatorChar;
-        return normalizedPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
+            MountName: location.MountName,
+            SourcePath: location.FilePath,
+            SourceRelativePath: relativePath);
     }
 }

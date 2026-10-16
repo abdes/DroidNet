@@ -42,9 +42,18 @@ public class HistoryKeeper : ITransactionManager
     private readonly ITransactionFactory? transactionFactory;
     private readonly Stack<ITransaction> transactions = new();
     private readonly ObservableCollection<IChange> undoStack = [];
+
+    // The position each undo entry leads to, and the position redoing each redo entry leads to, aligned with the stacks.
+    private readonly List<long> undoPositions = [];
+    private readonly List<long> redoPositions = [];
     private ChangeSet? currentChangeSet;
 
     private int isCollectingChangesCounter;
+    private long lastPosition;
+    private long emptyPosition;
+
+    // The position of the entry being undone or redone, which the inverse it records leads back to.
+    private long replayPosition;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HistoryKeeper"/> class with the specified root object and optional transaction factory.
@@ -110,6 +119,10 @@ public class HistoryKeeper : ITransactionManager
     /// Gets a value indicating whether there are changes that can be redone.
     /// </summary>
     public bool CanRedo => this.redoStack.Count != 0;
+
+    /// <summary>Gets the position of the current state, which undoing and redoing an entry restore.</summary>
+    /// <remarks>It changes before the stacks do, so an observer of <see cref="UndoStack"/> reads the new position.</remarks>
+    public HistoryPosition Position => new(this.undoPositions.Count == 0 ? this.emptyPosition : this.undoPositions[^1]);
 
     /// <summary>Gets a value indicating whether replay, a transaction or a change set is in progress.</summary>
     public bool IsBusy => this.State != States.Idle || this.transactions.Count != 0 || this.isCollectingChangesCounter != 0;
@@ -242,7 +255,7 @@ public class HistoryKeeper : ITransactionManager
             this.CommitTransactions();
         }
 
-        if (!this.TryPopUndoStack(out var lastChange))
+        if (!this.TryPopUndoStack(out var lastChange, out this.replayPosition))
         {
             return;
         }
@@ -266,11 +279,12 @@ public class HistoryKeeper : ITransactionManager
             this.CommitTransactions();
         }
 
-        if (!this.TryPopUndoStack(out var lastChange))
+        if (!this.TryPopUndoStack(out var lastChange, out var position))
         {
             return;
         }
 
+        this.replayPosition = position;
         var inverseCount = this.redoStack.Count;
         try
         {
@@ -284,9 +298,9 @@ public class HistoryKeeper : ITransactionManager
         }
         catch
         {
-            if (RemoveEmptyReplay(this.redoStack, inverseCount, this.redoStack.FirstOrDefault()))
+            if (RemoveEmptyReplay(this.redoStack, this.redoPositions, inverseCount, this.redoStack.FirstOrDefault()))
             {
-                this.PushToUndoStack(lastChange);
+                this.PushToUndoStack(lastChange, position);
             }
 
             throw;
@@ -303,7 +317,7 @@ public class HistoryKeeper : ITransactionManager
             this.CommitTransactions();
         }
 
-        if (!this.TryPopRedoStack(out var lastChange))
+        if (!this.TryPopRedoStack(out var lastChange, out this.replayPosition))
         {
             return;
         }
@@ -327,11 +341,12 @@ public class HistoryKeeper : ITransactionManager
             this.CommitTransactions();
         }
 
-        if (!this.TryPopRedoStack(out var lastChange))
+        if (!this.TryPopRedoStack(out var lastChange, out var position))
         {
             return;
         }
 
+        this.replayPosition = position;
         var inverseCount = this.undoStack.Count;
         try
         {
@@ -344,9 +359,9 @@ public class HistoryKeeper : ITransactionManager
         }
         catch
         {
-            if (RemoveEmptyReplay(this.undoStack, inverseCount, this.undoStack.LastOrDefault()))
+            if (RemoveEmptyReplay(this.undoStack, this.undoPositions, inverseCount, this.undoStack.LastOrDefault()))
             {
-                this.PushToRedoStack(lastChange);
+                this.PushToRedoStack(lastChange, position);
             }
 
             throw;
@@ -364,6 +379,7 @@ public class HistoryKeeper : ITransactionManager
             throw new InvalidOperationException("unable to clear the undo history because we're not Idle");
         }
 
+        this.emptyPosition = ++this.lastPosition;
         this.ClearUndoStack();
         this.ClearRedoStack();
     }
@@ -424,49 +440,80 @@ public class HistoryKeeper : ITransactionManager
         }
     }
 
-    private static bool RemoveEmptyReplay(ObservableCollection<IChange> inverse, int previousCount, IChange? added)
+    private static bool RemoveEmptyReplay(ObservableCollection<IChange> inverse, List<long> positions, int previousCount, IChange? added)
     {
         if (inverse.Count == previousCount + 1 && added is ChangeSet set && !set.Changes.Any())
         {
-            _ = inverse.Remove(set);
+            var index = inverse.IndexOf(set);
+            positions.RemoveAt(index);
+            inverse.RemoveAt(index);
         }
 
         return inverse.Count == previousCount;
     }
 
-    private void ClearUndoStack() => this.undoStack.Clear();
+    private void ClearUndoStack()
+    {
+        this.undoPositions.Clear();
+        this.undoStack.Clear();
+    }
 
-    private bool TryPopRedoStack(out IChange value)
+    private bool TryPopRedoStack(out IChange value, out long position)
     {
         if (this.redoStack.Count > 0)
         {
             value = this.redoStack[0];
+            position = this.redoPositions[0];
+            this.redoPositions.RemoveAt(0);
             this.redoStack.RemoveAt(0);
             return true;
         }
 
         value = default!;
+        position = default;
         return false;
     }
 
-    private bool TryPopUndoStack(out IChange value)
+    private bool TryPopUndoStack(out IChange value, out long position)
     {
         if (this.undoStack.Count > 0)
         {
             value = this.undoStack[^1];
+            position = this.undoPositions[^1];
+            this.undoPositions.RemoveAt(this.undoPositions.Count - 1);
             this.undoStack.RemoveAt(this.undoStack.Count - 1);
             return true;
         }
 
         value = default!;
+        position = default;
         return false;
     }
 
-    private void PushToRedoStack(IChange change) => this.redoStack.Insert(0, change);
+    // Undoing records the inverse of the entry it undid; redoing that inverse returns to where the entry led.
+    private void PushToRedoStack(IChange change) => this.PushToRedoStack(change, this.replayPosition);
 
-    private void PushToUndoStack(IChange change) => this.undoStack.Add(change);
+    private void PushToRedoStack(IChange change, long position)
+    {
+        this.redoPositions.Insert(0, position);
+        this.redoStack.Insert(0, change);
+    }
 
-    private void ClearRedoStack() => this.redoStack.Clear();
+    // Redoing records the inverse of the entry it redid, which leads where that entry led; anything else is a new state.
+    private void PushToUndoStack(IChange change)
+        => this.PushToUndoStack(change, this.State == States.Redoing ? this.replayPosition : ++this.lastPosition);
+
+    private void PushToUndoStack(IChange change, long position)
+    {
+        this.undoPositions.Add(position);
+        this.undoStack.Add(change);
+    }
+
+    private void ClearRedoStack()
+    {
+        this.redoPositions.Clear();
+        this.redoStack.Clear();
+    }
 
     private void CommitTransactions() => this.transactions.FirstOrDefault()?.Commit();
 

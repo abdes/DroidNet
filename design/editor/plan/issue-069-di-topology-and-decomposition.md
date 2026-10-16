@@ -259,13 +259,21 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   goes into, still leaves the publication. Gate: engine writer tests,
   ContentPipeline native cook repair tests, and the reviewer's check that
   deleting one asset of a large mount no longer cooks the rest.
-- **S1.5 Document kinds.** Design first: the contract a document type implements
-  in `Oxygen.Editor.Documents` (load, save against the version it read, reload,
-  commit an edit in progress, apply and revert its history changes, retarget to
-  a relocated file) and how an open request reaches it, with no window and no
-  tab in it (documents design decisions 2 and 7). Then the contract, with tests
-  over a fake type; Projects is reduced to asset-to-file resolution, and its
-  scene-specific parts wait for S1.6. Gate: Documents and Projects tests.
+- **S1.5 Document kinds** ([document-kinds.md](../review/document-kinds.md)).
+  `Oxygen.Editor.Documents` holds what every document has and does, without
+  windows or tabs: its file, the version it read, dirty from its history's
+  position, missing and changed on disk, its history and its content; opening
+  once per file with the kind registered for the file's suffix, saving against
+  the version it read, saving a copy, hearing that its file changed (quiet
+  reload, changed on disk, missing), reloading, Keep Mine and following a
+  relocation. A kind only decodes its file, captures and encodes what to save,
+  finishes its edits in progress and applies a relocation to its model; it holds
+  no version or history. TimeMachine's history exposes its position, which undo
+  and redo restore. Projects maps asset URIs to files and back, in the asset
+  catalog's URI form, and every copy of that mapping outside the scene parts of
+  Projects uses it; those parts wait for S1.6. `Oxygen.Editor.Runtime` loses its
+  unused reference to Documents. Gate: TimeMachine, Documents and Projects tests
+  and the tests of the modules whose copies are replaced.
 - **S1.6 Scenes** (C1, C2, C3 model side, C4 contract, C7, C15). Design first.
   `Oxygen.Editor.Scenes` takes the command service, edit sessions, selection,
   the organizer and mutator model, the scene preferences (behind interfaces),

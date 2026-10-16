@@ -5,32 +5,82 @@
 Multi-window Oxygen editors require sophisticated document management:
 
 - Tracking open documents across multiple windows
-- Preventing users from closing critical singleton documents (like the current scene)
+- Preventing users from closing critical singleton documents (like the current
+  scene)
 - Coordinating document state changes and UI updates
-- Handling async document close operations with user vetoes (e.g., "Save before closing?")
+- Handling async document close operations with user vetoes (e.g., "Save before
+  closing?")
 - Supporting arbitrary document types with type-safe metadata
 
-**Oxygen.Editor.Documents** solves these problems with a clean, event-driven API built on minimal abstractions.
+**Oxygen.Editor.Documents** solves these problems with a clean, event-driven API
+built on minimal abstractions.
 
 ## Overview
 
-Oxygen.Editor.Documents provides the complete document lifecycle management system for the Oxygen Editor. It integrates seamlessly with Aura's tab UI, supports per-window document management, and enforces architectural constraints (like "only one scene per window") through a declarative, type-safe model.
+Oxygen.Editor.Documents provides the complete document lifecycle management
+system for the Oxygen Editor. It integrates seamlessly with Aura's tab UI,
+supports per-window document management, and enforces architectural constraints
+(like "only one scene per window") through a declarative, type-safe model.
 
 Key responsibilities:
 
 - **Lifecycle Management**: Open, close, attach, detach, and select documents
-- **Type Safety**: Custom metadata classes ensure compile-time safety for document properties
-- **Singleton Enforcement**: Automatically ensures only one non-closable document of each type per window
-- **Async Coordination**: Coordinate document close operations with async save dialogs
-- **Event-Driven**: Rich event system for UI state synchronization and business logic hooks
+- **Type Safety**: Custom metadata classes ensure compile-time safety for
+  document properties
+- **Singleton Enforcement**: Automatically ensures only one non-closable
+  document of each type per window
+- **Async Coordination**: Coordinate document close operations with async save
+  dialogs
+- **Event-Driven**: Rich event system for UI state synchronization and business
+  logic hooks
+
+## Documents and document kinds
+
+What a document is, independent of where it shows, is in `Document`,
+`OpenDocuments` and the kind contract
+([document-kinds.md](../../design/editor/review/document-kinds.md)). None of it
+knows windows or tabs.
+
+- A `Document` edits one file. It holds the `FileVersion` it read or last saved,
+  and every save writes only over that version, through `IAtomicFileStore`, so
+  an outside change surfaces as a conflict. It is dirty while its `History` is
+  away from the position of its last save or load, so undoing back to that
+  position makes it clean. When told its file changed (`CheckFileAsync`), it
+  ignores its own save, reloads quietly when it has no edits, and otherwise
+  marks itself changed on disk or missing. It also reloads, keeps its edits over
+  an outside change (`KeepMineAsync`), saves a copy, and follows a relocation
+  without a history entry.
+- `OpenDocuments` opens each file once, with the `IDocumentKind` registered for
+  its suffix (the longest suffix wins, and no two kinds share one).
+- An `IDocumentKind` only decodes a file into its `IDocumentContent`. The
+  content finishes its edits in progress, captures what a save writes (or
+  refuses with a reason), and applies a relocation to its model. A kind never
+  reads or writes a file and holds no version or history.
+
+```csharp
+var documents = new OpenDocuments([materialKind], atomicFileStore, loggerFactory);
+var opened = await documents.OpenAsync(new DocumentFile(path, assetUri));
+if (opened.Document is { } document)
+{
+    // Editors record their edits into document.History.
+    var saved = await document.SaveAsync();
+}
+```
+
+The tab-level service described below (`EditorDocumentService`, the close
+coordinator and the prompts) is the Aura integration the editor uses today.
 
 ## Core Concepts
 
 ### Document Metadata
 
-The core `IDocumentMetadata` contract and the minimal document service interfaces live in the shared module: [DroidNet.Documents/README.md](../Documents/README.md).
+The core `IDocumentMetadata` contract and the minimal document service
+interfaces live in the shared module:
+[DroidNet.Documents/README.md](../Documents/README.md).
 
-For editor-specific metadata, extend `BaseDocumentMetadata` (provided by this repository) and implement a unique `DocumentType` string to enable type-based singleton enforcement.
+For editor-specific metadata, extend `BaseDocumentMetadata` (provided by this
+repository) and implement a unique `DocumentType` string to enable type-based
+singleton enforcement.
 
 Example pattern (in your editor project):
 
@@ -44,9 +94,13 @@ public class MyCustomDocumentMetadata : BaseDocumentMetadata
 
 ### Singleton Documents
 
-Documents that must exist as a single instance per window ("singletons") should be enforced at the metadata *type* level by implementing `IsClosable` to always return `false` for that type. That makes the singleton intent explicit and prevents callers from accidentally creating closable instances.
+Documents that must exist as a single instance per window ("singletons") should
+be enforced at the metadata _type_ level by implementing `IsClosable` to always
+return `false` for that type. That makes the singleton intent explicit and
+prevents callers from accidentally creating closable instances.
 
-Example — set `IsClosable` in the document metadata constructor (works regardless of whether the base property is virtual):
+Example — set `IsClosable` in the document metadata constructor (works
+regardless of whether the base property is virtual):
 
 ```csharp
 public class SceneDocumentMetadata : BaseDocumentMetadata
@@ -62,9 +116,12 @@ public class SceneDocumentMetadata : BaseDocumentMetadata
 }
 ```
 
-If `BaseDocumentMetadata.IsClosable` becomes `virtual` in the future, you can instead override the property to always return `false`.
+If `BaseDocumentMetadata.IsClosable` becomes `virtual` in the future, you can
+instead override the property to always return `false`.
 
-When opening a new singleton document, the service will attempt to close any existing singleton of the same type first (subject to veto by `DocumentClosing` handlers).
+When opening a new singleton document, the service will attempt to close any
+existing singleton of the same type first (subject to veto by `DocumentClosing`
+handlers).
 
 ### Document Matching
 
@@ -86,7 +143,8 @@ await docService.OpenDocumentAsync(windowId, properties); // OK (different type)
 
 ### Event-Driven Architecture
 
-The service raises events at each document lifecycle stage, enabling UI updates, business logic, and async workflows:
+The service raises events at each document lifecycle stage, enabling UI updates,
+business logic, and async workflows:
 
 ```csharp
 // Document opened → Update UI, initialize editor view
@@ -227,15 +285,15 @@ await docService.CloseDocumentAsync(windowId, documentId, force: true);
 
 ## Event Model
 
-| Event | When Raised | Async? | Veto Support |
-| ----- | ----------- | ------ | ------------ |
-| `DocumentOpened` | Document successfully opened | No | — |
-| `DocumentClosing` | Before document close (if not forced) | Yes | ✓ Add veto tasks |
-| `DocumentClosed` | After document successfully closed | No | — |
-| `DocumentActivated` | Document selected/activated | No | — |
-| `DocumentDetached` | Document detached from service | No | — |
-| `DocumentAttached` | Document attached to service | No | — |
-| `DocumentMetadataChanged` | Document metadata updated | No | — |
+| Event                     | When Raised                           | Async? | Veto Support     |
+| ------------------------- | ------------------------------------- | ------ | ---------------- |
+| `DocumentOpened`          | Document successfully opened          | No     | —                |
+| `DocumentClosing`         | Before document close (if not forced) | Yes    | ✓ Add veto tasks |
+| `DocumentClosed`          | After document successfully closed    | No     | —                |
+| `DocumentActivated`       | Document selected/activated           | No     | —                |
+| `DocumentDetached`        | Document detached from service        | No     | —                |
+| `DocumentAttached`        | Document attached to service          | No     | —                |
+| `DocumentMetadataChanged` | Document metadata updated             | No     | —                |
 
 ### Veto Pattern
 
@@ -253,7 +311,8 @@ docService.DocumentClosing += (s, args) =>
 };
 ```
 
-Multiple handlers can add veto tasks; if any returns `false`, the close is vetoed.
+Multiple handlers can add veto tasks; if any returns `false`, the close is
+vetoed.
 
 ## Integration Points
 
@@ -335,4 +394,5 @@ await docService.UpdateMetadataAsync(windowId, documentId, metadata);
 
 - [DroidNet.Documents](../Documents/README.md) — Core abstractions
 - [Aura](../Aura/README.md) — Tab UI integration
-- [Oxygen.Editor.World](../Oxygen.Editor.World/) — Example usage: scene documents
+- [Oxygen.Editor.World](../Oxygen.Editor.World/) — Example usage: scene
+  documents

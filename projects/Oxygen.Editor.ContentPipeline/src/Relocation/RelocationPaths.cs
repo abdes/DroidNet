@@ -184,19 +184,11 @@ public static class RelocationPaths
     /// <returns>The absolute path, or null when the path is not in a writable authoring mount.</returns>
     public static string? ToPhysical(ProjectContext project, string virtualPath)
     {
-        if (FindWritableMount(project, virtualPath) is not { } mount)
-        {
-            return null;
-        }
-
-        var segments = virtualPath.Trim('/').Split('/');
-        if (segments.Skip(1).Any(static segment => segment.Length == 0 || segment is "." or ".."))
-        {
-            return null;
-        }
-
-        var root = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath));
-        return segments.Length == 1 ? root : Path.GetFullPath(Path.Combine([root, .. segments.Skip(1)]));
+        ArgumentNullException.ThrowIfNull(virtualPath);
+        return FindWritableMount(project, virtualPath) is not null
+            && project.FindByVirtualPath("/" + virtualPath.Trim('/')) is { MountKind: ProjectMountKind.Authoring } location
+                ? location.FilePath
+                : null;
     }
 
     /// <summary>Maps a physical location inside a writable authoring mount to its virtual path.</summary>
@@ -206,22 +198,10 @@ public static class RelocationPaths
     public static string? ToVirtual(ProjectContext project, string physicalPath)
     {
         ArgumentNullException.ThrowIfNull(physicalPath);
-        var full = Path.GetFullPath(physicalPath).TrimEnd(Path.DirectorySeparatorChar);
-        foreach (var mount in GetWritableMounts(project))
-        {
-            var root = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath)).TrimEnd(Path.DirectorySeparatorChar);
-            if (string.Equals(full, root, StringComparison.OrdinalIgnoreCase))
-            {
-                return "/" + mount.Name;
-            }
-
-            if (full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            {
-                return "/" + mount.Name + "/" + full[(root.Length + 1)..].Replace('\\', '/');
-            }
-        }
-
-        return null;
+        return project.FindByFilePath(physicalPath) is { MountKind: ProjectMountKind.Authoring } location
+            && FindWritableMount(project, location.VirtualPath) is not null
+                ? location.VirtualPath
+                : null;
     }
 
     /// <summary>Gets the folder that holds the project's editor scenes, which are identified by name.</summary>

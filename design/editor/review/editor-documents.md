@@ -53,11 +53,15 @@ cook sees every change on disk the same way and reads saved files only.
      shows: identity, the file it edits, its kind, its saved and current
      versions, whether it is dirty, missing or changed on disk, and the contract
      a document kind implements. No windows, no tabs.
-   - The Shell owns the one document service: opening a file once, placing the
-     document, projecting it to tabs, saving, closing, prompts, the missing and
-     conflict banner, following relocated files, and the histories.
-     `EditorDocumentService`, `DocumentHostViewModel` and `DocumentManager` fold
-     into it.
+   - The Shell owns the one document service: when and where documents open,
+     save, reload and close; placing the document, projecting it to tabs,
+     prompts, the missing and conflict banner, and routing Undo and Redo to the
+     histories. How a document opens once per file, saves against the version it
+     read, reloads and follows a relocated file is common behavior of
+     `Oxygen.Editor.Documents`, without windows
+     ([document-kinds.md](document-kinds.md)). `EditorDocumentService`,
+     `DocumentHostViewModel` and `DocumentManager` fold into the Shell's
+     service.
 
      Its name is `IDocumentService` in `Oxygen.Editor.Shell`, implemented by
      `DocumentService`; it replaces `IEditorDocumentService`. The Aura-facing
@@ -198,14 +202,16 @@ commits edits in progress first.
 | ------------------------------------------------------------------------------ | -------------------------------------------- | ---------------------------------------------------- |
 | Close a document, close a window, exit the editor, close or switch the project | _"Save changes to 2 documents?"_             | **Save**, **Don't Save**, **Cancel**                 |
 | Play, Cook                                                                     | _"Save 2 documents and play?"_               | **Save and Play** (or **Save and Cook**), **Cancel** |
-| Rename, move or delete an asset whose open document is dirty                   | _"Save 1 document and rename?"_              | **Save and Rename**, **Cancel**                      |
+| Rename or move an asset whose open document is dirty                           | _"Save 1 document and rename?"_              | **Save and Rename**, **Cancel**                      |
+| Delete an asset whose document is open                                         | _"Delete Wood? It is open and will close."_  | **Delete**, **Cancel**                               |
 | Reload a dirty document from disk after an outside change                      | _"Discard your changes to Wood and reload?"_ | **Reload**, **Keep Mine**, **Save a Copy**           |
 
-Only closing offers Don't Save, because closing throws the edits away anyway;
-Play, Cook and relocation need the saved files, so their only alternative is
-Cancel. Today closing already asks, through `DocumentCloseCoordinator`; Play
-saves without asking, Cook parks itself, and relocation refuses with "Save or
-discard the changes first" (section 3).
+Only closing offers Don't Save, because closing throws the edits away anyway,
+and deleting discards them with the file it deletes; Play, Cook and a rename or
+move need the saved files, so their only alternative is Cancel. Today closing
+already asks, through `DocumentCloseCoordinator`; Play saves without asking,
+Cook parks itself, and relocation refuses with "Save or discard the changes
+first" (section 3).
 
 ## 3. What happens today
 
