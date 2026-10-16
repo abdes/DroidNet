@@ -34,10 +34,13 @@ namespace detail {
       || (c >= '0' && c <= '9');
   }
 
+  //! Letters, digits, '-', '_', '.', and the space and parentheses that
+  //! authored names such as "Wet Rubber (2)" use.
   [[nodiscard]] constexpr auto IsAllowedSegmentChar(const char c) noexcept
     -> bool
   {
-    return IsAsciiAlphaNumeric(c) || c == '-' || c == '_' || c == '.';
+    return IsAsciiAlphaNumeric(c) || c == '-' || c == '_' || c == '.'
+      || c == ' ' || c == '(' || c == ')';
   }
 
   [[nodiscard]] constexpr auto DotCount(const std::string_view segment) noexcept
@@ -126,6 +129,12 @@ namespace detail {
       if (!detail::IsAllowedSegmentChar(c)) {
         return "segment contains disallowed characters";
       }
+    }
+    // Windows drops a trailing space from file names, so such a segment could
+    // not name its source file. A leading space is rejected too, so that two
+    // names that read the same cannot both exist.
+    if (segment.front() == ' ' || segment.back() == ' ') {
+      return "segment must not start or end with a space";
     }
 
     if (is_leaf) {

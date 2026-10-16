@@ -212,8 +212,11 @@ NOLINT_TEST(VirtualPathResolverTest, CanonicalPathValidationMatrixFromSpec)
 {
   oxygen::content::VirtualPathResolver resolver;
 
-  constexpr auto kValidPaths = std::array<std::string_view, 11> {
+  constexpr auto kValidPaths = std::array<std::string_view, 14> {
     "/Game/Physics/Materials/Rubber.opmat",
+    "/Game/Physics/Materials/my rubber.opmat",
+    "/Game/Physics/Materials/Wet Rubber (2).opmat",
+    "/Game/New folder (2)/Materials/Rubber.opmat",
     "/Game/Physics/Materials/Ice.opmat",
     "/game/Physics/Materials/Rubber.opmat",
     "/Game/Physics/Shapes/BoulderConvexHull.ocshape",
@@ -233,13 +236,16 @@ NOLINT_TEST(VirtualPathResolverTest, CanonicalPathValidationMatrixFromSpec)
     }) << path;
   }
 
-  constexpr auto kInvalidPaths = std::array<std::string_view, 11> {
+  constexpr auto kInvalidPaths = std::array<std::string_view, 14> {
     "/9game/Physics/Materials/Rubber.opmat",
     "Physics/Materials/Rubber.opmat",
     "/Game/Physics/Materials/Rubber.opmat/",
     "/Game/Physics//Materials/Rubber.opmat",
     "/Game/Physics/Materials/../Rubber.opmat",
-    "/Game/Physics/Materials/my rubber.opmat",
+    "/Game/Physics/Materials/Rubber[2].opmat",
+    "/Game/ Physics/Materials/Rubber.opmat",
+    "/Game/Physics /Materials/Rubber.opmat",
+    "/Game/Physics/Materials/Rubber.opmat ",
     "/Game/Physics.Materials/Rubber.opmat",
     "/Game/Physics/Materials/Rubber",
     "/Game/Physics/Materials/.Rubber",
