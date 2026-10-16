@@ -22,15 +22,8 @@ public sealed partial class AssetRelocationWorkflow
     [LoggerMessage(Level = LogLevel.Information, Message = "{Title} cancelled at the confirmation; {Referrers} files use the content.")]
     private partial void LogReviewCancelled(string title, int referrers);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Undo of the last rename or move requested.")]
-    private partial void LogUndoRequested();
-
-    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Undo of the earlier rename or move is no longer offered: another change followed it.")]
-    private static partial void LogUndoForgotten(ILogger logger);
-
-    [System.Diagnostics.Conditional("DEBUG")]
-    private void LogUndoForgotten()
-        => LogUndoForgotten(this.logger);
+    [LoggerMessage(Level = LogLevel.Information, Message = "{Action} of '{Label}' requested.")]
+    private partial void LogReplayRequested(string action, string label);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Asking the scene workspace to {Command} scene '{Scene}' (new name: '{NewName}').")]
     private partial void LogSceneCommand(SceneAssetCommand command, string scene, string? newName);
@@ -47,19 +40,4 @@ public sealed partial class AssetRelocationWorkflow
     [System.Diagnostics.Conditional("DEBUG")]
     private void LogOutcome(string title, bool succeeded, string message)
         => LogOutcome(this.logger, title, succeeded, message);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Cooking the project after {Title} to publish the changed scenes.")]
-    private partial void LogCookStarted(string title);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "The cook after {Title} published ({Status}).")]
-    private partial void LogCookPublished(string title, Oxygen.Managed.Core.Diagnostics.OperationStatus status);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The cook after {Title} ended {Status}: {Diagnostics}")]
-    private partial void LogCookNotSucceeded(string title, Oxygen.Managed.Core.Diagnostics.OperationStatus status, string diagnostics);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The cook after {Title} was cancelled.")]
-    private partial void LogCookCancelled(string title);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "The cook after {Title} failed.")]
-    private partial void LogCookFailed(Exception exception, string title);
 }

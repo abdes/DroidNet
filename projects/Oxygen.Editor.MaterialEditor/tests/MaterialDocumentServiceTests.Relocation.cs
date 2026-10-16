@@ -28,7 +28,7 @@ public sealed partial class MaterialDocumentServiceTests
         map.AddMove(new(document.SourcePath, target, IsDirectory: false));
         map.AddIdentity("/Content/Materials/Red.omat", "/Content/Materials/Blue.omat", isFolder: false);
 
-        _ = service.FollowRelocation(document.DocumentId, new AssetRelocationChange(map, [], Task.FromResult<string?>(null))).Should().BeTrue();
+        _ = service.FollowRelocation(document.DocumentId, new AssetRelocationChange(map, [])).Should().BeTrue();
 
         var followed = service.GetDocument(document.DocumentId);
         _ = followed.MaterialUri.Should().Be(new Uri("asset:///Content/Materials/Blue.omat.json"));
@@ -50,7 +50,7 @@ public sealed partial class MaterialDocumentServiceTests
         var map = new RelocationMap();
         map.AddIdentity("/Content/Textures/Wood.otex", "/Content/Textures/Oak.otex", isFolder: false);
         var written = new FileVersion(Exists: true, new string('C', 64));
-        var unchanged = new AssetRelocationChange(map, [new RelocatedFile(document.SourcePath, document.SourcePath, written)], Task.FromResult<string?>(null));
+        var unchanged = new AssetRelocationChange(map, [new RelocatedFile(document.SourcePath, document.SourcePath, written)]);
 
         _ = service.FollowRelocation(document.DocumentId, unchanged).Should().BeTrue();
 

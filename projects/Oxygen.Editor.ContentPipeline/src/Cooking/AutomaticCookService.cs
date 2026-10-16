@@ -17,11 +17,12 @@ namespace Oxygen.Editor.ContentPipeline.Cooking;
 /// <remarks>
 /// A change to a cookable source under an authoring mount opens a quiet window, which each further change restarts, up
 /// to <see cref="QuietWindowLimit"/> after the first change. When it closes, a run waiting for one of the changed
-/// sources to be saved resumes. Otherwise, while Cook on change is on, the service waits until no cook of the project is
-/// in progress and cooks each changed source whose published output does not match what is on disk; a cook that ran
-/// after the change, such as Play's, already covered it. A source has at most one cook in flight, and a change while it
-/// runs cooks the source once more when it ends. A cook stopped for a cook the user asked for goes through the same check
-/// again, so it is cooked after that cook only if that cook did not cover it.
+/// sources to be saved resumes. Otherwise, while Cook on change is on, the service waits until the project writer is
+/// idle, so no cook, import or relocation is half done, and cooks each changed source whose published output does not
+/// match what is on disk; a cook that ran after the change, such as Play's, already covered it. A source has at most one cook in flight, and a change while it
+/// runs cooks the source once more when it ends. A source whose file is gone by then, moved or deleted, is not cooked; its
+/// removal reaches the service as its own change. A cook stopped for a cook the user asked for goes through the same
+/// check again, so it is cooked after that cook only if that cook did not cover it.
 /// </remarks>
 public sealed partial class AutomaticCookService : IAutomaticCookService, IDisposable
 {
@@ -283,13 +284,19 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         var stale = changedSources;
         try
         {
-            await this.WaitForProjectCooksAsync(current, lifetime).ConfigureAwait(false);
-            var cooked = (await this.statuses.ReadAsync(current, changedSources, lifetime).ConfigureAwait(false))
-                .Where(static status => status.Freshness == AssetCookFreshness.Current).Select(static status => status.AssetUri).ToHashSet();
-            stale = [.. changedSources.Where(asset => !cooked.Contains(asset))];
+            await this.runs.WhenWriterIdleAsync(lifetime).ConfigureAwait(false);
+            var read = await this.statuses.ReadAsync(current, changedSources, lifetime).ConfigureAwait(false);
+            var cooked = read.Where(static status => status.Freshness == AssetCookFreshness.Current).Select(static status => status.AssetUri).ToHashSet();
+            var gone = read.Where(static status => status.Freshness == AssetCookFreshness.MissingSource).Select(static status => status.AssetUri).ToHashSet();
+            stale = [.. changedSources.Where(asset => !cooked.Contains(asset) && !gone.Contains(asset))];
             if (cooked.Count > 0)
             {
                 this.LogAlreadyCooked(cooked.Count);
+            }
+
+            if (gone.Count > 0)
+            {
+                this.LogSourcesGone(gone.Count);
             }
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
@@ -310,30 +317,6 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         foreach (var asset in stale)
         {
             this.Queue(current, asset);
-        }
-    }
-
-    // A cook in progress may cover the change; one waiting for a Save does not end on its own and is not waited for.
-    private async Task WaitForProjectCooksAsync(ProjectContext current, CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            var runChanged = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            void OnRunChanged(object? sender, CookRunChangedEventArgs args) => runChanged.TrySetResult();
-            this.runs.RunChanged += OnRunChanged;
-            try
-            {
-                if (!this.runs.Runs.Any(run => run.ProjectId == current.ProjectId && !run.IsCompleted && run.State != CookRunState.NeedsSave))
-                {
-                    return;
-                }
-
-                await runChanged.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                this.runs.RunChanged -= OnRunChanged;
-            }
         }
     }
 

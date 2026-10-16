@@ -18,6 +18,9 @@ public sealed partial class AutomaticCookService
     [LoggerMessage(Level = LogLevel.Information, Message = "{Count} changed sources were not cooked again: their published output already matches the files.")]
     private partial void LogAlreadyCooked(int count);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "{Count} changed sources were not cooked: their files are gone.")]
+    private partial void LogSourcesGone(int count);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "The cook status of {Count} changed sources could not be read; they are cooked.")]
     private partial void LogStatusUnavailable(Exception exception, int count);
 

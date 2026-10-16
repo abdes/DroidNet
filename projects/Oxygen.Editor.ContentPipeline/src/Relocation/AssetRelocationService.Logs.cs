@@ -11,8 +11,8 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// <inheritdoc cref="AssetRelocationService"/>
 /// <remarks>
 /// Levels: Information for each requested change and each file moved, rewritten, copied or recycled; Debug for plan
-/// details; Warning for a change that did not happen, a file whose references could not be updated, and a cook that
-/// did not publish; Error for unexpected failures.
+/// details; Warning for a change that did not happen and a file whose references could not be updated; Error for
+/// unexpected failures.
 /// </remarks>
 public sealed partial class AssetRelocationService
 {
@@ -21,6 +21,9 @@ public sealed partial class AssetRelocationService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Output group relocation requested: model '{Model}' -> group '{Group}'.")]
     private partial void LogGroupRelocationRequested(string model, string group);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "'{Label}' recorded in the history; undoing it runs the reverse relocation.")]
+    private partial void LogRecorded(string label);
 
     [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Relocation changes nothing; no file is touched.")]
     private static partial void LogNothingToRelocate(ILogger logger);
@@ -72,19 +75,4 @@ public sealed partial class AssetRelocationService
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Open document participant {Participant} could not follow the relocation; its next save reports the file conflict.")]
     private partial void LogParticipantFailed(Exception exception, string participant);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Cooking the project after the {Operation} to publish the changed assets and retire the old ones.")]
-    private partial void LogCookStarted(string operation);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "The cook after the {Operation} published ({Status}).")]
-    private partial void LogCookPublished(string operation, Oxygen.Managed.Core.Diagnostics.OperationStatus status);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The cook after the {Operation} ended {Status}; the old cooked assets may still be listed: {Diagnostics}")]
-    private partial void LogCookNotSucceeded(string operation, Oxygen.Managed.Core.Diagnostics.OperationStatus status, string diagnostics);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The cook after the {Operation} was cancelled; the old cooked assets may still be listed.")]
-    private partial void LogCookCancelled(string operation);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "The cook after the {Operation} failed; the old cooked assets may still be listed.")]
-    private partial void LogCookFailed(Exception exception, string operation);
 }

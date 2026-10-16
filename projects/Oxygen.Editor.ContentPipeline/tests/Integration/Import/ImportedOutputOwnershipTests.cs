@@ -222,7 +222,7 @@ public sealed class ImportedOutputOwnershipTests
         _ = statuses.Should().OnlyContain(static status => status.Freshness == AssetCookFreshness.OutOfDate && status.HasPublishedOutput);
         _ = statuses.SelectMany(static status => status.Diagnostics).Should().NotContain(static issue => issue.Severity == DiagnosticSeverity.Error);
         using var selected = await workspace.Publication.AcquireReadAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var incomplete = await new global::Oxygen.Editor.ContentPipeline.Snapshots.CookDependencyDiscovery(new AcceptedCookSourceFacts(workspace.ProjectContext, selected.ProductState, workspace.Documents)).DiscoverAsync(workspace.ProjectContext, [CookInputResolver.Resolve(workspace.ProjectContext, source, ContentCookInputRole.Primary)], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var incomplete = await new global::Oxygen.Editor.ContentPipeline.Snapshots.CookDependencyDiscovery(new AcceptedCookSourceFacts(workspace.ProjectContext, selected.ProductState, CookSavedSourceReader.HashFileAsync)).DiscoverAsync(workspace.ProjectContext, [CookInputResolver.Resolve(workspace.ProjectContext, source, ContentCookInputRole.Primary)], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = incomplete.SourcesNeedingAnalysis.Should().Contain(source);
         _ = incomplete.Diagnostics.Should().BeEmpty();
         _ = runner.Count.Should().Be(count);

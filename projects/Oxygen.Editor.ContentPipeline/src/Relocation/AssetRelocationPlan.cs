@@ -40,12 +40,6 @@ public sealed class AssetRelocationPlan
     /// <summary>Gets the absolute locations of every file the relocation rewrites, after the moves.</summary>
     public IReadOnlyList<string> RewrittenFiles => [.. this.Edits.Select(static edit => edit.FinalPath)];
 
-    /// <summary>
-    /// Gets the follow-up cook that publishes the relocated content. It never faults; its result is null when the
-    /// content published, or why it did not.
-    /// </summary>
-    public Task<string?> ContentPublished { get; internal set; } = Task.FromResult<string?>(null);
-
     /// <summary>Gets the request that undoes this relocation.</summary>
     public AssetRelocationRequest Reverse => this.Request.Reverse(this.PreviousGroups);
 

@@ -19,14 +19,24 @@ internal sealed class ImportedSourceIndex
     /// <summary>Gets previously identified native outputs for project key lookup.</summary>
     public IReadOnlyCollection<Uri> KnownOutputs => this.previousOwners.Keys;
 
-    /// <summary>Reads saved source namespaces and trusted prior output ownership once for a request.</summary>
+    /// <summary>Reads saved source namespaces and trusted prior output ownership once for a cook.</summary>
     /// <param name="project">The project's authoring mount declarations.</param>
     /// <param name="documents">Owners protecting acknowledged saved settings.</param>
     /// <param name="previous">Verified prior output ownership.</param>
     /// <param name="cancellationToken">Cancels settings discovery.</param>
     /// <returns>The source namespaces and prior named outputs.</returns>
-    public static async Task<ImportedSourceIndex> ReadAsync(ProjectContext project, ICookDocumentRegistry documents, CookProvenance previous, CancellationToken cancellationToken)
+    public static Task<ImportedSourceIndex> ReadAsync(ProjectContext project, ICookDocumentRegistry documents, CookProvenance previous, CancellationToken cancellationToken)
+        => ReadAsync(project, (path, token) => CookSavedSourceReader.ReadAsync(documents, path, token, allowUnsavedDocuments: true), previous, cancellationToken);
+
+    /// <summary>Reads source namespaces and trusted prior output ownership with the given settings reader.</summary>
+    /// <param name="project">The project's authoring mount declarations.</param>
+    /// <param name="readSettings">Reads one import settings file: a cook reads what open documents acknowledge, a status reads the disk.</param>
+    /// <param name="previous">Verified prior output ownership.</param>
+    /// <param name="cancellationToken">Cancels settings discovery.</param>
+    /// <returns>The source namespaces and prior named outputs.</returns>
+    public static async Task<ImportedSourceIndex> ReadAsync(ProjectContext project, Func<string, CancellationToken, Task<byte[]>> readSettings, CookProvenance previous, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(readSettings);
         var index = new ImportedSourceIndex();
         foreach (var mount in project.AuthoringMounts)
         {
@@ -50,7 +60,7 @@ internal sealed class ImportedSourceIndex
 
                 try
                 {
-                    var settings = NativeSceneImportSettings.Parse(await CookSavedSourceReader.ReadAsync(documents, path, cancellationToken, allowUnsavedDocuments: true).ConfigureAwait(false));
+                    var settings = NativeSceneImportSettings.Parse(await readSettings(path, cancellationToken).ConfigureAwait(false));
                     if (string.Equals(settings.ResolveFile(project.ProjectRoot, settings.PrimaryRelativePath), primary, StringComparison.OrdinalIgnoreCase)
                         && project.AuthoringMounts.Any(item => string.Equals(item.Name, settings.MountPoint, StringComparison.OrdinalIgnoreCase)))
                     {

@@ -50,6 +50,34 @@ internal static partial class CookSavedSourceReader
             cancellationToken,
             allowUnsavedDocuments);
 
+    /// <summary>Reads a source file as it is on disk, for status, which describes the files and not open documents.</summary>
+    /// <param name="sourcePath">The absolute source path.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The file's bytes.</returns>
+    public static async Task<byte[]> ReadFileAsync(string sourcePath, CancellationToken cancellationToken)
+    {
+        // Like HashFileAsync, never blocks a writer.
+        var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var lifetime = source.ConfigureAwait(false);
+        var buffer = new MemoryStream();
+        await using var copy = buffer.ConfigureAwait(false);
+        await source.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+        return buffer.ToArray();
+    }
+
+    /// <summary>Hashes a source file as it is on disk, for status, which describes the files and not open documents.</summary>
+    /// <param name="sourcePath">The absolute source path.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The file's SHA-256 hash.</returns>
+    public static async Task<string> HashFileAsync(string sourcePath, CancellationToken cancellationToken)
+    {
+        // A status read never blocks a save's atomic replace or a tool writing in place. A write during the read changes
+        // the hash, which reads as changed; the write is its own change and reads again.
+        var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var lifetime = source.ConfigureAwait(false);
+        return Convert.ToHexString(await SHA256.HashDataAsync(source, cancellationToken).ConfigureAwait(false));
+    }
+
     /// <summary>Copies and hashes one saved source while excluding saves and external replacement.</summary>
     /// <param name="documents">Registered source owners.</param>
     /// <param name="sourcePath">The original absolute source path.</param>

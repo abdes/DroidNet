@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using System.Reactive.Subjects;
 using System.Threading.Channels;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
@@ -194,31 +194,41 @@ public sealed class AutomaticCookServiceTests
         _ = (await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)).AssetUri.Should().Be(Wood, "the change made while the setting was off stays uncooked");
     }
 
-    /// <summary>A change that a cook in progress covers is not cooked again once that cook has published it.</summary>
+    /// <summary>Changes wait until the project writer is idle; one that the finished work covered is not cooked again.</summary>
     /// <returns>The asynchronous covering-cook regression.</returns>
     [TestMethod]
-    public async Task ChangeCoveredByACookInProgressIsNotCookedAgain()
+    public async Task ChangeCoveredByWorkInProgressIsNotCookedAgain()
     {
         using var fixture = new Fixture();
-        var project = fixture.Projects.ActiveProject!;
-        var play = new CookRunSnapshot
-        {
-            OperationId = Guid.NewGuid(), ProjectId = project.ProjectId, ProjectRoot = project.ProjectRoot,
-            DisplayName = "Main", Request = new(CookTargetKind.CurrentScene, Main), State = CookRunState.Cooking,
-        };
-        fixture.InProgress = [play];
+        var busy = fixture.HoldWriter();
         using var service = fixture.CreateService();
 
         fixture.Change(AssetChangeKind.Updated, Main);
         fixture.Change(AssetChangeKind.Updated, Wood);
         fixture.Time.Advance(AutomaticCookService.QuietWindow);
-        _ = fixture.Calls.Reader.TryRead(out _).Should().BeFalse("the cook waits for the cook in progress");
+        _ = fixture.Calls.Reader.TryRead(out _).Should().BeFalse("the cook waits for the work in progress");
 
         fixture.Fresh.Add(Main);
-        fixture.InProgress = [];
-        fixture.Runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(play with { State = CookRunState.Succeeded, CompletedAt = DateTimeOffset.UtcNow }));
+        busy.SetResult();
 
         _ = (await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)).AssetUri.Should().Be(Wood, "only the change the finished cook did not cover is cooked");
+        _ = fixture.Calls.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    /// <summary>A changed source whose file is gone when the window closes is not cooked.</summary>
+    /// <returns>The asynchronous gone-source regression.</returns>
+    [TestMethod]
+    public async Task SourceGoneBeforeItCooksIsNotCooked()
+    {
+        using var fixture = new Fixture();
+        fixture.Gone.Add(Wood);
+        using var service = fixture.CreateService();
+
+        fixture.Change(AssetChangeKind.Updated, Wood);
+        fixture.Change(AssetChangeKind.Updated, Main);
+        fixture.Time.Advance(AutomaticCookService.QuietWindow);
+
+        _ = (await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)).AssetUri.Should().Be(Main);
         _ = fixture.Calls.Reader.TryRead(out _).Should().BeFalse();
     }
 
@@ -262,7 +272,6 @@ public sealed class AutomaticCookServiceTests
     public async Task StoppedCookCoveredByTheRequestedCookIsNotCookedAgain()
     {
         using var fixture = new Fixture();
-        var project = fixture.Projects.ActiveProject!;
         var stopped = new TaskCompletionSource<ContentCookResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         fixture.Result = stopped.Task;
         using var service = fixture.CreateService();
@@ -270,17 +279,11 @@ public sealed class AutomaticCookServiceTests
         fixture.Time.Advance(AutomaticCookService.QuietWindow);
         _ = await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false);
 
-        var requested = new CookRunSnapshot
-        {
-            OperationId = Guid.NewGuid(), ProjectId = project.ProjectId, ProjectRoot = project.ProjectRoot,
-            DisplayName = "Materials", Request = new(CookTargetKind.Folder, new Uri("asset:///Content/Materials")), State = CookRunState.Cooking,
-        };
-        fixture.InProgress = [requested];
+        var requested = fixture.HoldWriter();
         fixture.Result = Task.FromResult(Succeeded());
-        fixture.Fresh.Add(Wood);
         stopped.SetException(new CookPreemptedException());
-        fixture.InProgress = [];
-        fixture.Runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(requested with { State = CookRunState.Succeeded, CompletedAt = DateTimeOffset.UtcNow }));
+        fixture.Fresh.Add(Wood);
+        requested.SetResult();
 
         fixture.Change(AssetChangeKind.Updated, Main);
         fixture.Time.Advance(AutomaticCookService.QuietWindow);
@@ -293,6 +296,7 @@ public sealed class AutomaticCookServiceTests
     {
         private readonly Subject<AssetChange> changes = new();
         private readonly Mock<IContentPipelineService> pipeline = new();
+        private TaskCompletionSource writer = IdleWriter();
 
         public Fixture()
         {
@@ -307,12 +311,14 @@ public sealed class AutomaticCookServiceTests
                 Scenes = [],
             });
             _ = this.Runs.SetupGet(value => value.Runs).Returns(() => this.InProgress);
+            _ = this.Runs.Setup(value => value.WhenWriterIdleAsync(It.IsAny<CancellationToken>()))
+                .Returns<CancellationToken>(token => this.writer.Task.WaitAsync(token));
             _ = this.Statuses.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<IReadOnlyList<Uri>>(), It.IsAny<CancellationToken>()))
                 .Returns<ProjectContext, IReadOnlyList<Uri>, CancellationToken>((_, assets, _) => this.StatusFailure is { } failure
                     ? Task.FromException<IReadOnlyList<AssetCookStatus>>(failure)
                     : Task.FromResult<IReadOnlyList<AssetCookStatus>>([.. assets.Select(asset => new AssetCookStatus(
                         asset,
-                        this.Fresh.Contains(asset) ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate,
+                        this.Fresh.Contains(asset) ? AssetCookFreshness.Current : this.Gone.Contains(asset) ? AssetCookFreshness.MissingSource : AssetCookFreshness.OutOfDate,
                         HasPublishedOutput: true,
                         CookedOutputAvailability.Present,
                         [],
@@ -321,7 +327,7 @@ public sealed class AutomaticCookServiceTests
             _ = this.pipeline.Setup(value => value.CookSavedAssetAsync(It.IsAny<Uri>(), It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()))
                 .Returns<Uri, ProjectContext, CancellationToken>(async (uri, project, token) =>
                 {
-                    _ = this.Calls.Writer.TryWrite((uri, token));
+                    _ = this.Calls.Writer.TryWrite(new(uri, token));
                     if (this.Result is { } result)
                     {
                         return await result.ConfigureAwait(false);
@@ -344,30 +350,59 @@ public sealed class AutomaticCookServiceTests
 
         public HashSet<Uri> Fresh { get; } = [];
 
+        public HashSet<Uri> Gone { get; } = [];
+
         public Exception? StatusFailure { get; set; }
 
         public IReadOnlyList<CookRunSnapshot> InProgress { get; set; } = [];
 
         public ManualTime Time { get; } = new();
 
-        public Channel<(Uri AssetUri, CancellationToken Token)> Calls { get; } = Channel.CreateUnbounded<(Uri AssetUri, CancellationToken Token)>();
+        public Channel<CookCall> Calls { get; } = Channel.CreateUnbounded<CookCall>();
 
         public Task<ContentCookResult>? Result { get; set; } = Task.FromResult(Succeeded());
 
+        /// <summary>Holds the project writer until the returned source completes.</summary>
+        /// <returns>The source that releases the writer.</returns>
+        public TaskCompletionSource HoldWriter()
+        {
+            this.writer = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            return this.writer;
+        }
+
         public AutomaticCookService CreateService()
-            => new(this.Projects, this.Manager.Object, Mock.Of<IAssetCatalog>(catalog => catalog.Changes == this.changes), this.pipeline.Object, this.Statuses.Object, this.Runs.Object,
-                NullLogger<AutomaticCookService>.Instance, this.Time);
+            => new(
+                this.Projects,
+                this.Manager.Object,
+                Mock.Of<IAssetCatalog>(catalog => catalog.Changes == this.changes),
+                this.pipeline.Object,
+                this.Statuses.Object,
+                this.Runs.Object,
+                NullLogger<AutomaticCookService>.Instance,
+                this.Time);
 
         public void Change(AssetChangeKind kind, Uri uri, Uri? previous = null) => this.changes.OnNext(new(kind, uri, previous));
 
         public string SourcePath(Uri uri)
             => Path.GetFullPath(Path.Combine(this.Projects.ActiveProject!.ProjectRoot, Uri.UnescapeDataString(uri.AbsolutePath).TrimStart('/')));
 
-        public async Task<(Uri AssetUri, CancellationToken Token)> NextCallAsync(TestContext context)
+        public async Task<CookCall> NextCallAsync(TestContext context)
             => await this.Calls.Reader.ReadAsync(context.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(5), context.CancellationToken).ConfigureAwait(false);
 
         public void Dispose() => this.changes.Dispose();
+
+        private static TaskCompletionSource IdleWriter()
+        {
+            var idle = new TaskCompletionSource();
+            idle.SetResult();
+            return idle;
+        }
     }
+
+    /// <summary>One cook the service asked the pipeline for.</summary>
+    /// <param name="AssetUri">The source it cooks.</param>
+    /// <param name="Token">The cook's cancellation.</param>
+    private sealed record CookCall(Uri AssetUri, CancellationToken Token);
 
     /// <summary>A clock the test advances; timers fire on the advancing thread.</summary>
     private sealed class ManualTime : TimeProvider

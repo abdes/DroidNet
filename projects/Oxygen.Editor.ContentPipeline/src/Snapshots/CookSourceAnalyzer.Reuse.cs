@@ -70,7 +70,11 @@ internal sealed partial class CookSourceAnalyzer
         }
 
         var products = previous.Products.ToDictionary(static product => product.SourceUri);
-        var accepted = await new AcceptedCookSourceFacts(operation.Project, previous, documents).ReadAsync(inputs, cancellationToken).ConfigureAwait(false);
+        var accepted = await new AcceptedCookSourceFacts(
+                operation.Project,
+                previous,
+                (path, token) => CookSavedSourceReader.HashAsync(documents, path, token, allowUnsavedDocuments: true))
+            .ReadAsync(inputs, cancellationToken).ConfigureAwait(false);
         foreach (var facts in accepted.Sources)
         {
             if (facts.RequiresAnalysis || !products.TryGetValue(facts.Input.AssetUri, out var product)

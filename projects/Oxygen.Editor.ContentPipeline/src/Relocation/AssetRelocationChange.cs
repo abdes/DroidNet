@@ -14,11 +14,10 @@ public sealed class AssetRelocationChange
 {
     private readonly RelocationMap map;
 
-    internal AssetRelocationChange(RelocationMap map, IReadOnlyList<RelocatedFile> rewrittenFiles, Task<string?> contentPublished)
+    internal AssetRelocationChange(RelocationMap map, IReadOnlyList<RelocatedFile> rewrittenFiles)
     {
         this.map = map;
         this.RewrittenFiles = rewrittenFiles;
-        this.ContentPublished = contentPublished;
     }
 
     /// <summary>Gets the physical moves, including companion files and folders.</summary>
@@ -26,13 +25,6 @@ public sealed class AssetRelocationChange
 
     /// <summary>Gets each rewritten file with its locations and the version the transaction wrote.</summary>
     public IReadOnlyList<RelocatedFile> RewrittenFiles { get; }
-
-    /// <summary>
-    /// Gets the follow-up cook that publishes the moved assets under their new identities. The runtime resolves the
-    /// new paths only after it succeeds. It never faults; its result is null when the content published, or why it
-    /// did not.
-    /// </summary>
-    public Task<string?> ContentPublished { get; }
 
     /// <summary>Maps an asset reference to its new identity, keeping its form.</summary>
     /// <param name="reference">A full <c>asset:///</c> URI or a canonical virtual path.</param>

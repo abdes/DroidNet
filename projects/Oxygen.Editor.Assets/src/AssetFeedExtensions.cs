@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Linq;
+using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.Assets;
 
@@ -20,5 +21,32 @@ public static class AssetFeedExtensions
         ArgumentNullException.ThrowIfNull(rule);
         ArgumentNullException.ThrowIfNull(keeping);
         return feed.Items.Select(assets => rule.Apply(assets, keeping));
+    }
+
+    /// <summary>Finds the listed entry a reference denotes: by identity, then by cooked identity, then by logical path.</summary>
+    /// <param name="entries">The entries the feed published.</param>
+    /// <param name="uri">The asset reference.</param>
+    /// <returns>The entry, or <see langword="null"/> when none is listed.</returns>
+    public static AssetEntry? Find(this IReadOnlyList<AssetEntry> entries, Uri uri)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        ArgumentNullException.ThrowIfNull(uri);
+        var logicalKey = GetLogicalKey(uri);
+        return entries.FirstOrDefault(item => item.IdentityUri == uri)
+            ?? entries.FirstOrDefault(item => item.CookedUri == uri)
+            ?? entries.FirstOrDefault(item => string.Equals(GetLogicalKey(item.IdentityUri), logicalKey, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string GetLogicalKey(Uri uri)
+    {
+        var path = AssetUriHelper.GetVirtualPath(uri);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            path = uri.AbsolutePath;
+        }
+
+        return path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            ? path[..^".json".Length]
+            : path;
     }
 }

@@ -184,7 +184,9 @@ history, and the operation carries on as if the slider had been released.
 The user renames a material that an open scene uses. The relocation rewrites the
 references on disk, every open document follows its file, and the whole rename
 is one entry in the global history that a single Undo reverses. The cook sees
-the changed files like any others (2.1 or 2.2).
+the changed files like any others (2.1 or 2.2). The scene's preview keeps
+showing the material as it was until the renamed material is cooked and mounted,
+then shows it under its new name.
 
 ### 2.9 Every operation that meets unsaved edits
 
@@ -289,7 +291,9 @@ tells it to.
 
 The asset feed remains the one source of an asset's status: needs cooking,
 cooking, cooked, failed, plus "unsaved changes" when an open document edits it.
-Every place that shows an asset shows that status.
+Every place that shows an asset shows that status. A status compares the files
+on disk with the published content; it reads them without waiting for any
+document or writer.
 
 ### 4.6 Bursts of changes and requests
 

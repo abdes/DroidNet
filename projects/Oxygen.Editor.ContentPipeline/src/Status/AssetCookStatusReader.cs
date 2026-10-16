@@ -14,7 +14,11 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.ContentPipeline.Status;
 
 /// <summary>Reads the same input fingerprints and output evidence used by incremental cooking.</summary>
-/// <param name="documents">Document owners protecting acknowledged saved bytes.</param>
+/// <remarks>
+/// A status describes the source files on disk against the published content. It reads the files directly, without
+/// waiting for an open document's save gate, and reports an open document's unsaved changes beside the status.
+/// </remarks>
+/// <param name="documents">The open documents, whose unsaved changes the status reports.</param>
 /// <param name="publication">The committed metadata verifier.</param>
 /// <param name="nativeCompatibility">The current cooking producer identity.</param>
 public sealed partial class AssetCookStatusReader(
@@ -69,18 +73,18 @@ public sealed partial class AssetCookStatusReader(
         var builtinOrigins = ResolveBuiltinOutputOrigins(project, prior);
         var requests = requested.Select(uri => (Requested: uri, Source: builtinOrigins.GetValueOrDefault(uri, uri))).ToArray();
         var builtins = requests.Select(static item => item.Source).Where(IsBuiltinIdentity).Distinct().ToImmutableArray();
-        var imports = await ImportedSourceIndex.ReadAsync(project, documents, prior, cancellationToken).ConfigureAwait(false);
+        var imports = await ImportedSourceIndex.ReadAsync(project, CookSavedSourceReader.ReadFileAsync, prior, cancellationToken).ConfigureAwait(false);
         var mapped = requests.Where(item => !IsBuiltinIdentity(item.Source)).Select(item => (item.Requested, Resolution: imports.ResolveOutputFacts(project, item.Source, ContentCookInputRole.Primary))).ToArray();
         var inputs = mapped.Select(item => item.Resolution.Source ?? CookInputResolver.Resolve(project, item.Requested, ContentCookInputRole.Primary)).ToArray();
         using var libraries = await CookedLibraryReadSet.AcquireAsync(project, cancellationToken, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), imports.KnownOutputs).ConfigureAwait(false);
-        var graph = await this.CreateDependencyDiscovery(project, prior, imports, libraries).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
+        var graph = await CreateDependencyDiscovery(project, prior, imports, libraries).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
         graph = graph with { Builtins = [.. graph.Builtins.Union(builtins)] };
         graph = libraries.Apply(graph);
         var validGraph = WithCompleteAssets(graph);
         var producer = prior.Products.IsEmpty ? NativeProducerObservation.Unknown : nativeCompatibility.Observation;
         var plan = await ReadFreshnessAsync(snapshot, producer.Fingerprint ?? string.Empty, validGraph, prior, cancellationToken).ConfigureAwait(false);
-        var changed = await this.FindChangedInputsAsync(graph.Files, cancellationToken).ConfigureAwait(false);
-        using var owners = await documents.AcquireAsync(graph.Assets.Select(static asset => asset.SourceAbsolutePath), cancellationToken).ConfigureAwait(false);
+        var changed = await FindChangedInputsAsync(graph.Files, cancellationToken).ConfigureAwait(false);
+        var owners = documents.GetState();
         var products = prior.Products.ToDictionary(static product => product.SourceUri);
         var sourceStatuses = inputs.DistinctBy(static input => input.AssetUri).ToDictionary(static input => input.AssetUri, input => CreateStatus(
             input,
@@ -240,7 +244,7 @@ public sealed partial class AssetCookStatusReader(
         return current is not null && current != prior;
     }
 
-    private async Task<HashSet<string>> FindChangedInputsAsync(ImmutableArray<CookSnapshotInput> inputs, CancellationToken cancellationToken)
+    private static async Task<HashSet<string>> FindChangedInputsAsync(ImmutableArray<CookSnapshotInput> inputs, CancellationToken cancellationToken)
     {
         var changed = new HashSet<string>(StringComparer.Ordinal);
         foreach (var input in inputs)
@@ -256,7 +260,7 @@ public sealed partial class AssetCookStatusReader(
                 }
                 else
                 {
-                    var hash = await CookSavedSourceReader.HashAsync(documents, input.SourcePath, cancellationToken, allowUnsavedDocuments: true).ConfigureAwait(false);
+                    var hash = await CookSavedSourceReader.HashFileAsync(input.SourcePath, cancellationToken).ConfigureAwait(false);
                     if (!string.Equals(hash, input.DiscoveryHash, StringComparison.Ordinal))
                     {
                         _ = changed.Add(input.RelativePath);
@@ -272,9 +276,9 @@ public sealed partial class AssetCookStatusReader(
         return changed;
     }
 
-    private CookDependencyDiscovery CreateDependencyDiscovery(ProjectContext project, CookProvenance prior, ImportedSourceIndex imports, CookedLibraryReadSet libraries)
+    private static CookDependencyDiscovery CreateDependencyDiscovery(ProjectContext project, CookProvenance prior, ImportedSourceIndex imports, CookedLibraryReadSet libraries)
         => new(
-            new AcceptedCookSourceFacts(project, prior, documents),
+            new AcceptedCookSourceFacts(project, prior, CookSavedSourceReader.HashFileAsync),
             resolveImported: uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency),
             resolveBufferOwner: path => prior.FindBufferOwner(project, path),
             preferCookedReference: libraries.IsLibraryPreferred,

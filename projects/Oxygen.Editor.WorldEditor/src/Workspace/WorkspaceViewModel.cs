@@ -376,6 +376,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<IAssetFeed, AssetFeed>(Reuse.Singleton);
         childContainer.Register<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService, Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationService>(Reuse.Singleton);
         childContainer.Register<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService, Oxygen.Editor.ContentPipeline.Cooking.AutomaticCookService>(Reuse.Singleton);
+        childContainer.Register<Oxygen.Editor.Shell.Documents.IHistoryService, Oxygen.Editor.Shell.Documents.HistoryService>(Reuse.Singleton);
+
+        // The project's global history: the Content Browser's child container records into this instance, and it ends
+        // with the workspace.
+        _ = childContainer.Resolve<Oxygen.Editor.Shell.Documents.IHistoryService>();
 
         // One instance for the workspace: open documents register as participants on it, and the Content Browser's
         // child container must reach the same instance instead of creating its own on first use.

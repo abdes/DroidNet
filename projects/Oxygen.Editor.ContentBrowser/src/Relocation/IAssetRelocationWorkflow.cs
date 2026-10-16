@@ -14,12 +14,24 @@ namespace Oxygen.Editor.ContentBrowser.Relocation;
 /// </summary>
 public interface IAssetRelocationWorkflow
 {
-    /// <summary>Occurs when a change completed or failed, with the result to show and whether Undo is available.</summary>
+    /// <summary>Occurs when a change completed or failed, with the result to show.</summary>
     /// <remarks>Every operation also returns its outcome; a cancelled delete or a change of nothing raises nothing.</remarks>
     public event EventHandler<AssetRelocationCompletedEventArgs>? Completed;
 
-    /// <summary>Gets a value indicating whether the last relocation can be undone.</summary>
+    /// <summary>Occurs when the global history gains, loses, undoes or redoes an entry.</summary>
+    public event EventHandler? HistoryChanged;
+
+    /// <summary>Gets a value indicating whether the global history has an entry to undo.</summary>
     public bool CanUndo { get; }
+
+    /// <summary>Gets a value indicating whether the global history has an entry to redo.</summary>
+    public bool CanRedo { get; }
+
+    /// <summary>Gets what the next undo undoes, such as <c>Rename</c>, or <see langword="null"/> when there is nothing.</summary>
+    public string? UndoLabel { get; }
+
+    /// <summary>Gets what the next redo redoes, or <see langword="null"/> when there is nothing.</summary>
+    public string? RedoLabel { get; }
 
     /// <summary>Runs a rename or move.</summary>
     /// <param name="request">The requested moves.</param>
@@ -27,9 +39,13 @@ public interface IAssetRelocationWorkflow
     /// <returns>The outcome, or null when the request changes nothing.</returns>
     public Task<AssetRelocationOutcome?> RelocateAsync(AssetRelocationRequest request, string title);
 
-    /// <summary>Runs the reverse of the last relocation.</summary>
+    /// <summary>Undoes the latest entry of the global history.</summary>
     /// <returns>The outcome, or null when there is nothing to undo.</returns>
     public Task<AssetRelocationOutcome?> UndoAsync();
+
+    /// <summary>Redoes the latest undone entry of the global history.</summary>
+    /// <returns>The outcome, or null when there is nothing to redo.</returns>
+    public Task<AssetRelocationOutcome?> RedoAsync();
 
     /// <summary>Copies assets or folders into a folder under unique names.</summary>
     /// <param name="sources">The virtual paths to copy.</param>
@@ -68,5 +84,4 @@ public interface IAssetRelocationWorkflow
 /// <param name="Succeeded">Whether the change committed.</param>
 /// <param name="Title">The operation title.</param>
 /// <param name="Message">What changed, or why it failed.</param>
-/// <param name="CanUndo">Whether Undo is offered.</param>
-public sealed record AssetRelocationOutcome(bool Succeeded, string Title, string Message, bool CanUndo);
+public sealed record AssetRelocationOutcome(bool Succeeded, string Title, string Message);

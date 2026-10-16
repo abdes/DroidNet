@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.TimeMachine;
 using Oxygen.Editor.ContentPipeline.Relocation;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Relocation;
@@ -23,14 +24,14 @@ public sealed class AssetRedirectsTests
         var service = workspace.CreateService(redirects);
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
 
-        _ = await service.RelocateAsync(Move("/Content/Materials/A.omat.json", "/Content/Materials/B.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
-        var second = await service.RelocateAsync(Move("/Content/Materials/B.omat.json", "/Content/Materials/C.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.RelocateAsync(Move("/Content/Materials/A.omat.json", "/Content/Materials/B.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var second = await service.RelocateAsync(Move("/Content/Materials/B.omat.json", "/Content/Materials/C.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = redirects.Resolve("asset:///Content/Materials/A.omat.json").Should().Be("asset:///Content/Materials/C.omat.json");
         _ = redirects.Resolve("/Content/Materials/A.omat").Should().Be("/Content/Materials/C.omat");
         _ = redirects.Resolve(new Uri("asset:///Content/Materials/Other.omat.json")).Should().Be(new Uri("asset:///Content/Materials/Other.omat.json"));
 
-        _ = await service.RelocateAsync(second.Reverse, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.RelocateAsync(second.Reverse, "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = redirects.Resolve("asset:///Content/Materials/A.omat.json").Should().Be("asset:///Content/Materials/B.omat.json");
     }
 
@@ -43,7 +44,7 @@ public sealed class AssetRedirectsTests
         using var redirects = new AssetRedirects(workspace.Context);
         var service = workspace.CreateService(redirects);
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
-        _ = await service.RelocateAsync(Move("/Content/Materials/A.omat.json", "/Content/Materials/B.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.RelocateAsync(Move("/Content/Materials/A.omat.json", "/Content/Materials/B.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
 
         _ = redirects.Resolve("asset:///Content/Materials/A.omat.json").Should().Be("asset:///Content/Materials/A.omat.json");
@@ -86,7 +87,7 @@ public sealed class AssetRedirectsTests
         AssetRelocationChange? followed = null;
         using var registration = service.AddParticipant(new Participant(change => followed = change));
 
-        var plan = await service.RelocateAsync(Move("/Content/Materials/A.omat.json", "/Content/Materials/B.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.RelocateAsync(Move("/Content/Materials/A.omat.json", "/Content/Materials/B.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = followed.Should().NotBeNull();
         var rewrite = followed!.FindRewrite(scene);
@@ -94,7 +95,6 @@ public sealed class AssetRedirectsTests
         _ = rewrite!.Written.Should().Be((await workspace.Files.ReadAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Version);
         _ = followed.MapReference(new Uri("asset:///Content/Materials/A.omat.json")).Should().Be(new Uri("asset:///Content/Materials/B.omat.json"));
         _ = followed.MapPath(workspace.PathOf("Content/Materials/A.omat.json")).Should().Be(workspace.PathOf("Content/Materials/B.omat.json"));
-        _ = plan.ContentPublished.IsCompleted.Should().BeTrue("no pipeline was given, so nothing is cooked");
     }
 
     private static AssetRelocationRequest Move(string source, string target) => new() { Moves = [new(source, target)] };

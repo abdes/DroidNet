@@ -69,8 +69,9 @@ public sealed class AssetCookStatusTests
         using var project = new StatusProject();
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var hash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(project.SourcePath, this.TestContext.CancellationToken).ConfigureAwait(false)));
-        using var registration = project.Documents.Register(project.SourcePath, token => Task.FromResult<CookDocumentReadLease?>(
-            new(new CookDocumentState(Guid.NewGuid(), project.SourcePath, "Material", 2, 1, IsDirty: true, hash), static () => { })));
+        var dirty = new CookDocumentState(Guid.NewGuid(), project.SourcePath, "Material", 2, 1, IsDirty: true, hash);
+        using var registration = project.Documents.Register(project.SourcePath, token => Task.FromResult<CookDocumentReadLease?>(new(dirty, static () => { })));
+        registration.UpdateState(dirty);
         var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = status.Freshness.Should().Be(AssetCookFreshness.Current);
         _ = status.HasUnsavedChanges.Should().BeTrue();
@@ -160,7 +161,8 @@ public sealed class AssetCookStatusTests
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var native = new Mock<INativeCompatibilityService>(MockBehavior.Strict);
         var verified = await project.VerifyNativeAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
-        await using var artifacts = verified.Artifacts!;
+        var artifacts = verified.Artifacts!;
+        await using var artifactsLifetime = artifacts.ConfigureAwait(false);
         _ = native.SetupSequence(service => service.Observation)
             .Returns(new NativeProducerObservation(1, artifacts.Fingerprint, []))
             .Returns(new NativeProducerObservation(2, null, []));
@@ -197,7 +199,8 @@ public sealed class AssetCookStatusTests
         await File.WriteAllTextAsync(producer, "new producer", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var native = new Oxygen.Testing.TemporaryNativeArtifacts([new NativeArtifactLocation("producer", producer)]);
         var verifiedProducer = await native.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
-        await using var producerLifetime = verifiedProducer.Artifacts!;
+        var producerArtifacts = verifiedProducer.Artifacts!;
+        await using var producerLifetime = producerArtifacts.ConfigureAwait(false);
         var status = (await project.CreateReader(native).ReadAsync(project.Project, [StatusProject.SourceUri], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
         _ = status.Freshness.Should().Be(AssetCookFreshness.OutOfDate);
         _ = status.HasAvailableOutput.Should().BeTrue();
@@ -211,8 +214,9 @@ public sealed class AssetCookStatusTests
     {
         using var project = new StatusProject();
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var owner = project.Documents.Register(project.SourcePath, _ => Task.FromResult<global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentReadLease?>(new(new(Guid.NewGuid(), project.SourcePath, "Material", 2, 1, IsDirty: true, new string('A', 64)), static () =>
-{ })));
+        var dirty = new CookDocumentState(Guid.NewGuid(), project.SourcePath, "Material", 2, 1, IsDirty: true, new string('A', 64));
+        using var owner = project.Documents.Register(project.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(dirty, static () => { })));
+        owner.UpdateState(dirty);
         File.Delete(project.SourcePath);
         var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = status.Freshness.Should().Be(AssetCookFreshness.MissingSource);
@@ -304,7 +308,8 @@ public sealed class AssetCookStatusTests
             var plan = CookIncrementalPlanner.CreatePlan(producer.Fingerprint, graph.Files, graph, new(this.Project.ProjectId, [], []), ImmutableDictionary<string, global::Oxygen.Editor.ContentPipeline.Inspection.CookedInventoryReport>.Empty);
             using var baseline = await this.publication.AcquireReadAsync(this.Project, cancellationToken).ConfigureAwait(false);
             using var ownership = CookOutputLease.AcquireOperation(this.Root, operation.OperationId);
-            await using var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content"], this.files, this.manager, cancellationToken).ConfigureAwait(false);
+            var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content"], this.files, this.manager, cancellationToken).ConfigureAwait(false);
+            await using var stagingLifetime = staging.ConfigureAwait(false);
             var candidate = staging.Roots.Single();
             var root = candidate.Path;
             await File.WriteAllTextAsync(Path.Combine(root, "container.index.bin"), "index", cancellationToken).ConfigureAwait(false);
@@ -321,12 +326,41 @@ public sealed class AssetCookStatusTests
 
             Oxygen.Testing.NativeInventoryFixture.WriteIndex(root, indexed, candidate.SourceKey);
             var inventory = Oxygen.Testing.NativeInventoryFixture.Read(root);
-            var evidence = new CookProvenance.Root("Content", inventory.SourceKey, inventory.IndexSha256);
-            var provenance = new CookProvenance(
+            var provenance = this.CreateProvenance(outputs, plan, graph, inventory);
+            var opening = await CookOutputReadLease.AcquireAsync(root, cancellationToken).ConfigureAwait(false);
+            candidate.AcceptVerification(opening, inventory);
+            var document = new CookPublicationDocument(
+                CookPublicationDocument.CurrentVersion,
                 this.Project.ProjectId,
-                [evidence],
+                operation.OperationId,
+                DateTimeOffset.UtcNow,
+                CookPublicationDocument.ConfigurationIdentity(this.Project),
+                staging.SealRoots(),
+                provenance.Products,
+                new(producer.Fingerprint, new string('A', 64), graph.Files, [], [], []));
+            await staging.Transaction.PrepareAsync(operation, document, sourceReplacement: null, [], projectChange: null, cancellationToken).ConfigureAwait(false);
+            staging.RetainForPublication();
+            using var accepted = await staging.Transaction.PublishAsync(preview: null, baseline, static () => { }, cancellationToken).ConfigureAwait(false);
+            this.selectedRoot = accepted.FindProjectRoot("Content");
+        }
+
+        public Task<NativeCompatibilityResult> VerifyNativeAsync(Guid operation, CancellationToken token) => this.native.VerifyAsync(operation, token);
+
+        public void Dispose()
+        {
+            this.native.Dispose();
+            this.directory.Delete(recursive: true);
+        }
+
+        private CookProvenance CreateProvenance(ContentCookedAsset[] outputs, CookIncrementalPlan plan, CookDependencyGraph graph, global::Oxygen.Editor.ContentPipeline.Inspection.CookedInventoryReport inventory)
+            => new(
+                this.Project.ProjectId,
+                [new CookProvenance.Root("Content", inventory.SourceKey, inventory.IndexSha256)],
                 [
-                    .. outputs.Select(output => new CookProvenance.Product(output.SourceAssetUri, plan.Fingerprints[output.SourceAssetUri], graph.Dependencies[output.SourceAssetUri],
+                    .. outputs.Select(output => new CookProvenance.Product(
+                        output.SourceAssetUri,
+                        plan.Fingerprints[output.SourceAssetUri],
+                        graph.Dependencies[output.SourceAssetUri],
                         [new(output with { DescriptorRelativePath = output.VirtualPath["/Content/".Length..] }, "Content")])
                         {
                             ReuseFingerprint = plan.Fingerprints[output.SourceAssetUri],
@@ -336,22 +370,6 @@ public sealed class AssetCookStatusTests
                             NativeReferences = graph.SourceFacts[output.SourceAssetUri].References,
                         }),
                 ]);
-            var opening = await CookOutputReadLease.AcquireAsync(root, cancellationToken).ConfigureAwait(false);
-            candidate.AcceptVerification(opening, inventory);
-            var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, this.Project.ProjectId, operation.OperationId,
-                DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(this.Project), staging.SealRoots(), provenance.Products,
-                new(producer.Fingerprint, new string('A', 64), graph.Files, [], [], []));
-            await staging.Transaction.PrepareAsync(operation, document, sourceReplacement: null, [], projectChange: null, cancellationToken).ConfigureAwait(false);
-            staging.RetainForPublication();
-            using var accepted = await staging.Transaction.PublishAsync(preview: null, baseline, static () => { }, cancellationToken).ConfigureAwait(false);
-            this.selectedRoot = accepted.FindProjectRoot("Content");
-        }
-
-        public void Dispose()
-        {
-            this.native.Dispose();
-            this.directory.Delete(recursive: true);
-        }
 
         private sealed class StatusSourceFacts(ProjectContext project, ContentCookInput primary, IReadOnlyList<Uri> dependencies) : ICookSourceFactsProvider
         {
@@ -361,20 +379,32 @@ public sealed class AssetCookStatusTests
                 return Task.FromResult(new CookSourceFrontier([.. inputs.Select(this.Describe)], [], [], []));
             }
 
-            private CookSourceFacts Describe(ContentCookInput source)
-                => new(source,
-                    [new(source.OutputVirtualPath ?? throw new InvalidOperationException("The fixture requires a descriptor output."),
-                        source.Kind.ToString().ToLowerInvariant(), "/", Required: true)],
-                    source.AssetUri == primary.AssetUri
-                        ? [.. dependencies.Select(uri => new global::Oxygen.Editor.ContentPipeline.Import.NativeLogicalDependency(
-                            CookInputResolver.Resolve(project, uri, ContentCookInputRole.Dependency).OutputVirtualPath
-                                ?? throw new InvalidOperationException("The fixture requires a material output."),
-                            "material", "/", Required: true))]
-                        : [],
-                    [new(source.AssetUri, source.SourceAbsolutePath, source.SourceRelativePath,
-                        Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source.SourceAbsolutePath))))]);
-        }
+            private static string KindName(ContentCookAssetKind kind) => kind switch
+            {
+                ContentCookAssetKind.Material => "material",
+                ContentCookAssetKind.Geometry => "geometry",
+                ContentCookAssetKind.Texture => "texture",
+                ContentCookAssetKind.Scene => "scene",
+                _ => throw new InvalidOperationException($"The fixture does not describe {kind} sources."),
+            };
 
-        public Task<NativeCompatibilityResult> VerifyNativeAsync(Guid operation, CancellationToken token) => this.native.VerifyAsync(operation, token);
+            private CookSourceFacts Describe(ContentCookInput source)
+            {
+                var output = source.OutputVirtualPath ?? throw new InvalidOperationException("The fixture requires a descriptor output.");
+                global::Oxygen.Editor.ContentPipeline.Import.NativeLogicalDependency[] references = source.AssetUri == primary.AssetUri
+                    ? [.. dependencies.Select(uri => new global::Oxygen.Editor.ContentPipeline.Import.NativeLogicalDependency(
+                        CookInputResolver.Resolve(project, uri, ContentCookInputRole.Dependency).OutputVirtualPath ?? throw new InvalidOperationException("The fixture requires a material output."),
+                        "material",
+                        "/",
+                        Required: true))]
+                    : [];
+                var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source.SourceAbsolutePath)));
+                return new(
+                    source,
+                    [new(output, KindName(source.Kind), "/", Required: true)],
+                    [.. references],
+                    [new(source.AssetUri, source.SourceAbsolutePath, source.SourceRelativePath, hash)]);
+            }
+        }
     }
 }

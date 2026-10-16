@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+
+        <Title>Oxygen Editor Shell</Title>
+        <Description>The editor's shell: the services every editor part shares, starting with the session's histories.</Description>
+        <PackageTags>oxygen;gameengine</PackageTags>
+        <RootNamespace>Oxygen.Editor.Shell</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)/TimeMachine/src/TimeMachine.csproj" />
+    </ItemGroup>
+
+</Project>

@@ -425,13 +425,24 @@
                 IsOpen="{x:Bind ViewModel.IsOperationResultVisible, Mode=TwoWay}"
                 Message="{x:Bind ViewModel.OperationResultMessage, Mode=OneWay}"
                 Severity="{x:Bind ViewModel.OperationResultSeverity, Mode=OneWay}">
-                <muxc:InfoBar.ActionButton>
-                    <Button
-                        Command="{x:Bind ViewModel.UndoRelocationCommand}"
-                        Content="Undo"
-                        ToolTipService.ToolTip="Restore the previous names, locations and references."
-                        Visibility="{x:Bind ViewModel.IsUndoAvailable, Mode=OneWay}" />
-                </muxc:InfoBar.ActionButton>
+                <muxc:InfoBar.Content>
+                    <StackPanel
+                        Margin="0,0,0,12"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        Visibility="{x:Bind ViewModel.IsHistoryAvailable, Mode=OneWay}">
+                        <Button
+                            Command="{x:Bind ViewModel.UndoRelocationCommand}"
+                            Content="Undo"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.UndoToolTip, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.IsUndoAvailable, Mode=OneWay}" />
+                        <Button
+                            Command="{x:Bind ViewModel.RedoRelocationCommand}"
+                            Content="Redo"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.RedoToolTip, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.IsRedoAvailable, Mode=OneWay}" />
+                    </StackPanel>
+                </muxc:InfoBar.Content>
             </muxc:InfoBar>
 
             <!--  The context menu mirrors the toolbar for the right-clicked selection or the folder.  -->

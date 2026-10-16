@@ -14,23 +14,28 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Editor.Shell.Documents;
 
 namespace Oxygen.Editor.ContentBrowser.Relocation;
 
 /// <summary>Runs Content Browser renames, moves, copies and deletes, then refreshes the browser and open documents.</summary>
-/// <param name="relocation">Applies the file changes and recooks after them.</param>
+/// <remarks>
+/// Renames and moves are recorded in the session's global history, so they undo and redo in order with everything
+/// else recorded there; copies, deletes and scene commands are not recorded and leave the history as it is.
+/// </remarks>
+/// <param name="relocation">Applies the file changes.</param>
+/// <param name="histories">Holds the global history that renames and moves are recorded in.</param>
 /// <param name="dialogs">Asks for names, and confirms deleting content that other content uses.</param>
 /// <param name="messenger">Hands scene commands to the open scene workspace.</param>
 /// <param name="assets">The browser's asset rows.</param>
-/// <param name="pipeline">Recooks the project after a scene command.</param>
 /// <param name="shell">Moves deleted files to the Recycle Bin.</param>
-/// <param name="logger">Records requests, outcomes and the follow-up refresh and cook.</param>
+/// <param name="logger">Records requests and outcomes.</param>
 public sealed partial class AssetRelocationWorkflow(
     IAssetRelocationService relocation,
+    IHistoryService histories,
     IDialogService dialogs,
     IMessenger messenger,
     IAssetFeed assets,
-    IContentPipelineService pipeline,
     IAssetShell shell,
     ILogger<AssetRelocationWorkflow>? logger = null) : IAssetRelocationWorkflow, IDisposable
 {
@@ -40,13 +45,30 @@ public sealed partial class AssetRelocationWorkflow(
 
     // Content changed outside a relocation (a save, an import, an external edit) makes cached referrers stale.
     private readonly IDisposable contentChanges = assets.Items.Subscribe(_ => relocation.Invalidate());
-    private AssetRelocationRequest? undo;
+    private readonly DroidNet.TimeMachine.HistoryKeeper history = histories.GlobalHistory;
+    private readonly HistoryObserver historyObserver = new(histories.GlobalHistory);
 
     /// <inheritdoc/>
     public event EventHandler<AssetRelocationCompletedEventArgs>? Completed;
 
     /// <inheritdoc/>
-    public bool CanUndo => this.undo is not null;
+    public event EventHandler? HistoryChanged
+    {
+        add => this.historyObserver.Changed += value;
+        remove => this.historyObserver.Changed -= value;
+    }
+
+    /// <inheritdoc/>
+    public bool CanUndo => this.history.CanUndo;
+
+    /// <inheritdoc/>
+    public bool CanRedo => this.history.CanRedo;
+
+    /// <inheritdoc/>
+    public string? UndoLabel => this.history.CanUndo ? this.history.UndoStack[^1].Key.ToString() : null;
+
+    /// <inheritdoc/>
+    public string? RedoLabel => this.history.CanRedo ? this.history.RedoStack[0].Key.ToString() : null;
 
     /// <inheritdoc/>
     public async Task<AssetRelocationOutcome?> RelocateAsync(AssetRelocationRequest request, string title)
@@ -54,47 +76,29 @@ public sealed partial class AssetRelocationWorkflow(
         ArgumentNullException.ThrowIfNull(request);
         try
         {
-            var applied = await relocation.RelocateAsync(request, CancellationToken.None).ConfigureAwait(true);
+            var applied = await relocation.RelocateAsync(request, title, this.history, CancellationToken.None).ConfigureAwait(true);
             if (applied.Moves.Count == 0 && applied.GroupFolders.Count == 0 && applied.RewrittenFiles.Count == 0)
             {
                 this.LogNothingToDo(title);
                 return null;
             }
 
-            this.undo = applied.Reverse;
-            await this.AfterChangeAsync(title, cook: false).ConfigureAwait(true);
-            _ = this.ReportPublicationAsync(title, applied.ContentPublished);
-            return this.Publish(new(Succeeded: true, title, DescribeResult(applied), CanUndo: true));
+            await this.AfterChangeAsync().ConfigureAwait(true);
+            return this.Publish(new(Succeeded: true, title, DescribeResult(applied)));
         }
         catch (AssetRelocationException error)
         {
-            return this.Publish(new(Succeeded: false, title, error.Message, this.CanUndo));
+            return this.Publish(new(Succeeded: false, title, error.Message));
         }
     }
 
     /// <inheritdoc/>
-    public async Task<AssetRelocationOutcome?> UndoAsync()
-    {
-        if (this.undo is not { } request)
-        {
-            return null;
-        }
+    public Task<AssetRelocationOutcome?> UndoAsync()
+        => this.ReplayAsync(undo: true);
 
-        this.LogUndoRequested();
-        try
-        {
-            var applied = await relocation.RelocateAsync(request, CancellationToken.None).ConfigureAwait(true);
-            this.undo = null;
-            await this.AfterChangeAsync("Undo", cook: false).ConfigureAwait(true);
-            _ = this.ReportPublicationAsync("Undo", applied.ContentPublished);
-            return this.Publish(new(Succeeded: true, "Undo", "Restored the previous names, locations and references.", CanUndo: false));
-        }
-        catch (AssetRelocationException error)
-        {
-            // A rejected or rolled-back undo changed nothing, so it stays available, for example after a save.
-            return this.Publish(new(Succeeded: false, "Undo", error.Message, CanUndo: true));
-        }
-    }
+    /// <inheritdoc/>
+    public Task<AssetRelocationOutcome?> RedoAsync()
+        => this.ReplayAsync(undo: false);
 
     /// <inheritdoc/>
     public async Task<AssetRelocationOutcome> CopyAsync(IReadOnlyList<string> sources, string targetFolder, string title)
@@ -102,16 +106,15 @@ public sealed partial class AssetRelocationWorkflow(
         try
         {
             var copies = await relocation.CopyAsync(sources, targetFolder, CancellationToken.None).ConfigureAwait(true);
-            await this.AfterChangeAsync(title, cook: false).ConfigureAwait(true);
+            await this.AfterChangeAsync().ConfigureAwait(true);
             var message = copies.Count == 1
                 ? $"Created {RelocationPaths.GetName(copies[0])}."
                 : string.Create(CultureInfo.CurrentCulture, $"Created {copies.Count} copies in {targetFolder}.");
-            this.ForgetUndo();
-            return this.Publish(new(Succeeded: true, title, message, CanUndo: false));
+            return this.Publish(new(Succeeded: true, title, message));
         }
         catch (AssetRelocationException error)
         {
-            return this.Publish(new(Succeeded: false, title, error.Message, this.CanUndo));
+            return this.Publish(new(Succeeded: false, title, error.Message));
         }
     }
 
@@ -154,12 +157,11 @@ public sealed partial class AssetRelocationWorkflow(
         }
         catch (Exception error) when (error is AssetRelocationException or IOException)
         {
-            return this.Publish(new(Succeeded: false, title, error.Message, this.CanUndo));
+            return this.Publish(new(Succeeded: false, title, error.Message));
         }
 
-        await this.AfterChangeAsync(title, cook: false).ConfigureAwait(true);
-        this.ForgetUndo();
-        return this.Publish(new(Succeeded: true, title, $"Moved {Describe(sources)} to the Recycle Bin. Restore {(sources.Count == 1 ? "it" : "them")} from there to bring {(sources.Count == 1 ? "it" : "them")} back.", CanUndo: false));
+        await this.AfterChangeAsync().ConfigureAwait(true);
+        return this.Publish(new(Succeeded: true, title, $"Moved {Describe(sources)} to the Recycle Bin. Restore {(sources.Count == 1 ? "it" : "them")} from there to bring {(sources.Count == 1 ? "it" : "them")} back."));
     }
 
     /// <inheritdoc/>
@@ -181,7 +183,7 @@ public sealed partial class AssetRelocationWorkflow(
         if (!request.HasReceivedResponse)
         {
             this.LogSceneCommandUnhandled(command, sceneName);
-            return this.Publish(new(Succeeded: false, title, "Scenes change only while the project's world editor is open.", this.CanUndo));
+            return this.Publish(new(Succeeded: false, title, "Scenes change only while the project's world editor is open."));
         }
 
         string? error;
@@ -197,23 +199,25 @@ public sealed partial class AssetRelocationWorkflow(
 
         if (error is not null)
         {
-            return this.Publish(new(Succeeded: false, title, error, this.CanUndo));
+            return this.Publish(new(Succeeded: false, title, error));
         }
 
-        relocation.Invalidate();
-        await this.AfterChangeAsync(title, cook: true).ConfigureAwait(true);
+        await this.AfterChangeAsync().ConfigureAwait(true);
         var message = command switch
         {
             SceneAssetCommand.Rename => $"Renamed scene '{sceneName}' to '{newName}'.",
             SceneAssetCommand.Duplicate => $"Duplicated scene '{sceneName}'.",
             _ => $"Moved scene '{sceneName}' to the Recycle Bin.",
         };
-        this.ForgetUndo();
-        return this.Publish(new(Succeeded: true, title, message, CanUndo: false));
+        return this.Publish(new(Succeeded: true, title, message));
     }
 
     /// <inheritdoc/>
-    public void Dispose() => this.contentChanges.Dispose();
+    public void Dispose()
+    {
+        this.contentChanges.Dispose();
+        this.historyObserver.Dispose();
+    }
 
     /// <inheritdoc/>
     public Task<IReadOnlyList<string>> FindReferrersAsync(string virtualPath, CancellationToken cancellationToken)
@@ -283,13 +287,36 @@ public sealed partial class AssetRelocationWorkflow(
 
     // Undo reverses only the change just made: after a copy, delete or scene change, reversing an older rename would
     // undo something the user no longer sees as the last step.
-    private void ForgetUndo()
+    // A rejected or rolled-back undo or redo changed nothing, so its entry stays in the history.
+    private async Task<AssetRelocationOutcome?> ReplayAsync(bool undo)
     {
-        if (this.undo is not null)
+        var label = undo ? this.UndoLabel : this.RedoLabel;
+        if (label is null)
         {
-            this.undo = null;
-            this.LogUndoForgotten();
+            return null;
         }
+
+        var title = undo ? "Undo" : "Redo";
+        this.LogReplayRequested(title, label);
+        try
+        {
+            if (undo)
+            {
+                await this.history.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+            }
+            else
+            {
+                await this.history.RedoAsync(CancellationToken.None).ConfigureAwait(true);
+            }
+        }
+        catch (AssetRelocationException error)
+        {
+            return this.Publish(new(Succeeded: false, $"{title} {label}", error.Message));
+        }
+
+        await this.AfterChangeAsync().ConfigureAwait(true);
+        var message = undo ? "Restored the previous names, locations and references." : "Applied the names, locations and references again.";
+        return this.Publish(new(Succeeded: true, $"{title} {label}", message));
     }
 
     // The service, the scene workspace or this workflow logged the cause at its level; this records what the user saw.
@@ -300,52 +327,37 @@ public sealed partial class AssetRelocationWorkflow(
         return outcome;
     }
 
-    // The files and references are committed; if republishing fails, the browser still shows the old cooked asset
-    // until the next successful cook, so say so instead of leaving the success message.
-    private async Task ReportPublicationAsync(string title, Task<string?> contentPublished)
-    {
-        if (await contentPublished.ConfigureAwait(true) is { } problem)
-        {
-            _ = this.Publish(new(Succeeded: false, title, "The files and references were updated, but republishing the cooked content failed, so the old asset may still be listed. " + problem, this.CanUndo));
-        }
-    }
-
-    // Refreshes rows and pickers at once; the sources tree and open documents follow the relocation service's report.
-    // Relocations, copies and deletes recook through the relocation service, after open documents followed; a scene
-    // command changes files through the scene workspace, so it starts the cook here.
-    private async Task AfterChangeAsync(string title, bool cook)
+    // Refreshes rows and pickers at once; the sources tree and open documents follow the relocation service's report,
+    // and the changed files reach cook on change through the asset catalog.
+    private async Task AfterChangeAsync()
     {
         relocation.Invalidate();
         await assets.RefreshAsync().ConfigureAwait(true);
-        if (cook)
-        {
-            this.LogCookStarted(title);
-            _ = this.CookAfterChangeAsync(title);
-        }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The follow-up cook runs after the change committed; its failure is logged and shown in the Cooking panel.")]
-    private async Task CookAfterChangeAsync(string title)
+    /// <summary>Forwards the changes of a history's undo and redo entries until disposed.</summary>
+    private sealed class HistoryObserver : IDisposable
     {
-        try
+        private readonly System.Collections.Specialized.INotifyCollectionChanged undo;
+        private readonly System.Collections.Specialized.INotifyCollectionChanged redo;
+
+        public HistoryObserver(DroidNet.TimeMachine.HistoryKeeper history)
         {
-            var result = await pipeline.CookProjectAsync(CancellationToken.None).ConfigureAwait(false);
-            if (result.Status is Oxygen.Managed.Core.Diagnostics.OperationStatus.Succeeded or Oxygen.Managed.Core.Diagnostics.OperationStatus.SucceededWithWarnings)
-            {
-                this.LogCookPublished(title, result.Status);
-            }
-            else
-            {
-                this.LogCookNotSucceeded(title, result.Status, string.Join(" ", result.Diagnostics.Select(static diagnostic => diagnostic.Message)));
-            }
+            this.undo = history.UndoStack;
+            this.redo = history.RedoStack;
+            this.undo.CollectionChanged += this.OnChanged;
+            this.redo.CollectionChanged += this.OnChanged;
         }
-        catch (OperationCanceledException)
+
+        public event EventHandler? Changed;
+
+        public void Dispose()
         {
-            this.LogCookCancelled(title);
+            this.undo.CollectionChanged -= this.OnChanged;
+            this.redo.CollectionChanged -= this.OnChanged;
         }
-        catch (Exception failure)
-        {
-            this.LogCookFailed(failure, title);
-        }
+
+        private void OnChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs args)
+            => this.Changed?.Invoke(this, EventArgs.Empty);
     }
 }

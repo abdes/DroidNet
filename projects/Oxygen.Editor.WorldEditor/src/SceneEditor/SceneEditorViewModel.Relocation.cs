@@ -5,6 +5,7 @@
 using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
 using Microsoft.UI.Dispatching;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -12,11 +13,14 @@ namespace Oxygen.Editor.World.SceneEditor;
 
 /// <summary>
 /// Keeps the open scene in step with Content Browser changes without reloading it: as a relocation participant it
-/// re-points its affected references in memory, and it renames itself when the browser renames it.
+/// re-points its affected references in memory, and it renames itself when the browser renames it. The runtime keeps
+/// showing the re-pointed nodes as they were until the asset feed reports their new assets mounted, whoever cooks them.
 /// </summary>
 public partial class SceneEditorViewModel
 {
+    private readonly RelocatedRuntimeRefresh relocatedRuntime = new();
     private IDisposable? relocationParticipant;
+    private IDisposable? relocatedContent;
 
     private string? SceneSourcePath => this.scene?.Project.ProjectInfo.Location is { } root
         ? Path.GetFullPath(Path.Combine(root, Oxygen.Editor.Projects.Constants.ContentFolderName, Oxygen.Editor.Projects.Constants.ScenesFolderName, this.scene.Name + Oxygen.Editor.Projects.Constants.SceneFileExtension))
@@ -47,6 +51,9 @@ public partial class SceneEditorViewModel
     {
         this.relocationParticipant?.Dispose();
         this.relocationParticipant = null;
+        this.relocatedContent?.Dispose();
+        this.relocatedContent = null;
+        this.relocatedRuntime.Clear();
     }
 
     private async Task FollowRelocationAsync(AssetRelocationChange change)
@@ -64,7 +71,63 @@ public partial class SceneEditorViewModel
         }
 
         // The command service logs the outcome, including why the scene could not follow.
-        _ = await this.commandService.FollowRelocationAsync(this.CreateCommandContext(), change, rewrite).ConfigureAwait(true);
+        var result = await this.commandService.FollowRelocationAsync(this.CreateCommandContext(), change, rewrite).ConfigureAwait(true);
+        if (result.Succeeded && (result.RuntimeNodes.Count != 0 || result.RuntimeEnvironment))
+        {
+            this.relocatedRuntime.Add(result);
+            this.LogRelocatedContentAwaited(this.Metadata.Title, result.RuntimeNodes.Count, result.RuntimeEnvironment);
+            this.ObserveRelocatedContent();
+        }
+    }
+
+    // The feed publishes its current entries on subscription, so assets that are already mounted show at once.
+    private void ObserveRelocatedContent()
+    {
+        if (this.relocatedContent is not null)
+        {
+            return;
+        }
+
+        if (this.container.Resolve<IAssetFeed>(IfUnresolved.ReturnDefault) is not { } feed)
+        {
+            this.LogRelocatedContentUnobservable(this.Metadata.Title);
+            this.relocatedRuntime.Clear();
+            return;
+        }
+
+        var dispatcher = DispatcherQueue.GetForCurrentThread();
+        this.relocatedContent = feed.Items.Subscribe(entries =>
+        {
+            if (dispatcher is null)
+            {
+                _ = this.ShowMountedRelocationsAsync(entries);
+            }
+            else
+            {
+                _ = dispatcher.TryEnqueue(() => _ = this.ShowMountedRelocationsAsync(entries));
+            }
+        });
+    }
+
+    private async Task ShowMountedRelocationsAsync(IReadOnlyList<AssetEntry> entries)
+    {
+        if (this.isDisposed || this.scene is not { } current || !this.relocatedRuntime.IsPending)
+        {
+            return;
+        }
+
+        var ready = this.relocatedRuntime.TakeReady(current, uri => entries.Find(uri)?.RuntimeAvailability
+            is AssetRuntimeAvailability.Mounted or AssetRuntimeAvailability.NotApplicable);
+        if (!this.relocatedRuntime.IsPending)
+        {
+            this.relocatedContent?.Dispose();
+            this.relocatedContent = null;
+        }
+
+        if (ready.Nodes.Count != 0 || ready.Environment)
+        {
+            await this.commandService.RefreshRelocatedRuntimeAsync(this.CreateCommandContext(), ready.Nodes, ready.Environment).ConfigureAwait(true);
+        }
     }
 
     private async Task<string?> RenameOpenSceneAsync(string name)

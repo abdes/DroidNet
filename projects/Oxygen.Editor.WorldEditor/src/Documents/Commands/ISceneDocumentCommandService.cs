@@ -367,14 +367,22 @@ public interface ISceneDocumentCommandService
         string name);
 
     /// <summary>
-    /// Re-points the open scene's references to a committed relocation in memory, outside undo history, records the
-    /// rewritten file as its saved state, and refreshes only the affected nodes in the runtime after the cook publishes.
+    /// Re-points the open scene's references to a committed relocation in memory, outside undo history, and records
+    /// the rewritten file as its saved state. The runtime keeps showing what it showed until the moved assets are
+    /// mounted; the result names what to refresh then, through <see cref="RefreshRelocatedRuntimeAsync"/>.
     /// </summary>
     /// <param name="context">The document command context.</param>
     /// <param name="change">The committed relocation.</param>
     /// <param name="rewrite">The relocation's rewrite of this scene's file.</param>
     /// <returns>The result; the document stays clean.</returns>
-    public Task<SceneCommandResult> FollowRelocationAsync(SceneDocumentCommandContext context, Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationChange change, Oxygen.Editor.ContentPipeline.Relocation.RelocatedFile rewrite);
+    public Task<SceneRelocationResult> FollowRelocationAsync(SceneDocumentCommandContext context, Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationChange change, Oxygen.Editor.ContentPipeline.Relocation.RelocatedFile rewrite);
+
+    /// <summary>Shows relocated nodes and the environment again in the runtime, once the assets they reference are mounted.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeIds">The re-pointed nodes to attach again; nodes no longer in the scene are skipped.</param>
+    /// <param name="environment">Whether to update the environment.</param>
+    /// <returns>Completion after the runtime accepted the refresh, or skipped it for a scene it no longer shows.</returns>
+    public Task RefreshRelocatedRuntimeAsync(SceneDocumentCommandContext context, IReadOnlyCollection<Guid> nodeIds, bool environment);
 
     /// <summary>Renames the scene asset through its persistence owner and records reversible document history.</summary>
     /// <param name="context">The document command context.</param>

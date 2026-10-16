@@ -38,9 +38,22 @@ public partial class AssetsViewModel
     /// <summary>Gets the shared result order, view and tile size.</summary>
     public AssetBrowserPresentation Presentation => contentBrowserState.Presentation;
 
-    /// <summary>Gets a value indicating whether the result bar offers Undo for the last rename or move.</summary>
+    /// <summary>Gets a value indicating whether the result bar offers Undo of the global history's latest entry.</summary>
     [ObservableProperty]
     public partial bool IsUndoAvailable { get; private set; }
+
+    /// <summary>Gets a value indicating whether the result bar offers Redo of the latest undone entry.</summary>
+    [ObservableProperty]
+    public partial bool IsRedoAvailable { get; private set; }
+
+    /// <summary>Gets a value indicating whether the result bar offers Undo or Redo.</summary>
+    public bool IsHistoryAvailable => this.IsUndoAvailable || this.IsRedoAvailable;
+
+    /// <summary>Gets what Undo undoes.</summary>
+    public string UndoToolTip => relocation?.UndoLabel is { } label ? $"Undo {label}: restore the previous names, locations and references." : "Nothing to undo.";
+
+    /// <summary>Gets what Redo redoes.</summary>
+    public string RedoToolTip => relocation?.RedoLabel is { } label ? $"Redo {label}: apply the names, locations and references again." : "Nothing to redo.";
 
     /// <summary>Gets what Rename does, or why it is unavailable.</summary>
     public string RenameToolTip => Explain("Rename (F2)", this.GetRenameBlocker(), "Content that uses it is updated.");
@@ -246,9 +259,22 @@ public partial class AssetsViewModel
         this.OperationResultTitle = outcome.Title;
         this.OperationResultMessage = outcome.Message;
         this.OperationResultSeverity = outcome.Succeeded ? InfoBarSeverity.Success : InfoBarSeverity.Error;
-        this.IsUndoAvailable = outcome.CanUndo && relocation?.CanUndo == true;
         this.IsOperationResultVisible = true;
+        this.UpdateHistoryActions();
         this.NotifyAssetActions();
+    }
+
+    private void OnRelocationHistoryChanged(object? sender, EventArgs e) => this.UpdateHistoryActions();
+
+    private void UpdateHistoryActions()
+    {
+        this.IsUndoAvailable = relocation?.CanUndo == true;
+        this.IsRedoAvailable = relocation?.CanRedo == true;
+        this.OnPropertyChanged(nameof(this.IsHistoryAvailable));
+        this.OnPropertyChanged(nameof(this.UndoToolTip));
+        this.OnPropertyChanged(nameof(this.RedoToolTip));
+        this.UndoRelocationCommand.NotifyCanExecuteChanged();
+        this.RedoRelocationCommand.NotifyCanExecuteChanged();
     }
 
     private bool CanOpenSelected() => this.SelectedAssets.Count == 1;
@@ -313,7 +339,7 @@ public partial class AssetsViewModel
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
         {
-            this.OnRelocationCompleted(this, new(new(Succeeded: false, "Rename output group", error.Message, relocation.CanUndo)));
+            this.OnRelocationCompleted(this, new(new(Succeeded: false, "Rename output group", error.Message)));
             return;
         }
 
@@ -445,8 +471,18 @@ public partial class AssetsViewModel
     {
         if (relocation is not null)
         {
-            this.IsUndoAvailable = false;
             _ = await relocation.UndoAsync().ConfigureAwait(true);
+        }
+    }
+
+    private bool CanRedoRelocation() => relocation?.CanRedo == true;
+
+    [RelayCommand(CanExecute = nameof(CanRedoRelocation))]
+    private async Task RedoRelocationAsync()
+    {
+        if (relocation is not null)
+        {
+            _ = await relocation.RedoAsync().ConfigureAwait(true);
         }
     }
 

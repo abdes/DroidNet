@@ -11,7 +11,10 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.ContentPipeline.Status;
 
 /// <summary>Reads acknowledged source state around accepted native facts, without native queries or source parsing.</summary>
-internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProvenance publication, ICookDocumentRegistry documents) : ICookSourceFactsProvider
+/// <param name="project">The project whose sources are read.</param>
+/// <param name="publication">The accepted facts of the published content.</param>
+/// <param name="hashSource">Hashes one source file: a cook reads what its open documents acknowledge, a status reads the disk.</param>
+internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProvenance publication, Func<string, CancellationToken, Task<string>> hashSource) : ICookSourceFactsProvider
 {
     private readonly Dictionary<Uri, CookProvenance.Product> products = publication.Products.ToDictionary(static product => product.SourceUri);
 
@@ -65,7 +68,7 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
 
     private async Task<CookSourceFacts> ReadSourceAsync(ContentCookInput input, CancellationToken cancellationToken)
     {
-        var hash = await CookSavedSourceReader.HashAsync(documents, input.SourceAbsolutePath, cancellationToken, allowUnsavedDocuments: true).ConfigureAwait(false);
+        var hash = await hashSource(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
         var primary = new CookSnapshotInput(input.AssetUri, input.SourceAbsolutePath, input.SourceRelativePath, hash);
         if (!this.products.TryGetValue(input.AssetUri, out var prior)
             || prior.SourceInput is null || prior.SourceFiles.IsEmpty
@@ -87,7 +90,7 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
             if (file.Kind == CookSnapshotInputKind.File)
             {
                 var currentHash = string.Equals(file.RelativePath, primary.RelativePath, StringComparison.Ordinal)
-                    ? hash : await CookSavedSourceReader.HashAsync(documents, file.SourcePath, cancellationToken, allowUnsavedDocuments: true).ConfigureAwait(false);
+                    ? hash : await hashSource(file.SourcePath, cancellationToken).ConfigureAwait(false);
                 files.Add(file with { DiscoveryHash = currentHash });
             }
             else

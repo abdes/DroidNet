@@ -20,7 +20,7 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 public sealed partial class SceneDocumentCommandService
 {
     /// <inheritdoc/>
-    public async Task<SceneCommandResult> FollowRelocationAsync(SceneDocumentCommandContext context, AssetRelocationChange change, RelocatedFile rewrite)
+    public async Task<SceneRelocationResult> FollowRelocationAsync(SceneDocumentCommandContext context, AssetRelocationChange change, RelocatedFile rewrite)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(change);
@@ -29,7 +29,7 @@ public sealed partial class SceneDocumentCommandService
         if (authoring is null)
         {
             this.LogSceneCouldNotFollowRelocation(context.Scene.Name);
-            return new SceneCommandResult(Succeeded: false);
+            return SceneRelocationResult.Failed;
         }
 
         // The relocation runs only while the scene is saved, so its file before the rewrite equals this model.
@@ -54,18 +54,51 @@ public sealed partial class SceneDocumentCommandService
 
         this.projectManager.RecordSceneSourceRewrite(scene, rewrite.Path, rewrite.Written);
 
-        // Republishes the saved state to the cook registration, so the follow-up cook accepts the rewritten file.
+        // Republishes the saved state to the cook registration, so the next cook accepts the rewritten file.
         _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
         this.LogSceneFollowedRelocation(scene.Name, nodes.Length, environment is not null);
-        _ = this.RefreshRuntimeAfterPublishAsync(context, nodes, environment is not null, change.ContentPublished);
-        return SceneCommandResult.Success;
+
+        // Script slots have no runtime projection; only geometry is attached again.
+        return new SceneRelocationResult(
+            Succeeded: true,
+            [.. nodes.Where(static node => node.Components.OfType<GeometryComponent>().Any()).Select(static node => node.Id)],
+            environment is not null);
+    }
+
+    /// <inheritdoc/>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The scene already follows the relocation; a runtime refresh failure is logged and the runtime keeps its previous view.")]
+    public async Task RefreshRelocatedRuntimeAsync(SceneDocumentCommandContext context, IReadOnlyCollection<Guid> nodeIds, bool environment)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(nodeIds);
+        if (!ReferenceEquals(this.sceneEngineSync.GetDocumentScene(context.Metadata), context.Scene))
+        {
+            return;
+        }
+
+        try
+        {
+            var nodes = nodeIds.Select(id => FindNode(context.Scene, id)).OfType<SceneNode>().ToArray();
+            foreach (var node in nodes)
+            {
+                _ = await this.sceneEngineSync.AttachGeometryAsync(context.Scene, node).ConfigureAwait(true);
+            }
+
+            if (environment)
+            {
+                _ = await this.sceneEngineSync.UpdateEnvironmentAsync(context.Scene, context.Scene.Environment).ConfigureAwait(true);
+            }
+
+            this.LogRuntimeRefreshedAfterRelocation(context.Scene.Name, nodes.Length, environment);
+        }
+        catch (Exception failure)
+        {
+            this.LogRuntimeRefreshFailed(failure, context.Scene.Name);
+        }
     }
 
     private static IEnumerable<Uri?> ReferencedUris(SceneNode node)
-        => node.Components.OfType<GeometryComponent>().SelectMany(static geometry => new[] { geometry.Geometry?.Uri }
-            .Concat(geometry.OverrideSlots.Concat(geometry.TargetedOverrides.SelectMany(static target => target.OverrideSlots))
-                .OfType<World.Slots.MaterialsSlot>().Select(static slot => (Uri?)slot.Material.Uri)))
-            .Concat(SceneReferenceRetargeting.ScriptReferences(node));
+        => SceneReferenceRetargeting.RuntimeReferences(node).Concat(SceneReferenceRetargeting.ScriptReferences(node));
 
     /// <summary>Resolves a reference captured before a relocation to the asset's current identity.</summary>
     /// <param name="uri">The captured reference.</param>
@@ -136,48 +169,5 @@ public sealed partial class SceneDocumentCommandService
             "Restored a reference to a deleted asset",
             $"{names} was deleted, so the restored reference shows as missing until you choose another asset.",
             context);
-    }
-
-    // After the follow-up cook publishes, only the nodes whose references changed are re-applied to the runtime.
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authored change committed; a runtime refresh failure is logged and leaves the scene editable.")]
-    private async Task RefreshRuntimeAfterPublishAsync(SceneDocumentCommandContext context, SceneNode[] nodes, bool environment, Task<string?> contentPublished)
-    {
-        if (nodes.Length == 0 && !environment)
-        {
-            return;
-        }
-
-        // The runtime resolves the new identities only from published content; until a cook succeeds the nodes keep
-        // showing the content they were attached with.
-        if (await contentPublished.ConfigureAwait(true) is { } problem)
-        {
-            this.LogRuntimeRefreshSkipped(context.Scene.Name, nodes.Length, problem);
-            return;
-        }
-
-        try
-        {
-            if (!ReferenceEquals(this.sceneEngineSync.GetDocumentScene(context.Metadata), context.Scene))
-            {
-                return;
-            }
-
-            // Script slots have no runtime projection; only geometry is re-attached.
-            foreach (var node in nodes.Where(node => node.Components.OfType<GeometryComponent>().Any() && ReferenceEquals(FindNode(context.Scene, node.Id), node)))
-            {
-                _ = await this.sceneEngineSync.AttachGeometryAsync(context.Scene, node).ConfigureAwait(true);
-            }
-
-            if (environment)
-            {
-                _ = await this.sceneEngineSync.UpdateEnvironmentAsync(context.Scene, context.Scene.Environment).ConfigureAwait(true);
-            }
-
-            this.LogRuntimeRefreshedAfterRelocation(context.Scene.Name, nodes.Length, environment);
-        }
-        catch (Exception failure)
-        {
-            this.LogRuntimeRefreshFailed(failure, context.Scene.Name);
-        }
     }
 }

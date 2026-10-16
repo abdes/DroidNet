@@ -94,7 +94,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = fixture.Sync.Setup(value => value.GetDocumentScene(context.Metadata)).Returns(scene);
         var map = new RelocationMap();
         map.AddIdentity("/Content/Input/Gameplay.oimap", "/Content/Controls/Gameplay.oimap", isFolder: false);
-        var change = new AssetRelocationChange(map, [], Task.FromResult<string?>(null));
+        var change = new AssetRelocationChange(map, []);
 
         var result = await fixture.Sut.FollowRelocationAsync(context, change, new RelocatedFile("C:/scene.oscene.json", "C:/scene.oscene.json", written)).ConfigureAwait(false);
 

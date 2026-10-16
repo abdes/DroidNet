@@ -90,6 +90,18 @@ internal static class SceneReferenceRetargeting
         return changed ? result : null;
     }
 
+    /// <summary>Gets the asset references the runtime shows for a node: its geometry and material slots.</summary>
+    /// <param name="node">The node.</param>
+    /// <returns>The geometry and the materials of its component and targeted slots.</returns>
+    public static IEnumerable<Uri> RuntimeReferences(SceneNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        return node.Components.OfType<GeometryComponent>().SelectMany(static geometry => new[] { geometry.Geometry?.Uri }
+            .Concat(geometry.OverrideSlots.Concat(geometry.TargetedOverrides.SelectMany(static target => target.OverrideSlots))
+                .OfType<MaterialsSlot>().Select(static slot => (Uri?)slot.Material.Uri)))
+            .OfType<Uri>();
+    }
+
     /// <summary>Gets the asset references a node's script slots hold.</summary>
     /// <param name="node">The node.</param>
     /// <returns>The scripts and asset parameter values.</returns>

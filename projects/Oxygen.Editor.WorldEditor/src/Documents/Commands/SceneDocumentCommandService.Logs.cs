@@ -22,11 +22,8 @@ public sealed partial class SceneDocumentCommandService
     [LoggerMessage(Level = LogLevel.Warning, Message = "Scene '{Scene}' is loading or busy with another edit and could not follow the relocation; its next save reports the file conflict.")]
     private partial void LogSceneCouldNotFollowRelocation(string scene);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Scene '{Scene}': refreshed {Nodes} relocated nodes in the runtime after the cook published (environment: {Environment}).")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Scene '{Scene}': showed {Nodes} relocated nodes again in the runtime once their assets were mounted (environment: {Environment}).")]
     private partial void LogRuntimeRefreshedAfterRelocation(string scene, int nodes, bool environment);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Scene '{Scene}': {Nodes} relocated nodes are not refreshed in the runtime because the cook did not publish: {Problem}")]
-    private partial void LogRuntimeRefreshSkipped(string scene, int nodes, string problem);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Scene '{Scene}': could not refresh relocated nodes in the runtime.")]
     private partial void LogRuntimeRefreshFailed(Exception exception, string scene);

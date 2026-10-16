@@ -164,6 +164,12 @@ public partial class SceneEditorViewModel
     [LoggerMessage(Level = LogLevel.Warning, Message = "Scene editor '{Scene}' cannot follow asset relocations: no relocation service in its workspace.")]
     private partial void LogRelocationUnavailable(string scene);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Scene '{Scene}': {Nodes} relocated nodes (environment: {Environment}) keep their runtime view until their assets are mounted.")]
+    private partial void LogRelocatedContentAwaited(string scene, int nodes, bool environment);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Scene editor '{Scene}' cannot show relocated nodes again: no asset feed in its workspace.")]
+    private partial void LogRelocatedContentUnobservable(string scene);
+
     [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Open scene '{Scene}' has nothing to follow: {Reason}.")]
     private static partial void LogRelocationSkipped(ILogger logger, string scene, string reason);
 

@@ -23,6 +23,14 @@ public interface ICookRunService
     /// <returns>Completion of cancellation signaling, not worker drain.</returns>
     public Task CancelAsync(Guid operationId);
 
+    /// <summary>
+    /// Waits until no operation holds or waits for the project writer: no cook, import, relocation or project change
+    /// is in progress. A run waiting for a save holds neither.
+    /// </summary>
+    /// <param name="cancellationToken">Stops waiting.</param>
+    /// <returns>Completion once the writer is idle; it may be taken again right after.</returns>
+    public Task WhenWriterIdleAsync(CancellationToken cancellationToken);
+
     /// <summary>Requeues a blocked run after an explicit save action; capture rechecks all inputs.</summary>
     /// <param name="operationId">The blocked run.</param>
     /// <returns>Whether the run was waiting for saved inputs.</returns>

@@ -41,8 +41,8 @@ Tooling facts the spec does not mention, which shape every new UI project:
   project gets its own `Themes/Generic.xaml`, merged by the application through
   the editor's module (spec risk table, last rows).
 - The application has no test project, so Phase 0 and every slice that changes
-  the composition root (S1.2, S1.7, S1.10, S1.11 and S1.13) are verified by the
-  reviewer's editor build.
+  the composition root (S1.2, S1.4a, S1.7, S1.10, S1.11 and S1.13) are verified
+  by the reviewer's editor build.
 
 ## 2. Decisions made for implementation
 
@@ -184,11 +184,34 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   on change of the same scope gives it its own work, so an explicit cook or
   reimport is no longer reduced to the automatic one. Every stop and join is
   logged. Gate: ContentPipeline tests.
+- **S1.4a Global history** (documents design decision 1). `Oxygen.Editor.Shell`
+  is created with its first part, `Documents/`: `IHistoryService` holds the
+  session's global history. It is registered in the workspace's scope, beside
+  cook on change, so a project's history ends with it. ContentPipeline records
+  each relocation into the history its caller gives it, as one change whose undo
+  runs the reverse relocation and records the reverse of that for redo. The
+  Content Browser's own single undo goes; its result bar offers Undo and Redo
+  over the global history, which Ctrl+Z reaches with command routing in S1.10. A
+  copy, delete or scene command no longer clears it: an undo that a later change
+  made invalid is rejected without changing anything and stays listed. A
+  relocation, copy, delete or scene command no longer cooks the whole project:
+  the changed files reach cook on change through the catalog, and an open scene
+  shows its relocated nodes again in the runtime once the asset feed reports
+  their new assets mounted, whoever cooked them. Cook on change waits until the
+  project writer is idle (`ICookRunService.WhenWriterIdleAsync`), so it never
+  reads statuses while a relocation is half done, and it skips a source whose
+  file is gone. A status reads source files from disk, sharing them with any
+  writer, and lists unsaved documents from the registry's published state; it no
+  longer waits for save gates or compares an open document's saved hash. Gate:
+  Shell, ContentPipeline, Assets, Content Browser, Material Editor and World
+  Editor tests, the reviewer's editor build and acceptance of Undo and Redo.
 - **S1.4 Pipeline workflows out of UI** (architecture section 6). The operations
-  and undo of `AssetRelocationWorkflow`, and the name and folder validation and
-  template writing of `ScriptAssetCreation`, move to ContentPipeline; the
-  prompts stay in the Content Browser. Gate: ContentPipeline and Content Browser
-  tests.
+  of `AssetRelocationWorkflow` (the referrer search before a delete, the refresh
+  after a change) and the folder choice, name validation, next free name and
+  template writing of `ScriptAssetCreation` move to ContentPipeline; the name
+  collision check reads the asset catalog and the template is written through
+  `IAtomicFileStore`. The prompts and result messages stay in the Content
+  Browser. Gate: ContentPipeline and Content Browser tests.
 - **S1.5 Document kinds.** Design first: the contract a document type implements
   in `Oxygen.Editor.Documents` (load, save against the version it read, reload,
   commit an edit in progress, apply and revert its history changes, retarget to
@@ -203,8 +226,10 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   Projects; it implements the scene document type (S1.5) and declares
   `ISceneEngineSync`. Command and content-demand services lose their `WindowId`;
   multi-node actions become TimeMachine transactions (documents design decision
-  1). Gate: Scenes tests without the WinUI host, and the World Editor tests that
-  cover the callers.
+  1). Renaming, duplicating and deleting a scene asset, sent today as
+  `SceneAssetCommandMessage` to whichever scene workspace is open, become Scenes
+  operations. Gate: Scenes tests without the WinUI host, and the World Editor
+  tests that cover the callers.
 - **S1.7 LivePreview** (C4 implementation, C11, C13, Play). Design first.
   `Oxygen.Editor.LivePreview` takes engine sync, content demand, mount changes,
   the runtime session start taken out of `WorkspaceViewModel`, the Play services
@@ -226,22 +251,22 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   they collect into the next one. A cook run fails as a whole when one input
   fails, which is why the single run waits for the skip. Gate: ContentPipeline
   and LivePreview tests.
-- **S1.10 Shell** (C9, C10, C12, C16). `Oxygen.Editor.Shell` is created with the
-  layout of shell design section 7 and receives the generic workspace machinery
-  of `WorldEditor/Workspace`. Its document service (`IDocumentService`,
+- **S1.10 Shell** (C9, C10, C12, C16). `Oxygen.Editor.Shell` grows to the layout
+  of shell design section 7 and receives the generic workspace machinery of
+  `WorldEditor/Workspace`. Its document service (`IDocumentService`,
   `DocumentService`) replaces `EditorDocumentService`, `DocumentHostViewModel`
   and `DocumentManager`: it opens a file once, places the document, owns the
-  per-document and global histories, the Undo and Redo commands, the
-  confirmations of documents design 2.9, the missing and conflict banner, and
-  following relocated files. Aura's contract in `DroidNet.Documents` is renamed
-  `IDocumentTabSource`. The other contracts land in their target shape (decision
-  4): contributions (panel and editor descriptors, `IDocumentEditorProvider`),
-  part services (placement, commands, close and exit) and desktop integration
-  (`CodeEditorService`, `IAssetShell`). Their first implementations adapt
-  today's Aura, Docking and Routing; the library changes of shell design section
-  9 come in Phase 5. Notifications, menus, the status bar and the command
-  palette are not part of #69 (shell design section 8). Gate: Shell tests and
-  the reviewer's editor build.
+  per-document histories beside the global one of S1.4a, the Undo and Redo
+  commands, the confirmations of documents design 2.9, the missing and conflict
+  banner, and following relocated files. Aura's contract in `DroidNet.Documents`
+  is renamed `IDocumentTabSource`. The other contracts land in their target
+  shape (decision 4): contributions (panel and editor descriptors,
+  `IDocumentEditorProvider`), part services (placement, commands, close and
+  exit) and desktop integration (`CodeEditorService`, `IAssetShell`). Their
+  first implementations adapt today's Aura, Docking and Routing; the library
+  changes of shell design section 9 come in Phase 5. Notifications, menus, the
+  status bar and the command palette are not part of #69 (shell design section
+  8). Gate: Shell tests and the reviewer's editor build.
 - **S1.11 Unsaved documents** (documents design 4.3). `Oxygen.Editor.Documents`
   declares `IUnsavedDocuments`, the Shell's document service implements it and
   ContentPipeline consumes it. Play, Cook and relocation ask before they run.
@@ -347,13 +372,13 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 
 ## 5. Execution risks beyond the spec
 
-| Risk                                                                                    | Handling                                                                                                                                                |
-| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Concurrent editor work on the `editor` branch touches files being moved                 | Move one folder per commit and commit promptly; a move never carries unrelated edits                                                                    |
-| `x:Bind` and `ms-appx` paths break silently after a XAML move                           | Rewrite resource URIs in the moving commit; each editor's UI tests load its views (spec risk table)                                                     |
-| A moved type turns public and collides with an existing name in its new namespace scope | Namespaces are preserved (R6), so collisions surface at compile time in the moving commit                                                               |
-| An editor build of the application is the only check of composition-root changes        | Phase 0, S1.2, S1.7, S1.10, S1.11, S1.13, S2.3, S3.1 and Phase 4 end with the reviewer's build; no further slice starts on a broken composition root    |
-| Shell contracts are written before the library changes they will run on                 | The Shell's first implementations adapt today's Aura, Docking and Routing behind the target contracts; Phase 5 replaces the adapters, not the contracts |
+| Risk                                                                                    | Handling                                                                                                                                                    |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Concurrent editor work on the `editor` branch touches files being moved                 | Move one folder per commit and commit promptly; a move never carries unrelated edits                                                                        |
+| `x:Bind` and `ms-appx` paths break silently after a XAML move                           | Rewrite resource URIs in the moving commit; each editor's UI tests load its views (spec risk table)                                                         |
+| A moved type turns public and collides with an existing name in its new namespace scope | Namespaces are preserved (R6), so collisions surface at compile time in the moving commit                                                                   |
+| An editor build of the application is the only check of composition-root changes        | Phase 0, S1.2, S1.4a, S1.7, S1.10, S1.11, S1.13, S2.3, S3.1 and Phase 4 end with the reviewer's build; no further slice starts on a broken composition root |
+| Shell contracts are written before the library changes they will run on                 | The Shell's first implementations adapt today's Aura, Docking and Routing behind the target contracts; Phase 5 replaces the adapters, not the contracts     |
 
 ## 6. Status ledger
 

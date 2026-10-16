@@ -103,6 +103,27 @@ public sealed class CookPriorityTests
         _ = (await Task.WhenAll(preview, saved, requested).WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(1, 2, 3);
     }
 
+    /// <summary>The writer is idle only once no operation holds it or waits for it.</summary>
+    /// <returns>The asynchronous idle regression.</returns>
+    [TestMethod]
+    public async Task WriterIsIdleOnlyWhenNothingHoldsOrWaitsForIt()
+    {
+        var context = CreateContextService();
+        using var coordinator = CreateCoordinator(context);
+        await coordinator.WhenWriterIdleAsync(this.TestContext.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
+        var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var queued = coordinator.RunAsync((_, _) => release.Task, this.TestContext.CancellationToken);
+
+        var idle = coordinator.WhenWriterIdleAsync(this.TestContext.CancellationToken);
+        await hold.ReleaseAsync().ConfigureAwait(false);
+        _ = idle.IsCompleted.Should().BeFalse("the queued operation takes the writer next");
+
+        release.SetResult(1);
+        _ = await queued.ConfigureAwait(false);
+        await idle.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Removing a cancelled priority waiter allows the next save to acquire the writer.</summary>
     /// <returns>The asynchronous cancellation regression.</returns>
     [TestMethod]

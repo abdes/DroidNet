@@ -16,6 +16,26 @@ namespace Oxygen.Editor.ContentPipeline;
 public sealed partial class ContentCookCoordinator
 {
     private readonly List<WriterRequest> waitingWriters = [];
+    private readonly List<TaskCompletionSource> idleWaiters = [];
+
+    // Called under stateLock.
+    private bool IsWriterIdle => this.activeOperation is null && this.waitingWriters.Count == 0;
+
+    /// <inheritdoc />
+    public Task WhenWriterIdleAsync(CancellationToken cancellationToken)
+    {
+        lock (this.stateLock)
+        {
+            if (this.IsWriterIdle)
+            {
+                return Task.CompletedTask;
+            }
+
+            var idle = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            this.idleWaiters.Add(idle);
+            return idle.Task.WaitAsync(cancellationToken);
+        }
+    }
 
     private async Task AcquireWriterAsync(ContentCookOperation operation, CookRunRequest? request, SharedCook? shared, CancellationToken cancellationToken)
     {
@@ -67,6 +87,7 @@ public sealed partial class ContentCookCoordinator
 
         if (this.waitingWriters.Count == 0)
         {
+            this.ReleaseIdleWaiters();
             return;
         }
 
@@ -85,6 +106,17 @@ public sealed partial class ContentCookCoordinator
         }
 
         _ = granted.Granted.TrySetResult();
+    }
+
+    // Called under stateLock.
+    private void ReleaseIdleWaiters()
+    {
+        foreach (var idle in this.idleWaiters)
+        {
+            _ = idle.TrySetResult();
+        }
+
+        this.idleWaiters.Clear();
     }
 
     // Called under stateLock.

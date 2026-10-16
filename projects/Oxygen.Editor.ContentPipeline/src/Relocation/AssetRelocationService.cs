@@ -4,6 +4,8 @@
 
 using System.Globalization;
 using DroidNet.Storage;
+using DroidNet.TimeMachine;
+using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
@@ -18,10 +20,9 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// <param name="documents">The open documents and their unsaved state.</param>
 /// <param name="files">The atomic file store.</param>
 /// <param name="logger">Records every move, rewrite, copy, delete, rejection and restore.</param>
-/// <param name="pipeline">Republishes changed content after each change; without it nothing is recooked.</param>
 /// <param name="redirects">The session's relocation record for undo, redo and paste; optional.</param>
 public sealed partial class AssetRelocationService(IContentCookCoordinator coordinator, IProjectContextService projects, ICookDocumentRegistry documents, IAtomicFileStore files,
-    ILogger<AssetRelocationService>? logger = null, IContentPipelineService? pipeline = null, AssetRedirects? redirects = null)
+    ILogger<AssetRelocationService>? logger = null, AssetRedirects? redirects = null)
     : IAssetRelocationService
 {
     private readonly ILogger logger = (ILogger?)logger ?? NullLogger.Instance;
@@ -49,33 +50,25 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     }
 
     /// <inheritdoc/>
-    public async Task<AssetRelocationPlan> RelocateAsync(AssetRelocationRequest request, CancellationToken cancellationToken)
+    public async Task<AssetRelocationPlan> RelocateAsync(AssetRelocationRequest request, string label, HistoryKeeper history, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
+        ArgumentNullException.ThrowIfNull(history);
         var caller = SynchronizationContext.Current;
-        var published = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        AssetRelocationPlan plan;
-        try
-        {
-            plan = await this.RelocateCoreAsync(request, published.Task, cancellationToken).ConfigureAwait(false);
-        }
-        catch
-        {
-            _ = published.TrySetResult(null);
-            throw;
-        }
 
-        plan.ContentPublished = published.Task;
+        // Resumes on the caller's context: the history belongs to it, and an undo running this relocation is still
+        // undoing when the reverse is recorded.
+        var plan = await this.RelocateCoreAsync(request, cancellationToken).ConfigureAwait(true);
         if (plan.IsEmpty)
         {
-            _ = published.TrySetResult(null);
             return plan;
         }
 
+        var reverse = plan.Reverse;
+        history.AddChange(new AsyncSimpleAction(token => new ValueTask(this.RelocateAsync(reverse, label, history, token))) { Key = label });
+        this.LogRecorded(label);
         this.RaiseFilesChanged(caller, new(plan.Moves, plan.RewrittenFiles, [], plan.Moves.Any(static move => move.IsDirectory)));
-
-        // The writer is released: cook now, so open documents that followed the change are consistent with their files.
-        _ = this.CookAfterChangeAsync("relocation", published);
         return plan;
     }
 
@@ -108,7 +101,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(targetFolder);
-        return this.ThenCookAsync("copy", coordinator.RunAsync<IReadOnlyList<string>>(
+        return coordinator.RunAsync<IReadOnlyList<string>>(
             (operation, token) => this.LoggedAsync<IReadOnlyList<string>>("Copy", async () =>
             {
                 var project = operation.Project;
@@ -132,7 +125,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 this.Invalidate();
                 return copies;
             }),
-            cancellationToken));
+            cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -141,9 +134,9 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(recycle);
         var caller = SynchronizationContext.Current;
-        IReadOnlyList<string> deleted = [];
+        List<string> deleted = [];
         var foldersDeleted = false;
-        _ = await this.ThenCookAsync("delete", coordinator.RunAsync(
+        _ = await coordinator.RunAsync(
             (operation, token) => this.LoggedAsync("Delete", async () =>
             {
                 var project = operation.Project;
@@ -191,7 +184,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 redirects?.RecordDeleted(distinct.Select(path => RelocationPaths.ToVirtual(project, path)).OfType<string>().Select(RelocationPaths.ToIdentity));
                 return true;
             }),
-            cancellationToken)).ConfigureAwait(false);
+            cancellationToken).ConfigureAwait(false);
         if (deleted.Count != 0)
         {
             this.RaiseFilesChanged(caller, new([], [], deleted, foldersDeleted));
@@ -422,7 +415,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         }
     }
 
-    private Task<AssetRelocationPlan> RelocateCoreAsync(AssetRelocationRequest request, Task<string?> contentPublished, CancellationToken cancellationToken)
+    private Task<AssetRelocationPlan> RelocateCoreAsync(AssetRelocationRequest request, CancellationToken cancellationToken)
         => coordinator.RunAsync(
             (operation, token) => this.LoggedAsync("Relocation", async () =>
             {
@@ -460,13 +453,13 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
 
                 this.LogRelocationCommitted(plan.Moves.Count, plan.Edits.Count);
                 redirects?.Record(plan.Map);
-                await this.NotifyParticipantsAsync(new AssetRelocationChange(plan.Map, written, contentPublished)).ConfigureAwait(false);
+                await this.NotifyParticipantsAsync(new AssetRelocationChange(plan.Map, written)).ConfigureAwait(false);
                 return plan;
             }),
             cancellationToken);
 
-    // Open documents follow the committed files before the writer is released, so the follow-up cook sees them
-    // consistent. A participant failure leaves its document to report the file conflict on its next save.
+    // Open documents follow the committed files before the writer is released, so the next cook sees them consistent.
+    // A participant failure leaves its document to report the file conflict on its next save.
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The files are committed; one document's failure must not undo the relocation or skip the other documents.")]
     private async Task NotifyParticipantsAsync(AssetRelocationChange change)
     {
@@ -490,50 +483,6 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The follow-up cook runs after the change committed; its failure is logged and shown in the Cooking panel.")]
-    private async Task CookAfterChangeAsync(string operation, TaskCompletionSource<string?> published)
-    {
-        string? problem = null;
-        try
-        {
-            if (pipeline is null)
-            {
-                return;
-            }
-
-            this.LogCookStarted(operation);
-            var result = await pipeline.CookProjectAsync(CancellationToken.None).ConfigureAwait(false);
-            if (result.Status is Oxygen.Managed.Core.Diagnostics.OperationStatus.Succeeded or Oxygen.Managed.Core.Diagnostics.OperationStatus.SucceededWithWarnings)
-            {
-                this.LogCookPublished(operation, result.Status);
-            }
-            else
-            {
-                problem = string.Join(" ", result.Diagnostics.Select(static diagnostic => diagnostic.Message));
-                if (problem.Length == 0)
-                {
-                    problem = $"The cook ended {result.Status}.";
-                }
-
-                this.LogCookNotSucceeded(operation, result.Status, problem);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            problem = "Republishing was cancelled.";
-            this.LogCookCancelled(operation);
-        }
-        catch (Exception failure)
-        {
-            problem = failure.Message;
-            this.LogCookFailed(failure, operation);
-        }
-        finally
-        {
-            _ = published.TrySetResult(problem);
-        }
-    }
-
     // Raised where the caller started the operation, like Progress<T>, so UI listeners need no dispatcher.
     private void RaiseFilesChanged(SynchronizationContext? caller, AssetFilesChangedEventArgs args)
     {
@@ -550,13 +499,6 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         {
             caller.Post(_ => handlers(this, args), state: null);
         }
-    }
-
-    private async Task<T> ThenCookAsync<T>(string operation, Task<T> change)
-    {
-        var result = await change.ConfigureAwait(false);
-        _ = this.CookAfterChangeAsync(operation, new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously));
-        return result;
     }
 
     private async Task<T> LoggedAsync<T>(string operation, Func<Task<T>> work)

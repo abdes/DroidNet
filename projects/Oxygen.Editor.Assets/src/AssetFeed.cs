@@ -128,11 +128,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
             }
 
             project = active;
-            var logicalKey = GetLogicalKey(uri);
-            var match = this.items.Value.FirstOrDefault(item => item.IdentityUri == uri)
-                ?? this.items.Value.FirstOrDefault(item => item.CookedUri == uri)
-                ?? this.items.Value.FirstOrDefault(item => string.Equals(GetLogicalKey(item.IdentityUri), logicalKey, StringComparison.OrdinalIgnoreCase));
-            if (match is not null)
+            if (this.items.Value.Find(uri) is { } match)
             {
                 return match;
             }
@@ -204,7 +200,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
             CookStatus = state,
             CookedPath = item.CookedMetadata is not null ? item.CookedPath : ResolvePublishedOutputPath(item, state),
             DiagnosticCodes = item.DiagnosticCodes.Where(code => !string.Equals(code, AssetIdentityDiagnosticCodes.CookedMissing, StringComparison.Ordinal)
-                    || state.OutputAvailability == CookedOutputAvailability.Missing && state.HasPublishedOutput)
+                    || (state.OutputAvailability == CookedOutputAvailability.Missing && state.HasPublishedOutput))
                 .Concat(state.Diagnostics.Select(static diagnostic => diagnostic.Code)).Distinct(StringComparer.Ordinal).ToArray(),
             PrimaryState = state.Freshness == AssetCookFreshness.Unknown ? item.PrimaryState : state.Freshness switch
             {
@@ -219,19 +215,6 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
                 : state.Freshness == AssetCookFreshness.Current && !state.HasUnsavedChanges ? AssetState.Cooked : AssetState.Stale,
             IsSelectable = state.Freshness == AssetCookFreshness.Unknown ? item.IsSelectable : state.Freshness is not (AssetCookFreshness.InvalidSource or AssetCookFreshness.MissingSource),
         };
-
-    private static string GetLogicalKey(Uri uri)
-    {
-        var path = AssetUriHelper.GetVirtualPath(uri);
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            path = uri.AbsolutePath;
-        }
-
-        return path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            ? path[..^".json".Length]
-            : path;
-    }
 
     private static string? TryResolveSourcePath(ProjectContext project, Uri uri)
     {
@@ -248,8 +231,12 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         return mount is null ? null : Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath, mountRelativePath));
     }
 
-    private async Task<IReadOnlyList<AssetEntry>> ApplyCookStatusAsync(ProjectContext project, IReadOnlyList<AssetEntry> source, CancellationToken cancellationToken,
-        Oxygen.Editor.ContentPipeline.Publication.ICookPublicationReadLease? publication = null, string? publicationError = null)
+    private async Task<IReadOnlyList<AssetEntry>> ApplyCookStatusAsync(
+        ProjectContext project,
+        IReadOnlyList<AssetEntry> source,
+        CancellationToken cancellationToken,
+        Oxygen.Editor.ContentPipeline.Publication.ICookPublicationReadLease? publication = null,
+        string? publicationError = null)
     {
         source = source.Select(item => item.Kind == AssetKind.ForeignSource && item.SourcePath is { } path
             && File.Exists(path + Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.SidecarSuffix)

@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
+using DroidNet.TimeMachine;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 
@@ -41,7 +42,7 @@ public sealed class AssetRelocationTests
     public async Task RenamingMaterialRewritesEveryReferenceInItsForm()
     {
         using var workspace = CreateContent();
-        var plan = await workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var plan = await workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = workspace.Exists("Content/Materials/Red.omat.json").Should().BeFalse();
         _ = workspace.Exists("Content/Materials/Blue.omat.json").Should().BeTrue();
@@ -53,13 +54,66 @@ public sealed class AssetRelocationTests
         _ = workspace.ReadJson("Content/Geometry/Box.ogeo.json")["lods"]![0]!["submeshes"]![0]!["material_ref"]!.GetValue<string>().Should().Be("/Content/Materials/Blue.omat");
     }
 
+    /// <summary>A relocation undoes and redoes through the history it was recorded in.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task RelocationUndoesAndRedoesThroughItsHistory()
+    {
+        using var workspace = CreateContent();
+        var history = new HistoryKeeper(this);
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), "Rename", history, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = history.UndoStack.Should().ContainSingle().Which.Key.Should().Be("Rename");
+
+        await history.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = workspace.Exists("Content/Materials/Red.omat.json").Should().BeTrue();
+        _ = workspace.Read("Content/Scenes/Main.oscene.json").Should().Contain("asset:///Content/Materials/Red.omat.json").And.NotContain("Blue.omat");
+        _ = history.CanUndo.Should().BeFalse();
+
+        await history.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = workspace.Exists("Content/Materials/Blue.omat.json").Should().BeTrue();
+        _ = workspace.Exists("Content/Materials/Red.omat.json").Should().BeFalse();
+        _ = history.CanUndo.Should().BeTrue();
+        _ = history.CanRedo.Should().BeFalse();
+    }
+
+    /// <summary>An undo that a later change made impossible is rejected, changes nothing and stays in the history.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task UndoMadeImpossibleByALaterChangeStaysInTheHistory()
+    {
+        using var workspace = CreateContent();
+        var history = new HistoryKeeper(this);
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), "Rename", history, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = workspace.Write("Content/Materials/Red.omat.json", Material);
+        var before = Snapshot(workspace.Root);
+
+        Func<Task> undo = async () => await history.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = await undo.Should().ThrowAsync<AssetRelocationException>().ConfigureAwait(false);
+        _ = Snapshot(workspace.Root).Should().BeEquivalentTo(before);
+        _ = history.CanUndo.Should().BeTrue();
+    }
+
+    /// <summary>A request that changes nothing records nothing.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task RelocationThatChangesNothingRecordsNothing()
+    {
+        using var workspace = CreateContent();
+        var history = new HistoryKeeper(this);
+
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Red.omat.json"), "Rename", history, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = history.CanUndo.Should().BeFalse();
+    }
+
     /// <summary>A texture and its image move together; the descriptor keeps a valid source and a new identity.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task RenamingTextureRenamesItsImageAndRewritesIdentityAndReferrers()
     {
         using var workspace = CreateContent();
-        _ = await workspace.Service.RelocateAsync(Move("/Content/Textures/Wood.otex.json", "/Content/Textures/Oak.otex.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Textures/Wood.otex.json", "/Content/Textures/Oak.otex.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = workspace.Exists("Content/Textures/Oak.png").Should().BeTrue();
         _ = workspace.Exists("Content/Textures/Wood.png").Should().BeFalse();
@@ -79,7 +133,7 @@ public sealed class AssetRelocationTests
         _ = workspace.Write("Content/Props/Box.ogeo.json", Geometry.Replace("/Content/Geometry/", "/Content/Props/", StringComparison.Ordinal));
         _ = workspace.Write("Content/Props/mesh.bin", "bin");
         _ = workspace.Write("Content/Shared/far.otex.json", """{ "virtual_path": "/Content/Shared/far.otex", "source": "../Textures/Wood.png" }""");
-        _ = await workspace.Service.RelocateAsync(Move("/Content/Shared", "/Content/Props/Shared"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Shared", "/Content/Props/Shared"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var moved = workspace.ReadJson("Content/Props/Shared/far.otex.json");
         _ = moved["source"]!.GetValue<string>().Should().Be("../../Textures/Wood.png");
@@ -96,7 +150,7 @@ public sealed class AssetRelocationTests
         _ = workspace.Write("Content/Materials/Robot/Paint.omat.json", """{ "name": "Paint" }""");
         var request = new AssetRelocationRequest { GroupMoves = [new("/Content/SourceMedia/DCC/Robot/robot.gltf", "Hero")] };
 
-        var plan = await workspace.Service.RelocateAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var plan = await workspace.Service.RelocateAsync(request, "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = workspace.ReadSettings("Content/SourceMedia/DCC/Robot/robot.gltf.import.json").OutputDirectory.Should().Be("Hero");
         _ = workspace.Exists("Content/Materials/Hero/Paint.omat.json").Should().BeTrue();
@@ -115,7 +169,7 @@ public sealed class AssetRelocationTests
         _ = workspace.Write("Content/Geometry/Vehicles/readme.txt", "notes");
         _ = workspace.Write("Content/Scenes/Vehicles/keep.txt", "notes");
 
-        _ = await workspace.Service.RelocateAsync(Move("/Content/Geometry/Vehicles", "/Content/Geometry/Cars"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Geometry/Vehicles", "/Content/Geometry/Cars"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = workspace.ReadSettings("Content/SourceMedia/DCC/Robot/robot.gltf.import.json").OutputDirectory.Should().Be("Cars/Robot");
         _ = workspace.Exists("Content/Scenes/Cars/keep.txt").Should().BeTrue();
@@ -129,10 +183,10 @@ public sealed class AssetRelocationTests
         using var workspace = CreateContent();
         _ = workspace.WriteModel("Content/SourceMedia/DCC/Robot", "robot.gltf", "Robot");
 
-        _ = await workspace.Service.RelocateAsync(Move("/Content/SourceMedia/DCC/Robot", "/Content/SourceMedia/Bot"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await workspace.Service.RelocateAsync(Move("/Content/SourceMedia/DCC/Robot", "/Content/SourceMedia/Bot"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = workspace.ReadSettings("Content/SourceMedia/Bot/robot.gltf.import.json").BundleRoot.Should().Be("Content/SourceMedia/Bot");
 
-        _ = await workspace.Service.RelocateAsync(Move("/Content/SourceMedia/Bot/robot.gltf", "/Content/SourceMedia/Bot/hero.gltf"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await workspace.Service.RelocateAsync(Move("/Content/SourceMedia/Bot/robot.gltf", "/Content/SourceMedia/Bot/hero.gltf"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
         var settings = workspace.ReadSettings("Content/SourceMedia/Bot/hero.gltf.import.json");
         _ = settings.PrimaryRelativePath.Should().Be("hero.gltf");
         _ = settings.Files.Should().BeEquivalentTo("hero.gltf", "mesh.bin");
@@ -163,7 +217,7 @@ public sealed class AssetRelocationTests
         _ = workspace.WriteModel("Content/SourceMedia/DCC/Robot", "robot.gltf", "Robot");
         var before = Snapshot(workspace.Root);
 
-        Func<Task> work = () => workspace.Service.RelocateAsync(Move(source, target), this.TestContext.CancellationToken);
+        Func<Task> work = () => workspace.Service.RelocateAsync(Move(source, target), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
 
         _ = await work.Should().ThrowAsync<AssetRelocationException>().ConfigureAwait(false);
         _ = Snapshot(workspace.Root).Should().BeEquivalentTo(before);
@@ -179,7 +233,7 @@ public sealed class AssetRelocationTests
         _ = workspace.Write("Content/Player/move.luau", "return {}");
         var request = new AssetRelocationRequest { Moves = [new("/Content/Player/jump.lua", "/Content/Player/move.lua")] };
 
-        Func<Task> work = () => workspace.Service.RelocateAsync(request, this.TestContext.CancellationToken);
+        Func<Task> work = () => workspace.Service.RelocateAsync(request, "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
 
         _ = await work.Should().ThrowAsync<AssetRelocationException>().WithMessage("*move.luau*same script*").ConfigureAwait(false);
         _ = workspace.Exists("Content/Player/jump.lua").Should().BeTrue();
@@ -206,13 +260,14 @@ public sealed class AssetRelocationTests
     {
         using var workspace = CreateContent();
         _ = workspace.Write("Content/Scripts/move.lua", "return {}");
-        _ = workspace.Write("Content/Scenes/Scripted.oscene.json", """
+        const string scripted = """
             { "Name": "Scripted", "RootNodes": [ { "Name": "Player", "Components": [ { "$type": "Scripting", "Name": "Scripting",
               "Slots": [ { "Id": "0f8fad5b-d9cb-469f-a165-70867728950e", "Script": "asset:///Content/Scripts/move.oscript",
                 "Overrides": { "follow": { "Type": "asset", "Value": "asset:///Content/Scripts/move.oscript" } } } ] } ] } ] }
-            """);
+            """;
+        _ = workspace.Write("Content/Scenes/Scripted.oscene.json", scripted);
 
-        _ = await workspace.Service.RelocateAsync(Move("/Content/Scripts/move.lua", "/Content/Scripts/walk.lua"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Scripts/move.lua", "/Content/Scripts/walk.lua"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var slot = workspace.ReadJson("Content/Scenes/Scripted.oscene.json")["RootNodes"]![0]!["Components"]![0]!["Slots"]![0]!;
         _ = slot["Script"]!.GetValue<string>().Should().Be("asset:///Content/Scripts/walk.oscript");
@@ -229,7 +284,7 @@ public sealed class AssetRelocationTests
         _ = workspace.WriteModel("Content/SourceMedia/DCC/Car", "car.gltf", "Car");
         var request = new AssetRelocationRequest { GroupMoves = [new("/Content/SourceMedia/DCC/Robot/robot.gltf", "Car/Robot")] };
 
-        Func<Task> work = () => workspace.Service.RelocateAsync(request, this.TestContext.CancellationToken);
+        Func<Task> work = () => workspace.Service.RelocateAsync(request, "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
 
         _ = await work.Should().ThrowAsync<AssetRelocationException>().WithMessage("*overlap*").ConfigureAwait(false);
     }
@@ -247,7 +302,7 @@ public sealed class AssetRelocationTests
         var before = Snapshot(workspace.Root);
         workspace.Service.FailAfterStep = failAfterStep;
 
-        Func<Task> work = () => workspace.Service.RelocateAsync(Move("/Content/Textures/Wood.otex.json", "/Content/Textures/Oak.otex.json"), this.TestContext.CancellationToken);
+        Func<Task> work = () => workspace.Service.RelocateAsync(Move("/Content/Textures/Wood.otex.json", "/Content/Textures/Oak.otex.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
 
         _ = await work.Should().ThrowAsync<AssetRelocationException>().WithMessage("*restored*").ConfigureAwait(false);
         _ = Snapshot(workspace.Root).Should().BeEquivalentTo(before);
@@ -293,7 +348,7 @@ public sealed class AssetRelocationTests
         using var registration = workspace.Documents.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(null));
         registration.UpdateState(new(Guid.NewGuid(), path, "Main", Revision: 2, SavedRevision: 1, IsDirty: true, SavedContentHash: string.Empty));
 
-        Func<Task> work = () => workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken);
+        Func<Task> work = () => workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
 
         _ = await work.Should().ThrowAsync<AssetRelocationException>().WithMessage("*Main*").ConfigureAwait(false);
         _ = workspace.Exists("Content/Materials/Red.omat.json").Should().BeTrue();
@@ -350,7 +405,7 @@ public sealed class AssetRelocationTests
         var reports = new List<AssetFilesChangedEventArgs>();
         workspace.Service.FilesChanged += (_, args) => reports.Add(args);
 
-        _ = await workspace.Service.RelocateAsync(Move("/Content/Shared", "/Content/Props/Shared"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Shared", "/Content/Props/Shared"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var report = reports.Should().ContainSingle().Subject;
         _ = report.Moves.Should().Contain(move => move.IsDirectory && move.Source == workspace.PathOf("Content/Shared") && move.Target == workspace.PathOf("Content/Props/Shared"));
@@ -399,7 +454,7 @@ public sealed class AssetRelocationTests
         Task<AssetRelocationPlan> relocation;
         try
         {
-            relocation = workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken);
+            relocation = workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
         }
         finally
         {
@@ -440,7 +495,7 @@ public sealed class AssetRelocationTests
         using var workspace = CreateContent();
         var before = Snapshot(workspace.Root);
 
-        var plan = await workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Red.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var plan = await workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Red.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = plan.Moves.Should().BeEmpty();
         _ = plan.RewrittenFiles.Should().BeEmpty();

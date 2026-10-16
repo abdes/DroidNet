@@ -152,6 +152,7 @@ public partial class AssetsViewModel(
 
             messenger.Register<CreateScriptRequestMessage>(this, (_, message) => message.Reply(scripts?.CreateScriptAsync() ?? Task.FromResult<string?>(null)));
             relocation?.Completed += this.OnRelocationCompleted;
+            relocation?.HistoryChanged += this.OnRelocationHistoryChanged;
             automaticCooking.PropertyChanged += this.OnAutomaticCookingChanged;
 
             // Indexing is started by ContentBrowserViewModel - no need to start here
@@ -318,6 +319,7 @@ public partial class AssetsViewModel(
                 // Cleanup event subscriptions
                 contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
                 relocation?.Completed -= this.OnRelocationCompleted;
+                relocation?.HistoryChanged -= this.OnRelocationHistoryChanged;
 
                 this.PropertyChanging -= this.OnLayoutViewModelChanging;
                 this.PropertyChanged -= this.OnLayoutViewModelChanged;
