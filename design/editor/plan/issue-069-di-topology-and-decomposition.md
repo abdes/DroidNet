@@ -1,6 +1,7 @@
 # Issue #69: DI scope topology and WorldEditor decomposition
 
-Status: `in progress` — Phase 0 and S1.1 (Assets) are done. Phase 1 follows
+Status: `in progress` — Phase 0, S1.1 (Assets) and S1.2 (Cook on change) are
+done. Phase 1 follows
 [editor-module-architecture.md](../review/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -40,7 +41,7 @@ Tooling facts the spec does not mention, which shape every new UI project:
   project gets its own `Themes/Generic.xaml`, merged by the application through
   the editor's module (spec risk table, last rows).
 - The application has no test project, so Phase 0 and every slice that changes
-  the composition root (S1.2, S1.8, S1.11, S1.12 and S1.14) are verified by the
+  the composition root (S1.2, S1.7, S1.10, S1.11 and S1.13) are verified by the
   reviewer's editor build.
 
 ## 2. Decisions made for implementation
@@ -103,7 +104,7 @@ slices do not reopen them.
 | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `IRuntimeProblemSource`, `PlayRequest`, `PlayStatus*`, `PlayActivity`, `PlayFailure`                                                          | `LivePreview`                           | Play is runtime work; Problems consumes `IRuntimeProblemSource` only                                                                                              |
 | `PlaySessionService`, `PlaySessionSettingsService`, `PlayerConnection`, `PlayerSettingsSync`, `RuntimeProblemReader` and their tests          | `LivePreview`                           | Registered by the LivePreview module, not by `WorkspaceViewModel.Play`                                                                                            |
-| `IPlayWorkspace`, `ICookingWorkspaceActions` (C12, **C16**)                                                                                   | Shell                                   | Replaced by Shell placement and commands (shell design section 4); selecting a node goes through Scenes. `WorkspaceViewModel` keeps implementing both until S1.11 |
+| `IPlayWorkspace`, `ICookingWorkspaceActions` (C12, **C16**)                                                                                   | Shell                                   | Replaced by Shell placement and commands (shell design section 4); selecting a node goes through Scenes. `WorkspaceViewModel` keeps implementing both until S1.10 |
 | `PlayTransportBar`, `ScenePlayToolbarViewModel`, `PlayerWindowModeIndexConverter`, `PlayerWindowSizeOption`, `PlayPrimaryAccent`, `PlayPanel` | `SceneEditor`                           | Moves with the scene editor (`SceneEditorView` hosts the bar)                                                                                                     |
 | `Diagnostics/SceneOperationResults`                                                                                                           | `Scenes`                                | Scene operation-result vocabulary                                                                                                                                 |
 | `Diagnostics/RuntimeOperationResults`                                                                                                         | `LivePreview`                           | Runtime operation-result vocabulary                                                                                                                               |
@@ -166,7 +167,7 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   overflow, and `AssetCatalog` keeps watching the authored folders across
   publications and reports only the differences when it installs new catalogs.
   Every cook logs when it is queued, starts, waits for a save and finishes. The
-  cook is registered beside the catalog, in the workspace's scope. Until S1.10,
+  cook is registered beside the catalog, in the workspace's scope. Until S1.9,
   scripts and input files cook like any file, and one with problems fails its
   cook. Gate: Managed.Assets, Projects, Assets and ContentPipeline tests, the
   tests of the callers, the reviewer's editor build and acceptance of the
@@ -176,48 +177,40 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   its unfinished inputs return to the waiting automatic run; an explicit request
   joins a pending one that is identical or covers it; Play waits for a running
   foreground cook that covers its inputs. Gate: ContentPipeline tests.
-- **S1.4 Test boundaries.** Remove ContentPipeline's internals grants to other
-  modules' tests (World Editor `Unit`, `Unit.UI`, `Integration.UI`,
-  `Benchmarks.UI`, Material Editor, Content Browser UI): each such test is
-  rewritten over public API, faked ports or the real services, or moves into
-  ContentPipeline's tests when it checks pipeline behavior. Stop linking other
-  modules' fixtures (World Editor from Content Browser and ContentPipeline,
-  Material Editor and Content Browser from ContentPipeline). Gate: the touched
-  test projects.
-- **S1.5 Pipeline workflows out of UI** (architecture section 6). The operations
+- **S1.4 Pipeline workflows out of UI** (architecture section 6). The operations
   and undo of `AssetRelocationWorkflow`, and the name and folder validation and
   template writing of `ScriptAssetCreation`, move to ContentPipeline; the
   prompts stay in the Content Browser. Gate: ContentPipeline and Content Browser
   tests.
-- **S1.6 Document kinds.** Design first: the contract a document type implements
+- **S1.5 Document kinds.** Design first: the contract a document type implements
   in `Oxygen.Editor.Documents` (load, save against the version it read, reload,
   commit an edit in progress, apply and revert its history changes, retarget to
   a relocated file) and how an open request reaches it, with no window and no
   tab in it (documents design decisions 2 and 7). Then the contract, with tests
   over a fake type; Projects is reduced to asset-to-file resolution, and its
-  scene-specific parts wait for S1.7. Gate: Documents and Projects tests.
-- **S1.7 Scenes** (C1, C2, C3 model side, C4 contract, C7, C15). Design first.
+  scene-specific parts wait for S1.6. Gate: Documents and Projects tests.
+- **S1.6 Scenes** (C1, C2, C3 model side, C4 contract, C7, C15). Design first.
   `Oxygen.Editor.Scenes` takes the command service, edit sessions, selection,
   the organizer and mutator model, the scene preferences (behind interfaces),
   the clipboard model, `ScriptSlotEdits` and the scene-specific parts of
-  Projects; it implements the scene document type (S1.6) and declares
+  Projects; it implements the scene document type (S1.5) and declares
   `ISceneEngineSync`. Command and content-demand services lose their `WindowId`;
   multi-node actions become TimeMachine transactions (documents design decision
   1). Gate: Scenes tests without the WinUI host, and the World Editor tests that
   cover the callers.
-- **S1.8 LivePreview** (C4 implementation, C11, C13, Play). Design first.
+- **S1.7 LivePreview** (C4 implementation, C11, C13, Play). Design first.
   `Oxygen.Editor.LivePreview` takes engine sync, content demand, mount changes,
   the runtime session start taken out of `WorkspaceViewModel`, the Play services
   and the runtime problem source, and the adapters for the ports of Scenes and
   Assets. It is the only domain module that references `Oxygen.Editor.Runtime`
   and `Oxygen.Interop`. Gate: LivePreview tests and the reviewer's editor build.
-- **S1.9 Models in World.** Design first. World gains `Material` over
+- **S1.8 Models in World.** Design first. World gains `Material` over
   `MaterialSource`, `Texture`, `InputMappingContext` and `InputAction`, and
   `Script` with its source and declared parameters, each with its problems
   (documents design decision 7); the editing part of `MaterialDocumentService`
   moves into `Material` and the Material Editor. Gate: World and Material Editor
   tests.
-- **S1.10 Script and input checks** (documents design 4.2, and rules 1 to 3 of
+- **S1.9 Script and input checks** (documents design 4.2, and rules 1 to 3 of
   4.6). ContentPipeline takes the input file check and the script check, and
   produces the problems of the World models; script analysis runs through a port
   ContentPipeline owns, which LivePreview implements. Cook on change skips an
@@ -226,7 +219,7 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   they collect into the next one. A cook run fails as a whole when one input
   fails, which is why the single run waits for the skip. Gate: ContentPipeline
   and LivePreview tests.
-- **S1.11 Shell** (C9, C10, C12, C16). `Oxygen.Editor.Shell` is created with the
+- **S1.10 Shell** (C9, C10, C12, C16). `Oxygen.Editor.Shell` is created with the
   layout of shell design section 7 and receives the generic workspace machinery
   of `WorldEditor/Workspace`. Its document service (`IDocumentService`,
   `DocumentService`) replaces `EditorDocumentService`, `DocumentHostViewModel`
@@ -242,7 +235,7 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   9 come in Phase 5. Notifications, menus, the status bar and the command
   palette are not part of #69 (shell design section 8). Gate: Shell tests and
   the reviewer's editor build.
-- **S1.12 Unsaved documents** (documents design 4.3). `Oxygen.Editor.Documents`
+- **S1.11 Unsaved documents** (documents design 4.3). `Oxygen.Editor.Documents`
   declares `IUnsavedDocuments`, the Shell's document service implements it and
   ContentPipeline consumes it. Play, Cook and relocation ask before they run.
   The `NeedsSave` state, `CookDocumentRegistry`, the read leases, the save gates
@@ -250,7 +243,7 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   and a cook on change no longer waits for a dirty document (scenario 2.6).
   Gate: ContentPipeline tests, the reviewer's editor build, and the reviewer's
   acceptance of the confirmations in the running editor.
-- **S1.13 Features**, a move commit and a rename commit each, with the feature's
+- **S1.12 Features**, a move commit and a rename commit each, with the feature's
   module, theme dictionary and tests, in this order: `Output`, `Problems`,
   `Cooking`, `CookedInspector` (from `Inspection`), `SceneExplorer` (C3 explorer
   side), `SceneEditor` (C14, Play UI), `SceneInspector` (from `Inspector`); then
@@ -263,11 +256,18 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   that feature's types and the document host stops constructing it. Gate: that
   feature's tests; UI test failures go to the reviewer; visible changes wait for
   the reviewer's acceptance (decision 8).
-- **S1.14 Dissolve the World Editor.** Nothing is left in
+- **S1.13 Dissolve the World Editor.** Nothing is left in
   `Oxygen.Editor.WorldEditor`; the project and its test projects are deleted,
   `Oxygen.Editor.World` drops its internals grant to it, and the application
   composes the Shell and the modules (decision 3). Gate: the reviewer's editor
   build.
+- **S1.14 Test boundaries.** Most of the internals grants and linked fixtures go
+  with the moves of the earlier slices, because a test moves with the code it
+  checks. What is left is removed here: no module grants its internals to
+  another module's tests, each remaining test is rewritten over public API,
+  faked ports or the real services, or moves into the tests of the module whose
+  behavior it checks, and no test project links another module's fixtures. Gate:
+  the touched test projects.
 - **S1.15 Enforcement.** A `unittest` in `tooling/tests` checks the layer rules
   of architecture section 2 and the internals rule of its decision 4; hand-built
   test containers move to the shared host-equivalent builder in `TestHelpers`.
@@ -345,7 +345,7 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 | Concurrent editor work on the `editor` branch touches files being moved                 | Move one folder per commit and commit promptly; a move never carries unrelated edits                                                                    |
 | `x:Bind` and `ms-appx` paths break silently after a XAML move                           | Rewrite resource URIs in the moving commit; each editor's UI tests load its views (spec risk table)                                                     |
 | A moved type turns public and collides with an existing name in its new namespace scope | Namespaces are preserved (R6), so collisions surface at compile time in the moving commit                                                               |
-| An editor build of the application is the only check of composition-root changes        | Phase 0, S1.2, S1.8, S1.11, S1.12, S1.14, S2.3, S3.1 and Phase 4 end with the reviewer's build; no further slice starts on a broken composition root    |
+| An editor build of the application is the only check of composition-root changes        | Phase 0, S1.2, S1.7, S1.10, S1.11, S1.13, S2.3, S3.1 and Phase 4 end with the reviewer's build; no further slice starts on a broken composition root    |
 | Shell contracts are written before the library changes they will run on                 | The Shell's first implementations adapt today's Aura, Docking and Routing behind the target contracts; Phase 5 replaces the adapters, not the contracts |
 
 ## 6. Status ledger
