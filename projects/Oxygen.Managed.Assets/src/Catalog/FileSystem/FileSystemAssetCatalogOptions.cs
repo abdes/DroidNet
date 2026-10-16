@@ -29,4 +29,10 @@ public sealed record FileSystemAssetCatalogOptions
     /// This applies to the underlying filesystem watcher. Snapshot enumeration still uses the storage provider.
     /// </remarks>
     public string WatcherFilter { get; init; } = "*";
+
+    /// <summary>
+    /// Gets the folders under the root, relative to it, whose files the catalog does not list or report, such as the
+    /// folders another catalog covers.
+    /// </summary>
+    public IReadOnlyList<string> ExcludedFolders { get; init; } = [];
 }
