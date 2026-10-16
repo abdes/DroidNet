@@ -119,10 +119,13 @@ public sealed partial class ContentCookCoordinator
         this.idleWaiters.Clear();
     }
 
+    // The work that takes the writer without a cook request.
+    private const string OtherWriterWork = "a move, rename, copy or delete of project files, a mount change or a cooked library inspection";
+
     // Called under stateLock.
     private void PreemptAutomaticWriter()
     {
-        if (this.activeOperation is not { } active || !this.waitingWriters.Exists(static waiting => waiting.IsForeground)
+        if (this.activeOperation is not { } active || this.waitingWriters.Find(static waiting => waiting.IsForeground) is not { } foreground
             || !this.runs.TryGetValue(active.OperationId, out var run) || run.Preempted
             || run.Snapshot is not { Request: { IsAutomatic: true, IsDemand: false }, IsCompleted: false }
             || run.Snapshot.State is CookRunState.Publishing or CookRunState.Cancelling)
@@ -131,6 +134,12 @@ public sealed partial class ContentCookCoordinator
         }
 
         run.Preempted = true;
+        run.PreemptedFor = foreground.Request switch
+        {
+            { IsDemand: true } => "the active preview's cook",
+            { } request => $"the requested cook of {DescribeScope(request)}",
+            null => OtherWriterWork,
+        };
         _ = run.Cancellation.CancelAsync();
     }
 

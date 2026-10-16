@@ -4,11 +4,11 @@
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
-/// <summary>The files a committed relocation or delete changed, with the exact moves the editor made.</summary>
+/// <summary>The files the editor changed, with the exact moves, copies and deletes it made.</summary>
 /// <param name="moves">The physical moves, including companion files and folders.</param>
 /// <param name="rewrittenFiles">The absolute locations of the files whose references were rewritten, after the moves.</param>
 /// <param name="deletedFiles">The absolute files and folders moved to the Recycle Bin.</param>
-/// <param name="foldersChanged">Whether a folder moved or was deleted.</param>
+/// <param name="foldersChanged">Whether a folder moved, was created or was deleted.</param>
 public sealed class AssetFilesChangedEventArgs(
     IReadOnlyList<RelocationFileMove> moves,
     IReadOnlyList<string> rewrittenFiles,
@@ -24,6 +24,16 @@ public sealed class AssetFilesChangedEventArgs(
     /// <summary>Gets the absolute files and folders moved to the Recycle Bin.</summary>
     public IReadOnlyList<string> DeletedFiles { get; } = deletedFiles;
 
-    /// <summary>Gets a value indicating whether a folder moved or was deleted.</summary>
+    /// <summary>Gets a value indicating whether a folder moved, was created or was deleted.</summary>
     public bool FoldersChanged { get; } = foldersChanged;
+
+    /// <summary>Gets the absolute files and folders created, such as copies and new scripts.</summary>
+    public IReadOnlyList<string> CreatedFiles { get; private init; } = [];
+
+    /// <summary>Reports files and folders the editor created and changed nothing else.</summary>
+    /// <param name="createdFiles">The absolute files and folders created.</param>
+    /// <param name="foldersCreated">Whether a folder was created.</param>
+    /// <returns>The report.</returns>
+    public static AssetFilesChangedEventArgs ForCreated(IReadOnlyList<string> createdFiles, bool foldersCreated)
+        => new([], [], [], foldersCreated) { CreatedFiles = createdFiles };
 }

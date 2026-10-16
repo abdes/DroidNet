@@ -74,7 +74,7 @@ public sealed partial class ContentCookCoordinator
 
         if (joined is not null)
         {
-            this.LogRunJoined(request, joined.DisplayName);
+            this.LogRunJoined(request, DescribeRun(joined));
             this.PublishRun(joined, reveal: !joined.Request.IsAutomatic);
         }
 

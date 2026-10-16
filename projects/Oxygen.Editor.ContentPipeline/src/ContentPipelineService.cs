@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -43,6 +44,9 @@ public sealed partial class ContentPipelineService(
     DroidNet.Storage.IAtomicFileStore files,
     Publication.CookPublicationService publication) : IContentPipelineService
 {
+    /// <summary>The code of the Info diagnostic that names a moved or deleted source whose cooked output a cook removes.</summary>
+    internal const string OutputRetiredCode = "asset_cook.output_retired";
+
     private readonly INativeCompatibilityService nativeCompatibility = nativeCompatibility;
     private readonly Publication.CookPublicationService publication = publication ?? throw new ArgumentNullException(nameof(publication));
 
@@ -162,7 +166,7 @@ public sealed partial class ContentPipelineService(
                 Severity = DiagnosticSeverity.Error,
                 Code = AssetImportDiagnosticCodes.SourceMissing,
                 Message = $"Cook source is missing: {input.SourceRelativePath}.",
-                AffectedVirtualPath = input.AssetUri.AbsolutePath,
+                AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
                 AffectedPath = input.SourceAbsolutePath,
             })
             .ToList();
@@ -417,7 +421,7 @@ public sealed partial class ContentPipelineService(
             return input is null ? issue : issue with
             {
                 AffectedPath = Path.Combine(scope.Project.ProjectRoot, input.SourceRelativePath),
-                AffectedVirtualPath = input.AssetUri.AbsolutePath,
+                AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
             };
         });
 

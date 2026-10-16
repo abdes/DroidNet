@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Status;
@@ -38,7 +39,7 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
                         Code = AssetImportDiagnosticCodes.SourceMissing,
                         Message = $"The authored source is no longer available: '{input.SourceAbsolutePath}'.",
                         AffectedPath = input.SourceAbsolutePath,
-                        AffectedVirtualPath = input.AssetUri.AbsolutePath,
+                        AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
                     });
                     continue;
                 }
@@ -55,7 +56,7 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
                     Code = error is FileNotFoundException or DirectoryNotFoundException ? AssetImportDiagnosticCodes.SourceMissing : ContentPipelineDiagnosticCodes.ManifestGenerationFailed,
                     Message = error.Message,
                     AffectedPath = input.SourceAbsolutePath,
-                    AffectedVirtualPath = input.AssetUri.AbsolutePath,
+                    AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
                 });
             }
         }

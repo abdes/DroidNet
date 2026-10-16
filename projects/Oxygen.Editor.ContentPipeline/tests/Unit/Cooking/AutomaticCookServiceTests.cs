@@ -139,7 +139,6 @@ public sealed class AutomaticCookServiceTests
         fixture.Change(AssetChangeKind.Added, new Uri("asset:///project/Content/Scenes/Main.oscene.json"));
         fixture.Change(AssetChangeKind.Added, new Uri("asset:///Cooked/Scenes/Main.oscene.json"));
         fixture.Change(AssetChangeKind.Updated, new Uri("asset:///Content/Notes.txt"));
-        fixture.Change(AssetChangeKind.Removed, Main);
         fixture.Change(AssetChangeKind.Listed, Main);
         fixture.Change(AssetChangeKind.Added, Wood);
         fixture.Time.Advance(AutomaticCookService.QuietWindow);
@@ -161,12 +160,14 @@ public sealed class AutomaticCookServiceTests
         var previous = await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false);
 
         var renamed = new Uri("asset:///Content/Scenes/Demo.oscene.json");
+        fixture.Gone.Add(Main);
         fixture.Change(AssetChangeKind.Relocated, renamed, Main);
         _ = previous.Token.IsCancellationRequested.Should().BeTrue();
         fixture.Time.Advance(AutomaticCookService.QuietWindow);
 
-        var current = await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false);
-        _ = current.AssetUri.Should().Be(renamed);
+        // The previous identity is cooked too, to remove its output.
+        CookCall[] next = [await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false), await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)];
+        var current = next.Single(call => call.AssetUri == renamed);
         _ = current.Token.IsCancellationRequested.Should().BeFalse();
     }
 
@@ -215,13 +216,14 @@ public sealed class AutomaticCookServiceTests
         _ = fixture.Calls.Reader.TryRead(out _).Should().BeFalse();
     }
 
-    /// <summary>A changed source whose file is gone when the window closes is not cooked.</summary>
+    /// <summary>A changed source whose file is gone when the window closes, and that was never cooked, is not cooked.</summary>
     /// <returns>The asynchronous gone-source regression.</returns>
     [TestMethod]
-    public async Task SourceGoneBeforeItCooksIsNotCooked()
+    public async Task GoneSourceWithoutOutputIsNotCooked()
     {
         using var fixture = new Fixture();
         fixture.Gone.Add(Wood);
+        _ = fixture.NeverCooked.Add(Wood);
         using var service = fixture.CreateService();
 
         fixture.Change(AssetChangeKind.Updated, Wood);
@@ -230,6 +232,37 @@ public sealed class AutomaticCookServiceTests
 
         _ = (await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)).AssetUri.Should().Be(Main);
         _ = fixture.Calls.Reader.TryRead(out _).Should().BeFalse();
+    }
+
+    /// <summary>A deleted source that has cooked output is cooked, which removes that output.</summary>
+    /// <returns>The asynchronous removal regression.</returns>
+    [TestMethod]
+    public async Task DeletedSourceWithOutputIsCookedToRemoveIt()
+    {
+        using var fixture = new Fixture();
+        fixture.Gone.Add(Main);
+        using var service = fixture.CreateService();
+
+        fixture.Change(AssetChangeKind.Removed, Main);
+        fixture.Time.Advance(AutomaticCookService.QuietWindow);
+
+        _ = (await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)).AssetUri.Should().Be(Main);
+    }
+
+    /// <summary>A renamed source's previous identity is cooked to remove its output, and the new one is cooked.</summary>
+    /// <returns>The asynchronous rename regression.</returns>
+    [TestMethod]
+    public async Task RenamedSourceRemovesThePreviousOutputAndCooksTheNewOne()
+    {
+        using var fixture = new Fixture();
+        fixture.Gone.Add(Main);
+        using var service = fixture.CreateService();
+
+        fixture.Change(AssetChangeKind.Relocated, Wood, previous: Main);
+        fixture.Time.Advance(AutomaticCookService.QuietWindow);
+
+        CookCall[] calls = [await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false), await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)];
+        _ = calls.Select(static call => call.AssetUri).Should().BeEquivalentTo([Main, Wood]);
     }
 
     /// <summary>A change whose status cannot be read is cooked rather than left stale.</summary>
@@ -319,7 +352,7 @@ public sealed class AutomaticCookServiceTests
                     : Task.FromResult<IReadOnlyList<AssetCookStatus>>([.. assets.Select(asset => new AssetCookStatus(
                         asset,
                         this.Fresh.Contains(asset) ? AssetCookFreshness.Current : this.Gone.Contains(asset) ? AssetCookFreshness.MissingSource : AssetCookFreshness.OutOfDate,
-                        HasPublishedOutput: true,
+                        HasPublishedOutput: !this.NeverCooked.Contains(asset),
                         CookedOutputAvailability.Present,
                         [],
                         [],
@@ -351,6 +384,8 @@ public sealed class AutomaticCookServiceTests
         public HashSet<Uri> Fresh { get; } = [];
 
         public HashSet<Uri> Gone { get; } = [];
+
+        public HashSet<Uri> NeverCooked { get; } = [];
 
         public Exception? StatusFailure { get; set; }
 

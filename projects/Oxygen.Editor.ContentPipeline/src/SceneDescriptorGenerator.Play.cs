@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -96,13 +97,13 @@ public sealed partial class SceneDescriptorGenerator
                 Message = message,
                 TechnicalMessage = technicalMessage ?? $"Scene '{this.Scene.Name}': {propertyPath}.",
                 AffectedPath = this.SceneInput.SourceAbsolutePath,
-                AffectedVirtualPath = this.SceneInput.AssetUri.AbsolutePath,
+                AffectedVirtualPath = AssetUriHelper.GetVirtualPath(this.SceneInput.AssetUri),
                 AffectedEntity = new AffectedScope
                 {
                     ProjectId = this.Scope.Project.ProjectId,
                     SceneId = this.Scene.Id,
                     SceneName = this.Scene.Name,
-                    AssetVirtualPath = this.SceneInput.AssetUri.AbsolutePath,
+                    AssetVirtualPath = AssetUriHelper.GetVirtualPath(this.SceneInput.AssetUri),
                     ComponentName = ScenePlayPropertyPaths.IsPlayProperty(propertyPath) ? "Play" : "Environment",
                 },
                 SuggestedAction = new PrimaryAction

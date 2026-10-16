@@ -337,7 +337,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     }
 
     private static bool HasProjectOwner(CookDependencyGraph graph, Uri uri)
-        => graph.Assets.Any(input => input.OwnsOutput(uri.AbsolutePath));
+        => graph.Assets.Any(input => input.OwnsOutput(AssetUriHelper.GetVirtualPath(uri)));
 
     private static DiagnosticRecord IncompleteInspectionIssue(ContentCookInput consumer, CookedAssetDependencies? metadata)
         => metadata is null
@@ -354,7 +354,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         => Issue(consumer, "asset_cook.library_inspection_required", "Project asset identities are awaiting inspection.") with { Severity = DiagnosticSeverity.Warning };
 
     private static DiagnosticRecord Issue(ContentCookInput consumer, string code, string message)
-        => new() { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = code, Message = message, AffectedPath = consumer.SourceAbsolutePath, AffectedVirtualPath = consumer.AssetUri.AbsolutePath };
+        => new() { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = code, Message = message, AffectedPath = consumer.SourceAbsolutePath, AffectedVirtualPath = AssetUriHelper.GetVirtualPath(consumer.AssetUri) };
 
     private Queue<(Root root, AssetRecord asset)> CreateReferenceQueue(IReadOnlyList<Uri> references)
     {

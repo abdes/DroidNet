@@ -3,10 +3,17 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Storage.Native;
+using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Catalog.FileSystem;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.RetainedModelScenario;
 
@@ -81,15 +88,35 @@ public sealed class CookRepairTests
         _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
     }
 
-    /// <summary>A save cook queued before its source was deleted ends without an error, and the next cook retires the output.</summary>
+    /// <summary>A material in a folder named as the editor names copies, with a space and parentheses, cooks.</summary>
     /// <returns>The asynchronous native regression.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
-    public async Task AutomaticCookOfDeletedSourceEndsWithoutError()
+    public async Task MaterialInFolderWithSpaceAndParenthesesCooks()
+    {
+        using var workspace = new CookWorkspace();
+        workspace.WriteMaterial("Content/New folder (2)/Wet Rubber.omat.json", "Wet Rubber");
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = CreateRecordingApi(compatibility);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
+
+        var result = await pipeline.CookAssetAsync(new("asset:///Content/New%20folder%20%282%29/Wet%20Rubber.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertCookSucceeded(result);
+        _ = (await api.ReadInventoryAsync(workspace.CookedRoot("Content"), artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false))
+            .Assets.Select(static asset => asset.VirtualPath).Should().Contain("/Content/New folder (2)/Wet Rubber.omat");
+    }
+
+    /// <summary>An automatic cook of a deleted source removes its cooked output and keeps every other asset.</summary>
+    /// <returns>The asynchronous native regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task AutomaticCookOfDeletedSourceRemovesItsOutput()
     {
         using var workspace = new CookWorkspace();
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
+
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
@@ -98,11 +125,180 @@ public sealed class CookRepairTests
 
         var result = await pipeline.CookSavedAssetAsync(new("asset:///Content/Materials/Blue.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
 
+        AssertCookSucceeded(result);
+        _ = result.IsPublished.Should().BeTrue();
+        var paths = (await api.ReadInventoryAsync(workspace.CookedRoot("Content"), artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false))
+            .Assets.Select(static asset => asset.VirtualPath).ToArray();
+        _ = paths.Should().NotContain("/Content/Materials/Blue.omat").And.Contain("/Content/Materials/Red.omat");
+
+        _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Deleting a folder whose material was cooked removes its cooked output through cook on change: the file
+    /// catalog reports the material removed and the automatic cook publishes the content again without it.
+    /// </summary>
+    /// <returns>The asynchronous native regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task DeletedFolderLosesItsCookedMaterialThroughCookOnChange()
+    {
+        using var workspace = new CookWorkspace();
+        workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
+        workspace.WriteMaterial("Content/New folder/Blue.omat.json", "Blue");
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = CreateRecordingApi(compatibility);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
+        AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
+        using var catalog = new FileSystemAssetCatalog(
+            new NativeStorageProvider(new RealFileSystem()),
+            new() { RootFolderPath = Path.Combine(workspace.Root, "Content"), MountPoint = "Content" });
+        _ = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var automatic = new AutomaticCookService(
+            workspace.ContextService, workspace.Manager, catalog, pipeline, pipeline, workspace.CookCoordinator, NullLogger<AutomaticCookService>.Instance);
+
+        Directory.Delete(Path.Combine(workspace.Root, "Content", "New folder"), recursive: true);
+
+        string[] paths = [];
+        for (var attempt = 0; attempt < 120 && (paths.Length == 0 || paths.Contains("/Content/New folder/Blue.omat")); attempt++)
+        {
+            await Task.Delay(250, this.TestContext.CancellationToken).ConfigureAwait(false);
+            try
+            {
+                paths = [.. (await api.ReadInventoryAsync(workspace.CookedRoot("Content"), artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false))
+                    .Assets.Select(static asset => asset.VirtualPath)];
+            }
+            catch (InvalidDataException)
+            {
+                // A publication replaced the generation between finding it and reading it; the next read finds the new one.
+            }
+        }
+
+        _ = paths.Should().NotContain("/Content/New folder/Blue.omat").And.Contain("/Content/Materials/Red.omat");
+    }
+
+    /// <summary>
+    /// Moving a cooked material into a new folder cooks it there through cook on change, and its output at the old
+    /// path goes.
+    /// </summary>
+    /// <returns>The asynchronous native regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task MovedMaterialCooksAtItsNewPathThroughCookOnChange()
+    {
+        using var workspace = new CookWorkspace();
+        workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
+        workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = CreateRecordingApi(compatibility);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
+        AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
+        using var catalog = new FileSystemAssetCatalog(
+            new NativeStorageProvider(new RealFileSystem()),
+            new() { RootFolderPath = Path.Combine(workspace.Root, "Content"), MountPoint = "Content" });
+        _ = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var automatic = new AutomaticCookService(
+            workspace.ContextService, workspace.Manager, catalog, pipeline, pipeline, workspace.CookCoordinator, NullLogger<AutomaticCookService>.Instance);
+        _ = Directory.CreateDirectory(Path.Combine(workspace.Root, "Content", "New folder"));
+        await Task.Delay(500, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        File.Move(Path.Combine(workspace.Root, "Content", "Materials", "Blue.omat.json"), Path.Combine(workspace.Root, "Content", "New folder", "Blue.omat.json"));
+
+        string[] paths = [];
+        for (var attempt = 0; attempt < 120 && !paths.Contains("/Content/New folder/Blue.omat"); attempt++)
+        {
+            await Task.Delay(250, this.TestContext.CancellationToken).ConfigureAwait(false);
+            try
+            {
+                paths = [.. (await api.ReadInventoryAsync(workspace.CookedRoot("Content"), artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false))
+                    .Assets.Select(static asset => asset.VirtualPath)];
+            }
+            catch (InvalidDataException)
+            {
+                // A publication replaced the generation between finding it and reading it; the next read finds the new one.
+            }
+        }
+
+        _ = paths.Should().Contain("/Content/New folder/Blue.omat").And.NotContain("/Content/Materials/Blue.omat");
+    }
+
+    /// <summary>
+    /// Deleting the last asset of a mount takes the mount's root out of the publication, as if it was never cooked: the
+    /// preview no longer mounts it and its generation is reclaimed.
+    /// </summary>
+    /// <returns>The asynchronous native regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task DeletingTheLastAssetOfAMountDropsItsRoot()
+    {
+        using var workspace = new CookWorkspace();
+        workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = CreateRecordingApi(compatibility);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
+        AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
+        var generation = workspace.CookedRoot("Content");
+        var preview = new RecordingPublicationPreview();
+        await using var previewLifetime = preview.ConfigureAwait(false);
+        using var registration = workspace.Publication.RegisterPreview(workspace.ProjectContext, () => Task.FromResult<ICookPublicationPreview?>(preview));
+        File.Delete(Path.Combine(workspace.Root, "Content/Materials/Blue.omat.json"));
+
+        var result = await pipeline.CookSavedAssetAsync(new("asset:///Content/Materials/Blue.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertCookSucceeded(result);
+        _ = result.IsPublished.Should().BeTrue();
+        _ = ReadProjectRoots(workspace.Root).Should().BeEmpty();
+        _ = preview.Committed.Should().ContainSingle().Which.Should().BeEmpty();
+        _ = Directory.Exists(generation).Should().BeFalse("nothing references the dropped generation");
+        AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
+    }
+
+    /// <summary>One cook takes an emptied mount out of the publication and publishes the cook of another mount.</summary>
+    /// <returns>The asynchronous native regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task CookDropsAnEmptiedMountAndPublishesAnother()
+    {
+        using var workspace = new CookWorkspace([new("Content", "Content"), new("Extra", "Extra")]);
+        workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
+        workspace.WriteMaterial("Extra/Materials/Red.omat.json", "Red");
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = CreateRecordingApi(compatibility);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
+        AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
+        _ = ReadProjectRoots(workspace.Root).Should().BeEquivalentTo("Content", "Extra");
+        File.Delete(Path.Combine(workspace.Root, "Content/Materials/Blue.omat.json"));
+        workspace.WriteText("Extra/Materials/Red.omat.json", workspace.ReadText("Extra/Materials/Red.omat.json").Replace("0.5", "0.8", StringComparison.Ordinal));
+
+        var result = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertCookSucceeded(result);
+        _ = result.IsPublished.Should().BeTrue();
+        _ = ReadProjectRoots(workspace.Root).Should().Equal("Extra");
+        _ = (await api.ReadInventoryAsync(workspace.CookedRoot("Extra"), artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false))
+            .Assets.Select(static asset => asset.VirtualPath).Should().Contain("/Extra/Materials/Red.omat");
+        _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
+    }
+
+    /// <summary>An automatic cook of a source deleted before it was ever cooked ends without an error.</summary>
+    /// <returns>The asynchronous native regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task AutomaticCookOfNeverCookedDeletedSourceEndsWithoutError()
+    {
+        using var workspace = new CookWorkspace();
+        workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = CreateRecordingApi(compatibility);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
+        AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
+        workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
+        File.Delete(Path.Combine(workspace.Root, "Content/Materials/Blue.omat.json"));
+
+        var result = await pipeline.CookSavedAssetAsync(new("asset:///Content/Materials/Blue.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+
         _ = result.Status.Should().Be(OperationStatus.Cancelled);
         _ = result.Diagnostics.Should().NotContain(static diagnostic => diagnostic.Severity >= DiagnosticSeverity.Error);
-        AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
-        _ = (await api.ReadInventoryAsync(workspace.CookedRoot("Content"), artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false))
-            .Assets.Select(static asset => asset.VirtualPath).Should().Contain("/Content/Materials/Red.omat").And.NotContain("/Content/Materials/Blue.omat");
     }
 
     /// <summary>A relocated output group rebuilds the model's outputs in the new group and retires the old ones.</summary>
@@ -235,5 +431,13 @@ public sealed class CookRepairTests
         AssertCookSucceeded(result);
         _ = result.CookedAssets.Select(static asset => asset.VirtualPath).Should().BeEquivalentTo(first.CookedAssets.Select(static asset => asset.VirtualPath));
         _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
+    }
+
+    // The project mounts the current publication holds a root for.
+    private static string[] ReadProjectRoots(string projectRoot)
+    {
+        var head = System.Text.Json.JsonSerializer.Deserialize<CookPublicationHead>(File.ReadAllBytes(CookPublicationPaths.Head(projectRoot)), CookPublicationDocument.JsonOptions)!;
+        var document = System.Text.Json.JsonSerializer.Deserialize<CookPublicationDocument>(File.ReadAllBytes(CookPublicationPaths.Document(projectRoot, head.PublicationId)), CookPublicationDocument.JsonOptions)!;
+        return [.. document.Roots.Where(static root => root.Owner == CookPublicationRootOwner.Project).Select(static root => root.Name).Order(StringComparer.Ordinal)];
     }
 }

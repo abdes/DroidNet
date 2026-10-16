@@ -106,6 +106,44 @@ public sealed class AssetsViewModelCommandTests
         }
     }
 
+    /// <summary>A folder the sources tree copied or cut pastes as that folder, whatever the asset list copied before.</summary>
+    /// <returns>The asynchronous paste check.</returns>
+    [TestMethod]
+    public async Task FolderFromTheSourcesTreePastesAsAFolder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "OxygenBrowserCommands", Guid.NewGuid().ToString("N"));
+        var clayPath = Path.Combine(root, "Content", "Materials", "Clay.omat.json");
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(clayPath)!);
+        _ = Directory.CreateDirectory(Path.Combine(root, "Content", "Props"));
+        await File.WriteAllTextAsync(clayPath, "{}").ConfigureAwait(false);
+        var workflow = new Mock<IAssetRelocationWorkflow>();
+        var (browser, state, _) = await CreateBrowserAsync(root, workflow.Object).ConfigureAwait(false);
+        try
+        {
+            using (browser)
+            {
+                state.PublishSelection([CreateAsset("/Content/Materials/Clay.omat.json", AssetKind.Material, descriptor: clayPath)]);
+                browser.CopySelectedCommand.Execute(parameter: null);
+
+                state.SetClipboard(["/Content/Materials"], isCut: false);
+                state.SetSelectedFolders(["/Content/Props"]);
+                await browser.PasteCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+                workflow.Verify(value => value.PasteAsync(It.Is<IReadOnlyList<string>>(items => items.SequenceEqual(new[] { "/Content/Materials" })), false, "/Content/Props"));
+
+                _ = workflow.Setup(value => value.PasteAsync(It.IsAny<IReadOnlyList<string>>(), true, "/Content/Props"))
+                    .ReturnsAsync(new AssetRelocationOutcome(Succeeded: true, "Move", "Moved."));
+                state.SetClipboard(["/Content/Materials"], isCut: true);
+                await browser.PasteCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+                workflow.Verify(value => value.PasteAsync(It.Is<IReadOnlyList<string>>(items => items.SequenceEqual(new[] { "/Content/Materials" })), true, "/Content/Props"));
+                _ = state.Clipboard.Should().BeEmpty("cut items are pasted once");
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     /// <summary>New Folder works in authoring folders only, and asks the sources tree to create the folder.</summary>
     /// <returns>The asynchronous availability check.</returns>
     [TestMethod]

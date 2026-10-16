@@ -19,10 +19,11 @@ namespace Oxygen.Editor.ContentPipeline.Cooking;
 /// to <see cref="QuietWindowLimit"/> after the first change. When it closes, a run waiting for one of the changed
 /// sources to be saved resumes. Otherwise, while Cook on change is on, the service waits until the project writer is
 /// idle, so no cook, import or relocation is half done, and cooks each changed source whose published output does not
-/// match what is on disk; a cook that ran after the change, such as Play's, already covered it. A source has at most one cook in flight, and a change while it
-/// runs cooks the source once more when it ends. A source whose file is gone by then, moved or deleted, is not cooked; its
-/// removal reaches the service as its own change. A cook stopped for a cook the user asked for goes through the same
-/// check again, so it is cooked after that cook only if that cook did not cover it.
+/// match what is on disk; a cook that ran after the change, such as Play's, already covered it. A source has at most
+/// one cook in flight, and a change while it runs cooks the source once more when it ends. A source that was moved or
+/// deleted is a change too: if it has published output, its cook publishes the content again without it, and if it
+/// was never cooked there is nothing to do. A cook stopped for a cook the user asked for goes through the same check
+/// again, so it is cooked after that cook only if that cook did not cover it.
 /// </remarks>
 public sealed partial class AutomaticCookService : IAutomaticCookService, IDisposable
 {
@@ -215,35 +216,43 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
                 return;
             }
 
+            // A cook in flight for a source that is gone stops; the source is checked again, to remove its output.
             if (change.Kind is AssetChangeKind.Removed)
             {
-                _ = this.changed.Remove(change.Uri);
                 this.Retire(change.Uri);
+                this.Note(current, change.Uri);
                 return;
             }
 
             if (change is { Kind: AssetChangeKind.Relocated, PreviousUri: { } previous })
             {
-                _ = this.changed.Remove(previous);
                 this.Retire(previous);
+                this.Note(current, previous);
             }
 
-            if (!TryResolveSource(current, change.Uri, out var source))
-            {
-                return;
-            }
-
-            this.changed[change.Uri] = source;
-            var now = this.time.GetTimestamp();
-            if (!this.windowOpen)
-            {
-                this.windowOpen = true;
-                this.windowOpenedAt = now;
-            }
-
-            var left = QuietWindowLimit - this.time.GetElapsedTime(this.windowOpenedAt, now);
-            _ = this.window.Change(left < QuietWindow ? (left > TimeSpan.Zero ? left : TimeSpan.Zero) : QuietWindow, Timeout.InfiniteTimeSpan);
+            this.Note(current, change.Uri);
         }
+    }
+
+    // Called under sync.
+    private void Note(ProjectContext current, Uri uri)
+    {
+        if (!TryResolveSource(current, uri, out var source))
+        {
+            this.LogChangeIgnored(uri);
+            return;
+        }
+
+        this.changed[uri] = source;
+        var now = this.time.GetTimestamp();
+        if (!this.windowOpen)
+        {
+            this.windowOpen = true;
+            this.windowOpenedAt = now;
+        }
+
+        var left = QuietWindowLimit - this.time.GetElapsedTime(this.windowOpenedAt, now);
+        _ = this.window.Change(left < QuietWindow ? (left > TimeSpan.Zero ? left : TimeSpan.Zero) : QuietWindow, Timeout.InfiniteTimeSpan);
     }
 
     private async Task CloseWindowAsync()
@@ -265,9 +274,16 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
             lifetime = this.projectLifetime.Token;
         }
 
-        var changedSources = closed.Where(item => !this.ResumeWaitingRuns(current, item.Value)).Select(static item => item.Key).ToList();
+        var resumed = closed.Where(item => this.ResumeWaitingRuns(current, item.Value)).Select(static item => item.Key).ToHashSet();
+        if (resumed.Count != 0)
+        {
+            this.LogResumedWaitingRuns(resumed.Count);
+        }
+
+        var changedSources = closed.Select(static item => item.Key).Where(asset => !resumed.Contains(asset)).ToList();
         if (changedSources.Count != 0)
         {
+            this.LogCheckingChangedSources(changedSources.Count, changedSources);
             await this.CookStaleAsync(current, changedSources, lifetime).ConfigureAwait(false);
         }
     }
@@ -284,10 +300,20 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         var stale = changedSources;
         try
         {
-            await this.runs.WhenWriterIdleAsync(lifetime).ConfigureAwait(false);
+            var idle = this.runs.WhenWriterIdleAsync(lifetime);
+            if (!idle.IsCompleted)
+            {
+                var waitStarted = this.time.GetTimestamp();
+                this.LogWaitingForWriter(changedSources.Count);
+                await idle.ConfigureAwait(false);
+                this.LogWriterIdle(this.time.GetElapsedTime(waitStarted).TotalSeconds);
+            }
+
             var read = await this.statuses.ReadAsync(current, changedSources, lifetime).ConfigureAwait(false);
             var cooked = read.Where(static status => status.Freshness == AssetCookFreshness.Current).Select(static status => status.AssetUri).ToHashSet();
-            var gone = read.Where(static status => status.Freshness == AssetCookFreshness.MissingSource).Select(static status => status.AssetUri).ToHashSet();
+            // A source that is gone is cooked only to remove the output it published.
+            var gone = read.Where(static status => status.Freshness == AssetCookFreshness.MissingSource && !status.HasPublishedOutput)
+                .Select(static status => status.AssetUri).ToHashSet();
             stale = [.. changedSources.Where(asset => !cooked.Contains(asset) && !gone.Contains(asset))];
             if (cooked.Count > 0)
             {
@@ -450,6 +476,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     {
         if (this.cooks.Remove(asset, out var cook))
         {
+            this.LogCookRetired(asset);
             Cancel(cook);
         }
     }

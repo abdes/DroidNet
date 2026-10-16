@@ -12,13 +12,15 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// </summary>
 /// <remarks>
 /// Nothing here cooks: the changed files reach the cook through the asset catalog like any other change, and cook on
-/// change or the user cooks them.
+/// change or the user cooks them. The references it finds follow the asset catalog: any catalog change, including
+/// one made outside the editor, makes the next search read the files again.
 /// </remarks>
 public interface IAssetRelocationService
 {
     /// <summary>
-    /// Occurs after a relocation or a delete is committed, with the exact files it moved, rewrote or deleted. It is
-    /// raised on the synchronization context of the operation's caller, after open documents followed the change.
+    /// Occurs after a relocation, copy or delete is committed, with the exact files it moved, rewrote, created or
+    /// deleted. It is raised on the synchronization context of the operation's caller, after open documents followed
+    /// the change.
     /// </summary>
     /// <remarks>
     /// Only changes made through this service are reported. Files changed outside the editor reach the asset
@@ -54,6 +56,15 @@ public interface IAssetRelocationService
     /// <returns>The referrers' virtual paths.</returns>
     public Task<IReadOnlyList<string>> FindReferrersAsync(string virtualPath, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Finds the authored files that would lose a reference if the sources were deleted: the files outside the sources
+    /// that reference any of them. The files are read again first, so the review of a delete is never stale.
+    /// </summary>
+    /// <param name="sources">The assets or folders to delete.</param>
+    /// <param name="cancellationToken">Cancels the scan.</param>
+    /// <returns>The referrers' virtual paths, sorted and without duplicates.</returns>
+    public Task<IReadOnlyList<string>> FindReferrersOutsideAsync(IReadOnlyList<string> sources, CancellationToken cancellationToken);
+
     /// <summary>Copies assets or folders into a folder under unique names; references are not rewritten.</summary>
     /// <param name="sources">The virtual paths to copy.</param>
     /// <param name="targetFolder">The destination folder.</param>
@@ -69,7 +80,4 @@ public interface IAssetRelocationService
     /// <returns>Completion after the files are recycled.</returns>
     /// <exception cref="AssetRelocationException">The delete is not allowed; nothing was deleted.</exception>
     public Task DeleteAsync(IReadOnlyList<string> sources, Func<IReadOnlyList<string>, Task> recycle, CancellationToken cancellationToken);
-
-    /// <summary>Forgets cached references after content changed outside a relocation.</summary>
-    public void Invalidate();
 }

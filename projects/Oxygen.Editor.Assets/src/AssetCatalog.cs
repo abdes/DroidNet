@@ -32,7 +32,7 @@ namespace Oxygen.Editor.Assets;
 /// reports every cooked record that stays as updated, since the publication may have changed it; an authored file that
 /// did not change reports nothing.
 /// </remarks>
-public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarget, IAssetCatalogReader, IDisposable, IAsyncDisposable
+public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IAssetPublicationTarget, IAssetCatalogReader, IDisposable, IAsyncDisposable
 {
     private readonly IProjectContextService projectContextService;
     private readonly IStorageProvider storage;
@@ -54,6 +54,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
     private Guid? visibleProjectId;
     private readonly HashSet<Task> initializationRuns = [];
     private readonly Subject<AssetChange> changes = new();
+    private readonly Subject<Uri> folderChanges = new();
     private readonly CancellationTokenSource lifetime = new();
     private readonly CancellationToken lifetimeToken;
     private Task? initialization;
@@ -79,6 +80,10 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
 
     /// <inheritdoc />
     public IObservable<AssetChange> Changes => this.changes.AsObservable();
+
+    /// <inheritdoc />
+    /// <remarks>Folders of the installed project folder catalogs; the folders of a catalog being replaced are not reported.</remarks>
+    public IObservable<Uri> FolderChanges => this.folderChanges.AsObservable();
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<AssetRecord>> QueryAsync(AssetQuery query, CancellationToken cancellationToken = default)
@@ -321,6 +326,8 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
         {
             this.changes.OnCompleted();
             this.changes.Dispose();
+            this.folderChanges.OnCompleted();
+            this.folderChanges.Dispose();
         }
 
         if (pending?.IsCompleted != false)
@@ -497,7 +504,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
         candidates.Add(await this.PrepareCatalogAsync(new BuiltinAssetCatalog(this.builtins)).ConfigureAwait(false));
         if (!string.IsNullOrEmpty(project.ProjectRoot))
         {
-            candidates.Add(await this.PrepareFolderAsync(project, "project", project.ProjectRoot, kept).ConfigureAwait(false));
+            candidates.Add(await this.PrepareFolderAsync(project, "project", project.ProjectRoot, kept, GetFoldersOfOtherCatalogs(project)).ConfigureAwait(false));
         }
 
         foreach (var mount in project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount)))
@@ -515,11 +522,20 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
         }
     }
 
+    // Each file belongs to one catalog. The project folder's catalog lists the files outside the mounts, so it leaves
+    // out every mount folder inside the project: the authoring mounts and the local folders mounted from inside it.
+    private static string[] GetFoldersOfOtherCatalogs(ProjectContext project)
+        => [.. project.AuthoringMounts.Select(static mount => mount.RelativePath)
+            .Concat(project.LocalFolderMounts.Select(mount => Path.GetRelativePath(project.ProjectRoot, mount.AbsolutePath)))
+            .Select(static path => path.Replace('/', Path.DirectorySeparatorChar).Trim(Path.DirectorySeparatorChar))
+            .Where(static path => path.Length != 0 && path != "." && path != ".." && !path.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) && !Path.IsPathRooted(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)];
+
     // A folder the installed catalogs already watch for this project keeps its catalog and watcher, so no change made
     // while another publication is installed goes unseen.
-    private async Task<Registration> PrepareFolderAsync(ProjectContext project, string mountPoint, string root, Dictionary<Registration, IReadOnlyList<AssetRecord>> kept)
+    private async Task<Registration> PrepareFolderAsync(ProjectContext project, string mountPoint, string root, Dictionary<Registration, IReadOnlyList<AssetRecord>> kept, IReadOnlyList<string>? excluded = null)
     {
-        var folder = new WatchedFolder(project.ProjectId, mountPoint, root);
+        var folder = new WatchedFolder(project.ProjectId, mountPoint, root, string.Join('|', excluded ?? []));
         Registration? installed;
         lock (this.stateLock)
         {
@@ -534,7 +550,8 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
 
         var registration = await this.PrepareCatalogAsync(new FileSystemAssetCatalog(
             this.storage,
-            new FileSystemAssetCatalogOptions { RootFolderPath = root, MountPoint = mountPoint })).ConfigureAwait(false);
+            new FileSystemAssetCatalogOptions { RootFolderPath = root, MountPoint = mountPoint, ExcludedFolders = excluded ?? [] },
+            this.logger)).ConfigureAwait(false);
         registration.Folder = folder;
         return registration;
     }
@@ -545,6 +562,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
         try
         {
             registration.Subscription = catalog.Changes.Subscribe(change => this.OnCatalogChange(registration, change));
+            registration.FolderSubscription = (catalog as IAssetFolderSource)?.FolderChanges.Subscribe(folder => this.OnFolderChange(registration, folder));
             registration.Initial = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.lifetimeToken).ConfigureAwait(false);
             this.lifetimeToken.ThrowIfCancellationRequested();
             return registration;
@@ -622,11 +640,13 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
             if (!registration.Published)
             {
                 registration.Pending.Add(change);
+                this.LogChangeHeld(change.Kind, change.Uri);
                 return;
             }
 
             if (!this.catalogs.Contains(registration))
             {
+                this.LogChangeIgnored(change.Kind, change.Uri);
                 return;
             }
 
@@ -671,10 +691,17 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
         notifications.AddRange(this.visible.Where(uri => !installed.Contains(uri)).Select(static uri => new AssetChange(AssetChangeKind.Removed, uri)));
         this.visible.Clear();
         this.visible.UnionWith(installed);
+        var held = 0;
         foreach (var change in candidates.SelectMany(static candidate => candidate.Pending))
         {
             notifications.Add(change);
             this.Track(change);
+            held++;
+        }
+
+        if (held != 0)
+        {
+            this.LogHeldChangesReported(held);
         }
     }
 
@@ -699,6 +726,31 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
                 break;
             case AssetChangeKind.Updated:
                 break;
+        }
+    }
+
+    private void OnFolderChange(Registration registration, Uri folder)
+    {
+        lock (this.stateLock)
+        {
+            if (this.isDisposed)
+            {
+                return;
+            }
+
+            if (!registration.Published || !this.catalogs.Contains(registration))
+            {
+                this.LogFolderChangeDropped(folder);
+                return;
+            }
+        }
+
+        lock (this.notificationLock)
+        {
+            if (!this.isDisposed)
+            {
+                this.folderChanges.OnNext(folder);
+            }
         }
     }
 
@@ -768,6 +820,8 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
 
         public IDisposable? Subscription { get; set; }
 
+        public IDisposable? FolderSubscription { get; set; }
+
         public IReadOnlyList<AssetRecord> Initial { get; set; } = [];
 
         public List<AssetChange> Pending { get; } = [];
@@ -777,18 +831,21 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetPublicationTarge
         public void Dispose()
         {
             this.Subscription?.Dispose();
+            this.FolderSubscription?.Dispose();
             (this.Catalog as IDisposable)?.Dispose();
         }
     }
 
-    private sealed record WatchedFolder(Guid ProjectId, string MountPoint, string Root)
+    // Excluded lists the folders the catalog leaves out, so a catalog whose exclusions changed is replaced.
+    private sealed record WatchedFolder(Guid ProjectId, string MountPoint, string Root, string Excluded)
     {
         public bool Equals(WatchedFolder? other)
             => other is not null && this.ProjectId == other.ProjectId
                 && string.Equals(this.MountPoint, other.MountPoint, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(this.Root, other.Root, StringComparison.OrdinalIgnoreCase);
+                && string.Equals(this.Root, other.Root, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(this.Excluded, other.Excluded, StringComparison.OrdinalIgnoreCase);
 
         public override int GetHashCode()
-            => HashCode.Combine(this.ProjectId, StringComparer.OrdinalIgnoreCase.GetHashCode(this.MountPoint), StringComparer.OrdinalIgnoreCase.GetHashCode(this.Root));
+            => HashCode.Combine(this.ProjectId, StringComparer.OrdinalIgnoreCase.GetHashCode(this.MountPoint), StringComparer.OrdinalIgnoreCase.GetHashCode(this.Root), StringComparer.OrdinalIgnoreCase.GetHashCode(this.Excluded));
     }
 }

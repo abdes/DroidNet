@@ -369,12 +369,14 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             Reuse.Singleton);
         childContainer.Register<AssetCatalog>(Reuse.Singleton);
         childContainer.RegisterMapping<IAssetCatalog, AssetCatalog>();
+        childContainer.RegisterMapping<IAssetFolderSource, AssetCatalog>();
         childContainer.RegisterMapping<IAssetPublicationTarget, AssetCatalog>();
         childContainer.RegisterDelegate<Oxygen.Editor.ContentPipeline.Status.IAssetCookStatusReader>(
             resolver => resolver.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(), Reuse.Singleton);
         childContainer.Register<IAssetRuntimeStatusSource, AssetRuntimeStatusSource>(Reuse.Singleton);
         childContainer.Register<IAssetFeed, AssetFeed>(Reuse.Singleton);
         childContainer.Register<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService, Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationService>(Reuse.Singleton);
+        childContainer.Register<Oxygen.Editor.ContentPipeline.Authoring.IScriptAssetAuthoring, Oxygen.Editor.ContentPipeline.Authoring.ScriptAssetAuthoring>(Reuse.Singleton);
         childContainer.Register<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService, Oxygen.Editor.ContentPipeline.Cooking.AutomaticCookService>(Reuse.Singleton);
         childContainer.Register<Oxygen.Editor.Shell.Documents.IHistoryService, Oxygen.Editor.Shell.Documents.HistoryService>(Reuse.Singleton);
 
@@ -385,6 +387,10 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         // One instance for the workspace: open documents register as participants on it, and the Content Browser's
         // child container must reach the same instance instead of creating its own on first use.
         _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>();
+
+        // Likewise one script authoring service: the asset feed follows the files it reports creating, so the Content
+        // Browser's New Script must reach the instance the feed listens to.
+        _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Authoring.IScriptAssetAuthoring>();
 
         // The cook listens to the catalog's changes from the moment the workspace opens, and the Content Browser's
         // Cook on change toggle reaches the same instance.

@@ -3,12 +3,35 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.Assets;
 
 /// <inheritdoc cref="AssetCatalog"/>
+/// <remarks>
+/// Levels: Debug for each change held back while catalogs are installed; Information for the held changes reported
+/// once they are; Warning for a change that is not reported at all, and for an observer that failed.
+/// </remarks>
 public sealed partial class AssetCatalog
 {
     [LoggerMessage(Level = LogLevel.Warning, Message = "An observer of the asset catalog failed after the catalog was updated; the update stays in place.")]
     private partial void LogObserverFailed(Exception exception);
+
+    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "{Kind} change of '{Uri}' arrived from a catalog that is not installed yet; it is held, and reported only if that catalog is installed.")]
+    private static partial void LogChangeHeld(ILogger logger, AssetChangeKind kind, Uri uri);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Reported {Count} changes that were held while the asset catalogs were being installed.")]
+    private partial void LogHeldChangesReported(int count);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Kind} change of '{Uri}' came from a catalog that is no longer installed; it is not reported.")]
+    private partial void LogChangeIgnored(AssetChangeKind kind, Uri uri);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Folder change of '{Folder}' came from a catalog that is not installed; it is not reported.")]
+    private partial void LogFolderChangeDropped(Uri folder);
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void LogChangeHeld(AssetChangeKind kind, Uri uri)
+#pragma warning disable CA1873 // Compiled out of release builds by Conditional("DEBUG")
+        => LogChangeHeld(this.logger, kind, uri);
+#pragma warning restore CA1873
 }

@@ -12,7 +12,7 @@ public sealed class CookPreemptedException : OperationCanceledException
 {
     /// <summary>Initializes a new instance of the <see cref="CookPreemptedException"/> class.</summary>
     public CookPreemptedException()
-        : base("The cook on change stopped so that a requested cook could run first.")
+        : base("The cook on change stopped so that other work on the project could run first.")
     {
     }
 

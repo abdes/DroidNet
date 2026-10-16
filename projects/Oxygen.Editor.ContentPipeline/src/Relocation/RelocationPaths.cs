@@ -88,6 +88,12 @@ public static class RelocationPaths
             return "Names starting with a dot are reserved for derived content.";
         }
 
+        // The engine cooks a virtual path whose segments use only these characters.
+        if (!name.All(static c => char.IsAsciiLetterOrDigit(c) || c is ' ' or '-' or '_' or '.' or '(' or ')'))
+        {
+            return "Use letters, digits, spaces, '-', '_', '(' and ')'; other characters cannot be cooked.";
+        }
+
         var stem = name.Split('.')[0].ToUpperInvariant();
         return stem is "CON" or "PRN" or "AUX" or "NUL"
             || (stem.Length == 4 && stem[3] is >= '1' and <= '9' && (stem.StartsWith("COM", StringComparison.Ordinal) || stem.StartsWith("LPT", StringComparison.Ordinal)))

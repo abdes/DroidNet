@@ -1,7 +1,8 @@
 # Issue #69: DI scope topology and WorldEditor decomposition
 
-Status: `in progress` — Phase 0, S1.1 (Assets) and S1.2 (Cook on change) are
-done. Phase 1 follows
+Status: `in progress` — Phase 0 and S1.1 to S1.4 (Assets, Cook on change,
+Foreground cooks, Global history, Pipeline workflows out of UI) are done. Phase
+1 follows
 [editor-module-architecture.md](../review/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -205,13 +206,68 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   longer waits for save gates or compares an open document's saved hash. Gate:
   Shell, ContentPipeline, Assets, Content Browser, Material Editor and World
   Editor tests, the reviewer's editor build and acceptance of Undo and Redo.
-- **S1.4 Pipeline workflows out of UI** (architecture section 6). The operations
-  of `AssetRelocationWorkflow` (the referrer search before a delete, the refresh
-  after a change) and the folder choice, name validation, next free name and
-  template writing of `ScriptAssetCreation` move to ContentPipeline; the name
-  collision check reads the asset catalog and the template is written through
-  `IAtomicFileStore`. The prompts and result messages stay in the Content
-  Browser. Gate: ContentPipeline and Content Browser tests.
+- **S1.4 Pipeline workflows out of UI** (architecture section 6). The relocation
+  service keeps its reference index current itself: any asset catalog change
+  makes the next search read the files again, so no caller invalidates it. It
+  also reviews a delete (`IAssetRelocationService.FindReferrersOutsideAsync`):
+  the files outside the deleted items that use them, read again first.
+  ContentPipeline's `Authoring/IScriptAssetAuthoring` proposes the folder and
+  the first free name of a new script or input file, checks a chosen name
+  against the asset catalog, and writes the template through `IAtomicFileStore`
+  only where no file exists, so a file the catalog has not seen yet is never
+  overwritten; `ScriptTemplates` moves with it. Both services report the files
+  the editor changed as `FilesChanged`, the relocation service now including the
+  files and folders a copy creates, and script authoring each file it creates
+  before `CreateAsync` returns. The asset feed follows both reports and reads
+  the catalog again at once, whoever asked for the change, so an undo from
+  anywhere and a new script's reveal see the change before the file watcher
+  reports it. The Content Browser keeps the prompts, the result messages, the
+  reveal and the code editor launch, and no longer refreshes its rows after a
+  change, except after a scene command. The sources tree and the asset list
+  share one clipboard, so a folder copied or cut in the tree pastes as a folder;
+  the tree pastes with Ctrl+V and deletes folders with Delete or its context
+  menu, through the same workflow as the asset list. The asset catalog knows the
+  folders of its roots: a folder created, deleted or renamed outside the editor
+  makes it read the root again, so the files inside follow, and reports the
+  folder through `IAssetFolderSource`, which the tree reloads on. Each file
+  belongs to one catalog: the project folder's catalog leaves out the mounts
+  inside the project, so no change is reported twice. A selected folder that no
+  longer exists, deleted or reached again through Back or Forward, shows its
+  nearest existing folder instead. Cook on change treats a moved or deleted
+  source as a change: an automatic cook of a source that is gone, and that has
+  published output, publishes the content again without it. A mount whose every
+  product was retired, and that nothing in the cook goes into, leaves the
+  publication as if it was never cooked: the preview unmounts its root and its
+  generation is reclaimed. The engine's canonical virtual path accepts the space
+  and parentheses as well as letters, digits, `-`, `_` and `.`, and the editor
+  accepts exactly those characters in a name, so every name it creates, such as
+  `New folder (2)`, cooks. Gate: ContentPipeline, Assets, Content Browser and
+  World Editor tests.
+- **S1.4b Shared authoring mounts.** Design first, from the scenario: a studio
+  keeps shared source content (materials, textures, models, scripts) in a folder
+  outside any project, and several projects mount it and edit, cook, rename,
+  move and delete its assets as they do their own Content. Today an editable
+  mount must sit inside the project folder: cook inputs, recorded input facts
+  and cook provenance store paths relative to the project root,
+  `CookInputResolver` rejects anything outside it, relocation and the atomic
+  file store assume project files, and the Mounts dialog adds only read-only
+  cooked libraries and derived folders. The design settles how a shared mount's
+  files are identified in snapshots and provenance, where each project's cooked
+  output of a shared mount goes and what happens when two projects cook it, how
+  a relocation updates the references of projects that are not open, how unsaved
+  documents in another editor session are protected, and how the Mounts dialog
+  adds, edits and removes such a mount. Then the implementation. Gate:
+  ContentPipeline, Assets, Projects and Content Browser tests, and the
+  reviewer's editor check of one folder mounted in two projects.
+- **S1.4c Removing one cooked product.** A loose cooked index can only add or
+  update entries, so retiring one product, as a deleted or renamed source does,
+  rebuilds its whole mount: every other product of that mount is cooked again,
+  and the delay before the old cooked row goes grows with the mount. The engine
+  gains removal of entries from a loose cooked index, and the cook repair
+  removes retired products instead of rebuilding the root. Engine work,
+  authorized with the slice. Gate: engine index tests, ContentPipeline native
+  cook repair tests, and the reviewer's check that deleting one asset of a large
+  mount no longer cooks the rest.
 - **S1.5 Document kinds.** Design first: the contract a document type implements
   in `Oxygen.Editor.Documents` (load, save against the version it read, reload,
   commit an edit in progress, apply and revert its history changes, retarget to
@@ -228,8 +284,10 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   multi-node actions become TimeMachine transactions (documents design decision
   1). Renaming, duplicating and deleting a scene asset, sent today as
   `SceneAssetCommandMessage` to whichever scene workspace is open, become Scenes
-  operations. Gate: Scenes tests without the WinUI host, and the World Editor
-  tests that cover the callers.
+  operations; they report the files they change like the relocation service
+  does, the asset feed follows that report, and the Content Browser's refresh
+  after a scene command goes. Gate: Scenes tests without the WinUI host, and the
+  World Editor tests that cover the callers.
 - **S1.7 LivePreview** (C4 implementation, C11, C13, Play). Design first.
   `Oxygen.Editor.LivePreview` takes engine sync, content demand, mount changes,
   the runtime session start taken out of `WorkspaceViewModel`, the Play services

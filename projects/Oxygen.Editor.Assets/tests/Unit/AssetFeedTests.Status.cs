@@ -4,7 +4,9 @@
 
 using AwesomeAssertions;
 using Moq;
+using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
@@ -50,7 +52,7 @@ public sealed partial class AssetFeedTests
         var state = new AssetCookStatus(uri, freshness, published, verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []);
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]));
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime);
+        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
@@ -86,7 +88,9 @@ public sealed partial class AssetFeedTests
             reader,
             new CookDocumentRegistry(),
             EmptyCookRuns(),
-            unavailableRuntime);
+            unavailableRuntime,
+            NoRelocations(),
+            NoAuthoring());
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
 
@@ -120,7 +124,7 @@ public sealed partial class AssetFeedTests
         });
         var catalog = new TestProjectAssetCatalog([new AssetRecord(red)]);
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime);
+        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
         var snapshots = new List<IReadOnlyList<AssetEntry>>();
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(snapshots.Add), this.TestContext.CancellationToken);
         var refresh = provider.RefreshAsync(this.TestContext.CancellationToken);
@@ -172,7 +176,7 @@ public sealed partial class AssetFeedTests
         var context = workspace.ActivateProject();
         var catalog = new TestProjectAssetCatalog([new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json"))]);
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime);
+        using var provider = new AssetFeed(catalog, context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
         var refresh = provider.RefreshAsync(this.TestContext.CancellationToken);
@@ -210,7 +214,7 @@ public sealed partial class AssetFeedTests
         var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]) { PublicationError = failure };
         var reader = new DelegateStatusReader((_, _, _) => throw new InvalidOperationException("Must not reopen failed publication."));
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime);
+        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime, NoRelocations(), NoAuthoring());
         var item = await provider.ResolveAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = item.Should().NotBeNull();
         _ = item!.IsSelectable.Should().Be(!broken);
@@ -248,7 +252,7 @@ public sealed partial class AssetFeedTests
             return [];
         });
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        var provider = new AssetFeed(new TestProjectAssetCatalog([new(uri)]), workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime);
+        var provider = new AssetFeed(new TestProjectAssetCatalog([new(uri)]), workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime, NoRelocations(), NoAuthoring());
         var refresh = provider.RefreshAsync(this.TestContext.CancellationToken);
         var disposal = Task.CompletedTask;
         try
@@ -269,6 +273,10 @@ public sealed partial class AssetFeedTests
     }
 
     private static ICookRunService EmptyCookRuns() => Mock.Of<ICookRunService>(runs => runs.Runs == Array.Empty<CookRunSnapshot>());
+
+    private static IAssetRelocationService NoRelocations() => Mock.Of<IAssetRelocationService>();
+
+    private static IScriptAssetAuthoring NoAuthoring() => Mock.Of<IScriptAssetAuthoring>();
 
     private sealed class DelegateStatusReader(Func<ProjectContext, IReadOnlyList<Uri>, CancellationToken, Task<IReadOnlyList<AssetCookStatus>>> read) : IAssetCookStatusReader
     {

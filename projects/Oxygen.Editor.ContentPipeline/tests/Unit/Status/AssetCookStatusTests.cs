@@ -106,6 +106,42 @@ public sealed class AssetCookStatusTests
         native.VerifyNoOtherCalls();
     }
 
+    /// <summary>An asset that cannot be a cook input is invalid on its own; the other assets are read as usual.</summary>
+    /// <returns>The asynchronous isolation regression.</returns>
+    [TestMethod]
+    public async Task UnresolvableAssetIsInvalidWithoutFailingTheOthers()
+    {
+        using var project = new StatusProject();
+        var outside = new Uri("asset:///Outside/Material.omat.json");
+
+        var statuses = await project.CreateReader().ReadAsync(project.Project, [StatusProject.SourceUri, outside], this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = statuses.Single(status => status.AssetUri == StatusProject.SourceUri).Freshness.Should().Be(AssetCookFreshness.NeedsCooking);
+        var invalid = statuses.Single(status => status.AssetUri == outside);
+        _ = invalid.Freshness.Should().Be(AssetCookFreshness.InvalidSource);
+        _ = invalid.Diagnostics.Should().ContainSingle().Which.Code.Should().Be("asset_status.input_unresolved");
+    }
+
+    /// <summary>
+    /// A diagnostic names its asset by the virtual path the engine cooks, not by the escaped URI path, so an asset in a
+    /// folder such as "New folder (2)" shows its real name and matches its asset.
+    /// </summary>
+    /// <param name="inProject">Whether the asset is a project source that is gone, rather than one outside the project.</param>
+    /// <returns>The asynchronous path regression.</returns>
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public async Task DiagnosticNamesAnAssetInAFolderWithSpacesByItsVirtualPath(bool inProject)
+    {
+        using var project = new StatusProject();
+        var path = inProject ? "/Content/New folder (2)/Wet Rubber.omat.json" : "/Outside Folder/Wet Rubber.omat.json";
+        var uri = new Uri("asset://" + path);
+
+        var statuses = await project.CreateReader().ReadAsync(project.Project, [uri], this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = statuses.Single().Diagnostics.Should().NotBeEmpty().And.OnlyContain(diagnostic => diagnostic.AffectedVirtualPath == path);
+    }
+
     /// <summary>Built-ins without project contributions have no missing descriptor or native-tool requirement.</summary>
     /// <returns>The asynchronous engine-identity inspection regression.</returns>
     [TestMethod]

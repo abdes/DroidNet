@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -216,7 +217,7 @@ public sealed partial class ContentPipelineService
         if (missing is not null)
         {
             var owners = graph.FileDependencies.Where(pair => pair.Value.Contains(missing.RelativePath, StringComparer.Ordinal))
-                .Select(static pair => pair.Key.AbsolutePath);
+                .Select(static pair => AssetUriHelper.GetVirtualPath(pair.Key));
             throw new CookInputDiscoveryException([new()
             {
                 OperationId = operation.OperationId,

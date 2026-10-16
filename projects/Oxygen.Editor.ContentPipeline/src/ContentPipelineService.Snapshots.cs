@@ -7,6 +7,8 @@ using System.Security.Cryptography;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -55,6 +57,31 @@ public sealed partial class ContentPipelineService
         }
     }
 
+    // An automatic cook whose sources are all gone, and at least one of them has a published product.
+    private static bool IsRetiringRemovedSources(ProjectContext project, Incremental.CookProvenance previous, ContentCookInput[] primaryInputs)
+        => primaryInputs.Length != 0 && primaryInputs.All(static input => !File.Exists(input.SourceAbsolutePath))
+            && previous.Products.Any(product => primaryInputs.Any(input => input.AssetUri == product.SourceUri)
+                && Incremental.CookRootRepair.IsRetired(project.ProjectRoot, product));
+
+    // Each removed source is reported as an Info diagnostic, so the run names what it removed.
+    private static void ReportRetiredSources(Guid operationId, ContentCookInput[] inputs)
+    {
+        foreach (var input in inputs)
+        {
+            var retired = new DiagnosticRecord
+            {
+                OperationId = operationId,
+                Domain = FailureDomain.AssetCook,
+                Severity = DiagnosticSeverity.Info,
+                Code = OutputRetiredCode,
+                Message = $"'{Path.GetFileName(input.SourceAbsolutePath)}' was moved or deleted after it was cooked; this cook removes its cooked output.",
+                AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
+                AffectedPath = input.SourceAbsolutePath,
+            };
+            CookRunContext.Report(new(retired.Message, retired.Severity, Diagnostic: retired));
+        }
+    }
+
     private async Task<ContentCookResult> CookCapturedScopesAsync(
         ContentCookOperation operation,
         Func<IReadOnlyList<ContentCookScope>> resolveScopes,
@@ -86,7 +113,15 @@ public sealed partial class ContentPipelineService
         }
 
         var scopes = resolveScopes();
-        if (await this.ValidatePrimaryInputsAsync(operation, targetKind, primaryInputs, scopes.Any(static scope => scope.ImportReplacement is not null), scopes.All(static scope => scope.IsAutomatic), cancellationToken).ConfigureAwait(false) is { } preflight)
+        var isAutomatic = scopes.All(static scope => scope.IsAutomatic);
+        if (isAutomatic && IsRetiringRemovedSources(operation.Project, previous, primaryInputs))
+        {
+            // The sources were moved or deleted after they were cooked: nothing is left to cook, and the cook's repair
+            // publishes the content again without their products.
+            ReportRetiredSources(operation.OperationId, primaryInputs);
+            resolveScopes = static () => [];
+        }
+        else if (await this.ValidatePrimaryInputsAsync(operation, targetKind, primaryInputs, scopes.Any(static scope => scope.ImportReplacement is not null), isAutomatic, cancellationToken).ConfigureAwait(false) is { } preflight)
         {
             return preflight;
         }
@@ -162,8 +197,8 @@ public sealed partial class ContentPipelineService
             return new(operation.OperationId, targetKind, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null);
         }
 
-        // A save or preview may have queued this cook before the Content Browser moved or deleted its source.
-        // There is nothing left to cook; the next cook retires the old output.
+        // A save or preview may have queued this cook before its source, never cooked, was moved or deleted. There is
+        // nothing to cook and no output to remove.
         if (isAutomatic && primaryInputs.All(static input => !File.Exists(input.SourceAbsolutePath)))
         {
             var retired = CreateSourceMissingDiagnostics(operation.OperationId, primaryInputs).Select(diagnostic => diagnostic with

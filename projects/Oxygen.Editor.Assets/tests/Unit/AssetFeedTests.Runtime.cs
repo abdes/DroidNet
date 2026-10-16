@@ -31,7 +31,7 @@ public sealed partial class AssetFeedTests
             reads++;
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [new(uri, new("asset:///Content/Materials/Red.omat"), Oxygen.Editor.ContentPipeline.ContentCookAssetKind.Material, "Content", "/Content/Materials/Red.omat") { DescriptorRelativePath = "Materials/Red.omat" }], [], []) { OutputRoots = System.Collections.Immutable.ImmutableDictionary<string, string>.Empty.Add("Content", workspace.SourcePath(".cooked/Content")) }]);
         });
-        using var provider = new AssetFeed(new TestProjectAssetCatalog([new AssetRecord(uri)]), context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), preview);
+        using var provider = new AssetFeed(new TestProjectAssetCatalog([new AssetRecord(uri)]), context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), preview, NoRelocations(), NoAuthoring());
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);

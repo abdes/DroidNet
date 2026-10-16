@@ -3,14 +3,17 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using System.Reactive.Subjects;
 using System.Text.Json.Nodes;
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Assets.Catalog;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Relocation;
@@ -19,6 +22,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Relocation;
 internal sealed class RelocationWorkspace : IDisposable
 {
     private readonly ProjectContextService context = new();
+    private readonly Subject<AssetChange> catalogChanges = new();
 
     public RelocationWorkspace()
     {
@@ -35,7 +39,8 @@ internal sealed class RelocationWorkspace : IDisposable
         });
         this.Coordinator = new(this.context, NullLogger<ContentCookCoordinator>.Instance);
         this.Files = new NativeAtomicFileStore(new RealFileSystem());
-        this.Service = new(this.Coordinator, this.context, this.Documents, this.Files);
+        this.Catalog = Mock.Of<IAssetCatalog>(catalog => catalog.Changes == this.catalogChanges);
+        this.Service = new(this.Coordinator, this.context, this.Documents, this.Files, this.Catalog);
     }
 
     public string Root { get; } = Path.Combine(Path.GetTempPath(), "OxygenRelocationTests", Guid.NewGuid().ToString("N"));
@@ -46,13 +51,19 @@ internal sealed class RelocationWorkspace : IDisposable
 
     public NativeAtomicFileStore Files { get; }
 
+    public IAssetCatalog Catalog { get; }
+
     public AssetRelocationService Service { get; }
 
     public ProjectContext Project => this.context.ActiveProject!;
 
     public ProjectContextService Context => this.context;
 
-    public AssetRelocationService CreateService(AssetRedirects? redirects) => new(this.Coordinator, this.context, this.Documents, this.Files, redirects: redirects);
+    public AssetRelocationService CreateService(AssetRedirects? redirects) => new(this.Coordinator, this.context, this.Documents, this.Files, this.Catalog, redirects: redirects);
+
+    /// <summary>Reports a catalog change, as the file watcher does after an edit outside a relocation.</summary>
+    /// <param name="uri">The changed asset.</param>
+    public void ChangeInCatalog(Uri uri) => this.catalogChanges.OnNext(new(AssetChangeKind.Updated, uri));
 
     public string PathOf(string relative) => Path.GetFullPath(Path.Combine(this.Root, relative));
 
@@ -101,7 +112,9 @@ internal sealed class RelocationWorkspace : IDisposable
     public void Dispose()
     {
         this.context.Close();
+        this.Service.Dispose();
         this.Coordinator.Dispose();
+        this.catalogChanges.Dispose();
         try
         {
             Directory.Delete(this.Root, recursive: true);

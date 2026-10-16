@@ -48,6 +48,15 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
     /// <summary>Gets the number of assets in the current folders before search and filters.</summary>
     public int ScopeCount { get; private set; }
 
+    /// <summary>
+    /// Gets the virtual paths Paste copies or moves. The asset list and the sources tree share it, so a folder cut or
+    /// copied in either pastes as a folder.
+    /// </summary>
+    public IReadOnlyList<string> Clipboard { get; private set; } = [];
+
+    /// <summary>Gets a value indicating whether Paste moves the clipboard's items instead of copying them.</summary>
+    public bool IsClipboardCut { get; private set; }
+
     /// <summary>Gets or sets the active identity retained when switching asset layouts.</summary>
     internal Uri? SelectedAssetUri { get; set; }
 
@@ -140,6 +149,20 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
         var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
         return this.SelectedFolders.Contains(pathRelativeToProjectRoot);
     }
+
+    /// <summary>Puts items on the clipboard, replacing what it held.</summary>
+    /// <param name="items">The virtual paths of the assets and folders.</param>
+    /// <param name="isCut">Whether Paste moves them instead of copying them.</param>
+    public void SetClipboard(IReadOnlyList<string> items, bool isCut)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        this.Clipboard = items;
+        this.IsClipboardCut = isCut;
+        this.OnPropertyChanged(nameof(this.Clipboard));
+    }
+
+    /// <summary>Empties the clipboard, as after the cut items were moved.</summary>
+    public void ClearClipboard() => this.SetClipboard([], isCut: false);
 
     /// <summary>Publishes the active layout's selection to the details pane and commands.</summary>
     /// <param name="assets">The selected assets; the last is the active asset.</param>

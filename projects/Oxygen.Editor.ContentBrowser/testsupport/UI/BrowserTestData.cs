@@ -40,6 +40,11 @@ internal static class BrowserTestData
         return catalog.Object;
     }
 
+    /// <summary>Creates a folder source that never reports a folder change.</summary>
+    /// <returns>The folder source.</returns>
+    internal static Oxygen.Managed.Assets.Catalog.IAssetFolderSource CreateNavigationFolders()
+        => Mock.Of<Oxygen.Managed.Assets.Catalog.IAssetFolderSource>(folders => folders.FolderChanges == System.Reactive.Linq.Observable.Never<Uri>());
+
     internal static AssetEntry CreateNavigationAsset(string path, AssetKind kind) => new(new("asset://" + path), Path.GetFileName(path), kind, AssetState.Descriptor, DerivedState: null, AssetRuntimeAvailability.Unknown, path, path, path, CookedUri: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
 
     internal static Mock<IAssetFeed> CreateQueryProvider(BehaviorSubject<IReadOnlyList<AssetEntry>> updates)

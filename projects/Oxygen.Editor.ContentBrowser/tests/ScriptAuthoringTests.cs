@@ -4,8 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentBrowser.Scripts;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
+using Oxygen.Editor.ContentPipeline.Authoring;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -15,17 +14,6 @@ public sealed class ScriptAuthoringTests : IDisposable
     private readonly string root = Path.Combine(Path.GetTempPath(), "oxygen-script-authoring-tests", Guid.NewGuid().ToString("N"));
 
     public ScriptAuthoringTests() => Directory.CreateDirectory(Path.Combine(this.root, "Content", "Player"));
-
-    private ProjectContext Project => new()
-    {
-        ProjectId = Guid.NewGuid(),
-        Name = "Test",
-        Category = Category.Games,
-        ProjectRoot = this.root,
-        AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-        LocalFolderMounts = [],
-        Scenes = [],
-    };
 
     public void Dispose()
     {
@@ -86,26 +74,6 @@ public sealed class ScriptAuthoringTests : IDisposable
     [TestMethod]
     public void PreferenceWithoutCustomCommandIsInvalid()
         => _ = new CodeEditorPreference(CodeEditorPreference.CurrentVersion, CodeEditorKind.Custom, " ").IsValid.Should().BeFalse();
-
-    [TestMethod]
-    public void DefaultFolderIsTheBrowsedFolderOrTheKindFolderAtTheMountRoot()
-    {
-        // The Content Browser selects folders by virtual path.
-        _ = ScriptAssetCreation.GetDefaultFolder(this.Project, "/Content/Player", "Scripts").Should().Be("/Content/Player");
-        _ = ScriptAssetCreation.GetDefaultFolder(this.Project, "/Content", "Scripts").Should().Be("/Content/Scripts");
-        _ = ScriptAssetCreation.GetDefaultFolder(this.Project, "/", "Scripts").Should().Be("/Content/Scripts");
-        _ = ScriptAssetCreation.GetDefaultFolder(this.Project, null, "Input").Should().Be("/Content/Input");
-    }
-
-    [TestMethod]
-    public void ValidateRejectsANameThatWouldCookToAnExistingScript()
-    {
-        File.WriteAllText(Path.Combine(this.root, "Content", "Player", "move.luau"), string.Empty);
-
-        _ = ScriptAssetCreation.Validate(this.Project, "move", "/Content/Player", [".lua", ".luau"], 63).Should().Contain("move.luau");
-        _ = ScriptAssetCreation.Validate(this.Project, "jump", "/Content/Player", [".lua", ".luau"], 63).Should().BeNull();
-        _ = ScriptAssetCreation.Validate(this.Project, "jump", "/Elsewhere", [".lua", ".luau"], 63).Should().NotBeNull();
-    }
 
     [TestMethod]
     public void InputSourceIndexFindsTheDeclaringFileAndLine()

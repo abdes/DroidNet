@@ -38,6 +38,7 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
 /// <param name="catalog">The asset catalog, whose changes may bring new cooked folders.</param>
+/// <param name="folders">Reports the folders created, deleted or renamed under the authoring roots.</param>
 /// <param name="hostingContext">Brings catalog notifications to the UI thread.</param>
 /// <param name="relocation">Renames, moves and copies folders with their references; without it only empty folders rename.</param>
 /// <param name="relocationService">Reports the folders the editor moved or deleted; absent where the editor cannot relocate.</param>
@@ -50,6 +51,7 @@ public partial class ProjectLayoutViewModel(
     IMessenger messenger,
     Oxygen.Editor.ContentPipeline.Publication.CookPublicationService publications,
     IAssetCatalog catalog,
+    IAssetFolderSource folders,
     HostingContext hostingContext,
     ILoggerFactory? loggerFactory,
     Relocation.IAssetRelocationWorkflow? relocation = null,
@@ -68,7 +70,9 @@ public partial class ProjectLayoutViewModel(
     private bool suppressTreeSelectionEvents;
     private bool isSubscribed;
     private IDisposable? catalogSubscription;
+    private IDisposable? folderSubscription;
     private int publishedFoldersCheckQueued;
+    private int folderReloadQueued;
 
     private ITreeItem? selectedItem;
     private bool hasUnsavedChanges;
@@ -121,6 +125,7 @@ public partial class ProjectLayoutViewModel(
             this.messenger.Register<NavigateToFolderRequestMessage>(this, (_, message) => _ = HandleNavigateRequestAsync(message));
             this.messenger.Register<CreateFolderRequestMessage>(this, (_, message) => _ = this.CreateFolderAsync(message));
             this.catalogSubscription = catalog.Changes.Subscribe(_ => this.OnCatalogChanged());
+            this.folderSubscription = folders.FolderChanges.Subscribe(_ => this.OnFoldersChanged());
             if (relocationService is not null)
             {
                 relocationService.FilesChanged += this.OnFilesChanged;
@@ -222,6 +227,7 @@ public partial class ProjectLayoutViewModel(
             this.selectionRequestVersion++;
             this.messenger.UnregisterAll(this);
             this.catalogSubscription?.Dispose();
+            this.folderSubscription?.Dispose();
             if (relocationService is not null)
             {
                 relocationService.FilesChanged -= this.OnFilesChanged;

@@ -39,12 +39,19 @@ public partial class ProjectLayoutViewModel
         var selected = new HashSet<TreeItemAdapter>(ReferenceEqualityComparer.Instance);
         try
         {
+            var shown = new List<string>(paths.Length);
             foreach (var path in paths)
             {
-                var target = path is "/" or "." ? root
-                    : VirtualPath.IsCanonicalAbsolute(path)
-                        ? await this.FindAdapterByVirtualPathAsync(path).ConfigureAwait(true)
-                        : await FindFolderAdapterAsync(root, path).ConfigureAwait(true);
+                // A folder deleted since it was selected, or reached again through Back or Forward, is not shown: its
+                // nearest folder that still exists is.
+                var existing = path;
+                var target = await this.FindSelectedFolderAsync(root, existing).ConfigureAwait(true);
+                while (target is null && GetParentFolder(existing) is { } parent)
+                {
+                    existing = parent;
+                    target = await this.FindSelectedFolderAsync(root, existing).ConfigureAwait(true);
+                }
+
                 if (!this.IsSelectionRequestCurrent(version, root))
                 {
                     return;
@@ -54,6 +61,20 @@ public partial class ProjectLayoutViewModel
                 {
                     _ = selected.Add(adapter);
                 }
+
+                if (!string.Equals(existing, path, StringComparison.Ordinal))
+                {
+                    this.LogMissingSelectedFolder(path, existing);
+                }
+
+                shown.Add(existing);
+            }
+
+            if (!shown.SequenceEqual(paths, StringComparer.Ordinal))
+            {
+                // The new scope selects the tree again, through the state's change.
+                contentBrowserState.SetSelectedFolders([.. shown.Distinct(StringComparer.Ordinal)]);
+                return;
             }
 
             if (this.IsSelectionRequestCurrent(version, root) && this.ShownItems.Contains(root)
@@ -83,6 +104,29 @@ public partial class ProjectLayoutViewModel
             // A retired tree cannot apply its delayed lookup to the new scope.
         }
     }
+
+    // The folder above a selected folder, in the selection's own form: "/Content/Props" or "Content/Props".
+    private static string? GetParentFolder(string path)
+    {
+        if (path is "/" or "." || path.Length == 0)
+        {
+            return null;
+        }
+
+        var slash = path.TrimEnd('/').LastIndexOf('/');
+        return slash switch
+        {
+            < 0 => ".",
+            0 => "/",
+            _ => path[..slash],
+        };
+    }
+
+    private async Task<ITreeItem?> FindSelectedFolderAsync(TreeItemAdapter root, string path)
+        => path is "/" or "." ? root
+            : VirtualPath.IsCanonicalAbsolute(path)
+                ? await this.FindAdapterByVirtualPathAsync(path).ConfigureAwait(true)
+                : await FindFolderAdapterAsync(root, path).ConfigureAwait(true);
 
     private async Task<bool> RevealSelectedAncestorsAsync(HashSet<TreeItemAdapter> selected, long version, TreeItemAdapter root)
     {

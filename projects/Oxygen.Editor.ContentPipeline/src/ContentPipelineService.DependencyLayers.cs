@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -50,7 +51,7 @@ public sealed partial class ContentPipelineService
             Domain = FailureDomain.AssetCook,
             Severity = cycle ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
             Code = cycle ? "asset_cook.dependency_cycle" : "asset_cook.dependency_failed",
-            AffectedVirtualPath = input.AssetUri.AbsolutePath,
+            AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
             Message = cycle ? $"A dependency cycle prevents cooking '{input.AssetUri}'." : $"Skipped '{input.AssetUri}' because a required asset failed.",
         }).ToArray();
         foreach (var input in inputs)
@@ -122,13 +123,13 @@ public sealed partial class ContentPipelineService
                 var result = await this.CookMixedInputsAsync(operation.OperationId, scope, cancellationToken).ConfigureAwait(false);
                 results.Add(result);
                 var globalError = result.Diagnostics.Any(issue => issue.Severity >= DiagnosticSeverity.Error
-                    && !mount.Any(input => string.Equals(issue.AffectedVirtualPath, input.AssetUri.AbsolutePath, StringComparison.Ordinal)));
+                    && !mount.Any(input => string.Equals(issue.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(input.AssetUri), StringComparison.Ordinal)));
                 foreach (var input in mount)
                 {
                     _ = remaining.Remove(input.AssetUri);
                     if (result.Status is not (OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings)
                         && (globalError || result.Diagnostics.Any(issue => issue.Severity >= DiagnosticSeverity.Error
-                            && string.Equals(issue.AffectedVirtualPath, input.AssetUri.AbsolutePath, StringComparison.Ordinal))
+                            && string.Equals(issue.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(input.AssetUri), StringComparison.Ordinal))
                             || !result.CookedAssets.Any(asset => asset.SourceAssetUri == input.AssetUri)))
                     {
                         _ = failed.Add(input.AssetUri);

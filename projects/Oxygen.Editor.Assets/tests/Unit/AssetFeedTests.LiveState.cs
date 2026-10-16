@@ -40,7 +40,7 @@ public sealed partial class AssetFeedTests
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []) { SourcePaths = [path], SavedSourceHash = sourceHash }]);
         });
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, documents, EmptyCookRuns(), unavailableRuntime);
+        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, documents, EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
         provider.Items.Subscribe(
@@ -94,7 +94,7 @@ public sealed partial class AssetFeedTests
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>(uris.Select(uri => new AssetCookStatus(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])).ToArray());
         });
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), cookService.Object, unavailableRuntime);
+        using var provider = new AssetFeed(catalog, context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), cookService.Object, unavailableRuntime, NoRelocations(), NoAuthoring());
         IReadOnlyList<AssetEntry> rows = [];
         var notifications = 0;
         provider.Items.Subscribe(
@@ -157,7 +157,7 @@ public sealed partial class AssetFeedTests
         });
         var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]);
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, documents, EmptyCookRuns(), unavailableRuntime);
+        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, documents, EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(
             new Observer<IReadOnlyList<AssetEntry>>(value =>
@@ -207,7 +207,7 @@ public sealed partial class AssetFeedTests
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, complete ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])]);
         });
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(new TestProjectAssetCatalog([new AssetRecord(uri)]), context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), cooks.Object, unavailableRuntime);
+        using var provider = new AssetFeed(new TestProjectAssetCatalog([new AssetRecord(uri)]), context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), cooks.Object, unavailableRuntime, NoRelocations(), NoAuthoring());
         provider.Items.Subscribe(
             new Observer<IReadOnlyList<AssetEntry>>(items =>
         {

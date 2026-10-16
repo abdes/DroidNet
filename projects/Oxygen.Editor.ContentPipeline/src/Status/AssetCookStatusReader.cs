@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -74,8 +75,16 @@ public sealed partial class AssetCookStatusReader(
         var requests = requested.Select(uri => (Requested: uri, Source: builtinOrigins.GetValueOrDefault(uri, uri))).ToArray();
         var builtins = requests.Select(static item => item.Source).Where(IsBuiltinIdentity).Distinct().ToImmutableArray();
         var imports = await ImportedSourceIndex.ReadAsync(project, CookSavedSourceReader.ReadFileAsync, prior, cancellationToken).ConfigureAwait(false);
-        var mapped = requests.Where(item => !IsBuiltinIdentity(item.Source)).Select(item => (item.Requested, Resolution: imports.ResolveOutputFacts(project, item.Source, ContentCookInputRole.Primary))).ToArray();
-        var inputs = mapped.Select(item => item.Resolution.Source ?? CookInputResolver.Resolve(project, item.Requested, ContentCookInputRole.Primary)).ToArray();
+        var resolved = requests.Where(item => !IsBuiltinIdentity(item.Source))
+            .Select(item => (item.Requested, Resolution: imports.ResolveOutputFacts(project, item.Source, ContentCookInputRole.Primary)))
+            .Select(item => (item.Requested, item.Resolution, Input: ResolveInput(project, item.Requested, item.Resolution)))
+            .ToArray();
+
+        // An asset that cannot be a cook input, such as one outside the project, is invalid on its own; the others
+        // are read as usual.
+        var unresolved = resolved.Select(static item => item.Input.Unresolved).OfType<AssetCookStatus>().ToArray();
+        var mapped = resolved.Where(static item => item.Input.Input is not null).Select(static item => (item.Requested, item.Resolution)).ToArray();
+        var inputs = resolved.Select(static item => item.Input.Input).OfType<ContentCookInput>().ToArray();
         using var libraries = await CookedLibraryReadSet.AcquireAsync(project, cancellationToken, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), imports.KnownOutputs).ConfigureAwait(false);
         var graph = await CreateDependencyDiscovery(project, prior, imports, libraries).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
         graph = graph with { Builtins = [.. graph.Builtins.Union(builtins)] };
@@ -99,10 +108,49 @@ public sealed partial class AssetCookStatusReader(
         var states = inputs.Select((input, index) => MapImportedStatus(mapped[index].Requested, mapped[index].Resolution, sourceStatuses[input.AssetUri]))
             .Concat(requests.Where(item => IsBuiltinIdentity(item.Source)).Select(item =>
                 CreateBuiltinStatus(item.Source, products, plan, prior.Products.IsEmpty || producer.Fingerprint is not null, metadataUnavailable) with { AssetUri = item.Requested }))
+            .Concat(unresolved)
             .Select(state => state with { OutputRoots = snapshot.ProjectRoots }).ToArray();
         return prior.Products.IsEmpty || producer.Revision == nativeCompatibility.Observation.Revision ? states
             : states.Select(static state => state with { Freshness = AssetCookFreshness.Unknown }).ToArray();
     }
+
+    // The cook input of a requested asset, or, when it cannot be one, the asset's invalid status.
+    private static (ContentCookInput? Input, AssetCookStatus? Unresolved) ResolveInput(ProjectContext project, Uri requested, ImportedSourceIndex.Resolution resolution)
+    {
+        if (resolution.Source is { } source)
+        {
+            return (source, null);
+        }
+
+        try
+        {
+            return (CookInputResolver.Resolve(project, requested, ContentCookInputRole.Primary), null);
+        }
+        catch (InvalidDataException failure)
+        {
+            return (null, CreateUnresolvedStatus(requested, failure.Message));
+        }
+    }
+
+    private static AssetCookStatus CreateUnresolvedStatus(Uri requested, string reason)
+        => new(
+            requested,
+            AssetCookFreshness.InvalidSource,
+            HasPublishedOutput: false,
+            CookedOutputAvailability.Unknown,
+            [],
+            [],
+            [
+                new DiagnosticRecord
+                {
+                    OperationId = Guid.Empty,
+                    Domain = FailureDomain.AssetCook,
+                    Severity = DiagnosticSeverity.Error,
+                    Code = "asset_status.input_unresolved",
+                    Message = reason,
+                    AffectedVirtualPath = AssetUriHelper.GetVirtualPath(requested),
+                },
+            ]);
 
     private static CookDependencyGraph WithCompleteAssets(CookDependencyGraph graph)
     {
@@ -187,7 +235,7 @@ public sealed partial class AssetCookStatusReader(
         Code = code,
         Message = message,
         AffectedPath = input.SourceAbsolutePath,
-        AffectedVirtualPath = input.AssetUri.AbsolutePath,
+        AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
     };
 
     private static AssetCookStatus MapImportedStatus(Uri requested, ImportedSourceIndex.Resolution resolution, AssetCookStatus status)
@@ -199,7 +247,7 @@ public sealed partial class AssetCookStatusReader(
                 AssetUri = requested,
                 Freshness = AssetCookFreshness.InvalidSource,
                 OutputAvailability = CookedOutputAvailability.Unknown,
-                Diagnostics = [new DiagnosticRecord { OperationId = Guid.Empty, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error, Code = "asset_status.import_conflict", Message = error, AffectedVirtualPath = requested.AbsolutePath }],
+                Diagnostics = [new DiagnosticRecord { OperationId = Guid.Empty, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error, Code = "asset_status.import_conflict", Message = error, AffectedVirtualPath = AssetUriHelper.GetVirtualPath(requested) }],
             };
         }
 

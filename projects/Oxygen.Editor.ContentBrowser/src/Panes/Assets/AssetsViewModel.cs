@@ -479,6 +479,12 @@ public partial class AssetsViewModel(
         {
             this.NotifyCookSelection();
         }
+
+        // The sources tree also cuts and copies folders onto the shared clipboard.
+        if (!this.disposed && e.PropertyName is nameof(ContentBrowserState.Clipboard))
+        {
+            this.NotifyAssetActions();
+        }
     }
 
     private async void OnAssetItemInvoked(object? sender, AssetsViewItemInvokedEventArgs args)

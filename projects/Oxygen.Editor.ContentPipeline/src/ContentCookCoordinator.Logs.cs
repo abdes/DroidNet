@@ -26,6 +26,9 @@ public sealed partial class ContentCookCoordinator
     [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Name} waits for {Count} documents to be saved.")]
     private partial void LogRunWaitingForSave(string name, int count);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Name} removed the cooked output of {Sources}, which were moved or deleted, in {Seconds:F1} s; publishing their mount again without them cooked {Updated} assets and reused {Reused}.")]
+    private partial void LogRunRemovedOutput(string name, string sources, double seconds, int updated, int reused);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Name} finished ({State}) in {Seconds:F1} s: {Updated} assets cooked, {Reused} reused.")]
     private partial void LogRunSucceeded(string name, CookRunState state, double seconds, int updated, int reused);
 
@@ -35,8 +38,8 @@ public sealed partial class ContentCookCoordinator
     [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Name} cancelled after {Seconds:F1} s.")]
     private partial void LogRunCancelled(string name, double seconds);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Name} stopped after {Seconds:F1} s so that a requested cook could run first.")]
-    private partial void LogRunStopped(string name, double seconds);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Name} stopped after {Seconds:F1} s so that {Work} could run first.")]
+    private partial void LogRunStopped(string name, double seconds, string work);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Scope} joined the queued cook of {Name}.")]
     private partial void LogRunJoined(string scope, string name);
@@ -49,7 +52,7 @@ public sealed partial class ContentCookCoordinator
         string? name;
         lock (this.stateLock)
         {
-            name = this.runs.TryGetValue(operationId, out var run) ? run.Snapshot.DisplayName : null;
+            name = this.runs.TryGetValue(operationId, out var run) ? DescribeRun(run.Snapshot) : null;
         }
 
         if (name is not null)
@@ -68,27 +71,32 @@ public sealed partial class ContentCookCoordinator
         }
     }
 
-    private void LogRunFinished(CookRunSnapshot run, bool stopped)
+    private void LogRunFinished(CookRunSnapshot run, bool stopped, string? stoppedFor)
     {
         var seconds = ((run.CompletedAt ?? DateTimeOffset.UtcNow) - run.StartedAt).TotalSeconds;
         var updated = run.Assets.Values.Count(static asset => asset.State == CookAssetState.Updated);
         var reused = run.Assets.Values.Count(static asset => asset.State == CookAssetState.Reused);
         switch (run.State)
         {
+            case CookRunState.Succeeded or CookRunState.UpToDate
+                when run.Diagnostics.Where(static issue => string.Equals(issue.Code, ContentPipelineService.OutputRetiredCode, StringComparison.Ordinal))
+                    .Select(static issue => issue.AffectedVirtualPath).OfType<string>().ToArray() is { Length: > 0 } removed:
+                this.LogRunRemovedOutput(DescribeRun(run), string.Join(", ", removed), seconds, updated, reused);
+                break;
             case CookRunState.Succeeded or CookRunState.UpToDate:
-                this.LogRunSucceeded(run.DisplayName, run.State, seconds, updated, reused);
+                this.LogRunSucceeded(DescribeRun(run), run.State, seconds, updated, reused);
                 break;
             case CookRunState.SucceededWithWarnings:
-                this.LogRunWarned(run.DisplayName, seconds, updated, reused, run.Diagnostics.FirstOrDefault(static issue => issue.Severity == DiagnosticSeverity.Warning)?.Message);
+                this.LogRunWarned(DescribeRun(run), seconds, updated, reused, run.Diagnostics.FirstOrDefault(static issue => issue.Severity == DiagnosticSeverity.Warning)?.Message);
                 break;
             case CookRunState.Cancelled when stopped:
-                this.LogRunStopped(run.DisplayName, seconds);
+                this.LogRunStopped(DescribeRun(run), seconds, stoppedFor ?? OtherWriterWork);
                 break;
             case CookRunState.Cancelled:
-                this.LogRunCancelled(run.DisplayName, seconds);
+                this.LogRunCancelled(DescribeRun(run), seconds);
                 break;
             default:
-                this.LogRunFailed(run.DisplayName, seconds, run.Diagnostics.FirstOrDefault(static issue => issue.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Fatal)?.Message);
+                this.LogRunFailed(DescribeRun(run), seconds, run.Diagnostics.FirstOrDefault(static issue => issue.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Fatal)?.Message);
                 break;
         }
     }

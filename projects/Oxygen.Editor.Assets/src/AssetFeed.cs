@@ -7,7 +7,9 @@ using System.Reactive.Subjects;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Assets.Runtime;
+using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
@@ -19,6 +21,10 @@ namespace Oxygen.Editor.Assets;
 /// <summary>
 /// The asset feed over the asset catalog, cook status, open documents and the preview's acknowledged state.
 /// </summary>
+/// <remarks>
+/// Files the editor itself moves, copies, deletes or creates are read again as soon as their service reports them,
+/// whoever asked for the change; other file changes arrive through the catalog's file watching.
+/// </remarks>
 public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposable
 {
     private readonly IAssetCatalogReader catalog;
@@ -28,6 +34,8 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     private readonly IAssetCookStatusReader cookStatus;
     private readonly ICookDocumentRegistry documents;
     private readonly ICookRunService cooks;
+    private readonly IAssetRelocationService relocation;
+    private readonly IScriptAssetAuthoring authoring;
     private readonly IAssetRuntimeStatusSource runtimeStatus;
     private readonly BehaviorSubject<IReadOnlyList<AssetEntry>> items = new([]);
     private readonly IDisposable changesSubscription;
@@ -44,6 +52,8 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     /// <param name="documents">Live authoring-state notifications.</param>
     /// <param name="cooks">Cook progress and completion notifications.</param>
     /// <param name="runtimeStatus">The preview's acknowledged content and asset request outcomes.</param>
+    /// <param name="relocation">Reports the files that relocations, copies and deletes changed.</param>
+    /// <param name="authoring">Reports the scripts and input files it created.</param>
     /// <param name="logger">Background refresh diagnostics.</param>
     public AssetFeed(
         AssetCatalog catalog,
@@ -53,8 +63,10 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         ICookDocumentRegistry documents,
         ICookRunService cooks,
         IAssetRuntimeStatusSource runtimeStatus,
+        IAssetRelocationService relocation,
+        IScriptAssetAuthoring authoring,
         ILogger<AssetFeed>? logger = null)
-        : this((IAssetCatalogReader)catalog, projectContextService, projectCookScopeProvider, cookStatus, documents, cooks, runtimeStatus, logger)
+        : this((IAssetCatalogReader)catalog, projectContextService, projectCookScopeProvider, cookStatus, documents, cooks, runtimeStatus, relocation, authoring, logger)
     {
     }
 
@@ -66,6 +78,8 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     /// <param name="documents">Live authoring-state notifications.</param>
     /// <param name="cooks">Cook progress and completion notifications.</param>
     /// <param name="runtimeStatus">The preview's acknowledged content and asset request outcomes.</param>
+    /// <param name="relocation">Reports the files that relocations, copies and deletes changed.</param>
+    /// <param name="authoring">Reports the scripts and input files it created.</param>
     /// <param name="logger">Background refresh diagnostics.</param>
     internal AssetFeed(
         IAssetCatalogReader catalog,
@@ -75,6 +89,8 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         ICookDocumentRegistry documents,
         ICookRunService cooks,
         IAssetRuntimeStatusSource runtimeStatus,
+        IAssetRelocationService relocation,
+        IScriptAssetAuthoring authoring,
         ILogger<AssetFeed>? logger = null)
     {
         this.catalog = catalog;
@@ -84,6 +100,8 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         this.documents = documents;
         this.cooks = cooks;
         this.runtimeStatus = runtimeStatus;
+        this.relocation = relocation;
+        this.authoring = authoring;
         this.logger = logger ?? NullLogger<AssetFeed>.Instance;
         this.changesSubscription = this.catalog.Changes
             .Subscribe(_ => this.OnCatalogChanged());
@@ -93,6 +111,8 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         this.cooks.RunChanged += this.OnCookRunChanged;
         this.cookStatus.Changed += this.OnFreshnessChanged;
         this.runtimeStatus.Changed += this.OnRuntimeStatusChanged;
+        this.relocation.FilesChanged += this.OnEditorFilesChanged;
+        this.authoring.FilesChanged += this.OnEditorFilesChanged;
     }
 
     /// <inheritdoc />
@@ -173,6 +193,8 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         this.cooks.RunChanged -= this.OnCookRunChanged;
         this.cookStatus.Changed -= this.OnFreshnessChanged;
         this.runtimeStatus.Changed -= this.OnRuntimeStatusChanged;
+        this.relocation.FilesChanged -= this.OnEditorFilesChanged;
+        this.authoring.FilesChanged -= this.OnEditorFilesChanged;
     }
 
     /// <summary>Cancels discovery and waits until its retained publication readers have drained.</summary>

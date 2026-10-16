@@ -8,9 +8,10 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 namespace Oxygen.Editor.ContentBrowser.Relocation;
 
 /// <summary>
-/// The Content Browser's rename, move, copy and delete workflow: it runs the change, keeps the browser, open
-/// documents and cooked content current, and offers Undo for the last rename or move. Only a delete of content that
-/// other content uses asks for confirmation.
+/// The Content Browser's rename, move, copy and delete workflow: it asks for names and confirmations, has the content
+/// pipeline make the change and reports the outcome; the asset feed and the sources tree follow the pipeline's report
+/// of the changed files. Undo and Redo run the session's global history. Only a delete of content that other content
+/// uses asks for confirmation.
 /// </summary>
 public interface IAssetRelocationWorkflow
 {
@@ -53,6 +54,13 @@ public interface IAssetRelocationWorkflow
     /// <param name="title">The operation title.</param>
     /// <returns>The outcome.</returns>
     public Task<AssetRelocationOutcome> CopyAsync(IReadOnlyList<string> sources, string targetFolder, string title);
+
+    /// <summary>Pastes cut or copied items into a folder: a cut moves them there, a copy creates copies.</summary>
+    /// <param name="sources">The virtual paths on the clipboard.</param>
+    /// <param name="move">Whether the items were cut.</param>
+    /// <param name="targetFolder">The folder to paste into.</param>
+    /// <returns>The outcome, or null when every cut item is already in that folder.</returns>
+    public Task<AssetRelocationOutcome?> PasteAsync(IReadOnlyList<string> sources, bool move, string targetFolder);
 
     /// <summary>Confirms when other content uses the items, then moves them to the Recycle Bin.</summary>
     /// <param name="sources">The virtual paths to delete.</param>

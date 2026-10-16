@@ -63,7 +63,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
 
                     using var baseline = await this.AcquireForOperationAsync(operation, token).ConfigureAwait(false);
                     using var libraries = await CookedLibraryReadSet.AcquireAsync(project, token).ConfigureAwait(false);
-                    var document = BuildMetadataDocument(operation, project, baseline, libraries);
+                    var document = BuildMetadataDocument(operation, project, baseline, libraries, droppedRoots: ImmutableHashSet<string>.Empty);
                     if ((baseline.Document is { } current
                             && string.Equals(current.MountConfigurationIdentity, document.MountConfigurationIdentity, StringComparison.Ordinal)
                             && current.Roots.SequenceEqual(document.Roots))
@@ -105,7 +105,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
         coordinator.VerifyWriter(operation);
         using var baseline = await this.AcquireForOperationAsync(operation, cancellationToken).ConfigureAwait(false);
         using var libraries = await CookedLibraryReadSet.AcquireAsync(next, cancellationToken).ConfigureAwait(false);
-        var document = BuildMetadataDocument(operation, next, baseline, libraries);
+        var document = BuildMetadataDocument(operation, next, baseline, libraries, droppedRoots: ImmutableHashSet<string>.Empty);
         var transaction = await CookPublicationTransaction.ReserveAsync(operation, baseline, [], files, projectManager, cancellationToken).ConfigureAwait(false);
         var projectChange = new CookPublicationJournal.ProjectConfiguration(ProjectInfo.ToJson(expected), ProjectInfo.ToJson(desired));
         await transaction.PrepareAsync(operation, document, sourceReplacement: null, [], projectChange, cancellationToken).ConfigureAwait(false);
@@ -180,10 +180,11 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
         CookPublicationReadLease baseline,
         CookedLibraryReadSet libraries,
         ContentCookResult result,
+        IReadOnlySet<string> droppedRoots,
         CancellationToken cancellationToken)
     {
         coordinator.VerifyWriter(operation);
-        var document = BuildMetadataDocument(operation, operation.Project, baseline, libraries);
+        var document = BuildMetadataDocument(operation, operation.Project, baseline, libraries, droppedRoots);
         if ((baseline.Document is { } current
                 && string.Equals(current.MountConfigurationIdentity, document.MountConfigurationIdentity, StringComparison.Ordinal)
                 && current.Roots.SequenceEqual(document.Roots))
@@ -309,9 +310,11 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
         ContentCookOperation operation,
         ProjectContext selected,
         CookPublicationReadLease baseline,
-        CookedLibraryReadSet libraries)
+        CookedLibraryReadSet libraries,
+        IReadOnlySet<string> droppedRoots)
     {
-        var names = selected.AuthoringMounts.Select(static mount => mount.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // A mount left with no products leaves the publication, as if it was never cooked; so does a removed mount.
+        var names = selected.AuthoringMounts.Select(static mount => mount.Name).Where(name => !droppedRoots.Contains(name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var owned = baseline.Roots.Where(root => root.Owner == CookPublicationRootOwner.Project && names.Contains(root.Name)).ToArray();
         var products = baseline.ProductState.Products.Where(product => product.Outputs.All(output => owned.Any(root => string.Equals(root.Name, output.RootMount, StringComparison.Ordinal)))).ToImmutableArray();
         return new(

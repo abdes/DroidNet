@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Reactive.Linq;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Dialogs;
@@ -87,6 +86,6 @@ public sealed class RelocationHistoryTests
             histories,
             Mock.Of<IDialogService>(),
             Mock.Of<IMessenger>(),
-            Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
+            Mock.Of<IAssetFeed>(),
             Mock.Of<IAssetShell>());
 }

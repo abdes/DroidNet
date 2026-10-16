@@ -6,12 +6,14 @@ using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Oxygen.Editor.Assets.TestSupport;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Discovery;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.Assets.TestSupport;
 using Oxygen.Testing;
 using Testably.Abstractions;
 
@@ -47,7 +49,7 @@ public sealed class NativeImportTests
         var pipeline = new ContentPipelineService(projects, runs, scopes, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, documents, compatibility, files, publication);
         await using var catalog = new AssetCatalog(projects, storage, CreateEmptyImportBuiltins(), publication);
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, projects, scopes, pipeline, documents, runs, runtime);
+        using var provider = new AssetFeed(catalog, projects, scopes, pipeline, documents, runs, runtime, Mock.Of<IAssetRelocationService>(), Mock.Of<IScriptAssetAuthoring>());
         IReadOnlyList<AssetEntry> choices = [];
         IReadOnlyList<AssetEntry> rows = [];
         provider.Assets(AssetRule.For(AssetKind.Material)).Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => choices = value), this.TestContext.CancellationToken);

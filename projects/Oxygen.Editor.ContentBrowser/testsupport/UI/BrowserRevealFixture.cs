@@ -151,6 +151,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
         this.container.RegisterInstance<IBuiltinCatalogDiscovery>(new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
         this.container.RegisterInstance(this.Dialogs.Object);
         this.container.RegisterInstance(Mock.Of<IAssetCatalog>(catalog => catalog.Changes == System.Reactive.Linq.Observable.Never<AssetChange>()));
+        this.container.RegisterInstance(Mock.Of<IAssetFolderSource>(folders => folders.FolderChanges == System.Reactive.Linq.Observable.Never<Uri>()));
         this.container.RegisterInstance(Mock.Of<IAutomaticCookService>());
         this.container.RegisterInstance(Mock.Of<IProjectManagerService>());
         this.container.RegisterInstance(Mock.Of<IAuthoringTargetResolver>());

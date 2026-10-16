@@ -85,24 +85,6 @@ public sealed partial class AssetIdentityReducerTests
     }
 
     [TestMethod]
-    public void Reduce_WhenProjectRootCatalogDuplicatesAuthoringMount_ShouldIgnoreProjectRootDuplicate()
-    {
-        using var workspace = new TempWorkspace();
-        WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
-
-        var rows = Reduce(
-            workspace,
-            [
-                new AssetRecord(new Uri("asset:///project/Content/Materials/Red.omat.json")),
-                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
-            ]);
-
-        _ = rows.Should().ContainSingle();
-        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
-        _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
-    }
-
-    [TestMethod]
     public void Reduce_WhenImportSidecarExistsNextToMaterial_ShouldNotCreateSidecarRow()
     {
         using var workspace = new TempWorkspace();

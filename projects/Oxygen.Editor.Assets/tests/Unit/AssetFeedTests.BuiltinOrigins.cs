@@ -43,7 +43,7 @@ public sealed partial class AssetFeedTests
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]));
         var projects = workspace.ActivateProject();
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(new TestProjectAssetCatalog(records), projects, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime);
+        using var provider = new AssetFeed(new TestProjectAssetCatalog(records), projects, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime, NoRelocations(), NoAuthoring());
         var resolved = (await provider.ResolveAsync(cookedUri, this.TestContext.CancellationToken).ConfigureAwait(false))!;
         _ = resolved.IsBuiltin.Should().BeFalse();
         _ = resolved.BuiltinOriginUri.Should().BeNull();
@@ -81,7 +81,7 @@ public sealed partial class AssetFeedTests
         { OutputRoots = System.Collections.Immutable.ImmutableDictionary<string, string>.Empty.Add("Content", workspace.SourcePath(".cooked/Content")) }).ToArray();
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>(statuses));
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(new TestProjectAssetCatalog([.. originals, .. copies]), workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime);
+        using var provider = new AssetFeed(new TestProjectAssetCatalog([.. originals, .. copies]), workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
         IReadOnlyList<AssetEntry> items = [];
         using var subscription = provider.Items.Subscribe(value => items = value);
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -138,7 +138,7 @@ public sealed partial class AssetFeedTests
         var state = new AssetCookStatus(engineUri, AssetCookFreshness.Current, HasPublishedOutput: true, verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [new(engineUri, cookedUri, ContentCookAssetKind.Material, "Content", cookedUri.AbsolutePath)], [], []) { OutputRoots = System.Collections.Immutable.ImmutableDictionary<string, string>.Empty.Add("Content", workspace.SourcePath(".cooked/Content")) };
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]));
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(new TestProjectAssetCatalog(records), workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime);
+        using var provider = new AssetFeed(new TestProjectAssetCatalog(records), workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
         var row = await provider.ResolveAsync(authored ? descriptorUri : cookedUri, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = row!.IsBuiltin.Should().BeFalse();
         _ = row.BuiltinOriginUri.Should().BeNull();

@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 
@@ -22,6 +23,9 @@ public sealed partial class AssetFeed
     private ProjectContext? publishedProject;
 
     private void OnFreshnessChanged(object? sender, EventArgs args) => this.OnCatalogChanged();
+
+    // The catalog would see the change only when its file watcher reports it; reading again now shows it at once.
+    private void OnEditorFilesChanged(object? sender, AssetFilesChangedEventArgs args) => this.OnCatalogChanged();
 
     private Task RequestRefresh(bool invalidate)
     {

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -81,7 +82,7 @@ public static class ScriptSlotDiagnostics
             Message = message,
             TechnicalMessage = technicalMessage,
             AffectedPath = scene.SourceAbsolutePath,
-            AffectedVirtualPath = scene.AssetUri.AbsolutePath,
+            AffectedVirtualPath = AssetUriHelper.GetVirtualPath(scene.AssetUri),
             AffectedEntity = new AffectedScope
             {
                 SceneId = sceneId,
@@ -89,7 +90,7 @@ public static class ScriptSlotDiagnostics
                 NodeId = site.NodeId,
                 NodeName = site.NodeName,
                 ComponentName = "Scripting",
-                AssetVirtualPath = scene.AssetUri.AbsolutePath,
+                AssetVirtualPath = AssetUriHelper.GetVirtualPath(scene.AssetUri),
             },
             SuggestedAction = new PrimaryAction
             {

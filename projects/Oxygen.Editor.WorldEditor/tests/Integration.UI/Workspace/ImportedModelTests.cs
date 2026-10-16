@@ -6,9 +6,12 @@ using System.Numerics;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml.Controls;
+using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector.Geometry;
@@ -46,7 +49,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         var imported = libraryOnly ? await CreateImportedLibraryAsync(fixture, services, format, timeout.Token).ConfigureAwait(true) : null;
         await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
         using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
-        await using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus);
+        await using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IScriptAssetAuthoring>());
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         using var previewRegistration = fixture.RegisterWorkspacePublication(services, catalog);
         if (imported is null)

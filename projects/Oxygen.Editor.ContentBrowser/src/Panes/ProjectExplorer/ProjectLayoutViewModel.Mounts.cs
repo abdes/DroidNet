@@ -29,6 +29,24 @@ public partial class ProjectLayoutViewModel
         }
     }
 
+    // Folders created, deleted or renamed, in the editor or outside it, arrive from the catalog as a burst; one reload on
+    // the UI thread covers the burst.
+    private void OnFoldersChanged()
+    {
+        if (Interlocked.Exchange(ref this.folderReloadQueued, 1) == 0)
+        {
+            _ = hostingContext.DispatcherScheduler.Schedule(() =>
+            {
+                Volatile.Write(ref this.folderReloadQueued, 0);
+                if (!this.selectionDisposed)
+                {
+                    this.LogReloadingTreeAfterFolderChanges();
+                    _ = this.ReloadMountTreeAsync();
+                }
+            });
+        }
+    }
+
     // Reloads the tree only when the project's cooked outputs differ from the cooked folders it shows, so that
     // ordinary source changes leave the tree alone.
     private async Task RefreshPublishedFoldersAsync()

@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -40,8 +41,9 @@ public sealed partial class ContentPipelineService
         var expectedInputs = CookProducedSourceFile.ExpectedInputs(snapshot.Inputs, produced);
         var expectedFiles = expectedInputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
         var sourceInputs = graph.Assets.ToDictionary(static input => input.AssetUri);
-        var roots = previous.Roots.ToDictionary(static root => root.Mount, StringComparer.Ordinal);
-        var products = previous.Products.ToDictionary(static product => product.SourceUri);
+        var roots = previous.Roots.Where(root => !plan.DroppedRoots.Contains(root.Mount)).ToDictionary(static root => root.Mount, StringComparer.Ordinal);
+        var products = previous.Products.Where(product => !product.Outputs.Any(output => plan.DroppedRoots.Contains(output.RootMount)))
+            .ToDictionary(static product => product.SourceUri);
         var inventories = plan.PriorInventories.ToBuilder();
         var invalidatedRoots = previous.Roots.Where(root => !plan.ValidSharedRoots.Contains(root.Mount)).Select(static root => root.Mount).ToHashSet(StringComparer.Ordinal);
         foreach (var result in results.Where(static value => value.VerifiedRoot is not null))
@@ -146,7 +148,7 @@ public sealed partial class ContentPipelineService
             Diagnostics =
             [
                 .. result.Diagnostics.Where(diagnostic => diagnostic.Severity == Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Warning
-                    && (diagnostic.AffectedVirtualPath is null || string.Equals(diagnostic.AffectedVirtualPath, source.Key.AbsolutePath, StringComparison.Ordinal)
+                    && (diagnostic.AffectedVirtualPath is null || string.Equals(diagnostic.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(source.Key), StringComparison.Ordinal)
                         || source.Any(asset => string.Equals(asset.VirtualPath, diagnostic.AffectedVirtualPath, StringComparison.Ordinal)))),
             ],
         };
@@ -262,7 +264,10 @@ public sealed partial class ContentPipelineService
         CookRootRepair repair,
         CancellationToken cancellationToken)
     {
-        var plan = CookIncrementalPlanner.CreatePlan(snapshot.BuildFingerprint, snapshot.Inputs, graph, previous, inventories, repair.EmptyRoots);
+        var plan = CookIncrementalPlanner.CreatePlan(snapshot.BuildFingerprint, snapshot.Inputs, graph, previous, inventories, repair.EmptyRoots) with
+        {
+            DroppedRoots = [.. repair.EmptyRoots.Where(mount => !graph.Assets.Any(input => string.Equals(input.MountName, mount, StringComparison.OrdinalIgnoreCase)))],
+        };
         if (resolveScopes().Any(static scope => !scope.AllowImportedSourceChanges))
         {
             var blocked = ChangedImportedSourceDiagnostics(operation.OperationId, graph, previous, plan);
@@ -383,7 +388,9 @@ public sealed partial class ContentPipelineService
             return new(operation.OperationId, targetKind, OperationStatus.Failed, missing, [], Inspection: null, Validation: null);
         }
 
-        CookRunContext.Report(new(Message: "Already up to date."));
+        CookRunContext.Report(new(Message: plan.DroppedRoots.IsEmpty
+            ? "Already up to date."
+            : $"Removed the cooked content of {string.Join(", ", plan.DroppedRoots.Order(StringComparer.Ordinal))}: nothing is left to cook there."));
         var unchanged = new ContentCookResult(operation.OperationId, targetKind, plan.Diagnostics.IsEmpty ? OperationStatus.Succeeded : OperationStatus.SucceededWithWarnings, NormalizeDiagnostics(operation.OperationId, plan.Diagnostics), [], Inspection: null, Validation: null)
         {
             IsUpToDate = true,
@@ -391,7 +398,7 @@ public sealed partial class ContentPipelineService
             InputSnapshot = snapshot,
             InputsAreCurrent = await this.InputsAreCurrentAsync(snapshot, graph, resolveScopes, cancellationToken).ConfigureAwait(false),
         };
-        return await this.publication.PublishObservedBindingsAsync(operation, baseline, libraries, unchanged, cancellationToken).ConfigureAwait(false);
+        return await this.publication.PublishObservedBindingsAsync(operation, baseline, libraries, unchanged, plan.DroppedRoots, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<CookDependencyGraph> PrepareMissingScenesAsync(

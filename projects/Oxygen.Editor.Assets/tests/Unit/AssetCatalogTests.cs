@@ -292,6 +292,9 @@ public sealed class AssetCatalogTests
     {
         _ = records.Should().Contain(record => record.Uri == new Uri("asset:///project/Root.txt"));
         _ = records.Should().Contain(record => record.Uri == new Uri("asset:///Content/Shape.ogeo"));
+
+        // Each file belongs to one catalog: the project folder's catalog leaves out the Content mount.
+        _ = records.Should().NotContain(record => record.Uri == new Uri("asset:///project/Content/Shape.ogeo"));
     }
 
     private sealed class Fixture : IDisposable
@@ -326,8 +329,8 @@ public sealed class AssetCatalogTests
             _ = this.storage.Setup(value => value.Normalize(It.IsAny<string>())).Returns(string.Empty);
             _ = this.storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>()))
                 .Returns((string parent, string relative) => Path.Combine(parent, relative.Replace('/', Path.DirectorySeparatorChar)));
-            var rootFolder = MakeFolder(root, this.EnumerateRootAsync);
             var contentFolder = MakeFolder(content, this.EnumerateContentAsync);
+            var rootFolder = MakeFolder(root, this.EnumerateRootAsync, contentFolder);
             var missing = new Mock<IFolder>();
             _ = missing.Setup(value => value.ExistsAsync()).ReturnsAsync(value: false);
             _ = this.storage.Setup(value => value.GetFolderFromPathAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -367,21 +370,24 @@ public sealed class AssetCatalogTests
 
         public void Dispose() => this.directory.Delete(recursive: true);
 
-        private static IFolder MakeFolder(string path, Func<string, CancellationToken, IAsyncEnumerable<IDocument>> documents)
+        private static IFolder MakeFolder(string path, Func<string, CancellationToken, IAsyncEnumerable<IDocument>> documents, params IFolder[] children)
         {
             var folder = new Mock<IFolder>();
             _ = folder.SetupGet(value => value.Location).Returns(path);
             _ = folder.Setup(value => value.ExistsAsync()).ReturnsAsync(value: true);
-            _ = folder.Setup(value => value.GetFoldersAsync(It.IsAny<CancellationToken>())).Returns(EmptyFolders());
+            _ = folder.Setup(value => value.GetFoldersAsync(It.IsAny<CancellationToken>())).Returns(() => Folders(children));
             _ = folder.Setup(value => value.GetDocumentsAsync(It.IsAny<CancellationToken>()))
                 .Returns((CancellationToken token) => documents(path, token));
             return folder.Object;
         }
 
-        private static async IAsyncEnumerable<IFolder> EmptyFolders()
+        private static async IAsyncEnumerable<IFolder> Folders(IFolder[] children)
         {
             await Task.CompletedTask.ConfigureAwait(false);
-            yield break;
+            foreach (var child in children)
+            {
+                yield return child;
+            }
         }
 
         private async IAsyncEnumerable<IDocument> EnumerateRootAsync(string path, [EnumeratorCancellation] CancellationToken token)

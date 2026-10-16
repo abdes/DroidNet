@@ -4,7 +4,7 @@
 
 using AwesomeAssertions;
 using Json.Schema;
-using Oxygen.Editor.ContentBrowser.Scripts;
+using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.World.Scripting;
 using Oxygen.Managed.Core.Diagnostics;
 

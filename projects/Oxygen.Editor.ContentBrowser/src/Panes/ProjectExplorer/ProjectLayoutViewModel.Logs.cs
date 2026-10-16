@@ -250,6 +250,21 @@ public partial class ProjectLayoutViewModel
         => LogFolderDropRequested(this.logger, operation, string.Join(", ", folders), parent);
 #pragma warning restore CA1873
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Folder '{Folder}' no longer exists; showing '{Shown}' instead.")]
+    private partial void LogMissingSelectedFolder(string folder, string shown);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Reloading the sources tree: the asset catalog reported changed folders.")]
+    private partial void LogReloadingTreeAfterFolderChanges();
+
+    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Folder delete in the sources tree: [{Folders}].")]
+    private static partial void LogFolderDeleteRequested(ILogger logger, string folders);
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void LogFolderDeleteRequested(IEnumerable<string> folders)
+#pragma warning disable CA1873 // Compiled out of release builds by Conditional("DEBUG")
+        => LogFolderDeleteRequested(this.logger, string.Join(", ", folders));
+#pragma warning restore CA1873
+
     [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Reloading the sources tree after {Moves} folder moves and {Deleted} deletes.")]
     private static partial void LogReloadingTreeAfterFileChanges(ILogger logger, int moves, int deleted);
 

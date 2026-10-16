@@ -111,7 +111,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         var projects = new ProjectContextService();
         projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = root.Location, AuthoringMounts = [new("Content", "Content") { IsExpanded = false }], LocalFolderMounts = [], Scenes = [], });
         var state = new ContentBrowserState(projects);
-        using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var selected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         model.PropertyChanged += OnSelectionChanged;
         try
@@ -142,6 +142,50 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
                 && model.SelectedItem?.Label == "Fast")
             {
                 _ = selected.TrySetResult();
+            }
+        }
+    });
+
+    /// <summary>
+    /// A folder that no longer exists, deleted since it was selected or reached again through Back or Forward, is
+    /// replaced by its nearest folder that still exists.
+    /// </summary>
+    /// <returns>The asynchronous missing-folder regression.</returns>
+    [TestMethod]
+    public Task MissingSelectedFolderShowsItsNearestExistingFolder() => EnqueueAsync(async () =>
+    {
+        using var directory = new NavigationDirectory();
+        var props = CreateNavigationFolder("Props", directory.Path + "/Content/Props", []);
+        var content = CreateNavigationFolder("Content", directory.Path + "/Content", [props]);
+        var root = CreateNavigationFolder("Navigation", directory.Path, [content]);
+        var storage = new Mock<IStorageProvider>();
+        _ = storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>())).Returns((string parent, string child) => parent.TrimEnd('/') + "/" + child);
+        _ = storage.Setup(value => value.GetFolderFromPathAsync(root.Location, It.IsAny<CancellationToken>())).ReturnsAsync(root);
+        _ = storage.Setup(value => value.GetFolderFromPathAsync(content.Location, It.IsAny<CancellationToken>())).ReturnsAsync(content);
+        var projects = new ProjectContextService();
+        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = root.Location, AuthoringMounts = [new("Content", "Content") { IsExpanded = false }], LocalFolderMounts = [], Scenes = [], });
+        var state = new ContentBrowserState(projects);
+        using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        var shown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        model.PropertyChanged += OnSelectionChanged;
+        try
+        {
+            await model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!).ConfigureAwait(true);
+            state.SetSelectedFolders(["/Content/Props/Deleted folder"]);
+            await shown.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true);
+
+            _ = state.SelectedFolders.Should().Equal("/Content/Props");
+        }
+        finally
+        {
+            model.PropertyChanged -= OnSelectionChanged;
+        }
+
+        void OnSelectionChanged(object? sender, PropertyChangedEventArgs args)
+        {
+            if (args.PropertyName == nameof(ProjectLayoutViewModel.SelectedItem) && model.SelectedItem?.Label == "Props")
+            {
+                _ = shown.TrySetResult();
             }
         }
     });
@@ -200,7 +244,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
             message.Reply(Task.FromResult(succeeds));
         });
         var state = new ContentBrowserState(projects);
-        using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), messenger, CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), messenger, CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         await model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!).ConfigureAwait(true);
         var tree = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Single();
         var renamed = tree.VirtualFolderMounts.Single(mount => string.Equals(mount.MountPointName, "Library", StringComparison.Ordinal));
@@ -263,7 +307,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         };
         projects.Activate(first);
         using var changes = new System.Reactive.Subjects.Subject<Oxygen.Managed.Assets.Catalog.AssetChange>();
-        using var model = new ProjectLayoutViewModel(projects, storage.Object, new ContentBrowserState(projects), Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(changes), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        using var model = new ProjectLayoutViewModel(projects, storage.Object, new ContentBrowserState(projects), Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(changes), CreateNavigationFolders(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var load = model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!);
         try
         {

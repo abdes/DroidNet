@@ -40,6 +40,7 @@
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/DependencyScenario.cs" Link="Support/DependencyScenario.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/FailImportBatchRunner.cs" Link="Support/FailImportBatchRunner.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/FailingPublicationPreview.cs" Link="Support/FailingPublicationPreview.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/RecordingPublicationPreview.cs" Link="Support/RecordingPublicationPreview.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/IncrementalCookScenario.cs" Link="Support/IncrementalCookScenario.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/NativeContentPipelineFixture.cs" Link="Support/NativeContentPipelineFixture.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/NativeSourceFactsFixture.cs" Link="Support/NativeSourceFactsFixture.cs" />

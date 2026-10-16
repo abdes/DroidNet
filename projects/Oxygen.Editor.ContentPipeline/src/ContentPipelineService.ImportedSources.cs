@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -62,7 +63,7 @@ public sealed partial class ContentPipelineService
                 Domain = FailureDomain.AssetImport,
                 Severity = DiagnosticSeverity.Error,
                 Code = "asset_import.reimport_required",
-                AffectedVirtualPath = pair.Key.AbsolutePath,
+                AffectedVirtualPath = AssetUriHelper.GetVirtualPath(pair.Key),
                 Message = $"Reimport '{Path.GetFileName(Uri.UnescapeDataString(pair.Key.AbsolutePath))}' to confirm its source changes before automatic cooking updates it.",
             })];
     }
@@ -76,7 +77,7 @@ public sealed partial class ContentPipelineService
             Domain = FailureDomain.AssetImport,
             Severity = DiagnosticSeverity.Error,
             Code = AssetImportDiagnosticCodes.ImportFailed,
-            AffectedVirtualPath = uri.AbsolutePath,
+            AffectedVirtualPath = AssetUriHelper.GetVirtualPath(uri),
             Message = $"The retained model does not produce '{uri}'. Choose an existing imported output or correct the source before reimporting.",
         })];
     }
@@ -132,7 +133,7 @@ public sealed partial class ContentPipelineService
                     Domain = FailureDomain.AssetImport,
                     Severity = DiagnosticSeverity.Error,
                     Code = AssetImportDiagnosticCodes.ImportFailed,
-                    AffectedVirtualPath = source.AssetUri.AbsolutePath,
+                    AffectedVirtualPath = AssetUriHelper.GetVirtualPath(source.AssetUri),
                     Message = message,
                 },
             ],
@@ -224,7 +225,7 @@ public sealed partial class ContentPipelineService
             Severity = DiagnosticSeverity.Error,
             Code = AssetImportDiagnosticCodes.ImportFailed,
             AffectedPath = source.SourceAbsolutePath,
-            AffectedVirtualPath = source.AssetUri.AbsolutePath,
+            AffectedVirtualPath = AssetUriHelper.GetVirtualPath(source.AssetUri),
             Message = $"Import of '{settings.Name}' overlaps '{path}'. Choose a different destination without replacing existing assets.",
         };
     }

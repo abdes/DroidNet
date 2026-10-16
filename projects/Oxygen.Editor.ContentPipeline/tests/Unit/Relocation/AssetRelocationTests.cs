@@ -414,6 +414,23 @@ public sealed class AssetRelocationTests
         _ = report.FoldersChanged.Should().BeTrue();
     }
 
+    /// <summary>A copy reports the files and folders it created.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task CopyReportsTheCreatedFiles()
+    {
+        using var workspace = CreateContent();
+        var reports = new List<AssetFilesChangedEventArgs>();
+        workspace.Service.FilesChanged += (_, args) => reports.Add(args);
+
+        _ = await workspace.Service.CopyAsync(["/Content/Materials/Red.omat.json", "/Content/Textures"], "/Content/Geometry", this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var report = reports.Should().ContainSingle().Subject;
+        _ = report.CreatedFiles.Should().BeEquivalentTo(workspace.PathOf("Content/Geometry/Red.omat.json"), workspace.PathOf("Content/Geometry/Textures"));
+        _ = report.Moves.Should().BeEmpty();
+        _ = report.FoldersChanged.Should().BeTrue("a folder was copied");
+    }
+
     /// <summary>A committed delete reports exactly the files and folders it recycled.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
@@ -513,6 +530,37 @@ public sealed class AssetRelocationTests
             .Should().BeEquivalentTo("/Content/Geometry/Box.ogeo.json", "/Content/Scenes/Main.oscene.json");
         _ = (await workspace.Service.FindReferrersAsync("/Content/Textures", this.TestContext.CancellationToken).ConfigureAwait(false))
             .Should().BeEquivalentTo("/Content/Materials/Red.omat.json", "/Content/Scenes/Main.oscene.json");
+    }
+
+    /// <summary>The review of a delete lists only the files outside the deleted items that use them.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task DeleteReviewListsOnlyUsersThatStay()
+    {
+        using var workspace = CreateContent();
+
+        var referrers = await workspace.Service.FindReferrersOutsideAsync(
+            ["/Content/Materials/Red.omat.json", "/Content/Geometry/Box.ogeo.json"], this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = referrers.Should().Equal("/Content/Scenes/Main.oscene.json");
+    }
+
+    /// <summary>A catalog change, such as an edit outside the editor, makes the next search read the files again.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task CatalogChangeRefreshesTheReferrers()
+    {
+        using var workspace = CreateContent();
+        const string red = "/Content/Materials/Red.omat.json";
+        _ = await workspace.Service.FindReferrersAsync(red, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = workspace.Write("Content/Geometry/Crate.ogeo.json", Geometry.Replace("Box", "Crate", StringComparison.Ordinal));
+
+        var cached = await workspace.Service.FindReferrersAsync(red, this.TestContext.CancellationToken).ConfigureAwait(false);
+        workspace.ChangeInCatalog(new Uri("asset:///Content/Geometry/Crate.ogeo.json"));
+        var fresh = await workspace.Service.FindReferrersAsync(red, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = cached.Should().NotContain("/Content/Geometry/Crate.ogeo.json");
+        _ = fresh.Should().Contain("/Content/Geometry/Crate.ogeo.json");
     }
 
     private static RelocationWorkspace CreateContent()

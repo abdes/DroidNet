@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -137,8 +138,12 @@ public sealed partial class ContentCookCoordinator
         return request.TargetKind == CookTargetKind.Folder ? name : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(name));
     }
 
-    private static string FinishMessage(CookRunState state, bool stopped)
-        => stopped ? "Stopped so that a requested cook could run first. Cook on change cooks this again after it if it is still out of date." : state switch
+    // Names a run by its scope as well, since a moved file's old and new paths share a name.
+    private static string DescribeRun(CookRunSnapshot run)
+        => run.Request.ScopeUri is null ? run.DisplayName : $"{run.DisplayName} ({DescribeScope(run.Request)})";
+
+    private static string FinishMessage(CookRunState state, bool stopped, string? stoppedFor)
+        => stopped ? $"Stopped so that {stoppedFor ?? OtherWriterWork} could run first. Cook on change cooks this again after it if it is still out of date." : state switch
         {
             CookRunState.Succeeded => "Cook complete.",
             CookRunState.SucceededWithWarnings => "Cook completed with warnings.",
@@ -167,7 +172,7 @@ public sealed partial class ContentCookCoordinator
             run.Snapshot = snapshot = Append(run.Snapshot with { UnsavedDocuments = documents }, new(Message: "Waiting for participating documents to be saved.", State: CookRunState.NeedsSave));
         }
 
-        this.LogRunWaitingForSave(snapshot.DisplayName, documents.Length);
+        this.LogRunWaitingForSave(DescribeRun(snapshot), documents.Length);
         this.PublishRun(snapshot, reveal: !snapshot.Request.IsAutomatic);
         return resume;
     }
@@ -202,7 +207,7 @@ public sealed partial class ContentCookCoordinator
             this.revealQueueOutcome |= !snapshot.Request.IsAutomatic;
         }
 
-        this.LogRunQueued(snapshot.DisplayName, snapshot.Request.IsDemand ? "the active preview" : snapshot.Request.IsAutomatic ? "cook on change" : "a request");
+        this.LogRunQueued(DescribeRun(snapshot), snapshot.Request.IsDemand ? "the active preview" : snapshot.Request.IsAutomatic ? "cook on change" : "a request");
         this.PublishRun(snapshot, reveal: !snapshot.Request.IsAutomatic);
         return new RunProgress(this, operation.OperationId);
     }
@@ -290,6 +295,7 @@ public sealed partial class ContentCookCoordinator
         CookRunSnapshot snapshot;
         CookRunSnapshot? queueOutcome = null;
         bool stopped;
+        string? stoppedFor;
         lock (this.stateLock)
         {
             if (!this.runs.TryGetValue(operationId, out var run) || run.Snapshot.IsCompleted)
@@ -298,6 +304,7 @@ public sealed partial class ContentCookCoordinator
             }
 
             stopped = run.Preempted && state == CookRunState.Cancelled;
+            stoppedFor = run.PreemptedFor;
             snapshot = run.Snapshot;
             foreach (var diagnostic in diagnostics)
             {
@@ -321,7 +328,7 @@ public sealed partial class ContentCookCoordinator
             foreach (var asset in snapshot.Assets.Values.Where(static asset => asset.State is CookAssetState.Preparing or CookAssetState.Cooking))
             {
                 var issue = snapshot.Diagnostics.FirstOrDefault(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Fatal
-                    && string.Equals(diagnostic.AffectedVirtualPath, asset.AssetUri.AbsolutePath, StringComparison.Ordinal));
+                    && string.Equals(diagnostic.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(asset.AssetUri), StringComparison.Ordinal));
                 var assetState = issue is not null ? CookAssetState.Failed
                     : state == CookRunState.Cancelled ? CookAssetState.Cancelled
                     : asset.State == CookAssetState.Preparing ? CookAssetState.Skipped : CookAssetState.Unresolved;
@@ -332,12 +339,12 @@ public sealed partial class ContentCookCoordinator
                 }));
             }
 
-            snapshot = Append(snapshot, new(FinishMessage(state, stopped)));
+            snapshot = Append(snapshot, new(FinishMessage(state, stopped, stoppedFor)));
             run.Snapshot = snapshot = snapshot with { State = state, CompletedAt = DateTimeOffset.UtcNow };
             queueOutcome = this.TakeCompletedQueueOutcome();
         }
 
-        this.LogRunFinished(snapshot, stopped);
+        this.LogRunFinished(snapshot, stopped, stoppedFor);
         this.PublishCompletedQueue(snapshot, queueOutcome);
     }
 
@@ -402,6 +409,8 @@ public sealed partial class ContentCookCoordinator
         internal FileStream? RetryOwnership { get; set; }
 
         internal bool Preempted { get; set; }
+
+        internal string? PreemptedFor { get; set; }
     }
 
     private sealed class RunProgress(ContentCookCoordinator owner, Guid operationId) : IProgress<CookRunProgress>

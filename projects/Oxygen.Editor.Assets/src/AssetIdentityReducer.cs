@@ -38,7 +38,7 @@ internal sealed class AssetIdentityReducer
         ArgumentNullException.ThrowIfNull(cookScope);
 
         return records
-            .Where(record => IsBrowsableRecord(record.Uri, project))
+            .Where(static record => IsBrowsableRecord(record.Uri))
             .GroupBy(static record => record.Cooked is null ? GetLogicalKey(record.Uri) : AssetUriHelper.GetVirtualPath(record.Uri), StringComparer.OrdinalIgnoreCase)
             .Select(group => this.CreateItem(group.ToList(), project))
             .OfType<AssetEntry>()
@@ -112,7 +112,7 @@ internal sealed class AssetIdentityReducer
             _ => false,
         };
 
-    private static bool IsBrowsableRecord(Uri uri, ProjectContext project)
+    private static bool IsBrowsableRecord(Uri uri)
     {
         var path = AssetUriHelper.GetRelativePath(uri).Replace('\\', '/').TrimStart('/');
         if (IsImportSidecarPath(path))
@@ -120,24 +120,7 @@ internal sealed class AssetIdentityReducer
             return false;
         }
 
-        var mountPoint = AssetUriHelper.GetMountPoint(uri);
-        return !IsDerivedRootMount(mountPoint)
-            && (!string.Equals(mountPoint, "project", StringComparison.OrdinalIgnoreCase)
-            || (!path.StartsWith(".cooked/", StringComparison.OrdinalIgnoreCase)
-            && !path.StartsWith(".imported/", StringComparison.OrdinalIgnoreCase)
-            && !path.StartsWith(".build/", StringComparison.OrdinalIgnoreCase)
-            && !project.AuthoringMounts.Any(mount =>
-        {
-            var mountRelativePath = mount.RelativePath.Replace('\\', '/').Trim('/');
-            return path.Equals(mountRelativePath, StringComparison.OrdinalIgnoreCase)
-                   || path.StartsWith(mountRelativePath + "/", StringComparison.OrdinalIgnoreCase);
-        })
-            && !project.LocalFolderMounts.Any(mount =>
-        {
-            var relative = Path.GetRelativePath(project.ProjectRoot, mount.AbsolutePath).Replace('\\', '/');
-            return relative is not "." and not ".." && !relative.StartsWith("../", StringComparison.Ordinal)
-                && (path.Equals(relative, StringComparison.OrdinalIgnoreCase) || path.StartsWith(relative + "/", StringComparison.OrdinalIgnoreCase));
-        })));
+        return !IsDerivedRootMount(AssetUriHelper.GetMountPoint(uri));
     }
 
     private static bool IsImportSidecarPath(string path)

@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ContentBrowser.Scripts;
+namespace Oxygen.Editor.ContentPipeline.Authoring;
 
 /// <summary>
 /// The text New Script and New Input File write.

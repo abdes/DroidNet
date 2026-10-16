@@ -224,7 +224,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
 
     private CookPreemptedException? ToPreempted(Guid operationId, Exception exception)
         => exception is OperationCanceledException && this.IsPreempted(operationId)
-            ? new CookPreemptedException("The cook on change stopped so that a requested cook could run first.", exception)
+            ? new CookPreemptedException("The cook on change stopped so that other work on the project could run first.", exception)
             : null;
 
     private void EndRequest(ContentCookOperation operation, FileStream? ownership, bool acquired, CancellationTokenSource requestCancellation)

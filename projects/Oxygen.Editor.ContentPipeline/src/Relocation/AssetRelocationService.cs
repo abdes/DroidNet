@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -19,23 +20,36 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// <param name="projects">The active project.</param>
 /// <param name="documents">The open documents and their unsaved state.</param>
 /// <param name="files">The atomic file store.</param>
+/// <param name="catalog">The asset catalog; its changes make the cached references stale.</param>
 /// <param name="logger">Records every move, rewrite, copy, delete, rejection and restore.</param>
 /// <param name="redirects">The session's relocation record for undo, redo and paste; optional.</param>
 public sealed partial class AssetRelocationService(IContentCookCoordinator coordinator, IProjectContextService projects, ICookDocumentRegistry documents, IAtomicFileStore files,
-    ILogger<AssetRelocationService>? logger = null, AssetRedirects? redirects = null)
-    : IAssetRelocationService
+    IAssetCatalog catalog, ILogger<AssetRelocationService>? logger = null, AssetRedirects? redirects = null)
+    : IAssetRelocationService, IDisposable
 {
     private readonly ILogger logger = (ILogger?)logger ?? NullLogger.Instance;
     private readonly Lock sync = new();
     private readonly List<IAssetRelocationParticipant> participants = [];
     private Task<AuthoredReferenceIndex>? cached;
     private ProjectContext? cachedProject;
+    private IDisposable? catalogChanges;
 
     /// <inheritdoc/>
     public event EventHandler<AssetFilesChangedEventArgs>? FilesChanged;
 
     /// <summary>Gets or sets a test hook that fails a relocation after this many applied steps.</summary>
     internal int? FailAfterStep { get; set; }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        lock (this.sync)
+        {
+            this.catalogChanges?.Dispose();
+            this.catalogChanges = null;
+            this.cached = null;
+        }
+    }
 
     /// <inheritdoc/>
     public IDisposable AddParticipant(IAssetRelocationParticipant participant)
@@ -84,6 +98,8 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         Task<AuthoredReferenceIndex> index;
         lock (this.sync)
         {
+            // Content changed outside a relocation (a save, an import, an external edit) makes the index stale.
+            this.catalogChanges ??= catalog.Changes.Subscribe(_ => this.Invalidate());
             if (this.cached?.IsFaulted != false || this.cached.IsCanceled || !ReferenceEquals(this.cachedProject, project))
             {
                 this.cachedProject = project;
@@ -97,11 +113,28 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     }
 
     /// <inheritdoc/>
-    public Task<IReadOnlyList<string>> CopyAsync(IReadOnlyList<string> sources, string targetFolder, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> FindReferrersOutsideAsync(IReadOnlyList<string> sources, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        this.Invalidate();
+        var referrers = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var source in sources)
+        {
+            referrers.UnionWith((await this.FindReferrersAsync(source, cancellationToken).ConfigureAwait(false))
+                .Where(referrer => !sources.Any(deleted => RelocationPaths.IsSameOrInside(referrer, deleted))));
+        }
+
+        return [.. referrers];
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<string>> CopyAsync(IReadOnlyList<string> sources, string targetFolder, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(targetFolder);
-        return coordinator.RunAsync<IReadOnlyList<string>>(
+        var caller = SynchronizationContext.Current;
+        RelocationFileMove[] created = [];
+        var copies = await coordinator.RunAsync<IReadOnlyList<string>>(
             (operation, token) => this.LoggedAsync<IReadOnlyList<string>>("Copy", async () =>
             {
                 var project = operation.Project;
@@ -123,9 +156,12 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 coordinator.VerifyWriter(operation);
                 await this.WriteCopiesAsync(map, index.Mounts).ConfigureAwait(false);
                 this.Invalidate();
+                created = [.. map.Moves];
                 return copies;
             }),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        this.RaiseFilesChanged(caller, AssetFilesChangedEventArgs.ForCreated([.. created.Select(static copy => copy.Target)], created.Any(static copy => copy.IsDirectory)));
+        return copies;
     }
 
     /// <inheritdoc/>
@@ -188,15 +224,6 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         if (deleted.Count != 0)
         {
             this.RaiseFilesChanged(caller, new([], [], deleted, foldersDeleted));
-        }
-    }
-
-    /// <inheritdoc/>
-    public void Invalidate()
-    {
-        lock (this.sync)
-        {
-            this.cached = null;
         }
     }
 
@@ -412,6 +439,14 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             }
 
             throw new AssetRelocationException("The copy failed and was removed: " + failure.Message, failure);
+        }
+    }
+
+    private void Invalidate()
+    {
+        lock (this.sync)
+        {
+            this.cached = null;
         }
     }
 

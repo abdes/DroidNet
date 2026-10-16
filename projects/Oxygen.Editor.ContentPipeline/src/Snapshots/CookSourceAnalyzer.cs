@@ -11,6 +11,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -82,7 +83,7 @@ internal sealed partial class CookSourceAnalyzer(
         foreach (var job in report.Jobs)
         {
             var owner = prepared.FirstOrDefault(source => string.Equals(source.Job.Id, job.Id, StringComparison.Ordinal))?.Input;
-            diagnostics.AddRange(job.Diagnostics.Select(issue => issue with { AffectedVirtualPath = owner?.AssetUri.AbsolutePath }));
+            diagnostics.AddRange(job.Diagnostics.Select(issue => issue with { AffectedVirtualPath = owner is null ? null : AssetUriHelper.GetVirtualPath(owner.AssetUri) }));
             foreach (var path in job.Files.Select(static file => file.Path).Concat(job.Observations.Select(static observation => observation.Path)).Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 var relative = Path.GetRelativePath(operation.Project.ProjectRoot, path).Replace('\\', '/');
@@ -96,7 +97,7 @@ internal sealed partial class CookSourceAnalyzer(
                         Code = "asset_cook.source_outside_project",
                         Message = $"Cook dependency '{path}' is outside the project. Retain it inside the project before cooking.",
                         AffectedPath = path,
-                        AffectedVirtualPath = owner?.AssetUri.AbsolutePath,
+                        AffectedVirtualPath = owner is null ? null : AssetUriHelper.GetVirtualPath(owner.AssetUri),
                     });
                 }
             }
@@ -113,7 +114,7 @@ internal sealed partial class CookSourceAnalyzer(
                 Code = "asset_cook.analysis_incomplete",
                 Message = "Native source analysis did not complete.",
                 AffectedPath = owner?.SourceAbsolutePath ?? job.SourcePath,
-                AffectedVirtualPath = owner?.AssetUri.AbsolutePath,
+                AffectedVirtualPath = owner is null ? null : AssetUriHelper.GetVirtualPath(owner.AssetUri),
             });
         }
 
@@ -146,7 +147,7 @@ internal sealed partial class CookSourceAnalyzer(
             var source = prepared[index];
             var facts = report.Jobs[index];
             if (!facts.Complete || diagnostics.Any(issue => issue.Severity >= DiagnosticSeverity.Error
-                && string.Equals(issue.AffectedVirtualPath, source.Input.AssetUri.AbsolutePath, StringComparison.Ordinal)))
+                && string.Equals(issue.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(source.Input.AssetUri), StringComparison.Ordinal)))
             {
                 continue;
             }
@@ -364,10 +365,10 @@ internal sealed partial class CookSourceAnalyzer(
             Domain = FailureDomain.AssetImport,
             Severity = DiagnosticSeverity.Error,
             Code = "material.texture_reference_invalid",
-            Message = $"Material '{input.AssetUri.AbsolutePath}' texture channel '{channel}' {issue}.",
+            Message = $"Material '{AssetUriHelper.GetVirtualPath(input.AssetUri)}' texture channel '{channel}' {issue}.",
             TechnicalMessage = details,
             AffectedPath = affectedPath,
-            AffectedVirtualPath = input.AssetUri.AbsolutePath,
+            AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
         };
 
     // The scripts and assets a scene's slots use are cooked by its sidecar job, which native analysis does not see.

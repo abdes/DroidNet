@@ -18,16 +18,18 @@ using Oxygen.Editor.Shell.Documents;
 
 namespace Oxygen.Editor.ContentBrowser.Relocation;
 
-/// <summary>Runs Content Browser renames, moves, copies and deletes, then refreshes the browser and open documents.</summary>
+/// <summary>Runs Content Browser renames, moves, copies and deletes, and reports their outcomes.</summary>
 /// <remarks>
 /// Renames and moves are recorded in the session's global history, so they undo and redo in order with everything
-/// else recorded there; copies, deletes and scene commands are not recorded and leave the history as it is.
+/// else recorded there; copies, deletes and scene commands are not recorded and leave the history as it is. The
+/// relocation service reports every file it changed, and the asset feed, the sources tree and open documents follow
+/// that report, whoever asked for the change.
 /// </remarks>
 /// <param name="relocation">Applies the file changes.</param>
 /// <param name="histories">Holds the global history that renames and moves are recorded in.</param>
 /// <param name="dialogs">Asks for names, and confirms deleting content that other content uses.</param>
 /// <param name="messenger">Hands scene commands to the open scene workspace.</param>
-/// <param name="assets">The browser's asset rows.</param>
+/// <param name="assets">The asset feed, read again after a scene command.</param>
 /// <param name="shell">Moves deleted files to the Recycle Bin.</param>
 /// <param name="logger">Records requests and outcomes.</param>
 public sealed partial class AssetRelocationWorkflow(
@@ -42,9 +44,6 @@ public sealed partial class AssetRelocationWorkflow(
     private const int ListedItems = 8;
 
     private readonly ILogger logger = (ILogger?)logger ?? NullLogger.Instance;
-
-    // Content changed outside a relocation (a save, an import, an external edit) makes cached referrers stale.
-    private readonly IDisposable contentChanges = assets.Items.Subscribe(_ => relocation.Invalidate());
     private readonly DroidNet.TimeMachine.HistoryKeeper history = histories.GlobalHistory;
     private readonly HistoryObserver historyObserver = new(histories.GlobalHistory);
 
@@ -83,7 +82,6 @@ public sealed partial class AssetRelocationWorkflow(
                 return null;
             }
 
-            await this.AfterChangeAsync().ConfigureAwait(true);
             return this.Publish(new(Succeeded: true, title, DescribeResult(applied)));
         }
         catch (AssetRelocationException error)
@@ -106,7 +104,6 @@ public sealed partial class AssetRelocationWorkflow(
         try
         {
             var copies = await relocation.CopyAsync(sources, targetFolder, CancellationToken.None).ConfigureAwait(true);
-            await this.AfterChangeAsync().ConfigureAwait(true);
             var message = copies.Count == 1
                 ? $"Created {RelocationPaths.GetName(copies[0])}."
                 : string.Create(CultureInfo.CurrentCulture, $"Created {copies.Count} copies in {targetFolder}.");
@@ -119,23 +116,31 @@ public sealed partial class AssetRelocationWorkflow(
     }
 
     /// <inheritdoc/>
+    public async Task<AssetRelocationOutcome?> PasteAsync(IReadOnlyList<string> sources, bool move, string targetFolder)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(targetFolder);
+        if (!move)
+        {
+            return await this.CopyAsync(sources, targetFolder, "Paste").ConfigureAwait(true);
+        }
+
+        var moves = sources.Where(path => !string.Equals(RelocationPaths.GetParent(path), targetFolder, StringComparison.OrdinalIgnoreCase))
+            .Select(path => new AssetRelocationMove(path, RelocationPaths.Combine(targetFolder, RelocationPaths.GetName(path)))).ToArray();
+        return moves.Length == 0 ? null : await this.RelocateAsync(new AssetRelocationRequest { Moves = moves }, "Move").ConfigureAwait(true);
+    }
+
+    /// <inheritdoc/>
     public async Task<AssetRelocationOutcome?> DeleteAsync(IReadOnlyList<string> sources)
     {
         ArgumentNullException.ThrowIfNull(sources);
         const string title = "Delete";
-        relocation.Invalidate();
-        var referrers = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var source in sources)
-        {
-            referrers.UnionWith((await relocation.FindReferrersAsync(source, CancellationToken.None).ConfigureAwait(true))
-                .Where(referrer => !sources.Any(deleted => RelocationPaths.IsSameOrInside(referrer, deleted))));
-        }
-
+        var referrers = await relocation.FindReferrersOutsideAsync(sources, CancellationToken.None).ConfigureAwait(true);
         if (referrers.Count != 0)
         {
             var review = new StringBuilder()
                 .Append(CultureInfo.CurrentCulture, $"{Describe(sources)} {(sources.Count == 1 ? "is" : "are")} used by:").AppendLine();
-            AppendList(review, referrers.ToArray());
+            AppendList(review, referrers);
             _ = review.AppendLine().Append("Those references will show as missing. The files go to the Recycle Bin.");
             if (!await dialogs.ConfirmAsync(title, review.ToString()).ConfigureAwait(true))
             {
@@ -160,7 +165,6 @@ public sealed partial class AssetRelocationWorkflow(
             return this.Publish(new(Succeeded: false, title, error.Message));
         }
 
-        await this.AfterChangeAsync().ConfigureAwait(true);
         return this.Publish(new(Succeeded: true, title, $"Moved {Describe(sources)} to the Recycle Bin. Restore {(sources.Count == 1 ? "it" : "them")} from there to bring {(sources.Count == 1 ? "it" : "them")} back."));
     }
 
@@ -202,7 +206,8 @@ public sealed partial class AssetRelocationWorkflow(
             return this.Publish(new(Succeeded: false, title, error));
         }
 
-        await this.AfterChangeAsync().ConfigureAwait(true);
+        // The scene workspace changes scene files without reporting them, so the rows are read again here.
+        await assets.RefreshAsync().ConfigureAwait(true);
         var message = command switch
         {
             SceneAssetCommand.Rename => $"Renamed scene '{sceneName}' to '{newName}'.",
@@ -213,11 +218,7 @@ public sealed partial class AssetRelocationWorkflow(
     }
 
     /// <inheritdoc/>
-    public void Dispose()
-    {
-        this.contentChanges.Dispose();
-        this.historyObserver.Dispose();
-    }
+    public void Dispose() => this.historyObserver.Dispose();
 
     /// <inheritdoc/>
     public Task<IReadOnlyList<string>> FindReferrersAsync(string virtualPath, CancellationToken cancellationToken)
@@ -272,21 +273,19 @@ public sealed partial class AssetRelocationWorkflow(
     private static string Describe(IReadOnlyList<string> sources)
         => sources.Count == 1 ? $"'{RelocationPaths.GetName(sources[0])}'" : string.Create(CultureInfo.CurrentCulture, $"{sources.Count} items");
 
-    private static void AppendList(StringBuilder text, string[] items)
+    private static void AppendList(StringBuilder text, IReadOnlyList<string> items)
     {
         foreach (var item in items.Take(ListedItems))
         {
             _ = text.Append("  • ").Append(item).AppendLine();
         }
 
-        if (items.Length > ListedItems)
+        if (items.Count > ListedItems)
         {
-            _ = text.Append(CultureInfo.CurrentCulture, $"  and {items.Length - ListedItems} more").AppendLine();
+            _ = text.Append(CultureInfo.CurrentCulture, $"  and {items.Count - ListedItems} more").AppendLine();
         }
     }
 
-    // Undo reverses only the change just made: after a copy, delete or scene change, reversing an older rename would
-    // undo something the user no longer sees as the last step.
     // A rejected or rolled-back undo or redo changed nothing, so its entry stays in the history.
     private async Task<AssetRelocationOutcome?> ReplayAsync(bool undo)
     {
@@ -314,7 +313,6 @@ public sealed partial class AssetRelocationWorkflow(
             return this.Publish(new(Succeeded: false, $"{title} {label}", error.Message));
         }
 
-        await this.AfterChangeAsync().ConfigureAwait(true);
         var message = undo ? "Restored the previous names, locations and references." : "Applied the names, locations and references again.";
         return this.Publish(new(Succeeded: true, $"{title} {label}", message));
     }
@@ -325,14 +323,6 @@ public sealed partial class AssetRelocationWorkflow(
         this.LogOutcome(outcome.Title, outcome.Succeeded, outcome.Message);
         this.Completed?.Invoke(this, new(outcome));
         return outcome;
-    }
-
-    // Refreshes rows and pickers at once; the sources tree and open documents follow the relocation service's report,
-    // and the changed files reach cook on change through the asset catalog.
-    private async Task AfterChangeAsync()
-    {
-        relocation.Invalidate();
-        await assets.RefreshAsync().ConfigureAwait(true);
     }
 
     /// <summary>Forwards the changes of a history's undo and redo entries until disposed.</summary>

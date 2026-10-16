@@ -26,9 +26,6 @@ public partial class AssetsViewModel
     private const string ReadOnlyReason = "Cooked, built-in and mounted content is read-only.";
     private const string UnavailableReason = "Not available without an open project workspace.";
 
-    private IReadOnlyList<string> clipboard = [];
-    private bool clipboardIsCut;
-
     // What the selected rows are on disk, read once per selection or command-state change instead of per query.
     private IReadOnlyList<AssetTarget>? selectionTargets;
 
@@ -73,8 +70,8 @@ public partial class AssetsViewModel
     /// <summary>Gets what Paste does, or why it is unavailable.</summary>
     public string PasteToolTip => Explain(
         "Paste (Ctrl+V)",
-        this.clipboard.Count == 0 ? "Cut or copy items first." : this.IsSelectedFolderWritable() ? null : "Choose a folder under Content or another authoring folder.",
-        this.clipboardIsCut ? "Moves the cut items here." : "Copies the items here.");
+        contentBrowserState.Clipboard.Count == 0 ? "Cut or copy items first." : this.IsSelectedFolderWritable() ? null : "Choose a folder under Content or another authoring folder.",
+        contentBrowserState.IsClipboardCut ? "Moves the cut items here." : "Copies the items here.");
 
     /// <summary>Gets what Duplicate does, or why it is unavailable.</summary>
     public string DuplicateToolTip => Explain("Duplicate (Ctrl+D)", this.GetDuplicateBlocker(), "Creates a copy next to each item.");
@@ -365,12 +362,10 @@ public partial class AssetsViewModel
             return;
         }
 
-        this.clipboard = [.. this.DescribeSelection().Select(static target => target.VirtualPath!)];
-        this.clipboardIsCut = isCut;
-        this.NotifyAssetActions();
+        contentBrowserState.SetClipboard([.. this.DescribeSelection().Select(static target => target.VirtualPath!)], isCut);
     }
 
-    private bool CanPaste() => relocation is not null && this.clipboard.Count != 0 && this.IsSelectedFolderWritable();
+    private bool CanPaste() => relocation is not null && contentBrowserState.Clipboard.Count != 0 && this.IsSelectedFolderWritable();
 
     [RelayCommand(CanExecute = nameof(CanPaste))]
     private async Task PasteAsync()
@@ -381,23 +376,10 @@ public partial class AssetsViewModel
         }
 
         var folder = Uri.UnescapeDataString(this.GetSelectedFolderUri().AbsolutePath).TrimEnd('/');
-        if (!this.clipboardIsCut)
+        var isCut = contentBrowserState.IsClipboardCut;
+        if (await relocation.PasteAsync(contentBrowserState.Clipboard, isCut, folder).ConfigureAwait(true) is { Succeeded: true } && isCut)
         {
-            _ = await relocation.CopyAsync(this.clipboard, folder, "Paste").ConfigureAwait(true);
-            return;
-        }
-
-        var moves = this.clipboard.Where(path => !string.Equals(RelocationPaths.GetParent(path), folder, StringComparison.OrdinalIgnoreCase))
-            .Select(path => new AssetRelocationMove(path, RelocationPaths.Combine(folder, RelocationPaths.GetName(path)))).ToArray();
-        if (moves.Length == 0)
-        {
-            return;
-        }
-
-        if (await relocation.RelocateAsync(new AssetRelocationRequest { Moves = moves }, "Move").ConfigureAwait(true) is { Succeeded: true })
-        {
-            this.clipboard = [];
-            this.NotifyAssetActions();
+            contentBrowserState.ClearClipboard();
         }
     }
 

@@ -21,6 +21,12 @@ internal sealed record CookIncrementalPlan(
     /// <summary>Gets committed inventory metadata for comparison with candidate outputs; this is not a live read lease.</summary>
     public ImmutableDictionary<string, CookedInventoryReport> PriorInventories { get; init; } = ImmutableDictionary<string, CookedInventoryReport>.Empty;
 
+    /// <summary>
+    /// Gets the mounts whose every product was retired and that nothing in this cook goes into. They leave the
+    /// publication, as if never cooked, rather than being published as empty roots.
+    /// </summary>
+    public ImmutableHashSet<string> DroppedRoots { get; init; } = ImmutableHashSet<string>.Empty.WithComparer(StringComparer.Ordinal);
+
     /// <summary>Gets output descriptors whose shared resources and own bytes remain verified.</summary>
     public ImmutableHashSet<(string rootMount, string virtualPath)> VerifiedOutputs { get; init; } = [];
 

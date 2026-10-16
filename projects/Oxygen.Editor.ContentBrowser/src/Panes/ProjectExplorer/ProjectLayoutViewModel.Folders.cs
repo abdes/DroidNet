@@ -4,7 +4,9 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls;
+using DroidNet.Controls.Menus;
 using DroidNet.Storage;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline.Relocation;
@@ -12,8 +14,8 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
 /// <summary>
-/// New Folder, folder renames and folder moves. A folder's path is part of every asset identity inside it, so
-/// renaming or moving a populated folder is a relocation that updates every reference to its assets.
+/// New Folder, folder renames, moves, copies and deletes. A folder's path is part of every asset identity inside it,
+/// so renaming or moving a populated folder is a relocation that updates every reference to its assets.
 /// </summary>
 public partial class ProjectLayoutViewModel
 {
@@ -115,6 +117,65 @@ public partial class ProjectLayoutViewModel
             : TreeDropResult.Rejected;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The folders go on the Content Browser's clipboard instead of the tree's own, which copies rows only, so Paste,
+    /// in the tree or the asset list, copies them as folders.
+    /// </remarks>
+    public override Task CopyItemsAsync(IReadOnlyList<ITreeItem> items)
+    {
+        this.PutOnClipboard(items, isCut: false);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The folders go on the Content Browser's clipboard; the browser's Paste moves them.</remarks>
+    public override Task CutItemsAsync(IReadOnlyList<ITreeItem> items)
+    {
+        this.PutOnClipboard(items, isCut: true);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Pastes the Content Browser's clipboard into the focused folder, as the asset list's Paste does.</summary>
+    /// <returns>Completion after the paste, or at once when there is nothing to paste or no folder to paste into.</returns>
+    public async Task PasteIntoFocusedFolderAsync()
+    {
+        if (relocation is null || contentBrowserState.Clipboard.Count == 0
+            || (this.FocusedItem?.Item ?? this.SelectedItem) is not { } target || !IsWritable(target) || this.GetVirtualPath(target) is not { } folder)
+        {
+            return;
+        }
+
+        var isCut = contentBrowserState.IsClipboardCut;
+        if (await relocation.PasteAsync(contentBrowserState.Clipboard, isCut, folder).ConfigureAwait(true) is { Succeeded: true } && isCut)
+        {
+            contentBrowserState.ClearClipboard();
+        }
+    }
+
+    /// <summary>Deletes the selected folders, through the same confirmation and Recycle Bin as the asset list.</summary>
+    /// <returns>Completion after the delete, or at once when no selected folder can be deleted.</returns>
+    public Task DeleteSelectedFoldersAsync() => this.DeleteFoldersAsync(this.GetAuthoredFolders(this.ShownItems.Where(static item => item.IsSelected)));
+
+    /// <summary>Builds the context menu of a folder row.</summary>
+    /// <param name="item">The row the menu was requested on.</param>
+    /// <returns>The menu; it has no items for rows that are not folders under an authoring mount.</returns>
+    public IMenuSource BuildFolderMenu(ITreeItem item)
+    {
+        var builder = new MenuBuilder();
+        if (relocation is not null && this.GetAuthoredFolders([item]) is { Length: > 0 } folders)
+        {
+            _ = builder.AddMenuItem(new MenuItemData
+            {
+                Text = "Delete",
+                Icon = new Microsoft.UI.Xaml.Controls.SymbolIconSource { Symbol = Microsoft.UI.Xaml.Controls.Symbol.Delete },
+                Command = new AsyncRelayCommand(() => this.DeleteFoldersAsync(folders)),
+            });
+        }
+
+        return builder.Build();
+    }
+
     /// <summary>Returns a folder name that does not exist yet: "New folder", then "New folder (2)" and so on.</summary>
     /// <param name="exists">Tells whether a name is already taken.</param>
     /// <returns>The first free name.</returns>
@@ -188,7 +249,33 @@ public partial class ProjectLayoutViewModel
         return false;
     }
 
-    // Folders that moved or were deleted change the tree and the selected folders; reload both from disk.
+    // The folders under an authoring mount: they can be copied, moved and deleted. Mount roots are changed in Mounts,
+    // and the importer's fixed folders are rejected by the delete itself.
+    private string[] GetAuthoredFolders(IEnumerable<ITreeItem> items)
+        => [.. items.OfType<FolderTreeItemAdapter>().Where(IsUnderAuthoringMount).Select(this.GetVirtualPath).OfType<string>()];
+
+    private async Task DeleteFoldersAsync(string[] folders)
+    {
+        if (relocation is null || folders.Length == 0)
+        {
+            return;
+        }
+
+        this.LogFolderDeleteRequested(folders);
+        _ = await relocation.DeleteAsync(folders).ConfigureAwait(true);
+    }
+
+    // A selection without any authored folder leaves the clipboard as it is.
+    private void PutOnClipboard(IReadOnlyList<ITreeItem> items, bool isCut)
+    {
+        var folders = this.GetAuthoredFolders(items);
+        if (folders.Length != 0)
+        {
+            contentBrowserState.SetClipboard(folders, isCut);
+        }
+    }
+
+    // Folders that moved, were created or were deleted change the tree and the selected folders; reload both from disk.
     private void OnFilesChanged(object? sender, AssetFilesChangedEventArgs args) => _ = this.FollowChangedFilesAsync(args);
 
     private async Task FollowChangedFilesAsync(AssetFilesChangedEventArgs message)
