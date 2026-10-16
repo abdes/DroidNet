@@ -22,7 +22,6 @@ public sealed class ProjectAssetFilesTests
         ProjectRoot = ProjectRoot,
         AuthoringMounts = [new ProjectMountPoint("Content", "Content"), new ProjectMountPoint("Levels", @"Content\Levels")],
         LocalFolderMounts = [new LocalFolderMount("Shared", @"D:\Library")],
-        Scenes = [],
     };
 
     [TestMethod]

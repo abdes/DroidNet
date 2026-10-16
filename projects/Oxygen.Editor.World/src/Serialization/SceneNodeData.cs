@@ -2,13 +2,22 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json.Serialization;
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
 /// Data transfer object for scene node.
 /// </summary>
-public record SceneNodeData : GameObjectData
+public record SceneNodeData : NamedData
 {
+    /// <summary>
+    /// Gets or initializes the identity of the node.
+    /// </summary>
+    [JsonPropertyOrder(-1)]
+    public required NodeId Id { get; init; }
+
     /// <summary>
     /// Gets or initializes the list of components (including TransformComponent).
     /// TransformComponent is represented by a <see cref="TransformData"/> entry.

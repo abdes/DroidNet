@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>An immutable node-creation request with authored identity.</summary>
@@ -9,4 +11,4 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="NodeId">The authored node identity.</param>
 /// <param name="ParentId">The optional authored parent identity.</param>
 /// <param name="InitializeWorldAsRoot">Whether initial world transform treats the node as a root.</param>
-public sealed record RuntimeCreateNode(string Name, Guid NodeId, Guid? ParentId, bool InitializeWorldAsRoot) : RuntimeWorldCommand;
+public sealed record RuntimeCreateNode(string Name, NodeId NodeId, NodeId? ParentId, bool InitializeWorldAsRoot) : RuntimeWorldCommand;

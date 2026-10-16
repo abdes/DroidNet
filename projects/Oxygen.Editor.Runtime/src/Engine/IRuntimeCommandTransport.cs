@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Internal native conversion boundary, substitutable without constructing native facades.</summary>
@@ -34,7 +36,7 @@ internal interface IRuntimeCommandTransport
     /// <summary>Reads node properties and currently resolved assets after earlier mutations.</summary>
     /// <param name="nodeId">The authored node identity.</param>
     /// <returns>The native node state.</returns>
-    public Task<RuntimeNodeState> ObserveNodeAsync(Guid nodeId);
+    public Task<RuntimeNodeState> ObserveNodeAsync(NodeId nodeId);
 
     /// <summary>Performs the native ExecuteInput operation.</summary>
     /// <param name="viewId">The viewId transport value.</param>

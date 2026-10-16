@@ -198,7 +198,7 @@ public partial class SceneEditorViewModel
     [RelayCommand]
     private void SelectEnvironment()
         => this.container.Resolve<ISceneSelectionService>(IfUnresolved.ReturnDefault)?.Publish(
-            this.Metadata.DocumentId,
+            this.Document.Id,
             new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNodeId: null, PrimaryFolderId: null),
             SelectionSource);
 }

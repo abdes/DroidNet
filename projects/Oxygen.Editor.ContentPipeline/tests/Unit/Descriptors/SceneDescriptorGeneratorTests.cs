@@ -935,7 +935,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var scene = new Scene(project)
         {
             Name = "Main",
-            Id = new Guid(0x10000000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1),
+            Id = SceneId.FromValue(new Guid(0x10000000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)),
         };
         scene.SetEnvironment(new SceneEnvironmentData
         {

@@ -85,17 +85,6 @@ internal static class AssetRelocationPlanner
         }
 
         var name = RelocationPaths.GetName(move.SourcePath);
-        if (!isDirectory && RelocationPaths.IsEditorScene(project, source))
-        {
-            throw new AssetRelocationException($"Scenes stay in {Constants.ContentFolderName}/{Constants.ScenesFolderName}; rename '{RelocationPaths.GetDisplayName(name)}' with Rename on the scene.");
-        }
-
-        if (isDirectory ? Directory.EnumerateFiles(source, "*" + Constants.SceneFileExtension, SearchOption.AllDirectories).Any() && ContainsEditorScenesTarget(project, target, source)
-            : RelocationPaths.IsEditorScene(project, target))
-        {
-            throw new AssetRelocationException($"Scenes are created with New Scene; a scene file cannot be moved into {Constants.ContentFolderName}/{Constants.ScenesFolderName}.");
-        }
-
         foreach (var import in index.Imports)
         {
             var bundle = Path.GetFullPath(Path.Combine(project.ProjectRoot, import.Settings.BundleRoot));
@@ -213,13 +202,6 @@ internal static class AssetRelocationPlanner
 
     private static bool IsSameOrInside(string path, string folder)
         => string.Equals(path, folder, StringComparison.OrdinalIgnoreCase) || path.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-
-    private static bool ContainsEditorScenesTarget(ProjectContext project, string target, string source)
-    {
-        var scenes = RelocationPaths.GetEditorScenesFolder(project);
-        return Directory.EnumerateFiles(source, "*" + Constants.SceneFileExtension, SearchOption.AllDirectories)
-            .Any(file => string.Equals(Path.GetDirectoryName(target + file[source.Length..]), scenes, StringComparison.OrdinalIgnoreCase));
-    }
 
     private static void AddFile(RelocationMap map, string source, string target)
     {

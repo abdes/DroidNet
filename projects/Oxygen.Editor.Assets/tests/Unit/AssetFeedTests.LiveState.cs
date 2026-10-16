@@ -30,7 +30,7 @@ public sealed partial class AssetFeedTests
         var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]);
         var documents = new CookDocumentRegistry();
         using var owner = documents.Register(path, _ => throw new InvalidOperationException("Presentation must not acquire the source."));
-        var initial = new CookDocumentState(Guid.NewGuid(), path, "Red", 1, 1, IsDirty: false, new string('A', 64));
+        var initial = new CookDocumentState(path, "Red", 1, 1, IsDirty: false, new string('A', 64));
         owner.UpdateState(initial);
         var reads = 0;
         var sourceHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false)));
@@ -138,7 +138,7 @@ public sealed partial class AssetFeedTests
         var uri = new Uri("asset:///Content/Materials/Red.omat.json");
         var documents = new CookDocumentRegistry();
         using var owner = documents.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(null));
-        var original = new CookDocumentState(Guid.NewGuid(), path, "Red", 1, 1, IsDirty: false, "old");
+        var original = new CookDocumentState(path, "Red", 1, 1, IsDirty: false, "old");
         owner.UpdateState(original);
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

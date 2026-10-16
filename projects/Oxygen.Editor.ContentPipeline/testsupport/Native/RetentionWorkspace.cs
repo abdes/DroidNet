@@ -28,7 +28,6 @@ internal sealed partial class RetentionWorkspace : IDisposable
             ProjectRoot = this.ProjectRoot,
             AuthoringMounts = [new("Content", "Content")],
             LocalFolderMounts = [],
-            Scenes = [],
         });
         this.Coordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
         this.Retention = new(this.Documents, this.Coordinator);

@@ -3,18 +3,17 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Messaging.Messages;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ContentBrowser.Messages;
 
 /// <summary>
 ///     Message sent when a scene needs to be opened in the editor.
 /// </summary>
-/// <param name="scene">The <see cref="Scene"/> instance to be opened in the editor.</param>
-public class OpenSceneRequestMessage(Scene scene) : AsyncRequestMessage<bool>
+/// <param name="sceneUri">The asset URI of the scene file to open.</param>
+public class OpenSceneRequestMessage(Uri sceneUri) : AsyncRequestMessage<bool>
 {
     /// <summary>
-    ///     Gets the <see cref="Scene"/> instance to be opened in the editor.
+    ///     Gets the asset URI of the scene file to open.
     /// </summary>
-    public Scene Scene { get; } = scene;
+    public Uri SceneUri { get; } = sceneUri;
 }

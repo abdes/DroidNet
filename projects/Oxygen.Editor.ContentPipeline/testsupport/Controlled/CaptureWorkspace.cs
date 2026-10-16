@@ -25,7 +25,6 @@ internal sealed partial class CaptureWorkspace : IDisposable
             ProjectRoot = this.Root,
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
-            Scenes = [],
         });
         this.Coordinator = new(this.context, NullLogger<ContentCookCoordinator>.Instance);
         this.Capture = new(this.Documents, this.Coordinator);

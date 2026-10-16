@@ -10,6 +10,7 @@ using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Diagnostics;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Workspace;
@@ -41,7 +42,7 @@ public sealed partial class WorkspaceInteractionService(
     IEditorSettingsManager settings,
     IOperationResultPublisher results,
     IStatusReducer status,
-    ILoggerFactory? loggerFactory = null) : ObservableObject
+    ILoggerFactory? loggerFactory = null) : ObservableObject, Oxygen.Editor.Scenes.Interaction.ISceneNodeInteraction
 {
     /// <summary>The project-scoped interaction identity in the editor database.</summary>
     internal static readonly SettingKey<ProjectInteraction> Key = new("WorldEditor", "SceneInteraction");
@@ -54,10 +55,10 @@ public sealed partial class WorkspaceInteractionService(
     private PendingWrite? pendingWrite;
 
     private ProjectContext? activeProject;
-    private Guid activeSceneId;
-    private HashSet<Guid> hiddenNodeIds = [];
-    private HashSet<Guid> lockedNodeIds = [];
-    private Dictionary<Guid, SceneInteraction> scenes = [];
+    private SceneId activeSceneId;
+    private HashSet<NodeId> hiddenNodeIds = [];
+    private HashSet<NodeId> lockedNodeIds = [];
+    private Dictionary<SceneId, SceneInteraction> scenes = [];
     private long activationGeneration;
 
     /// <summary>Raised whenever the hidden or locked set for the active scene changes.</summary>
@@ -67,7 +68,7 @@ public sealed partial class WorkspaceInteractionService(
     public SceneCategories Categories { get; private set; } = SceneCategories.All;
 
     /// <summary>Gets the scene whose state this service currently presents.</summary>
-    public Guid ActiveSceneId => this.activeSceneId;
+    public SceneId ActiveSceneId => this.activeSceneId;
 
     /// <summary>
     /// Loads the stored interaction state for a scene of <paramref name="project"/>, replacing any
@@ -76,7 +77,7 @@ public sealed partial class WorkspaceInteractionService(
     /// <param name="project">The project that owns the state.</param>
     /// <param name="sceneId">The scene whose state is being presented.</param>
     /// <returns>The restoration task.</returns>
-    public Task RestoreAsync(ProjectContext project, Guid sceneId)
+    public Task RestoreAsync(ProjectContext project, SceneId sceneId)
     {
         ArgumentNullException.ThrowIfNull(project);
         if (this.activeProject?.ProjectId != project.ProjectId
@@ -106,7 +107,7 @@ public sealed partial class WorkspaceInteractionService(
     public void ClearActiveScene()
     {
         this.activationGeneration++;
-        this.activeSceneId = Guid.Empty;
+        this.activeSceneId = SceneId.Empty;
         this.hiddenNodeIds = [];
         this.lockedNodeIds = [];
         this.Categories = SceneCategories.All;
@@ -121,12 +122,12 @@ public sealed partial class WorkspaceInteractionService(
     /// the Explorer computes the effective set (see the plan's R1) and this service stays a store of
     /// explicitly stated entries.
     /// </remarks>
-    public bool IsHidden(Guid nodeId) => this.hiddenNodeIds.Contains(nodeId);
+    public bool IsHidden(NodeId nodeId) => this.hiddenNodeIds.Contains(nodeId);
 
     /// <summary>Gets whether <paramref name="nodeId"/> is locked against editing.</summary>
     /// <param name="nodeId">The stable authored node id.</param>
     /// <returns><see langword="true"/> when the node is locked.</returns>
-    public bool IsLocked(Guid nodeId) => this.lockedNodeIds.Contains(nodeId);
+    public bool IsLocked(NodeId nodeId) => this.lockedNodeIds.Contains(nodeId);
 
     /// <summary>Finds the closest locked node that protects <paramref name="node"/> from editing.</summary>
     /// <param name="node">The selected scene node.</param>
@@ -152,12 +153,12 @@ public sealed partial class WorkspaceInteractionService(
 
     /// <summary>Gets a snapshot of the explicitly hidden node ids of the active scene.</summary>
     /// <returns>The hidden ids in no particular order.</returns>
-    public IReadOnlyCollection<Guid> HiddenNodeIds() => [.. this.hiddenNodeIds];
+    public IReadOnlyCollection<NodeId> HiddenNodeIds() => [.. this.hiddenNodeIds];
 
     /// <summary>Hides or shows <paramref name="nodeId"/> in the editing viewports.</summary>
     /// <param name="nodeId">The stable authored node id.</param>
     /// <param name="isHidden">The requested state.</param>
-    public void SetHidden(Guid nodeId, bool isHidden) => this.Mutate(
+    public void SetHidden(NodeId nodeId, bool isHidden) => this.Mutate(
         nodeId,
         isHidden,
         this.hiddenNodeIds,
@@ -167,7 +168,7 @@ public sealed partial class WorkspaceInteractionService(
     /// <summary>Locks or unlocks <paramref name="nodeId"/> against editing.</summary>
     /// <param name="nodeId">The stable authored node id.</param>
     /// <param name="isLocked">The requested state.</param>
-    public void SetLocked(Guid nodeId, bool isLocked) => this.Mutate(
+    public void SetLocked(NodeId nodeId, bool isLocked) => this.Mutate(
         nodeId,
         isLocked,
         this.lockedNodeIds,
@@ -219,9 +220,9 @@ public sealed partial class WorkspaceInteractionService(
     private static SettingContext Context(ProjectContext project)
         => SettingContext.Project(Path.TrimEndingDirectorySeparator(Path.GetFullPath(project.ProjectRoot)).ToUpperInvariant());
 
-    private void Mutate(Guid nodeId, bool requested, HashSet<Guid> target, string appliedMessage, string reversedMessage)
+    private void Mutate(NodeId nodeId, bool requested, HashSet<NodeId> target, string appliedMessage, string reversedMessage)
     {
-        if (nodeId == Guid.Empty)
+        if (nodeId.IsEmpty)
         {
             return;
         }
@@ -238,7 +239,7 @@ public sealed partial class WorkspaceInteractionService(
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Scene Explorer workspace state: {NodeId} {Change}.")]
-    private partial void LogStateChange(Guid nodeId, string change);
+    private partial void LogStateChange(NodeId nodeId, string change);
 
     private void RaiseStateChanged() => this.StateChanged?.Invoke(this, EventArgs.Empty);
 
@@ -250,7 +251,7 @@ public sealed partial class WorkspaceInteractionService(
             return;
         }
 
-        if (this.activeSceneId == Guid.Empty)
+        if (this.activeSceneId.IsEmpty)
         {
             return;
         }
@@ -259,7 +260,7 @@ public sealed partial class WorkspaceInteractionService(
             [.. this.hiddenNodeIds], [.. this.lockedNodeIds], this.Categories);
         this.pendingWrite = new PendingWrite(
             project,
-            new ProjectInteraction(project.ProjectId, new Dictionary<Guid, SceneInteraction>(this.scenes)));
+            new ProjectInteraction(project.ProjectId, new Dictionary<SceneId, SceneInteraction>(this.scenes)));
 
         // Chain onto the serialized queue so a fast sequence of toggles cannot interleave writes.
         this.persistence = this.SavePendingAfterAsync(this.persistence);
@@ -288,7 +289,7 @@ public sealed partial class WorkspaceInteractionService(
         }
     }
 
-    private async Task RestoreAfterAsync(Task previous, ProjectContext project, Guid sceneId, long generation)
+    private async Task RestoreAfterAsync(Task previous, ProjectContext project, SceneId sceneId, long generation)
     {
         await previous.ConfigureAwait(true);
         if (generation != this.activationGeneration || !ReferenceEquals(this.activeProject, project) || this.activeSceneId != sceneId)
@@ -332,7 +333,7 @@ public sealed partial class WorkspaceInteractionService(
             return;
         }
 
-        this.scenes = new Dictionary<Guid, SceneInteraction>(stored.Scenes);
+        this.scenes = new Dictionary<SceneId, SceneInteraction>(stored.Scenes);
         if (this.scenes.TryGetValue(sceneId, out var scene))
         {
             this.hiddenNodeIds = [.. scene.HiddenNodeIds];
@@ -367,15 +368,15 @@ public sealed partial class WorkspaceInteractionService(
     /// <param name="Scenes">The interaction state keyed by stable scene identity.</param>
     internal sealed record ProjectInteraction(
         Guid ProjectId,
-        IReadOnlyDictionary<Guid, SceneInteraction> Scenes);
+        IReadOnlyDictionary<SceneId, SceneInteraction> Scenes);
 
     /// <summary>The saved interaction state for one scene.</summary>
     /// <param name="HiddenNodeIds">Nodes hidden in the editing viewports.</param>
     /// <param name="LockedNodeIds">Nodes locked against editing.</param>
     /// <param name="Categories">The Scene Explorer category filter.</param>
     internal sealed record SceneInteraction(
-        IReadOnlyList<Guid> HiddenNodeIds,
-        IReadOnlyList<Guid> LockedNodeIds,
+        IReadOnlyList<NodeId> HiddenNodeIds,
+        IReadOnlyList<NodeId> LockedNodeIds,
         SceneCategories Categories);
 }
 

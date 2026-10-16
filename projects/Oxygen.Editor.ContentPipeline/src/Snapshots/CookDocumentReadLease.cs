@@ -4,9 +4,9 @@
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
-/// <summary>Holds a document's existing save gate while its saved input is copied.</summary>
+/// <summary>Holds a document's read lease while its saved input is copied, so its content stays in place.</summary>
 /// <param name="state">Document state captured by its authoring owner.</param>
-/// <param name="release">Releases the owner's acquired save gate.</param>
+/// <param name="release">Releases the owner's read lease.</param>
 public sealed partial class CookDocumentReadLease(CookDocumentState state, Action release) : IDisposable
 {
     private Action? release = release;

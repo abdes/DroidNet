@@ -5,6 +5,7 @@
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World;
 
@@ -35,6 +36,11 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     public IProject Project { get; init; }
 
     /// <summary>
+    ///     Gets the identity of the scene, authored in its file.
+    /// </summary>
+    public SceneId Id { get; init; } = SceneId.New();
+
+    /// <summary>
     ///     Gets the list of root entities within the scene.
     /// </summary>
     public ObservableCollection<SceneNode> RootNodes { get; init; } = [];
@@ -47,12 +53,12 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// <summary>
     /// Gets the scene-level native asset references with read-only collections.
     /// </summary>
-    public Serialization.SceneReferencesData References { get; private set; } = NormalizeReferences(null);
+    public Serialization.SceneReferencesData References { get; private set; } = NormalizeReferences(references: null);
 
     /// <summary>
     /// Gets how the scene starts when played, with a read-only context list.
     /// </summary>
-    public Serialization.ScenePlayData Play { get; private set; } = NormalizePlay(null);
+    public Serialization.ScenePlayData Play { get; private set; } = NormalizePlay(play: null);
 
     /// <summary>
     /// Gets the camera node a played scene starts viewing through: the authored starting camera, else the first
@@ -127,23 +133,18 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// </summary>
     /// <returns>A data transfer object containing the current state of this scene.</returns>
     public Serialization.SceneData Dehydrate()
-    {
-        if (LightValidation.ValidateScene(this) is { } error)
-        {
-            throw new InvalidOperationException(error);
-        }
-
-        return new()
-        {
-            Name = this.Name,
-            Id = this.Id,
-            RootNodes = [.. this.RootNodes.Select(n => n.Dehydrate())],
-            Environment = NormalizeEnvironment(this.Environment),
-            References = this.References.IsEmpty ? null : NormalizeReferences(this.References),
-            Play = this.Play.IsEmpty ? null : NormalizePlay(this.Play),
-            ExplorerLayout = this.ExplorerLayout,
-        };
-    }
+        => LightValidation.ValidateScene(this) is { } error
+            ? throw new InvalidOperationException(error)
+            : new()
+            {
+                Name = this.Name,
+                Id = this.Id,
+                RootNodes = [.. this.RootNodes.Select(n => n.Dehydrate())],
+                Environment = NormalizeEnvironment(this.Environment),
+                References = this.References.IsEmpty ? null : NormalizeReferences(this.References),
+                Play = this.Play.IsEmpty ? null : NormalizePlay(this.Play),
+                ExplorerLayout = this.ExplorerLayout,
+            };
 
     /// <summary>
     /// Replaces editor-only Scene Explorer layout data.
@@ -156,7 +157,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// Replaces scene-level environment authoring data.
     /// </summary>
     /// <param name="environment">The new environment data.</param>
-    internal void SetEnvironment(Serialization.SceneEnvironmentData environment)
+    public void SetEnvironment(Serialization.SceneEnvironmentData environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
         var normalized = NormalizeEnvironment(environment);
@@ -172,7 +173,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// Replaces scene-level asset references.
     /// </summary>
     /// <param name="references">The new reference data.</param>
-    internal void SetReferences(Serialization.SceneReferencesData references)
+    public void SetReferences(Serialization.SceneReferencesData references)
     {
         ArgumentNullException.ThrowIfNull(references);
         var normalized = NormalizeReferences(references);
@@ -188,7 +189,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// Replaces how the scene starts when played.
     /// </summary>
     /// <param name="play">The new play settings.</param>
-    internal void SetPlay(Serialization.ScenePlayData play)
+    public void SetPlay(Serialization.ScenePlayData play)
     {
         ArgumentNullException.ThrowIfNull(play);
         var normalized = NormalizePlay(play);
@@ -210,6 +211,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             Fog = environment.Fog ?? new(),
             SkySphere = environment.SkySphere ?? new(),
             SkyLight = environment.SkyLight ?? new(),
+
             // The former color was only required to be finite; the background is display-only SDR.
             Background = environment.LegacyBackgroundColor is { } legacy
                 ? new() { Enabled = true, ColorRgb = System.Numerics.Vector3.Clamp(legacy, System.Numerics.Vector3.Zero, System.Numerics.Vector3.One) }
@@ -222,10 +224,10 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     {
         references ??= new();
 
-        ArgumentNullException.ThrowIfNull(references.Scripts);
-        ArgumentNullException.ThrowIfNull(references.InputActions);
-        ArgumentNullException.ThrowIfNull(references.PhysicsSidecars);
-        ArgumentNullException.ThrowIfNull(references.ExtraAssets);
+        ArgumentNullException.ThrowIfNull(references.Scripts, nameof(references));
+        ArgumentNullException.ThrowIfNull(references.InputActions, nameof(references));
+        ArgumentNullException.ThrowIfNull(references.PhysicsSidecars, nameof(references));
+        ArgumentNullException.ThrowIfNull(references.ExtraAssets, nameof(references));
 
         return new()
         {
@@ -239,10 +241,10 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     private static Serialization.ScenePlayData NormalizePlay(Serialization.ScenePlayData? play)
     {
         play ??= new();
-        ArgumentNullException.ThrowIfNull(play.StartingInputContexts);
+        ArgumentNullException.ThrowIfNull(play.StartingInputContexts, nameof(play));
         return new()
         {
-            StartingCamera = play.StartingCamera == Guid.Empty ? null : play.StartingCamera,
+            StartingCamera = play.StartingCamera is { IsEmpty: true } ? null : play.StartingCamera,
             StartingInputContexts = new List<Serialization.StartingInputContextData>(play.StartingInputContexts).AsReadOnly(),
         };
     }

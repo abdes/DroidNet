@@ -100,7 +100,7 @@ internal sealed class SunDependenciesTests : DroidNet.Tests.VisualUserInterfaceT
         await model.AtmosphereLights.InspectAtmosphereSourceAsync(source).ConfigureAwait(true);
         _ = host.SelectedComponentType.Should().Be<DirectionalLightComponent>();
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
     /// <summary>Source reset restores bindings and source values in one undoable command without changing illumination.</summary>

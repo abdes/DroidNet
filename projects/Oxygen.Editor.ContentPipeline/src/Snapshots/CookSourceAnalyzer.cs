@@ -187,14 +187,14 @@ internal sealed partial class CookSourceAnalyzer(
                 LocalFolderMounts = [.. operation.Project.LocalFolderMounts],
             })
             { Name = operation.Project.Name };
-            foreach (var known in operation.Project.Scenes)
-            {
-                project.Scenes.Add(new Scene(project) { Id = known.Id, Name = known.Name });
-            }
 
             var stream = new MemoryStream(bytes, writable: false);
             await using var lifetime = stream.ConfigureAwait(false);
             var scene = await new SceneSerializer(project).DeserializeAsync(stream).ConfigureAwait(false);
+
+            // A scene's name is its file name, whatever the file says; a scene a relocation renamed keeps its old name
+            // inside the file until it is saved again.
+            scene.Name = Path.GetFileName(input.SourceAbsolutePath)[..^AssetFileTypes.SceneDescriptor.Length];
             var hasBuiltins = scene.AllNodes.SelectMany(static node => node.Components.OfType<GeometryComponent>())
                 .Any(static geometry => geometry.Geometry?.Uri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase) == true
                     || geometry.OverrideSlots.OfType<Oxygen.Editor.World.Slots.MaterialsSlot>().Any(static slot => slot.Material.Uri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase)));

@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using DroidNet.Controls;
+using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Editor.Schemas;
@@ -46,6 +47,28 @@ public sealed partial class MaterialEditorViewModelTests
         await sut.PrepareForCloseAsync().ConfigureAwait(false);
         _ = (await sut.SaveForCloseAsync().ConfigureAwait(false)).Should().BeTrue();
         _ = metadata.IsDirty.Should().BeFalse();
+    }
+
+    /// <summary>Verifies the material's tab is told when an edit makes it dirty and when a save makes it clean.</summary>
+    /// <returns>The asynchronous test task.</returns>
+    [TestMethod]
+    public async Task TabIsToldWhenTheMaterialBecomesDirtyAndWhenItIsSaved()
+    {
+        var service = new RecordingDocumentService(CreateDocument());
+        var metadata = new MaterialDocumentMetadata(service.Document.MaterialUri);
+        var shown = new List<bool>();
+        var documents = new Mock<DroidNet.Documents.IDocumentService>();
+        _ = documents.Setup(value => value.UpdateMetadataAsync(It.IsAny<Microsoft.UI.WindowId>(), metadata.DocumentId, metadata))
+            .Callback(() => shown.Add(metadata.IsDirty))
+            .ReturnsAsync(value: true);
+        using var sut = new MaterialEditorViewModel(metadata, service, new FakeAssetFeed(), System.Reactive.Concurrency.ImmediateScheduler.Instance, documents: documents.Object);
+        await WaitForLoadAsync(sut).ConfigureAwait(false);
+
+        sut.MetallicFactor = 0.75f;
+        await WaitForEditAsync(service, expectedCount: 1).ConfigureAwait(false);
+        await sut.SaveAsync().ConfigureAwait(false);
+
+        _ = shown.Should().Equal(true, false);
     }
 
     /// <summary>Verifies resource disposal never makes a material close decision.</summary>

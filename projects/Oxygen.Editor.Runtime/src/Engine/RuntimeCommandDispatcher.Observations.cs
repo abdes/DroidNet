@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Validates native observations against run and scene lifetime.</summary>
@@ -17,7 +19,7 @@ internal sealed partial class RuntimeCommandDispatcher
 
     /// <inheritdoc/>
     public async Task<RuntimeNodeObservation> ObserveNodeAsync(
-        Guid operationId, RuntimeSceneTarget target, Guid nodeId, CancellationToken cancellationToken = default)
+        Guid operationId, RuntimeSceneTarget target, NodeId nodeId, CancellationToken cancellationToken = default)
     {
         var (outcome, state) = await this.ObserveAsync(operationId, target, transport => transport.ObserveNodeAsync(nodeId), cancellationToken).ConfigureAwait(false);
         return new(outcome, nodeId, state);

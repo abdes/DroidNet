@@ -85,7 +85,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
             state.SetSelectedFolders(["/Content"]);
             await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
             using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
-            using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IScriptAssetAuthoring>());
+            using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
             using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider, services.Projects, state, CreateStatusHosting(), services.Builtins) : new ListLayoutViewModel(provider, services.Projects, state, CreateStatusHosting(), services.Builtins);
             var query = new AssetQueryView
             {

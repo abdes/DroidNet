@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -343,7 +344,7 @@ public interface IEngineService : IAsyncDisposable
     ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
     ///     <see langword="false"/> on failure.
     /// </returns>
-    public Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, Guid? cameraNodeId);
+    public Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, NodeId? cameraNodeId);
 
     /// <summary>
     /// Start or stop piloting the scene camera a view looks through.
@@ -367,7 +368,7 @@ public interface IEngineService : IAsyncDisposable
     /// <param name="viewId">The view whose editor camera supplies the pose.</param>
     /// <param name="nodeId">The node the pose is expressed for, in its parent's space.</param>
     /// <returns>The pose, or <see langword="null"/> when the view or node does not exist.</returns>
-    public Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, Guid nodeId);
+    public Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, NodeId nodeId);
 
     /// <summary>
     /// Read a view's editor camera state, so a pane can keep it when its view is released and
@@ -434,7 +435,7 @@ public interface IEngineService : IAsyncDisposable
     /// <param name="viewId">The view whose editor camera moves.</param>
     /// <param name="nodeIds">The nodes to frame, with their descendants; empty frames the whole scene.</param>
     /// <returns>What the request did.</returns>
-    public Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<Guid> nodeIds);
+    public Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeId> nodeIds);
 
     /// <summary>
     /// Outline the selected nodes, and their descendants, in every editing view that shows the
@@ -446,7 +447,7 @@ public interface IEngineService : IAsyncDisposable
     ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
     ///     <see langword="false"/> on failure.
     /// </returns>
-    public Task<bool> SetSelectionOutlineAsync(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId);
+    public Task<bool> SetSelectionOutlineAsync(IReadOnlyList<NodeId> nodeIds, NodeId? activeNodeId);
 
     /// <summary>
     /// Show the transform gizmo of the given targets in every editing view, or hide it for the

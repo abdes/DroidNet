@@ -5,7 +5,7 @@
 namespace Oxygen.Managed.Core;
 
 /// <summary>Authored perspective-camera framing policy.</summary>
-public enum CameraAspectMode : byte
+public enum CameraAspectMode
 {
     /// <summary>Derive aspect from each target while retaining vertical FOV.</summary>
     Auto = 0,

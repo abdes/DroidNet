@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using System.Runtime.InteropServices;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -11,4 +13,5 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="Position">Local position.</param>
 /// <param name="Rotation">Local rotation.</param>
 /// <param name="Scale">Local scale.</param>
-public readonly record struct RuntimeGizmoTarget(Guid NodeId, Vector3 Position, Quaternion Rotation, Vector3 Scale);
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct RuntimeGizmoTarget(NodeId NodeId, Vector3 Position, Quaternion Rotation, Vector3 Scale);

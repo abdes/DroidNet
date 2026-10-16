@@ -5,6 +5,7 @@
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -24,7 +25,7 @@ public sealed partial class SceneDescriptorGenerator
     /// <param name="site">Where a problem is reported.</param>
     /// <returns>The camera's node index; <see langword="null"/> when the scene has no camera or the authored one is
     /// missing, which is reported.</returns>
-    private static int? CreateStartingCamera(Scene scene, IReadOnlyDictionary<Guid, int> nodeIndices, PropertySite site)
+    private static int? CreateStartingCamera(Scene scene, IReadOnlyDictionary<NodeId, int> nodeIndices, PropertySite site)
     {
         if (scene.Play.StartingCamera is { } authored && scene.EffectiveStartingCamera is null)
         {

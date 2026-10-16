@@ -2,8 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Immutable runtime request to RemoveSceneNode.</summary>
 /// <param name="NodeId">The NodeId command value.</param>
-public sealed record RuntimeRemoveSceneNode(Guid NodeId) : RuntimeWorldCommand;
+public sealed record RuntimeRemoveSceneNode(NodeId NodeId) : RuntimeWorldCommand;

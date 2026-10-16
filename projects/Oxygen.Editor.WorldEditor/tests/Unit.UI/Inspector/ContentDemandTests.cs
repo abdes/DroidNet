@@ -66,7 +66,7 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
         var button = (SplitButton)view.FindName("AssetSplitButton");
         await PickAssetAsync(button, "Custom", material: false, this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = fixture.Geometry.Geometry!.Uri.Should().Be(fixture.GeometryUri);
-        _ = fixture.Authoring.Context.Metadata.IsDirty.Should().BeTrue("the accepted assignment must dirty the consuming scene");
+        _ = fixture.Authoring.Document.IsDirty.Should().BeTrue("the accepted assignment must dirty the consuming scene");
         _ = fixture.Authoring.Context.History.UndoStack.Should().ContainSingle();
         _ = fixture.Requests.Should().ContainSingle().Which.uri.Should().Be(fixture.GeometryUri);
         await fixture.Authoring.Context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -144,7 +144,7 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
         _ = fixture.Assets.Setup(value => value.ResolveAsync(fixture.GeometryUri, It.IsAny<CancellationToken>())).Returns(resolved.Task);
         fixture.Geometry.Geometry = new(fixture.GeometryUri);
         fixture.Activate();
-        fixture.Authoring.Documents.Raise(value => value.DocumentClosed += null, new DocumentClosedEventArgs(default, fixture.Authoring.Context.Metadata));
+        fixture.Authoring.Documents.Raise(value => value.DocumentClosed += null, new DocumentClosedEventArgs(default, fixture.Authoring.Tab));
         resolved.SetResult(fixture.GeometryAsset);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = fixture.Requests.Should().BeEmpty();

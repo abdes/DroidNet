@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Tests;
 
@@ -15,7 +16,7 @@ public sealed class ComponentIdentityTests
     [TestMethod]
     public void ComponentIdentity_ShouldRoundTripThroughDto()
     {
-        var componentId = Guid.NewGuid();
+        var componentId = ComponentId.New();
         var camera = new PerspectiveCamera
         {
             Id = componentId,
@@ -34,17 +35,17 @@ public sealed class ComponentIdentityTests
     {
         var project = new Mock<IProject>().Object;
         var scene = new Scene(project) { Name = "Scene" };
-        var duplicateId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var duplicateId = ComponentId.FromValue(Guid.Parse("11111111-1111-1111-1111-111111111111"));
         var data = new SceneNodeData
         {
-            Id = Guid.NewGuid(),
+            Id = NodeId.New(),
             Name = "Cube",
             Components =
             [
-                new TransformData { Id = Guid.Empty, Name = "Transform" },
+                new TransformData { Id = ComponentId.Empty, Name = "Transform" },
                 new GeometryComponentData
                 {
-                    Id = Guid.Empty,
+                    Id = ComponentId.Empty,
                     Name = "Geometry",
                     GeometryUri = "asset:///Engine/Generated/BasicShapes/Cube",
                 },
@@ -65,7 +66,7 @@ public sealed class ComponentIdentityTests
 
         var node = SceneNode.CreateAndHydrate(scene, data);
 
-        _ = node.Components.Select(static component => component.Id).Should().OnlyHaveUniqueItems();
-        _ = node.Components.Should().NotContain(component => component.Id == Guid.Empty);
+        _ = node.Components.Should().OnlyHaveUniqueItems(static component => component.Id);
+        _ = node.Components.Should().NotContain(component => component.Id.IsEmpty);
     }
 }

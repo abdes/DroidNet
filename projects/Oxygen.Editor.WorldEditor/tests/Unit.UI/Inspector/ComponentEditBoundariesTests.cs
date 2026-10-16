@@ -115,7 +115,7 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
         _ = host.ComponentFilters.Single(option => option.ComponentType == typeof(TransformComponent)).ValidationMessage.Should().Be(message);
         _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalScale.X.Should().Be(1);
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
     /// <summary>Changing a hidden transform clears only the feedback for its changed field.</summary>

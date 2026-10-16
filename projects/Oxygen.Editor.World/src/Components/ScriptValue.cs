@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using System.Numerics;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World;
 
@@ -24,7 +25,7 @@ public sealed record ScriptValue
     /// <summary>Gets the value type.</summary>
     public ScriptValueKind Kind { get; }
 
-    /// <summary>Gets the boolean value.</summary>
+    /// <summary>Gets a value indicating whether the boolean value is true.</summary>
     public bool BoolValue { get; private init; }
 
     /// <summary>Gets the integer value.</summary>
@@ -43,7 +44,7 @@ public sealed record ScriptValue
     public Uri? AssetUri { get; private init; }
 
     /// <summary>Gets the referenced node.</summary>
-    public Guid NodeId { get; private init; }
+    public NodeId NodeId { get; private init; }
 
     /// <summary>Creates a boolean value.</summary>
     /// <param name="value">The value.</param>
@@ -110,8 +111,8 @@ public sealed record ScriptValue
     /// <summary>Creates a node reference value.</summary>
     /// <param name="node">The node identity.</param>
     /// <returns>The script value.</returns>
-    public static ScriptValue FromNode(Guid node)
-        => node == Guid.Empty ? throw new ArgumentException("A node reference needs a node.", nameof(node)) : new(ScriptValueKind.Node) { NodeId = node };
+    public static ScriptValue FromNode(NodeId node)
+        => node.IsEmpty ? throw new ArgumentException("A node reference needs a node.", nameof(node)) : new(ScriptValueKind.Node) { NodeId = node };
 
     /// <summary>Gets the number of vector components of a kind.</summary>
     /// <param name="kind">The kind.</param>
@@ -141,7 +142,7 @@ public sealed record ScriptValue
             ScriptValueKind.Vec2 or ScriptValueKind.Vec3 or ScriptValueKind.Vec4
                 => "(" + string.Join(", ", this.GetVectorComponents().Select(static component => component.ToString(CultureInfo.InvariantCulture))) + ")",
             ScriptValueKind.Asset => this.AssetUri?.ToString() ?? string.Empty,
-            ScriptValueKind.Node => this.NodeId.ToString("D"),
+            ScriptValueKind.Node => this.NodeId.ToString(),
             _ => string.Empty,
         };
 }

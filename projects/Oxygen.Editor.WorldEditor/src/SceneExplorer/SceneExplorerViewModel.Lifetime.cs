@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
@@ -55,7 +56,7 @@ public partial class SceneExplorerViewModel
         }
 
         var ct = await this.BeginSceneLoadAsync().ConfigureAwait(true);
-        this.loadingDocumentId = request.Scene.Id;
+        this.loadingDocumentId = request.Metadata.DocumentId;
         try
         {
             if (!await this.InstallLoadedSceneAsync(request.Scene, request.Metadata, ct).ConfigureAwait(true))
@@ -63,7 +64,6 @@ public partial class SceneExplorerViewModel
                 return false;
             }
 
-            request.Metadata.IsSceneLoadPending = false;
             this.NotifySelectionDependentCommands();
             this.HasUnavailableScene = false;
             this.CanReloadPreviousScene = false;
@@ -77,8 +77,8 @@ public partial class SceneExplorerViewModel
 
     private void OnSceneDocumentClosed(object? sender, DocumentClosedEventArgs args)
     {
-        if (args.WindowId != this.windowId || args.Metadata is not SceneDocumentMetadata
-            || this.Scene?.AttachedObject.Id != args.Metadata.DocumentId)
+        if (args.WindowId != this.windowId || args.Metadata is not SceneDocumentMetadata closed
+            || !ReferenceEquals(this.sceneDocument, closed))
         {
             return;
         }
@@ -92,6 +92,7 @@ public partial class SceneExplorerViewModel
             this.ClearRoot();
             this.projection.Clear();
             this.Scene = null;
+            this.sceneDocument = null;
             this.ClearCutMarks();
             this.ClipboardItemStore = [];
             this.FilterPredicate = null;
@@ -100,7 +101,7 @@ public partial class SceneExplorerViewModel
             this.searchExpandedFolderIds.Clear();
             this.searchExpandedNodeIds.Clear();
             this.interaction?.ClearActiveScene();
-            _ = this.messenger.Send(new SceneAuthoringUnloadedMessage(args.Metadata.DocumentId));
+            _ = this.messenger.Send(new SceneAuthoringUnloadedMessage(closed.SceneDocumentId));
         }
         finally
         {

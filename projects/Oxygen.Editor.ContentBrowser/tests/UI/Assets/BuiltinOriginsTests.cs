@@ -59,7 +59,7 @@ public sealed partial class BuiltinOriginsTests : DroidNet.Tests.VisualUserInter
         _ = provider.SetupGet(value => value.Items).Returns(updates);
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var projects = new ProjectContextService();
-        projects.Activate(new ProjectContext { ProjectId = Guid.NewGuid(), ProjectRoot = Path.GetTempPath(), Name = "Built-ins", Category = Category.Games, AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")], LocalFolderMounts = [], Scenes = [] });
+        projects.Activate(new ProjectContext { ProjectId = Guid.NewGuid(), ProjectRoot = Path.GetTempPath(), Name = "Built-ins", Category = Category.Games, AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")], LocalFolderMounts = [] });
         var state = new ContentBrowserState(projects);
         state.SetSelectedFolders(["/Cooked/Content/" + (geometry ? "Geometry" : "Materials")]);
         using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);

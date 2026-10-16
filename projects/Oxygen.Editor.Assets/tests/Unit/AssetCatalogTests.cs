@@ -317,7 +317,6 @@ public sealed class AssetCatalogTests
                 ProjectRoot = root,
                 AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [],
-                Scenes = [],
             };
             var files = new NativeAtomicFileStore(new RealFileSystem());
             var observedFiles = new Mock<IAtomicFileStore>();

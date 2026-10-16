@@ -22,47 +22,6 @@ public sealed partial class SceneDocumentCommandServiceTests
     private static readonly Uri BlueMaterial = new("asset:///Content/Materials/Blue.omat.json");
     private static readonly Uri GreenMaterial = new("asset:///Content/Materials/Green.omat.json");
 
-    /// <summary>
-    /// An open scene follows a rename in memory: only referencing nodes change, nothing enters history, the document
-    /// stays clean, the rewritten file becomes its saved state, and only those nodes are named for the runtime refresh,
-    /// which attaches them again.
-    /// </summary>
-    /// <returns>The asynchronous test.</returns>
-    [TestMethod]
-    public async Task OpenSceneFollowsRelocationWithoutReloadOrHistory()
-    {
-        var projectManager = new Mock<IProjectManagerService>(MockBehavior.Strict);
-        var written = new FileVersion(Exists: true, new string('B', 64));
-        _ = projectManager.Setup(value => value.RecordSceneSourceRewrite(It.IsAny<Scene>(), "C:/scene.oscene.json", written));
-        var fixture = CreateFixture(projectManager: projectManager.Object);
-        var scene = CreateScene();
-        var red = AddSlotGeometry(scene, "Red", "Cube");
-        var plain = AddSlotGeometry(scene, "Plain", "Sphere");
-        AssignSlot(red, RedMaterial);
-        var context = CreateContext(scene);
-        _ = fixture.Sync.Setup(value => value.GetDocumentScene(context.Metadata)).Returns(scene);
-        _ = fixture.Sync.Setup(value => value.AttachGeometryAsync(scene, red, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditGeometry, AffectedScope.Empty));
-        var map = new RelocationMap();
-        map.AddIdentity("/Content/Materials/Red.omat", "/Content/Materials/Blue.omat", isFolder: false);
-        var change = new AssetRelocationChange(map, []);
-
-        var result = await fixture.Sut.FollowRelocationAsync(context, change, new RelocatedFile("C:/scene.oscene.json", "C:/scene.oscene.json", written)).ConfigureAwait(false);
-
-        _ = result.Succeeded.Should().BeTrue();
-        _ = result.RuntimeNodes.Should().Equal(red.Id);
-        _ = red.Components.OfType<GeometryComponent>().Single().OverrideSlots.OfType<MaterialsSlot>().Single().Material.Uri.Should().Be(BlueMaterial);
-        _ = context.History.UndoStack.Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
-        projectManager.Verify(value => value.RecordSceneSourceRewrite(scene, "C:/scene.oscene.json", written), Times.Once);
-        fixture.Sync.Verify(value => value.AttachGeometryAsync(scene, red, It.IsAny<CancellationToken>()), Times.Never, "the runtime keeps its view until the asset is mounted");
-
-        await fixture.Sut.RefreshRelocatedRuntimeAsync(context, result.RuntimeNodes, result.RuntimeEnvironment).ConfigureAwait(false);
-
-        fixture.Sync.Verify(value => value.AttachGeometryAsync(scene, red, It.IsAny<CancellationToken>()), Times.Once);
-        fixture.Sync.Verify(value => value.AttachGeometryAsync(scene, plain, It.IsAny<CancellationToken>()), Times.Never);
-    }
-
     /// <summary>Undo restores a material captured before a rename at the material's current identity.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]

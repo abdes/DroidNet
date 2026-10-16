@@ -94,7 +94,6 @@ public sealed class CookedLibraryCatalogTests
                 ProjectRoot = this.directory.FullName,
                 AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [new("First", this.First), new("Second", this.Second)],
-                Scenes = [],
             });
             var project = this.Projects.ActiveProject!;
             this.Publication = new(project.ProjectId, project.ProjectRoot);

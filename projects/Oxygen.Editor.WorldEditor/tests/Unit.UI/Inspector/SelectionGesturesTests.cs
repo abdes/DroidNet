@@ -89,7 +89,7 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
         _ = ReadNumericSource(second, kind).Should().Be(80, "the new target rejects the old callback");
         _ = number.NumberValue.Should().Be(80, "the bound control refreshes after rejecting the callback");
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
     /// <summary>Relative Transform text edits preserve each target's delta in one undoable command.</summary>
@@ -166,6 +166,6 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
         _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalPosition.X.Should().Be(10);
         _ = second.Components.OfType<TransformComponent>().Single().LocalPosition.X.Should().Be(20);
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 }

@@ -20,6 +20,7 @@ using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Editor.WorldEditor.TestSupport;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.SceneExplorer;
 
@@ -98,7 +99,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         var harness = new AuthoringHarness(out var scene, out var node);
         var second = new SceneNode(scene) { Name = "Second" };
         scene.RootNodes.Add(second);
-        _ = harness.Commands.Setup(value => value.CompleteEditSessionsAsync(It.IsAny<SceneDocumentCommandContext>(), commit: true))
+        _ = harness.Commands.Setup(value => value.CompleteEditSessionsAsync(It.IsAny<Scene>(), commit: true))
             .Returns(Task.CompletedTask);
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
@@ -109,7 +110,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
 
         _ = explorer.SelectedItemsCount.Should().Be(1);
         _ = explorer.SelectedItem.Should().BeSameAs(row);
-        harness.Commands.Verify(value => value.CompleteEditSessionsAsync(It.IsAny<SceneDocumentCommandContext>(), commit: true), Times.Once);
+        harness.Commands.Verify(value => value.CompleteEditSessionsAsync(It.IsAny<Scene>(), commit: true), Times.Once);
     });
 
     [TestMethod]
@@ -323,18 +324,17 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
             scene = new Scene(project) { Name = "Scene" };
             node = new SceneNode(scene) { Name = "Node" };
             scene.RootNodes.Add(node);
-            project.Scenes.Add(scene);
             this.scene = scene;
             this.Manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
             _ = this.Manager.SetupGet(value => value.CurrentProject).Returns(project);
             this.Documents = new Mock<IDocumentService>();
-            var metadata = new SceneDocumentMetadata(scene.Id);
+            var metadata = SceneTabs.Open(scene);
             this.openDocuments.Add(metadata);
             _ = this.Documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns(() => this.openDocuments);
             _ = this.Documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
             this.Sync = new Mock<ISceneEngineSync>();
-            _ = this.Sync.Setup(value => value.GetDocumentScene(metadata)).Returns(scene);
-            _ = this.Sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata)).Returns(value: true);
+            _ = this.Sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
+            _ = this.Sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata.DocumentId)).Returns(value: true);
             _ = this.Sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             this.Commands = new Mock<ISceneDocumentCommandService>(MockBehavior.Strict);
         }
@@ -352,11 +352,10 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         public Scene AddScene(string name)
         {
             var added = new Scene(this.scene.Project) { Name = name };
-            this.scene.Project.Scenes.Add(added);
-            var metadata = new SceneDocumentMetadata(added.Id);
+            var metadata = SceneTabs.Open(added);
             this.openDocuments.Add(metadata);
-            _ = this.Sync.Setup(value => value.GetDocumentScene(metadata)).Returns(added);
-            _ = this.Sync.Setup(value => value.RegisterDocument(added, metadata)).Returns(value: true);
+            _ = this.Sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(added);
+            _ = this.Sync.Setup(value => value.RegisterDocument(added, metadata.DocumentId)).Returns(value: true);
             return added;
         }
 

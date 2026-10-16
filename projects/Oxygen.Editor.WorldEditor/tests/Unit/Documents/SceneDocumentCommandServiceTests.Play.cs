@@ -35,7 +35,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeTrue();
         _ = ScenePlayData.AreEquivalent(scene.Play, play).Should().BeTrue();
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
 
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -70,38 +70,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         }
 
         _ = scene.Play.IsEmpty.Should().BeTrue();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
-        _ = context.History.UndoStack.Should().BeEmpty();
-    }
-
-    /// <summary>An open scene's starting input contexts follow a rename without entering history.</summary>
-    /// <returns>The asynchronous test.</returns>
-    [TestMethod]
-    public async Task OpenSceneStartingInputContextsFollowRelocation()
-    {
-        var projectManager = new Mock<IProjectManagerService>(MockBehavior.Strict);
-        var written = new FileVersion(Exists: true, new string('C', 64));
-        _ = projectManager.Setup(value => value.RecordSceneSourceRewrite(It.IsAny<Scene>(), "C:/scene.oscene.json", written));
-        var fixture = CreateFixture(projectManager: projectManager.Object);
-        var scene = CreateScene();
-        var context = CreateContext(scene);
-        _ = await fixture.Sut.EditScenePlayAsync(context, new ScenePlayData
-        {
-            StartingInputContexts = [new StartingInputContextData(GameplayContext, Priority: 4), new StartingInputContextData(MenuContext)],
-        }).ConfigureAwait(false);
-        context.History.Clear();
-        context.Metadata.IsDirty = false;
-        _ = fixture.Sync.Setup(value => value.GetDocumentScene(context.Metadata)).Returns(scene);
-        var map = new RelocationMap();
-        map.AddIdentity("/Content/Input/Gameplay.oimap", "/Content/Controls/Gameplay.oimap", isFolder: false);
-        var change = new AssetRelocationChange(map, []);
-
-        var result = await fixture.Sut.FollowRelocationAsync(context, change, new RelocatedFile("C:/scene.oscene.json", "C:/scene.oscene.json", written)).ConfigureAwait(false);
-
-        _ = result.Succeeded.Should().BeTrue();
-        _ = scene.Play.StartingInputContexts.Should().Equal(
-            new StartingInputContextData(new Uri("asset:///Content/Controls/Gameplay.oimap"), Priority: 4),
-            new StartingInputContextData(MenuContext));
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
     }
 

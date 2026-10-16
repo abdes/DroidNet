@@ -2,89 +2,83 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using Oxygen.Editor.ContentPipeline.Snapshots;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
-/// <summary>Connects a scene document's saved identity and UI-owned read state to cook capture.</summary>
-/// <param name="documents">The shared registry of saved authoring inputs.</param>
-/// <param name="projectManager">The owner of acknowledged scene source versions.</param>
+/// <summary>Tells the cook which saved scene file an open scene document edits and whether it has unsaved edits.</summary>
+/// <param name="documents">The shared registry of open authoring inputs.</param>
 /// <param name="hostingContext">The authoring UI dispatcher.</param>
-/// <param name="documentService">The existing document metadata notifications.</param>
-public sealed partial class SceneCookInputRegistrar(
-    ICookDocumentRegistry documents,
-    IProjectManagerService projectManager,
-    HostingContext hostingContext,
-    IDocumentService documentService)
+public sealed partial class SceneCookInputRegistrar(ICookDocumentRegistry documents, HostingContext hostingContext)
 {
-    /// <summary>Registers a loaded scene until its document or saved source changes.</summary>
-    /// <param name="context">The scene document's current authoring ownership.</param>
-    /// <param name="commands">The owner of the document's save gate and gesture state.</param>
-    /// <returns>A registration to dispose, or null until the scene has a saved source.</returns>
-    public IDisposable? Register(SceneDocumentCommandContext context, ISceneDocumentCommandService commands)
-        => projectManager.GetSceneSourceVersion(context.Scene) is { } source
-            ? new Registration(context, projectManager, documentService, source.SourcePath, documents.Register(source.SourcePath, token => hostingContext.Dispatcher.DispatchAsync(() => commands.AcquireCookReadAsync(context, token))))
-            : null;
-
-    private sealed partial class Registration : IDisposable
+    /// <summary>Registers an open scene document until it closes.</summary>
+    /// <param name="tab">The scene document's tab, which carries its document and the change counters the cook compares.</param>
+    /// <param name="commands">The owner of the scene's edits in progress.</param>
+    /// <returns>The registration to dispose when the document closes.</returns>
+    public IDisposable Register(SceneDocumentMetadata tab, ISceneDocumentCommandService commands)
     {
-        private readonly SceneDocumentCommandContext context;
-        private readonly IProjectManagerService projectManager;
-        private readonly ICookDocumentRegistration document;
-        private readonly IDocumentService documentService;
-        private string sourcePath;
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(commands);
+        var document = tab.Document ?? throw new ArgumentException("The scene tab has no document.", nameof(tab));
+        var registration = new Registration(tab, commands);
+        registration.Attach(documents.Register(document.File.Path, _ => hostingContext.Dispatcher.DispatchAsync(registration.AcquireRead)));
+        return registration;
+    }
 
-        public Registration(SceneDocumentCommandContext context, IProjectManagerService projectManager, IDocumentService documentService, string sourcePath, ICookDocumentRegistration document)
+    private sealed partial class Registration(SceneDocumentMetadata tab, ISceneDocumentCommandService commands) : IDisposable
+    {
+        private readonly global::Oxygen.Editor.Documents.Document document = tab.Document!;
+        private ICookDocumentRegistration? registration;
+        private string sourcePath = tab.Document!.File.Path;
+
+        public void Attach(ICookDocumentRegistration value)
         {
-            this.context = context;
-            this.projectManager = projectManager;
-            this.document = document;
-            this.documentService = documentService;
-            this.sourcePath = Path.GetFullPath(sourcePath);
-            this.documentService.DocumentMetadataChanged += this.OnMetadataChanged;
-            this.PublishState();
+            this.registration = value;
+            this.document.StateChanged += this.OnStateChanged;
+            this.registration.UpdateState(this.CaptureState());
         }
 
         public void Dispose()
         {
-            this.documentService.DocumentMetadataChanged -= this.OnMetadataChanged;
-            this.document.Dispose();
+            this.document.StateChanged -= this.OnStateChanged;
+            this.registration?.Dispose();
         }
 
-        private void OnMetadataChanged(object? sender, DocumentMetadataChangedEventArgs args)
+        // Holds off replacing the scene while the cook reads its file, so the state it captured stays the scene's.
+        public CookDocumentReadLease? AcquireRead()
+            => this.document.AcquireReadLease() is { } lease
+                ? new CookDocumentReadLease(this.CaptureState(), lease.Dispose)
+                : null;
+
+        private void OnStateChanged(object? sender, EventArgs args)
         {
-            if (ReferenceEquals(args.NewMetadata, this.context.Metadata))
+            var state = this.CaptureState();
+            if (!string.Equals(this.sourcePath, state.SourcePath, StringComparison.OrdinalIgnoreCase))
             {
-                this.PublishState();
+                this.registration?.RelocateSource(state);
+                this.sourcePath = state.SourcePath;
+            }
+            else
+            {
+                this.registration?.UpdateState(state);
             }
         }
 
-        private void PublishState()
+        private CookDocumentState CaptureState()
         {
-            if (this.projectManager.GetSceneSourceVersion(this.context.Scene) is { } source)
-            {
-                var state = new CookDocumentState(
-                    this.context.DocumentId,
-                    Path.GetFullPath(source.SourcePath),
-                    this.context.Metadata.Title,
-                    this.context.Metadata.ChangeVersion,
-                    this.context.Metadata.SavedVersion,
-                    this.context.Metadata.IsDirty,
-                    source.Version.Sha256);
-                if (!string.Equals(this.sourcePath, state.SourcePath, StringComparison.Ordinal))
-                {
-                    this.document.RelocateSource(state);
-                    this.sourcePath = state.SourcePath;
-                }
-                else
-                {
-                    this.document.UpdateState(state);
-                }
-            }
+            // The tab's change counters follow the document; whichever hears of a change first brings them up to date.
+            _ = tab.Refresh();
+            var scene = (this.document.Content as SceneContent)?.Scene;
+            return new CookDocumentState(
+                this.document.File.Path,
+                this.document.Title,
+                tab.ChangeVersion,
+                tab.SavedVersion,
+                this.document.IsDirty || (scene is not null && commands.HasEditInProgress(scene)),
+                this.document.Version.Sha256);
         }
     }
 }

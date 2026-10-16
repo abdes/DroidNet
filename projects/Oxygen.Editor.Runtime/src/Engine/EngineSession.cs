@@ -4,6 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -109,7 +110,7 @@ internal abstract class EngineSession
     /// <param name="viewId">The viewId value.</param>
     /// <param name="cameraNodeId">The camera node id, or <see langword="null"/> for the editor camera.</param>
     /// <returns>The runtime operation result.</returns>
-    public abstract Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, Guid? cameraNodeId);
+    public abstract Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, NodeId? cameraNodeId);
 
     /// <summary>Starts or stops piloting the scene camera a view looks through.</summary>
     /// <param name="viewId">The viewId value.</param>
@@ -121,7 +122,7 @@ internal abstract class EngineSession
     /// <param name="viewId">The viewId value.</param>
     /// <param name="nodeId">The nodeId value.</param>
     /// <returns>The pose, or <see langword="null"/> when the view or node does not exist.</returns>
-    public abstract Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, Guid nodeId);
+    public abstract Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, NodeId nodeId);
 
     /// <summary>Reads a view's editor camera state.</summary>
     /// <param name="viewId">The viewId value.</param>
@@ -164,13 +165,13 @@ internal abstract class EngineSession
     /// <param name="viewId">The view whose editor camera moves.</param>
     /// <param name="nodeIds">The nodes to frame; empty frames the whole scene.</param>
     /// <returns>What the request did.</returns>
-    public abstract Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<Guid> nodeIds);
+    public abstract Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeId> nodeIds);
 
     /// <summary>Outlines the selected nodes in every editing view.</summary>
     /// <param name="nodeIds">The selected nodes; empty clears the outline.</param>
     /// <param name="activeNodeId">The active node, if any.</param>
     /// <returns>The runtime operation result.</returns>
-    public abstract bool SetSelectionOutline(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId);
+    public abstract bool SetSelectionOutline(IReadOnlyList<NodeId> nodeIds, NodeId? activeNodeId);
 
     /// <summary>Shows the transform gizmo for the given targets in every editing view.</summary>
     /// <param name="gizmo">The tool, space, snapping and targets.</param>

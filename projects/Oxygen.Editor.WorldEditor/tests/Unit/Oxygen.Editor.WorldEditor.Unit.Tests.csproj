@@ -31,6 +31,7 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneAuthoringFixture.cs" Link="Fixtures/SceneAuthoringFixture.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneTabs.cs" Link="Fixtures/SceneTabs.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneTestData.cs" Link="Fixtures/SceneTestData.cs" />
     </ItemGroup>
 </Project>

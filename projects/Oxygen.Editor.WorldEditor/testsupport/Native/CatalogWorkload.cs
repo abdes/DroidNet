@@ -53,8 +53,7 @@ internal static class CatalogWorkload
         _ = importedSlots.Should().NotBeNull();
         inventories.Add(mesh, importedSlots!);
         SeedCatalogWorkloadScene(scene, builtins, mesh, inventories);
-        var manager = new ProjectManagerService(new DroidNet.Storage.Native.NativeStorageProvider(new Testably.Abstractions.RealFileSystem()));
-        _ = (await manager.SaveSceneAsync(scene).ConfigureAwait(true)).Should().BeTrue();
+        await fixture.SaveSceneChangedInMemoryAsync(cancellationToken).ConfigureAwait(true);
         var cooked = await pipeline.CookProjectAsync(cancellationToken).ConfigureAwait(true);
         _ = cooked.IsPublished.Should().BeTrue(DescribeWorkloadCook(cooked));
     }

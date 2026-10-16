@@ -47,7 +47,7 @@ public sealed class PreviewCookTests
         _ = result.InputSnapshot.Should().NotBeNull();
         var snapshot = result.InputSnapshot!;
         _ = snapshot.Inputs.Should().NotContain(input => input.AssetUri != null && input.AssetUri.AbsolutePath.EndsWith(".oscene.json", StringComparison.Ordinal));
-        _ = snapshot.Documents.Should().NotContain(document => document.DocumentId == scene.DocumentId);
+        _ = snapshot.Documents.Should().NotContain(document => string.Equals(document.SourcePath, scene.SourcePath, StringComparison.OrdinalIgnoreCase));
         _ = scene.IsDirty.Should().BeTrue();
     }
 

@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Documents;
+
 namespace Oxygen.Editor.World.Play;
 
 /// <summary>A snapshot of the workspace's Play state.</summary>
@@ -13,7 +15,7 @@ namespace Oxygen.Editor.World.Play;
 /// <param name="FramesPerSecond">The running player's frame rate, once it reported one.</param>
 public sealed record PlayStatus(
     PlayActivity Activity,
-    Guid? DocumentId = null,
+    DocumentId? DocumentId = null,
     string SceneName = "",
     bool IsStale = false,
     PlayFailure? Failure = null,

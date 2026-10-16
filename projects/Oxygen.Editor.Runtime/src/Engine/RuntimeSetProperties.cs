@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Immutable runtime request to SetProperties.</summary>
 /// <param name="NodeId">The NodeId command value.</param>
 /// <param name="Entries">The Entries command value.</param>
-public sealed record RuntimeSetProperties(Guid NodeId, ImmutableArray<RuntimePropertyValue> Entries) : RuntimeWorldCommand;
+public sealed record RuntimeSetProperties(NodeId NodeId, ImmutableArray<RuntimePropertyValue> Entries) : RuntimeWorldCommand;

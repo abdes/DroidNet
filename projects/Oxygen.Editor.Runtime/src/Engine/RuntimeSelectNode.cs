@@ -2,8 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Immutable runtime request to SelectNode.</summary>
 /// <param name="NodeId">The NodeId command value.</param>
-public sealed record RuntimeSelectNode(Guid NodeId) : RuntimeWorldCommand;
+public sealed record RuntimeSelectNode(NodeId NodeId) : RuntimeWorldCommand;

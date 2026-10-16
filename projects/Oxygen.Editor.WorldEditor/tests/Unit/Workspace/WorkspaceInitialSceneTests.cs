@@ -3,64 +3,77 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
+using Moq;
 using Oxygen.Editor.World.Workspace;
+using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
 
+/// <summary>Finds the scene a workspace opens first among the project's scene files, in any folder.</summary>
 [TestClass]
 public sealed class WorkspaceInitialSceneTests
 {
-    [TestMethod]
-    public void ResolveSceneByNameOrId_MatchesByNameFileStemOrId()
-    {
-        var project = CreateProjectWithScenes(out var byName, out var byStem, out var byId);
+    private static readonly Guid AlphaId = Guid.NewGuid();
+    private static readonly Guid BetaId = Guid.NewGuid();
+    private static readonly Guid GammaId = Guid.NewGuid();
 
-        _ = WorkspaceViewModel.ResolveSceneByNameOrId(project, byName.Name).Should().BeSameAs(byName);
-        _ = WorkspaceViewModel.ResolveSceneByNameOrId(project, $"{byStem.Name}.oscene.json").Should().BeSameAs(byStem);
-        _ = WorkspaceViewModel.ResolveSceneByNameOrId(project, byId.Id.ToString("D")).Should().BeSameAs(byId);
+    [TestMethod]
+    public async Task ResolveSceneByNameOrId_MatchesByNameFileNameOrId()
+    {
+        using var scenes = CreateScenes();
+
+        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(scenes.Context, "Alpha").ConfigureAwait(false))!.FilePath.Should().Be(scenes.PathOf("Alpha"));
+        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(scenes.Context, "Beta.oscene.json").ConfigureAwait(false))!.FilePath.Should().Be(scenes.PathOf("Beta"));
+        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(scenes.Context, GammaId.ToString("D")).ConfigureAwait(false))!.FilePath.Should().Be(scenes.PathOf("Levels/Gamma"));
     }
 
     [TestMethod]
-    public void ResolveSceneByNameOrId_ReturnsNullForBlankOrUnknown()
+    public async Task ResolveSceneByNameOrId_ReturnsNullForBlankOrUnknown()
     {
-        var project = CreateProjectWithScenes(out _, out _, out _);
+        using var scenes = CreateScenes();
 
-        _ = WorkspaceViewModel.ResolveSceneByNameOrId(project, "   ").Should().BeNull();
-        _ = WorkspaceViewModel.ResolveSceneByNameOrId(project, "Not a scene").Should().BeNull();
+        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(scenes.Context, "   ").ConfigureAwait(false)).Should().BeNull();
+        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(scenes.Context, "Not a scene").ConfigureAwait(false)).Should().BeNull();
+        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(scenes.Context, Guid.NewGuid().ToString("D")).ConfigureAwait(false)).Should().BeNull();
     }
 
     [TestMethod]
-    public void ResolveInitialScene_ConfiguredDefaultWinsOverActiveSceneAndListOrder()
+    public async Task ResolveInitialScene_ConfiguredStartSceneIsFoundByIdentityInAnyFolder()
     {
-        var project = CreateProjectWithScenes(out var first, out var configured, out _);
-        project.ProjectInfo.DefaultSceneId = configured.Id;
-        project.ActiveScene = first;
+        using var scenes = CreateScenes();
 
-        _ = WorkspaceViewModel.ResolveInitialScene(project, ProjectContext.FromProject(project)).Should().BeSameAs(configured);
-        _ = project.ProjectInfo.DefaultSceneId.Should().Be(configured.Id);
+        var initial = await WorkspaceViewModel.ResolveInitialSceneAsync(scenes.Context with { DefaultSceneId = GammaId }).ConfigureAwait(false);
+
+        _ = initial.Should().Be(scenes.FileOf("Levels/Gamma").AssetUri);
     }
 
     [TestMethod]
-    public void ResolveInitialScene_MissingConfiguredIdentityDoesNotFallBackToActiveOrFirstScene()
+    public async Task ResolveInitialScene_RequestedSceneWinsOverTheStartScene()
     {
-        var project = CreateProjectWithScenes(out var first, out _, out _);
-        project.ProjectInfo.DefaultSceneId = Guid.NewGuid();
-        project.ActiveScene = first;
+        using var scenes = CreateScenes();
+        var requested = scenes.FileOf("Beta").AssetUri;
 
-        _ = WorkspaceViewModel.ResolveInitialScene(project, ProjectContext.FromProject(project)).Should().BeNull();
+        var initial = await WorkspaceViewModel.ResolveInitialSceneAsync(scenes.Context with { DefaultSceneId = AlphaId, InitialSceneAssetUri = requested }).ConfigureAwait(false);
+
+        _ = initial.Should().Be(requested);
     }
 
-    private static Project CreateProjectWithScenes(out Scene byName, out Scene byStem, out Scene byId)
+    [TestMethod]
+    public async Task ResolveInitialScene_MissingStartSceneDoesNotFallBackToAnotherScene()
     {
-        var project = new Project(new ProjectInfo("Migration", Category.Games, "H:/MigrationTests", "preview.png")) { Name = "Migration" };
-        byName = new Scene(project) { Name = "Alpha" };
-        byStem = new Scene(project) { Name = "Beta" };
-        byId = new Scene(project) { Name = "Gamma" };
-        project.Scenes.Add(byName);
-        project.Scenes.Add(byStem);
-        project.Scenes.Add(byId);
-        return project;
+        using var scenes = CreateScenes();
+
+        _ = (await WorkspaceViewModel.ResolveInitialSceneAsync(scenes.Context with { DefaultSceneId = Guid.NewGuid() }).ConfigureAwait(false)).Should().BeNull();
+        _ = (await WorkspaceViewModel.ResolveInitialSceneAsync(scenes.Context).ConfigureAwait(false)).Should().BeNull();
+    }
+
+    private static SceneDocumentFiles CreateScenes()
+    {
+        var scenes = new SceneDocumentFiles(Mock.Of<ISceneDocumentCommandService>());
+        scenes.Write("Alpha", SceneDocumentFiles.Data(AlphaId, "Alpha"));
+        scenes.Write("Beta", SceneDocumentFiles.Data(BetaId, "Beta"));
+        scenes.Write("Levels/Gamma", SceneDocumentFiles.Data(GammaId, "Gamma"));
+        return scenes;
     }
 }

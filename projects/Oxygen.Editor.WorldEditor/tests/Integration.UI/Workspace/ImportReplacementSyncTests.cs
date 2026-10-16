@@ -46,9 +46,9 @@ public sealed class ImportReplacementSyncTests : DroidNet.Tests.VisualUserInterf
         var slot = await fixture.ReadSingleMaterialSlotAsync(node, timeout.Token).ConfigureAwait(true);
         _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [node], slot, material, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         var before = await WaitForNodeAsync(fixture, node, static value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.8f, 0.2f, 0.1f, 1)) < 0.001f, timeout.Token).ConfigureAwait(true);
-        var revision = fixture.Context.Metadata.ChangeVersion;
+        var revision = fixture.Document.History.Position;
         var history = fixture.Context.History.UndoStack.Count;
-        var dirty = fixture.Context.Metadata.IsDirty;
+        var dirty = fixture.Document.IsDirty;
 
         var path = Path.Combine(fixture.ProjectRoot, "Incoming", "Triangle." + format);
         await File.WriteAllTextAsync(path, Recolor(await File.ReadAllTextAsync(path, timeout.Token).ConfigureAwait(true), format), timeout.Token).ConfigureAwait(true);
@@ -60,9 +60,9 @@ public sealed class ImportReplacementSyncTests : DroidNet.Tests.VisualUserInterf
 
         var after = await WaitForNodeAsync(fixture, node, static value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.1f, 0.8f, 0.2f, 1)) < 0.001f, timeout.Token).ConfigureAwait(true);
         _ = after.MaterialKeys.Should().Equal(before.MaterialKeys);
-        _ = fixture.Context.Metadata.ChangeVersion.Should().Be(revision);
+        _ = fixture.Document.History.Position.Should().Be(revision);
         _ = fixture.Context.History.UndoStack.Should().HaveCount(history);
-        _ = fixture.Context.Metadata.IsDirty.Should().Be(dirty);
+        _ = fixture.Document.IsDirty.Should().Be(dirty);
     });
 
     private static string Recolor(string source, string format)

@@ -7,7 +7,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
-using DroidNet.TimeMachine;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -45,6 +44,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly IContentPipelineService contentPipelineService;
     private readonly SceneCookInputRegistrar cookInputs;
     private readonly IDocumentService documentService;
+    private readonly OpenDocuments documents;
     private readonly WindowId windowId;
     private readonly IContainer container;
     private IDisposable? cookInputRegistration;
@@ -57,8 +57,9 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <summary>
     /// Initializes a new instance of the <see cref="SceneEditorViewModel"/> class.
     /// </summary>
-    /// <param name="metadata">The scene document metadata.</param>
+    /// <param name="metadata">The scene document's tab.</param>
     /// <param name="documentService">The document service.</param>
+    /// <param name="documents">The open documents, which the scene document leaves when it closes.</param>
     /// <param name="windowId">The window identifier.</param>
     /// <param name="engineService">Coordinates native engine usage for the document.</param>
     /// <param name="sceneEngineSync">Tracks the scene's runtime projection lifetime.</param>
@@ -77,6 +78,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     public SceneEditorViewModel(
         SceneDocumentMetadata metadata,
         IDocumentService documentService,
+        OpenDocuments documents,
         WindowId windowId,
         IEngineService engineService,
         ISceneEngineSync sceneEngineSync,
@@ -104,11 +106,13 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.contentPipelineService = contentPipelineService;
         this.cookInputs = cookInputs;
         this.documentService = documentService;
+        this.documents = documents;
         this.windowId = windowId;
         this.loggerFactory = loggerFactory;
         this.Viewports = [];
         this.Metadata = metadata;
-        this.scene = sceneEngineSync.GetDocumentScene(metadata);
+        this.Document = metadata.Document ?? throw new ArgumentException("The scene tab has no document.", nameof(metadata));
+        this.scene = sceneEngineSync.GetDocumentScene(metadata.SceneDocumentId) ?? metadata.Scene;
         this.container = container;
         this.messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger(nameof(SceneEditorViewModel));
@@ -123,8 +127,10 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         // restoration. This avoids creating engine views before the scene exists
         // (prevents "frame context has no scene").
         this.RegisterMessages();
+        this.Document.StateChanged += this.OnDocumentStateChanged;
+        this.Document.ContentReplaced += this.OnDocumentContentReplaced;
         this.InitializePlay();
-        this.RefreshCookInputRegistration();
+        this.RegisterCookInput();
         sceneEngineSync.SceneSynchronized += this.OnSceneSynchronized;
         this.WatchSourcePresence(catalog);
         if (this.scene is { } loaded && sceneEngineSync.IsSceneSynchronized(loaded))
@@ -139,6 +145,9 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// </summary>
     [ObservableProperty]
     public partial SceneDocumentMetadata Metadata { get; set; }
+
+    /// <summary>Gets the scene document the editor edits.</summary>
+    public Document Document { get; }
 
     /// <summary>
     /// Gets or sets the current layout of the viewports.
@@ -188,7 +197,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         await this.PreviewSettings.FlushAsync().ConfigureAwait(true);
         if (this.scene is not null)
         {
-            await this.commandService.CompleteEditSessionsAsync(this.CreateCommandContext(), commit: true).ConfigureAwait(true);
+            await this.commandService.CompleteEditSessionsAsync(this.scene, commit: true).ConfigureAwait(true);
         }
 
         this.isClosing = true;
@@ -206,15 +215,14 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     public async Task CloseAsync(bool discard)
     {
         await this.pendingConflict.ConfigureAwait(true);
-        if (this.Metadata.IsDirty && !discard)
+        if (this.Document.IsDirty && !discard)
         {
             throw new InvalidOperationException("The scene has unsaved changes.");
         }
 
-        // Histories contain delegates over scene objects which must not survive a reload.
         if (this.scene is not null)
         {
-            await this.commandService.CompleteEditSessionsAsync(this.CreateCommandContext(), commit: false).ConfigureAwait(true);
+            await this.commandService.CompleteEditSessionsAsync(this.scene, commit: false).ConfigureAwait(true);
         }
 
         using var replacement = this.scene is null ? null
@@ -224,18 +232,15 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             throw new InvalidOperationException("A scene operation is still finishing. Try closing again.");
         }
 
-        if ((this.Metadata.IsDirty && !discard) || UndoRedo.GetHistory(this.Metadata.DocumentId).IsBusy)
+        if ((this.Document.IsDirty && !discard) || this.Document.History.IsBusy)
         {
             throw new InvalidOperationException("The scene changed while preparing to close. Review its changes before closing.");
         }
 
-        this.sceneEngineSync.CloseDocument(this.Metadata);
-        UndoRedo.GetHistory(this.Metadata.DocumentId).Clear();
+        // Closing the document drops its history and retires its scene.
+        this.sceneEngineSync.CloseDocument(this.Document.Id);
         replacement?.Retire();
-        if (this.scene is not null)
-        {
-            this.container.Resolve<Oxygen.Editor.Projects.IProjectManagerService>().RetireScene(this.scene);
-        }
+        this.documents.Close(this.Document);
     }
 
     /// <inheritdoc/>
@@ -251,6 +256,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         if (disposing)
         {
             this.isDisposed = true;
+            this.Document.StateChanged -= this.OnDocumentStateChanged;
+            this.Document.ContentReplaced -= this.OnDocumentContentReplaced;
             this.StopWatchingSourcePresence();
             this.DisposeRelocationParticipant();
             this.cookInputRegistration?.Dispose();
@@ -261,7 +268,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             }
 
             this.sceneEngineSync.SceneSynchronized -= this.OnSceneSynchronized;
-            this.sceneEngineSync.CloseDocument(this.Metadata);
+            this.sceneEngineSync.CloseDocument(this.Document.Id);
             this.LogUnregisteringFromMessages(this.Metadata.DocumentId);
 
             this.messenger.UnregisterAll(this);
@@ -277,16 +284,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         }
     }
 
-    private static Uri GetSceneAssetUri(Oxygen.Editor.World.Scene scene)
-    {
-        var mountName = scene.Project.ProjectInfo.AuthoringMounts.FirstOrDefault(
-                mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase))
-            ?.Name
-            ?? scene.Project.ProjectInfo.AuthoringMounts.FirstOrDefault()?.Name
-            ?? "Content";
-        return new Uri($"{AssetUris.Scheme}:///{mountName}/Scenes/{scene.Name}.oscene.json");
-    }
-
     private void RegisterMessages()
     {
         this.LogRegisteringForSceneLoaded(this.Metadata.DocumentId);
@@ -296,7 +293,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             {
                 this.scene = message.Scene;
                 this.sceneReady = false;
-                this.RefreshCookInputRegistration();
                 this.RefreshPlayScene();
             }
         });
@@ -307,12 +303,9 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.RegisterRelocationMessages();
     }
 
-    private void RefreshCookInputRegistration()
-    {
-        this.cookInputRegistration?.Dispose();
-        this.cookInputRegistration = this.scene is null || this.isDisposed
-            ? null : this.cookInputs.Register(this.CreateCommandContext(), this.commandService);
-    }
+    // The cook asks the registration whether the scene's file has unsaved edits; it follows the document until it closes.
+    private void RegisterCookInput()
+        => this.cookInputRegistration ??= this.isDisposed ? null : this.cookInputs.Register(this.Metadata, this.commandService);
 
     [RelayCommand]
     private async Task Save() => await this.SaveAsync().ConfigureAwait(true);
@@ -329,7 +322,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
         try
         {
-            var sceneUri = GetSceneAssetUri(this.scene);
+            var sceneUri = this.Document.File.AssetUri;
             var result = await this.contentPipelineService.CookCurrentSceneAsync(sceneUri, CancellationToken.None)
                 .ConfigureAwait(true);
 
@@ -349,34 +342,140 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         if (this.scene is null)
         {
             this.LogSaveRequestedButSceneNotReady();
-            this.operationResults.Publish(new OperationResult
-            {
-                OperationId = Guid.NewGuid(),
-                OperationKind = SceneOperationKinds.Save,
-                Status = OperationStatus.Failed,
-                Severity = DiagnosticSeverity.Error,
-                Title = "Scene was not saved",
-                Message = "The scene is still loading. Wait for it to finish before saving.",
-                AffectedScope = new AffectedScope { DocumentId = this.Metadata.DocumentId, DocumentName = this.Metadata.Title },
-                CompletedAt = DateTimeOffset.UtcNow,
-            });
+            this.PublishSaveFailure("The scene is still loading. Wait for it to finish before saving.", "SAVE_FAILED");
             return false;
         }
 
         this.LogSaveRequested();
-        var result = await this.commandService.SaveSceneAsync(this.CreateCommandContext()).ConfigureAwait(true);
-        this.HasSaveConflict = !result.Succeeded && (this.HasSaveConflict || result.IsConflict);
-        if (result.Succeeded)
+        DocumentSaveResult result;
+        try
         {
-            this.RefreshCookInputRegistration();
-            this.LogSaveSuccessful();
+            result = await this.Document.SaveAsync().ConfigureAwait(true);
         }
-        else
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DroidNet.Storage.StorageException)
         {
             this.LogSaveFailed();
+            this.PublishSaveFailure($"The scene could not be written: {exception.Message}", "SAVE_EXCEPTION");
+            return false;
         }
 
-        return result.Succeeded && !result.HasUnsavedChanges;
+        this.HasSaveConflict = result.Outcome == DocumentSaveOutcome.Conflict;
+        if (!result.Succeeded)
+        {
+            this.LogSaveFailed();
+            this.PublishSaveFailure(result.Message ?? "The scene was not saved.", result.Outcome == DocumentSaveOutcome.Conflict ? "Conflict" : "SAVE_FAILED");
+            return false;
+        }
+
+        this.LogSaveSuccessful();
+        if (this.Document.IsDirty)
+        {
+            this.operationResults.Publish(new OperationResult
+            {
+                OperationId = Guid.NewGuid(),
+                OperationKind = SceneOperationKinds.Save,
+                Status = OperationStatus.SucceededWithWarnings,
+                Severity = DiagnosticSeverity.Warning,
+                Title = "Scene snapshot saved",
+                Message = "Saved; newer changes remain unsaved",
+                AffectedScope = this.DocumentScope(),
+                CompletedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
+        return !this.Document.IsDirty;
+    }
+
+    private void PublishSaveFailure(string message, string code)
+    {
+        var operationId = Guid.NewGuid();
+        this.operationResults.Publish(new OperationResult
+        {
+            OperationId = operationId,
+            OperationKind = SceneOperationKinds.Save,
+            Status = OperationStatus.Failed,
+            Severity = DiagnosticSeverity.Error,
+            Title = code == "Conflict" ? "Scene changed outside this document" : "Scene was not saved",
+            Message = message,
+            AffectedScope = this.DocumentScope(),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Diagnostics =
+            [
+                new DiagnosticRecord
+                {
+                    OperationId = operationId,
+                    Domain = FailureDomain.Document,
+                    Severity = DiagnosticSeverity.Error,
+                    Code = DiagnosticCodes.DocumentPrefix + code,
+                    Message = message,
+                    AffectedEntity = this.DocumentScope(),
+                },
+            ],
+        });
+    }
+
+    private AffectedScope DocumentScope()
+        => new()
+        {
+            DocumentId = this.Document.Id.Value,
+            DocumentName = this.Document.Title,
+            DocumentPath = this.Document.File.Path,
+            SceneId = this.scene?.Id,
+            SceneName = this.scene?.Name,
+        };
+
+    // The tab shows the document's title, dirtiness and presence on disk.
+    private void OnDocumentStateChanged(object? sender, EventArgs args)
+    {
+        if (!this.isDisposed && this.Metadata.Refresh())
+        {
+            _ = this.documentService.UpdateMetadataAsync(this.windowId, this.Metadata.DocumentId, this.Metadata);
+        }
+    }
+
+    // A reload replaced the scene: the engine and the views show the new one, and the history was cleared with it.
+    private void OnDocumentContentReplaced(object? sender, DocumentContentReplacedEventArgs args)
+    {
+        if (this.isDisposed || args.Current is not SceneContent current)
+        {
+            return;
+        }
+
+        var replacement = current.Scene;
+        _ = this.sceneEngineSync.RegisterDocument(replacement, this.Document.Id);
+        this.scene = replacement;
+        this.sceneReady = false;
+        this.HasSaveConflict = false;
+        this.RefreshPlayScene();
+        _ = this.messenger.Send(new SceneAuthoringLoadedMessage(replacement, this.Metadata));
+
+        // The Scene Explorer answers when it shows this document; it shows the new scene, or the tab must be reopened.
+        var reloaded = this.messenger.Send(new SceneReloadedMessage(replacement, this.Metadata, this.windowId));
+        if (reloaded.HasReceivedResponse)
+        {
+            _ = this.ReportTreeRefreshAsync(reloaded.Response);
+        }
+    }
+
+    private async Task ReportTreeRefreshAsync(Task<bool> refresh)
+    {
+        if (await refresh.ConfigureAwait(true) || this.isDisposed)
+        {
+            return;
+        }
+
+        this.LogTreeNotRefreshed();
+        this.operationResults.Publish(new OperationResult
+        {
+            OperationId = Guid.NewGuid(),
+            OperationKind = SceneOperationKinds.Reload,
+            Status = OperationStatus.SucceededWithWarnings,
+            Severity = DiagnosticSeverity.Warning,
+            Title = "Scene tree not refreshed",
+            Message = "Reloaded from disk. The scene tree could not be refreshed; reopen the tab to refresh its display.",
+            AffectedScope = this.DocumentScope(),
+            CompletedAt = DateTimeOffset.UtcNow,
+        });
     }
 
     private void PublishCookResult(ContentCookResult result, Uri sceneUri)
@@ -397,8 +496,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             CompletedAt = DateTimeOffset.UtcNow,
             AffectedScope = new AffectedScope
             {
-                DocumentId = this.Metadata.DocumentId,
-                DocumentName = this.Metadata.Title,
+                DocumentId = this.Document.Id.Value,
+                DocumentName = this.Document.Title,
                 AssetId = sceneUri.ToString(),
                 AssetVirtualPath = sceneUri.AbsolutePath,
                 SceneId = this.scene?.Id,
@@ -432,8 +531,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             CompletedAt = DateTimeOffset.UtcNow,
             AffectedScope = new AffectedScope
             {
-                DocumentId = this.Metadata.DocumentId,
-                DocumentName = this.Metadata.Title,
+                DocumentId = this.Document.Id.Value,
+                DocumentName = this.Document.Title,
                 SceneId = this.scene?.Id,
                 SceneName = this.scene?.Name,
             },
@@ -450,7 +549,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             return;
         }
 
-        if (this.Metadata != null && msg.Scene.Id == this.Metadata.DocumentId)
+        if (ReferenceEquals(msg.Scene, this.scene))
         {
             this.OnSceneReady(msg.Scene);
         }
@@ -464,7 +563,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private void OnSceneSynchronized(object? sender, SceneSynchronizationCompletedEventArgs args)
     {
         _ = sender;
-        if (!this.isDisposed && ReferenceEquals(args.Metadata, this.Metadata) && !this.sceneReady
+        if (!this.isDisposed && args.DocumentId == this.Document.Id && !this.sceneReady
             && !this.viewportRestorePending)
         {
             this.OnSceneReady(args.Scene);
@@ -482,7 +581,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         _ = this.RestoreViewportsAsync();
         if (this.SelectionService is { } selection)
         {
-            this.UpdateSelectionOutline(selection.GetContext(this.Metadata.DocumentId));
+            this.UpdateSelectionOutline(selection.GetContext(this.Document.Id));
         }
 
         this.UpdateTransformGizmo();
@@ -490,8 +589,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
     private SceneDocumentCommandContext CreateCommandContext()
         => new(
-            this.Metadata.DocumentId,
-            this.Metadata,
+            this.Document.Id,
             this.scene ?? throw new InvalidOperationException("Scene is not loaded."),
-            UndoRedo.GetHistory(this.Metadata.DocumentId));
+            this.Document.History);
 }

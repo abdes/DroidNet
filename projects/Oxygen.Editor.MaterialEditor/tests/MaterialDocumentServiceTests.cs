@@ -219,7 +219,7 @@ public sealed partial class MaterialDocumentServiceTests
 
         var cooking = service.CookAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken);
         var run = await blocked.Task.WaitAsync(TimeSpan.FromSeconds(10), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = run.UnsavedDocuments.Single().DocumentId.Should().Be(created.DocumentId);
+        _ = run.UnsavedDocuments.Single().SourcePath.Should().Be(Path.GetFullPath(created.SourcePath));
         _ = cooking.IsCompleted.Should().BeFalse();
         _ = service.GetDocument(created.DocumentId).IsDirty.Should().BeTrue();
         _ = (await service.SaveAsync(created.DocumentId, this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
@@ -524,7 +524,6 @@ public sealed partial class MaterialDocumentServiceTests
                 ProjectRoot = @"C:\Project",
                 AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
                 LocalFolderMounts = [new LocalFolderMount("StudioLibrary", workspace.Root)],
-                Scenes = [],
             });
         var resolver = new ProjectMaterialSourcePathResolver(contextService);
 

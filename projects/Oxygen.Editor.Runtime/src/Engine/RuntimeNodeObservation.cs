@@ -2,10 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>The correlated outcome and native state for one node observation.</summary>
 /// <param name="Outcome">The requested scene activation's observation outcome.</param>
 /// <param name="NodeId">The authored node identity requested by the caller.</param>
 /// <param name="State">Native values on success; otherwise null.</param>
-public sealed record RuntimeNodeObservation(RuntimeCommandResult Outcome, Guid NodeId, RuntimeNodeState? State);
+public sealed record RuntimeNodeObservation(RuntimeCommandResult Outcome, NodeId NodeId, RuntimeNodeState? State);

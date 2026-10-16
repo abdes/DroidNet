@@ -237,9 +237,9 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     [TestMethod]
     public Task UnsavedRecoveryKeepsItsActionInlineAndNamesNavigable() => EnqueueAsync(async () =>
     {
-        var document = new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(Guid.NewGuid(), "C:\\Project\\Content\\NewScene2.oscene.json", "NewScene2", Revision: 2, SavedRevision: 1, IsDirty: true, SavedContentHash: string.Empty);
+        var document = new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState("C:\\Project\\Content\\NewScene2.oscene.json", "NewScene2", Revision: 2, SavedRevision: 1, IsDirty: true, SavedContentHash: string.Empty);
         var actions = new Mock<ICookingWorkspaceActions>();
-        _ = actions.Setup(value => value.OpenDocumentAsync(document.DocumentId)).ReturnsAsync(value: true);
+        _ = actions.Setup(value => value.OpenDocumentAsync(document.SourcePath)).ReturnsAsync(value: true);
         using var model = CreateModel(actions.Object, document);
         var view = new CookingPanelView { ViewModel = model, Width = 960, Height = 340, RequestedTheme = ElementTheme.Dark };
         await LoadTestContentAsync(view).ConfigureAwait(true);
@@ -256,7 +256,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         _ = ((TextBlock)link.Content).Text.Should().Be(document.DisplayName);
         ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)new Microsoft.UI.Xaml.Automation.Peers.HyperlinkButtonAutomationPeer(link).GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
         await WaitForRenderAsync().ConfigureAwait(true);
-        actions.Verify(value => value.OpenDocumentAsync(document.DocumentId), Times.Once);
+        actions.Verify(value => value.OpenDocumentAsync(document.SourcePath), Times.Once);
     });
 
     /// <summary>Recovery activation waits for the initiating menu event to return and selects the requested run.</summary>
@@ -535,7 +535,6 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
             ProjectRoot = Path.GetTempPath(),
             AuthoringMounts = [],
             LocalFolderMounts = [],
-            Scenes = [],
         });
         var operationId = Guid.NewGuid();
         DiagnosticRecord Issue(string name, string message) => new()

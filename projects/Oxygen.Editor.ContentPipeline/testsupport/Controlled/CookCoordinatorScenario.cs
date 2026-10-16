@@ -27,6 +27,5 @@ internal static class CookCoordinatorScenario
         ProjectRoot = Path.GetTempPath(),
         AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
         LocalFolderMounts = [],
-        Scenes = [],
     };
 }

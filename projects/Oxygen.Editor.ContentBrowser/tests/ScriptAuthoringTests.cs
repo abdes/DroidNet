@@ -79,7 +79,7 @@ public sealed class ScriptAuthoringTests : IDisposable
     public void InputSourceIndexFindsTheDeclaringFileAndLine()
     {
         var file = Path.Combine(this.root, "Content", "Player", "Player.input.json");
-        File.WriteAllText(file, ScriptTemplates.InputFile("Gameplay"));
+        File.WriteAllText(file, AssetTemplates.InputFile("Gameplay"));
 
         var action = InputSourceIndex.Find(Path.GetDirectoryName(file)!, "Jump", isContext: false);
         var context = InputSourceIndex.Find(Path.GetDirectoryName(file)!, "Gameplay", isContext: true);

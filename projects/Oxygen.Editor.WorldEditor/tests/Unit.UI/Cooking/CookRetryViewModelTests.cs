@@ -37,7 +37,6 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
             ProjectRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
             AuthoringMounts = [new("Content", "Content")],
             LocalFolderMounts = [],
-            Scenes = [],
         };
         projects.Activate(project);
         var source = new Uri("asset:///Content/SourceMedia/DCC/Crate/Crate.gltf");

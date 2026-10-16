@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Utils;
 
 /// <summary>
@@ -14,13 +16,13 @@ public static class SceneTraversal
     /// </summary>
     /// <param name="root">The root node to start traversal from.</param>
     /// <param name="visitor">Action invoked for each node, receiving the node and its parent GUID.</param>
-    /// <param name="parentGuid">Optional parent GUID for the root node.</param>
-    public static void TraverseDepthFirst(SceneNode root, Action<SceneNode, Guid?> visitor, Guid? parentGuid = null)
+    /// <param name="parentId">Optional parent of the root node.</param>
+    public static void TraverseDepthFirst(SceneNode root, Action<SceneNode, NodeId?> visitor, NodeId? parentId = null)
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(visitor);
 
-        visitor(root, parentGuid);
+        visitor(root, parentId);
 
         foreach (var child in root.Children)
         {
@@ -33,17 +35,17 @@ public static class SceneTraversal
     /// </summary>
     /// <param name="root">The root node to start traversal from.</param>
     /// <param name="visitor">Async function invoked for each node, receiving the node and its parent GUID.</param>
-    /// <param name="parentGuid">Optional parent GUID for the root node.</param>
+    /// <param name="parentId">Optional parent of the root node.</param>
     /// <returns>A task that completes when traversal is finished.</returns>
     public static async Task TraverseDepthFirstAsync(
         SceneNode root,
-        Func<SceneNode, Guid?, Task> visitor,
-        Guid? parentGuid = null)
+        Func<SceneNode, NodeId?, Task> visitor,
+        NodeId? parentId = null)
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(visitor);
 
-        await visitor(root, parentGuid).ConfigureAwait(false);
+        await visitor(root, parentId).ConfigureAwait(false);
 
         foreach (var child in root.Children)
         {
@@ -56,11 +58,11 @@ public static class SceneTraversal
     /// </summary>
     /// <param name="root">The root node to start collection from.</param>
     /// <returns>List of all node GUIDs in the hierarchy.</returns>
-    public static IReadOnlyCollection<Guid> CollectNodeIds(SceneNode root)
+    public static IReadOnlyCollection<NodeId> CollectNodeIds(SceneNode root)
     {
         ArgumentNullException.ThrowIfNull(root);
 
-        var ids = new List<Guid>();
+        var ids = new List<NodeId>();
         TraverseDepthFirst(root, (node, _) => ids.Add(node.Id));
         return ids;
     }
@@ -85,7 +87,7 @@ public static class SceneTraversal
     /// <param name="root">The root node to search from.</param>
     /// <param name="targetId">The GUID to search for.</param>
     /// <returns>The found node, or null if not found.</returns>
-    public static SceneNode? FindNodeById(SceneNode root, Guid targetId)
+    public static SceneNode? FindNodeById(SceneNode root, NodeId targetId)
     {
         ArgumentNullException.ThrowIfNull(root);
 

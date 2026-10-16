@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Inspector.Environment;
 
 /// <summary>An entry of the starting camera list: Automatic, a camera, or the authored camera that is gone.</summary>
@@ -9,10 +11,10 @@ namespace Oxygen.Editor.World.Inspector.Environment;
 /// selection set to an entry always reaches the list.</remarks>
 /// <param name="id">The camera node; null for Automatic.</param>
 /// <param name="name">The text the list shows.</param>
-public sealed class StartingCameraChoice(Guid? id, string name)
+public sealed class StartingCameraChoice(NodeId? id, string name)
 {
     /// <summary>Gets the camera node; null for Automatic.</summary>
-    public Guid? Id { get; } = id;
+    public NodeId? Id { get; } = id;
 
     /// <summary>Gets the text the list shows.</summary>
     public string Name { get; } = name;

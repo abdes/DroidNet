@@ -19,6 +19,7 @@ public static class ScriptOperationResults
     /// <param name="message">What failed, in the user's terms.</param>
     /// <param name="path">The affected file, if any.</param>
     /// <param name="exception">The exception, if any.</param>
+    /// <param name="domain">Where the failure belongs; scripts by default.</param>
     public static void PublishFailure(
         IOperationResultPublisher publisher,
         string operationKind,
@@ -26,7 +27,8 @@ public static class ScriptOperationResults
         string title,
         string message,
         string? path = null,
-        Exception? exception = null)
+        Exception? exception = null,
+        FailureDomain domain = FailureDomain.ScriptAuthoring)
     {
         ArgumentNullException.ThrowIfNull(publisher);
         var operationId = Guid.NewGuid();
@@ -45,7 +47,7 @@ public static class ScriptOperationResults
                 new DiagnosticRecord
                 {
                     OperationId = operationId,
-                    Domain = FailureDomain.ScriptAuthoring,
+                    Domain = domain,
                     Severity = DiagnosticSeverity.Error,
                     Code = code,
                     Message = message,

@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Immutable runtime request to RemoveSceneNodes.</summary>
 /// <param name="Nodes">The Nodes command value.</param>
-public sealed record RuntimeRemoveSceneNodes(ImmutableArray<Guid> Nodes) : RuntimeWorldCommand;
+public sealed record RuntimeRemoveSceneNodes(ImmutableArray<NodeId> Nodes) : RuntimeWorldCommand;

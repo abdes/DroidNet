@@ -208,8 +208,7 @@ public sealed class ScriptingViewModelTests : IDisposable
 
     private ScriptingViewModel CreateModel(Action? onEdit = null, IScriptDeclarationProvider? declarations = null)
     {
-        var metadata = new SceneDocumentMetadata { Title = this.scene.Name };
-        var context = new SceneDocumentCommandContext(metadata.DocumentId, metadata, this.scene, new HistoryKeeper(this.scene));
+        var context = new SceneDocumentCommandContext(Guid.NewGuid(), this.scene, new HistoryKeeper(this.scene));
         var commands = new Mock<ISceneDocumentCommandService>();
         _ = commands.Setup(service => service.EditScriptSlotsAsync(context, this.player.Id, It.IsAny<ImmutableArray<ScriptSlot>>()))
             .Returns((SceneDocumentCommandContext _, Guid _, ImmutableArray<ScriptSlot> slots) =>
@@ -230,7 +229,6 @@ public sealed class ScriptingViewModelTests : IDisposable
             ProjectRoot = @"C:\Project",
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
-            Scenes = [],
         });
         return new ScriptingViewModel(commands.Object, () => context, analysis: analysis.Object, projects: projects, declarationProvider: declarations);
     }

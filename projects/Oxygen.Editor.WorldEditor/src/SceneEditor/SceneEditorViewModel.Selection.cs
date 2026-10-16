@@ -8,6 +8,7 @@ using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.SceneEditor;
@@ -32,14 +33,14 @@ public partial class SceneEditorViewModel
     private void RegisterSelectionMessages()
         => this.messenger.Register<FrameSceneNodesRequestMessage>(this, (_, message) =>
         {
-            if (!this.isDisposed && message.DocumentId == this.Metadata.DocumentId && this.GetActiveViewport() is { } viewport)
+            if (!this.isDisposed && message.DocumentId == this.Document.Id && this.GetActiveViewport() is { } viewport)
             {
                 _ = viewport.FrameAsync(message.NodeIds);
             }
         });
 
-    private IReadOnlyList<Guid> GetSelectedNodeIds()
-        => this.SelectionService?.GetContext(this.Metadata.DocumentId).SelectedNodeIds ?? [];
+    private IReadOnlyList<NodeId> GetSelectedNodeIds()
+        => this.SelectionService?.GetContext(this.Document.Id).SelectedNodeIds ?? [];
 
     private void ApplyViewportSelection(ViewportSelection selection)
     {
@@ -52,7 +53,7 @@ public partial class SceneEditorViewModel
         // The Explorer reconciles its rows with the stored selection, reveals the active row and
         // tells the other panels.
         service.Publish(
-            this.Metadata.DocumentId,
+            this.Document.Id,
             nodeIds.Count == 0
                 ? SceneSelectionContext.Empty
                 : new SceneSelectionContext(SceneSelectionKind.Node, nodeIds, [], nodeIds[^1], PrimaryFolderId: null),
@@ -63,7 +64,7 @@ public partial class SceneEditorViewModel
     private void UpdateSelectionOutline(SceneSelectionContext context)
         => _ = this.SetSelectionOutlineAsync(context.SelectedNodeIds, context.PrimaryNodeId);
 
-    private async Task SetSelectionOutlineAsync(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId)
+    private async Task SetSelectionOutlineAsync(IReadOnlyList<NodeId> nodeIds, NodeId? activeNodeId)
     {
         try
         {

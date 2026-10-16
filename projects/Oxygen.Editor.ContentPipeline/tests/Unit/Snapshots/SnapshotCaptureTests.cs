@@ -223,5 +223,5 @@ public sealed class SnapshotCaptureTests
     }
 
     private static CookDocumentState State(CookSnapshotInput input)
-        => new(Guid.NewGuid(), input.SourcePath, "Material", 1, 1, IsDirty: false, input.DiscoveryHash);
+        => new(input.SourcePath, "Material", 1, 1, IsDirty: false, input.DiscoveryHash);
 }

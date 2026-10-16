@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using DroidNet.Hosting.WinUI;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Runtime.Tests;
@@ -31,7 +32,7 @@ public sealed class EngineLoopSupervisionTests
         var runId = service.WorldCommands.RunId;
         var activation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = Mock.Get(native.Commands).Setup(value => value.ActivateSceneAsync(It.IsAny<string>())).Returns(activation.Task);
-        var target = new RuntimeSceneTarget(runId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var target = new RuntimeSceneTarget(runId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         var pending = service.WorldCommands.ActivateSceneAsync(Guid.NewGuid(), target, "Pending", this.TestContext.CancellationToken);
         var original = new InvalidOperationException("Native frame failed", new IOException("Original cause"));
 

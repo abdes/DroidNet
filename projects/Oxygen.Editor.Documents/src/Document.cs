@@ -59,7 +59,7 @@ public sealed partial class Document : IDisposable
     public event EventHandler<DocumentContentReplacedEventArgs>? ContentReplaced;
 
     /// <summary>Gets the document's identity, which is also its tab's.</summary>
-    public Guid Id { get; } = Guid.NewGuid();
+    public DocumentId Id { get; } = DocumentId.New();
 
     /// <summary>Gets the document's kind.</summary>
     public IDocumentKind Kind { get; }
@@ -96,6 +96,8 @@ public sealed partial class Document : IDisposable
     public bool IsChangedOnDisk { get; private set; }
 
     private bool HasEdits => this.History.Position != this.savedPosition;
+
+    private bool IsBeingEdited => this.History.IsBusy || this.Content.HasEditsInProgress;
 
     /// <summary>Saves the document: finishes its edits in progress, then writes what its content captures.</summary>
     /// <param name="cancellationToken">Cancels the save before the file is replaced.</param>
@@ -200,8 +202,8 @@ public sealed partial class Document : IDisposable
     /// <param name="cancellationToken">Cancels reading the file.</param>
     /// <returns>What the document found and did.</returns>
     /// <remarks>
-    /// A document without edits reads the changed file again; one with edits, or one being edited, is marked changed on
-    /// disk; one whose file is gone is marked missing.
+    /// A document without edits reads the changed file again; one with edits, or with an edit in progress, is marked
+    /// changed on disk; one whose file is gone is marked missing.
     /// </remarks>
     public async Task<DocumentFileState> CheckFileAsync(CancellationToken cancellationToken = default)
     {
@@ -219,7 +221,7 @@ public sealed partial class Document : IDisposable
                 return this.MarkPresent();
             }
 
-            if (this.HasEdits || this.History.IsBusy)
+            if (this.HasEdits || this.IsBeingEdited)
             {
                 return this.MarkChangedOnDisk();
             }
@@ -246,7 +248,7 @@ public sealed partial class Document : IDisposable
         await this.operations.WaitAsync(cancellationToken).ConfigureAwait(true);
         try
         {
-            if (this.History.IsBusy)
+            if (this.IsBeingEdited)
             {
                 return this.ReloadFailed("The document is being edited. Finish the edit, then reload it.");
             }
@@ -317,7 +319,7 @@ public sealed partial class Document : IDisposable
         await this.operations.WaitAsync(cancellationToken).ConfigureAwait(true);
         try
         {
-            if (this.IsDirty || this.IsChangedOnDisk || this.History.IsBusy)
+            if (this.IsDirty || this.IsChangedOnDisk || this.IsBeingEdited)
             {
                 throw new InvalidOperationException($"'{this.Title}' has unsaved edits; a relocation only rewrites saved documents.");
             }
@@ -343,9 +345,13 @@ public sealed partial class Document : IDisposable
             return;
         }
 
-        this.disposed = true;
+        lock (this.leaseSync)
+        {
+            this.disposed = true;
+        }
+
         ((INotifyCollectionChanged)this.History.UndoStack).CollectionChanged -= this.OnHistoryChanged;
-        (this.Content as IDisposable)?.Dispose();
+        this.DisposeContentAfterReads(this.Content);
         this.operations.Dispose();
     }
 
@@ -358,6 +364,17 @@ public sealed partial class Document : IDisposable
             return decoded.Problem;
         }
 
+        try
+        {
+            // A reader holding a lease keeps the content in place until it is done.
+            await this.ReadsReleasedAsync().WaitAsync(cancellationToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            (content as IDisposable)?.Dispose();
+            throw;
+        }
+
         var previous = this.Content;
         this.Content = content;
         this.History.Clear();
@@ -367,7 +384,7 @@ public sealed partial class Document : IDisposable
         this.IsChangedOnDisk = false;
         this.LogReloaded();
         this.ContentReplaced?.Invoke(this, new DocumentContentReplacedEventArgs(previous, content));
-        (previous as IDisposable)?.Dispose();
+        this.DisposeContentAfterReads(previous);
         this.PublishState();
         return null;
     }

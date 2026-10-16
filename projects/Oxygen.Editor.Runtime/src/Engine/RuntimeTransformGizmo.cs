@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>What the editing views show a transform gizmo for.</summary>
@@ -15,6 +17,6 @@ public sealed record RuntimeTransformGizmo(
     RuntimeTransformTool Tool,
     RuntimeTransformSpace Space,
     RuntimeTransformSnap Snap,
-    IReadOnlyList<Guid> Targets,
-    Guid? ActiveNodeId,
+    IReadOnlyList<NodeId> Targets,
+    NodeId? ActiveNodeId,
     float DisplayScale);

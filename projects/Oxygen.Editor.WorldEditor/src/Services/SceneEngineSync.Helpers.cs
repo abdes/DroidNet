@@ -8,6 +8,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Services;
@@ -44,7 +45,7 @@ public sealed partial class SceneEngineSync
         return false;
     }
 
-    private static SceneNode? FindNode(Scene scene, Guid nodeId)
+    private static SceneNode? FindNode(Scene scene, NodeId nodeId)
     {
         foreach (var root in scene.RootNodes)
         {
@@ -188,7 +189,7 @@ public sealed partial class SceneEngineSync
     private static AffectedScope Scope(
         Scene scene,
         SceneNode? node = null,
-        Guid? nodeId = null,
+        NodeId? nodeId = null,
         string? componentType = null,
         string? componentName = null,
         string? assetVirtualPath = null)
@@ -438,7 +439,7 @@ public sealed partial class SceneEngineSync
     private async Task<bool> CreateNodeWithCallbackAsync(
         WorldDispatch world,
         SceneNode node,
-        Guid? parentGuid,
+        NodeId? parentGuid,
         bool initializeWorldAsRoot,
         CancellationToken cancellationToken)
     {

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World;
 
@@ -100,7 +101,7 @@ public interface IProjectInfo
     ///     (surviving rename) and must reference one of the project's discovered scenes; a missing or invalid value
     ///     requires an explicit choice rather than falling back to last-opened or first-listed.
     /// </remarks>
-    public Guid? DefaultSceneId { get; set; }
+    public SceneId? DefaultSceneId { get; set; }
 
     /// <summary>Gets or sets the project's settings.</summary>
     public ProjectSettings Settings { get; set; }

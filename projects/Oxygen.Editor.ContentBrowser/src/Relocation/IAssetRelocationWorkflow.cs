@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline.Relocation;
 
 namespace Oxygen.Editor.ContentBrowser.Relocation;
@@ -62,17 +61,10 @@ public interface IAssetRelocationWorkflow
     /// <returns>The outcome, or null when every cut item is already in that folder.</returns>
     public Task<AssetRelocationOutcome?> PasteAsync(IReadOnlyList<string> sources, bool move, string targetFolder);
 
-    /// <summary>Confirms when other content uses the items, then moves them to the Recycle Bin.</summary>
+    /// <summary>Confirms when other content uses the items or they are open, then moves them to the Recycle Bin.</summary>
     /// <param name="sources">The virtual paths to delete.</param>
     /// <returns>The outcome, or null when the user cancelled.</returns>
     public Task<AssetRelocationOutcome?> DeleteAsync(IReadOnlyList<string> sources);
-
-    /// <summary>Asks the scene workspace to rename, duplicate or delete a scene.</summary>
-    /// <param name="command">The change.</param>
-    /// <param name="sceneName">The scene's name.</param>
-    /// <param name="newName">The new name for a rename or duplicate.</param>
-    /// <returns>The outcome.</returns>
-    public Task<AssetRelocationOutcome> RunSceneCommandAsync(SceneAssetCommand command, string sceneName, string? newName);
 
     /// <summary>Finds the authored files that use an asset or any asset inside a folder.</summary>
     /// <param name="virtualPath">The asset or folder.</param>

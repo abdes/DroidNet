@@ -53,7 +53,6 @@ public sealed class CookedLibraryFoldersTests
                 ProjectRoot = this.directory.FullName,
                 AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [new("First", this.First), new("Second", second)],
-                Scenes = [],
             };
             var uri = new Uri("asset:///Content/Shared.omat");
             this.Shared = new(uri, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Unknown, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, uri, CookedPath: null, AssetGuid: null, [], IsSelectable: true)

@@ -13,19 +13,13 @@ public sealed partial class DocumentManager
     /// <summary>Reloads the previous saved scene after a replacement failed following retirement.</summary>
     /// <returns>Whether the previous saved scene was successfully staged and installed.</returns>
     public Task<bool> ReloadPreviousSceneAsync()
-    {
-        if (this.previousSavedScene is not { } previous || this.projectManager.CurrentProject is not { } project
-            || project.ProjectInfo.Id != previous.projectId
-            || !string.Equals(project.ProjectInfo.Location, previous.projectRoot, StringComparison.OrdinalIgnoreCase)
-            || project.Scenes.FirstOrDefault(scene => scene.Id == previous.sceneId) is not { } scene)
-        {
-            return Task.FromResult(false);
-        }
+        => this.previousSavedScene is { } previous && this.projectContextService.ActiveProject is { } project
+            && project.ProjectId == previous.projectId
+            && string.Equals(project.ProjectRoot, previous.projectRoot, StringComparison.OrdinalIgnoreCase)
+                ? this.OpenSceneAsync(previous.sceneUri)
+                : Task.FromResult(false);
 
-        return this.OpenSceneAsync(scene);
-    }
-
-    private void PublishSceneLoadFailure(Scene scene, bool unavailable)
+    private void PublishSceneLoadFailure(Uri sceneUri, bool unavailable, string? problem = null)
     {
         if (unavailable)
         {
@@ -37,16 +31,19 @@ public sealed partial class DocumentManager
             return;
         }
 
+        var title = unavailable ? "Scene unavailable" : "Scene was not loaded";
+        var message = unavailable
+                ? "The previous editable scene was retired, but the replacement could not be installed. Reload the previous saved scene or open another scene."
+                : (problem ?? "The source could not be validated.") + " The current scene, selection and clipboard were kept.";
+
         _ = SceneOperationResults.PublishFailure(
             publisher,
             reducer,
             "Scene.Load",
             FailureDomain.Document,
             DiagnosticCodes.DocumentPrefix + (unavailable ? "SCENE_UNAVAILABLE" : "SCENE_LOAD_FAILED"),
-            unavailable ? "Scene unavailable" : "Scene was not loaded",
-            unavailable
-                ? "The previous editable scene was retired, but the replacement could not be installed. Reload the previous saved scene or open another scene."
-                : "The source could not be validated. The current scene, selection and clipboard were kept.",
-            new AffectedScope { DocumentId = scene.Id, DocumentName = scene.Name });
+            title,
+            message,
+            new AffectedScope { DocumentName = SceneContent.NameOf(Uri.UnescapeDataString(sceneUri.AbsolutePath)), AssetVirtualPath = Uri.UnescapeDataString(sceneUri.AbsolutePath) });
     }
 }

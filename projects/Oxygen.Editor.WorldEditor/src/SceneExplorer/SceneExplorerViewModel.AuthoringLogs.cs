@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 
@@ -13,7 +14,7 @@ public partial class SceneExplorerViewModel
     private partial void LogAuthoringAddFailed(Exception exception, string item);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to load scene {SceneId} ({SceneName}).")]
-    private partial void LogAuthoringLoadFailed(Exception exception, Guid sceneId, string sceneName);
+    private partial void LogAuthoringLoadFailed(Exception exception, SceneId sceneId, string sceneName);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to apply in-place rename for {Item}.")]
     private partial void LogAuthoringRenameFailed(Exception exception, string item);

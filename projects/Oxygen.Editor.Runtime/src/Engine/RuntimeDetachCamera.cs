@@ -2,8 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Immutable runtime request to DetachCamera.</summary>
 /// <param name="NodeId">The NodeId command value.</param>
-public sealed record RuntimeDetachCamera(Guid NodeId) : RuntimeWorldCommand;
+public sealed record RuntimeDetachCamera(NodeId NodeId) : RuntimeWorldCommand;

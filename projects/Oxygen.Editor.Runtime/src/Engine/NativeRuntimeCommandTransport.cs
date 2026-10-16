@@ -26,19 +26,19 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
         switch (request.Command)
         {
             case RuntimeRemoveSceneNode value:
-                this.world.RemoveSceneNode(value.NodeId);
+                this.world.RemoveSceneNode(value.NodeId.Value);
                 break;
             case RuntimeRenameSceneNode value:
-                this.world.RenameSceneNode(value.NodeId, value.NewName);
+                this.world.RenameSceneNode(value.NodeId.Value, value.NewName);
                 break;
             case RuntimeSetLocalTransform value:
-                this.world.SetLocalTransform(value.NodeId, value.Position, value.Rotation, value.Scale);
+                this.world.SetLocalTransform(value.NodeId.Value, value.Position, value.Rotation, value.Scale);
                 break;
             case RuntimeSetProperties value:
-                this.world.SetProperties(value.NodeId, RuntimeTransportConversion.ToNative(value.Entries));
+                this.world.SetProperties(value.NodeId.Value, RuntimeTransportConversion.ToNative(value.Entries));
                 break;
             case RuntimeSetGeometry value:
-                this.world.SetGeometry(value.NodeId, value.AssetPath, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
+                this.world.SetGeometry(value.NodeId.Value, value.AssetPath, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
                 break;
             case RuntimeSetMaterialOverride value:
                 if (!Enum.IsDefined(value.Intent))
@@ -46,31 +46,31 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
                     throw new ArgumentOutOfRangeException(nameof(request), "Unknown material assignment intent.");
                 }
 
-                this.world.SetMaterialOverride(value.NodeId, value.GeometryPath, value.SlotId, value.LayoutRevision, value.MaterialPath, (byte)value.Intent, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
+                this.world.SetMaterialOverride(value.NodeId.Value, value.GeometryPath, value.SlotId, value.LayoutRevision, value.MaterialPath, (byte)value.Intent, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
                 break;
             case RuntimeSetEnvironment value:
                 this.world.SetEnvironment(value.AtmosphereEnabled, value.SunDiskEnabled, value.PlanetRadiusMeters, value.AtmosphereHeightMeters, value.GroundAlbedoRgb, value.RayleighScaleHeightMeters, value.MieScaleHeightMeters, value.MieAnisotropy, value.SkyLuminanceFactorRgb, value.AerialPerspectiveDistanceScale, value.AerialScatteringStrength, value.AerialPerspectiveStartDepthMeters, value.HeightFogContribution, value.ExposureMode, value.ExposureEnabled, value.ExposureKey, value.ManualExposureEv, value.ExposureCompensation, value.ToneMapping, value.AutoExposureMeteringMode, value.AutoExposureMinEv, value.AutoExposureMaxEv, value.AutoExposureSpeedUp, value.AutoExposureSpeedDown, value.AutoExposureLowPercentile, value.AutoExposureHighPercentile, value.AutoExposureMinLogLuminance, value.AutoExposureLogLuminanceRange, value.AutoExposureTargetLuminance, value.AutoExposureSpotMeterRadius, value.AutoExposureBlackInfluence, value.AutoExposureTransitionDistanceEv, value.AutoExposureCompensationCurve.Select(static key => new ExposureCompensationKeyManaged { MeteredEv = key.MeteredEv, CompensationEv = key.CompensationEv }).ToArray(), value.AutoExposureMeteringMask?.CookedRoot, value.AutoExposureMeteringMask?.DescriptorRelativePath, value.AutoExposureMeteringMask?.ProjectMount, value.BloomIntensity, value.BloomThreshold, value.Saturation, value.Contrast, value.VignetteIntensity, value.DisplayGamma, RuntimeTransportConversion.ToNative(value.Fog), RuntimeTransportConversion.ToNative(value.SkySphere, value.SkySphereCubemap), RuntimeTransportConversion.ToNative(value.SkyLight, value.SkyLightCubemap), RuntimeTransportConversion.ToNative(value.Background), (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
                 break;
             case RuntimeDetachGeometry value:
-                this.world.DetachGeometry(value.NodeId);
+                this.world.DetachGeometry(value.NodeId.Value);
                 break;
             case RuntimeSelectNode value:
-                this.world.SelectNode(value.NodeId);
+                this.world.SelectNode(value.NodeId.Value);
                 break;
             case RuntimeDeselectNode value:
-                this.world.DeselectNode(value.NodeId);
+                this.world.DeselectNode(value.NodeId.Value);
                 break;
             case RuntimeReparentSceneNode value:
-                this.world.ReparentSceneNode(value.Child, value.Parent, value.PreserveWorldTransform);
+                this.world.ReparentSceneNode(value.Child.Value, value.Parent?.Value, value.PreserveWorldTransform);
                 break;
             case RuntimeReparentSceneNodes value:
-                this.world.ReparentSceneNodes(value.Children.ToArray(), value.Parent, value.PreserveWorldTransform);
+                this.world.ReparentSceneNodes([.. value.Children.Select(static id => id.Value)], value.Parent?.Value, value.PreserveWorldTransform);
                 break;
             case RuntimeUpdateTransformsForNodes value:
-                this.world.UpdateTransformsForNodes(value.Nodes.ToArray());
+                this.world.UpdateTransformsForNodes([.. value.Nodes.Select(static id => id.Value)]);
                 break;
             case RuntimeRemoveSceneNodes value:
-                this.world.RemoveSceneNodes(value.Nodes.ToArray());
+                this.world.RemoveSceneNodes([.. value.Nodes.Select(static id => id.Value)]);
                 break;
             default:
                 this.ExecuteComponent(request.Command);
@@ -89,7 +89,7 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
     public Task CreateNodeAsync(RuntimeCreateNode command)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        this.world.CreateSceneNode(command.Name, command.NodeId, command.ParentId, _ => completion.TrySetResult(), command.InitializeWorldAsRoot);
+        this.world.CreateSceneNode(command.Name, command.NodeId.Value, command.ParentId?.Value, _ => completion.TrySetResult(), command.InitializeWorldAsRoot);
         return completion.Task;
     }
 
@@ -137,31 +137,31 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
         switch (command)
         {
             case RuntimeAttachPerspectiveCamera value:
-                this.world.AttachPerspectiveCamera(value.NodeId, value.FieldOfViewYRadians, value.AspectRatio, value.NearPlane, value.FarPlane, (byte)value.AspectMode);
+                this.world.AttachPerspectiveCamera(value.NodeId.Value, value.FieldOfViewYRadians, value.AspectRatio, value.NearPlane, value.FarPlane, (byte)value.AspectMode);
                 break;
             case RuntimeAttachOrthographicCamera value:
-                this.world.AttachOrthographicCamera(value.NodeId, value.OrthographicSize, value.AspectRatio, value.NearPlane, value.FarPlane, (byte)value.AspectMode);
+                this.world.AttachOrthographicCamera(value.NodeId.Value, value.OrthographicSize, value.AspectRatio, value.NearPlane, value.FarPlane, (byte)value.AspectMode);
                 break;
             case RuntimeDetachCamera value:
-                this.world.DetachCamera(value.NodeId);
+                this.world.DetachCamera(value.NodeId.Value);
                 break;
             case RuntimeAttachDirectionalLight value:
-                this.world.AttachDirectionalLight(value.NodeId, value.IntensityLux, value.AngularSizeRadians, value.Color, value.AffectsWorld, value.Mobility, value.CastsShadows, value.ShadowBias, value.ShadowNormalBias, value.ContactShadows, value.ShadowResolutionHint, value.ExposureCompensation, value.AtmosphereLightSlot, value.UsePerPixelAtmosphereTransmittance, value.AtmosphereDiskLuminanceScaleRgb, value.CascadeCount, value.SplitMode, value.MaxShadowDistance, value.CascadeDistances, value.DistributionExponent, value.TransitionFraction, value.DistanceFadeoutFraction);
+                this.world.AttachDirectionalLight(value.NodeId.Value, value.IntensityLux, value.AngularSizeRadians, value.Color, value.AffectsWorld, value.Mobility, value.CastsShadows, value.ShadowBias, value.ShadowNormalBias, value.ContactShadows, value.ShadowResolutionHint, value.ExposureCompensation, value.AtmosphereLightSlot, value.UsePerPixelAtmosphereTransmittance, value.AtmosphereDiskLuminanceScaleRgb, value.CascadeCount, value.SplitMode, value.MaxShadowDistance, value.CascadeDistances, value.DistributionExponent, value.TransitionFraction, value.DistanceFadeoutFraction);
                 break;
             case RuntimeAttachPointLight value:
-                this.world.AttachPointLight(value.NodeId, value.LuminousFluxLumens, value.Range, value.SourceRadius, value.Color, value.AffectsWorld, value.CastsShadows, value.ShadowBias, value.ShadowNormalBias, value.ContactShadows, value.ShadowResolutionHint, value.ExposureCompensation);
+                this.world.AttachPointLight(value.NodeId.Value, value.LuminousFluxLumens, value.Range, value.SourceRadius, value.Color, value.AffectsWorld, value.CastsShadows, value.ShadowBias, value.ShadowNormalBias, value.ContactShadows, value.ShadowResolutionHint, value.ExposureCompensation);
                 break;
             case RuntimeAttachSpotLight value:
-                this.world.AttachSpotLight(value.NodeId, value.LuminousFluxLumens, value.Range, value.SourceRadius, value.InnerConeAngleRadians, value.OuterConeAngleRadians, value.Color, value.AffectsWorld, value.CastsShadows, value.ShadowBias, value.ShadowNormalBias, value.ContactShadows, value.ShadowResolutionHint, value.ExposureCompensation);
+                this.world.AttachSpotLight(value.NodeId.Value, value.LuminousFluxLumens, value.Range, value.SourceRadius, value.InnerConeAngleRadians, value.OuterConeAngleRadians, value.Color, value.AffectsWorld, value.CastsShadows, value.ShadowBias, value.ShadowNormalBias, value.ContactShadows, value.ShadowResolutionHint, value.ExposureCompensation);
                 break;
             case RuntimeDetachLight value:
-                this.world.DetachLight(value.NodeId);
+                this.world.DetachLight(value.NodeId.Value);
                 break;
             case RuntimeAttachLocalFogVolume value:
-                this.world.AttachLocalFogVolume(value.NodeId, value.Enabled, value.RadialFogExtinction, value.HeightFogExtinction, value.HeightFogFalloff, value.HeightFogOffset, value.FogPhaseG, value.FogAlbedo, value.FogEmissive, value.SortPriority);
+                this.world.AttachLocalFogVolume(value.NodeId.Value, value.Enabled, value.RadialFogExtinction, value.HeightFogExtinction, value.HeightFogFalloff, value.HeightFogOffset, value.FogPhaseG, value.FogAlbedo, value.FogEmissive, value.SortPriority);
                 break;
             case RuntimeDetachLocalFogVolume value:
-                this.world.DetachLocalFogVolume(value.NodeId);
+                this.world.DetachLocalFogVolume(value.NodeId.Value);
                 break;
             default:
                 throw new ArgumentException("Unsupported runtime world command.", nameof(command));

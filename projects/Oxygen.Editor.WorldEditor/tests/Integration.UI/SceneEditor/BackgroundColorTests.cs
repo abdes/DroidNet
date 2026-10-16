@@ -19,6 +19,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
@@ -79,49 +80,67 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
 
     private static async Task CheckNativeBackgroundWorkflowAsync(EngineService engine, SceneEngineSync sync, IOperationResultPublisher results, string directory, CancellationToken cancellationToken)
     {
-        var manager = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()));
         var project = new Project(new ProjectInfo("Native UI", Category.Games, directory, "preview.png"))
         {
             Name = "Native UI",
         };
-        var scene = Scene.CreateAndHydrate(project, new SceneData { Id = Guid.NewGuid(), Name = "Background", Environment = new SceneEnvironmentData { AtmosphereEnabled = true } });
-        project.Scenes.Add(scene);
-        var metadata = new SceneDocumentMetadata(scene.Id);
-        var ready = new TaskCompletionSource<RuntimeSceneTarget>(TaskCreationOptions.RunContinuationsAsynchronously);
-        sync.SceneSynchronized += (_, args) =>
-        {
-            if (ReferenceEquals(args.Metadata, metadata))
-            {
-                _ = ready.TrySetResult(args.Target);
-            }
-        };
-        _ = sync.RegisterDocument(scene, metadata).Should().BeTrue();
-        _ = (await sync.SyncSceneWhenReadyAsync(scene, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
-        var target = await ready.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
-        await EditSaveBackgroundAsync(engine, sync, results, manager, scene, metadata, target, cancellationToken).ConfigureAwait(true);
-        sync.CloseDocument(metadata);
-        var reopened = await manager.LoadSceneAsync(scene).ConfigureAwait(true);
-        _ = reopened.Should().NotBeNull();
-        AssertColorClose(reopened!.Environment.Background.ColorRgb, new Vector3(0.12743768f, 0.05126946f, 0.2158605f));
-        _ = reopened.Environment.Background.Enabled.Should().BeTrue();
-        _ = reopened.Environment.AtmosphereEnabled.Should().BeFalse();
-        metadata = new SceneDocumentMetadata(reopened.Id);
-        ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        _ = sync.RegisterDocument(reopened, metadata).Should().BeTrue();
-        _ = (await sync.SyncSceneWhenReadyAsync(reopened, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
-        target = await ready.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
-        var observed = await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true);
-        _ = observed.Background.ColorRgb.Should().Be(reopened.Environment.Background.ColorRgb);
+        var path = Path.Combine(directory, "Content", "Scenes", "Background.oscene.json");
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var data = new SceneData { Id = Guid.NewGuid(), Name = "Background", Environment = new SceneEnvironmentData { AtmosphereEnabled = true } };
+        await File.WriteAllBytesAsync(path, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData), cancellationToken).ConfigureAwait(true);
+        var file = new DocumentFile(path, new Uri("asset:///Content/Scenes/Background.oscene.json"));
+        var commands = new SceneDocumentCommandService(new SceneSelectionService(), sync, new StrongReferenceMessenger(), results, new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>(), Moq.Mock.Of<ISceneMutator>(), Moq.Mock.Of<ISceneOrganizer>());
+        var projects = new Mock<IProjectManagerService>();
+        _ = projects.SetupGet(value => value.CurrentProject).Returns(project);
+        using var scenes = new OpenDocuments([new SceneDocumentKind(projects.Object, commands)], new NativeAtomicFileStore(new RealFileSystem()));
+        var document = await OpenAndShowAsync(scenes, file, sync, cancellationToken).ConfigureAwait(true);
+        await EditSaveBackgroundAsync(engine, commands, document, document.Target, cancellationToken).ConfigureAwait(true);
+        sync.CloseDocument(document.Document.Id);
+        scenes.Close(document.Document);
+        var reopened = await OpenAndShowAsync(scenes, file, sync, cancellationToken).ConfigureAwait(true);
+        var environment = reopened.Scene.Environment;
+        AssertColorClose(environment.Background.ColorRgb, new Vector3(0.12743768f, 0.05126946f, 0.2158605f));
+        _ = environment.Background.Enabled.Should().BeTrue();
+        _ = environment.AtmosphereEnabled.Should().BeFalse();
+        var observed = await ReadNativeBackgroundAsync(engine, reopened.Target, cancellationToken).ConfigureAwait(true);
+        _ = observed.Background.ColorRgb.Should().Be(environment.Background.ColorRgb);
         _ = observed.AtmosphereEnabled.Should().BeFalse();
-        sync.CloseDocument(metadata);
+        sync.CloseDocument(reopened.Document.Id);
     }
 
-    private static async Task EditSaveBackgroundAsync(EngineService engine, SceneEngineSync sync, IOperationResultPublisher results, ProjectManagerService manager, Scene scene, SceneDocumentMetadata metadata, RuntimeSceneTarget target, CancellationToken cancellationToken)
+    // Opens the scene file as a document and shows its scene in the engine.
+    private static async Task<OpenScene> OpenAndShowAsync(OpenDocuments scenes, DocumentFile file, SceneEngineSync sync, CancellationToken cancellationToken)
     {
-        var documents = new Mock<IDocumentService>();
-        _ = documents.Setup(value => value.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>())).ReturnsAsync(value: true);
-        var commands = new SceneDocumentCommandService(new SceneSelectionService(), sync, manager, documents.Object, default, new StrongReferenceMessenger(), results, new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>(), Moq.Mock.Of<ISceneMutator>(), Moq.Mock.Of<ISceneOrganizer>());
-        var context = new SceneDocumentCommandContext(scene.Id, metadata, scene, new HistoryKeeper(scene));
+        var opened = await scenes.OpenAsync(file, cancellationToken).ConfigureAwait(true);
+        _ = opened.Document.Should().NotBeNull(opened.Problem);
+        var document = opened.Document!;
+        var scene = ((SceneContent)document.Content).Scene;
+        var ready = new TaskCompletionSource<RuntimeSceneTarget>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnSynchronized(object? sender, SceneSynchronizationCompletedEventArgs args)
+        {
+            if (args.DocumentId == document.Id)
+            {
+                _ = ready.TrySetResult(sync.GetSynchronizedTarget(args.DocumentId)!);
+            }
+        }
+
+        sync.SceneSynchronized += OnSynchronized;
+        try
+        {
+            _ = sync.RegisterDocument(scene, document.Id).Should().BeTrue();
+            _ = (await sync.SyncSceneWhenReadyAsync(scene, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
+            return new(document, scene, await ready.Task.WaitAsync(cancellationToken).ConfigureAwait(true));
+        }
+        finally
+        {
+            sync.SceneSynchronized -= OnSynchronized;
+        }
+    }
+
+    private static async Task EditSaveBackgroundAsync(EngineService engine, SceneDocumentCommandService commands, OpenScene opened, RuntimeSceneTarget target, CancellationToken cancellationToken)
+    {
+        var scene = opened.Scene;
+        var context = new SceneDocumentCommandContext(opened.Document.Id, scene, opened.Document.History);
         var model = new EnvironmentViewModel(commands, () => context);
         using (model)
         {
@@ -157,7 +176,7 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
             _ = (await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true)).Background.ColorRgb.Should().Be(original.Background.ColorRgb);
             await context.History.RedoAsync(cancellationToken).ConfigureAwait(true);
             _ = (await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true)).Background.ColorRgb.Should().Be(expected);
-            _ = (await commands.SaveSceneAsync(context).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+            _ = (await opened.Document.SaveAsync(cancellationToken).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         }
     }
 
@@ -194,4 +213,6 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         _ = observed.State!.BackgroundExists.Should().BeTrue();
         return observed.State;
     }
+
+    private sealed record OpenScene(Document Document, Scene Scene, RuntimeSceneTarget Target);
 }

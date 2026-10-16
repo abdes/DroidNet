@@ -6,6 +6,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.World.Documents;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
@@ -120,9 +121,9 @@ public partial class SceneEditorViewModel
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
         Message = "Viewport pane {Pane} of document {DocumentId} looked through camera {CameraId}, which no longer exists; it uses its editor camera")]
-    private static partial void LogRestoredCameraMissing(ILogger logger, int pane, Guid? documentId, Guid cameraId);
+    private static partial void LogRestoredCameraMissing(ILogger logger, int pane, Guid? documentId, NodeId cameraId);
 
-    private void LogRestoredCameraMissing(int pane, Guid cameraId)
+    private void LogRestoredCameraMissing(int pane, NodeId cameraId)
         => LogRestoredCameraMissing(this.logger, pane, this.Metadata?.DocumentId, cameraId);
 
     [LoggerMessage(
@@ -170,16 +171,15 @@ public partial class SceneEditorViewModel
     [LoggerMessage(Level = LogLevel.Warning, Message = "Scene editor '{Scene}' cannot show relocated nodes again: no asset feed in its workspace.")]
     private partial void LogRelocatedContentUnobservable(string scene);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Scene Explorer could not show the reloaded scene of document {DocumentId}.")]
+    private static partial void LogTreeNotRefreshed(ILogger logger, Oxygen.Editor.Documents.DocumentId documentId);
+
+    private void LogTreeNotRefreshed() => LogTreeNotRefreshed(this.logger, this.Document.Id);
+
     [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Open scene '{Scene}' has nothing to follow: {Reason}.")]
     private static partial void LogRelocationSkipped(ILogger logger, string scene, string reason);
 
     [System.Diagnostics.Conditional("DEBUG")]
     private void LogRelocationSkipped(string scene, string reason)
         => LogRelocationSkipped(this.logger, scene, reason);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Renamed the open scene '{Previous}' to '{Name}' from the Content Browser.")]
-    private partial void LogOpenSceneRenamed(string previous, string name);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The open scene '{Previous}' was not renamed to '{Name}'.")]
-    private partial void LogOpenSceneNotRenamed(string previous, string name);
 }

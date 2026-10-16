@@ -18,6 +18,7 @@ using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Editor.WorldEditor.TestSupport;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -141,7 +142,6 @@ public sealed class SceneExplorerDropTests
         child = new SceneNode(scene) { Name = "Child" };
         scene.RootNodes.Add(parent);
         scene.RootNodes.Add(child);
-        project.Scenes.Add(scene);
         return new Harness(project, scene, folderId ?? Guid.NewGuid());
     }
 
@@ -152,7 +152,7 @@ public sealed class SceneExplorerDropTests
             this.Project = project;
             this.Scene = scene;
             this.FolderId = folderId;
-            this.Metadata = new SceneDocumentMetadata(scene.Id);
+            this.Metadata = SceneTabs.Open(scene);
 
             var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
             _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
@@ -164,8 +164,8 @@ public sealed class SceneExplorerDropTests
             this.Documents = documents;
 
             var sync = new Mock<ISceneEngineSync>();
-            _ = sync.Setup(value => value.GetDocumentScene(this.Metadata)).Returns(scene);
-            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), this.Metadata)).Returns(value: true);
+            _ = sync.Setup(value => value.GetDocumentScene(this.Metadata.DocumentId)).Returns(scene);
+            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), this.Metadata.DocumentId)).Returns(value: true);
             _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             this.Sync = sync;
 

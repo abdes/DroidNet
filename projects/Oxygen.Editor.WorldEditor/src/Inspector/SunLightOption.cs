@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>
@@ -10,4 +12,4 @@ namespace Oxygen.Editor.World.Inspector;
 /// <param name="NodeId">The scene node id, or <see langword="null"/> for no sun binding.</param>
 /// <param name="DisplayName">The display name shown in the environment inspector.</param>
 /// <param name="IsEnabled">Whether the light is available for this atmosphere role.</param>
-public sealed record SunLightOption(Guid? NodeId, string DisplayName, bool IsEnabled = true);
+public sealed record SunLightOption(NodeId? NodeId, string DisplayName, bool IsEnabled = true);

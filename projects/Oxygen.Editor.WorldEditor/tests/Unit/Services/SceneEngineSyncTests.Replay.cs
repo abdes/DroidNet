@@ -21,7 +21,7 @@ public sealed partial class SceneEngineSyncTests
     public async Task ReactivatingCurrentScene_PublishesReadinessWithoutRebuildingProjection()
     {
         using var fixture = new ReplayFixture();
-        var (scene, _, metadata) = fixture.RegisterScene(1);
+        var (scene, _, documentId) = fixture.RegisterScene(1);
         _ = (await fixture.Sync.SyncSceneWhenReadyAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
         var requests = fixture.Requests.ToArray();
         var ready = new List<SceneSynchronizationCompletedEventArgs>();
@@ -30,7 +30,7 @@ public sealed partial class SceneEngineSyncTests
         _ = (await fixture.Sync.SyncSceneWhenReadyAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
 
         _ = ready.Should().ContainSingle().Which.Scene.Should().BeSameAs(scene);
-        _ = ready[0].Metadata.Should().BeSameAs(metadata);
+        _ = ready[0].DocumentId.Should().Be(documentId);
         _ = fixture.Requests.Should().Equal(requests);
     }
 
@@ -38,14 +38,14 @@ public sealed partial class SceneEngineSyncTests
     public async Task DeleteDuringFullProjection_RemovesTheFrozenNodeBeforeReadiness()
     {
         using var fixture = new ReplayFixture();
-        var (scene, node, metadata) = fixture.RegisterScene(1);
+        var (scene, node, documentId) = fixture.RegisterScene(1);
         var (createdRequest, creationCompletion) = fixture.DelayNodeCreation();
         var syncing = fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken);
         var request = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        SetPosition(node, metadata, 7);
-        _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(7)], fixture.Sync.CaptureRevision(scene, metadata), this.TestContext.CancellationToken).ConfigureAwait(false);
+        SetPosition(fixture.Sync, node, 7);
+        _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(7)], fixture.Sync.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = scene.RootNodes.Remove(node);
-        metadata.IsDirty = true;
+        _ = fixture.Sync.AdvanceRevision(scene);
         await fixture.Sync.RemoveNodeAsync(scene, node.Id).ConfigureAwait(false);
 
         creationCompletion.SetResult(Accepted(request));
@@ -60,16 +60,16 @@ public sealed partial class SceneEngineSyncTests
     public async Task NodeAddedDuringProjection_IsCreatedBeforeItsLaterPropertyEdit()
     {
         using var fixture = new ReplayFixture();
-        var (scene, _, metadata) = fixture.RegisterScene(0);
+        var (scene, _, documentId) = fixture.RegisterScene(0);
         var (createdRequest, creationCompletion) = fixture.DelayNodeCreation();
         var syncing = fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken);
         var first = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         var added = new SceneNode(scene) { Name = "Added during sync" };
         scene.RootNodes.Add(added);
-        metadata.IsDirty = true;
+        _ = fixture.Sync.AdvanceRevision(scene);
         var adding = fixture.Sync.CreateNodeAsync(added);
-        SetPosition(added, metadata, 9);
-        _ = await fixture.Sync.UpdatePropertiesAsync(scene, added, [CreateTransformEntry(9)], fixture.Sync.CaptureRevision(scene, metadata), this.TestContext.CancellationToken).ConfigureAwait(false);
+        SetPosition(fixture.Sync, added, 9);
+        _ = await fixture.Sync.UpdatePropertiesAsync(scene, added, [CreateTransformEntry(9)], fixture.Sync.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = adding.IsCompleted.Should().BeFalse();
 
         creationCompletion.SetResult(Accepted(first));
@@ -86,17 +86,17 @@ public sealed partial class SceneEngineSyncTests
     public async Task ComponentRemovedDuringProjection_DiscardsItsQueuedFieldsAndDetachesTheFrozenComponent()
     {
         using var fixture = new ReplayFixture();
-        var (scene, node, metadata) = fixture.RegisterScene(0);
+        var (scene, node, documentId) = fixture.RegisterScene(0);
         var camera = new PerspectiveCamera { Name = "Camera", FieldOfView = 60 };
         node.Components.Add(camera);
         var (createdRequest, creationCompletion) = fixture.DelayNodeCreation();
         var syncing = fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken);
         var request = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         camera.FieldOfView = 70;
-        metadata.IsDirty = true;
-        _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [new(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.FieldOfViewYRadians, 70 * MathF.PI / 180)], fixture.Sync.CaptureRevision(scene, metadata), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = fixture.Sync.AdvanceRevision(scene);
+        _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [new(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.FieldOfViewYRadians, 70 * MathF.PI / 180)], fixture.Sync.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = node.Components.Remove(camera);
-        metadata.IsDirty = true;
+        _ = fixture.Sync.AdvanceRevision(scene);
         _ = await fixture.Sync.DetachCameraAsync(scene, node.Id, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         creationCompletion.SetResult(Accepted(request));
@@ -132,10 +132,10 @@ public sealed partial class SceneEngineSyncTests
     {
         using var fixture = new ReplayFixture();
         fixture.State = EngineServiceState.NoEngine;
-        var (scene, node, metadata) = fixture.RegisterScene(1);
+        var (scene, node, documentId) = fixture.RegisterScene(1);
         _ = (await fixture.Sync.SyncSceneWhenReadyAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeFalse();
-        SetPosition(node, metadata, 9);
-        _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(9)], fixture.Sync.CaptureRevision(scene, metadata), this.TestContext.CancellationToken).ConfigureAwait(false);
+        SetPosition(fixture.Sync, node, 9);
+        _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(9)], fixture.Sync.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         var completed = new TaskCompletionSource<SceneSynchronizationCompletedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
         fixture.Sync.SceneSynchronized += (_, args) => completed.SetResult(args);
 
@@ -145,7 +145,7 @@ public sealed partial class SceneEngineSyncTests
         var synchronized = await completed.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = synchronized.Scene.Should().BeSameAs(scene);
-        _ = synchronized.Metadata.Should().BeSameAs(metadata);
+        _ = synchronized.DocumentId.Should().Be(documentId);
         _ = synchronized.Target.RunId.Should().Be(runId);
         _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeSetLocalTransform>().Should().ContainSingle().Which.Position.X.Should().Be(9);
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
@@ -156,7 +156,7 @@ public sealed partial class SceneEngineSyncTests
     public async Task DisposingDuringProjection_RetiresTheDocumentAndFinishesWithoutDisposingAnOwnedWait()
     {
         using var fixture = new ReplayFixture();
-        var (scene, _, metadata) = fixture.RegisterScene(1);
+        var (scene, _, documentId) = fixture.RegisterScene(1);
         var (createdRequest, creationCompletion) = fixture.DelayNodeCreation();
         var sync = fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken);
         var request = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -167,7 +167,7 @@ public sealed partial class SceneEngineSyncTests
         var result = await sync.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Should().BeFalse();
-        _ = fixture.Sync.RegisterDocument(scene, metadata).Should().BeFalse();
+        _ = fixture.Sync.RegisterDocument(scene, documentId).Should().BeFalse();
         fixture.Engine.Verify(value => value.DisposeAsync(), Times.Never);
     }
 
@@ -175,18 +175,18 @@ public sealed partial class SceneEngineSyncTests
     public async Task EnvironmentDuringFullSnapshot_ReplaysAfterEarlierProperties()
     {
         using var fixture = new ReplayFixture();
-        var (scene, node, metadata) = fixture.RegisterScene(0);
+        var (scene, node, documentId) = fixture.RegisterScene(0);
         var (createdRequest, creationCompletion) = fixture.DelayNodeCreation();
         var sync = fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken);
         var request = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        SetPosition(node, metadata, 7);
-        _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(7)], fixture.Sync.CaptureRevision(scene, metadata), this.TestContext.CancellationToken).ConfigureAwait(false);
+        SetPosition(fixture.Sync, node, 7);
+        _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(7)], fixture.Sync.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         var color = new Vector3(0.2f, 0.4f, 0.6f);
         var environment = scene.Environment with { Background = new() { Enabled = true, ColorRgb = color } };
         scene.SetEnvironment(environment);
-        metadata.IsDirty = true;
+        _ = fixture.Sync.AdvanceRevision(scene);
 
-        var pending = await fixture.Sync.UpdateEnvironmentAsync(scene, environment, fixture.Sync.CaptureRevision(scene, metadata), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var pending = await fixture.Sync.UpdateEnvironmentAsync(scene, environment, fixture.Sync.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = pending.Overall.Should().Be(SyncStatus.SkippedNotRunning);
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(2);
         creationCompletion.SetResult(Accepted(request));
@@ -202,15 +202,15 @@ public sealed partial class SceneEngineSyncTests
     public async Task EnvironmentReplayFailure_RetainsBackgroundScopeAndRecoversWithCurrentSnapshot()
     {
         using var fixture = new ReplayFixture();
-        var (scene, _, metadata) = fixture.RegisterScene(0);
+        var (scene, _, documentId) = fixture.RegisterScene(0);
         var (createdRequest, creationCompletion) = fixture.DelayNodeCreation();
         var sync = fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken);
         var request = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         var color = new Vector3(0.2f, 0.4f, 0.6f);
         var environment = scene.Environment with { Background = new() { Enabled = true, ColorRgb = color } };
         scene.SetEnvironment(environment);
-        metadata.IsDirty = true;
-        _ = await fixture.Sync.UpdateEnvironmentAsync(scene, environment, fixture.Sync.CaptureRevision(scene, metadata), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = fixture.Sync.AdvanceRevision(scene);
+        _ = await fixture.Sync.UpdateEnvironmentAsync(scene, environment, fixture.Sync.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         fixture.RejectedBackground = color;
 
         creationCompletion.SetResult(Accepted(request));
@@ -231,12 +231,12 @@ public sealed partial class SceneEngineSyncTests
     public async Task FullSnapshot_KeepsItsCapturedValueAndReplaysNewerAuthoring()
     {
         using var fixture = new ReplayFixture();
-        var (scene, node, metadata) = fixture.RegisterScene(1);
+        var (scene, node, documentId) = fixture.RegisterScene(1);
         var (createdRequest, creationCompletion) = fixture.DelayNodeCreation();
         var sync = fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken);
         var request = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        SetPosition(node, metadata, 9);
-        var stamp = fixture.Sync.CaptureRevision(scene, metadata);
+        SetPosition(fixture.Sync, node, 9);
+        var stamp = fixture.Sync.CaptureRevision(scene);
 
         var pending = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(9)], stamp, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = pending.Status.Should().Be(SyncStatus.SkippedNotRunning);
@@ -255,12 +255,12 @@ public sealed partial class SceneEngineSyncTests
     public async Task FailedReplay_RemainsVisibleUntilACompleteCurrentSnapshotSucceeds()
     {
         using var fixture = new ReplayFixture();
-        var (scene, node, metadata) = fixture.RegisterScene(1);
+        var (scene, node, documentId) = fixture.RegisterScene(1);
         var (createdRequest, creationCompletion) = fixture.DelayNodeCreation();
         var sync = fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken);
         var request = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        SetPosition(node, metadata, 9);
-        _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(9)], fixture.Sync.CaptureRevision(scene, metadata), this.TestContext.CancellationToken).ConfigureAwait(false);
+        SetPosition(fixture.Sync, node, 9);
+        _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(9)], fixture.Sync.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         fixture.RejectedPropertyComponent = EngineComponentId.Transform;
 
         creationCompletion.SetResult(Accepted(request));
@@ -269,7 +269,7 @@ public sealed partial class SceneEngineSyncTests
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(1);
         var failure = fixture.Results.Should().ContainSingle().Which;
         _ = failure.Message.Should().Be("Controlled property rejection");
-        _ = failure.AffectedScope.DocumentId.Should().Be(metadata.DocumentId);
+        _ = failure.AffectedScope.DocumentId.Should().Be(documentId);
         fixture.RejectedPropertyComponent = null;
         fixture.ResumeNodeCreation();
         _ = (await fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
@@ -282,12 +282,12 @@ public sealed partial class SceneEngineSyncTests
     public async Task OlderDelayedPayload_CannotOverwriteANewerAcceptedRevision()
     {
         using var fixture = new ReplayFixture();
-        var (scene, node, metadata) = fixture.RegisterScene(0);
+        var (scene, node, documentId) = fixture.RegisterScene(0);
         _ = await fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
-        SetPosition(node, metadata, 1);
-        var older = fixture.Sync.CaptureRevision(scene, metadata);
-        SetPosition(node, metadata, 2);
-        var newer = fixture.Sync.CaptureRevision(scene, metadata);
+        SetPosition(fixture.Sync, node, 1);
+        var older = fixture.Sync.CaptureRevision(scene);
+        SetPosition(fixture.Sync, node, 2);
+        var newer = fixture.Sync.CaptureRevision(scene);
         _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(2)], newer, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var stale = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(1)], older, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -301,12 +301,12 @@ public sealed partial class SceneEngineSyncTests
     public async Task InactiveScene_BuffersItsOwnValuesAndDoesNotDispatchIntoAnotherScene()
     {
         using var fixture = new ReplayFixture();
-        var (first, firstNode, firstMetadata) = fixture.RegisterScene(1);
+        var (first, firstNode, firstDocumentId) = fixture.RegisterScene(1);
         var (second, _, _) = fixture.RegisterScene(2);
         _ = await fixture.Sync.SyncSceneAsync(second, this.TestContext.CancellationToken).ConfigureAwait(false);
-        SetPosition(firstNode, firstMetadata, 7);
+        SetPosition(fixture.Sync, firstNode, 7);
 
-        var pending = await fixture.Sync.UpdatePropertiesAsync(first, firstNode, [CreateTransformEntry(7)], fixture.Sync.CaptureRevision(first, firstMetadata), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var pending = await fixture.Sync.UpdatePropertiesAsync(first, firstNode, [CreateTransformEntry(7)], fixture.Sync.CaptureRevision(first), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = pending.Status.Should().Be(SyncStatus.SkippedNotRunning);
         _ = fixture.Requests.Should().OnlyContain(request => request.Target.SceneId == second.Id);
@@ -321,11 +321,11 @@ public sealed partial class SceneEngineSyncTests
     {
         using var fixture = new ReplayFixture();
         fixture.State = EngineServiceState.Ready;
-        var (scene, node, metadata) = fixture.RegisterScene(1);
-        SetPosition(node, metadata, 7);
-        _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(7)], fixture.Sync.CaptureRevision(scene, metadata), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var (scene, node, documentId) = fixture.RegisterScene(1);
+        SetPosition(fixture.Sync, node, 7);
+        _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(7)], fixture.Sync.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = scene.RootNodes.Remove(node);
-        metadata.IsDirty = true;
+        _ = fixture.Sync.AdvanceRevision(scene);
         fixture.State = EngineServiceState.Running;
 
         _ = (await fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
@@ -340,21 +340,21 @@ public sealed partial class SceneEngineSyncTests
     {
         using var fixture = new ReplayFixture();
         fixture.State = EngineServiceState.Ready;
-        var (scene, node, oldMetadata) = fixture.RegisterScene(1);
-        var old = fixture.Sync.CaptureRevision(scene, oldMetadata);
-        fixture.Sync.CloseDocument(oldMetadata);
-        _ = fixture.Sync.RegisterDocument(scene, oldMetadata).Should().BeFalse();
-        var reopened = new SceneDocumentMetadata(scene.Id);
+        var (scene, node, oldDocumentId) = fixture.RegisterScene(1);
+        var old = fixture.Sync.CaptureRevision(scene);
+        fixture.Sync.CloseDocument(oldDocumentId);
+        _ = fixture.Sync.RegisterDocument(scene, oldDocumentId).Should().BeFalse();
+        var reopened = Guid.NewGuid();
         _ = fixture.Sync.RegisterDocument(scene, reopened).Should().BeTrue();
-        SetPosition(node, reopened, 9);
-        var current = fixture.Sync.CaptureRevision(scene, reopened);
+        SetPosition(fixture.Sync, node, 9);
+        var current = fixture.Sync.CaptureRevision(scene);
         _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(9)], current, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        fixture.Sync.CloseDocument(oldMetadata);
+        fixture.Sync.CloseDocument(oldDocumentId);
         var stale = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(1)], old, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = stale.Status.Should().Be(SyncStatus.Cancelled);
-        _ = fixture.Sync.CaptureRevision(scene, oldMetadata).DocumentLifetime.Should().BeEmpty();
+        _ = fixture.Sync.CaptureRevision(scene).DocumentLifetime.Should().Be(current.DocumentLifetime, "closing the old document again leaves the reopened one");
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(1);
         fixture.State = EngineServiceState.Running;
         _ = await fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -365,10 +365,10 @@ public sealed partial class SceneEngineSyncTests
     private static RuntimeCommandResult Accepted(RuntimeWorldRequest request)
         => new(request.OperationId, request.Target.RunId, RuntimeCommandStatus.Accepted);
 
-    private static void SetPosition(SceneNode node, SceneDocumentMetadata metadata, float value)
+    private static void SetPosition(SceneEngineSync sync, SceneNode node, float value)
     {
         node.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(value, 0, 0);
-        metadata.IsDirty = true;
+        _ = sync.AdvanceRevision(node.Scene);
     }
 
     private sealed partial class ReplayFixture : IDisposable
@@ -413,15 +413,15 @@ public sealed partial class SceneEngineSyncTests
 
         public void Dispose() => this.Sync.Dispose();
 
-        public (Scene scene, SceneNode node, SceneDocumentMetadata metadata) RegisterScene(float x)
+        public (Scene scene, SceneNode node, Guid documentId) RegisterScene(float x)
         {
             var scene = CreateScene();
             var node = new SceneNode(scene) { Name = "Cube" };
             scene.RootNodes.Add(node);
             node.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(x, 0, 0);
-            var metadata = new SceneDocumentMetadata(scene.Id);
-            _ = this.Sync.RegisterDocument(scene, metadata);
-            return (scene, node, metadata);
+            var documentId = Guid.NewGuid();
+            _ = this.Sync.RegisterDocument(scene, documentId);
+            return (scene, node, documentId);
         }
 
         public (TaskCompletionSource<RuntimeWorldRequest> request, TaskCompletionSource<RuntimeCommandResult> completion) DelayNodeCreation()

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Services;
 
@@ -14,5 +15,5 @@ public interface ISceneContentDemandService
     /// <param name="nodeIds">The selected assignment targets.</param>
     /// <param name="assetUri">The assigned identity; null means no material override.</param>
     /// <param name="kind">The geometry or material slot being assigned.</param>
-    public void RequestAssignment(Scene scene, IReadOnlyList<Guid> nodeIds, Uri? assetUri, AssetKind kind);
+    public void RequestAssignment(Scene scene, IReadOnlyList<NodeId> nodeIds, Uri? assetUri, AssetKind kind);
 }

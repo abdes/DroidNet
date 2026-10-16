@@ -75,7 +75,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var original = model.PropertyEditors.ToArray();
-        var version = fixture.Context.Metadata.ChangeVersion;
+        var version = fixture.Document.History.Position;
         _ = original.Select(static editor => editor.GetType()).Should().Equal(
             new[] { typeof(TransformViewModel), typeof(GeometryViewModel), typeof(NodeRenderingViewModel) },
             "the node Rendering section follows every component section in the unfiltered view");
@@ -102,9 +102,9 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         _ = all.IsChecked.Should().BeTrue();
         _ = model.IsAllComponentsSelected.Should().BeTrue();
         _ = model.PropertyEditors.Should().Equal(original);
-        _ = fixture.Context.Metadata.ChangeVersion.Should().Be(version);
+        _ = fixture.Document.History.Position.Should().Be(version);
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
     /// <summary>Multi-node filters preserve target applicability and explain components missing from some nodes.</summary>
@@ -193,7 +193,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         await camera.PendingEdits.ConfigureAwait(true);
         _ = fixture.Camera.FieldOfView.Should().Be(60);
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
     /// <summary>A point light filters to its own editor section and remains removable.</summary>
@@ -246,10 +246,10 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         };
         _ = node.AddComponent(new GeometryComponent { Name = "Geometry" });
         scene.RootNodes.Add(node);
-        var metadata = new SceneDocumentMetadata(scene.Id);
-        _ = fixture.Documents.Setup(service => service.GetOpenDocuments(It.IsAny<Microsoft.UI.WindowId>())).Returns([fixture.Context.Metadata, metadata]);
-        _ = fixture.Documents.Setup(service => service.GetActiveDocumentId(It.IsAny<Microsoft.UI.WindowId>())).Returns(scene.Id);
-        _ = fixture.Sync.Setup(service => service.GetDocumentScene(metadata)).Returns(scene);
+        var metadata = SceneTabs.Open(scene);
+        _ = fixture.Documents.Setup(service => service.GetOpenDocuments(It.IsAny<Microsoft.UI.WindowId>())).Returns([fixture.Tab, metadata]);
+        _ = fixture.Documents.Setup(service => service.GetActiveDocumentId(It.IsAny<Microsoft.UI.WindowId>())).Returns(metadata.DocumentId);
+        _ = fixture.Sync.Setup(service => service.GetDocumentScene(metadata.DocumentId)).Returns(scene);
         _ = fixture.Messenger.Send(new SceneAuthoringLoadedMessage(scene, metadata));
         _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([node]));
         await WaitForRenderAsync().ConfigureAwait(true);

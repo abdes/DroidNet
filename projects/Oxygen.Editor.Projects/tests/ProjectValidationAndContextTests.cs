@@ -11,6 +11,7 @@ using Moq;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Projects.Tests;
@@ -73,7 +74,6 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             ProjectRoot = @"C:\Project",
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
-            Scenes = [],
         };
 
         service.Activate(context);
@@ -138,7 +138,6 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             ProjectRoot = @"C:\Project",
             AuthoringMounts = [],
             LocalFolderMounts = [],
-            Scenes = [],
         };
 
         var scope = provider.CreateScope(context);
@@ -294,7 +293,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     [TestMethod]
     public void ProjectInfo_ShouldRoundTripDefaultSceneId()
     {
-        var defaultSceneId = Guid.NewGuid();
+        var defaultSceneId = SceneId.New();
         var info = new ProjectInfo("Default", Category.Games, @"C:\Projects\Default")
         {
             DefaultSceneId = defaultSceneId,
@@ -321,13 +320,13 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     [TestMethod]
     public void ProjectContext_ShouldCarryDefaultSceneId()
     {
-        var defaultSceneId = Guid.NewGuid();
+        var defaultSceneId = SceneId.New();
         var info = new ProjectInfo("Context", Category.Games, @"C:\Projects\Context")
         {
             DefaultSceneId = defaultSceneId,
         };
 
-        var context = ProjectContext.FromProjectInfo(info, [new ProjectSceneInfo(defaultSceneId, "Main")]);
+        var context = ProjectContext.FromProjectInfo(info);
 
         _ = context.DefaultSceneId.Should().Be(defaultSceneId);
     }
@@ -394,7 +393,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         var manifest = await fs.File.ReadAllTextAsync(@"C:\Projects\Created\Project.oxy").ConfigureAwait(false);
         var info = ProjectInfo.FromJson(manifest);
         _ = info.DefaultSceneId.Should().Be(
-            Guid.Parse("09b406b8-410c-4cc3-8c0a-5f6af9afcc0c"),
+            SceneId.FromValue(Guid.Parse("09b406b8-410c-4cc3-8c0a-5f6af9afcc0c")),
             "the created manifest must record the starter scene's own serialized id");
         _ = result.ProjectInfo!.DefaultSceneId.Should().Be(info.DefaultSceneId);
     }
@@ -686,7 +685,6 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             ProjectRoot = @"C:\Project",
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
-            Scenes = [],
         };
 
     private sealed class RecordingObserver<T> : IObserver<T>

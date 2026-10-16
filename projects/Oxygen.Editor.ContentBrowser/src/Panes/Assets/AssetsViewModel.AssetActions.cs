@@ -187,7 +187,7 @@ public partial class AssetsViewModel
             : asset.DescriptorPath ?? asset.SourcePath;
         if (path is null || !(File.Exists(path) || Directory.Exists(path)))
         {
-            return new(VirtualPath: null, PhysicalPath: null, IsFolder: false, IsEditorScene: false, IsImportedOutput: asset.ImportSourceUri is not null, ModelSourcePath: asset.ImportSourcePath);
+            return new(VirtualPath: null, PhysicalPath: null, IsFolder: false, IsImportedOutput: asset.ImportSourceUri is not null, ModelSourcePath: asset.ImportSourcePath);
         }
 
         var isModel = Path.GetExtension(path).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX" && File.Exists(path + NativeSceneImportSettings.SidecarSuffix);
@@ -195,7 +195,6 @@ public partial class AssetsViewModel
             RelocationPaths.ToVirtual(project, path),
             path,
             Directory.Exists(path),
-            RelocationPaths.IsEditorScene(project, path),
             IsImportedOutput: false,
             isModel ? path : asset.ImportSourcePath);
     }
@@ -225,7 +224,6 @@ public partial class AssetsViewModel
         return relocation is null ? UnavailableReason : targets.Count == 0 ? "Select items to move or copy."
             : targets.Any(static target => target.IsImportedOutput) ? "Imported assets belong to their model. Use Rename output group."
             : targets.Any(static target => target.VirtualPath is null) ? ReadOnlyReason
-            : targets.Any(static target => target.IsEditorScene) ? "Scenes stay in Content/Scenes; use Rename or Duplicate."
             : null;
     }
 
@@ -235,8 +233,7 @@ public partial class AssetsViewModel
         return relocation is null ? UnavailableReason : targets.Count == 0 ? "Select items to duplicate."
             : targets.Any(static target => target.IsImportedOutput) ? "Imported assets belong to their model. Import the model again instead."
             : targets.Any(static target => target.VirtualPath is null) ? ReadOnlyReason
-            : targets.Any(static target => target.IsEditorScene) && targets.Count != 1 ? "Duplicate one scene at a time."
-            : targets.Any(static target => !target.IsEditorScene && target.ModelSourcePath is not null) ? "Import the model again instead of duplicating it."
+            : targets.Any(static target => target.ModelSourcePath is not null) ? "Import the model again instead of duplicating it."
             : null;
     }
 
@@ -246,7 +243,6 @@ public partial class AssetsViewModel
         return relocation is null ? UnavailableReason : targets.Count == 0 ? "Select items to delete."
             : targets.Any(static target => target.IsImportedOutput) ? "Imported assets belong to their model. Delete the model instead."
             : targets.Any(static target => target.VirtualPath is null) ? ReadOnlyReason
-            : targets.Any(static target => target.IsEditorScene) && targets.Count != 1 ? "Delete one scene at a time."
             : null;
     }
 
@@ -297,17 +293,6 @@ public partial class AssetsViewModel
 
         var target = this.DescribeSelection()[0];
         var name = RelocationPaths.GetName(target.VirtualPath!);
-        if (target.IsEditorScene)
-        {
-            var scene = RelocationPaths.GetDisplayName(name);
-            if (await relocation.PromptNameAsync("Rename scene", scene).ConfigureAwait(true) is { } newScene)
-            {
-                _ = await relocation.RunSceneCommandAsync(SceneAssetCommand.Rename, scene, newScene).ConfigureAwait(true);
-            }
-
-            return;
-        }
-
         var current = target.IsFolder ? name : RelocationPaths.GetDisplayName(name);
         if (await relocation.PromptNameAsync("Rename", current).ConfigureAwait(true) is { } newName)
         {
@@ -394,13 +379,6 @@ public partial class AssetsViewModel
         }
 
         var targets = this.DescribeSelection();
-        if (targets is [{ IsEditorScene: true } scene])
-        {
-            var name = RelocationPaths.GetDisplayName(RelocationPaths.GetName(scene.VirtualPath!));
-            _ = await relocation.RunSceneCommandAsync(SceneAssetCommand.Duplicate, name, newName: null).ConfigureAwait(true);
-            return;
-        }
-
         foreach (var group in targets.GroupBy(static target => RelocationPaths.GetParent(target.VirtualPath!), StringComparer.OrdinalIgnoreCase))
         {
             if (await relocation.CopyAsync([.. group.Select(static target => target.VirtualPath!)], group.Key, "Duplicate").ConfigureAwait(true) is { Succeeded: false })
@@ -421,17 +399,6 @@ public partial class AssetsViewModel
         }
 
         var targets = this.DescribeSelection();
-        if (targets is [{ IsEditorScene: true } scene])
-        {
-            var name = RelocationPaths.GetDisplayName(RelocationPaths.GetName(scene.VirtualPath!));
-            if (await dialogService.ConfirmAsync("Delete scene", $"Move scene '{name}' to the Recycle Bin?").ConfigureAwait(true))
-            {
-                _ = await relocation.RunSceneCommandAsync(SceneAssetCommand.Delete, name, newName: null).ConfigureAwait(true);
-            }
-
-            return;
-        }
-
         _ = await relocation.DeleteAsync([.. targets.Select(static target => target.VirtualPath!)]).ConfigureAwait(true);
     }
 
@@ -500,5 +467,5 @@ public partial class AssetsViewModel
     /// <param name="IsEditorScene">Whether the row is one of the project's named scenes.</param>
     /// <param name="IsImportedOutput">Whether the row is a cooked-only output of a model import.</param>
     /// <param name="ModelSourcePath">The model source the row is, or was imported from.</param>
-    private readonly record struct AssetTarget(string? VirtualPath, string? PhysicalPath, bool IsFolder, bool IsEditorScene, bool IsImportedOutput, string? ModelSourcePath);
+    private readonly record struct AssetTarget(string? VirtualPath, string? PhysicalPath, bool IsFolder, bool IsImportedOutput, string? ModelSourcePath);
 }

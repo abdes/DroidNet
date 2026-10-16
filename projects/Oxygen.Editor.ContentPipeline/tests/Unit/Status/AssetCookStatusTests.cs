@@ -69,7 +69,7 @@ public sealed class AssetCookStatusTests
         using var project = new StatusProject();
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var hash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(project.SourcePath, this.TestContext.CancellationToken).ConfigureAwait(false)));
-        var dirty = new CookDocumentState(Guid.NewGuid(), project.SourcePath, "Material", 2, 1, IsDirty: true, hash);
+        var dirty = new CookDocumentState(project.SourcePath, "Material", 2, 1, IsDirty: true, hash);
         using var registration = project.Documents.Register(project.SourcePath, token => Task.FromResult<CookDocumentReadLease?>(new(dirty, static () => { })));
         registration.UpdateState(dirty);
         var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -250,7 +250,7 @@ public sealed class AssetCookStatusTests
     {
         using var project = new StatusProject();
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var dirty = new CookDocumentState(Guid.NewGuid(), project.SourcePath, "Material", 2, 1, IsDirty: true, new string('A', 64));
+        var dirty = new CookDocumentState(project.SourcePath, "Material", 2, 1, IsDirty: true, new string('A', 64));
         using var owner = project.Documents.Register(project.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(dirty, static () => { })));
         owner.UpdateState(dirty);
         File.Delete(project.SourcePath);
@@ -281,7 +281,6 @@ public sealed class AssetCookStatusTests
                 Category = Category.Games,
                 AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [],
-                Scenes = [],
             };
             Directory.CreateDirectory(Path.GetDirectoryName(this.SourcePath)!);
             File.WriteAllText(this.SourcePath, MaterialJson);

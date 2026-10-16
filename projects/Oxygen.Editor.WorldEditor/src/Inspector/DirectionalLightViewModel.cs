@@ -10,6 +10,7 @@ using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -431,8 +432,8 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
     private void UpdateBinding<T>(
         PropertyBinding<T> binding,
-        IReadOnlyList<Guid> nodeIds,
-        Dictionary<Guid, object?> targetsByNode,
+        IReadOnlyList<NodeId> nodeIds,
+        Dictionary<NodeId, object?> targetsByNode,
         Action<T> setValue)
     {
         var previous = binding.HasValue ? (object?)binding.Value : null;
@@ -466,7 +467,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
             return;
         }
 
-        var perTarget = new Dictionary<Guid, PropertyEdit>();
+        var perTarget = new Dictionary<NodeId, PropertyEdit>();
         foreach (var node in this.selectedItems)
         {
             if (node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is not { } light)
@@ -527,7 +528,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
             return;
         }
 
-        var perTarget = new Dictionary<Guid, PropertyEdit>();
+        var perTarget = new Dictionary<NodeId, PropertyEdit>();
         foreach (var node in this.selectedItems)
         {
             if (node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is not { } light)
@@ -582,7 +583,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
             return;
         }
 
-        var perTarget = new Dictionary<Guid, PropertyEdit>();
+        var perTarget = new Dictionary<NodeId, PropertyEdit>();
         foreach (var node in this.selectedItems.Where(node => node.Components.Any(component => component is DirectionalLightComponent)))
         {
             var angles = TransformConverter.QuaternionToEulerDegrees(DirectionalLightOrientation.LocalRotation(node, (float)azimuth, (float)elevation));

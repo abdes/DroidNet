@@ -259,12 +259,12 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <summary>Checks whether a node belongs to the selected node's scene.</summary>
     /// <param name="nodeId">The node.</param>
     /// <returns>Whether the scene contains it.</returns>
-    internal bool ContainsNode(Guid nodeId) => this.node?.Scene.AllNodes.Any(candidate => candidate.Id == nodeId) == true;
+    internal bool ContainsNode(NodeId nodeId) => this.node?.Scene.AllNodes.Any(candidate => candidate.Id == nodeId) == true;
 
     /// <summary>Names a node of the scene for a node field.</summary>
     /// <param name="nodeId">The node.</param>
     /// <returns>The node's hierarchy path, or null when the scene no longer has it.</returns>
-    internal string? DescribeNode(Guid nodeId)
+    internal string? DescribeNode(NodeId nodeId)
         => this.node?.Scene.AllNodes.FirstOrDefault(candidate => candidate.Id == nodeId) is { } found ? found.HierarchyPath() : null;
 
     /// <inheritdoc />

@@ -105,7 +105,7 @@ internal sealed partial class CookPublicationTransaction
                 throw new InvalidDataException("Publication recovery encountered another project's configuration.");
             }
 
-            var recoveryProject = ProjectContext.FromProjectInfo(saved, []);
+            var recoveryProject = ProjectContext.FromProjectInfo(saved);
             var pending = await LoadAsync(recoveryProject, id, files, manager, gate, cancellationToken).ConfigureAwait(false);
             await pending.RecoverAsync(gate).ConfigureAwait(false);
         }

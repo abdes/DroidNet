@@ -30,7 +30,6 @@ public sealed partial class ContentBrowserCookFeedbackTests
             new DroidNet.Mvvm.Converters.ViewModelToView(Mock.Of<DroidNet.Mvvm.IViewLocator>()),
             new ContentBrowserState(projects),
             projects,
-            Mock.Of<IProjectManagerService>(),
             Mock.Of<IAuthoringTargetResolver>(),
             pipeline.Object,
             Mock.Of<Oxygen.Editor.Assets.IAssetFeed>(),

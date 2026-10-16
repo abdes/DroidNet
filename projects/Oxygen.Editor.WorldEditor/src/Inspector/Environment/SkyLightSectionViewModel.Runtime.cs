@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
-using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.Services;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -30,29 +30,29 @@ public sealed partial class SkyLightSectionViewModel
     /// <summary>Describes the rendered sky-light state for the author.</summary>
     /// <param name="state">The observed runtime environment, or <see langword="null"/> when none is shown.</param>
     /// <returns>A sentence naming the cause, or <see langword="null"/> when the sky light works or is off.</returns>
-    internal static string? DescribeRuntime(RuntimeEnvironmentState? state)
+    internal static string? DescribeRuntime(SceneSkyLightObservation? state)
     {
-        if (state is not { SkyLightObserved: true, SkyLightEnabled: true })
+        if (state is not { Observed: true, Enabled: true })
         {
             return null;
         }
 
-        return state.SkyLightUnavailableReason switch
+        return state.UnavailableReason switch
         {
-            RuntimeSkyLightUnavailableReason.MissingCubemap => "No cubemap is selected, so the sky light casts no light.",
-            RuntimeSkyLightUnavailableReason.ResourceResolveFailed => "The cubemap failed to load, so the sky light casts no light.",
-            RuntimeSkyLightUnavailableReason.NotTextureCube => "The selected texture is not a cubemap, so the sky light casts no light.",
-            RuntimeSkyLightUnavailableReason.UnsupportedFormat => "The cubemap is an LDR texture and cannot light the scene. Re-import it with a float (HDR) output format.",
-            RuntimeSkyLightUnavailableReason.ProcessingFailed => "Image-based lighting failed to process; the log names the cause.",
-            RuntimeSkyLightUnavailableReason.GpuProductsPending => "Loading the cubemap…",
-            _ when state.SkyLightEmptyCapture => "Nothing to capture: enable the atmosphere, a backdrop that lights the scene, or fog visible in sky captures.",
+            SceneSkyLightUnavailableReason.MissingCubemap => "No cubemap is selected, so the sky light casts no light.",
+            SceneSkyLightUnavailableReason.ResourceResolveFailed => "The cubemap failed to load, so the sky light casts no light.",
+            SceneSkyLightUnavailableReason.NotTextureCube => "The selected texture is not a cubemap, so the sky light casts no light.",
+            SceneSkyLightUnavailableReason.UnsupportedFormat => "The cubemap is an LDR texture and cannot light the scene. Re-import it with a float (HDR) output format.",
+            SceneSkyLightUnavailableReason.ProcessingFailed => "Image-based lighting failed to process; the log names the cause.",
+            SceneSkyLightUnavailableReason.GpuProductsPending => "Loading the cubemap…",
+            _ when state.EmptyCapture => "Nothing to capture: enable the atmosphere, a backdrop that lights the scene, or fog visible in sky captures.",
             _ => null,
         };
     }
 
     /// <summary>Reads the rendered sky-light state until it settles, replacing any earlier watch.</summary>
     /// <param name="observe">Reads the runtime environment, or <see langword="null"/> when no runtime shows the scene.</param>
-    internal void WatchRuntime(Func<CancellationToken, Task<RuntimeEnvironmentState?>>? observe)
+    internal void WatchRuntime(Func<CancellationToken, Task<SceneSkyLightObservation?>>? observe)
     {
         this.StopRuntimeWatch();
         if (observe is null)
@@ -76,7 +76,7 @@ public sealed partial class SkyLightSectionViewModel
         }
     }
 
-    private async Task ReadRuntimeAsync(Func<CancellationToken, Task<RuntimeEnvironmentState?>> observe, CancellationToken cancellationToken)
+    private async Task ReadRuntimeAsync(Func<CancellationToken, Task<SceneSkyLightObservation?>> observe, CancellationToken cancellationToken)
     {
         try
         {
@@ -91,7 +91,7 @@ public sealed partial class SkyLightSectionViewModel
                 stable = read > 0 && string.Equals(status, previous, StringComparison.Ordinal) ? stable + 1 : 0;
                 previous = status;
                 if (read + 1 >= RuntimeMinimumReads && stable + 1 >= RuntimeStableReads
-                    && state?.SkyLightUnavailableReason != RuntimeSkyLightUnavailableReason.GpuProductsPending)
+                    && state?.UnavailableReason != SceneSkyLightUnavailableReason.GpuProductsPending)
                 {
                     return;
                 }

@@ -150,7 +150,6 @@ public sealed class CookedContentMountTests
                 ProjectRoot = this.directory.FullName,
                 AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [new("First", this.First), new("Second", this.Second)],
-                Scenes = [],
             };
             this.Service = new();
         }

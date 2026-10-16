@@ -128,6 +128,24 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     }
 
     /// <inheritdoc/>
+    public IReadOnlyList<(string Name, bool IsDirty)> FindOpenDocuments(IReadOnlyList<string> sources)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        if (projects.ActiveProject is not { } project)
+        {
+            return [];
+        }
+
+        var deleted = sources.Select(source => RelocationPaths.ToPhysical(project, source)).OfType<string>().ToArray();
+        return [.. documents.GetState().Documents
+            .Where(document => deleted.Any(path => string.Equals(document.SourcePath, path, StringComparison.OrdinalIgnoreCase)
+                || document.SourcePath.StartsWith(path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
+            .Select(static document => (document.DisplayName, document.IsDirty))
+            .DistinctBy(static document => document.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static document => document.DisplayName, StringComparer.OrdinalIgnoreCase)];
+    }
+
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<string>> CopyAsync(IReadOnlyList<string> sources, string targetFolder, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sources);
@@ -188,11 +206,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                         throw new AssetRelocationException($"'{segments[1]}' is one of the importer's fixed folders and cannot be deleted.");
                     }
 
-                    if (!isDirectory && RelocationPaths.IsEditorScene(project, path))
-                    {
-                        throw new AssetRelocationException("Delete scenes with Delete on the scene.");
-                    }
-
+                    RejectStartSceneDelete(project, path, isDirectory);
                     paths.AddRange(GetDeletedFiles(project, index, path, isDirectory));
                 }
 
@@ -243,11 +257,6 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             var path = ResolveExisting(project, source);
             var isDirectory = Directory.Exists(path);
             RejectImportContent(project, index, path, isDirectory, "Import the model again instead of copying it.");
-            if (!isDirectory && RelocationPaths.IsEditorScene(project, path))
-            {
-                throw new AssetRelocationException("Duplicate scenes with Duplicate on the scene.");
-            }
-
             if (isDirectory && RelocationPaths.IsSameOrInside(targetFolder, source))
             {
                 throw new AssetRelocationException("A folder cannot be copied into itself.");
@@ -275,6 +284,23 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             var name = Path.GetFileName(image);
             var renamed = string.Equals(RelocationPaths.GetDisplayName(name), stem, StringComparison.OrdinalIgnoreCase) ? newStem + RelocationPaths.GetExtension(name) : name;
             map.AddMove(new(image, GetUniquePath(folder, renamed, isDirectory: false, reserved), IsDirectory: false));
+        }
+    }
+
+    // The project opens its start scene; deleting it, or a folder that holds it, would leave the project without one.
+    private static void RejectStartSceneDelete(ProjectContext project, string path, bool isDirectory)
+    {
+        if (project.DefaultSceneId is not { } start)
+        {
+            return;
+        }
+
+        var scenes = isDirectory
+            ? Directory.EnumerateFiles(path, "*" + AssetFileTypes.SceneDescriptor, SearchOption.AllDirectories)
+            : path.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase) ? [path] : [];
+        if (scenes.FirstOrDefault(scene => AuthoredReferenceFormat.ReadSceneId(File.ReadAllBytes(scene)) == start) is { } found)
+        {
+            throw new AssetRelocationException($"'{RelocationPaths.GetDisplayName(Path.GetFileName(found))}' is the project's start scene and cannot be deleted. Choose another start scene first.");
         }
     }
 

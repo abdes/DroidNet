@@ -5,6 +5,7 @@
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
@@ -18,9 +19,9 @@ public sealed partial class NativeLoopCleanupTests
     public Task NodeRotationUsesEditorYxzCoordinates(float pitch, float yaw, float roll)
         => this.RunNativeCommandsAsync(async commands =>
         {
-            var target = new RuntimeSceneTarget(commands.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+            var target = new RuntimeSceneTarget(commands.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
             _ = (await commands.ActivateSceneAsync(Guid.NewGuid(), target, "YXZ rotation", this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
-            var node = Guid.NewGuid();
+            var node = NodeId.New();
             _ = (await commands.CreateNodeAsync(new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeCreateNode("Rotated", node, ParentId: null, InitializeWorldAsRoot: true)), this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
             var rotation = Quaternion.CreateFromYawPitchRoll(yaw * MathF.PI / 180f, pitch * MathF.PI / 180f, roll * MathF.PI / 180f);
             _ = commands.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetLocalTransform(node, Vector3.Zero, rotation, Vector3.One)), this.TestContext.CancellationToken).Succeeded.Should().BeTrue();

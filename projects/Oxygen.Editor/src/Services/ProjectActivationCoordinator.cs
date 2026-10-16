@@ -304,7 +304,7 @@ internal sealed partial class ProjectActivationCoordinator(
         {
             try
             {
-                await publication.RecoverAsync(ProjectContext.FromProjectInfo(saved, []), cancellationToken).ConfigureAwait(true);
+                await publication.RecoverAsync(ProjectContext.FromProjectInfo(saved), cancellationToken).ConfigureAwait(true);
             }
             catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or System.Text.Json.JsonException)
             {

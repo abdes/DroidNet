@@ -203,24 +203,4 @@ public static class RelocationPaths
                 ? location.VirtualPath
                 : null;
     }
-
-    /// <summary>Gets the folder that holds the project's editor scenes, which are identified by name.</summary>
-    /// <param name="project">The project.</param>
-    /// <returns>The absolute <c>Content/Scenes</c> folder.</returns>
-    public static string GetEditorScenesFolder(ProjectContext project)
-    {
-        ArgumentNullException.ThrowIfNull(project);
-        return Path.GetFullPath(Path.Combine(project.ProjectRoot, Constants.ContentFolderName, Constants.ScenesFolderName));
-    }
-
-    /// <summary>Tests whether a physical file is an editor scene: a scene file directly in <c>Content/Scenes</c>.</summary>
-    /// <param name="project">The project.</param>
-    /// <param name="physicalPath">The file.</param>
-    /// <returns>Whether the file is one of the project's named scenes.</returns>
-    public static bool IsEditorScene(ProjectContext project, string physicalPath)
-    {
-        ArgumentNullException.ThrowIfNull(physicalPath);
-        return physicalPath.EndsWith(Constants.SceneFileExtension, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(Path.GetDirectoryName(Path.GetFullPath(physicalPath)), GetEditorScenesFolder(project), StringComparison.OrdinalIgnoreCase);
-    }
 }

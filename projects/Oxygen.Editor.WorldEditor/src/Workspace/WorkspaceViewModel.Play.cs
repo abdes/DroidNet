@@ -4,6 +4,7 @@
 
 using DroidNet.Docking;
 using DryIoc;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Play;
 using Oxygen.Editor.World.SceneExplorer;
@@ -39,7 +40,7 @@ public partial class WorkspaceViewModel : IPlayWorkspace
     }
 
     /// <inheritdoc />
-    public async Task<bool> SelectNodeAsync(Guid sceneDocumentId, SceneNode node)
+    public async Task<bool> SelectNodeAsync(DocumentId sceneDocumentId, SceneNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
         return Dockable.FromId(this.CenterOutletName)?.ViewModel is DocumentHostViewModel host

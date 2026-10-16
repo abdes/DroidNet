@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
@@ -68,9 +69,9 @@ public sealed partial class NativeLoopCleanupTests
 
     private async Task CheckNativeNodeAsync(RuntimeCommandDispatcher commands)
     {
-        var target = new RuntimeSceneTarget(commands.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var target = new RuntimeSceneTarget(commands.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         _ = (await commands.ActivateSceneAsync(Guid.NewGuid(), target, "Node observation", this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
-        var node = Guid.NewGuid();
+        var node = NodeId.New();
         _ = (await commands.CreateNodeAsync(new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeCreateNode("Observed", node, ParentId: null, InitializeWorldAsRoot: true)), this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
         void Send(RuntimeWorldCommand command)
             => _ = commands.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, command), this.TestContext.CancellationToken).Succeeded.Should().BeTrue();
@@ -109,8 +110,7 @@ public sealed partial class NativeLoopCleanupTests
         _ = observed.State.VertexCount.Should().BePositive();
         _ = observed.State.IndexCount.Should().Be(36);
         _ = observed.State.MaterialKeys.Should().ContainSingle();
-        Send(new RuntimeSetProperties(node,
-            [new(2, 7, (float)Oxygen.Managed.Core.CameraAspectMode.Fixed)]));
+        Send(new RuntimeSetProperties(node, [new(2, 7, (float)Oxygen.Managed.Core.CameraAspectMode.Fixed)]));
         var fixedCamera = await commands.ObserveNodeAsync(Guid.NewGuid(), target, node, timeout.Token).ConfigureAwait(false);
         _ = fixedCamera.Outcome.Succeeded.Should().BeTrue();
         _ = fixedCamera.State!.Properties.Single(value => value.ComponentId == 2 && value.FieldId == 7)

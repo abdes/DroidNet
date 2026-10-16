@@ -2,6 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Documents;
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Messages;
 
 /// <summary>
@@ -10,4 +13,4 @@ namespace Oxygen.Editor.World.Messages;
 /// </summary>
 /// <param name="DocumentId">The scene document owning the nodes.</param>
 /// <param name="NodeIds">The nodes to frame, with their descendants.</param>
-internal sealed record FrameSceneNodesRequestMessage(Guid DocumentId, IReadOnlyList<Guid> NodeIds);
+internal sealed record FrameSceneNodesRequestMessage(DocumentId DocumentId, IReadOnlyList<NodeId> NodeIds);

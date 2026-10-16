@@ -57,7 +57,7 @@ internal sealed class ComponentFeedbackTests : DroidNet.Tests.VisualUserInterfac
         _ = ComponentButton(view, type).FindDescendant<FontIcon>(icon => string.Equals(icon.Glyph, "\uEA39", StringComparison.Ordinal))!.Visibility.Should().Be(Visibility.Visible);
         host.SelectComponentFilter(type);
         _ = editor.ValidationFeedback.Summary.Should().Be(message);
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
         AcceptComponentValue(editor);
         await WaitForRenderAsync().ConfigureAwait(true);

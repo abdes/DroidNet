@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -65,7 +66,7 @@ public static class ScriptSlotDiagnostics
         string code,
         string message,
         ContentCookInput scene,
-        Guid sceneId,
+        SceneId sceneId,
         string sceneName,
         ScriptBindingSite site,
         string? parameter,
@@ -100,7 +101,7 @@ public static class ScriptSlotDiagnostics
                 Payload = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["AssetUri"] = scene.AssetUri.AbsoluteUri,
-                    ["NodeId"] = site.NodeId.ToString("D"),
+                    ["NodeId"] = site.NodeId.ToString(),
                     ["PropertyPath"] = PropertyPath(site.SlotId, parameter),
                 },
             },

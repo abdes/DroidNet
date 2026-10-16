@@ -33,7 +33,7 @@ public sealed partial class MaterialRefreshTests : DroidNet.Tests.VisualUserInte
         _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [node.Id], await fixture.ReadSingleMaterialSlotAsync(node.Id, timeout.Token).ConfigureAwait(true), uri, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = await WaitForNodeAsync(fixture, node.Id, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], red) < 0.001f, timeout.Token).ConfigureAwait(true);
         var source = fixture.Source;
-        var revision = fixture.Context.Metadata.ChangeVersion;
+        var revision = fixture.Document.History.Position;
         var historyCount = fixture.Context.History.UndoStack.Count;
         await fixture.SuspendCookedContentAsync().WaitAsync(timeout.Token).ConfigureAwait(true);
         var (_, recookedKey) = await fixture.CookTestMaterialAsync("Refresh", timeout.Token, green).ConfigureAwait(true);
@@ -43,7 +43,7 @@ public sealed partial class MaterialRefreshTests : DroidNet.Tests.VisualUserInte
         _ = refreshed.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(green);
         _ = refreshed.MaterialKeys.Should().ContainSingle().Which.Should().BeEquivalentTo(key);
         _ = fixture.Source.Should().BeSameAs(source);
-        _ = fixture.Context.Metadata.ChangeVersion.Should().Be(revision);
+        _ = fixture.Document.History.Position.Should().Be(revision);
         _ = fixture.Context.History.UndoStack.Should().HaveCount(historyCount);
     });
 }

@@ -15,6 +15,7 @@ using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 
@@ -85,9 +86,9 @@ public partial class SceneExplorerViewModel
             return true;
         }
 
-        await this.commandService.CompleteEditSessionsAsync(document, commit: true).ConfigureAwait(true);
+        await this.commandService.CompleteEditSessionsAsync(document.Scene, commit: true).ConfigureAwait(true);
         if (!ReferenceEquals(this.CreateCommandContext()?.Scene, document.Scene)
-            || !ReferenceEquals(this.CreateCommandContext()?.Metadata, document.Metadata)
+            || this.CreateCommandContext()?.DocumentId != document.DocumentId
             || !this.IsShown(anchor))
         {
             return false;
@@ -229,7 +230,7 @@ public partial class SceneExplorerViewModel
     private CapturedExplorerContext? CaptureExplorerContext(ITreeItem? anchor, bool background)
     {
         if (this.isDisposed || this.CreateCommandContext() is not { } document
-            || document.Metadata.IsSceneLoadPending || SceneAuthoringGate.IsRetired(document.Scene))
+            || SceneAuthoringGate.IsInstalling(document.Scene) || SceneAuthoringGate.IsRetired(document.Scene))
         {
             return null;
         }
@@ -288,10 +289,10 @@ public partial class SceneExplorerViewModel
             && ReferenceEquals(this.projectManager.CurrentProject, context.Project)
             && ReferenceEquals(this.projectContexts?.ActiveProject, context.ProjectActivation)
             && ReferenceEquals(current?.Scene, context.Document.Scene)
-            && ReferenceEquals(current?.Metadata, context.Document.Metadata)
-            && !context.Document.Metadata.IsSceneLoadPending
+            && current?.DocumentId == context.Document.DocumentId
+            && !SceneAuthoringGate.IsInstalling(context.Document.Scene)
             && !SceneAuthoringGate.IsRetired(context.Document.Scene)
-            && ReferenceEquals(this.sceneEngineSync.GetDocumentScene(context.Document.Metadata), context.Document.Scene)
+            && ReferenceEquals(this.sceneEngineSync.GetDocumentScene(context.Document.DocumentId), context.Document.Scene)
             && SameSelection(this.selectionService.GetContext(context.Document.DocumentId), context.Selection)
             && context.Selection.SelectedNodeIds.All(id => this.projection.GetNode(id) is not null)
             && context.Selection.SelectedFolderIds.All(id => this.projection.GetFolder(id) is not null)
@@ -778,7 +779,7 @@ public partial class SceneExplorerViewModel
         this.RefreshContextActions();
     }
 
-    private (Guid? ParentId, Guid? FolderId, Guid? InsertAfterId) ResolveCapturedPasteDestination(CapturedExplorerContext context, bool asChild)
+    private (NodeId? ParentId, FolderId? FolderId, NodeId? InsertAfterId) ResolveCapturedPasteDestination(CapturedExplorerContext context, bool asChild)
     {
         var target = asChild ? context.Targets[0] : context.Destination;
         var node = target as SceneNodeAdapter;
@@ -923,7 +924,7 @@ public partial class SceneExplorerViewModel
             : null;
     }
 
-    private async Task RequestCameraCommandAsync(SceneExplorerCommandKind kind, Guid nodeId)
+    private async Task RequestCameraCommandAsync(SceneExplorerCommandKind kind, NodeId nodeId)
     {
         var viewport = this.QueryCameraViewport();
         var viewing = viewport?.ViewedCameraId == nodeId;

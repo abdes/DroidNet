@@ -22,12 +22,12 @@ public sealed class InputFileCheckTests
 
     [TestMethod]
     public void TheNewInputFileTemplateChecksClean()
-        => _ = InputFileCheck.Check(Path, ScriptTemplates.InputFile("Player"), Schema).Should().BeEmpty();
+        => _ = InputFileCheck.Check(Path, AssetTemplates.InputFile("Player"), Schema).Should().BeEmpty();
 
     [TestMethod]
     public void AnUndeclaredActionIsReportedAtItsUse()
     {
-        var text = ScriptTemplates.InputFile("Player").Replace("\"action\": \"Jump\"", "\"action\": \"Boost\"", StringComparison.Ordinal);
+        var text = AssetTemplates.InputFile("Player").Replace("\"action\": \"Jump\"", "\"action\": \"Boost\"", StringComparison.Ordinal);
 
         var problem = InputFileCheck.Check(Path, text, Schema).Should().ContainSingle().Subject;
 
@@ -48,7 +48,7 @@ public sealed class InputFileCheckTests
     [TestMethod]
     public void AValueTheSchemaRejectsIsReported()
     {
-        var text = ScriptTemplates.InputFile("Player").Replace("\"slot\": \"Space\"", "\"slot\": \"NotAKey\"", StringComparison.Ordinal);
+        var text = AssetTemplates.InputFile("Player").Replace("\"slot\": \"Space\"", "\"slot\": \"NotAKey\"", StringComparison.Ordinal);
 
         _ = InputFileCheck.Check(Path, text, Schema).Should().Contain(static problem => problem.Code == ScriptDiagnosticCodes.InputInvalid);
     }

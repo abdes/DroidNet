@@ -12,7 +12,7 @@ namespace Oxygen.Editor.World.Services;
 public sealed partial class SceneEngineSync
 {
     /// <inheritdoc/>
-    public async Task<RuntimeEnvironmentState?> ObserveEnvironmentAsync(Scene scene, CancellationToken cancellationToken = default)
+    public async Task<SceneSkyLightObservation?> ObserveSkyLightAsync(Scene scene, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(scene);
         if (this.activeWorld is not { } world || !ReferenceEquals(this.activeScene, scene))
@@ -21,7 +21,9 @@ public sealed partial class SceneEngineSync
         }
 
         var observation = await world.Commands.ObserveEnvironmentAsync(Guid.NewGuid(), world.Target, cancellationToken).ConfigureAwait(false);
-        return observation.Outcome.Succeeded ? observation.State : null;
+        return observation.Outcome.Succeeded && observation.State is { } state
+            ? new SceneSkyLightObservation(state.SkyLightObserved, state.SkyLightEnabled, (SceneSkyLightUnavailableReason)state.SkyLightUnavailableReason, state.SkyLightEmptyCapture)
+            : null;
     }
 
     /// <inheritdoc/>
@@ -80,7 +82,7 @@ public sealed partial class SceneEngineSync
                 {
                     Scope = pair.Value.Scope with
                     {
-                        DocumentId = lifetime.Metadata.DocumentId,
+                        DocumentId = lifetime.DocumentId.Value,
                         DocumentLifetime = lifetime.Id,
                         AuthoringRevision = revision.Revision,
                     },

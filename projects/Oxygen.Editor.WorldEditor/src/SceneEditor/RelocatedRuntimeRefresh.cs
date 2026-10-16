@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
@@ -13,7 +14,7 @@ namespace Oxygen.Editor.World.SceneEditor;
 /// </summary>
 internal sealed class RelocatedRuntimeRefresh
 {
-    private readonly HashSet<Guid> nodes = [];
+    private readonly HashSet<NodeId> nodes = [];
     private bool environment;
 
     /// <summary>Gets a value indicating whether nodes or the environment wait for their assets.</summary>
@@ -36,7 +37,7 @@ internal sealed class RelocatedRuntimeRefresh
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(isMounted);
-        var ready = new List<Guid>();
+        var ready = new List<NodeId>();
         var current = scene.AllNodes.ToDictionary(static node => node.Id);
         foreach (var id in this.nodes.ToArray())
         {
@@ -66,5 +67,5 @@ internal sealed class RelocatedRuntimeRefresh
     /// <summary>What to show again in the runtime.</summary>
     /// <param name="Nodes">The nodes to attach again.</param>
     /// <param name="Environment">Whether to update the environment.</param>
-    public sealed record Ready(IReadOnlyList<Guid> Nodes, bool Environment);
+    public sealed record Ready(IReadOnlyList<NodeId> Nodes, bool Environment);
 }

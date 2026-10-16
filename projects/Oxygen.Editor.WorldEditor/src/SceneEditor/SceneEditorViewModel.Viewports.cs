@@ -5,11 +5,13 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DryIoc;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.SceneEditor;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
@@ -91,8 +93,8 @@ public partial class SceneEditorViewModel
         SceneViewportState? stored;
         try
         {
-            stored = this.Viewports.Count == 0 && this.ViewportStates is { } states && this.ActiveProject is { } project
-                ? await states.RestoreAsync(project, this.Metadata.DocumentId).ConfigureAwait(true)
+            stored = this.Viewports.Count == 0 && this.ViewportStates is { } states && this.ActiveProject is { } project && this.scene is { } scene
+                ? await states.RestoreAsync(project, scene.Id).ConfigureAwait(true)
                 : null;
         }
         finally
@@ -133,7 +135,7 @@ public partial class SceneEditorViewModel
         while (this.Viewports.Count < requiredCount)
         {
             var index = this.Viewports.Count;
-            var viewport = this.CreateViewport(metadata.DocumentId);
+            var viewport = this.CreateViewport(this.Document.Id);
             if (restoredPanes is not null && index < restoredPanes.Count)
             {
                 this.RestorePane(viewport, index, restoredPanes[index]);
@@ -165,7 +167,7 @@ public partial class SceneEditorViewModel
         this.EnsureFocusedViewportIsValid();
     }
 
-    private ViewportViewModel CreateViewport(Guid documentId)
+    private ViewportViewModel CreateViewport(DocumentId documentId)
     {
         var viewport = new ViewportViewModel(
             documentId,
@@ -253,7 +255,7 @@ public partial class SceneEditorViewModel
         this.SetFocusedViewport(viewport);
     }
 
-    private async Task StopOtherPilotsAsync(ViewportViewModel pilot, Guid cameraId)
+    private async Task StopOtherPilotsAsync(ViewportViewModel pilot, NodeId cameraId)
     {
         var others = this.Viewports
             .Where(viewport => !ReferenceEquals(viewport, pilot)
@@ -296,15 +298,16 @@ public partial class SceneEditorViewModel
     private void SaveViewportState()
     {
         if (!this.sceneReady || this.isDisposed || this.Viewports.Count == 0
-            || this.ViewportStates is not { } states || this.ActiveProject is not { } project)
+            || this.ViewportStates is not { } states || this.ActiveProject is not { } project || this.scene is not { } scene)
         {
             return;
         }
 
+        // Viewport state belongs to the scene, not to one opening of it: it is kept under the scene's own id.
         var focused = this.Viewports.ToList().FindIndex(viewport => viewport.ViewportId == this.FocusedViewportId);
         states.Update(
             project,
-            this.Metadata.DocumentId,
+            scene.Id,
             new SceneViewportState(this.CurrentLayout, Math.Max(focused, 0), [.. this.Viewports.Select(static viewport => viewport.CaptureState())]));
     }
 

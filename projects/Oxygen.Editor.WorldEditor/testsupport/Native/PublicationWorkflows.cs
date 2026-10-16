@@ -115,14 +115,14 @@ internal static class PublicationWorkflows
     {
         if (scope is not null)
         {
-            _ = (await fixture.Commands.SaveSceneAsync(fixture.Context).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+            _ = (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
         }
 
         var green = new Vector4(0, 1, 0, 1);
         var source = fixture.Source;
-        var revision = fixture.Context.Metadata.ChangeVersion;
+        var revision = fixture.Document.History.Position;
         var history = fixture.Context.History.UndoStack.Count;
-        var dirty = fixture.Context.Metadata.IsDirty;
+        var dirty = fixture.Document.IsDirty;
         var prior = services.Runs.Runs.Select(static run => run.OperationId).ToHashSet();
         SetCookOnChange(services, scope is null);
         await SetPublicationMaterialColorAsync(materials, material.DocumentId, green, cancellationToken).ConfigureAwait(true);
@@ -154,9 +154,9 @@ internal static class PublicationWorkflows
         }
 
         _ = fixture.Source.Should().BeSameAs(source);
-        _ = fixture.Context.Metadata.ChangeVersion.Should().Be(revision);
+        _ = fixture.Document.History.Position.Should().Be(revision);
         _ = fixture.Context.History.UndoStack.Should().HaveCount(history);
-        _ = fixture.Context.Metadata.IsDirty.Should().Be(dirty);
+        _ = fixture.Document.IsDirty.Should().Be(dirty);
         var updated = await feed.ResolveAsync(material.MaterialUri, cancellationToken).ConfigureAwait(true);
         _ = updated!.CookStatus!.Freshness.Should().Be(AssetCookFreshness.Current);
         _ = updated.RuntimeAvailability.Should().Be(AssetRuntimeAvailability.Mounted);
@@ -177,7 +177,7 @@ internal static class PublicationWorkflows
         await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
         using var automatic = new AutomaticCookService(services.Projects, Mock.Of<IProjectManagerService>(), catalog, services.Pipeline, services.Pipeline, services.Runs, NullLogger<AutomaticCookService>.Instance);
         using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
-        using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IScriptAssetAuthoring>());
+        using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         using var publication = fixture.RegisterWorkspacePublication(services, catalog);
         var materials = new MaterialDocumentService(new ProjectMaterialSourcePathResolver(services.Projects), new MaterialCookService(services.Pipeline, services.Projects, NullLogger<MaterialCookService>.Instance), services.Documents, new NativeAtomicFileStore(new RealFileSystem()));

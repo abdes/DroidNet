@@ -190,7 +190,7 @@ public sealed class SourceDependencyDiscoveryTests
         var geometry = CookInputResolver.Resolve(workspace.ProjectContext, new("asset:///Content/Geometry/AuthoredCube.ogeo.json"), ContentCookInputRole.Primary);
         Func<Task> discover = () => discovery.DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken);
         var failure = await discover.Should().ThrowAsync<global::Oxygen.Editor.ContentPipeline.Cooking.CookInputsNeedSaveException>().ConfigureAwait(false);
-        _ = failure.Which.Documents.Should().ContainSingle().Which.DocumentId.Should().Be(dirtyMaterial.DocumentId);
+        _ = failure.Which.Documents.Should().ContainSingle().Which.SourcePath.Should().Be(dirtyMaterial.SourcePath);
     }
 
     /// <summary>Cooked references remain distinct from source inputs and cannot be claimed fresh by discovery.</summary>

@@ -49,7 +49,7 @@ public sealed class NativeImportTests
         var pipeline = new ContentPipelineService(projects, runs, scopes, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, documents, compatibility, files, publication);
         await using var catalog = new AssetCatalog(projects, storage, CreateEmptyImportBuiltins(), publication);
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, projects, scopes, pipeline, documents, runs, runtime, Mock.Of<IAssetRelocationService>(), Mock.Of<IScriptAssetAuthoring>());
+        using var provider = new AssetFeed(catalog, projects, scopes, pipeline, documents, runs, runtime, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
         IReadOnlyList<AssetEntry> choices = [];
         IReadOnlyList<AssetEntry> rows = [];
         provider.Assets(AssetRule.For(AssetKind.Material)).Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => choices = value), this.TestContext.CancellationToken);

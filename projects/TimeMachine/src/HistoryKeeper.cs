@@ -499,9 +499,12 @@ public class HistoryKeeper : ITransactionManager
         this.redoStack.Insert(0, change);
     }
 
-    // Redoing records the inverse of the entry it redid, which leads where that entry led; anything else is a new state.
+    // Redoing records the inverse of the entry it redid, which leads where that entry led; a change of presentation
+    // stays where the history is; anything else is a new state.
     private void PushToUndoStack(IChange change)
-        => this.PushToUndoStack(change, this.State == States.Redoing ? this.replayPosition : ++this.lastPosition);
+        => this.PushToUndoStack(
+            change,
+            this.State == States.Redoing ? this.replayPosition : change.ChangesState ? ++this.lastPosition : this.Position.Value);
 
     private void PushToUndoStack(IChange change, long position)
     {

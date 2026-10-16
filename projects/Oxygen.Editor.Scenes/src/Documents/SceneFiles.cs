@@ -1,0 +1,81 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using System.Text.Json;
+using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
+
+namespace Oxygen.Editor.World.Documents;
+
+/// <summary>The scenes of a project: its scene files, in any folder of its authoring mounts.</summary>
+/// <remarks>A scene's name is its file name; its identity is the id inside the file.</remarks>
+public static class SceneFiles
+{
+    /// <summary>Lists the project's scene files.</summary>
+    /// <param name="project">The project.</param>
+    /// <returns>Where each scene file is, ordered by virtual path.</returns>
+    public static IReadOnlyList<ProjectAssetLocation> List(ProjectContext project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        return [.. project.AuthoringMounts
+            .Select(mount => project.FindByVirtualPath("/" + mount.Name))
+            .OfType<ProjectAssetLocation>()
+            .Where(static mount => Directory.Exists(mount.FilePath))
+            .SelectMany(static mount => Directory.EnumerateFiles(mount.FilePath, "*" + AssetFileTypes.SceneDescriptor, SearchOption.AllDirectories))
+            .Select(project.FindByFilePath)
+            .OfType<ProjectAssetLocation>()
+            .Where(static location => location.MountKind == ProjectMountKind.Authoring)
+            .DistinctBy(static location => location.FilePath, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static location => location.VirtualPath, StringComparer.OrdinalIgnoreCase)];
+    }
+
+    /// <summary>Finds the scene file that holds a scene identity.</summary>
+    /// <param name="project">The project.</param>
+    /// <param name="sceneId">The scene's id.</param>
+    /// <param name="cancellationToken">Cancels reading the files.</param>
+    /// <returns>Where the scene is, or <see langword="null"/> when no scene file holds the id.</returns>
+    public static async Task<ProjectAssetLocation?> FindByIdAsync(ProjectContext project, SceneId sceneId, CancellationToken cancellationToken = default)
+    {
+        foreach (var location in List(project))
+        {
+            if (await ReadIdAsync(location.FilePath, cancellationToken).ConfigureAwait(true) == sceneId)
+            {
+                return location;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Finds a scene by name, as the editor remembered the last scene a project opened before scenes could live
+    /// in any folder.</summary>
+    /// <param name="project">The project.</param>
+    /// <param name="name">The scene's name.</param>
+    /// <returns>The first scene file with that name, or <see langword="null"/>.</returns>
+    public static ProjectAssetLocation? FindByName(ProjectContext project, string name)
+        => List(project).FirstOrDefault(location => string.Equals(SceneContent.NameOf(location.FilePath), name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Reads the identity a scene file holds.</summary>
+    /// <param name="path">The scene file.</param>
+    /// <param name="cancellationToken">Cancels reading the file.</param>
+    /// <returns>The scene's id, or <see langword="null"/> when the file is not a readable scene.</returns>
+    public static async Task<SceneId?> ReadIdAsync(string path, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var stream = File.OpenRead(path);
+            await using var lifetime = stream.ConfigureAwait(true);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(true);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("Id", out var id) && id.TryGetGuid(out var value)
+                    ? SceneId.FromValue(value)
+                    : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
+    }
+}

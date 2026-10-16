@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
@@ -25,7 +26,7 @@ public sealed class RuntimeEnvironmentObservationTests
         _ = native.Setup(value => value.ObserveEnvironmentAsync()).Returns(completion.Task);
         var sut = new RuntimeCommandDispatcher();
         _ = sut.BeginRun(native.Object, new TaskCompletionSource().Task);
-        var target = new RuntimeSceneTarget(sut.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var target = new RuntimeSceneTarget(sut.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Environment", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         var pending = sut.ObserveEnvironmentAsync(Guid.NewGuid(), target, cancellation.Token);
@@ -59,7 +60,7 @@ public sealed class RuntimeEnvironmentObservationTests
         _ = native.Setup(value => value.ObserveEnvironmentAsync()).Throws(failure);
         var sut = new RuntimeCommandDispatcher();
         _ = sut.BeginRun(native.Object, new TaskCompletionSource().Task);
-        var target = new RuntimeSceneTarget(sut.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var target = new RuntimeSceneTarget(sut.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Environment", this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var rejected = await sut.ObserveEnvironmentAsync(Guid.NewGuid(), target, this.TestContext.CancellationToken).ConfigureAwait(false);

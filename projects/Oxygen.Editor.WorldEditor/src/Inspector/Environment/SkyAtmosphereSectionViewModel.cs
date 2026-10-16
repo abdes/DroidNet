@@ -125,7 +125,7 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
     public bool ValidateAerialStart(float value)
     {
         var result = SceneEnvironmentConstraints.ValidateAerialStart(value);
-        var ticket = this.EditOwner.Diagnostics.Begin([SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveStartDepthMeters.Id], revision: 0);
+        var ticket = this.EditOwner.Diagnostics.Begin([SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveStartDepthMeters.Id]);
         this.EditOwner.Diagnostics.Complete(ticket, new(result.IsValid) { ValidationCode = result.Code, ValidationMessage = result.Message });
         return result.IsValid;
     }

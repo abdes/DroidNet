@@ -34,6 +34,8 @@ internal sealed class NoteContent(Uri identity, string text, List<Uri> reference
 
     public bool IsDisposed { get; private set; }
 
+    public bool HasEditsInProgress => this.Pending is not null;
+
     public void Edit(string next)
     {
         var history = this.History ?? throw new InvalidOperationException("The note has no history.");
@@ -62,7 +64,7 @@ internal sealed class NoteContent(Uri identity, string text, List<Uri> reference
         this.Identity = relocation.File.AssetUri;
         for (var index = 0; index < references.Count; index++)
         {
-            if (relocation.MovedAssets.TryGetValue(references[index], out var moved))
+            if (relocation.MapUri(references[index]) is { } moved)
             {
                 references[index] = moved;
             }

@@ -5,6 +5,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Diagnostics;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LevelEditor;
@@ -32,7 +33,7 @@ public partial class ViewportViewModel
     public Action<ViewportSelection>? SelectionPicked { get; set; }
 
     /// <summary>Gets or sets the source of the selected nodes that <see cref="FrameSelectionAsync"/> frames.</summary>
-    public Func<IReadOnlyList<Guid>>? SelectedNodesProvider { get; set; }
+    public Func<IReadOnlyList<NodeId>>? SelectedNodesProvider { get; set; }
 
     /// <summary>
     /// Picks the nodes inside a rectangle of the pane and hands them to <see cref="SelectionPicked"/>.
@@ -75,7 +76,7 @@ public partial class ViewportViewModel
 
         // Hits come nearest the centre first; the selection's active node is its last.
         var nodes = result.Hits.Select(hit => hit.NodeId).Distinct().ToList();
-        IReadOnlyList<Guid> picked = nodes.Count == 0
+        IReadOnlyList<NodeId> picked = nodes.Count == 0
             ? []
             : isMarquee ? [.. nodes.Skip(1), nodes[0]] : [nodes[0]];
         this.SelectionPicked?.Invoke(new ViewportSelection(picked, mode));
@@ -109,7 +110,7 @@ public partial class ViewportViewModel
     /// <summary>Frames nodes with the pane's editor camera; an empty list frames the whole scene.</summary>
     /// <param name="nodeIds">The nodes to frame, with their descendants.</param>
     /// <returns>A task that completes when the request has been submitted.</returns>
-    internal async Task FrameAsync(IReadOnlyList<Guid> nodeIds)
+    internal async Task FrameAsync(IReadOnlyList<NodeId> nodeIds)
     {
         if (!this.AssignedViewId.IsValid)
         {

@@ -5,6 +5,7 @@
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World;
 
@@ -42,6 +43,11 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
         this.Components = [new TransformComponent { Name = nameof(TransformComponent), Node = this }];
         this.Children = [];
     }
+
+    /// <summary>
+    ///     Gets the identity of the node, authored in the scene file.
+    /// </summary>
+    public NodeId Id { get; init; } = NodeId.New();
 
     /// <summary>
     ///     Gets or sets a value indicating whether the scene node is expanded in the scene explorer.
@@ -452,13 +458,13 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
         };
     }
 
-    private static void EnsureComponentIdentity(GameComponent component, HashSet<Guid> usedIds)
+    private static void EnsureComponentIdentity(GameComponent component, HashSet<ComponentId> usedIds)
     {
-        if (component.Id == Guid.Empty || !usedIds.Add(component.Id))
+        if (component.Id.IsEmpty || !usedIds.Add(component.Id))
         {
             do
             {
-                component.Id = Guid.NewGuid();
+                component.Id = ComponentId.New();
             }
             while (!usedIds.Add(component.Id));
         }
@@ -466,7 +472,7 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
 
     private void HydrateComponents(IEnumerable<Serialization.ComponentData> components)
     {
-        var componentIds = new HashSet<Guid>();
+        var componentIds = new HashSet<ComponentId>();
         foreach (var compData in components)
         {
             var component = GameComponent.CreateAndHydrate(compData);

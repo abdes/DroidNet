@@ -61,13 +61,10 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeFalse();
         _ = node.Components.Should().Contain(transform);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = fixture.Results.Published.Should().ContainSingle()
             .Which.Diagnostics.Should().ContainSingle()
             .Which.Code.Should().Be(SceneDiagnosticCodes.ComponentRemoveDenied);
-        fixture.DocumentService.Verify(
-            service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>()),
-            Times.Never);
     }
 
     [TestMethod]
@@ -88,7 +85,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeFalse();
         _ = child.Components.OfType<GeometryComponent>().Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         _ = fixture.Results.Published.Should().ContainSingle()
             .Which.Diagnostics.Should().ContainSingle()
@@ -118,7 +115,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeFalse();
         _ = child.Components.OfType<TransformComponent>().Single().LocalPosition.Should().Be(originalPosition);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         _ = fixture.Results.Published.Should().ContainSingle()
             .Which.Diagnostics.Should().ContainSingle()
@@ -147,15 +144,12 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeFalse();
         _ = node.Components.OfType<GeometryComponent>().Single().Geometry.Should().NotBeNull();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = fixture.Results.Published.Should().ContainSingle()
             .Which.Diagnostics.Should().ContainSingle()
             .Which.Code.Should().Be(SceneDiagnosticCodes.GeometryReferenceRequired);
         fixture.Sync.Verify(sync => sync.DetachGeometryAsync(scene, node.Id, It.IsAny<CancellationToken>()), Times.Never);
         fixture.Sync.Verify(sync => sync.AttachGeometryAsync(scene, node, It.IsAny<CancellationToken>()), Times.Never);
-        fixture.DocumentService.Verify(
-            service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), context.DocumentId, context.Metadata),
-            Times.Never);
     }
 
     [TestMethod]
@@ -180,13 +174,10 @@ public sealed partial class SceneDocumentCommandServiceTests
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         fixture.Sync.Verify(sync => sync.AttachGeometryAsync(scene, node, It.IsAny<CancellationToken>()), Times.Never);
         fixture.Sync.Verify(sync => sync.DetachGeometryAsync(scene, node.Id, It.IsAny<CancellationToken>()), Times.Never);
-        fixture.DocumentService.Verify(
-            service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), context.DocumentId, context.Metadata),
-            Times.Never);
     }
 
     [TestMethod]
@@ -219,7 +210,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeTrue();
         _ = geometry.Geometry.Should().NotBeNull();
         _ = geometry.Geometry!.Uri.Should().Be(sphereUri);
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
         fixture.Sync.Verify(sync => sync.AttachGeometryAsync(scene, node, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -249,7 +240,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             session).ConfigureAwait(false);
 
         _ = transform.LocalPosition.X.Should().Be(2f);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
 
         session.Commit();
@@ -261,7 +252,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeTrue();
         _ = transform.LocalPosition.X.Should().Be(2f);
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
 
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -343,7 +334,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeTrue();
         _ = transform.LocalPosition.X.Should().Be(4.0f);
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
         _ = synced.Should().ContainSingle()
             .Which.Should().Be(new EnginePropertyValueEntry(EngineComponentId.Transform, (ushort)TransformField.PositionX, 4.0f));
@@ -378,7 +369,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         fixture.Sync.Verify(
             sync => sync.UpdatePropertiesAsync(
@@ -387,9 +378,6 @@ public sealed partial class SceneDocumentCommandServiceTests
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
                 It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()),
-            Times.Never);
-        fixture.DocumentService.Verify(
-            service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), context.DocumentId, context.Metadata),
             Times.Never);
     }
 
@@ -459,7 +447,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeTrue();
         _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
     }
 
@@ -524,13 +512,10 @@ public sealed partial class SceneDocumentCommandServiceTests
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         fixture.Sync.Verify(
             sync => sync.UpdateMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), It.IsAny<Uri?>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-        fixture.DocumentService.Verify(
-            service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), context.DocumentId, context.Metadata),
             Times.Never);
     }
 
@@ -630,7 +615,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = camera.AspectRatio.Should().Be(1.5f);
         _ = camera.NearPlane.Should().Be(0.25f);
         _ = camera.FarPlane.Should().Be(2500f);
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
         _ = synced.Should().NotBeNull();
         _ = synced!.Should().Contain(entry => entry.Component == EngineComponentId.PerspectiveCamera && entry.FieldId == (ushort)PerspectiveCameraField.FieldOfViewYRadians);
@@ -676,7 +661,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeTrue();
         AssertDirectionalLightEditApplied(light);
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
         _ = synced.Should().NotBeNull();
         _ = synced!.Should().Contain(entry => entry.Component == EngineComponentId.DirectionalLight && entry.FieldId == (ushort)DirectionalLightField.IntensityLux);
@@ -738,7 +723,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             distanceFadeoutFraction: 0.3f,
             shadowBias: 0.002f,
             shadowNormalBias: 0.05f);
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
         _ = synced.Should().NotBeNull();
         _ = synced!.Should().Contain(entry => entry.Component == EngineComponentId.DirectionalLight && entry.FieldId == (ushort)DirectionalLightField.IntensityLux);
@@ -778,15 +763,12 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeFalse();
         _ = scene.Environment.Should().Be(before);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = fixture.Results.Published.Should().ContainSingle()
             .Which.Diagnostics.Should().ContainSingle()
             .Which.Code.Should().Be(SceneDiagnosticCodes.EnvironmentSkyAtmosphereInvalid);
         fixture.Sync.Verify(
             sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-        fixture.DocumentService.Verify(
-            service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), context.DocumentId, context.Metadata),
             Times.Never);
     }
 
@@ -821,7 +803,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = syncedEnvironment.Should().NotBeNull();
         _ = syncedEnvironment!.PostProcess.ExposureMode.Should().Be(ExposureMode.Manual);
         _ = syncedEnvironment.PostProcess.ManualExposureEv.Should().Be(3.5f);
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
     }
 
@@ -992,7 +974,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeFalse();
         _ = scene.Environment.Should().Be(before);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = fixture.Results.Published.Should().ContainSingle()
             .Which.Diagnostics.Should().ContainSingle()
             .Which.Code.Should().Be(SceneDiagnosticCodes.EnvironmentManualExposureInvalid);
@@ -1032,7 +1014,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                 EditSessionToken.OneShot).ConfigureAwait(false);
             _ = result.Succeeded.Should().BeFalse();
             _ = scene.Environment.Should().Be(before);
-            _ = context.Metadata.IsDirty.Should().BeFalse();
+            _ = context.IsDirty().Should().BeFalse();
             _ = context.History.UndoStack.Should().BeEmpty();
             fixture.Sync.Verify(
                 sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()),
@@ -1064,7 +1046,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Value.Should().BeOfType<DirectionalLightComponent>()
             .Which.AtmosphereSlot.Should().Be(AtmosphereLightSlot.None);
         _ = existingSun.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot.Should().Be(AtmosphereLightSlot.Primary);
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
     }
 
@@ -1382,22 +1364,18 @@ public sealed partial class SceneDocumentCommandServiceTests
         return new Scene(project.Object) { Name = "Test Scene" };
     }
 
-    private static SceneDocumentCommandContext CreateContext(Scene scene)
-    {
-        var metadata = new SceneDocumentMetadata { Title = scene.Name };
-        return new(metadata.DocumentId, metadata, scene, new HistoryKeeper(scene));
-    }
+    private static SceneDocumentCommandContext CreateContext(Scene scene) => SceneContexts.Create(scene);
 
-    private static Fixture CreateFixture(ISceneEngineSync? synchronization = null, IProjectManagerService? projectManager = null, Oxygen.Editor.World.Workspace.WorkspaceInteractionService? interaction = null, Oxygen.Editor.ContentPipeline.Relocation.IAssetRedirects? redirects = null)
+    private static Fixture CreateFixture(ISceneEngineSync? synchronization = null, Oxygen.Editor.World.Workspace.WorkspaceInteractionService? interaction = null, Oxygen.Editor.ContentPipeline.Relocation.IAssetRedirects? redirects = null)
     {
         var sync = new Mock<ISceneEngineSync>(MockBehavior.Strict);
+        var lifetime = Guid.NewGuid();
+        long revision = 0;
         long sequence = 0;
-        _ = sync.Setup(value => value.CaptureRevision(It.IsAny<Scene>(), It.IsAny<SceneDocumentMetadata>()))
-            .Returns((Scene _, SceneDocumentMetadata metadata) => new SceneSyncRevision(metadata.DocumentId, metadata.ChangeVersion, Interlocked.Increment(ref sequence)));
-        var documentService = new Mock<IDocumentService>(MockBehavior.Strict);
-        _ = documentService
-            .Setup(service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>()))
-            .ReturnsAsync(value: true);
+        _ = sync.Setup(value => value.CaptureRevision(It.IsAny<Scene>()))
+            .Returns(() => new SceneSyncRevision(lifetime, Interlocked.Read(ref revision), Interlocked.Increment(ref sequence)));
+        _ = sync.Setup(value => value.AdvanceRevision(It.IsAny<Scene>()))
+            .Returns(() => new SceneSyncRevision(lifetime, Interlocked.Increment(ref revision), Interlocked.Increment(ref sequence)));
         var results = new CapturingOperationResultPublisher();
         var projects = new ProjectContextService();
         projects.Activate(ProjectContext.FromProjectInfo(SlotTestProjectInfo));
@@ -1407,9 +1385,6 @@ public sealed partial class SceneDocumentCommandServiceTests
         var sut = new SceneDocumentCommandService(
             new SceneSelectionService(),
             synchronization ?? sync.Object,
-            projectManager ?? new Mock<IProjectManagerService>(MockBehavior.Strict).Object,
-            documentService.Object,
-            default,
             WeakReferenceMessenger.Default,
             results,
             new OperationStatusReducer(),
@@ -1420,7 +1395,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             interaction,
             redirects);
 
-        return new(sut, sync, documentService, results, inventories, projects, interaction);
+        return new(sut, sync, results, inventories, projects, interaction);
     }
 
     /// <summary>Builds a workspace interaction owner over an in-memory settings store.</summary>
@@ -1438,7 +1413,6 @@ public sealed partial class SceneDocumentCommandServiceTests
     private sealed record Fixture(
         SceneDocumentCommandService Sut,
         Mock<ISceneEngineSync> Sync,
-        Mock<IDocumentService> DocumentService,
         CapturingOperationResultPublisher Results,
         Mock<IGeometryMaterialSlotProvider> Inventories,
         ProjectContextService Projects,

@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
@@ -19,9 +20,9 @@ public sealed class RuntimeAssetFailureTests
         var native = CreateTransport();
         var sut = new RuntimeCommandDispatcher();
         _ = sut.BeginRun(native.Object, new TaskCompletionSource().Task);
-        var target = new RuntimeSceneTarget(sut.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var target = new RuntimeSceneTarget(sut.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Scene", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var first = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetGeometry(Guid.NewGuid(), "/Content/Missing.ogeo"));
+        var first = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetGeometry(NodeId.New(), "/Content/Missing.ogeo"));
         var second = first with { OperationId = Guid.NewGuid() };
         var failures = new List<RuntimeAssetLoadFailedEventArgs>();
         sut.AssetLoadFailed += (_, args) => failures.Add(args);
@@ -56,9 +57,9 @@ public sealed class RuntimeAssetFailureTests
         var native = CreateTransport();
         var sut = new RuntimeCommandDispatcher();
         _ = sut.BeginRun(native.Object, new TaskCompletionSource().Task);
-        var target = new RuntimeSceneTarget(sut.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var target = new RuntimeSceneTarget(sut.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Scene", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var node = Guid.NewGuid();
+        var node = NodeId.New();
         var first = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetMaterialOverride(node, "/Content/Mesh.ogeo", Guid.NewGuid(), new string('0', 64), "/Content/First.omat", MaterialSlotAssignmentIntent.ObservedEdit));
         var otherSlot = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetMaterialOverride(node, "/Content/Mesh.ogeo", Guid.NewGuid(), new string('0', 64), "/Content/Other.omat", MaterialSlotAssignmentIntent.ObservedEdit));
         _ = sut.Execute(first, this.TestContext.CancellationToken);
@@ -78,9 +79,9 @@ public sealed class RuntimeAssetFailureTests
         var native = CreateTransport();
         var sut = new RuntimeCommandDispatcher();
         _ = sut.BeginRun(native.Object, new TaskCompletionSource().Task);
-        var target = new RuntimeSceneTarget(sut.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var target = new RuntimeSceneTarget(sut.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Scene", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var node = Guid.NewGuid();
+        var node = NodeId.New();
         var slot = Guid.NewGuid();
         var current = new RuntimeWorldRequest(
             Guid.NewGuid(),

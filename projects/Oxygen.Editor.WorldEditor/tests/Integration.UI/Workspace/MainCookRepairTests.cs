@@ -48,8 +48,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(90));
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
-        fixture.Context.Metadata.Title = "Main";
-        _ = (await fixture.Commands.SaveSceneAsync(fixture.Context).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
         using var services = new CatalogWorkloadServices(fixture);
         await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
         using var publication = fixture.RegisterWorkspacePublication(services, catalog);
@@ -113,7 +112,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         _ = actions.Setup(value => value.SaveListedAsync(It.IsAny<CookRunSnapshot>())).Returns<CookRunSnapshot>(async run =>
         {
             _ = run.UnsavedDocuments.Should().ContainSingle().Which.DisplayName.Should().Be("Main");
-            return (await fixture.Commands.SaveSceneAsync(fixture.Context).ConfigureAwait(true)).Succeeded;
+            return (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded;
         });
         return actions;
     }
@@ -142,13 +141,13 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         await EnterTextAsync(number, "100").ConfigureAwait(true);
         number.CompletePendingTextEdit();
         await fixture.Model.PendingEdits.ConfigureAwait(true);
-        _ = fixture.Context.Metadata.IsDirty.Should().BeTrue();
+        _ = fixture.Document.IsDirty.Should().BeTrue();
         var retry = panel.RetryCommand.ExecuteAsync(parameter: null);
         await WaitForBlockedMaterialAsync(panel, fixture.Context.DocumentId, cancellationToken).ConfigureAwait(true);
         var resumedId = panel.SelectedRun!.Snapshot.OperationId;
         await InvokeCookingSaveAsync(panel, cooking, cancellationToken).ConfigureAwait(true);
         await retry.WaitAsync(cancellationToken).ConfigureAwait(true);
         _ = services.Runs.Runs.Single(run => run.OperationId == resumedId).State.Should().BeOneOf(CookRunState.Succeeded, CookRunState.SucceededWithWarnings);
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
     }
 }

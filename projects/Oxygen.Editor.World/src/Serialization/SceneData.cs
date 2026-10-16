@@ -2,13 +2,22 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json.Serialization;
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
 /// Data transfer object for scene.
 /// </summary>
-public record SceneData : GameObjectData
+public record SceneData : NamedData
 {
+    /// <summary>
+    /// Gets or initializes the identity of the scene.
+    /// </summary>
+    [JsonPropertyOrder(-1)]
+    public required SceneId Id { get; init; }
+
     /// <summary>
     /// Gets or initializes the list of root nodes in the scene.
     /// </summary>

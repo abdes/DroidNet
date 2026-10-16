@@ -106,10 +106,46 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     [ObservableProperty]
     public partial object? ActiveEditorView { get; private set; }
 
-    /// <summary>Saves an explicit list through the ordinary document commands and conflict UI.</summary>
-    /// <param name="documentIds">The exact document identities the user authorized.</param>
+    /// <summary>Saves the open documents of an explicit list of assets through the ordinary document commands.</summary>
+    /// <param name="assets">The assets whose open documents the user authorized saving.</param>
     /// <returns>Whether no listed open document remains unsaved.</returns>
-    public async Task<bool> SaveDocumentsAsync(IReadOnlyList<Guid> documentIds)
+    public Task<bool> SaveDocumentsAsync(IReadOnlyList<Uri> assets)
+        => this.SaveTabsAsync([.. assets.Select(this.FindTab).OfType<Guid>()]);
+
+    /// <summary>Saves every open document with unsaved changes, through the ordinary document commands.</summary>
+    /// <returns>Whether no open document remains unsaved.</returns>
+    public Task<bool> SaveAllAsync()
+        => this.SaveTabsAsync([.. this.DocumentService.GetOpenDocuments(this.windowId).Where(static document => document.IsDirty).Select(static document => document.DocumentId)]);
+
+    /// <summary>Activates the open document of an asset for an explicit recovery action.</summary>
+    /// <param name="asset">The asset whose open document is activated.</param>
+    /// <returns>Whether the document was activated.</returns>
+    public Task<bool> SelectDocumentAsync(Uri asset)
+        => this.FindTab(asset) is { } tab ? this.DocumentService.SelectDocumentAsync(this.windowId, tab) : Task.FromResult(false);
+
+    /// <summary>Activates an open document.</summary>
+    /// <param name="document">The document to activate.</param>
+    /// <returns>Whether the document was activated.</returns>
+    public Task<bool> SelectDocumentAsync(DocumentId document)
+        => this.DocumentService.SelectDocumentAsync(this.windowId, document.Value); // A document's tab carries its id.
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    // The tab of the open document that edits the asset; tabs are keyed by the document service's own ids.
+    private Guid? FindTab(Uri asset)
+        => this.DocumentService.GetOpenDocuments(this.windowId).FirstOrDefault(metadata => metadata switch
+        {
+            SceneDocumentMetadata { Document: { } document } => document.File.AssetUri == asset,
+            MaterialDocumentMetadata material => material.MaterialUri == asset,
+            _ => false,
+        })?.DocumentId;
+
+    private async Task<bool> SaveTabsAsync(IReadOnlyList<Guid> documentIds)
     {
         foreach (var id in documentIds)
         {
@@ -124,23 +160,6 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         }
 
         return true;
-    }
-
-    /// <summary>Saves every open document with unsaved changes, through the ordinary document commands.</summary>
-    /// <returns>Whether no open document remains unsaved.</returns>
-    public Task<bool> SaveAllAsync()
-        => this.SaveDocumentsAsync([.. this.DocumentService.GetOpenDocuments(this.windowId).Where(static document => document.IsDirty).Select(static document => document.DocumentId)]);
-
-    /// <summary>Activates an existing document for an explicit recovery action.</summary>
-    /// <param name="documentId">The document identity.</param>
-    /// <returns>Whether the document was activated.</returns>
-    public Task<bool> SelectDocumentAsync(Guid documentId) => this.DocumentService.SelectDocumentAsync(this.windowId, documentId);
-
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        this.Dispose(disposing: true);
-        GC.SuppressFinalize(this);
     }
 
     /// <summary>
@@ -223,6 +242,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         return new SceneEditorViewModel(
             sceneMeta,
             this.DocumentService,
+            this.container.Resolve<Oxygen.Editor.Documents.OpenDocuments>(),
             this.windowId,
             this.engineService,
             this.container.Resolve<ISceneEngineSync>(),

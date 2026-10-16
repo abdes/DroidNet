@@ -68,7 +68,7 @@ public sealed record AffectedScope
     /// <summary>
     /// Gets the affected scene identity.
     /// </summary>
-    public Guid? SceneId { get; init; }
+    public SceneId? SceneId { get; init; }
 
     /// <summary>
     /// Gets the affected scene display name.
@@ -78,7 +78,7 @@ public sealed record AffectedScope
     /// <summary>
     /// Gets the affected scene node identity.
     /// </summary>
-    public Guid? NodeId { get; init; }
+    public NodeId? NodeId { get; init; }
 
     /// <summary>
     /// Gets the affected scene node display name.

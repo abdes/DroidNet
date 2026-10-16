@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Managed scene projection operations; implementations own native conversion and lifetime checks.</summary>
@@ -66,5 +68,5 @@ public interface IRuntimeWorldCommands
     /// <param name="nodeId">The authored node identity.</param>
     /// <param name="cancellationToken">Cancels the observation wait.</param>
     /// <returns>The native state only if the requested activation remains current.</returns>
-    public Task<RuntimeNodeObservation> ObserveNodeAsync(Guid operationId, RuntimeSceneTarget target, Guid nodeId, CancellationToken cancellationToken = default);
+    public Task<RuntimeNodeObservation> ObserveNodeAsync(Guid operationId, RuntimeSceneTarget target, NodeId nodeId, CancellationToken cancellationToken = default);
 }

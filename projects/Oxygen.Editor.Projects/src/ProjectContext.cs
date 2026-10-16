@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.World;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
 
@@ -50,11 +51,6 @@ public sealed record ProjectContext
     public IReadOnlyList<CookedContentSource> CookedContentOrder { get; init; } = [];
 
     /// <summary>
-    ///     Gets the currently known scene metadata.
-    /// </summary>
-    public required IReadOnlyList<ProjectSceneInfo> Scenes { get; init; }
-
-    /// <summary>
     ///     Gets a value indicating whether workspace activation should open an initial scene.
     /// </summary>
     public bool OpenInitialScene { get; init; } = true;
@@ -67,7 +63,7 @@ public sealed record ProjectContext
     /// <summary>
     ///     Gets the project's configured default scene identity, or <see langword="null"/> when none is configured.
     /// </summary>
-    public Guid? DefaultSceneId { get; init; }
+    public SceneId? DefaultSceneId { get; init; }
 
     /// <summary>
     ///     Gets the project's settings as its manifest held them when this context was created. A settings change does
@@ -84,18 +80,15 @@ public sealed record ProjectContext
     {
         ArgumentNullException.ThrowIfNull(project);
 
-        return FromProjectInfo(
-            project.ProjectInfo,
-            project.Scenes.Select(scene => new ProjectSceneInfo(scene.Id, scene.Name)));
+        return FromProjectInfo(project.ProjectInfo);
     }
 
     /// <summary>
-    ///     Creates a context snapshot from project metadata and known scene metadata.
+    ///     Creates a context snapshot from project metadata.
     /// </summary>
     /// <param name="info">The project metadata.</param>
-    /// <param name="scenes">The known scene metadata.</param>
     /// <returns>The project context.</returns>
-    public static ProjectContext FromProjectInfo(IProjectInfo info, IEnumerable<ProjectSceneInfo>? scenes = null)
+    public static ProjectContext FromProjectInfo(IProjectInfo info)
     {
         ArgumentNullException.ThrowIfNull(info);
 
@@ -109,7 +102,6 @@ public sealed record ProjectContext
             AuthoringMounts = [.. info.AuthoringMounts],
             LocalFolderMounts = [.. info.LocalFolderMounts],
             CookedContentOrder = [.. info.CookedContentOrder],
-            Scenes = [.. scenes ?? []],
             DefaultSceneId = info.DefaultSceneId,
             Settings = info.Settings,
         };

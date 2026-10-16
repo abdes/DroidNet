@@ -261,7 +261,9 @@ public sealed partial class MaterialDocumentService(
                 MountName: location.MountName,
                 SourceRelativePath: location.SourceRelativePath),
             cancellationToken).ConfigureAwait(false);
-        var capturedSavedRevision = result.Cook?.InputSnapshot?.Documents.FirstOrDefault(value => value.DocumentId == documentId)?.SavedRevision
+        var sourcePath = Path.GetFullPath(document.SourcePath);
+        var capturedSavedRevision = result.Cook?.InputSnapshot?.Documents
+                .FirstOrDefault(value => string.Equals(value.SourcePath, sourcePath, StringComparison.OrdinalIgnoreCase))?.SavedRevision
             ?? document.SavedRevision;
         result = result with { State = this.SetCookState(documentId, result.State, capturedSavedRevision) };
         this.LogCookCompleted(

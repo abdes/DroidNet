@@ -208,11 +208,7 @@ public sealed class SceneNodeEditorViewModelTests
         return new Scene(project) { Name = "Test Scene" };
     }
 
-    private static SceneDocumentCommandContext CreateContext(Scene scene)
-    {
-        var metadata = new SceneDocumentMetadata { Title = scene.Name };
-        return new(metadata.DocumentId, metadata, scene, new HistoryKeeper(scene));
-    }
+    private static SceneDocumentCommandContext CreateContext(Scene scene) => new(Guid.NewGuid(), scene, new HistoryKeeper(scene));
 
     private static SceneNode CreateNode(Scene scene)
     {

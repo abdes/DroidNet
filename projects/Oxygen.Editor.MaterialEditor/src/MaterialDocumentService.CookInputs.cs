@@ -48,7 +48,6 @@ public sealed partial class MaterialDocumentService
 
     private CookDocumentState CreateCookDocumentState(MaterialDocument document)
         => new(
-            document.DocumentId,
             Path.GetFullPath(document.SourcePath),
             document.DisplayName,
             document.Revision,

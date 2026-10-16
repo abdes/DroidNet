@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Messages;
 
 /// <summary>
@@ -10,7 +12,7 @@ namespace Oxygen.Editor.World.Messages;
 /// <param name="node">The reparented scene node.</param>
 /// <param name="oldParentNodeId">Id of the old parent scene node, or <see langword="null"/> when parent is not a scene-node.</param>
 /// <param name="newParentNodeId">Id of the new parent scene node, or <see langword="null"/> when parent is not a scene-node.</param>
-internal sealed class SceneNodeReparentedMessage(SceneNode node, System.Guid? oldParentNodeId, System.Guid? newParentNodeId)
+internal sealed class SceneNodeReparentedMessage(SceneNode node, NodeId? oldParentNodeId, NodeId? newParentNodeId)
 {
     /// <summary>
     /// Gets the reparented scene node.
@@ -20,10 +22,10 @@ internal sealed class SceneNodeReparentedMessage(SceneNode node, System.Guid? ol
     /// <summary>
     /// Gets id of the previous parent scene node, or <see langword="null"/> if the previous parent wasn't a scene-node.
     /// </summary>
-    public System.Guid? OldParentNodeId { get; } = oldParentNodeId;
+    public NodeId? OldParentNodeId { get; } = oldParentNodeId;
 
     /// <summary>
     /// Gets id of the new parent scene node, or <see langword="null"/> if the new parent isn't a scene-node.
     /// </summary>
-    public System.Guid? NewParentNodeId { get; } = newParentNodeId;
+    public NodeId? NewParentNodeId { get; } = newParentNodeId;
 }

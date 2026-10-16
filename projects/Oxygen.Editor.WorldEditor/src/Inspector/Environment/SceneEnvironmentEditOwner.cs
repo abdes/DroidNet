@@ -81,7 +81,8 @@ public sealed class SceneEnvironmentEditOwner : ObservableObject, IInspectorEdit
     /// <param name="scene">The new scene or null.</param>
     internal void Bind(Scene? scene)
     {
-        this.coordinator?.Bind(scene is null ? [] : [scene.Id]);
+        // The environment targets the bound context's scene; rebinding follows the context.
+        this.coordinator?.Bind([]);
         this.Scene = scene;
     }
 

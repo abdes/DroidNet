@@ -47,7 +47,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = replacement.FieldOfView.Should().Be(75);
         _ = editor.FieldOfView.Value.Should().Be(75);
         _ = context.History.UndoStack.Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = terminal.Should().BeEmpty();
     }
 
@@ -98,7 +98,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = emptyResult.Succeeded.Should().BeTrue("empty completion notifications remain no-ops");
         _ = result.Succeeded.Should().BeFalse();
         _ = node.Components.OfType<PerspectiveCamera>().Single().FieldOfView.Should().Be(60);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         _ = fixture.Results.Published.Should().ContainSingle()
             .Which.Diagnostics.Should().ContainSingle()
@@ -279,7 +279,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = second.Components.OfType<PerspectiveCamera>().Single().FieldOfView.Should().Be(80);
         _ = editor.FieldOfView.Value.Should().Be(80);
         _ = context.History.UndoStack.Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
     }
 
     [TestMethod]
@@ -332,7 +332,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = SceneSkyFields.SolidColorOf(scene.Environment).Should().Be(original);
         _ = context.History.UndoStack.Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
     }
 
     private static SceneNode CameraNode(Scene scene, float fieldOfView)

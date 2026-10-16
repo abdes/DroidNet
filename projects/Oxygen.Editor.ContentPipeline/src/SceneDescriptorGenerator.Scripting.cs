@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -25,7 +26,7 @@ public sealed partial class SceneDescriptorGenerator
         Scene scene,
         ContentCookScope scope,
         ContentCookInput sceneInput,
-        IReadOnlyDictionary<Guid, int> nodeIndices,
+        IReadOnlyDictionary<NodeId, int> nodeIndices,
         Guid operationId,
         List<DiagnosticRecord> diagnostics)
     {

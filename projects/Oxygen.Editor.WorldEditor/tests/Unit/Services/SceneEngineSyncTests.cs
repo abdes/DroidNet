@@ -97,7 +97,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
+        _ = sut.RegisterDocument(scene, Guid.NewGuid());
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         var entries = new[] { CreateTransformEntry(42.0f) };
@@ -142,7 +142,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Faulted);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
+        _ = sut.RegisterDocument(scene, Guid.NewGuid());
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         var entries = new[] { CreateTransformEntry(42.0f) };
@@ -222,7 +222,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
+        _ = sut.RegisterDocument(scene, Guid.NewGuid());
 
         var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -240,7 +240,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.WorldCommands).Returns((IRuntimeWorldCommands)null!);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
+        _ = sut.RegisterDocument(scene, Guid.NewGuid());
 
         var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 

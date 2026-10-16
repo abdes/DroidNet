@@ -28,7 +28,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeTrue();
         _ = scene.References.Should().BeEquivalentTo(references);
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
 
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -55,7 +55,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeFalse();
         _ = scene.References.Should().BeSameAs(before);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         _ = result.ValidationCode.Should().Be("SCENE_REFERENCES_INVALID");
     }

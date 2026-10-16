@@ -13,6 +13,7 @@ using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.SceneEditor;
@@ -44,10 +45,10 @@ public partial class SceneEditorViewModel
     /// <param name="tool">The dragged gizmo's tool: it decides which properties the drag changes.</param>
     /// <param name="targets">The targets' new local transforms.</param>
     /// <returns>One edit per target.</returns>
-    internal static Dictionary<Guid, PropertyEdit> BuildGizmoEdits(RuntimeTransformTool tool, IReadOnlyList<RuntimeGizmoTarget> targets)
+    internal static Dictionary<NodeId, PropertyEdit> BuildGizmoEdits(RuntimeTransformTool tool, IReadOnlyList<RuntimeGizmoTarget> targets)
     {
         var transform = SceneDocumentCommandService.Transform;
-        var edits = new Dictionary<Guid, PropertyEdit>(targets.Count);
+        var edits = new Dictionary<NodeId, PropertyEdit>(targets.Count);
         foreach (var target in targets)
         {
             // Every drag moves positions: rotation and scale act about the pivot.
@@ -153,7 +154,7 @@ public partial class SceneEditorViewModel
     /// <summary>The nodes the gizmo moves: the selection without locked nodes, and without nodes whose ancestor is selected too.</summary>
     /// <param name="activeNodeId">The node whose origin is the pivot.</param>
     /// <returns>The targets, in selection order.</returns>
-    internal IReadOnlyList<Guid> GetGizmoTargets(out Guid? activeNodeId)
+    internal IReadOnlyList<NodeId> GetGizmoTargets(out NodeId? activeNodeId)
     {
         activeNodeId = null;
         if (this.scene is null || this.SelectionService is not { } selection)
@@ -161,7 +162,7 @@ public partial class SceneEditorViewModel
             return [];
         }
 
-        var context = selection.GetContext(this.Metadata.DocumentId);
+        var context = selection.GetContext(this.Document.Id);
         var nodes = this.FindSelectionRoots(context.SelectedNodeIds);
         var interaction = this.Interaction;
         var targets = nodes.Where(node => interaction?.GetLockOwner(node) is null).Select(static node => node.Id).ToList();
@@ -269,7 +270,7 @@ public partial class SceneEditorViewModel
     private GizmoEdits? HelperEdits(RuntimeGizmoEvent gizmoEvent)
         => this.scene?.AllNodes.FirstOrDefault(node => node.Id == gizmoEvent.NodeId) is { } node
             && BuildHelperEdit(node, gizmoEvent.HelperHandle, gizmoEvent.Value) is { } edit
-            ? new(new Dictionary<Guid, PropertyEdit> { [node.Id] = edit }, HelperLabel(gizmoEvent.HelperHandle), [])
+            ? new(new Dictionary<NodeId, PropertyEdit> { [node.Id] = edit }, HelperLabel(gizmoEvent.HelperHandle), [])
             : null;
 
     private void OnTransformToolsChanged(object? sender, EventArgs e) => this.UpdateTransformGizmo();
@@ -315,8 +316,8 @@ public partial class SceneEditorViewModel
     private async Task SetSceneHelpersAsync(float displayScale)
     {
         var interaction = this.Interaction;
-        var selected = (this.SelectionService?.GetContext(this.Metadata.DocumentId).SelectedNodeIds ?? []).ToHashSet();
-        IReadOnlyList<Guid> locked = interaction is null || this.scene is null
+        var selected = (this.SelectionService?.GetContext(this.Document.Id).SelectedNodeIds ?? []).ToHashSet();
+        IReadOnlyList<NodeId> locked = interaction is null || this.scene is null
             ? []
             : [.. this.scene.AllNodes.Where(node => selected.Contains(node.Id) && interaction.GetLockOwner(node) is not null).Select(static node => node.Id)];
         var helpers = new RuntimeSceneHelpers([.. interaction?.HiddenNodeIds() ?? []], locked, displayScale);
@@ -358,7 +359,7 @@ public partial class SceneEditorViewModel
         }
     }
 
-    private List<SceneNode> FindSelectionRoots(IReadOnlyList<Guid> nodeIds)
+    private List<SceneNode> FindSelectionRoots(IReadOnlyList<NodeId> nodeIds)
     {
         if (this.scene is null || nodeIds.Count == 0)
         {
@@ -460,7 +461,7 @@ public partial class SceneEditorViewModel
         switch (command)
         {
             case ViewportEditCommand.Duplicate:
-                var selected = this.SelectionService?.GetContext(this.Metadata.DocumentId).SelectedNodeIds ?? [];
+                var selected = this.SelectionService?.GetContext(this.Document.Id).SelectedNodeIds ?? [];
                 var roots = this.FindSelectionRoots(selected);
                 if (roots.Count > 0)
                 {
@@ -469,13 +470,13 @@ public partial class SceneEditorViewModel
 
                 break;
             case ViewportEditCommand.Delete:
-                _ = this.messenger.Send(new SceneEditRequestMessage(this.Metadata.DocumentId, SceneEditRequest.Delete));
+                _ = this.messenger.Send(new SceneEditRequestMessage(this.Document.Id, SceneEditRequest.Delete));
                 break;
             case ViewportEditCommand.Undo:
-                _ = this.messenger.Send(new SceneEditRequestMessage(this.Metadata.DocumentId, SceneEditRequest.Undo));
+                _ = this.messenger.Send(new SceneEditRequestMessage(this.Document.Id, SceneEditRequest.Undo));
                 break;
             case ViewportEditCommand.Redo:
-                _ = this.messenger.Send(new SceneEditRequestMessage(this.Metadata.DocumentId, SceneEditRequest.Redo));
+                _ = this.messenger.Send(new SceneEditRequestMessage(this.Document.Id, SceneEditRequest.Redo));
                 break;
             default:
                 break;
@@ -485,8 +486,8 @@ public partial class SceneEditorViewModel
     /// <summary>Duplicates nodes beside themselves and selects the copies.</summary>
     private async Task DuplicateInPlaceAsync(
         SceneDocumentCommandContext context,
-        IReadOnlyList<Guid> nodeIds,
-        IReadOnlyDictionary<Guid, TransformData>? transforms)
+        IReadOnlyList<NodeId> nodeIds,
+        IReadOnlyDictionary<NodeId, TransformData>? transforms)
     {
         var result = await this.commandService.DuplicateNodesInPlaceAsync(context, nodeIds, transforms).ConfigureAwait(true);
         if (!result.Succeeded || result.Value is not { Count: > 0 } copies || this.isDisposed
@@ -495,9 +496,9 @@ public partial class SceneEditorViewModel
             return;
         }
 
-        IReadOnlyList<Guid> ids = [.. copies.Select(static node => node.Id)];
+        IReadOnlyList<NodeId> ids = [.. copies.Select(static node => node.Id)];
         selection.Publish(
-            this.Metadata.DocumentId,
+            this.Document.Id,
             new SceneSelectionContext(SceneSelectionKind.Node, ids, [], ids[^1], PrimaryFolderId: null),
             ViewportSelectionSource);
     }
@@ -542,7 +543,7 @@ public partial class SceneEditorViewModel
     /// <param name="Label">The undo entry's label.</param>
     /// <param name="Targets">A transform drag's results, which an Alt-drag duplicates at; empty for helpers.</param>
     private sealed record GizmoEdits(
-        IReadOnlyDictionary<Guid, PropertyEdit> Edits,
+        IReadOnlyDictionary<NodeId, PropertyEdit> Edits,
         string Label,
         IReadOnlyList<RuntimeGizmoTarget> Targets);
 }

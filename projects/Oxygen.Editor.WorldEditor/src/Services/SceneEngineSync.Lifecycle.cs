@@ -88,7 +88,7 @@ public sealed partial class SceneEngineSync
                 && lifetime.LastSynchronizedTarget is { } target && this.activeWorld?.Target == target
                 && target.RunId == this.engineService.WorldCommands.RunId
                 && lifetime.SnapshotBoundary is { } boundary
-                && boundary.Revision == lifetime.Metadata.ChangeVersion && boundary.Sequence == lifetime.Sequence
+                && boundary.Revision == lifetime.Revision && boundary.Sequence == lifetime.Sequence
                 && this.GetPendingPropertySyncCount(scene.Id) == 0;
         }
     }

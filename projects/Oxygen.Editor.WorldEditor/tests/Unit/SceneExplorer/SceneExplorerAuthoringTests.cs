@@ -7,8 +7,10 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
 using DroidNet.Documents;
 using DroidNet.Routing;
+using DroidNet.TimeMachine;
 using Microsoft.UI;
 using Moq;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
@@ -18,6 +20,7 @@ using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Editor.WorldEditor.TestSupport;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -76,14 +79,19 @@ public sealed partial class SceneExplorerAuthoringTests
         _ = notifications.Should().Equal(nameof(SceneAdapter.Label), nameof(SceneAdapter.DisplayLabel));
     }
 
+    /// <summary>Renaming the scene root renames its file through the relocation service, in the global history.</summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
-    public async Task RenameSceneRoot_ToolbarAndInlineUseDocumentRenameCommand()
+    public async Task RenameSceneRoot_ToolbarAndInlineRenameTheSceneFile()
     {
         var harness = new AuthoringHarness(out var scene, out _);
-        _ = harness.Commands.Setup(value => value.RenameSceneAsync(It.IsAny<SceneDocumentCommandContext>(), "Lantern Demo"))
-            .Callback<SceneDocumentCommandContext, string>((context, name) => context.Scene.Name = name)
-            .ReturnsAsync(SceneCommandResult.Success);
-        using var explorer = harness.Build();
+        var relocation = new Mock<IAssetRelocationService>();
+        var histories = new Mock<Oxygen.Editor.Shell.Documents.IHistoryService>();
+        var global = new HistoryKeeper(this);
+        _ = histories.SetupGet(value => value.GlobalHistory).Returns(global);
+        var contexts = new ProjectContextService();
+        contexts.Activate(SceneTabs.Project);
+        using var explorer = harness.Build(relocation.Object, histories.Object, contexts);
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var root = explorer.Scene!;
         explorer.SelectDisplayedItem(root, explorer.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
@@ -96,8 +104,13 @@ public sealed partial class SceneExplorerAuthoringTests
         var renamed = await explorer.CommitRenameAsync(root, "Lantern Demo").ConfigureAwait(false);
 
         _ = renamed.Succeeded.Should().BeTrue();
-        _ = root.Label.Should().Be("Lantern Demo");
-        harness.Commands.Verify(value => value.RenameSceneAsync(It.IsAny<SceneDocumentCommandContext>(), "Lantern Demo"), Times.Once);
+        relocation.Verify(
+            value => value.RelocateAsync(
+                It.Is<AssetRelocationRequest>(request => request.Moves.Single() == new AssetRelocationMove("/Content/Scene.oscene.json", "/Content/Lantern Demo.oscene.json")),
+                "Rename",
+                global,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [TestMethod]
@@ -155,7 +168,6 @@ public sealed partial class SceneExplorerAuthoringTests
             scene = new Scene(project) { Name = "Scene" };
             node = new SceneNode(scene) { Name = "Node" };
             scene.RootNodes.Add(node);
-            project.Scenes.Add(scene);
             this.scene = scene;
 
             var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
@@ -163,15 +175,15 @@ public sealed partial class SceneExplorerAuthoringTests
             this.Manager = manager;
 
             var documents = new Mock<IDocumentService>();
-            var metadata = new SceneDocumentMetadata(scene.Id);
+            var metadata = SceneTabs.Open(scene);
             this.openDocuments.Add(metadata);
             _ = documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns(() => this.openDocuments);
             _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
             this.Documents = documents;
 
             var sync = new Mock<ISceneEngineSync>();
-            _ = sync.Setup(value => value.GetDocumentScene(metadata)).Returns(scene);
-            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata)).Returns(value: true);
+            _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
+            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata.DocumentId)).Returns(value: true);
             _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             this.Sync = sync;
 
@@ -189,15 +201,17 @@ public sealed partial class SceneExplorerAuthoringTests
         public Scene AddScene(string name)
         {
             var added = new Scene(this.scene.Project) { Name = name };
-            this.scene.Project.Scenes.Add(added);
-            var metadata = new SceneDocumentMetadata(added.Id);
+            var metadata = SceneTabs.Open(added);
             this.openDocuments.Add(metadata);
-            _ = this.Sync.Setup(value => value.GetDocumentScene(metadata)).Returns(added);
-            _ = this.Sync.Setup(value => value.RegisterDocument(added, metadata)).Returns(value: true);
+            _ = this.Sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(added);
+            _ = this.Sync.Setup(value => value.RegisterDocument(added, metadata.DocumentId)).Returns(value: true);
             return added;
         }
 
-        public SceneExplorerViewModel Build()
+        public SceneExplorerViewModel Build(
+            IAssetRelocationService? relocation = null,
+            Oxygen.Editor.Shell.Documents.IHistoryService? histories = null,
+            IProjectContextService? contexts = null)
             => new(
                 this.Manager.Object,
                 new StrongReferenceMessenger(),
@@ -206,6 +220,9 @@ public sealed partial class SceneExplorerAuthoringTests
                 default,
                 this.Sync.Object,
                 new SceneSelectionService(),
-                this.Commands.Object);
+                this.Commands.Object,
+                projectContexts: contexts,
+                relocation: relocation,
+                histories: histories);
     }
 }

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -22,7 +23,7 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="ShadowResolutionHint">Requested resolution ceiling.</param>
 /// <param name="ExposureCompensation">The ExposureCompensation command value.</param>
 public sealed record RuntimeAttachSpotLight(
-    Guid NodeId,
+    NodeId NodeId,
     float LuminousFluxLumens,
     float Range,
     float SourceRadius,

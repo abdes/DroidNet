@@ -104,7 +104,7 @@ public sealed class CookDocumentRegistryTests
         first.UpdateState(saved);
         _ = changes.Should().ContainSingle();
         var before = registry.GetState();
-        second.UpdateState(saved with { DocumentId = Guid.NewGuid(), IsDirty = true });
+        second.UpdateState(saved with { IsDirty = true });
         _ = before.Documents.Should().ContainSingle().Which.IsDirty.Should().BeFalse();
         _ = registry.GetState().Documents.Should().HaveCount(2);
         first.Dispose();
@@ -114,9 +114,9 @@ public sealed class CookDocumentRegistryTests
         _ = changes.Should().HaveCount(3);
     }
 
-    /// <summary>A save is distinguishable from an edit; invalid owner updates leave state untouched.</summary>
+    /// <summary>A save is distinguishable from an edit; an update for another source leaves state untouched.</summary>
     [TestMethod]
-    public void StateUpdatesDistinguishSavedBytesAndRejectDifferentIdentity()
+    public void StateUpdatesDistinguishSavedBytesAndRejectAnotherSource()
     {
         var registry = new CookDocumentRegistry();
         var path = Path.Combine(Path.GetTempPath(), "material.omat.json");
@@ -131,9 +131,7 @@ public sealed class CookDocumentRegistryTests
         _ = latest!.SavedSourceChanged.Should().BeTrue();
         var version = registry.GetState().Version;
         Action invalidSource = () => owner.UpdateState(initial with { SourcePath = path + ".other" });
-        Action invalidOwner = () => owner.UpdateState(initial with { DocumentId = Guid.NewGuid() });
         _ = invalidSource.Should().Throw<ArgumentException>();
-        _ = invalidOwner.Should().Throw<ArgumentException>();
         _ = registry.GetState().Version.Should().Be(version);
     }
 
@@ -178,9 +176,6 @@ public sealed class CookDocumentRegistryTests
         _ = oldReads.Documents.Should().BeEmpty();
         using var newReads = await registry.AcquireAsync([renamedPath], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = newReads.Documents.Should().ContainSingle().Which.Should().Be(state);
-        Action otherOwner = () => registration.RelocateSource(state with { SourcePath = path, DocumentId = Guid.NewGuid() });
-        _ = otherOwner.Should().Throw<ArgumentException>();
-        _ = registry.GetState().Documents.Should().ContainSingle().Which.Should().Be(state);
     }
 
     /// <summary>A capture waiting on the old source releases its gate and cancels after a rename.</summary>
@@ -212,5 +207,5 @@ public sealed class CookDocumentRegistryTests
         _ = released.Should().BeTrue();
     }
 
-    private static CookDocumentState State(string path) => new(Guid.NewGuid(), path, "Material", 1, 1, IsDirty: false, "saved hash");
+    private static CookDocumentState State(string path) => new(path, "Material", 1, 1, IsDirty: false, "saved hash");
 }

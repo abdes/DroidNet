@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.Messaging.Messages;
 using Microsoft.UI;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Messages;
 
@@ -32,14 +33,14 @@ internal enum SceneCameraCommand
 /// <param name="WindowId">The editor window owning the request.</param>
 /// <param name="NodeId">The camera node.</param>
 /// <param name="Command">The requested action.</param>
-internal sealed class SceneCameraCommandMessage(WindowId WindowId, Guid NodeId, SceneCameraCommand Command)
+internal sealed class SceneCameraCommandMessage(WindowId WindowId, NodeId NodeId, SceneCameraCommand Command)
     : AsyncRequestMessage<bool>
 {
     /// <summary>Gets the editor window owning the request.</summary>
     public WindowId WindowId { get; } = WindowId;
 
     /// <summary>Gets the camera node.</summary>
-    public Guid NodeId { get; } = NodeId;
+    public NodeId NodeId { get; } = NodeId;
 
     /// <summary>Gets the requested action.</summary>
     public SceneCameraCommand Command { get; } = Command;
@@ -48,7 +49,7 @@ internal sealed class SceneCameraCommandMessage(WindowId WindowId, Guid NodeId, 
 /// <summary>What the window's active viewport shows.</summary>
 /// <param name="ViewedCameraId">The scene camera the viewport looks through, or <see langword="null"/> for its editor camera.</param>
 /// <param name="IsPiloting">Whether navigation moves that camera.</param>
-internal sealed record SceneCameraViewportState(Guid? ViewedCameraId, bool IsPiloting);
+internal sealed record SceneCameraViewportState(NodeId? ViewedCameraId, bool IsPiloting);
 
 /// <summary>
 /// Asks the window's active scene editor what its active viewport shows. No reply means no viewport.

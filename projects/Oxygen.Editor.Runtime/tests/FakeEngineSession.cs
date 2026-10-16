@@ -5,6 +5,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
@@ -110,11 +111,11 @@ internal sealed class FakeEngineSession : EngineSession
 
     public override Task<bool> SetViewCameraControlModeAsync(RuntimeViewId viewId, CameraControlMode mode) => Task.FromResult(true);
 
-    public override Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, Guid? cameraNodeId) => Task.FromResult(true);
+    public override Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, NodeId? cameraNodeId) => Task.FromResult(true);
 
     public override Task<bool> SetViewScenePilotAsync(RuntimeViewId viewId, bool pilot) => Task.FromResult(true);
 
-    public override Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, Guid nodeId) => Task.FromResult<RuntimeViewCameraPose?>(null);
+    public override Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, NodeId nodeId) => Task.FromResult<RuntimeViewCameraPose?>(null);
 
     public override Task<RuntimeEditorCamera?> GetViewEditorCameraAsync(RuntimeViewId viewId) => Task.FromResult<RuntimeEditorCamera?>(null);
 
@@ -126,9 +127,9 @@ internal sealed class FakeEngineSession : EngineSession
 
     public override Task<RuntimePickResult?> PickViewAsync(RuntimeViewId viewId, RuntimePickRect rect) => Task.FromResult<RuntimePickResult?>(null);
 
-    public override Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<Guid> nodeIds) => Task.FromResult(RuntimeFramingOutcome.Framed);
+    public override Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeId> nodeIds) => Task.FromResult(RuntimeFramingOutcome.Framed);
 
-    public override bool SetSelectionOutline(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId) => true;
+    public override bool SetSelectionOutline(IReadOnlyList<NodeId> nodeIds, NodeId? activeNodeId) => true;
 
     public override bool SetTransformGizmo(RuntimeTransformGizmo gizmo) => true;
 

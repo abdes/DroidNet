@@ -6,6 +6,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -15,8 +16,8 @@ public sealed partial class AtmosphereLightsSectionViewModel
     private readonly HashSet<SceneNode> observedNodes = [];
     private readonly HashSet<DirectionalLightComponent> observedLights = [];
     private readonly HashSet<TransformComponent> observedTransforms = [];
-    private Guid? observedSunId;
-    private Guid? observedSecondarySunId;
+    private NodeId? observedSunId;
+    private NodeId? observedSecondarySunId;
 
     private void AttachSceneObservers()
     {

@@ -3,11 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Dialogs;
 using DroidNet.TimeMachine;
 using Moq;
-using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Relocation;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Shell.Documents;
@@ -64,7 +62,5 @@ public sealed class RelocationPasteTests
             service,
             histories,
             Mock.Of<IDialogService>(),
-            Mock.Of<IMessenger>(),
-            Mock.Of<IAssetFeed>(),
             Mock.Of<IAssetShell>());
 }

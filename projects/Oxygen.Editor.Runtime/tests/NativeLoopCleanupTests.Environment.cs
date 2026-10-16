@@ -5,6 +5,8 @@
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
@@ -65,39 +67,44 @@ public sealed partial class NativeLoopCleanupTests
         VignetteIntensity = 0.3f,
         DisplayGamma = 2.4f,
         FogExists = true,
-        Fog = new()
-        {
-            Enabled = true,
-            Density = 0.03f,
-            HeightFalloff = 0.1f,
-            HeightOffsetMeters = 5f,
-            MaxOpacity = 0.8f,
-            InscatteringLuminanceRgb = new Vector3(0.2f, 0.3f, 0.4f),
-            SkyAmbientScaleRgb = new Vector3(0.9f, 0.8f, 0.7f),
-            SecondDensity = 0.01f,
-            SecondHeightFalloff = 0.05f,
-            SecondHeightOffsetMeters = 25f,
-            StartDistanceMeters = 10f,
-            EndDistanceMeters = 900f,
-            CutoffDistanceMeters = 5000f,
-            DirectionalInscatteringLuminanceRgb = new Vector3(1f, 0.9f, 0.8f),
-            DirectionalInscatteringExponent = 8f,
-            DirectionalInscatteringStartDistanceMeters = 50f,
-            VolumetricFogEnabled = true,
-            VolumetricScatteringDistribution = 0.4f,
-            VolumetricAlbedoRgb = new Vector3(0.5f, 0.6f, 0.7f),
-            VolumetricEmissiveRgb = new Vector3(0.01f, 0.02f, 0.03f),
-            VolumetricExtinctionScale = 2f,
-            VolumetricDistanceMeters = 300f,
-            VolumetricStartDistanceMeters = 1f,
-            VolumetricNearFadeInDistanceMeters = 3f,
-            VolumetricStaticLightingScatteringIntensity = 0.5f,
-            OverrideLightColorsWithFogInscattering = true,
-            RenderInMainPass = true,
-            Holdout = true,
-            VisibleInReflectionCaptures = false,
-            VisibleInRealTimeSkyCaptures = false,
-        },
+        SkySphereExists = true,
+        SkyLightExists = true,
+        BackgroundExists = true,
+        Fog = ObservedFogValues(),
+    };
+
+    private static FogEnvironmentData ObservedFogValues() => new()
+    {
+        Enabled = true,
+        Density = 0.03f,
+        HeightFalloff = 0.1f,
+        HeightOffsetMeters = 5f,
+        MaxOpacity = 0.8f,
+        InscatteringLuminanceRgb = new Vector3(0.2f, 0.3f, 0.4f),
+        SkyAmbientScaleRgb = new Vector3(0.9f, 0.8f, 0.7f),
+        SecondDensity = 0.01f,
+        SecondHeightFalloff = 0.05f,
+        SecondHeightOffsetMeters = 25f,
+        StartDistanceMeters = 10f,
+        EndDistanceMeters = 900f,
+        CutoffDistanceMeters = 5000f,
+        DirectionalInscatteringLuminanceRgb = new Vector3(1f, 0.9f, 0.8f),
+        DirectionalInscatteringExponent = 8f,
+        DirectionalInscatteringStartDistanceMeters = 50f,
+        VolumetricFogEnabled = true,
+        VolumetricScatteringDistribution = 0.4f,
+        VolumetricAlbedoRgb = new Vector3(0.5f, 0.6f, 0.7f),
+        VolumetricEmissiveRgb = new Vector3(0.01f, 0.02f, 0.03f),
+        VolumetricExtinctionScale = 2f,
+        VolumetricDistanceMeters = 300f,
+        VolumetricStartDistanceMeters = 1f,
+        VolumetricNearFadeInDistanceMeters = 3f,
+        VolumetricStaticLightingScatteringIntensity = 0.5f,
+        OverrideLightColorsWithFogInscattering = true,
+        RenderInMainPass = true,
+        Holdout = true,
+        VisibleInReflectionCaptures = false,
+        VisibleInRealTimeSkyCaptures = false,
     };
 
     private static RuntimeSetEnvironment EnvironmentRequest(RuntimeEnvironmentState state) => new(
@@ -147,7 +154,7 @@ public sealed partial class NativeLoopCleanupTests
 
     private async Task CheckNativeExposureMaskFailureAsync(RuntimeCommandDispatcher commands)
     {
-        var target = new RuntimeSceneTarget(commands.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var target = new RuntimeSceneTarget(commands.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         _ = (await commands.ActivateSceneAsync(Guid.NewGuid(), target, "Mask failure", this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
         var initial = EnvironmentRequest(ObservedEnvironmentValues());
         _ = commands.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, initial), this.TestContext.CancellationToken).Succeeded.Should().BeTrue();
@@ -192,7 +199,7 @@ public sealed partial class NativeLoopCleanupTests
 
     private async Task CheckNativeEnvironmentAsync(RuntimeCommandDispatcher commands)
     {
-        var target = new RuntimeSceneTarget(commands.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var target = new RuntimeSceneTarget(commands.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         var activated = await commands.ActivateSceneAsync(Guid.NewGuid(), target, "Environment observation", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = activated.Succeeded.Should().BeTrue();
         var expected = ObservedEnvironmentValues();

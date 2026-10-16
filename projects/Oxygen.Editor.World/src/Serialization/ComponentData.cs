@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
 
@@ -24,5 +25,5 @@ public abstract record ComponentData : NamedData
     /// <summary>
     /// Gets the stable component identity.
     /// </summary>
-    public Guid Id { get; init; } = Guid.NewGuid();
+    public ComponentId Id { get; init; } = ComponentId.New();
 }

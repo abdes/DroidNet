@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Services;
 
 /// <summary>
@@ -69,7 +71,7 @@ internal sealed class LiveSyncCoalescer
 
     /// <summary>Discards preview timing inherited from a retired scene activation.</summary>
     /// <param name="sceneId">The retired scene.</param>
-    public void ResetScene(Guid sceneId)
+    public void ResetScene(SceneId sceneId)
     {
         lock (this.gate)
         {

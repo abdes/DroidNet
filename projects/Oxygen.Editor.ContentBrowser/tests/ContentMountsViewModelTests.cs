@@ -122,6 +122,5 @@ public sealed class ContentMountsViewModelTests
         ProjectRoot = "C:/Projects/Mounts",
         AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
         LocalFolderMounts = [new("Studio library", "D:/Studio/EnvironmentLibrary")],
-        Scenes = [],
     };
 }

@@ -43,7 +43,7 @@ public sealed partial class SceneEngineSync
                 return Task.FromResult(Cancelled(operationKind, scope) with { Message = "The source document lifetime is no longer open." });
             }
 
-            scope = scope with { DocumentId = lifetime.Metadata.DocumentId, DocumentLifetime = lifetime.Id, AuthoringRevision = revision.Revision };
+            scope = scope with { DocumentId = lifetime.DocumentId.Value, DocumentLifetime = lifetime.Id, AuthoringRevision = revision.Revision };
             _ = this.pendingPropertySyncs.Enqueue(scene.Id, revision, node.Id, entries);
             var pending = this.pendingPropertySyncs.Snapshot(scene.Id, lifetime.Id)
                 .FirstOrDefault(request => request.Revision == revision && request.NodeId == node.Id);
@@ -185,7 +185,7 @@ public sealed partial class SceneEngineSync
         var scope = Scope(scene, node, componentType: GetPropertyComponentType(pending.Entries));
         scope = scope with
         {
-            DocumentId = this.openScenes[scene.Id].Metadata.DocumentId,
+            DocumentId = this.openScenes[scene.Id].DocumentId.Value,
             DocumentLifetime = pending.Revision.DocumentLifetime,
             AuthoringRevision = pending.Revision.Revision,
         };

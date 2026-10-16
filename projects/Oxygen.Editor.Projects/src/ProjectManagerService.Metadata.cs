@@ -16,7 +16,7 @@ public partial class ProjectManagerService
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
         ArgumentNullException.ThrowIfNull(settings);
         var path = storage.NormalizeRelativeTo(projectRoot, Constants.ProjectFileName);
-        return this.sceneWrites.RunAsync(
+        return this.manifestWrites.RunAsync(
             path,
             async () =>
             {
@@ -49,7 +49,7 @@ public partial class ProjectManagerService
         }
 
         var path = storage.NormalizeRelativeTo(projectInfo.Location, Constants.ProjectFileName);
-        return this.sceneWrites.RunAsync(
+        return this.manifestWrites.RunAsync(
             path,
             async () =>
             {

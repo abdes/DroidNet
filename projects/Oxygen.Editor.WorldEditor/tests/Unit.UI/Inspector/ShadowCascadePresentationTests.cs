@@ -44,7 +44,7 @@ internal sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
         _ = Field(view, "CascadeCount").IsEnabled.Should().BeTrue();
         _ = Field(view, "MaxShadowDistance").IsEnabled.Should().BeTrue();
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
     [TestMethod]
@@ -150,7 +150,7 @@ internal sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
         await WaitForRenderAsync().ConfigureAwait(true);
         AssertFields(view, DirectionalCsmSplitMode.Generated, 4);
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
     private static DirectionalLightShadowsView CreateView(DirectionalLightViewModel model)

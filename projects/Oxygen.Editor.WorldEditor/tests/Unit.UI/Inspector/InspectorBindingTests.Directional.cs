@@ -42,7 +42,7 @@ public sealed partial class InspectorBindingTests
         _ = SwatchColor(field).Should().Be(display);
         _ = light.Color.Should().Be(authored);
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
 
         await PickDisplayColorAsync(swatch, Windows.UI.Color.FromArgb(255, 64, 128, 32)).ConfigureAwait(true);
         await model.PendingEdits.ConfigureAwait(true);

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -160,9 +161,9 @@ public sealed partial class EngineService
     [LoggerMessage(
         Level = LogLevel.Debug,
         Message = "Requesting view with id '{ViewId}' to render through scene camera node '{CameraNodeId}' (none: editor camera).")]
-    private static partial void LogSetViewSceneCamera(ILogger logger, ulong viewId, Guid? cameraNodeId);
+    private static partial void LogSetViewSceneCamera(ILogger logger, ulong viewId, NodeId? cameraNodeId);
 
-    private void LogSetViewSceneCamera(RuntimeViewId viewId, Guid? cameraNodeId)
+    private void LogSetViewSceneCamera(RuntimeViewId viewId, NodeId? cameraNodeId)
         => LogSetViewSceneCamera(this.logger, viewId.Value, cameraNodeId);
 
     [LoggerMessage(

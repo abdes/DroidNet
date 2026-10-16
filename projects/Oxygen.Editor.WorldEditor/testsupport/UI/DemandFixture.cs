@@ -35,17 +35,23 @@ internal sealed partial class DemandFixture : IDisposable
         var info = new ProjectInfo("Demand", Category.Games, "C:/Demand", "preview.png");
         _ = Mock.Get(this.Authoring.Scene.Project).SetupGet(value => value.ProjectInfo).Returns(info);
         this.Authoring.Projects.Activate(ProjectContext.FromProjectInfo(info));
-        this.projects.Activate(new ProjectContext { ProjectId = info.Id, Name = info.Name, Category = Category.Games, ProjectRoot = "C:/Demand", AuthoringMounts = [new("Content", "Content")], LocalFolderMounts = [], Scenes = [], });
+        this.projects.Activate(new ProjectContext { ProjectId = info.Id, Name = info.Name, Category = Category.Games, ProjectRoot = "C:/Demand", AuthoringMounts = [new("Content", "Content")], LocalFolderMounts = [], });
         this.Geometry = new()
         {
             Name = "Geometry",
             Geometry = new(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
         };
         _ = this.Authoring.Node.AddComponent(this.Geometry);
-        this.activeDocument = this.Authoring.Scene.Id;
+        this.activeDocument = this.Authoring.Tab.DocumentId;
         _ = this.Authoring.Documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(() => this.activeDocument);
-        _ = this.Authoring.Documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns([this.Authoring.Context.Metadata]);
-        _ = this.Authoring.Documents.Setup(value => value.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>())).Callback(this.NotifyEdited).ReturnsAsync(value: true);
+        _ = this.Authoring.Documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns([this.Authoring.Tab]);
+
+        // The scene editor tells the tabs when its document's state changes; this fixture has no editor.
+        this.Authoring.Document.StateChanged += (_, _) =>
+        {
+            _ = this.Authoring.Tab.Refresh();
+            this.NotifyEdited();
+        };
         var accepted = new SyncOutcome(SyncStatus.Accepted, "Demand assignment", AffectedScope.Empty);
         _ = this.Authoring.Sync.Setup(value => value.AttachGeometryAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
         _ = this.Authoring.Sync.Setup(value => value.UpdateMaterialSlotAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<Oxygen.Editor.World.Slots.MaterialSlotTarget>(), It.IsAny<Uri?>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
@@ -95,9 +101,9 @@ internal sealed partial class DemandFixture : IDisposable
 
     public List<(Uri uri, CancellationToken token)> Requests { get; } = [];
 
-    public void Activate() => _ = this.Authoring.Messenger.Send(new SceneAuthoringLoadedMessage(this.Authoring.Scene, this.Authoring.Context.Metadata));
+    public void Activate() => _ = this.Authoring.Messenger.Send(new SceneAuthoringLoadedMessage(this.Authoring.Scene, this.Authoring.Tab));
 
-    public void NotifyEdited() => this.Authoring.Documents.Raise(value => value.DocumentMetadataChanged += null, new DocumentMetadataChangedEventArgs(default, this.Authoring.Context.Metadata));
+    public void NotifyEdited() => this.Authoring.Documents.Raise(value => value.DocumentMetadataChanged += null, new DocumentMetadataChangedEventArgs(default, this.Authoring.Tab));
 
     public void SwitchDocument(Guid documentId)
     {

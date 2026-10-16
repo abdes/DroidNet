@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Documents;
+
 namespace Oxygen.Editor.World.Messages;
 
 /// <summary>A history or deletion command the viewport asks the Scene Explorer to run.</summary>
@@ -23,4 +25,4 @@ internal enum SceneEditRequest
 /// </summary>
 /// <param name="DocumentId">The scene document.</param>
 /// <param name="Request">The command.</param>
-internal sealed record SceneEditRequestMessage(Guid DocumentId, SceneEditRequest Request);
+internal sealed record SceneEditRequestMessage(DocumentId DocumentId, SceneEditRequest Request);

@@ -152,7 +152,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         _ = host.Adapter.IsSelected.Should().BeFalse();
         _ = host.SecondaryAdapter.IsSelected.Should().BeTrue();
         _ = host.Fixture.Context.History.UndoStack.Should().ContainSingle("the real command owner records one hide operation");
-        _ = host.Fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = host.Fixture.Document.IsDirty.Should().BeFalse();
         _ = host.Node.IsVisible.Should().Be(authoredVisibility);
         AssertSlot(Button(host.Actions, "LockButton"), locked, hovered: true);
 
@@ -170,7 +170,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         host.Actions.SetRowHovered(hovered: false);
         AssertSlot(Button(host.Actions, "EyeButton"), suppressed: false, hovered: false);
         AssertSlot(Button(host.Actions, "LockButton"), locked, hovered: false);
-        host.Fixture.Sync.Verify(value => value.GetDocumentScene(It.IsAny<Oxygen.Editor.World.Documents.SceneDocumentMetadata>()), Times.AtLeastOnce);
+        host.Fixture.Sync.Verify(value => value.GetDocumentScene(It.IsAny<Guid>()), Times.AtLeastOnce);
         host.Fixture.Sync.VerifyNoOtherCalls();
     });
 
@@ -207,7 +207,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         AssertSlot(Button(host.Actions, "EyeButton"), hidden, hovered: false);
         AssertSlot(Button(host.Actions, "LockButton"), suppressed: false, hovered: false);
         _ = host.Fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = host.Fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = host.Fixture.Document.IsDirty.Should().BeFalse();
     });
 
     /// <summary>Verifies both row slots paint nonempty glyphs with distinct state shapes, independent of opacity.</summary>
@@ -299,7 +299,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         _ = host.Adapter.IsLocked.Should().BeTrue();
         _ = Glyph(host.Actions, "EyeGlyph").Glyph.Should().Be("\uED1A");
         _ = Glyph(host.Actions, "LockGlyph").Glyph.Should().Be("\uE72E");
-        _ = host.Fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = host.Fixture.Document.IsDirty.Should().BeFalse();
         host.Settings.Verify(
             settings => settings.SaveSettingAsync(
                 WorkspaceInteractionService.Key,
@@ -473,11 +473,11 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             var childNode = new SceneNode(scene) { Name = "Nested child" };
             scene.RootNodes.Add(secondaryNode);
             fixture.Node.AddChild(childNode);
-            var metadata = fixture.Context.Metadata;
+            var metadata = fixture.Tab;
             _ = fixture.Documents.Setup(service => service.GetOpenDocuments(It.IsAny<WindowId>())).Returns([metadata]);
             _ = fixture.Documents.Setup(service => service.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
-            _ = fixture.Sync.Setup(service => service.GetDocumentScene(metadata)).Returns(scene);
-            _ = fixture.Sync.Setup(service => service.RegisterDocument(scene, metadata)).Returns(value: true);
+            _ = fixture.Sync.Setup(service => service.GetDocumentScene(metadata.DocumentId)).Returns(scene);
+            _ = fixture.Sync.Setup(service => service.RegisterDocument(scene, metadata.DocumentId)).Returns(value: true);
             _ = fixture.Sync.Setup(service => service.SyncSceneWhenReadyAsync(scene, It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             viewModel = new SceneExplorerViewModel(
                 Mock.Of<IProjectManagerService>(),

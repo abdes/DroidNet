@@ -58,7 +58,7 @@ internal static class BrowserTestData
     internal static ProjectContextService CreateQueryProject(bool cookedMount = false)
     {
         var projects = new ProjectContextService();
-        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Query", Category = Category.Games, ProjectRoot = "C:/Query", AuthoringMounts = cookedMount ? [new("Content", "Content"), new("Cooked", ".cooked")] : [new("Content", "Content")], LocalFolderMounts = [], Scenes = [], });
+        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Query", Category = Category.Games, ProjectRoot = "C:/Query", AuthoringMounts = cookedMount ? [new("Content", "Content"), new("Cooked", ".cooked")] : [new("Content", "Content")], LocalFolderMounts = [], });
         return projects;
     }
 

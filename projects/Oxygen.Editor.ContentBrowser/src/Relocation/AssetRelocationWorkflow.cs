@@ -4,14 +4,11 @@
 
 using System.Globalization;
 using System.Text;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Dialogs;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Shell.Documents;
@@ -20,24 +17,20 @@ namespace Oxygen.Editor.ContentBrowser.Relocation;
 
 /// <summary>Runs Content Browser renames, moves, copies and deletes, and reports their outcomes.</summary>
 /// <remarks>
-/// Renames and moves are recorded in the session's global history, so they undo and redo in order with everything
-/// else recorded there; copies, deletes and scene commands are not recorded and leave the history as it is. The
+/// Renames and moves, of scenes as of any asset, are recorded in the session's global history, so they undo and redo in
+/// order with everything else recorded there; copies and deletes are not recorded and leave the history as it is. The
 /// relocation service reports every file it changed, and the asset feed, the sources tree and open documents follow
 /// that report, whoever asked for the change.
 /// </remarks>
 /// <param name="relocation">Applies the file changes.</param>
 /// <param name="histories">Holds the global history that renames and moves are recorded in.</param>
-/// <param name="dialogs">Asks for names, and confirms deleting content that other content uses.</param>
-/// <param name="messenger">Hands scene commands to the open scene workspace.</param>
-/// <param name="assets">The asset feed, read again after a scene command.</param>
+/// <param name="dialogs">Asks for names, and confirms deleting content that other content uses or that is open.</param>
 /// <param name="shell">Moves deleted files to the Recycle Bin.</param>
 /// <param name="logger">Records requests and outcomes.</param>
 public sealed partial class AssetRelocationWorkflow(
     IAssetRelocationService relocation,
     IHistoryService histories,
     IDialogService dialogs,
-    IMessenger messenger,
-    IAssetFeed assets,
     IAssetShell shell,
     ILogger<AssetRelocationWorkflow>? logger = null) : IAssetRelocationWorkflow, IDisposable
 {
@@ -136,15 +129,32 @@ public sealed partial class AssetRelocationWorkflow(
         ArgumentNullException.ThrowIfNull(sources);
         const string title = "Delete";
         var referrers = await relocation.FindReferrersOutsideAsync(sources, CancellationToken.None).ConfigureAwait(true);
-        if (referrers.Count != 0)
+        var open = relocation.FindOpenDocuments(sources);
+        if (referrers.Count != 0 || open.Count != 0)
         {
-            var review = new StringBuilder()
-                .Append(CultureInfo.CurrentCulture, $"{Describe(sources)} {(sources.Count == 1 ? "is" : "are")} used by:").AppendLine();
-            AppendList(review, referrers);
-            _ = review.AppendLine().Append("Those references will show as missing. The files go to the Recycle Bin.");
+            var review = new StringBuilder();
+            if (open.Count != 0)
+            {
+                _ = review.Append(CultureInfo.CurrentCulture, $"{string.Join(", ", open.Select(static document => document.Name))} {(open.Count == 1 ? "is" : "are")} open and will close.");
+                if (open.Any(static document => document.IsDirty))
+                {
+                    _ = review.Append(CultureInfo.CurrentCulture, $" Unsaved changes to {string.Join(", ", open.Where(static document => document.IsDirty).Select(static document => document.Name))} are discarded.");
+                }
+
+                _ = review.AppendLine();
+            }
+
+            if (referrers.Count != 0)
+            {
+                _ = review.Append(CultureInfo.CurrentCulture, $"{Describe(sources)} {(sources.Count == 1 ? "is" : "are")} used by:").AppendLine();
+                AppendList(review, referrers);
+                _ = review.AppendLine().Append("Those references will show as missing. ");
+            }
+
+            _ = review.Append("The files go to the Recycle Bin.");
             if (!await dialogs.ConfirmAsync(title, review.ToString()).ConfigureAwait(true))
             {
-                this.LogReviewCancelled(title, referrers.Count);
+                this.LogReviewCancelled(title, referrers.Count + open.Count);
                 return null;
             }
         }
@@ -166,55 +176,6 @@ public sealed partial class AssetRelocationWorkflow(
         }
 
         return this.Publish(new(Succeeded: true, title, $"Moved {Describe(sources)} to the Recycle Bin. Restore {(sources.Count == 1 ? "it" : "them")} from there to bring {(sources.Count == 1 ? "it" : "them")} back."));
-    }
-
-    /// <inheritdoc/>
-    public async Task<AssetRelocationOutcome> RunSceneCommandAsync(SceneAssetCommand command, string sceneName, string? newName)
-    {
-        var title = command switch
-        {
-            SceneAssetCommand.Rename => "Rename scene",
-            SceneAssetCommand.Duplicate => "Duplicate scene",
-            _ => "Delete scene",
-        };
-        var request = new SceneAssetCommandMessage(command, sceneName, newName, paths =>
-        {
-            shell.MoveToRecycleBin(paths);
-            return Task.CompletedTask;
-        });
-        this.LogSceneCommand(command, sceneName, newName);
-        _ = messenger.Send(request);
-        if (!request.HasReceivedResponse)
-        {
-            this.LogSceneCommandUnhandled(command, sceneName);
-            return this.Publish(new(Succeeded: false, title, "Scenes change only while the project's world editor is open."));
-        }
-
-        string? error;
-        try
-        {
-            error = await request.Response.ConfigureAwait(true);
-        }
-        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException or InvalidOperationException)
-        {
-            this.LogSceneCommandFailed(failure, command, sceneName);
-            error = failure.Message;
-        }
-
-        if (error is not null)
-        {
-            return this.Publish(new(Succeeded: false, title, error));
-        }
-
-        // The scene workspace changes scene files without reporting them, so the rows are read again here.
-        await assets.RefreshAsync().ConfigureAwait(true);
-        var message = command switch
-        {
-            SceneAssetCommand.Rename => $"Renamed scene '{sceneName}' to '{newName}'.",
-            SceneAssetCommand.Duplicate => $"Duplicated scene '{sceneName}'.",
-            _ => $"Moved scene '{sceneName}' to the Recycle Bin.",
-        };
-        return this.Publish(new(Succeeded: true, title, message));
     }
 
     /// <inheritdoc/>

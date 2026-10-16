@@ -18,40 +18,6 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 public sealed partial class SceneDocumentCommandServiceTests
 {
     [TestMethod]
-    public async Task PendingMetadataNotification_DoesNotDelayPropertyPublicationPastFullSync()
-    {
-        var engine = new Mock<IEngineService>();
-        _ = engine.SetupGet(value => value.State).Returns(EngineServiceState.Running);
-        var requests = new List<RuntimeWorldRequest>();
-        var world = CreateReplayWorld(requests);
-        var creation = new TaskCompletionSource<RuntimeCommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        RuntimeWorldRequest? creationRequest = null;
-        _ = world.Setup(value => value.CreateNodeAsync(It.IsAny<RuntimeWorldRequest>(), It.IsAny<CancellationToken>()))
-            .Callback<RuntimeWorldRequest, CancellationToken>((request, _) => creationRequest = request).Returns(creation.Task);
-        _ = engine.SetupGet(value => value.WorldCommands).Returns(world.Object);
-        using var synchronization = new SceneEngineSync(engine.Object);
-        var fixture = CreateFixture(synchronization);
-        var notification = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _ = fixture.DocumentService.Setup(value => value.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>())).Returns(notification.Task);
-        var scene = CreateScene();
-        var node = new SceneNode(scene) { Name = "Cube" };
-        scene.RootNodes.Add(node);
-        var context = CreateContext(scene);
-        _ = synchronization.RegisterDocument(scene, context.Metadata);
-        var rebuilding = synchronization.SyncSceneAsync(scene, this.TestContext.CancellationToken);
-
-        var editing = fixture.Sut.EditTransformAsync(context, [node.Id], PositionXEdit(9), EditSessionToken.OneShot);
-        _ = editing.IsCompleted.Should().BeFalse();
-        _ = synchronization.GetPendingPropertySyncCount(scene.Id).Should().Be(1);
-        creation.SetResult(new(creationRequest!.OperationId, creationRequest.Target.RunId, RuntimeCommandStatus.Accepted));
-        _ = (await rebuilding.ConfigureAwait(false)).Should().BeTrue();
-
-        _ = requests.PropertyEntries(node.Id, EngineComponentId.Transform).Should().Equal(RuntimePropertyRequests.PositionX(9));
-        notification.SetResult(true);
-        _ = await editing.ConfigureAwait(false);
-    }
-
-    [TestMethod]
     public async Task OfflineEditAndUndo_ReconnectProjectsCurrentAuthoringAndRedoRemainsLive()
     {
         var state = EngineServiceState.Ready;
@@ -66,7 +32,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         var context = CreateContext(scene);
-        _ = synchronization.RegisterDocument(scene, context.Metadata);
+        _ = synchronization.RegisterDocument(scene, context.DocumentId);
 
         _ = await fixture.Sut.EditTransformAsync(context, [node.Id], PositionXEdit(7), EditSessionToken.OneShot).ConfigureAwait(false);
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -79,7 +45,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = synchronization.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
         await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = requests.PropertyEntries(node.Id, EngineComponentId.Transform).Should().Equal(RuntimePropertyRequests.PositionX(7));
-        _ = context.Metadata.ChangeVersion.Should().Be(3);
+        _ = synchronization.CaptureRevision(scene).Revision.Should().Be(3);
     }
 
     private static Mock<IRuntimeWorldCommands> CreateReplayWorld(List<RuntimeWorldRequest> requests)

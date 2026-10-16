@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Interop;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -31,7 +32,7 @@ internal static class NativeSessionConversions
         => result is null
             ? null
             : new(
-                [.. result.Hits.Select(hit => new RuntimePickHit(hit.NodeId, hit.Depth, hit.GeometrySlot, hit.CenterDistance))],
+                [.. result.Hits.Select(hit => new RuntimePickHit(NodeId.FromValue(hit.NodeId), hit.Depth, hit.GeometrySlot, hit.CenterDistance))],
                 result.WorldPosition);
 
     /// <summary>Converts a native framing outcome by its named meaning.</summary>
@@ -53,13 +54,13 @@ internal static class NativeSessionConversions
             gizmoEvent.Duplicate,
             gizmoEvent.Hovering,
             gizmoEvent.Representable,
-            [.. gizmoEvent.Targets.Select(target => new RuntimeGizmoTarget(target.NodeId, target.Position, target.Rotation, target.Scale))],
+            [.. gizmoEvent.Targets.Select(target => new RuntimeGizmoTarget(NodeId.FromValue(target.NodeId), target.Position, target.Rotation, target.Scale))],
             gizmoEvent.ReadoutAxes,
             gizmoEvent.ReadoutValues,
             gizmoEvent.PivotPixel,
             gizmoEvent.PointerPixel,
             gizmoEvent.Helper,
-            gizmoEvent.NodeId,
+            NodeId.FromValue(gizmoEvent.NodeId),
             (RuntimeHelperHandle)(int)gizmoEvent.HelperHandle,
             gizmoEvent.Value);
 
@@ -99,7 +100,7 @@ internal static class NativeSessionConversions
             Purpose = config.Purpose,
             CompositingTarget = config.CompositingTarget,
             CameraPreset = ToNative<CameraViewPresetManaged>(config.CameraPreset),
-            SceneCamera = config.SceneCameraNodeId,
+            SceneCamera = config.SceneCameraNodeId?.Value,
             InsetHost = config.InsetHost is { } host ? new ViewIdManaged(host.Value) : null,
             ViewMode = ToNative<ViewModeManaged>(config.ViewMode),
             ShowGrid = config.ShowGrid,

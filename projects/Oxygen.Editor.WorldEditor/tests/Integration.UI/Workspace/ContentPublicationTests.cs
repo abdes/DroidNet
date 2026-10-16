@@ -4,15 +4,19 @@
 
 using System.Numerics;
 using AwesomeAssertions;
+using DroidNet.Storage.Native;
+using DroidNet.TimeMachine;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.WorldEditor.TestSupport.PublicationWorkflows;
 
@@ -28,11 +32,18 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         CheckWorkspacePublicationAsync(this.TestContext, scope: null, async (scenario, token) =>
         {
             var fixture = scenario.SceneAuthoringFixture;
-            _ = (await fixture.Commands.SaveSceneAsync(fixture.Context).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+            _ = (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
             var oldName = fixture.Source.Name;
             var oldUri = new Uri($"asset:///Content/Scenes/{Uri.EscapeDataString(oldName)}.oscene.json");
             _ = (await scenario.Services.Pipeline.CookCurrentSceneAsync(oldUri, token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
-            _ = (await fixture.Commands.RenameSceneAsync(fixture.Context, "Small Scene").ConfigureAwait(true)).Succeeded.Should().BeTrue();
+            using (var relocation = new AssetRelocationService(scenario.Services.Runs, scenario.Services.Projects, scenario.Services.Documents, new NativeAtomicFileStore(new RealFileSystem()), scenario.Catalog))
+            using (fixture.FollowRelocations(relocation))
+            {
+                var move = new AssetRelocationMove("/Content/Scenes/" + oldName + ".oscene.json", "/Content/Scenes/Small Scene.oscene.json");
+                _ = await relocation.RelocateAsync(new AssetRelocationRequest { Moves = [move] }, "Rename", new HistoryKeeper(fixture), token).ConfigureAwait(true);
+            }
+
+            _ = fixture.Source.Name.Should().Be("Small Scene");
             var result = await scenario.Services.Pipeline.CookAssetAsync(new("asset:///Content/Scenes/Small%20Scene.oscene.json"), token).ConfigureAwait(true);
             _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
             _ = result.IsMounted.Should().BeTrue();
@@ -67,7 +78,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         var fixture = scenario.SceneAuthoringFixture;
         var services = scenario.Services;
         var project = services.Projects.ActiveProject!;
-        _ = (await fixture.Commands.SaveSceneAsync(fixture.Context).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
         var hashes = ReadPublishedHashes(fixture.ProjectRoot);
         var prior = services.Runs.Runs.Select(static run => run.OperationId).ToHashSet();
         var runId = fixture.Runtime.ContentStatus.RunId;
@@ -216,7 +227,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
 
         var expected = await WaitForNodeAsync(fixture, nodes[0].Id, value => !value.MaterialKeys.Contains(scenario.Key, StringComparer.Ordinal), cancellationToken).ConfigureAwait(true);
         _ = expected.MaterialKeys.Should().NotContain(scenario.Key);
-        var revision = fixture.Context.Metadata.ChangeVersion;
+        var revision = fixture.Document.History.Position;
         var history = fixture.Context.History.UndoStack.Count;
         await releaseWriter().ConfigureAwait(true);
         _ = await WaitForPublicationRunAsync(scenario.Services, prior, cancellationToken).ConfigureAwait(true);
@@ -230,7 +241,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             _ = retained.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(new Vector4(0, 1, 0, 1));
         }
 
-        _ = fixture.Context.Metadata.ChangeVersion.Should().Be(revision);
+        _ = fixture.Document.History.Position.Should().Be(revision);
         _ = fixture.Context.History.UndoStack.Should().HaveCount(history);
         if (string.Equals(action, "Undo", StringComparison.Ordinal))
         {
@@ -249,7 +260,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
 
     private static async Task CheckUnchangedWorkspaceCookAsync(PublicationScenario scenario, CookTargetKind scope, CancellationToken cancellationToken)
     {
-        _ = (await scenario.SceneAuthoringFixture.Commands.SaveSceneAsync(scenario.SceneAuthoringFixture.Context).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await scenario.SceneAuthoringFixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = await CookPublicationScopeAsync(scenario, scope, cancellationToken).ConfigureAwait(true);
         var content = scenario.SceneAuthoringFixture.Runtime.ContentStatus;
         var files = ReadPublishedHashes(scenario.SceneAuthoringFixture.ProjectRoot).Keys.ToDictionary(static path => path, File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase);
@@ -318,7 +329,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         var node = current.RootNodes[0];
         var before = await WaitForNodeAsync(fixture, node.Id, static value => value.IndexCount > 0, cancellationToken).ConfigureAwait(true);
         _ = before.MaterialKeys.Should().NotContain(scenario.Key);
-        var revision = fixture.Context.Metadata.ChangeVersion;
+        var revision = fixture.Document.History.Position;
         var history = fixture.Context.History.UndoStack.Count;
         await releaseWriter().ConfigureAwait(true);
         _ = await WaitForPublicationRunAsync(scenario.Services, prior, cancellationToken).ConfigureAwait(true);
@@ -331,9 +342,9 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             _ = (await fixture.ReadNodeAsync(oldNode, cancellationToken).ConfigureAwait(true)).Exists.Should().BeFalse();
         }
 
-        _ = fixture.Context.Metadata.ChangeVersion.Should().Be(revision);
+        _ = fixture.Document.History.Position.Should().Be(revision);
         _ = fixture.Context.History.UndoStack.Should().HaveCount(history);
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
     }
 
     private static async Task CheckPublicationSourceConflictAsync(PublicationScenario scenario, CancellationToken cancellationToken)

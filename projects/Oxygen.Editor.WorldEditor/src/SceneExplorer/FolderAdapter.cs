@@ -21,19 +21,19 @@ public sealed class FolderAdapter : LayoutItemAdapter, ICanBeCloned
     private bool isExpansionTransient;
 
     public FolderAdapter(ExplorerEntryData entry)
-        : this(entry.FolderId ?? Guid.NewGuid(), entry.Name ?? FallbackName)
+        : this(entry.FolderId ?? FolderId.New(), entry.Name ?? FallbackName)
     {
         this.entryData = entry;
         this.IsExpanded = entry.IsExpanded ?? false;
     }
 
-    public FolderAdapter(Guid id, string name)
+    public FolderAdapter(FolderId id, string name)
     {
         this.Id = id;
         this.Name = name;
     }
 
-    public Guid Id { get; }
+    public FolderId Id { get; }
 
     public string Name
     {
@@ -63,7 +63,7 @@ public sealed class FolderAdapter : LayoutItemAdapter, ICanBeCloned
     public ITreeItem CloneSelf()
     {
         // Return a new folder with a new ID but same name.
-        return new FolderAdapter(Guid.NewGuid(), this.Name);
+        return new FolderAdapter(FolderId.New(), this.Name);
     }
 
     /// <summary>

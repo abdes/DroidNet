@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.World.Scripting;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Scripting;
 
@@ -169,11 +170,11 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
     /// <summary>Accepts nodes dragged from the Scene Explorer; the first one of this scene is referenced.</summary>
     /// <param name="nodes">The dragged node identities.</param>
     /// <returns>Whether a node was accepted.</returns>
-    public bool DropNodes(IReadOnlyList<Guid> nodes)
+    public bool DropNodes(IReadOnlyList<NodeId> nodes)
     {
         ArgumentNullException.ThrowIfNull(nodes);
         var node = nodes.FirstOrDefault(this.card.Owner.ContainsNode);
-        if (node == Guid.Empty)
+        if (node.IsEmpty)
         {
             this.SetError("Drop a node of this scene.");
             return false;

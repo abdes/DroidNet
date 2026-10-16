@@ -5,6 +5,7 @@
 using System.ComponentModel;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Editing;
 
@@ -54,7 +55,7 @@ internal sealed class InspectorBindingRegistration<T> : IInspectorBindingRefresh
     }
 
     /// <inheritdoc />
-    public void Refresh(IReadOnlyList<Guid> nodes, Func<Guid, object?> targets)
+    public void Refresh(IReadOnlyList<NodeId> nodes, Func<NodeId, object?> targets)
     {
         var previous = this.binding.HasValue ? (object?)this.binding.Value : null;
         var wasMixed = this.binding.IsMixed;

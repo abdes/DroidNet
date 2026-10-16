@@ -2,8 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Immutable runtime request to DetachGeometry.</summary>
 /// <param name="NodeId">The NodeId command value.</param>
-public sealed record RuntimeDetachGeometry(Guid NodeId) : RuntimeWorldCommand;
+public sealed record RuntimeDetachGeometry(NodeId NodeId) : RuntimeWorldCommand;

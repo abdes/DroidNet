@@ -30,6 +30,7 @@ using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Workspace;
@@ -176,44 +177,45 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         await this.OpenInitialSceneAsync().ConfigureAwait(true);
     }
 
-    /// <summary>Resolves a scene from a last-opened name by display name, file stem, or stable ID.</summary>
-    /// <param name="project">The project whose scenes are searched.</param>
+    /// <summary>Resolves a scene from a last-opened name by file stem, file name, or stable ID.</summary>
+    /// <param name="project">The project whose scene files are searched.</param>
     /// <param name="lastOpenedScene">The persisted last-opened scene name.</param>
-    /// <returns>The matching scene, or <see langword="null"/> when no scene matches.</returns>
-    internal static Oxygen.Editor.World.Scene? ResolveSceneByNameOrId(IProject project, string? lastOpenedScene)
+    /// <returns>Where the matching scene is, or <see langword="null"/> when no scene matches.</returns>
+    internal static async Task<ProjectAssetLocation?> ResolveSceneByNameOrIdAsync(ProjectContext project, string? lastOpenedScene)
     {
         if (string.IsNullOrWhiteSpace(lastOpenedScene))
         {
             return null;
         }
 
-        var sceneName = lastOpenedScene.EndsWith(Oxygen.Editor.Projects.Constants.SceneFileExtension, StringComparison.OrdinalIgnoreCase)
-            ? lastOpenedScene[..^Oxygen.Editor.Projects.Constants.SceneFileExtension.Length]
-            : System.IO.Path.GetFileNameWithoutExtension(lastOpenedScene);
-        return project.Scenes.FirstOrDefault(scene =>
-            string.Equals(scene.Name, lastOpenedScene, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(scene.Name, sceneName, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(scene.Id.ToString("D"), lastOpenedScene, StringComparison.OrdinalIgnoreCase));
+        if (Guid.TryParse(lastOpenedScene, out var id))
+        {
+            return await SceneFiles.FindByIdAsync(project, SceneId.FromValue(id)).ConfigureAwait(true);
+        }
+
+        var sceneName = lastOpenedScene.EndsWith(Oxygen.Managed.Assets.AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
+            ? lastOpenedScene[..^Oxygen.Managed.Assets.AssetFileTypes.SceneDescriptor.Length]
+            : lastOpenedScene;
+        return SceneFiles.FindByName(project, sceneName);
     }
 
-    internal static Oxygen.Editor.World.Scene? ResolveInitialScene(IProject project, ProjectContext context)
+    /// <summary>Resolves the scene a workspace opens first: the one activation asked for, else the project's start scene.</summary>
+    /// <param name="context">The project.</param>
+    /// <returns>The scene's asset URI, or <see langword="null"/> when there is none to open.</returns>
+    internal static async Task<Uri?> ResolveInitialSceneAsync(ProjectContext context)
     {
         // Fresh activation may carry an explicit scene request (template StarterScene or a workflow open).
         if (context.InitialSceneAssetUri is { } initialSceneAssetUri
-            && TryResolveSceneFromAssetUri(project, initialSceneAssetUri) is { } starterScene)
+            && context.FindByAssetUri(initialSceneAssetUri) is { IsMountRoot: false } requested && File.Exists(requested.FilePath))
         {
-            return starterScene;
+            return requested.AssetUri;
         }
 
-        // Otherwise the single loaded scene is the project's configured default, resolved by stable ID.
-        // A missing or invalid default is not silently replaced by last-opened or first-listed.
-        if (project.ProjectInfo.DefaultSceneId is { } defaultSceneId
-            && project.Scenes.FirstOrDefault(scene => scene.Id == defaultSceneId) is { } defaultScene)
-        {
-            return defaultScene;
-        }
-
-        return null;
+        // Otherwise the project's configured start scene, resolved by stable ID.
+        // A missing or invalid start scene is not silently replaced by last-opened or first-listed.
+        return context.DefaultSceneId is { } defaultSceneId
+            ? (await SceneFiles.FindByIdAsync(context, defaultSceneId).ConfigureAwait(true))?.AssetUri
+            : null;
     }
 
     /// <summary>Runs an editor-wide scene shortcut in the active scene editor or Scene Explorer.</summary>
@@ -269,6 +271,15 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         _ = childContainer.Resolve<ISceneContentDemandService>();
         childContainer.Register<ISceneSelectionService, SceneSelectionService>(Reuse.Singleton);
         childContainer.Register<ISceneDocumentCommandService, SceneDocumentCommandService>(Reuse.Singleton);
+
+        // The workspace's open documents: each scene file opens once, as a document of the scene kind.
+        childContainer.Register<SceneDocumentKind>(Reuse.Singleton);
+        childContainer.RegisterDelegate(
+            resolver => new Oxygen.Editor.Documents.OpenDocuments(
+                [resolver.Resolve<SceneDocumentKind>()],
+                resolver.Resolve<DroidNet.Storage.IAtomicFileStore>(),
+                resolver.Resolve<Microsoft.Extensions.Logging.ILoggerFactory>(IfUnresolved.ReturnDefault)),
+            Reuse.Singleton);
         childContainer.Register<DocumentManager>(Reuse.Singleton);
         this.documentManager = childContainer.Resolve<DocumentManager>();
 
@@ -376,7 +387,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<IAssetRuntimeStatusSource, AssetRuntimeStatusSource>(Reuse.Singleton);
         childContainer.Register<IAssetFeed, AssetFeed>(Reuse.Singleton);
         childContainer.Register<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService, Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationService>(Reuse.Singleton);
-        childContainer.Register<Oxygen.Editor.ContentPipeline.Authoring.IScriptAssetAuthoring, Oxygen.Editor.ContentPipeline.Authoring.ScriptAssetAuthoring>(Reuse.Singleton);
+        childContainer.Register<Oxygen.Editor.ContentPipeline.Authoring.IAssetAuthoring, Oxygen.Editor.ContentPipeline.Authoring.AssetAuthoring>(Reuse.Singleton);
         childContainer.Register<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService, Oxygen.Editor.ContentPipeline.Cooking.AutomaticCookService>(Reuse.Singleton);
         childContainer.Register<Oxygen.Editor.Shell.Documents.IHistoryService, Oxygen.Editor.Shell.Documents.HistoryService>(Reuse.Singleton);
 
@@ -390,33 +401,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
         // Likewise one script authoring service: the asset feed follows the files it reports creating, so the Content
         // Browser's New Script must reach the instance the feed listens to.
-        _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Authoring.IScriptAssetAuthoring>();
+        _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Authoring.IAssetAuthoring>();
 
         // The cook listens to the catalog's changes from the moment the workspace opens, and the Content Browser's
         // Cook on change toggle reaches the same instance.
         _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>();
-    }
-
-    private static Oxygen.Editor.World.Scene? TryResolveSceneFromAssetUri(IProject project, Uri sceneAssetUri)
-    {
-        if (!string.Equals(sceneAssetUri.Scheme, "asset", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        var fileName = System.IO.Path.GetFileName(Uri.UnescapeDataString(sceneAssetUri.AbsolutePath));
-        if (string.IsNullOrWhiteSpace(fileName))
-        {
-            return null;
-        }
-
-        var sceneName = fileName.EndsWith(Oxygen.Editor.Projects.Constants.SceneFileExtension, StringComparison.OrdinalIgnoreCase)
-            ? fileName[..^Oxygen.Editor.Projects.Constants.SceneFileExtension.Length]
-            : System.IO.Path.GetFileNameWithoutExtension(fileName);
-
-        return project.Scenes.FirstOrDefault(scene =>
-            string.Equals(scene.Name, sceneName, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(scene.Id.ToString("D"), sceneName, StringComparison.OrdinalIgnoreCase));
     }
 
     private void RegisterOutputPanels(IContainer childContainer)
@@ -546,7 +535,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         if (this.messenger is null
             || this.projectManager.CurrentProject is not { } project
             || this.projectContextService.ActiveProject is not { } context
-            || project.Scenes.Count == 0
             || !context.OpenInitialScene
             || ReferenceEquals(project, this.initialSceneProject))
         {
@@ -558,7 +546,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         // Seed the default scene for projects that predate DefaultSceneId before resolving it.
         await this.MigrateDefaultSceneAsync(project, context).ConfigureAwait(true);
 
-        var scene = ResolveInitialScene(project, context);
+        var scene = await ResolveInitialSceneAsync(this.projectContextService.ActiveProject ?? context).ConfigureAwait(true);
         if (scene is null)
         {
             return;
@@ -566,14 +554,14 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
         if (this.documentManager is null)
         {
-            this.LogInitialSceneManagerUnavailable(scene.Name);
+            this.LogInitialSceneManagerUnavailable(scene.ToString());
             return;
         }
 
         var opened = await this.documentManager.OpenSceneAsync(scene).ConfigureAwait(true);
         if (!opened)
         {
-            this.LogInitialSceneNotOpened(scene.Name, context.Name);
+            this.LogInitialSceneNotOpened(scene.ToString(), context.Name);
         }
     }
 
@@ -588,7 +576,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     /// </remarks>
     private async Task MigrateDefaultSceneAsync(IProject project, ProjectContext context)
     {
-        if (project.ProjectInfo.DefaultSceneId is not null || project.Scenes.Count == 0)
+        if (project.ProjectInfo.DefaultSceneId is not null)
         {
             return;
         }
@@ -602,13 +590,13 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             }
 
             var lastOpened = usage.LastOpenedScene;
-            var migrated = ResolveSceneByNameOrId(project, lastOpened);
-            if (migrated is null)
+            if (await ResolveSceneByNameOrIdAsync(context, lastOpened).ConfigureAwait(true) is not { } migrated
+                || await SceneFiles.ReadIdAsync(migrated.FilePath).ConfigureAwait(true) is not { } migratedId)
             {
                 return;
             }
 
-            project.ProjectInfo.DefaultSceneId = migrated.Id;
+            project.ProjectInfo.DefaultSceneId = migratedId;
             _ = await this.projectManager.SaveProjectInfoAsync(project.ProjectInfo).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

@@ -178,7 +178,6 @@ public sealed class AssetsViewModelCommandTests
             ProjectRoot = root,
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
             LocalFolderMounts = [],
-            Scenes = [],
         });
         var state = new ContentBrowserState(projects);
         var messenger = new StrongReferenceMessenger();
@@ -187,7 +186,6 @@ public sealed class AssetsViewModelCommandTests
             new DroidNet.Mvvm.Converters.ViewModelToView(Mock.Of<DroidNet.Mvvm.IViewLocator>()),
             state,
             projects,
-            Mock.Of<IProjectManagerService>(),
             Mock.Of<IAuthoringTargetResolver>(),
             Mock.Of<IContentPipelineService>(),
             Mock.Of<IAssetFeed>(),

@@ -11,6 +11,7 @@ using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Services;
@@ -159,7 +160,7 @@ public sealed partial class SceneEngineSync(
     /// <inheritdoc/>
     public Task<SyncOutcome> DetachGeometryAsync(
         Scene scene,
-        Guid nodeId,
+        NodeId nodeId,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -208,7 +209,7 @@ public sealed partial class SceneEngineSync(
     /// <inheritdoc/>
     public Task<SyncOutcome> DetachLightAsync(
         Scene scene,
-        Guid nodeId,
+        NodeId nodeId,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -257,7 +258,7 @@ public sealed partial class SceneEngineSync(
     /// <inheritdoc/>
     public Task<SyncOutcome> DetachLocalFogVolumeAsync(
         Scene scene,
-        Guid nodeId,
+        NodeId nodeId,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -318,7 +319,7 @@ public sealed partial class SceneEngineSync(
     /// <inheritdoc/>
     public Task<SyncOutcome> DetachCameraAsync(
         Scene scene,
-        Guid nodeId,
+        NodeId nodeId,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -353,7 +354,7 @@ public sealed partial class SceneEngineSync(
         => this.UpdateEnvironmentAsync(scene, environment, this.CaptureRevision(scene), cancellationToken);
 
     /// <inheritdoc/>
-    public async Task CreateNodeAsync(SceneNode node, Guid? parentGuid = null)
+    public async Task CreateNodeAsync(SceneNode node, NodeId? parentGuid = null)
     {
         ArgumentNullException.ThrowIfNull(node);
 
@@ -396,7 +397,7 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task RemoveNodeAsync(Scene scene, Guid nodeId)
+    public Task RemoveNodeAsync(Scene scene, NodeId nodeId)
     {
         var world = this.TryGetWorld(scene);
         if (world is null)
@@ -419,7 +420,7 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task RemoveNodeHierarchyAsync(Scene scene, Guid rootNodeId)
+    public Task RemoveNodeHierarchyAsync(Scene scene, NodeId rootNodeId)
     {
         var world = this.TryGetWorld(scene);
         if (world is null)
@@ -434,7 +435,7 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task RemoveNodeHierarchiesAsync(Scene scene, IReadOnlyList<Guid> rootNodeIds)
+    public Task RemoveNodeHierarchiesAsync(Scene scene, IReadOnlyList<NodeId> rootNodeIds)
     {
         if (rootNodeIds.Count == 0)
         {
@@ -453,7 +454,7 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task ReparentNodeAsync(Scene scene, Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false)
+    public Task ReparentNodeAsync(Scene scene, NodeId nodeId, NodeId? newParentGuid, bool preserveWorldTransform = false)
     {
         var world = this.TryGetWorld(scene);
         if (world is null)
@@ -476,7 +477,7 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task ReparentHierarchiesAsync(Scene scene, IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false)
+    public Task ReparentHierarchiesAsync(Scene scene, IReadOnlyList<NodeId> nodeIds, NodeId? newParentGuid, bool preserveWorldTransform = false)
     {
         if (nodeIds.Count == 0)
         {
@@ -495,7 +496,7 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task<SyncOutcome> RenameNodeAsync(Scene scene, Guid nodeId, string newName)
+    public Task<SyncOutcome> RenameNodeAsync(Scene scene, NodeId nodeId, string newName)
     {
         ArgumentNullException.ThrowIfNull(scene);
 
@@ -527,7 +528,7 @@ public sealed partial class SceneEngineSync(
         => this.UpdatePropertiesAsync(scene, node, entries, this.CaptureRevision(scene), cancellationToken);
 
     /// <inheritdoc/>
-    public int GetPendingPropertySyncCount(Guid sceneId)
+    public int GetPendingPropertySyncCount(SceneId sceneId)
     {
         lock (this.documentGate)
         {
@@ -555,7 +556,7 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task DetachGeometryAsync(Guid nodeId)
+    public Task DetachGeometryAsync(NodeId nodeId)
     {
         // Legacy callers do not provide a scene, so retain log-only behavior.
         var world = this.TryGetWorld();
@@ -597,7 +598,7 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task DetachLightAsync(Guid nodeId)
+    public Task DetachLightAsync(NodeId nodeId)
     {
         var world = this.TryGetWorld();
         if (world is null)
@@ -636,7 +637,7 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task DetachCameraAsync(Guid nodeId)
+    public Task DetachCameraAsync(NodeId nodeId)
     {
         var world = this.TryGetWorld();
         if (world is null)
@@ -657,62 +658,62 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task UpdateLodPolicyAsync(Guid nodeId, LevelOfDetailSlot lodSlot)
+    public Task UpdateLodPolicyAsync(NodeId nodeId, LevelOfDetailSlot lodSlot)
     {
         this.LogLodPolicySyncUnsupported(nodeId);
         return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
-    public bool ShouldIssuePreviewSync(Guid sceneId, Guid nodeId, DateTimeOffset observedAt)
-        => this.coalescer.ShouldIssuePreview(new SyncCoalescingKey(sceneId, nodeId), observedAt);
+    public bool ShouldIssuePreviewSync(SceneId sceneId, Guid previewTarget, DateTimeOffset observedAt)
+        => this.coalescer.ShouldIssuePreview(new SyncCoalescingKey(sceneId, previewTarget), observedAt);
 
     /// <inheritdoc/>
     public async Task<SyncOutcome?> TryPreviewSyncAsync(
-        Guid sceneId,
-        Guid nodeId,
+        SceneId sceneId,
+        Guid previewTarget,
         DateTimeOffset observedAt,
         Func<CancellationToken, Task<SyncOutcome>> sync,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sync);
 
-        return this.ShouldIssuePreviewSync(sceneId, nodeId, observedAt)
+        return this.ShouldIssuePreviewSync(sceneId, previewTarget, observedAt)
             ? await sync(cancellationToken).ConfigureAwait(false)
             : null;
     }
 
     /// <inheritdoc/>
-    public bool CompleteTerminalSync(Guid sceneId, Guid nodeId)
-        => this.coalescer.CompleteTerminalSync(new SyncCoalescingKey(sceneId, nodeId));
+    public bool CompleteTerminalSync(SceneId sceneId, Guid previewTarget)
+        => this.coalescer.CompleteTerminalSync(new SyncCoalescingKey(sceneId, previewTarget));
 
     /// <inheritdoc/>
     public async Task<SyncOutcome> CompleteTerminalSyncAsync(
-        Guid sceneId,
-        Guid nodeId,
+        SceneId sceneId,
+        Guid previewTarget,
         Func<CancellationToken, Task<SyncOutcome>> sync,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sync);
 
-        _ = this.CompleteTerminalSync(sceneId, nodeId);
+        _ = this.CompleteTerminalSync(sceneId, previewTarget);
         return await sync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public void CancelPreviewSync(Guid sceneId, Guid nodeId)
-        => this.coalescer.Cancel(new SyncCoalescingKey(sceneId, nodeId));
+    public void CancelPreviewSync(SceneId sceneId, Guid previewTarget)
+        => this.coalescer.Cancel(new SyncCoalescingKey(sceneId, previewTarget));
 
     /// <inheritdoc/>
     public async Task<SyncOutcome> CancelPreviewSyncAsync(
-        Guid sceneId,
-        Guid nodeId,
+        SceneId sceneId,
+        Guid previewTarget,
         Func<CancellationToken, Task<SyncOutcome>> revertSync,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(revertSync);
 
-        this.CancelPreviewSync(sceneId, nodeId);
+        this.CancelPreviewSync(sceneId, previewTarget);
         return await revertSync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -1061,7 +1062,7 @@ public sealed partial class SceneEngineSync(
     private Task<SyncOutcome> ExecuteNodeSyncAsync(
         Scene scene,
         SceneNode? node,
-        Guid nodeId,
+        NodeId nodeId,
         string operationKind,
         string? componentType,
         string rejectedCode,
@@ -1189,7 +1190,7 @@ public sealed partial class SceneEngineSync(
         }
     }
 
-    private void OnPendingPropertySyncCountChanged(Guid sceneId, int pendingCount)
+    private void OnPendingPropertySyncCountChanged(SceneId sceneId, int pendingCount)
         => this.PendingPropertySyncCountChanged?.Invoke(
             this,
             new PendingPropertySyncCountChangedEventArgs(sceneId, pendingCount));
@@ -1421,7 +1422,7 @@ public sealed partial class SceneEngineSync(
     {
         var succeeded = true;
 
-        void ResolveAndApply(SceneNode node, Guid? parentGuid)
+        void ResolveAndApply(SceneNode node, NodeId? parentGuid)
         {
             if (!node.IsActive)
             {
@@ -1473,7 +1474,7 @@ public sealed partial class SceneEngineSync(
     {
         try
         {
-            var handles = new List<Guid>();
+            var handles = new List<NodeId>();
 
             foreach (var root in scene.RootNodes)
             {

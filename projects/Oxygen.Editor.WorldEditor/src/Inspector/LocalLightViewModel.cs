@@ -9,6 +9,7 @@ using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -306,7 +307,7 @@ public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDi
             return;
         }
 
-        var perTarget = new Dictionary<Guid, PropertyEdit>();
+        var perTarget = new Dictionary<NodeId, PropertyEdit>();
         foreach (var node in this.selectedItems)
         {
             if (this.FindLight(node) is { } light)

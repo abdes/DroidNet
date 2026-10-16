@@ -2,25 +2,24 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Runtime.CompilerServices;
 using DroidNet.Hosting.WinUI;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Documents;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Services;
 
-/// <summary>Owns projection lifetimes while document metadata owns authoring revisions.</summary>
+/// <summary>Owns each open scene's projection lifetime and the authoring revision that orders its projections.</summary>
 public sealed partial class SceneEngineSync
 {
     private readonly Lock documentGate = new();
-    private readonly ConditionalWeakTable<SceneDocumentMetadata, DocumentRegistration> registrations = [];
-    private readonly Dictionary<Guid, DocumentLifetime> openScenes = [];
+    private readonly Dictionary<DocumentId, DocumentRegistration> registrations = [];
+    private readonly Dictionary<SceneId, DocumentLifetime> openScenes = [];
 
     /// <inheritdoc/>
-    public bool RegisterDocument(Scene scene, SceneDocumentMetadata metadata)
+    public bool RegisterDocument(Scene scene, DocumentId documentId)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        ArgumentNullException.ThrowIfNull(metadata);
         lock (this.documentGate)
         {
             if (this.disposed)
@@ -34,7 +33,7 @@ public sealed partial class SceneEngineSync
                 this.observingEngine = true;
             }
 
-            var registration = this.registrations.GetValue(metadata, _ => new());
+            var registration = this.Registration(documentId);
             if (registration.Closed)
             {
                 return false;
@@ -42,19 +41,19 @@ public sealed partial class SceneEngineSync
 
             if (this.openScenes.TryGetValue(scene.Id, out var previous))
             {
-                if (ReferenceEquals(previous.Scene, scene) && ReferenceEquals(previous.Metadata, metadata))
+                if (ReferenceEquals(previous.Scene, scene) && previous.DocumentId == documentId)
                 {
                     return true;
                 }
 
                 this.RetireDocument(previous);
-                if (!ReferenceEquals(previous.Metadata, metadata))
+                if (previous.DocumentId != documentId)
                 {
-                    this.registrations.GetValue(previous.Metadata, _ => new()).Closed = true;
+                    this.Registration(previous.DocumentId).Closed = true;
                 }
             }
 
-            var lifetime = new DocumentLifetime(scene, metadata);
+            var lifetime = new DocumentLifetime(scene, documentId);
             registration.Lifetime = lifetime;
             this.openScenes[scene.Id] = lifetime;
             this.pendingPropertySyncs.Register(scene.Id, lifetime.Id);
@@ -64,13 +63,25 @@ public sealed partial class SceneEngineSync
         return true;
     }
 
-    /// <inheritdoc/>
-    public Scene? GetDocumentScene(SceneDocumentMetadata metadata)
+    /// <summary>Gets the runtime activation that last accepted a document's scene.</summary>
+    /// <param name="documentId">The document's identity.</param>
+    /// <returns>The activation, or <see langword="null"/> when the document's scene was not synchronized.</returns>
+    public RuntimeSceneTarget? GetSynchronizedTarget(DocumentId documentId)
     {
-        ArgumentNullException.ThrowIfNull(metadata);
         lock (this.documentGate)
         {
-            return this.registrations.TryGetValue(metadata, out var registration)
+            return this.registrations.TryGetValue(documentId, out var registration) && !registration.Closed
+                ? registration.Lifetime?.LastSynchronizedTarget
+                : null;
+        }
+    }
+
+    /// <inheritdoc/>
+    public Scene? GetDocumentScene(DocumentId documentId)
+    {
+        lock (this.documentGate)
+        {
+            return this.registrations.TryGetValue(documentId, out var registration)
                 && !registration.Closed && registration.Lifetime is { } lifetime && this.IsDocumentCurrent(lifetime)
                 ? lifetime.Scene
                 : null;
@@ -88,14 +99,13 @@ public sealed partial class SceneEngineSync
     }
 
     /// <inheritdoc/>
-    public void CloseDocument(SceneDocumentMetadata metadata)
+    public void CloseDocument(DocumentId documentId)
     {
-        ArgumentNullException.ThrowIfNull(metadata);
-        Guid? sceneId = null;
+        SceneId? sceneId = null;
         lock (this.documentGate)
         {
-            // Retain a weak closed marker even if loading has not registered a scene yet.
-            var registration = this.registrations.GetValue(metadata, _ => new());
+            // Retain a closed marker even if loading has not registered a scene yet.
+            var registration = this.Registration(documentId);
             registration.Closed = true;
             if (registration.Lifetime is { } lifetime)
             {
@@ -117,22 +127,32 @@ public sealed partial class SceneEngineSync
         lock (this.documentGate)
         {
             return this.TryGetDocument(scene, out var lifetime)
-                ? new(lifetime.Id, lifetime.Metadata.ChangeVersion, ++lifetime.Sequence)
+                ? new(lifetime.Id, lifetime.Revision, ++lifetime.Sequence)
                 : default;
         }
     }
 
     /// <inheritdoc/>
-    public SceneSyncRevision CaptureRevision(Scene scene, SceneDocumentMetadata metadata)
+    public SceneSyncRevision AdvanceRevision(Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        ArgumentNullException.ThrowIfNull(metadata);
         lock (this.documentGate)
         {
-            return this.TryGetDocument(scene, out var lifetime) && ReferenceEquals(lifetime.Metadata, metadata)
-                ? new(lifetime.Id, lifetime.Metadata.ChangeVersion, ++lifetime.Sequence)
+            return this.TryGetDocument(scene, out var lifetime)
+                ? new(lifetime.Id, ++lifetime.Revision, ++lifetime.Sequence)
                 : default;
         }
+    }
+
+    private DocumentRegistration Registration(DocumentId documentId)
+    {
+        if (!this.registrations.TryGetValue(documentId, out var registration))
+        {
+            registration = new();
+            this.registrations.Add(documentId, registration);
+        }
+
+        return registration;
     }
 
     private bool TryGetDocument(Scene scene, out DocumentLifetime lifetime)
@@ -192,7 +212,7 @@ public sealed partial class SceneEngineSync
             }
 
             var snapshot = Scene.CreateAndHydrate(scene.Project, scene.Dehydrate());
-            var boundary = new SceneSyncRevision(lifetime.Id, lifetime.Metadata.ChangeVersion, lifetime.Sequence);
+            var boundary = new SceneSyncRevision(lifetime.Id, lifetime.Revision, lifetime.Sequence);
             return new(lifetime, snapshot, boundary);
         }
     }
@@ -221,7 +241,7 @@ public sealed partial class SceneEngineSync
 
                 this.projecting = null;
                 projection.Lifetime.LastSynchronizedTarget = target;
-                this.SceneSynchronized?.Invoke(this, new(projection.Lifetime.Scene, projection.Lifetime.Metadata, target));
+                this.SceneSynchronized?.Invoke(this, new(projection.Lifetime.Scene, projection.Lifetime.DocumentId));
                 return true;
             }
         }
@@ -239,12 +259,12 @@ public sealed partial class SceneEngineSync
             {
                 if (!this.IsSceneProjectionCurrent(scene) || !ReferenceEquals(this.requestedScene, scene)
                     || !this.TryGetDocument(scene, out var lifetime)
-                    || lifetime.LastSynchronizedTarget is not { } target)
+                    || lifetime.LastSynchronizedTarget is null)
                 {
                     return false;
                 }
 
-                this.SceneSynchronized?.Invoke(this, new(scene, lifetime.Metadata, target));
+                this.SceneSynchronized?.Invoke(this, new(scene, lifetime.DocumentId));
                 return true;
             }
         }
@@ -261,13 +281,16 @@ public sealed partial class SceneEngineSync
         public DocumentLifetime? Lifetime { get; set; }
     }
 
-    private sealed class DocumentLifetime(Scene scene, SceneDocumentMetadata metadata)
+    private sealed class DocumentLifetime(Scene scene, DocumentId documentId)
     {
         public Guid Id { get; } = Guid.NewGuid();
 
         public Scene Scene { get; } = scene;
 
-        public SceneDocumentMetadata Metadata { get; } = metadata;
+        public DocumentId DocumentId { get; } = documentId;
+
+        // Advances with every recorded edit, including undo and redo, so later projections supersede earlier ones.
+        public long Revision { get; set; }
 
         public long Sequence { get; set; }
 
@@ -286,6 +309,6 @@ public sealed partial class SceneEngineSync
 
     private sealed record SceneProjection(DocumentLifetime Lifetime, Scene Snapshot, SceneSyncRevision Boundary)
     {
-        public Dictionary<Guid, Guid?> NativeParents { get; } = Snapshot.AllNodes.ToDictionary(node => node.Id, node => node.Parent?.Id);
+        public Dictionary<NodeId, NodeId?> NativeParents { get; } = Snapshot.AllNodes.ToDictionary(node => node.Id, node => node.Parent?.Id);
     }
 }

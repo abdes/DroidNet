@@ -26,6 +26,16 @@ public interface IChange
     public object Key { get; }
 
     /// <summary>
+    /// Gets a value indicating whether applying the change changes the state of the history's root, as opposed to only
+    /// how the root is presented, such as which of its parts an editor hides.
+    /// </summary>
+    /// <remarks>
+    /// A change that does not change the state leaves the history at its position (<see cref="HistoryKeeper.Position"/>),
+    /// so recording, undoing or redoing it never makes a saved root differ from what it saved.
+    /// </remarks>
+    public bool ChangesState => true;
+
+    /// <summary>
     /// Applies the change.
     /// </summary>
     /// <remarks>

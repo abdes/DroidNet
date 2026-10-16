@@ -97,7 +97,7 @@ public sealed partial class CookingSaveConflictTests : DroidNet.Tests.VisualUser
         _ = result.OperationId.Should().Be(operationId);
         _ = panel.ActionError.Should().BeEmpty();
         _ = scenario.Materials.GetDocument(unrelatedId).IsDirty.Should().BeTrue();
-        _ = scenario.SceneAuthoringFixture.Context.Metadata.IsDirty.Should().BeTrue();
+        _ = scenario.SceneAuthoringFixture.Document.IsDirty.Should().BeTrue();
         var node = await scenario.SceneAuthoringFixture.ReadNodeAsync(scenario.SceneAuthoringFixture.Source.RootNodes[0].Id, cancellationToken).ConfigureAwait(true);
         _ = node.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(new Vector4(0, 0, 1, 1));
     }

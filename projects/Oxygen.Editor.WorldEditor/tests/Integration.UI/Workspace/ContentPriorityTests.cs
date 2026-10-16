@@ -43,7 +43,7 @@ public sealed partial class ContentPriorityTests : DroidNet.Tests.VisualUserInte
         var nodeId = fixture.Source.RootNodes.Single().Id;
         _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [nodeId], await fixture.ReadSingleMaterialSlotAsync(nodeId, this.TestContext.CancellationToken).ConfigureAwait(true), uri, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = await WaitForNodeAsync(fixture, nodeId, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], red) < 0.001f, timeout.Token).ConfigureAwait(true);
-        var revision = fixture.Context.Metadata.ChangeVersion;
+        var revision = fixture.Document.History.Position;
         var history = fixture.Context.History.UndoStack.Count;
         var source = fixture.Source;
         var overriding = project with
@@ -54,7 +54,7 @@ public sealed partial class ContentPriorityTests : DroidNet.Tests.VisualUserInte
         var overridden = await WaitForNodeAsync(fixture, nodeId, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], blue) < 0.001f, timeout.Token).ConfigureAwait(true);
         _ = overridden.MaterialKeys.Should().ContainSingle().Which.Should().Be(libraryKey);
         _ = fixture.Source.Should().BeSameAs(source);
-        _ = fixture.Context.Metadata.ChangeVersion.Should().Be(revision);
+        _ = fixture.Document.History.Position.Should().Be(revision);
         _ = fixture.Context.History.UndoStack.Should().HaveCount(history);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
         _ = await WaitForNodeAsync(fixture, nodeId, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], blue) < 0.001f, timeout.Token).ConfigureAwait(true);

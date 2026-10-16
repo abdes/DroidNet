@@ -113,7 +113,7 @@ public sealed class AutomaticCookServiceTests
             {
                 OperationId = operationId, ProjectId = project.ProjectId, ProjectRoot = project.ProjectRoot,
                 DisplayName = "Project", Request = new(CookTargetKind.Project, ScopeUri: null), State = CookRunState.NeedsSave,
-                UnsavedDocuments = [new(Guid.NewGuid(), fixture.SourcePath(Main), "Main", 1, 0, true, "old")],
+                UnsavedDocuments = [new(fixture.SourcePath(Main), "Main", 1, 0, true, "old")],
             },
         ];
         _ = fixture.Runs.Setup(value => value.ResumeAfterSave(operationId)).Callback(resumed.SetResult).Returns(value: true);
@@ -341,7 +341,6 @@ public sealed class AutomaticCookServiceTests
                 Category = Category.Games,
                 AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
                 LocalFolderMounts = [],
-                Scenes = [],
             });
             _ = this.Runs.SetupGet(value => value.Runs).Returns(() => this.InProgress);
             _ = this.Runs.Setup(value => value.WhenWriterIdleAsync(It.IsAny<CancellationToken>()))

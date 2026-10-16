@@ -8,6 +8,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -242,7 +243,7 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
             return;
         }
 
-        var perTarget = new Dictionary<Guid, PropertyEdit>();
+        var perTarget = new Dictionary<NodeId, PropertyEdit>();
         foreach (var node in this.selectedItems)
         {
             if (node.Components.OfType<LocalFogVolumeComponent>().FirstOrDefault() is { } volume)

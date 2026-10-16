@@ -36,7 +36,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeFalse();
         _ = light.Dehydrate().Should().BeEquivalentTo(before);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         fixture.Sync.VerifyNoOtherCalls();
     }
@@ -108,6 +108,6 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeFalse();
         _ = light.Dehydrate().Should().BeEquivalentTo(before);
         _ = context.History.UndoStack.Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
     }
 }

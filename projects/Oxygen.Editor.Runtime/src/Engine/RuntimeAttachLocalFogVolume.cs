@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -18,7 +19,7 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="FogEmissive">The emitted luminance.</param>
 /// <param name="SortPriority">The composition order among overlapping volumes.</param>
 public sealed record RuntimeAttachLocalFogVolume(
-    Guid NodeId,
+    NodeId NodeId,
     bool Enabled,
     float RadialFogExtinction,
     float HeightFogExtinction,

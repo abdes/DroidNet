@@ -15,6 +15,7 @@ using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Services;
 
@@ -69,7 +70,7 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
     }
 
     /// <inheritdoc />
-    public void RequestAssignment(Scene scene, IReadOnlyList<Guid> nodeIds, Uri? assetUri, AssetKind kind)
+    public void RequestAssignment(Scene scene, IReadOnlyList<NodeId> nodeIds, Uri? assetUri, AssetKind kind)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(nodeIds);
@@ -100,7 +101,7 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
         GC.SuppressFinalize(this);
     }
 
-    private static IEnumerable<(Guid nodeId, Uri uri, AssetKind kind)> References(Scene scene)
+    private static IEnumerable<(NodeId nodeId, Uri uri, AssetKind kind)> References(Scene scene)
     {
         foreach (var node in scene.AllNodes)
         {
@@ -119,7 +120,7 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
         }
     }
 
-    private void StartDemand(Uri uri, AssetKind kind, HashSet<Guid>? targets)
+    private void StartDemand(Uri uri, AssetKind kind, HashSet<NodeId>? targets)
     {
         if (this.scene is not { } current || this.projects.ActiveProject is not { } project
             || current.Project.ProjectInfo?.Id != project.ProjectId
@@ -187,7 +188,7 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
     private bool IsCurrent(Demand demand)
     {
         if (this.disposed || !ReferenceEquals(this.scene, demand.Scene) || !ReferenceEquals(this.projects.ActiveProject, demand.Project)
-            || this.documents.GetActiveDocumentId(this.windowId) != demand.Scene.Id
+            || this.documents.GetActiveDocumentId(this.windowId) != this.metadata?.DocumentId
             || !this.documents.GetOpenDocuments(this.windowId).Any(document => ReferenceEquals(document, this.metadata)))
         {
             return false;
@@ -208,7 +209,7 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
     [LoggerMessage(Level = LogLevel.Error, Message = "Unable to prepare preview content for {AssetUri}.")]
     private partial void LogDemandFailure(Exception exception, Uri assetUri);
 
-    private sealed class Demand(Scene scene, ProjectContext project, Uri uri, AssetKind kind, HashSet<Guid>? targets)
+    private sealed class Demand(Scene scene, ProjectContext project, Uri uri, AssetKind kind, HashSet<NodeId>? targets)
     {
         public Scene Scene { get; } = scene;
 
@@ -218,7 +219,7 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
 
         public AssetKind Kind { get; } = kind;
 
-        public HashSet<Guid>? Targets { get; } = targets;
+        public HashSet<NodeId>? Targets { get; } = targets;
 
         public CancellationTokenSource Cancellation { get; } = new();
 

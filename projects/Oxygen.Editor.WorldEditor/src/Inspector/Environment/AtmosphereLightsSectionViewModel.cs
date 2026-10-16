@@ -11,6 +11,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -19,8 +20,8 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
 {
     private readonly InspectorEditSessionCoordinator? lightAssignments;
     private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
-    private readonly Func<Guid, Task>? inspectSceneNode;
-    private readonly ConditionalWeakTable<Scene, Dictionary<Guid, PropertyEdit>> initialAtmosphereSources = new();
+    private readonly Func<NodeId, Task>? inspectSceneNode;
+    private readonly ConditionalWeakTable<Scene, Dictionary<NodeId, PropertyEdit>> initialAtmosphereSources = new();
     private Scene? scene;
     private bool isApplyingEditorValues;
     private bool disposed;
@@ -34,7 +35,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
         SceneEnvironmentEditOwner owner,
         ISceneDocumentCommandService? commands,
         Func<SceneDocumentCommandContext?>? context,
-        Func<Guid, Task>? inspect)
+        Func<NodeId, Task>? inspect)
     {
         this.EditOwner = owner;
         this.commandContextProvider = context;
@@ -112,7 +113,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
         }
 
         var initial = this.initialAtmosphereSources.GetValue(current, CaptureAtmosphereSources);
-        var edits = new Dictionary<Guid, PropertyEdit>();
+        var edits = new Dictionary<NodeId, PropertyEdit>();
         foreach (var node in current.AllNodes)
         {
             if (node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is not { } light)
@@ -189,9 +190,9 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
         this.SecondaryAtmosphereSource.SetInputEnabled(enabled);
     }
 
-    private static Dictionary<Guid, PropertyEdit> CaptureAtmosphereSources(Scene scene)
+    private static Dictionary<NodeId, PropertyEdit> CaptureAtmosphereSources(Scene scene)
     {
-        var result = new Dictionary<Guid, PropertyEdit>();
+        var result = new Dictionary<NodeId, PropertyEdit>();
         foreach (var node in scene.AllNodes)
         {
             if (node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is not { AtmosphereSlot: not AtmosphereLightSlot.None } light)
@@ -262,7 +263,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
     private SceneNode? FindAtmosphereSource(AtmosphereLightSlot slot)
         => this.scene?.AllNodes.FirstOrDefault(node => node.Components.OfType<DirectionalLightComponent>().Any(light => light.AtmosphereSlot == slot));
 
-    private void ApplyAtmosphereAssignment(AtmosphereLightSlot slot, Guid? selected)
+    private void ApplyAtmosphereAssignment(AtmosphereLightSlot slot, NodeId? selected)
     {
         if (this.isApplyingEditorValues || !this.EditOwner.IsInputEnabled || this.scene is null || this.disposed)
         {
@@ -275,7 +276,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
             return;
         }
 
-        var edits = new Dictionary<Guid, PropertyEdit>();
+        var edits = new Dictionary<NodeId, PropertyEdit>();
         if (current is not null)
         {
             edits[current.Id] = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
@@ -293,7 +294,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
         }
     }
 
-    private void RebuildSunOptions(Guid? primaryNodeId, Guid? secondaryNodeId)
+    private void RebuildSunOptions(NodeId? primaryNodeId, NodeId? secondaryNodeId)
     {
         this.SunOptions.Clear();
         this.SecondarySunOptions.Clear();

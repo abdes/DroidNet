@@ -48,9 +48,8 @@ internal sealed class InspectorFieldDiagnostics
 
     /// <summary>Captures ordering and document scope before an edit is submitted.</summary>
     /// <param name="properties">The edited properties.</param>
-    /// <param name="revision">The originating authoring revision.</param>
     /// <returns>The ticket required to deliver the result.</returns>
-    public Ticket Begin(IEnumerable<PropertyId> properties, long revision)
+    public Ticket Begin(IEnumerable<PropertyId> properties)
     {
         var affected = properties.SelectMany(property => this.dependents.TryGetValue(property, out var group) ? group : [property]).ToHashSet();
         var requestSequence = ++this.sequence;
@@ -59,7 +58,7 @@ internal sealed class InspectorFieldDiagnostics
             this.latest[property] = requestSequence;
         }
 
-        return new(this.scope, requestSequence, revision, affected);
+        return new(this.scope, requestSequence, affected);
     }
 
     /// <summary>Applies feedback only if the request is still current.</summary>
@@ -80,7 +79,6 @@ internal sealed class InspectorFieldDiagnostics
             }
 
             var field = this.Get(property);
-            field.Revision = ticket.Revision;
             field.Code = result.Succeeded ? string.Empty : result.ValidationCode ?? "PROPERTY_REJECTED";
             field.Message = result.Succeeded ? string.Empty : result.ValidationMessage ?? "This value was rejected.";
         }
@@ -92,7 +90,7 @@ internal sealed class InspectorFieldDiagnostics
     /// <param name="property">The refreshed property.</param>
     public void Invalidate(PropertyId property)
     {
-        var ticket = this.Begin([property], revision: 0);
+        var ticket = this.Begin([property]);
         this.Complete(ticket, SceneCommandResult.Success);
     }
 
@@ -110,6 +108,6 @@ internal sealed class InspectorFieldDiagnostics
         this.FeedbackChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Identifies the source scope, edit order, revision and affected fields.</summary>
-    internal sealed record Ticket(Guid Scope, long Sequence, long Revision, IReadOnlySet<PropertyId> Properties);
+    /// <summary>Identifies the source scope, edit order and affected fields.</summary>
+    internal sealed record Ticket(Guid Scope, long Sequence, IReadOnlySet<PropertyId> Properties);
 }

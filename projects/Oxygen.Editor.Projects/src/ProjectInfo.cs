@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Utils;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
 
@@ -119,7 +120,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     public DateTime LastUsedOn { get; set; }
 
     /// <inheritdoc />
-    public Guid? DefaultSceneId { get; set; }
+    public SceneId? DefaultSceneId { get; set; }
 
     /// <inheritdoc />
     public ProjectSettings Settings { get; set; } = new();
@@ -161,7 +162,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
         var obj = JsonSerializer.Deserialize<ProjectInfo>(json, JsonOptions)
             ?? throw new JsonException("Failed to deserialize ProjectInfo from JSON.");
 
-        if (obj.DefaultSceneId == Guid.Empty)
+        if (obj.DefaultSceneId is { IsEmpty: true })
         {
             obj.DefaultSceneId = null;
         }
@@ -225,7 +226,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
 
         public IList<CookedContentSource> CookedContentOrder { get; init; } = [];
 
-        public Guid? DefaultSceneId { get; init; }
+        public SceneId? DefaultSceneId { get; init; }
 
         public ProjectSettings Settings { get; init; } = new();
     }

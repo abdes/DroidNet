@@ -33,7 +33,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         await using var lifetime = fixture.ConfigureAwait(true);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(150));
-        _ = (await fixture.Commands.SaveSceneAsync(fixture.Context).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
         using var services = new CatalogWorkloadServices(fixture);
         var sceneUri = new Uri("asset:///Content/Scenes/" + Uri.EscapeDataString(fixture.Source.Name) + ".oscene.json");
         _ = (await services.Pipeline.CookCurrentSceneAsync(sceneUri, timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
@@ -57,7 +57,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         window.Resize(new((int)(root.Width * root.XamlRoot.RasterizationScale) + 60, (int)(root.Height * root.XamlRoot.RasterizationScale) + 100));
         try
         {
-            _ = await documents.OpenDocumentAsync(window.Id, fixture.Context.Metadata).ConfigureAwait(true);
+            _ = await documents.OpenDocumentAsync(window.Id, fixture.Tab).ConfigureAwait(true);
             await fixture.NotifyTransitionSceneReadyAsync(timeout.Token).ConfigureAwait(true);
             await WaitForDocumentViewportAsync(host, fixture, timeout.Token).ConfigureAwait(true);
             await fixture.SuspendCookedContentAsync().ConfigureAwait(true);
@@ -111,7 +111,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
             await fixture.NotifyTransitionSceneReadyAsync(cancellationToken).ConfigureAwait(true);
             await WaitForDocumentViewportAsync(host, fixture, cancellationToken).ConfigureAwait(true);
             _ = ((SceneEditorViewModel)host.ActiveEditor!).Viewports.Single().AssignedViewId.Should().NotBe(oldView);
-            _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+            _ = fixture.Document.IsDirty.Should().BeFalse();
         }
     }
 }

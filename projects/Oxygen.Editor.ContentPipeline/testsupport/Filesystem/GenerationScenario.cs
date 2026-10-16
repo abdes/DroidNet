@@ -33,7 +33,6 @@ internal static class GenerationScenario
         Category = Category.Games,
         AuthoringMounts = [new("Content", "Content")],
         LocalFolderMounts = [],
-        Scenes = [],
     };
 
     internal static async Task<string> WritePublicationFixtureAsync(ProjectContext project, IAtomicFileStore files, FileVersion expectedHead, CancellationToken token)

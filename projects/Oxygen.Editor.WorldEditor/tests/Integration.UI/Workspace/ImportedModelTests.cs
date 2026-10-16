@@ -49,7 +49,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         var imported = libraryOnly ? await CreateImportedLibraryAsync(fixture, services, format, timeout.Token).ConfigureAwait(true) : null;
         await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
         using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
-        await using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IScriptAssetAuthoring>());
+        await using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         using var previewRegistration = fixture.RegisterWorkspacePublication(services, catalog);
         if (imported is null)

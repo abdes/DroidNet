@@ -270,11 +270,7 @@ public sealed class SceneContentDemandObserverTests
         return new Scene(project.Object) { Name = "Observer Scene" };
     }
 
-    private static SceneDocumentCommandContext CreateContext(Scene scene)
-    {
-        var metadata = new SceneDocumentMetadata { Title = scene.Name };
-        return new(metadata.DocumentId, metadata, scene, new HistoryKeeper(scene));
-    }
+    private static SceneDocumentCommandContext CreateContext(Scene scene) => new(Guid.NewGuid(), scene, new HistoryKeeper(scene));
 
     private static Fixture CreateFixture()
     {
@@ -291,16 +287,11 @@ public sealed class SceneContentDemandObserverTests
             .ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.AddComponent, AffectedScope.Empty));
         _ = sync.Setup(value => value.DetachGeometryAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.RemoveComponent, AffectedScope.Empty));
-        var documents = new Mock<IDocumentService>();
-        _ = documents.Setup(value => value.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>())).ReturnsAsync(value: true);
         var projects = new ProjectContextService();
         projects.Activate(ProjectContext.FromProjectInfo(ObserverTestProjectInfo));
         var sut = new SceneDocumentCommandService(
             new SceneSelectionService(),
             sync.Object,
-            Mock.Of<IProjectManagerService>(),
-            documents.Object,
-            default,
             new StrongReferenceMessenger(),
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer(),

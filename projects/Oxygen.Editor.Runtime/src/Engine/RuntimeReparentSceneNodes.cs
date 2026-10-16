@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -10,4 +11,4 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="Children">The Children command value.</param>
 /// <param name="Parent">The Parent command value.</param>
 /// <param name="PreserveWorldTransform">The PreserveWorldTransform command value.</param>
-public sealed record RuntimeReparentSceneNodes(ImmutableArray<Guid> Children, Guid? Parent, bool PreserveWorldTransform) : RuntimeWorldCommand;
+public sealed record RuntimeReparentSceneNodes(ImmutableArray<NodeId> Children, NodeId? Parent, bool PreserveWorldTransform) : RuntimeWorldCommand;

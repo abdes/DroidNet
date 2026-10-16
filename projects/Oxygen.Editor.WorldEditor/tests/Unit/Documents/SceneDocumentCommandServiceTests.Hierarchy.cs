@@ -32,7 +32,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeFalse();
         _ = node.Name.Should().Be("Cube");
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
     }
 
@@ -52,7 +52,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeTrue();
         _ = node.Name.Should().Be("Sphere");
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
         interaction.SetLocked(node.Id, isLocked: true);
 
@@ -111,7 +111,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeTrue();
         _ = scene.RootNodes.Should().ContainSingle().Which.Name.Should().Be("New Node");
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
 
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -139,7 +139,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = published.Diagnostics.Should().ContainSingle()
             .Which.Code.Should().Be(DiagnosticCodes.ScenePrefix + "STALE_TARGET");
         _ = scene.ExplorerLayout.Should().BeNull("a rejected folder creation must not leave an uncommitted seeded layout behind");
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
     }
 
@@ -164,7 +164,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = published.Diagnostics.Should().ContainSingle()
             .Which.Code.Should().Be(DiagnosticCodes.ScenePrefix + "STALE_TARGET");
         _ = scene.ExplorerLayout.Should().BeNull("a rejected folder creation must not leave an uncommitted seeded layout behind");
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
     }
 
@@ -184,7 +184,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeFalse();
         _ = scene.ExplorerLayout.Should().BeNull();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         _ = fixture.Results.Published.Should().ContainSingle()
             .Which.Diagnostics.Should().ContainSingle()
@@ -210,7 +210,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeTrue();
         _ = scene.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(sibling);
         _ = scene.AllNodes.Should().NotContain(root);
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
 
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = scene.RootNodes.Should().Contain(root);
@@ -237,7 +237,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeFalse();
         _ = scene.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(root);
         _ = root.Children.Should().ContainSingle().Which.Should().BeSameAs(child);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         _ = fixture.Results.Published.Should().ContainSingle()
             .Which.Diagnostics.Should().ContainSingle()
@@ -267,7 +267,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeFalse();
         _ = source.Parent.Should().BeNull();
         _ = destination.Children.Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         _ = fixture.Results.Published.Should().ContainSingle()
             .Which.Diagnostics.Should().ContainSingle()
@@ -569,7 +569,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.ValidationCode.Should().Be(DiagnosticCodes.ScenePrefix + "STALE_TARGET");
         _ = scene.ExplorerLayout.Should().BeNull("a rejected delete must leave the layout exactly as it was");
         _ = scene.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(node);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
     }
 
@@ -649,7 +649,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeFalse();
         _ = parent.Parent.Should().BeNull();
         _ = child.Parent.Should().BeSameAs(parent);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
     }
 
@@ -870,7 +870,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = clone.Children.Should().ContainSingle().Which.Name.Should().Be("Child");
         _ = clone.Children[0].Id.Should().NotBe(child.Id);
         _ = clone.Components.Select(component => component.Id).Should().NotIntersectWith(source.Components.Select(component => component.Id));
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
     }
 
@@ -927,7 +927,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeFalse();
         _ = scene.RootNodes.Should().HaveCount(2, "no clone may be committed when any source is stale");
         _ = context.History.UndoStack.Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
     }
 
     [TestMethod]
@@ -1012,7 +1012,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeTrue();
         _ = scene.ExplorerLayout!.Select(entry => entry.NodeId).Should().Equal(b.Id, c.Id, a.Id);
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
     }
 
     [TestMethod]

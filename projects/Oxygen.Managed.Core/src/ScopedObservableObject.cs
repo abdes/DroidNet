@@ -52,7 +52,7 @@ public abstract class ScopedObservableObject : INotifyPropertyChanged, INotifyPr
     /// </remarks>
     public IDisposable SuppressNotifications()
     {
-        Interlocked.Increment(ref this.suppressNotificationCount);
+        _ = Interlocked.Increment(ref this.suppressNotificationCount);
         return new NotificationSuppressor(() => Interlocked.Decrement(ref this.suppressNotificationCount));
     }
 

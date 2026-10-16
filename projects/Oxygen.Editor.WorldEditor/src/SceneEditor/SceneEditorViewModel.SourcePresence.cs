@@ -3,16 +3,20 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.UI.Dispatching;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
-/// <summary>Marks the open scene when its file is deleted or moved outside the editor, and clears the mark when it returns.</summary>
+/// <summary>
+/// Tells the scene document when its file changes on disk: a scene without edits reloads quietly, one with edits is
+/// marked changed on disk, and one whose file is gone stays open, marked missing.
+/// </summary>
 public partial class SceneEditorViewModel
 {
     private IDisposable? sourceChanges;
 
-    // File watching reports the scene's file through the catalog: removed, renamed away, or added back.
+    // File watching reports the scene's file through the catalog: changed, removed, renamed away, or added back.
     private void WatchSourcePresence(IAssetCatalog? catalog)
     {
         if (catalog is null || DispatcherQueue.GetForCurrentThread() is not { } dispatcher)
@@ -25,23 +29,34 @@ public partial class SceneEditorViewModel
 
     private void OnSourceChanged(AssetChange change)
     {
-        if (this.isDisposed || this.scene is not { } current)
+        if (this.isDisposed || this.scene is null)
         {
             return;
         }
 
-        var uri = GetSceneAssetUri(current);
+        var uri = this.Document.File.AssetUri;
         if (change.Uri == uri || change.PreviousUri == uri)
         {
-            _ = this.RefreshSourcePresenceAsync();
+            _ = this.CheckSourceAsync();
         }
     }
 
-    private async Task RefreshSourcePresenceAsync()
+    private async Task CheckSourceAsync()
     {
         try
         {
-            _ = await this.commandService.RefreshSourcePresenceAsync(this.CreateCommandContext()).ConfigureAwait(true);
+            // A quiet reload replaces the scene, so commands in flight finish first; edits in progress are kept, and
+            // the document then does not reload.
+            if (this.scene is not { } current)
+            {
+                return;
+            }
+
+            using var replacement = await SceneAuthoringGate.BeginReplacementAsync(current, CancellationToken.None).ConfigureAwait(true);
+            if (replacement is not null)
+            {
+                _ = await this.Document.CheckFileAsync().ConfigureAwait(true);
+            }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {

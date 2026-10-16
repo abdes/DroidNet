@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
 
@@ -24,13 +25,13 @@ public record ExplorerEntryData
     /// Gets when Type == "Node", the referenced SceneNode Id.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public System.Guid? NodeId { get; init; }
+    public NodeId? NodeId { get; init; }
 
     /// <summary>
     /// Gets when Type == "Folder", optional folder id (useful for stable ids across edits).
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public System.Guid? FolderId { get; init; }
+    public FolderId? FolderId { get; init; }
 
     /// <summary>
     /// Gets or sets human friendly folder name (only for Type=="Folder").

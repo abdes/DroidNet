@@ -9,6 +9,7 @@ using AwesomeAssertions;
 using DroidNet.TimeMachine;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Relocation;
 
@@ -202,7 +203,6 @@ public sealed class AssetRelocationTests
     [DataRow("/Content", "/Stuff", DisplayName = "Mount root")]
     [DataRow("/Content/Materials/Red.omat.json", "/Content/Materials/Other.omat.json", DisplayName = "Name collision")]
     [DataRow("/Content/Materials/Red.omat.json", "/Content/Materials/Red.otex.json", DisplayName = "Type change")]
-    [DataRow("/Content/Scenes/Main.oscene.json", "/Content/Scenes/Other.oscene.json", DisplayName = "Editor scene")]
     [DataRow("/Content/Shared", "/Content/Shared/Inner", DisplayName = "Folder into itself")]
     [DataRow("/Content/SourceMedia/DCC/Robot/mesh.bin", "/Content/SourceMedia/DCC/Robot/body.bin", DisplayName = "Model bundle file")]
     [DataRow("/Content/SourceMedia/DCC/Robot/robot.gltf.import.json", "/Content/SourceMedia/DCC/Robot/x.gltf.import.json", DisplayName = "Import sidecar")]
@@ -346,7 +346,7 @@ public sealed class AssetRelocationTests
         using var workspace = CreateContent();
         var path = workspace.PathOf("Content/Scenes/Main.oscene.json");
         using var registration = workspace.Documents.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(null));
-        registration.UpdateState(new(Guid.NewGuid(), path, "Main", Revision: 2, SavedRevision: 1, IsDirty: true, SavedContentHash: string.Empty));
+        registration.UpdateState(new(path, "Main", Revision: 2, SavedRevision: 1, IsDirty: true, SavedContentHash: string.Empty));
 
         Func<Task> work = () => workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
 
@@ -561,6 +561,82 @@ public sealed class AssetRelocationTests
 
         _ = cached.Should().NotContain("/Content/Geometry/Crate.ogeo.json");
         _ = fresh.Should().Contain("/Content/Geometry/Crate.ogeo.json");
+    }
+
+    /// <summary>A scene moves to any folder like any asset, and the scenes that reference it follow.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task MovingSceneToAnotherFolderRewritesTheScenesThatReferenceIt()
+    {
+        using var workspace = CreateContent();
+        _ = workspace.Write("Content/Levels/Lobby.oscene.json", """{ "Id": "0b0e6b8c-3c5a-4a0e-9a8f-1b1f2a3c4d5e", "Name": "Lobby", "RootNodes": [], "References": { "ExtraAssets": [ "/Content/Scenes/Main.oscene" ] } }""");
+        var history = new HistoryKeeper(this);
+
+        var plan = await workspace.Service.RelocateAsync(Move("/Content/Scenes/Main.oscene.json", "/Content/Levels/Start.oscene.json"), "Move", history, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = workspace.Exists("Content/Scenes/Main.oscene.json").Should().BeFalse();
+        _ = workspace.Exists("Content/Levels/Start.oscene.json").Should().BeTrue();
+        _ = plan.Referrers.Should().Contain("/Content/Levels/Lobby.oscene.json");
+        _ = workspace.ReadJson("Content/Levels/Lobby.oscene.json")["References"]!["ExtraAssets"]![0]!.GetValue<string>().Should().Be("/Content/Levels/Start.oscene");
+        _ = history.UndoStack.Should().ContainSingle();
+    }
+
+    /// <summary>A copied scene is a scene of its own: a new identity, and the name of its file.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task CopyingSceneGivesTheCopyItsOwnIdentityAndName()
+    {
+        using var workspace = CreateContent();
+
+        var copies = await workspace.Service.CopyAsync(["/Content/Scenes/Main.oscene.json"], "/Content/Scenes", this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = copies.Should().ContainSingle().Which.Should().Be("/Content/Scenes/Main (2).oscene.json");
+        var copy = workspace.ReadJson("Content/Scenes/Main (2).oscene.json");
+        _ = copy["Name"]!.GetValue<string>().Should().Be("Main (2)");
+        _ = Guid.Parse(copy["Id"]!.GetValue<string>()).Should().NotBe(Guid.Parse("6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10"));
+        _ = workspace.ReadJson("Content/Scenes/Main.oscene.json")["Id"]!.GetValue<string>().Should().Be("6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10");
+    }
+
+    /// <summary>The project's start scene cannot be deleted, alone or with the folder that holds it.</summary>
+    /// <param name="source">What the delete names.</param>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    [DataRow("/Content/Levels/Start.oscene.json", DisplayName = "The scene")]
+    [DataRow("/Content/Levels", DisplayName = "Its folder")]
+    public async Task DeletingTheStartSceneIsRefused(string source)
+    {
+        using var workspace = CreateContent();
+        _ = workspace.Write("Content/Levels/Start.oscene.json", Scene);
+        workspace.Context.Activate(workspace.Project with { DefaultSceneId = SceneId.FromValue(Guid.Parse("6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10")) });
+        var recycled = new List<string>();
+
+        var delete = () => workspace.Service.DeleteAsync(
+            [source],
+            paths =>
+            {
+                recycled.AddRange(paths);
+                return Task.CompletedTask;
+            },
+            this.TestContext.CancellationToken);
+
+        _ = await delete.Should().ThrowAsync<AssetRelocationException>().WithMessage("*start scene*").ConfigureAwait(false);
+        _ = recycled.Should().BeEmpty();
+        _ = workspace.Exists("Content/Levels/Start.oscene.json").Should().BeTrue();
+    }
+
+    /// <summary>A delete names the open documents it would close, and which of them have unsaved edits.</summary>
+    [TestMethod]
+    public void FindOpenDocuments_NamesTheOpenDocumentsInsideTheDeletedItems()
+    {
+        using var workspace = CreateContent();
+        using var scene = workspace.Documents.Register(workspace.PathOf("Content/Scenes/Main.oscene.json"), _ => Task.FromResult<CookDocumentReadLease?>(null));
+        scene.UpdateState(new CookDocumentState(workspace.PathOf("Content/Scenes/Main.oscene.json"), "Main", 2, 1, IsDirty: true, string.Empty));
+        using var material = workspace.Documents.Register(workspace.PathOf("Content/Materials/Red.omat.json"), _ => Task.FromResult<CookDocumentReadLease?>(null));
+        material.UpdateState(new CookDocumentState(workspace.PathOf("Content/Materials/Red.omat.json"), "Red", 1, 1, IsDirty: false, string.Empty));
+
+        var open = workspace.Service.FindOpenDocuments(["/Content/Scenes"]);
+
+        _ = open.Should().Equal(("Main", true));
     }
 
     private static RelocationWorkspace CreateContent()

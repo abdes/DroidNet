@@ -30,10 +30,9 @@ public sealed partial class CookDocumentRegistry
                 return;
             }
 
-            if ((!relocate && !string.Equals(registration.SourcePath, state.SourcePath, StringComparison.OrdinalIgnoreCase))
-                || (registration.State is { } owner && owner.DocumentId != state.DocumentId))
+            if (!relocate && !string.Equals(registration.SourcePath, state.SourcePath, StringComparison.OrdinalIgnoreCase))
             {
-                throw new ArgumentException("Document state must belong to this registered source and document.", nameof(state));
+                throw new ArgumentException("Document state must belong to this registered source.", nameof(state));
             }
 
             if (registration.State == state)

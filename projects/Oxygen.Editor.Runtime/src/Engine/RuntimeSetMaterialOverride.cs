@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Immutable runtime request to SetMaterialOverride.</summary>
@@ -11,4 +13,4 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="LayoutRevision">The inventory revision observed for this edit.</param>
 /// <param name="MaterialPath">The cooked material path, or null to clear the override.</param>
 /// <param name="Intent">Whether this is a new observed edit or a retained authored assignment.</param>
-public sealed record RuntimeSetMaterialOverride(Guid NodeId, string GeometryPath, Guid SlotId, string LayoutRevision, string? MaterialPath, MaterialSlotAssignmentIntent Intent) : RuntimeWorldCommand;
+public sealed record RuntimeSetMaterialOverride(NodeId NodeId, string GeometryPath, Guid SlotId, string LayoutRevision, string? MaterialPath, MaterialSlotAssignmentIntent Intent) : RuntimeWorldCommand;

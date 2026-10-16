@@ -35,7 +35,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     private readonly ICookDocumentRegistry documents;
     private readonly ICookRunService cooks;
     private readonly IAssetRelocationService relocation;
-    private readonly IScriptAssetAuthoring authoring;
+    private readonly IAssetAuthoring authoring;
     private readonly IAssetRuntimeStatusSource runtimeStatus;
     private readonly BehaviorSubject<IReadOnlyList<AssetEntry>> items = new([]);
     private readonly IDisposable changesSubscription;
@@ -64,7 +64,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         ICookRunService cooks,
         IAssetRuntimeStatusSource runtimeStatus,
         IAssetRelocationService relocation,
-        IScriptAssetAuthoring authoring,
+        IAssetAuthoring authoring,
         ILogger<AssetFeed>? logger = null)
         : this((IAssetCatalogReader)catalog, projectContextService, projectCookScopeProvider, cookStatus, documents, cooks, runtimeStatus, relocation, authoring, logger)
     {
@@ -90,7 +90,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         ICookRunService cooks,
         IAssetRuntimeStatusSource runtimeStatus,
         IAssetRelocationService relocation,
-        IScriptAssetAuthoring authoring,
+        IAssetAuthoring authoring,
         ILogger<AssetFeed>? logger = null)
     {
         this.catalog = catalog;

@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Oxygen.Editor.World;
 using Testably.Abstractions;
+using DroidNet.Storage;
 
 namespace Oxygen.Editor.Projects.Tests;
 
@@ -55,5 +56,46 @@ public partial class ProjectManagerServiceTests
         Func<Task> save = () => service.SaveProjectInfoAsync(original, original, this.CancellationToken);
         _ = await save.Should().ThrowAsync<IOException>().WithMessage("*changed outside the editor*").ConfigureAwait(false);
         _ = (await File.ReadAllTextAsync(path, this.CancellationToken).ConfigureAwait(false)).Should().Be(externalJson);
+    }
+
+    private sealed class ControlledAtomicStore : IAtomicFileStore
+    {
+        private readonly NativeAtomicFileStore inner = new(new RealFileSystem());
+
+        public bool Fail { get; set; }
+
+        public string? FailOncePath { get; set; }
+
+        public Action<string>? AfterWrite { get; set; }
+
+        public Task<FileSnapshot> ReadAsync(string path, CancellationToken cancellationToken = default)
+            => this.inner.ReadAsync(path, cancellationToken);
+
+        public async Task<FileVersion> WriteAsync(string path, ReadOnlyMemory<byte> content, FileVersion expected, CancellationToken cancellationToken = default)
+        {
+            if (string.Equals(path, this.FailOncePath, StringComparison.OrdinalIgnoreCase))
+            {
+                this.FailOncePath = null;
+                throw new IOException("Controlled one-shot atomic write failure");
+            }
+
+            if (this.Fail)
+            {
+                throw new IOException("Controlled atomic write failure");
+            }
+
+            var written = await this.inner.WriteAsync(path, content, expected, cancellationToken).ConfigureAwait(false);
+            this.AfterWrite?.Invoke(path);
+            return written;
+        }
+    }
+
+    private sealed partial class AtomicWorkspace : IDisposable
+    {
+        private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("DroidNetSceneAtomic-");
+
+        public string Root => this.directory.FullName;
+
+        public void Dispose() => this.directory.Delete(recursive: true);
     }
 }

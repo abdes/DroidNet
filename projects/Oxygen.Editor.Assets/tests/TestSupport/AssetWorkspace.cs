@@ -40,7 +40,6 @@ internal sealed class AssetWorkspace : IDisposable
                 ProjectRoot = this.Root,
                 AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
                 LocalFolderMounts = [],
-                Scenes = [],
             });
 
         var context = service.ActiveProject!;

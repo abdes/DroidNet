@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Interop.World;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -10,9 +12,9 @@ namespace Oxygen.Editor.Runtime.Engine;
 internal sealed partial class NativeRuntimeCommandTransport
 {
     /// <inheritdoc/>
-    public async Task<RuntimeNodeState> ObserveNodeAsync(Guid nodeId)
+    public async Task<RuntimeNodeState> ObserveNodeAsync(NodeId nodeId)
     {
-        var state = await this.world.ObserveNodeAsync(nodeId).ConfigureAwait(false);
+        var state = await this.world.ObserveNodeAsync(nodeId.Value).ConfigureAwait(false);
         return new(
             state.Exists,
             state.IsPrimarySun,
@@ -29,7 +31,11 @@ internal sealed partial class NativeRuntimeCommandTransport
     public async Task<RuntimeEnvironmentState> ObserveEnvironmentAsync()
     {
         var state = await this.world.ObserveEnvironmentAsync().ConfigureAwait(false);
-        return new()
+        return WithEnvironmentParts(WithExposure(AtmosphereFromNative(state), state), state);
+    }
+
+    private static RuntimeEnvironmentState AtmosphereFromNative(EnvironmentStateManaged state)
+        => new()
         {
             Exists = state.Exists,
             AtmosphereExists = state.AtmosphereExists,
@@ -58,6 +64,11 @@ internal sealed partial class NativeRuntimeCommandTransport
             AerialScatteringStrength = state.AerialScatteringStrength,
             AerialPerspectiveStartDepthMeters = state.AerialPerspectiveStartDepthMeters,
             HeightFogContribution = state.HeightFogContribution,
+        };
+
+    private static RuntimeEnvironmentState WithExposure(RuntimeEnvironmentState observed, EnvironmentStateManaged state)
+        => observed with
+        {
             ExposureMode = state.ExposureMode,
             ExposureEnabled = state.ExposureEnabled,
             ExposureKey = state.ExposureKey,
@@ -87,6 +98,11 @@ internal sealed partial class NativeRuntimeCommandTransport
             Contrast = state.Contrast,
             VignetteIntensity = state.VignetteIntensity,
             DisplayGamma = state.DisplayGamma,
+        };
+
+    private static RuntimeEnvironmentState WithEnvironmentParts(RuntimeEnvironmentState observed, EnvironmentStateManaged state)
+        => observed with
+        {
             FogExists = state.FogExists,
             Fog = RuntimeTransportConversion.FromNative(state.Fog),
             SkySphereExists = state.SkySphereExists,
@@ -102,5 +118,4 @@ internal sealed partial class NativeRuntimeCommandTransport
             BackgroundExists = state.BackgroundExists,
             Background = RuntimeTransportConversion.FromNative(state.Background),
         };
-    }
 }

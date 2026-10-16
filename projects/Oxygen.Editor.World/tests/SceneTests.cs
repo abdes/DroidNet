@@ -9,6 +9,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Tests;
 
@@ -29,19 +30,19 @@ public class SceneTests
         scene.RootNodes.Add(retained);
         var candidate = new SceneData
         {
-            Id = Guid.NewGuid(),
+            Id = SceneId.New(),
             Name = "Invalid lights",
             RootNodes =
             [
                 new SceneNodeData
                 {
-                    Id = Guid.NewGuid(),
+                    Id = NodeId.New(),
                     Name = "Hidden owner", IsVisible = false,
                     Components = [new DirectionalLightData { Name = "Light", AtmosphereSlot = AtmosphereLightSlot.Primary }],
                 },
                 new SceneNodeData
                 {
-                    Id = Guid.NewGuid(),
+                    Id = NodeId.New(),
                     Name = "Duplicate",
                     Components = [new DirectionalLightData { Name = "Light", AtmosphereSlot = AtmosphereLightSlot.Primary }],
                 },
@@ -135,7 +136,8 @@ public class SceneTests
             }
             """;
 
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        await using var streamLifetime = stream.ConfigureAwait(false);
         var serializer = new SceneSerializer(this.ExampleProject);
 
         var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
@@ -177,7 +179,8 @@ public class SceneTests
               "Environment": { "AtmosphereEnabled": true }
             }
             """;
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        await using var streamLifetime = stream.ConfigureAwait(false);
         var serializer = new SceneSerializer(this.ExampleProject);
 
         var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
@@ -196,7 +199,8 @@ public class SceneTests
               "Environment": { "AtmosphereEnabled": false, "BackgroundColor": { "X": 0.1, "Y": 0.2, "Z": 0.3 } }
             }
             """;
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        await using var streamLifetime = stream.ConfigureAwait(false);
         var serializer = new SceneSerializer(this.ExampleProject);
 
         var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
@@ -205,7 +209,8 @@ public class SceneTests
         _ = scene.Environment.LegacyBackgroundColor.Should().BeNull();
         _ = scene.Environment.SkySphere.Should().Be(new SkySphereEnvironmentData());
         _ = scene.Environment.SkyLight.Should().Be(new SkyLightEnvironmentData());
-        using var saved = new MemoryStream();
+        var saved = new MemoryStream();
+        await using var savedLifetime = saved.ConfigureAwait(false);
         await serializer.SerializeAsync(saved, scene).ConfigureAwait(false);
         _ = Encoding.UTF8.GetString(saved.ToArray()).Should().NotContain("BackgroundColor");
     }
@@ -221,7 +226,8 @@ public class SceneTests
               "Environment": { "AtmosphereEnabled": false, "BackgroundColor": { "X": 2, "Y": -0.5, "Z": 0.25 } }
             }
             """;
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        await using var streamLifetime = stream.ConfigureAwait(false);
 
         var scene = await new SceneSerializer(this.ExampleProject).DeserializeAsync(stream).ConfigureAwait(false);
 
@@ -243,12 +249,13 @@ public class SceneTests
         };
         var scene = Scene.CreateAndHydrate(this.ExampleProject, new SceneData
         {
-            Id = Guid.NewGuid(),
+            Id = SceneId.New(),
             Name = "Fog Round Trip",
             Environment = new SceneEnvironmentData { Fog = fog },
         });
         var serializer = new SceneSerializer(this.ExampleProject);
-        using var stream = new MemoryStream();
+        var stream = new MemoryStream();
+        await using var streamLifetime = stream.ConfigureAwait(false);
 
         await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
         stream.Position = 0;
@@ -269,19 +276,21 @@ public class SceneTests
         };
         var scene = Scene.CreateAndHydrate(this.ExampleProject, new SceneData
         {
-            Id = Guid.NewGuid(),
+            Id = SceneId.New(),
             Name = "Reference Round Trip",
             References = references,
         });
         var serializer = new SceneSerializer(this.ExampleProject);
-        using var stream = new MemoryStream();
+        var stream = new MemoryStream();
+        await using var streamLifetime = stream.ConfigureAwait(false);
 
         await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
         stream.Position = 0;
         var restored = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
 
         _ = restored.References.Should().BeEquivalentTo(references);
-        using var emptyStream = new MemoryStream();
+        var emptyStream = new MemoryStream();
+        await using var emptyStreamLifetime = emptyStream.ConfigureAwait(false);
         await serializer.SerializeAsync(emptyStream, new Scene(this.ExampleProject) { Name = "Empty References" }).ConfigureAwait(false);
         var json = Encoding.UTF8.GetString(emptyStream.ToArray());
         _ = json.Should().NotContain("\"References\"");
@@ -298,7 +307,8 @@ public class SceneTests
               "Environment": { "ExposureMode": "Auto", "ManualExposureEv": 9.7 }
             }
             """;
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        await using var streamLifetime = stream.ConfigureAwait(false);
         var serializer = new SceneSerializer(this.ExampleProject);
         var deserialize = async () => await serializer.DeserializeAsync(stream).ConfigureAwait(false);
         _ = await deserialize.Should().ThrowAsync<JsonException>().ConfigureAwait(false);
@@ -315,7 +325,7 @@ public class SceneTests
         };
         var scene = Scene.CreateAndHydrate(this.ExampleProject, new SceneData
         {
-            Id = Guid.NewGuid(),
+            Id = SceneId.New(),
             Name = "Authored Exposure",
             Environment = new SceneEnvironmentData { PostProcess = exposure },
         });
@@ -337,7 +347,8 @@ public class SceneTests
             }
             """;
 
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        await using var streamLifetime = stream.ConfigureAwait(false);
         var serializer = new SceneSerializer(this.ExampleProject);
 
         var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
@@ -349,58 +360,13 @@ public class SceneTests
     public async Task Environment_AllFields_RoundTripThroughJson()
     {
         var scene = new Scene(this.ExampleProject) { Name = "Environment Scene" };
-        var expected = new SceneEnvironmentData
-        {
-            AtmosphereEnabled = false,
-            Background = new BackgroundEnvironmentData { Enabled = true, ColorRgb = new Vector3(0.2f, 0.3f, 0.4f) },
-            SkySphere = new SkySphereEnvironmentData
-            {
-                Enabled = true,
-                Source = SkySphereSource.SolidColor,
-                Cubemap = new Uri("asset:///Content/Sky.otex.json"),
-                SolidColorRgb = new Vector3(2.0f, 3.0f, 4.0f),
-                Intensity = 256.0f,
-                RotationRadians = 1.5f,
-                TintRgb = new Vector3(0.9f, 0.8f, 0.7f),
-            },
-            SkyLight = new SkyLightEnvironmentData
-            {
-                Enabled = false,
-                Source = SkyLightSource.SpecifiedCubemap,
-                Cubemap = new Uri("asset:///Content/Light.otex.json"),
-                Intensity = 2.0f,
-                TintRgb = new Vector3(0.5f, 0.6f, 0.7f),
-                DiffuseIntensity = 0.25f,
-                SpecularIntensity = 0.75f,
-                CubemapAngleRadians = -0.5f,
-                LowerHemisphereColor = new Vector3(0.1f, 0.2f, 0.3f),
-                LowerHemisphereIsSolidColor = false,
-                LowerHemisphereBlendAlpha = 0.4f,
-                VolumetricScatteringIntensity = 3.0f,
-                AffectReflections = false,
-            },
-            SkyAtmosphere = new SkyAtmosphereEnvironmentData
-            {
-                PlanetRadiusMeters = 6_400_000.0f,
-                AtmosphereHeightMeters = 90_000.0f,
-                GroundAlbedoRgb = new Vector3(0.1f, 0.2f, 0.3f),
-                RayleighScaleHeightMeters = 7_000.0f,
-                MieScaleHeightMeters = 1_400.0f,
-                MieAnisotropy = 0.7f,
-                SkyLuminanceFactorRgb = new Vector3(1.1f, 1.0f, 0.9f),
-                AerialPerspectiveDistanceScale = 1.2f,
-                AerialScatteringStrength = 0.8f,
-                AerialPerspectiveStartDepthMeters = 40.0f,
-                HeightFogContribution = 0.6f,
-                SunDiskEnabled = false,
-            },
-            PostProcess = CreateAuthoredPostProcess(),
-        };
+        var expected = CreateAuthoredEnvironment();
         scene.SetEnvironment(expected);
         expected = scene.Environment;
 
         var serializer = new SceneSerializer(this.ExampleProject);
-        using var stream = new MemoryStream();
+        var stream = new MemoryStream();
+        await using var streamLifetime = stream.ConfigureAwait(false);
         await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
         stream.Position = 0;
 
@@ -428,7 +394,8 @@ public class SceneTests
         scene.RootNodes.Add(node);
 
         var serializer = new SceneSerializer(this.ExampleProject);
-        using var stream = new MemoryStream();
+        var stream = new MemoryStream();
+        await using var streamLifetime = stream.ConfigureAwait(false);
         await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
         var json = Encoding.UTF8.GetString(stream.ToArray());
 
@@ -460,12 +427,12 @@ public class SceneTests
         // Act: build DTO in code then hydrate into domain Scene (more robust than relying on string literals)
         var data = new Serialization.SceneData
         {
-            Id = Guid.Empty,
+            Id = SceneId.Empty,
             Name = "Scene Name",
             RootNodes = [
                 new()
                 {
-                    Id = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                    Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000001")),
                     Name = "Node 1",
                     Components =
                     [
@@ -474,7 +441,7 @@ public class SceneTests
                 },
                 new()
                 {
-                    Id = Guid.Parse("00000000-0000-0000-0000-000000000002"),
+                    Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000002")),
                     Name = "Node 2",
                     Components =
                     [
@@ -504,7 +471,7 @@ public class SceneTests
     {
         // Arrange
         // Act: construct DTO equivalent to the JSON literal used previously
-        var data = new Serialization.SceneData { Id = Guid.Parse("00000000-0000-0000-0000-000000000010"), Name = "Scene Name", RootNodes = [] };
+        var data = new Serialization.SceneData { Id = SceneId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000010")), Name = "Scene Name", RootNodes = [] };
 
         var scene = new Scene(this.ExampleProject) { Name = data.Name, Id = data.Id };
         scene.Hydrate(data);
@@ -521,7 +488,7 @@ public class SceneTests
         // Arrange: Scene factory requires Name to be set by caller. Creating a DTO with missing Name
         // should still allow the factory to accept data, but CreateAndHydrate uses the DTO.Name as the scene
         // Name. We assert that creating a Scene with null Name is not allowed via object initializer.
-        var data = new Serialization.SceneData { Id = Guid.NewGuid(), Name = null!, RootNodes = [] };
+        var data = new Serialization.SceneData { Id = SceneId.New(), Name = null!, RootNodes = [] };
 
         // Act: factory CreateAndHydrate expects a non-null Name (the code assigns Name first). Simulate misuse.
         var act = () => Scene.CreateAndHydrate(this.ExampleProject, data);
@@ -568,12 +535,12 @@ public class SceneTests
         // Arrange: construct DTO programmatically (avoid JSON literal fragility)
         var data = new Serialization.SceneData
         {
-            Id = Guid.Parse("00000000-0000-0000-0000-000000000040"),
+            Id = SceneId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000040")),
             Name = "Scene Name",
             RootNodes = [
                 new()
                 {
-                    Id = Guid.Parse("00000000-0000-0000-0000-000000000041"),
+                    Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000041")),
                     Name = "Node 1",
                     Components =
                     [
@@ -582,7 +549,7 @@ public class SceneTests
                 },
                 new()
                 {
-                    Id = Guid.Parse("00000000-0000-0000-0000-000000000042"),
+                    Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000042")),
                     Name = "Node 2",
                     Components =
                     [
@@ -735,12 +702,12 @@ public class SceneTests
         // Arrange: construct nested DTO programmatically
         var data = new Serialization.SceneData
         {
-            Id = Guid.Parse("00000000-0000-0000-0000-000000000050"),
+            Id = SceneId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000050")),
             Name = "Scene",
             RootNodes = [
                 new()
                 {
-                    Id = Guid.Parse("00000000-0000-0000-0000-000000000051"),
+                    Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000051")),
                     Name = "Root",
                     Components =
                     [
@@ -750,7 +717,7 @@ public class SceneTests
                     [
                         new()
                         {
-                            Id = Guid.Parse("00000000-0000-0000-0000-000000000052"),
+                            Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000052")),
                             Name = "Child",
                             Components =
                             [
@@ -827,6 +794,54 @@ public class SceneTests
         _ = rt.OverrideSlots.OfType<Slots.MaterialsSlot>().Should().ContainSingle();
         _ = rt.OverrideSlots.OfType<Slots.MaterialsSlot>().First().Material.Uri.Should().Be("asset:///Engine/Generated/Materials/Gold");
     }
+
+    private static SceneEnvironmentData CreateAuthoredEnvironment() => new()
+    {
+        AtmosphereEnabled = false,
+        Background = new BackgroundEnvironmentData { Enabled = true, ColorRgb = new Vector3(0.2f, 0.3f, 0.4f) },
+        SkySphere = new SkySphereEnvironmentData
+        {
+            Enabled = true,
+            Source = SkySphereSource.SolidColor,
+            Cubemap = new Uri("asset:///Content/Sky.otex.json"),
+            SolidColorRgb = new Vector3(2.0f, 3.0f, 4.0f),
+            Intensity = 256.0f,
+            RotationRadians = 1.5f,
+            TintRgb = new Vector3(0.9f, 0.8f, 0.7f),
+        },
+        SkyLight = new SkyLightEnvironmentData
+        {
+            Enabled = false,
+            Source = SkyLightSource.SpecifiedCubemap,
+            Cubemap = new Uri("asset:///Content/Light.otex.json"),
+            Intensity = 2.0f,
+            TintRgb = new Vector3(0.5f, 0.6f, 0.7f),
+            DiffuseIntensity = 0.25f,
+            SpecularIntensity = 0.75f,
+            CubemapAngleRadians = -0.5f,
+            LowerHemisphereColor = new Vector3(0.1f, 0.2f, 0.3f),
+            LowerHemisphereIsSolidColor = false,
+            LowerHemisphereBlendAlpha = 0.4f,
+            VolumetricScatteringIntensity = 3.0f,
+            AffectReflections = false,
+        },
+        SkyAtmosphere = new SkyAtmosphereEnvironmentData
+        {
+            PlanetRadiusMeters = 6_400_000.0f,
+            AtmosphereHeightMeters = 90_000.0f,
+            GroundAlbedoRgb = new Vector3(0.1f, 0.2f, 0.3f),
+            RayleighScaleHeightMeters = 7_000.0f,
+            MieScaleHeightMeters = 1_400.0f,
+            MieAnisotropy = 0.7f,
+            SkyLuminanceFactorRgb = new Vector3(1.1f, 1.0f, 0.9f),
+            AerialPerspectiveDistanceScale = 1.2f,
+            AerialScatteringStrength = 0.8f,
+            AerialPerspectiveStartDepthMeters = 40.0f,
+            HeightFogContribution = 0.6f,
+            SunDiskEnabled = false,
+        },
+        PostProcess = CreateAuthoredPostProcess(),
+    };
 
     private static PostProcessEnvironmentData CreateAuthoredPostProcess()
         => new()

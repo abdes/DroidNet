@@ -165,7 +165,6 @@ public sealed class SceneAdapterLayoutTests
     {
         var project = new Project(new ProjectInfo("Layout", Category.Games, "H:/LayoutTreeTests", "preview.png")) { Name = "Layout" };
         var scene = new Scene(project) { Name = "Scene" };
-        project.Scenes.Add(scene);
         return scene;
     }
 }

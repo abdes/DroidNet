@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Services;
@@ -26,7 +27,7 @@ public sealed partial class SceneEngineSync
             }
         }
 
-        HashSet<Guid> removed = command switch
+        HashSet<NodeId> removed = command switch
         {
             RuntimeRemoveSceneNode remove => [remove.NodeId],
             RuntimeRemoveSceneNodes remove => [.. remove.Nodes],
@@ -73,7 +74,7 @@ public sealed partial class SceneEngineSync
             _ => command,
         };
 
-    private bool TryDeferNodeCreation(SceneNode node, Guid? parentId, out Task completionTask)
+    private bool TryDeferNodeCreation(SceneNode node, NodeId? parentId, out Task completionTask)
     {
         lock (this.documentGate)
         {
@@ -92,7 +93,7 @@ public sealed partial class SceneEngineSync
             var captured = this.ApplyRenderableComponents(collector, snapshot);
             var revision = this.CaptureRevision(node.Scene);
             var completion = new TaskCompletionSource<SyncOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var scope = Scope(node.Scene, node) with { DocumentId = projection.Lifetime.Metadata.DocumentId, DocumentLifetime = revision.DocumentLifetime, AuthoringRevision = revision.Revision };
+            var scope = Scope(node.Scene, node) with { DocumentId = projection.Lifetime.DocumentId.Value, DocumentLifetime = revision.DocumentLifetime, AuthoringRevision = revision.Revision };
             var failure = captured ? null : Failed(SceneOperationKinds.NodeCreate, scope, LiveSyncDiagnosticCodes.MutationFailed, "A component could not be prepared for runtime publication.");
             var request = new PendingWorldMutation(Guid.NewGuid(), revision, commands.ToImmutableArray(), SceneOperationKinds.NodeCreate, scope, failure, completion, CaptureFailed: !captured);
             projection.Lifetime.PendingMutations.Add(request.RequestId, request);
@@ -127,7 +128,7 @@ public sealed partial class SceneEngineSync
                 return true;
             }
 
-            scope = scope with { DocumentId = projection.Lifetime.Metadata.DocumentId, DocumentLifetime = revision.DocumentLifetime, AuthoringRevision = revision.Revision };
+            scope = scope with { DocumentId = projection.Lifetime.DocumentId.Value, DocumentLifetime = revision.DocumentLifetime, AuthoringRevision = revision.Revision };
             var request = new PendingWorldMutation(Guid.NewGuid(), revision, commands.ToImmutableArray(), operationKind, scope);
             projection.Lifetime.PendingMutations.Add(request.RequestId, request);
             outcome = RuntimeWorldUnavailable(operationKind, scope) with { Message = "The scene mutation will replay after the captured scene snapshot." };

@@ -167,6 +167,28 @@ public class HistoryKeeperPositionTests
         _ = history.CanUndo.Should().BeTrue();
     }
 
+    [TestMethod]
+    public void Position_OfAChangeThatKeepsTheState_DoesNotMove()
+    {
+        var history = new HistoryKeeper(this);
+        this.Set(history, 1);
+        var first = history.Position;
+
+        this.Present(history, "Hide");
+        _ = history.Position.Should().Be(first);
+        history.Undo();
+        _ = history.Position.Should().Be(first);
+        history.Redo();
+        _ = history.Position.Should().Be(first);
+        history.Undo();
+        history.Undo();
+
+        _ = history.Position.Should().NotBe(first);
+    }
+
+    private void Present(HistoryKeeper history, string label)
+        => history.AddChange(new SimpleAction(() => this.Present(history, label)) { Key = label, ChangesState = false });
+
     private void Set(HistoryKeeper history, int next)
     {
         var previous = this.value;

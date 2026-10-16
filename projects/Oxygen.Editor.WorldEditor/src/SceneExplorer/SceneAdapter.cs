@@ -57,9 +57,9 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
     /// </param>
     /// <returns>The asynchronous rebuild task.</returns>
     public async Task ReloadChildrenAsync(
-        ISet<Guid>? expandedFolderIds = null,
+        ISet<FolderId>? expandedFolderIds = null,
         bool preserveNodeExpansion = false,
-        ISet<Guid>? transientlyExpandedFolderIds = null)
+        ISet<FolderId>? transientlyExpandedFolderIds = null)
     {
         this.ClearChildren();
         this.rootItemsCache.Clear();
@@ -72,9 +72,9 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
     /// </summary>
     /// <param name="transientOnly">Whether to include only transiently expanded folders.</param>
     /// <returns>The identities of expanded folders.</returns>
-    public ISet<Guid> GetExpandedFolderIds(bool transientOnly = false)
+    public ISet<FolderId> GetExpandedFolderIds(bool transientOnly = false)
     {
-        var expanded = new HashSet<Guid>();
+        var expanded = new HashSet<FolderId>();
 
         // Use the cache! No more .Result deadlocks.
         var stack = new Stack<ITreeItem>(this.rootItemsCache);
@@ -121,19 +121,19 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
     }
 
     private async Task RebuildTreeAsync(
-        ISet<Guid>? expandedFolderIds = null,
+        ISet<FolderId>? expandedFolderIds = null,
         bool preserveNodeExpansion = false,
-        ISet<Guid>? transientlyExpandedFolderIds = null)
+        ISet<FolderId>? transientlyExpandedFolderIds = null)
     {
         var layout = this.AttachedObject.ExplorerLayout;
-        var seenNodeIds = new HashSet<Guid>();
-        var seenFolderIds = new HashSet<Guid>();
+        var seenNodeIds = new HashSet<NodeId>();
+        var seenFolderIds = new HashSet<FolderId>();
 
         // 1. Build from Layout (The "Seating Chart")
         if (this.UseLayoutAdapters && layout is { Count: > 0 })
         {
             // Index the scene graph once per rebuild so each entry resolves in O(1); the first node wins on duplicate ids.
-            var nodesById = new Dictionary<Guid, SceneNode>();
+            var nodesById = new Dictionary<NodeId, SceneNode>();
             foreach (var node in this.AttachedObject.AllNodes)
             {
                 _ = nodesById.TryAdd(node.Id, node);
@@ -147,7 +147,7 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
 
         // Layout is an overlay, not a filter: newly created descendants without layout seats
         // still belong in the hierarchy. Already seated nodes keep their authored placement.
-        var realizedNodes = new Dictionary<Guid, SceneNodeAdapter>();
+        var realizedNodes = new Dictionary<NodeId, SceneNodeAdapter>();
         var pending = new Stack<ITreeItem>(this.rootItemsCache);
         while (pending.TryPop(out var item))
         {
@@ -171,7 +171,7 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
         }
     }
 
-    private void PopulateUnseatedNodes(SceneNode node, ITreeItem parent, Dictionary<Guid, SceneNodeAdapter> realizedNodes)
+    private void PopulateUnseatedNodes(SceneNode node, ITreeItem parent, Dictionary<NodeId, SceneNodeAdapter> realizedNodes)
     {
         if (!realizedNodes.TryGetValue(node.Id, out var adapter))
         {
@@ -189,12 +189,12 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
     private async Task ProcessLayoutEntryAsync(
         ExplorerEntryData entry,
         ITreeItem parent,
-        Dictionary<Guid, SceneNode> nodesById,
-        HashSet<Guid> seenNodeIds,
-        HashSet<Guid> seenFolderIds,
-        ISet<Guid>? expandedFolderIds,
+        Dictionary<NodeId, SceneNode> nodesById,
+        HashSet<NodeId> seenNodeIds,
+        HashSet<FolderId> seenFolderIds,
+        ISet<FolderId>? expandedFolderIds,
         bool preserveNodeExpansion,
-        ISet<Guid>? transientlyExpandedFolderIds = null)
+        ISet<FolderId>? transientlyExpandedFolderIds = null)
     {
         // Case A: Folder
         if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
@@ -212,13 +212,13 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
 
             // A transient (search-driven) expansion must be marked before it is applied, or the
             // expanded view would be re-authored into the layout entry on this rebuild.
-            if (transientlyExpandedFolderIds?.Contains(entry.FolderId ?? Guid.Empty) == true)
+            if (entry.FolderId is { } transientId && transientlyExpandedFolderIds?.Contains(transientId) == true)
             {
                 folder.SetExpansionTransient(transient: true);
             }
 
             // Restore expansion state
-            if (expandedFolderIds?.Contains(entry.FolderId ?? Guid.Empty) == true || entry.IsExpanded == true)
+            if ((entry.FolderId is { } expandedId && expandedFolderIds?.Contains(expandedId) == true) || entry.IsExpanded == true)
             {
                 folder.IsExpanded = true;
             }

@@ -6,6 +6,7 @@ using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Services;
@@ -73,8 +74,8 @@ public sealed partial class SceneEngineSync
         {
             RuntimeSetGeometry geometry => (geometry.NodeId, geometry.AssetPath, SceneOperationKinds.EditGeometry, LiveSyncDiagnosticCodes.GeometryUnresolvedAtRuntime),
             RuntimeSetMaterialOverride material => (material.NodeId, material.MaterialPath, SceneOperationKinds.EditMaterialSlot, LiveSyncDiagnosticCodes.MaterialFailed),
-            RuntimeSetEnvironment environment => (Guid.Empty, SoleEnvironmentTexture(environment), SceneOperationKinds.EditEnvironment, LiveSyncDiagnosticCodes.EnvironmentFailed),
-            _ => (Guid.Empty, null, string.Empty, string.Empty),
+            RuntimeSetEnvironment environment => (NodeId.Empty, SoleEnvironmentTexture(environment), SceneOperationKinds.EditEnvironment, LiveSyncDiagnosticCodes.EnvironmentFailed),
+            _ => (NodeId.Empty, null, string.Empty, string.Empty),
         };
         var node = FindNode(scene, nodeId);
         if (node is null && request.Command is not RuntimeSetEnvironment)
@@ -122,7 +123,7 @@ public sealed partial class SceneEngineSync
             return this.TryGetDocument(scene, out var lifetime) && lifetime.Id == documentLifetime
                 ? Scope(scene, node, componentType: node is null ? nameof(PostProcessEnvironmentData) : nameof(GeometryComponent), assetVirtualPath: assetPath) with
                 {
-                    DocumentId = lifetime.Metadata.DocumentId,
+                    DocumentId = lifetime.DocumentId.Value,
                     DocumentLifetime = lifetime.Id,
                 }
                 : null;
@@ -130,7 +131,7 @@ public sealed partial class SceneEngineSync
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Runtime asset operation {OperationId}, native generation {Generation}, node {NodeId} failed: {Message}")]
-    private partial void LogAssetLoadFailed(Guid operationId, ulong generation, Guid nodeId, string message);
+    private partial void LogAssetLoadFailed(Guid operationId, ulong generation, NodeId nodeId, string message);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Cannot dispatch runtime asset failure {OperationId}: the UI dispatcher is unavailable.")]
     private partial void LogAssetFailureDispatchUnavailable(Guid operationId);

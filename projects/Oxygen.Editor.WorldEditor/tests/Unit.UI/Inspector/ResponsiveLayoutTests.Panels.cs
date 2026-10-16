@@ -95,7 +95,7 @@ internal sealed partial class ResponsiveLayoutTests
         _ = properties.ActualHeight.Should().BePositive("even a short dock must retain a scrollable property viewport");
         AssertAllToggle(view, multiple);
         await AssertScaledComponentSelectionAsync(view, multiple).ConfigureAwait(true);
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
         await ScaledXamlHost.ScrollToEndAsync(components, this.TestContext.CancellationToken).ConfigureAwait(true);
         await ScaledXamlHost.ScrollToEndAsync(properties, this.TestContext.CancellationToken).ConfigureAwait(true);

@@ -176,7 +176,6 @@ public sealed class CookStagingTests
                     Category = Category.Games,
                     AuthoringMounts = [new("Content", "Content")],
                     LocalFolderMounts = [],
-                    Scenes = [],
                 },
                 1);
         }

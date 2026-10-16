@@ -22,7 +22,7 @@ public sealed class CookSavedSourceReaderTests
     {
         var registry = new CookDocumentRegistry();
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "Main.oscene.json");
-        var state = new CookDocumentState(Guid.NewGuid(), path, "Main", 1, 1, IsDirty: false, "hash");
+        var state = new CookDocumentState(path, "Main", 1, 1, IsDirty: false, "hash");
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var released = false;

@@ -34,7 +34,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeFalse();
         _ = geometry.OverrideSlots.Should().BeEmpty();
         _ = context.History.UndoStack.Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         fixture.Inventories.Verify(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<Uri>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -63,7 +63,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         }
 
         _ = context.History.UndoStack.Should().ContainSingle();
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         fixture.Sync.Verify(value => value.UpdateMaterialSlotAsync(scene, It.IsAny<SceneNode>(), target, material, It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
@@ -84,7 +84,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = first.Components.OfType<GeometryComponent>().Single().OverrideSlots.Should().BeEmpty();
         _ = second.Components.OfType<GeometryComponent>().Single().OverrideSlots.Should().BeEmpty();
         _ = context.History.UndoStack.Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         fixture.Inventories.Verify(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<Uri>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -106,7 +106,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeFalse();
         _ = geometry.OverrideSlots.Should().BeEmpty();
         _ = context.History.UndoStack.Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
     }
 
     [TestMethod]
@@ -135,7 +135,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = (await pending.ConfigureAwait(false)).Succeeded.Should().BeFalse();
         _ = geometry.OverrideSlots.Should().BeEmpty();
         _ = context.History.UndoStack.Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
     }
 
     [TestMethod]
@@ -159,7 +159,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeTrue();
         _ = geometry.OverrideSlots.Should().Equal(resolved);
         _ = context.History.UndoStack.Should().ContainSingle();
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = geometry.OverrideSlots.Should().BeEquivalentTo([foreign, resolved, missing]);
         await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);

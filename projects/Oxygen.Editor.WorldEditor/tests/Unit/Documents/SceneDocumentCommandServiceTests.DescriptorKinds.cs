@@ -34,7 +34,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeTrue();
         _ = parent.IsVisible.Should().BeFalse();
         _ = parent.CastsShadows.Should().BeFalse();
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
         _ = synced.Should().ContainSingle().Which.Should().BeEquivalentTo(
         [

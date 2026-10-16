@@ -144,7 +144,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             }
         }
 
-        var nodeIndices = new Dictionary<Guid, int>();
+        var nodeIndices = new Dictionary<NodeId, int>();
         foreach (var root in scene.RootNodes)
         {
             AddNode(root, parentIndex: null);

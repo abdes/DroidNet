@@ -2,8 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Documents;
+
 namespace Oxygen.Editor.World.Messages;
 
 /// <summary>Notifies scene-following panels that the accepted editable graph has been retired.</summary>
 /// <param name="DocumentId">The retired document identity.</param>
-public sealed record SceneAuthoringUnloadedMessage(Guid DocumentId);
+public sealed record SceneAuthoringUnloadedMessage(DocumentId DocumentId);

@@ -191,7 +191,7 @@ public sealed class SourceBundleDiscoveryTests
     {
         using var workspace = new RetentionWorkspace();
         var primary = workspace.Write("model.gltf", "saved");
-        var state = new CookDocumentState(Guid.NewGuid(), primary.SourcePath, "Model", 2, 1, IsDirty: true, primary.DiscoveryHash);
+        var state = new CookDocumentState(primary.SourcePath, "Model", 2, 1, IsDirty: true, primary.DiscoveryHash);
         using var registration = workspace.Documents.Register(primary.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(state, () => { })));
         var inspector = new DelegateSourceAnalyzer((execution, token) => SourceFactsAsync(execution, token));
         Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -239,7 +239,7 @@ public sealed class SourceBundleDiscoveryTests
     {
         using var workspace = new RetentionWorkspace();
         var primary = workspace.Write("model.gltf", "saved");
-        var state = new CookDocumentState(Guid.NewGuid(), primary.SourcePath, "Model", 1, 1, IsDirty: false, primary.DiscoveryHash);
+        var state = new CookDocumentState(primary.SourcePath, "Model", 1, 1, IsDirty: false, primary.DiscoveryHash);
         using var registration = workspace.Documents.Register(primary.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(state, () => { })));
         await File.WriteAllTextAsync(primary.SourcePath, "external edit", this.TestContext.CancellationToken).ConfigureAwait(false);
         var inspector = new DelegateSourceAnalyzer((execution, token) => SourceFactsAsync(execution, token));

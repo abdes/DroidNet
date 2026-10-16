@@ -133,7 +133,6 @@ public sealed class ProblemsViewModelTests
             ProjectRoot = @"C:\Project",
             AuthoringMounts = [],
             LocalFolderMounts = [],
-            Scenes = [],
         });
         return new ProblemsViewModel(analysis.Object, this.codeEditor.Object, projects.Object, this.runtime);
     }

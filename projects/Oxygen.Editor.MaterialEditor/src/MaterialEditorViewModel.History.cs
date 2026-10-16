@@ -170,8 +170,15 @@ public sealed partial class MaterialEditorViewModel
     private void RefreshDocument(Guid documentId, bool refreshValues = true)
     {
         this.document = this.documentService.GetDocument(documentId);
+        var wasDirty = this.metadata.IsDirty;
         this.metadata.IsDirty = this.document.IsDirty;
         this.IsDirty = this.metadata.IsDirty;
+
+        // The tab shows the document's dirtiness only when it is told; edits, undo, saves and reloads all pass here.
+        if (wasDirty != this.metadata.IsDirty && this.documents is { } host)
+        {
+            _ = host.UpdateMetadataAsync(this.windowId, this.metadata.DocumentId, this.metadata);
+        }
         if (refreshValues)
         {
             this.isLoading = true;

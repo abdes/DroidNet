@@ -142,7 +142,7 @@ public sealed class SourceRetentionTests
     {
         using var workspace = new RetentionWorkspace();
         var input = workspace.Write("model.gltf", "saved");
-        var document = new CookDocumentState(Guid.NewGuid(), input.SourcePath, "Model", 2, 1, IsDirty: true, input.DiscoveryHash);
+        var document = new CookDocumentState(input.SourcePath, "Model", 2, 1, IsDirty: true, input.DiscoveryHash);
         using var registration = workspace.Documents.Register(input.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(document, () => { })));
         var result = await workspace.RetainAsync("Model", [input], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Source.Should().BeNull();

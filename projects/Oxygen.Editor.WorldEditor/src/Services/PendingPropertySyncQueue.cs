@@ -2,18 +2,20 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Services;
 
 /// <summary>Retains pending property values until acceptance or authoritative supersession.</summary>
 internal sealed class PendingPropertySyncQueue
 {
     private readonly Lock gate = new();
-    private readonly Dictionary<Guid, SceneQueue> scenes = [];
+    private readonly Dictionary<SceneId, SceneQueue> scenes = [];
 
     /// <summary>Installs an open-document lifetime, invalidating an earlier instance of the same scene.</summary>
     /// <param name="sceneId">The authored scene identity.</param>
     /// <param name="lifetime">The open-document lifetime.</param>
-    public void Register(Guid sceneId, Guid lifetime)
+    public void Register(SceneId sceneId, Guid lifetime)
     {
         lock (this.gate)
         {
@@ -27,7 +29,7 @@ internal sealed class PendingPropertySyncQueue
     /// <summary>Invalidates pending and accepted boundaries for a closed lifetime.</summary>
     /// <param name="sceneId">The authored scene identity.</param>
     /// <param name="lifetime">The lifetime being closed.</param>
-    public void Close(Guid sceneId, Guid lifetime)
+    public void Close(SceneId sceneId, Guid lifetime)
     {
         lock (this.gate)
         {
@@ -44,7 +46,7 @@ internal sealed class PendingPropertySyncQueue
     /// <param name="nodeId">The edited node.</param>
     /// <param name="entries">The requested property values.</param>
     /// <returns>The remaining pending request count.</returns>
-    public int Enqueue(Guid sceneId, SceneSyncRevision revision, Guid nodeId, IReadOnlyList<EnginePropertyValueEntry> entries)
+    public int Enqueue(SceneId sceneId, SceneSyncRevision revision, NodeId nodeId, IReadOnlyList<EnginePropertyValueEntry> entries)
     {
         ArgumentNullException.ThrowIfNull(entries);
         lock (this.gate)
@@ -76,7 +78,7 @@ internal sealed class PendingPropertySyncQueue
     /// <param name="sceneId">The authored scene identity.</param>
     /// <param name="lifetime">The currently projected document lifetime.</param>
     /// <returns>Pending requests in authoring and preview order.</returns>
-    public IReadOnlyList<PendingPropertySyncEntry> Snapshot(Guid sceneId, Guid lifetime)
+    public IReadOnlyList<PendingPropertySyncEntry> Snapshot(SceneId sceneId, Guid lifetime)
     {
         lock (this.gate)
         {
@@ -90,7 +92,7 @@ internal sealed class PendingPropertySyncQueue
     /// <param name="sceneId">The authored scene identity.</param>
     /// <param name="request">The request selected for replay.</param>
     /// <returns>The current payload, or null if superseded or closed.</returns>
-    public PendingPropertySyncEntry? Current(Guid sceneId, PendingPropertySyncEntry request)
+    public PendingPropertySyncEntry? Current(SceneId sceneId, PendingPropertySyncEntry request)
     {
         lock (this.gate)
         {
@@ -103,7 +105,7 @@ internal sealed class PendingPropertySyncQueue
     /// <summary>Removes only the successfully applied or deleted-target request.</summary>
     /// <param name="sceneId">The authored scene identity.</param>
     /// <param name="request">The acknowledged request.</param>
-    public void Acknowledge(Guid sceneId, PendingPropertySyncEntry request)
+    public void Acknowledge(SceneId sceneId, PendingPropertySyncEntry request)
     {
         lock (this.gate)
         {
@@ -118,7 +120,7 @@ internal sealed class PendingPropertySyncQueue
     /// <param name="sceneId">The authored scene identity.</param>
     /// <param name="request">The attempted request.</param>
     /// <param name="failure">The unsuccessful replay outcome.</param>
-    public void Fail(Guid sceneId, PendingPropertySyncEntry request, SyncOutcome failure)
+    public void Fail(SceneId sceneId, PendingPropertySyncEntry request, SyncOutcome failure)
     {
         lock (this.gate)
         {
@@ -133,7 +135,7 @@ internal sealed class PendingPropertySyncQueue
     /// <summary>Acknowledges the boundary of a fully accepted coherent scene snapshot.</summary>
     /// <param name="sceneId">The authored scene identity.</param>
     /// <param name="boundary">The captured snapshot boundary.</param>
-    public void Supersede(Guid sceneId, SceneSyncRevision boundary)
+    public void Supersede(SceneId sceneId, SceneSyncRevision boundary)
     {
         lock (this.gate)
         {
@@ -160,7 +162,7 @@ internal sealed class PendingPropertySyncQueue
     /// <param name="nodeId">The published node.</param>
     /// <param name="component">The complete component, or null for the node.</param>
     /// <param name="revision">The accepted publication revision.</param>
-    public void SupersedeTarget(Guid sceneId, Guid nodeId, EngineComponentId? component, SceneSyncRevision revision)
+    public void SupersedeTarget(SceneId sceneId, NodeId nodeId, EngineComponentId? component, SceneSyncRevision revision)
     {
         lock (this.gate)
         {
@@ -181,7 +183,7 @@ internal sealed class PendingPropertySyncQueue
     /// <summary>Gets the number of unacknowledged requests for a scene.</summary>
     /// <param name="sceneId">The authored scene identity.</param>
     /// <returns>The pending request count.</returns>
-    public int Count(Guid sceneId)
+    public int Count(SceneId sceneId)
     {
         lock (this.gate)
         {
@@ -189,16 +191,16 @@ internal sealed class PendingPropertySyncQueue
         }
     }
 
-    private static bool IsNewer(SceneQueue scene, SceneSyncRevision revision, Guid nodeId, EnginePropertyValueEntry entry)
+    private static bool IsNewer(SceneQueue scene, SceneSyncRevision revision, NodeId nodeId, EnginePropertyValueEntry entry)
         => (scene.Boundary is not { } boundary || !revision.IsAtOrBefore(boundary))
             && !IsTargetCovered(scene, revision, nodeId, entry.Component)
             && (!scene.Latest.TryGetValue(new(nodeId, entry.Component, entry.FieldId), out var latest) || !revision.IsAtOrBefore(latest));
 
-    private static bool IsCurrent(SceneQueue scene, SceneSyncRevision revision, Guid nodeId, EnginePropertyValueEntry entry)
+    private static bool IsCurrent(SceneQueue scene, SceneSyncRevision revision, NodeId nodeId, EnginePropertyValueEntry entry)
         => scene.Latest.TryGetValue(new(nodeId, entry.Component, entry.FieldId), out var latest) && latest == revision
             && !IsTargetCovered(scene, revision, nodeId, entry.Component);
 
-    private static bool IsTargetCovered(SceneQueue scene, SceneSyncRevision revision, Guid nodeId, EngineComponentId component)
+    private static bool IsTargetCovered(SceneQueue scene, SceneSyncRevision revision, NodeId nodeId, EngineComponentId component)
         => (scene.TargetBoundaries.TryGetValue((nodeId, null), out var node) && revision.IsAtOrBefore(node))
             || (scene.TargetBoundaries.TryGetValue((nodeId, component), out var target) && revision.IsAtOrBefore(target));
 
@@ -219,7 +221,7 @@ internal sealed class PendingPropertySyncQueue
     }
 
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Auto)]
-    private readonly record struct FieldKey(Guid NodeId, EngineComponentId Component, ushort FieldId);
+    private readonly record struct FieldKey(NodeId NodeId, EngineComponentId Component, ushort FieldId);
 
     private sealed class SceneQueue(Guid lifetime)
     {
@@ -231,6 +233,6 @@ internal sealed class PendingPropertySyncQueue
 
         public Dictionary<FieldKey, SceneSyncRevision> Latest { get; } = [];
 
-        public Dictionary<(Guid nodeId, EngineComponentId? component), SceneSyncRevision> TargetBoundaries { get; } = [];
+        public Dictionary<(NodeId nodeId, EngineComponentId? component), SceneSyncRevision> TargetBoundaries { get; } = [];
     }
 }

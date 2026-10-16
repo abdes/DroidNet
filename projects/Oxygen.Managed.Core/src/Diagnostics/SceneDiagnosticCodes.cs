@@ -9,6 +9,9 @@ namespace Oxygen.Managed.Core.Diagnostics;
 /// </summary>
 public static class SceneDiagnosticCodes
 {
+    /// <summary>A new scene could not be created: its name was rejected, a file exists there, or it could not be written.</summary>
+    public const string CreateFailed = DiagnosticCodes.ScenePrefix + "Asset.Create.Failed";
+
     /// <summary>The observed material slot no longer matches an editable native inventory.</summary>
     public const string MaterialSlotTargetInvalid = DiagnosticCodes.ScenePrefix + "MaterialSlot.Target.Invalid";
 

@@ -313,7 +313,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     [RelayCommand]
     private async Task OpenDocumentAsync(Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState? document)
     {
-        if (document is not null && !await this.workspace.OpenDocumentAsync(document.DocumentId).ConfigureAwait(true))
+        if (document is not null && !await this.workspace.OpenDocumentAsync(document.SourcePath).ConfigureAwait(true))
         {
             this.ActionError = "This document is no longer open. Cooking will recheck its saved source when resumed.";
         }

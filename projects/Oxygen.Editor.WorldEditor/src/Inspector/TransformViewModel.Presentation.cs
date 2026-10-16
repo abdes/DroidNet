@@ -4,13 +4,14 @@
 
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>Ends hidden transform gestures without discarding field feedback.</summary>
 public sealed partial class TransformViewModel
 {
-    private readonly Dictionary<PropertyId, Dictionary<Guid, float>> displayedSources = [];
+    private readonly Dictionary<PropertyId, Dictionary<NodeId, float>> displayedSources = [];
 
     /// <inheritdoc />
     internal override InspectorFieldDiagnostics? ValidationFeedback => this.diagnostics;
@@ -21,7 +22,7 @@ public sealed partial class TransformViewModel
         this.controller.SetInputEnabled(enabled);
     }
 
-    private void RefreshSourceFeedback(NumberBinding<float> binding, Dictionary<Guid, object?> targets)
+    private void RefreshSourceFeedback(NumberBinding<float> binding, Dictionary<NodeId, object?> targets)
     {
         var current = targets.Where(static item => item.Value is not null)
             .ToDictionary(static item => item.Key, item => binding.Descriptor.Read(item.Value!));

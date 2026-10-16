@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Immutable runtime request to UpdateTransformsForNodes.</summary>
 /// <param name="Nodes">The Nodes command value.</param>
-public sealed record RuntimeUpdateTransformsForNodes(ImmutableArray<Guid> Nodes) : RuntimeWorldCommand;
+public sealed record RuntimeUpdateTransformsForNodes(ImmutableArray<NodeId> Nodes) : RuntimeWorldCommand;

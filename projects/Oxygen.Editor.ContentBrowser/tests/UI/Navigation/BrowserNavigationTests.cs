@@ -41,7 +41,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
     public Task ReusedLayoutDropsOldFolderRowsAndActionTargets(bool tiles) => EnqueueAsync(async () =>
     {
         var projects = new ProjectContextService();
-        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = "C:/Navigation", AuthoringMounts = [], LocalFolderMounts = [], Scenes = [], });
+        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = "C:/Navigation", AuthoringMounts = [], LocalFolderMounts = [], });
         var state = new ContentBrowserState(projects);
         var geometry = CreateNavigationAsset("/Content/Geometry/Cube.ogeo.json", AssetKind.Geometry);
         var material = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
@@ -109,7 +109,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         _ = storage.Setup(value => value.GetFolderFromPathAsync(root.Location, It.IsAny<CancellationToken>())).ReturnsAsync(root);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(content.Location, It.IsAny<CancellationToken>())).ReturnsAsync(content);
         var projects = new ProjectContextService();
-        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = root.Location, AuthoringMounts = [new("Content", "Content") { IsExpanded = false }], LocalFolderMounts = [], Scenes = [], });
+        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = root.Location, AuthoringMounts = [new("Content", "Content") { IsExpanded = false }], LocalFolderMounts = [], });
         var state = new ContentBrowserState(projects);
         using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var selected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -163,7 +163,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         _ = storage.Setup(value => value.GetFolderFromPathAsync(root.Location, It.IsAny<CancellationToken>())).ReturnsAsync(root);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(content.Location, It.IsAny<CancellationToken>())).ReturnsAsync(content);
         var projects = new ProjectContextService();
-        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = root.Location, AuthoringMounts = [new("Content", "Content") { IsExpanded = false }], LocalFolderMounts = [], Scenes = [], });
+        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = root.Location, AuthoringMounts = [new("Content", "Content") { IsExpanded = false }], LocalFolderMounts = [], });
         var state = new ContentBrowserState(projects);
         using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var shown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -227,7 +227,6 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
             ProjectRoot = root.Location,
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
             LocalFolderMounts = [new("Library", "D:/Library")],
-            Scenes = [],
             DefaultSceneId = Guid.NewGuid(),
         };
         projects.Activate(project);
@@ -303,7 +302,6 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
             ProjectRoot = firstDirectory.Path,
             AuthoringMounts = [new("Cooked", ".cooked")],
             LocalFolderMounts = [],
-            Scenes = [],
         };
         projects.Activate(first);
         using var changes = new System.Reactive.Subjects.Subject<Oxygen.Managed.Assets.Catalog.AssetChange>();

@@ -4,6 +4,7 @@
 
 using DroidNet.Controls;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 
@@ -15,12 +16,12 @@ namespace Oxygen.Editor.World.SceneExplorer;
 /// </summary>
 public sealed class SceneExplorerProjection
 {
-    private readonly Dictionary<Guid, SceneNodeAdapter> nodeAdapters = [];
-    private readonly Dictionary<Guid, FolderAdapter> folderAdapters = [];
+    private readonly Dictionary<NodeId, SceneNodeAdapter> nodeAdapters = [];
+    private readonly Dictionary<FolderId, FolderAdapter> folderAdapters = [];
     private readonly HashSet<ITreeItem> trackedItems = [];
     private readonly List<LayoutFolder> layoutFolders = [];
-    private readonly Dictionary<Guid, LayoutAncestor[]> nodeLayoutChains = [];
-    private readonly Dictionary<Guid, LayoutAncestor[]> folderLayoutChains = [];
+    private readonly Dictionary<NodeId, LayoutAncestor[]> nodeLayoutChains = [];
+    private readonly Dictionary<FolderId, LayoutAncestor[]> folderLayoutChains = [];
     private readonly Dictionary<ITreeItem, ITreeItem> parentAdapters = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Gets the indexed node adapters.</summary>
@@ -35,24 +36,24 @@ public sealed class SceneExplorerProjection
     /// <summary>Gets the node adapter for the given identity, or <see langword="null"/> when not realized.</summary>
     /// <param name="nodeId">The node identity.</param>
     /// <returns>The adapter, or <see langword="null"/>.</returns>
-    public SceneNodeAdapter? GetNode(Guid nodeId)
+    public SceneNodeAdapter? GetNode(NodeId nodeId)
         => this.nodeAdapters.TryGetValue(nodeId, out var adapter) ? adapter : null;
 
     /// <summary>Gets the folder adapter for the given identity, or <see langword="null"/> when not realized.</summary>
     /// <param name="folderId">The folder identity.</param>
     /// <returns>The adapter, or <see langword="null"/>.</returns>
-    public FolderAdapter? GetFolder(Guid folderId)
+    public FolderAdapter? GetFolder(FolderId folderId)
         => this.folderAdapters.TryGetValue(folderId, out var adapter) ? adapter : null;
 
     /// <summary>Gets a value indicating whether a node adapter is indexed for the given identity.</summary>
     /// <param name="nodeId">The node identity.</param>
     /// <returns><see langword="true"/> when indexed; otherwise <see langword="false"/>.</returns>
-    public bool ContainsNode(Guid nodeId) => this.nodeAdapters.ContainsKey(nodeId);
+    public bool ContainsNode(NodeId nodeId) => this.nodeAdapters.ContainsKey(nodeId);
 
     /// <summary>Gets a value indicating whether a folder adapter is indexed for the given identity.</summary>
     /// <param name="folderId">The folder identity.</param>
     /// <returns><see langword="true"/> when indexed; otherwise <see langword="false"/>.</returns>
-    public bool ContainsFolder(Guid folderId) => this.folderAdapters.ContainsKey(folderId);
+    public bool ContainsFolder(FolderId folderId) => this.folderAdapters.ContainsKey(folderId);
 
     /// <summary>
     /// Gets the top-down authored-layout ancestor chain for the given node identity. The chain covers
@@ -60,7 +61,7 @@ public sealed class SceneExplorerProjection
     /// </summary>
     /// <param name="nodeId">The node identity.</param>
     /// <returns>The ancestors from the layout root down to the node's parent, or <see langword="null"/> when the node has no layout seat.</returns>
-    public IReadOnlyList<LayoutAncestor>? GetNodeLayoutAncestors(Guid nodeId)
+    public IReadOnlyList<LayoutAncestor>? GetNodeLayoutAncestors(NodeId nodeId)
         => this.nodeLayoutChains.TryGetValue(nodeId, out var chain) ? chain : null;
 
     /// <summary>
@@ -69,7 +70,7 @@ public sealed class SceneExplorerProjection
     /// </summary>
     /// <param name="folderId">The folder identity.</param>
     /// <returns>The ancestors from the layout root down to the folder's parent.</returns>
-    public IReadOnlyList<LayoutAncestor>? GetFolderLayoutAncestors(Guid folderId)
+    public IReadOnlyList<LayoutAncestor>? GetFolderLayoutAncestors(FolderId folderId)
         => this.folderLayoutChains.TryGetValue(folderId, out var chain) ? chain : null;
 
     /// <summary>Gets the realized projection ancestors without loading collapsed child collections.</summary>
@@ -211,8 +212,8 @@ public sealed class SceneExplorerProjection
         // independently of adapter realization. The claim rules mirror layout realization — the first
         // entry for a folder or node identity wins and a skipped duplicate contributes no children.
         // Folder entries without an id are not stably addressable; they resolve to no adapter.
-        var seenFolderIds = new HashSet<Guid>();
-        var seenNodeIds = new HashSet<Guid>();
+        var seenFolderIds = new HashSet<FolderId>();
+        var seenNodeIds = new HashSet<NodeId>();
         var chain = new List<LayoutAncestor>();
 
         Walk(layout);
@@ -234,7 +235,7 @@ public sealed class SceneExplorerProjection
                         this.folderLayoutChains[stableFolderId] = [.. chain];
                     }
 
-                    chain.Add(new LayoutAncestor(IsFolder: true, entry.FolderId));
+                    chain.Add(new LayoutAncestor(IsFolder: true, entry.FolderId, Node: null));
                     if (entry.Children is { } folderChildren)
                     {
                         Walk(folderChildren);
@@ -250,7 +251,7 @@ public sealed class SceneExplorerProjection
                     }
 
                     this.nodeLayoutChains[nodeId] = [.. chain];
-                    chain.Add(new LayoutAncestor(IsFolder: false, nodeId));
+                    chain.Add(new LayoutAncestor(IsFolder: false, Folder: null, nodeId));
                     if (entry.Children is { } nodeChildren)
                     {
                         Walk(nodeChildren);
@@ -265,10 +266,11 @@ public sealed class SceneExplorerProjection
     /// <summary>A folder declared by the authored explorer layout, whether or not it is realized as an adapter.</summary>
     /// <param name="Id">The stable folder identity, or <see langword="null"/> when the entry is not stably addressable.</param>
     /// <param name="Name">The folder display name, using the same fallback as the realized adapter label.</param>
-    public readonly record struct LayoutFolder(Guid? Id, string Name);
+    public readonly record struct LayoutFolder(FolderId? Id, string Name);
 
     /// <summary>An ancestor link in an authored-layout entry's chain.</summary>
     /// <param name="IsFolder">Whether the ancestor is a visual folder rather than a scene node seat.</param>
-    /// <param name="Id">The ancestor identity, or <see langword="null"/> for a folder entry without a stable id.</param>
-    public readonly record struct LayoutAncestor(bool IsFolder, Guid? Id);
+    /// <param name="Folder">The folder's identity, or <see langword="null"/> for a node or a folder entry without a stable id.</param>
+    /// <param name="Node">The node's identity, or <see langword="null"/> for a folder.</param>
+    public readonly record struct LayoutAncestor(bool IsFolder, FolderId? Folder, NodeId? Node);
 }

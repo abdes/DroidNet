@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Runtime.InteropServices;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -169,7 +170,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
         {
             RuntimeSetGeometry geometry => new(geometry.NodeId, AssetRequestKind.Geometry),
             RuntimeSetMaterialOverride material when material.SlotId != Guid.Empty => new(material.NodeId, AssetRequestKind.Material, material.SlotId, material.GeometryPath),
-            RuntimeSetEnvironment => new(Guid.Empty, AssetRequestKind.EnvironmentMask),
+            RuntimeSetEnvironment => new(NodeId.Empty, AssetRequestKind.EnvironmentMask),
             _ => null,
         };
 
@@ -259,7 +260,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
                 return rejection;
             }
 
-            if (target.SceneId == Guid.Empty || target.DocumentLifetime == Guid.Empty || target.ActivationId == Guid.Empty)
+            if (target.SceneId.IsEmpty || target.DocumentLifetime == Guid.Empty || target.ActivationId == Guid.Empty)
             {
                 return new(operationId, target.RunId, RuntimeCommandStatus.Rejected, "A scene activation requires scene, document and activation identities.");
             }
@@ -406,7 +407,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
         }
     }
 
-    private void ForgetAssetOperations(Guid nodeId)
+    private void ForgetAssetOperations(NodeId nodeId)
     {
         foreach (var target in this.assetOperations.Keys.Where(value => value.NodeId == nodeId).ToArray())
         {
@@ -433,5 +434,5 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
                     ? new(operationId, requestedRun, RuntimeCommandStatus.Rejected, "The runtime run is no longer current.") : null;
 
     [StructLayout(LayoutKind.Auto)]
-    private readonly record struct AssetRequestTarget(Guid NodeId, AssetRequestKind Kind, Guid SlotId = default, string? GeometryPath = null);
+    private readonly record struct AssetRequestTarget(NodeId NodeId, AssetRequestKind Kind, Guid SlotId = default, string? GeometryPath = null);
 }

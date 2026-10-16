@@ -6,6 +6,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Utils;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Services;
 
@@ -66,27 +67,27 @@ public partial class SceneEngineSync
         => LogFailedToCreateNode(this.logger, ex, node.Name);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "OxygenWorld is not available; cannot remove node '{NodeId}'")]
-    private static partial void LogCannotRemoveNode(ILogger logger, Guid nodeId);
+    private static partial void LogCannotRemoveNode(ILogger logger, NodeId nodeId);
 
-    private void LogCannotRemoveNode(Guid nodeId)
+    private void LogCannotRemoveNode(NodeId nodeId)
         => LogCannotRemoveNode(this.logger, nodeId);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Removed node '{NodeId}' from engine")]
-    private static partial void LogRemovedNode(ILogger logger, Guid nodeId);
+    private static partial void LogRemovedNode(ILogger logger, NodeId nodeId);
 
-    private void LogRemovedNode(Guid nodeId)
+    private void LogRemovedNode(NodeId nodeId)
         => LogRemovedNode(this.logger, nodeId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to remove node '{NodeId}' from engine")]
-    private static partial void LogFailedToRemoveNode(ILogger logger, Exception exception, Guid nodeId);
+    private static partial void LogFailedToRemoveNode(ILogger logger, Exception exception, NodeId nodeId);
 
-    private void LogFailedToRemoveNode(Exception ex, Guid nodeId)
+    private void LogFailedToRemoveNode(Exception ex, NodeId nodeId)
         => LogFailedToRemoveNode(this.logger, ex, nodeId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "OxygenWorld is not available; cannot remove node hierarchy '{NodeId}'")]
-    private static partial void LogCannotRemoveNodeHierarchy(ILogger logger, Guid nodeId);
+    private static partial void LogCannotRemoveNodeHierarchy(ILogger logger, NodeId nodeId);
 
-    private void LogCannotRemoveNodeHierarchy(Guid nodeId)
+    private void LogCannotRemoveNodeHierarchy(NodeId nodeId)
         => LogCannotRemoveNodeHierarchy(this.logger, nodeId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "OxygenWorld is not available; cannot remove node hierarchies")]
@@ -96,21 +97,21 @@ public partial class SceneEngineSync
         => LogCannotRemoveNodeHierarchies(this.logger);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "OxygenWorld is not available; cannot reparent node '{NodeId}'")]
-    private static partial void LogCannotReparentNode(ILogger logger, Guid nodeId);
+    private static partial void LogCannotReparentNode(ILogger logger, NodeId nodeId);
 
-    private void LogCannotReparentNode(Guid nodeId)
+    private void LogCannotReparentNode(NodeId nodeId)
         => LogCannotReparentNode(this.logger, nodeId);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Reparented node {NodeId} -> {ParentId}")]
-    private static partial void LogReparentedNode(ILogger logger, Guid nodeId, Guid? parentId);
+    private static partial void LogReparentedNode(ILogger logger, NodeId nodeId, NodeId? parentId);
 
-    private void LogReparentedNode(Guid nodeId, Guid? parentId)
+    private void LogReparentedNode(NodeId nodeId, NodeId? parentId)
         => LogReparentedNode(this.logger, nodeId, parentId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to reparent node '{NodeId}'")]
-    private static partial void LogFailedToReparentNode(ILogger logger, Exception exception, Guid nodeId);
+    private static partial void LogFailedToReparentNode(ILogger logger, Exception exception, NodeId nodeId);
 
-    private void LogFailedToReparentNode(Exception ex, Guid nodeId)
+    private void LogFailedToReparentNode(Exception ex, NodeId nodeId)
         => LogFailedToReparentNode(this.logger, ex, nodeId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "OxygenWorld is not available; cannot reparent hierarchies")]
@@ -132,21 +133,21 @@ public partial class SceneEngineSync
         => LogAttachedGeometry(this.logger, node.Name);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "OxygenWorld is not available; cannot detach geometry for node '{NodeId}'")]
-    private static partial void LogCannotDetachGeometry(ILogger logger, Guid nodeId);
+    private static partial void LogCannotDetachGeometry(ILogger logger, NodeId nodeId);
 
-    private void LogCannotDetachGeometry(Guid nodeId)
+    private void LogCannotDetachGeometry(NodeId nodeId)
         => LogCannotDetachGeometry(this.logger, nodeId);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Detached geometry (hidden) for node '{NodeId}'")]
-    private static partial void LogDetachedGeometry(ILogger logger, Guid nodeId);
+    private static partial void LogDetachedGeometry(ILogger logger, NodeId nodeId);
 
-    private void LogDetachedGeometry(Guid nodeId)
+    private void LogDetachedGeometry(NodeId nodeId)
         => LogDetachedGeometry(this.logger, nodeId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to detach geometry for node '{NodeId}'")]
-    private static partial void LogFailedToDetachGeometry(ILogger logger, Exception exception, Guid nodeId);
+    private static partial void LogFailedToDetachGeometry(ILogger logger, Exception exception, NodeId nodeId);
 
-    private void LogFailedToDetachGeometry(Exception ex, Guid nodeId)
+    private void LogFailedToDetachGeometry(Exception ex, NodeId nodeId)
         => LogFailedToDetachGeometry(this.logger, ex, nodeId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to attach geometry to node '{NodeName}'")]
@@ -174,51 +175,51 @@ public partial class SceneEngineSync
         => LogFailedToSetTransform(this.logger, ex, node.Name);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "SetProperties buffered. SceneId={SceneId} NodeId={NodeId} EntryCount={EntryCount} PendingCount={PendingCount}")]
-    private static partial void LogSetPropertiesBuffered(ILogger logger, Guid sceneId, Guid nodeId, int entryCount, int pendingCount);
+    private static partial void LogSetPropertiesBuffered(ILogger logger, SceneId sceneId, NodeId nodeId, int entryCount, int pendingCount);
 
-    private void LogSetPropertiesBuffered(Guid sceneId, Guid nodeId, int entryCount, int pendingCount)
+    private void LogSetPropertiesBuffered(SceneId sceneId, NodeId nodeId, int entryCount, int pendingCount)
         => LogSetPropertiesBuffered(this.logger, sceneId, nodeId, entryCount, pendingCount);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "SetProperties skipped. SceneId={SceneId} NodeId={NodeId} Status={Status} Code={Code} EntryCount={EntryCount}")]
-    private static partial void LogSetPropertiesSkipped(ILogger logger, Guid sceneId, Guid nodeId, SyncStatus status, string code, int entryCount);
+    private static partial void LogSetPropertiesSkipped(ILogger logger, SceneId sceneId, NodeId nodeId, SyncStatus status, string code, int entryCount);
 
-    private void LogSetPropertiesSkipped(Guid sceneId, Guid nodeId, SyncStatus status, string code, int entryCount)
+    private void LogSetPropertiesSkipped(SceneId sceneId, NodeId nodeId, SyncStatus status, string code, int entryCount)
         => LogSetPropertiesSkipped(this.logger, sceneId, nodeId, status, code, entryCount);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "SetProperties enqueued. SceneId={SceneId} NodeId={NodeId} EntryCount={EntryCount}")]
-    private static partial void LogSetPropertiesEnqueued(ILogger logger, Guid sceneId, Guid nodeId, int entryCount);
+    private static partial void LogSetPropertiesEnqueued(ILogger logger, SceneId sceneId, NodeId nodeId, int entryCount);
 
-    private void LogSetPropertiesEnqueued(Guid sceneId, Guid nodeId, int entryCount)
+    private void LogSetPropertiesEnqueued(SceneId sceneId, NodeId nodeId, int entryCount)
         => LogSetPropertiesEnqueued(this.logger, sceneId, nodeId, entryCount);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "SetProperties rejected. SceneId={SceneId} NodeId={NodeId} EntryCount={EntryCount}")]
-    private static partial void LogSetPropertiesRejected(ILogger logger, Exception exception, Guid sceneId, Guid nodeId, int entryCount);
+    private static partial void LogSetPropertiesRejected(ILogger logger, Exception exception, SceneId sceneId, NodeId nodeId, int entryCount);
 
-    private void LogSetPropertiesRejected(Exception ex, Guid sceneId, Guid nodeId, int entryCount)
+    private void LogSetPropertiesRejected(Exception ex, SceneId sceneId, NodeId nodeId, int entryCount)
         => LogSetPropertiesRejected(this.logger, ex, sceneId, nodeId, entryCount);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "SetProperties failed. SceneId={SceneId} NodeId={NodeId} EntryCount={EntryCount}")]
-    private static partial void LogSetPropertiesFailed(ILogger logger, Exception exception, Guid sceneId, Guid nodeId, int entryCount);
+    private static partial void LogSetPropertiesFailed(ILogger logger, Exception exception, SceneId sceneId, NodeId nodeId, int entryCount);
 
-    private void LogSetPropertiesFailed(Exception ex, Guid sceneId, Guid nodeId, int entryCount)
+    private void LogSetPropertiesFailed(Exception ex, SceneId sceneId, NodeId nodeId, int entryCount)
         => LogSetPropertiesFailed(this.logger, ex, sceneId, nodeId, entryCount);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Buffered SetProperties replay completed. SceneId={SceneId} PendingCount={PendingCount} ReplayedCount={ReplayedCount} SkippedCount={SkippedCount}")]
-    private static partial void LogBufferedSetPropertiesReplayCompleted(ILogger logger, Guid sceneId, int pendingCount, int replayedCount, int skippedCount);
+    private static partial void LogBufferedSetPropertiesReplayCompleted(ILogger logger, SceneId sceneId, int pendingCount, int replayedCount, int skippedCount);
 
-    private void LogBufferedSetPropertiesReplayCompleted(Guid sceneId, int pendingCount, int replayedCount, int skippedCount)
+    private void LogBufferedSetPropertiesReplayCompleted(SceneId sceneId, int pendingCount, int replayedCount, int skippedCount)
         => LogBufferedSetPropertiesReplayCompleted(this.logger, sceneId, pendingCount, replayedCount, skippedCount);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Buffered SetProperties replay skipped because the node no longer exists. SceneId={SceneId} NodeId={NodeId} EntryCount={EntryCount}")]
-    private static partial void LogBufferedSetPropertiesReplaySkipped(ILogger logger, Guid sceneId, Guid nodeId, int entryCount);
+    private static partial void LogBufferedSetPropertiesReplaySkipped(ILogger logger, SceneId sceneId, NodeId nodeId, int entryCount);
 
-    private void LogBufferedSetPropertiesReplaySkipped(Guid sceneId, Guid nodeId, int entryCount)
+    private void LogBufferedSetPropertiesReplaySkipped(SceneId sceneId, NodeId nodeId, int entryCount)
         => LogBufferedSetPropertiesReplaySkipped(this.logger, sceneId, nodeId, entryCount);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Buffered SetProperties replay rejected. SceneId={SceneId} NodeId={NodeId} EntryCount={EntryCount}")]
-    private static partial void LogBufferedSetPropertiesReplayRejected(ILogger logger, Exception exception, Guid sceneId, Guid nodeId, int entryCount);
+    private static partial void LogBufferedSetPropertiesReplayRejected(ILogger logger, Exception exception, SceneId sceneId, NodeId nodeId, int entryCount);
 
-    private void LogBufferedSetPropertiesReplayRejected(Exception ex, Guid sceneId, Guid nodeId, int entryCount)
+    private void LogBufferedSetPropertiesReplayRejected(Exception ex, SceneId sceneId, NodeId nodeId, int entryCount)
         => LogBufferedSetPropertiesReplayRejected(this.logger, ex, sceneId, nodeId, entryCount);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to request targeted transform propagation")]
@@ -246,55 +247,55 @@ public partial class SceneEngineSync
         => LogPropagatingTransforms(this.logger);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to detach light component from node {NodeId}")]
-    private static partial void LogFailedToDetachLightComponent(ILogger logger, Exception exception, Guid nodeId);
+    private static partial void LogFailedToDetachLightComponent(ILogger logger, Exception exception, NodeId nodeId);
 
-    private void LogFailedToDetachLightComponent(Exception ex, Guid nodeId)
+    private void LogFailedToDetachLightComponent(Exception ex, NodeId nodeId)
         => LogFailedToDetachLightComponent(this.logger, ex, nodeId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to detach camera component from node {NodeId}")]
-    private static partial void LogFailedToDetachCameraComponent(ILogger logger, Exception exception, Guid nodeId);
+    private static partial void LogFailedToDetachCameraComponent(ILogger logger, Exception exception, NodeId nodeId);
 
-    private void LogFailedToDetachCameraComponent(Exception ex, Guid nodeId)
+    private void LogFailedToDetachCameraComponent(Exception ex, NodeId nodeId)
         => LogFailedToDetachCameraComponent(this.logger, ex, nodeId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Live LOD policy sync is unsupported for node {NodeId}")]
-    private static partial void LogLodPolicySyncUnsupported(ILogger logger, Guid nodeId);
+    private static partial void LogLodPolicySyncUnsupported(ILogger logger, NodeId nodeId);
 
-    private void LogLodPolicySyncUnsupported(Guid nodeId)
+    private void LogLodPolicySyncUnsupported(NodeId nodeId)
         => LogLodPolicySyncUnsupported(this.logger, nodeId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to attach camera component to node {NodeId}")]
-    private static partial void LogFailedToAttachCameraComponent(ILogger logger, Exception exception, Guid nodeId);
+    private static partial void LogFailedToAttachCameraComponent(ILogger logger, Exception exception, NodeId nodeId);
 
-    private void LogFailedToAttachCameraComponent(Exception ex, Guid nodeId)
+    private void LogFailedToAttachCameraComponent(Exception ex, NodeId nodeId)
         => LogFailedToAttachCameraComponent(this.logger, ex, nodeId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to attach light component to node {NodeId}")]
-    private static partial void LogFailedToAttachLightComponent(ILogger logger, Exception exception, Guid nodeId);
+    private static partial void LogFailedToAttachLightComponent(ILogger logger, Exception exception, NodeId nodeId);
 
-    private void LogFailedToAttachLightComponent(Exception ex, Guid nodeId)
+    private void LogFailedToAttachLightComponent(Exception ex, NodeId nodeId)
         => LogFailedToAttachLightComponent(this.logger, ex, nodeId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to attach local fog volume to node {NodeId}")]
-    private static partial void LogFailedToAttachLocalFogVolume(ILogger logger, Exception exception, Guid nodeId);
+    private static partial void LogFailedToAttachLocalFogVolume(ILogger logger, Exception exception, NodeId nodeId);
 
-    private void LogFailedToAttachLocalFogVolume(Exception ex, Guid nodeId)
+    private void LogFailedToAttachLocalFogVolume(Exception ex, NodeId nodeId)
         => LogFailedToAttachLocalFogVolume(this.logger, ex, nodeId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to apply authored rendering flags to node {NodeId}")]
-    private static partial void LogFailedToApplyNodeRendering(ILogger logger, Exception exception, Guid nodeId);
+    private static partial void LogFailedToApplyNodeRendering(ILogger logger, Exception exception, NodeId nodeId);
 
-    private void LogFailedToApplyNodeRendering(Exception ex, Guid nodeId)
+    private void LogFailedToApplyNodeRendering(Exception ex, NodeId nodeId)
         => LogFailedToApplyNodeRendering(this.logger, ex, nodeId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Camera component type {CameraType} on node {NodeId} is not supported by live engine sync")]
-    private static partial void LogUnsupportedCameraComponent(ILogger logger, string cameraType, Guid nodeId);
+    private static partial void LogUnsupportedCameraComponent(ILogger logger, string cameraType, NodeId nodeId);
 
-    private void LogUnsupportedCameraComponent(string cameraType, Guid nodeId)
+    private void LogUnsupportedCameraComponent(string cameraType, NodeId nodeId)
         => LogUnsupportedCameraComponent(this.logger, cameraType, nodeId);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "CreateAllNodesAsync: Enqueueing creation for root node {NodeName} ({NodeId})")]
-    private static partial void LogEnqueueingRootNodeCreation(ILogger logger, string nodeName, Guid nodeId);
+    private static partial void LogEnqueueingRootNodeCreation(ILogger logger, string nodeName, NodeId nodeId);
 
     private void LogEnqueueingRootNodeCreation(SceneNode node)
         => LogEnqueueingRootNodeCreation(this.logger, node.Name, node.Id);
@@ -306,7 +307,7 @@ public partial class SceneEngineSync
         => LogAllNodeCreationTasksCompleted(this.logger, count);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "ApplyHierarchyAndComponents: Processing root node {NodeName} ({NodeId})")]
-    private static partial void LogProcessingHierarchyRootNode(ILogger logger, string nodeName, Guid nodeId);
+    private static partial void LogProcessingHierarchyRootNode(ILogger logger, string nodeName, NodeId nodeId);
 
     private void LogProcessingHierarchyRootNode(SceneNode node)
         => LogProcessingHierarchyRootNode(this.logger, node.Name, node.Id);
@@ -315,7 +316,7 @@ public partial class SceneEngineSync
         "scale=({SX:0.00},{SY:0.00},{SZ:0.00}) rot=({RX:0.00},{RY:0.00},{RZ:0.00},{RW:0.00})")]
     private static partial void LogSceneTransform(ILogger logger, string nodeName, string parentId, float x, float y, float z, float sx, float sy, float sz, float rx, float ry, float rz, float rw);
 
-    private void LogSceneTransform(SceneNode node, Guid? parentGuid)
+    private void LogSceneTransform(SceneNode node, NodeId? parentGuid)
     {
         if (!this.logger.IsEnabled(LogLevel.Information))
         {
@@ -350,7 +351,7 @@ public partial class SceneEngineSync
     [LoggerMessage(Level = LogLevel.Information, Message = "SceneTransform: node='{NodeName}' parent='{ParentId}' has NO Transform component")]
     private static partial void LogSceneTransformHasNoComponent(ILogger logger, string nodeName, string parentId);
 
-    private void LogSceneTransformHasNoComponent(SceneNode node, Guid? parentGuid)
+    private void LogSceneTransformHasNoComponent(SceneNode node, NodeId? parentGuid)
     {
         if (!this.logger.IsEnabled(LogLevel.Information))
         {

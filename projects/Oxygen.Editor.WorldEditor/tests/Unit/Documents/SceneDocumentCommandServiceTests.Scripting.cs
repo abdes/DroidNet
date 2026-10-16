@@ -54,7 +54,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = scripting.Slots.Should().Equal(after);
         _ = scripting.Slots[0].Script.Should().Be(MoveScript);
         _ = scripting.Slots[0].ExecutionOrder.Should().Be(-3);
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.IsDirty().Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
 
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -78,7 +78,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeTrue();
         _ = context.History.UndoStack.Should().BeEmpty();
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
     }
 
     [TestMethod]

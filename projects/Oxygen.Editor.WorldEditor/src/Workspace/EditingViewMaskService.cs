@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.World.Diagnostics;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Workspace;
@@ -33,7 +34,7 @@ public sealed partial class EditingViewMaskService(
     IOperationResultPublisher results,
     IStatusReducer status) : IDisposable
 {
-    private Guid warnedSceneId;
+    private SceneId warnedSceneId;
     private bool subscribed;
 
     /// <summary>
@@ -90,7 +91,7 @@ public sealed partial class EditingViewMaskService(
         }
 
         var sceneId = interaction.ActiveSceneId;
-        if (sceneId == Guid.Empty || sceneId == this.warnedSceneId)
+        if (sceneId.IsEmpty || sceneId == this.warnedSceneId)
         {
             return;
         }
@@ -104,6 +105,6 @@ public sealed partial class EditingViewMaskService(
             DiagnosticCodes.SettingsPrefix + "EDITING_VIEW_MASK_UNAVAILABLE",
             "Editor hide applied in workspace",
             "Viewport suppression is pending a runtime capability, so hidden nodes are still drawn in the editing viewports. In-game rendering is unaffected either way.",
-            new AffectedScope { DocumentId = sceneId });
+            new AffectedScope { SceneId = sceneId });
     }
 }

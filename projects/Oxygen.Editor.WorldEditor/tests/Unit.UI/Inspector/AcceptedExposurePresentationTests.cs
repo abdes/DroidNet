@@ -39,6 +39,6 @@ internal sealed class AcceptedExposurePresentationTests : VisualUserInterfaceTes
         };
         _ = actualLabel.Should().Be(label);
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 }

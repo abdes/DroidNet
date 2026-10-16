@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Routing;
+using DroidNet.Storage;
 using DroidNet.Storage.Native;
 using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -40,18 +41,18 @@ public sealed class DocumentManagerSceneLifetimeTests
         fixture.Participant.PendingEdit = true;
         fixture.PromptDecision = CloseDecision.Cancel;
 
-        var opened = await fixture.Manager.OpenSceneAsync(fixture.Second).ConfigureAwait(false);
+        var opened = await fixture.Manager.OpenSceneAsync(fixture.SecondUri).ConfigureAwait(false);
 
         _ = opened.Should().BeFalse();
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
-        _ = fixture.Project.ActiveScene.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.SelectedItemsCount.Should().Be(1);
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(cut ? DroidNet.Controls.ClipboardState.Cut : DroidNet.Controls.ClipboardState.Copied);
         _ = fixture.Explorer.PasteCommand.CanExecute(null).Should().BeTrue();
-        _ = fixture.FirstMetadata.IsDirty.Should().BeTrue();
+        _ = fixture.FirstDocument.IsDirty.Should().BeTrue();
         _ = fixture.Participant.Resumed.Should().BeTrue();
         _ = SceneAuthoringGate.IsRetired(fixture.First).Should().BeFalse();
         _ = fixture.Documents.GetOpenDocuments(fixture.Window).Should().ContainSingle();
+        _ = fixture.Files.Documents.Documents.Should().Equal(fixture.FirstDocument);
     }
 
     [TestMethod]
@@ -62,13 +63,12 @@ public sealed class DocumentManagerSceneLifetimeTests
         fixture.Participant.SaveSucceeds = false;
         fixture.PromptDecision = CloseDecision.Save;
 
-        _ = (await fixture.Manager.OpenSceneAsync(fixture.Second).ConfigureAwait(false)).Should().BeFalse();
+        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondUri).ConfigureAwait(false)).Should().BeFalse();
 
-        _ = fixture.Project.ActiveScene.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Cut);
         _ = fixture.Explorer.PasteCommand.CanExecute(null).Should().BeTrue();
-        _ = fixture.FirstMetadata.IsDirty.Should().BeTrue();
+        _ = fixture.FirstDocument.IsDirty.Should().BeTrue();
         _ = fixture.Participant.Closed.Should().BeFalse();
     }
 
@@ -79,64 +79,58 @@ public sealed class DocumentManagerSceneLifetimeTests
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync().ConfigureAwait(false);
 
-        _ = (await fixture.Manager.OpenSceneAsync(fixture.Second, cancellation.Token).ConfigureAwait(false)).Should().BeFalse();
+        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondUri, cancellation.Token).ConfigureAwait(false)).Should().BeFalse();
 
-        _ = fixture.Project.ActiveScene.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Cut);
         _ = fixture.Participant.Prepared.Should().BeFalse();
     }
 
     [TestMethod]
-    public async Task OpenSceneAsync_NewerRequestRejectsOlderStagedCompletionBeforeRetirement()
+    public async Task OpenSceneAsync_NewerRequestRejectsOlderReadBeforeRetirement()
     {
         using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
-        var third = new Scene(fixture.Project) { Name = "Third" };
-        fixture.Project.Scenes.Add(third);
-        _ = await fixture.SourceOwner.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(third)).ConfigureAwait(false);
-        var staging = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Files.Write("Third", SceneDocumentFiles.Data(Guid.NewGuid(), "Third"));
+        var reading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _ = fixture.Projects.Setup(value => value.StageSceneLoadAsync(fixture.Second, It.IsAny<CancellationToken>()))
-            .Returns(async (Scene scene, CancellationToken token) =>
+        fixture.Store.BeforeRead = async path =>
+        {
+            if (string.Equals(path, fixture.Files.PathOf("Second"), StringComparison.OrdinalIgnoreCase))
             {
-                staging.SetResult();
+                reading.SetResult();
                 await release.Task.ConfigureAwait(false);
-                return await fixture.SourceOwner.StageSceneLoadAsync(scene, token).ConfigureAwait(false);
-            });
-        var older = fixture.Manager.OpenSceneAsync(fixture.Second);
-        await staging.Task.ConfigureAwait(false);
-        var newer = fixture.Manager.OpenSceneAsync(third);
+            }
+        };
+        var older = fixture.Manager.OpenSceneAsync(fixture.SecondUri);
+        await reading.Task.ConfigureAwait(false);
+        var newer = fixture.Manager.OpenSceneAsync(fixture.Files.FileOf("Third").AssetUri);
         release.SetResult();
 
         _ = (await older.ConfigureAwait(false)).Should().BeFalse();
         _ = (await newer.ConfigureAwait(false)).Should().BeTrue();
 
-        _ = fixture.Explorer.Scene!.AttachedObject.Id.Should().Be(third.Id);
-        _ = fixture.Project.ActiveScene!.Id.Should().Be(third.Id);
-        _ = fixture.Documents.GetOpenDocuments(fixture.Window).OfType<SceneDocumentMetadata>().Should().ContainSingle().Which.DocumentId.Should().Be(third.Id);
-        UndoRedo.GetHistory(third.Id).Clear();
+        _ = fixture.Explorer.Scene!.AttachedObject.Name.Should().Be("Third");
+        _ = fixture.Documents.GetOpenDocuments(fixture.Window).OfType<SceneDocumentMetadata>().Should().ContainSingle()
+            .Which.Document!.File.Path.Should().Be(fixture.Files.PathOf("Third"));
+        _ = fixture.Files.Documents.Documents.Should().ContainSingle("the older request closed the document it read");
     }
 
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public async Task OpenSceneAsync_ApprovedReplacementRetiresDifferentIdentityAndAppliesClipboardPolicy(bool cut)
+    public async Task OpenSceneAsync_ApprovedReplacementRetiresThePreviousSceneAndAppliesClipboardPolicy(bool cut)
     {
         using var fixture = await LifetimeFixture.CreateAsync(cut).ConfigureAwait(false);
-        fixture.FirstMetadata.IsDirty = true;
+        fixture.FirstDocument.History.AddChange("Old edit", static () => { });
         fixture.PromptDecision = CloseDecision.Discard;
-        UndoRedo.GetHistory(fixture.First.Id).AddChange("Old edit", () => Task.CompletedTask);
 
-        _ = (await fixture.Manager.OpenSceneAsync(fixture.Second).ConfigureAwait(false)).Should().BeTrue();
+        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondUri).ConfigureAwait(false)).Should().BeTrue();
 
         var accepted = fixture.Explorer.Scene!.AttachedObject;
-        _ = accepted.Id.Should().Be(fixture.Second.Id);
-        _ = fixture.Project.ActiveScene.Should().BeSameAs(accepted);
+        _ = accepted.Name.Should().Be("Second");
         _ = SceneAuthoringGate.IsRetired(fixture.First).Should().BeTrue();
-        _ = fixture.Project.Scenes.Single(scene => scene.Id == fixture.First.Id).RootNodes.Should().BeEmpty();
-        _ = fixture.Project.Scenes.Should().NotContain(fixture.First);
-        _ = fixture.Sync.Object.GetDocumentScene(fixture.FirstMetadata).Should().BeNull();
-        _ = UndoRedo.GetHistory(fixture.First.Id).UndoStack.Should().BeEmpty();
+        _ = fixture.Files.Documents.Documents.Should().ContainSingle().Which.File.Path.Should().Be(fixture.Files.PathOf("Second"));
+        _ = fixture.Sync.Object.GetDocumentScene(fixture.FirstDocument.Id).Should().BeNull();
         _ = fixture.Explorer.ShownItems.OfType<SceneNodeAdapter>().Should().OnlyContain(adapter => ReferenceEquals(adapter.AttachedObject.Scene, accepted));
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(cut ? DroidNet.Controls.ClipboardState.Empty : DroidNet.Controls.ClipboardState.Copied);
         _ = fixture.Explorer.PasteCommand.CanExecute(null).Should().Be(!cut);
@@ -147,16 +141,16 @@ public sealed class DocumentManagerSceneLifetimeTests
     public async Task OpenSceneAsync_InvalidSourcePreservesDirtySceneAndClipboardBeforeGuard()
     {
         using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
-        fixture.FirstMetadata.IsDirty = true;
-        File.Delete(fixture.SecondPath);
+        fixture.FirstDocument.History.AddChange("Edit", static () => { });
+        File.Delete(fixture.Files.PathOf("Second"));
 
-        _ = (await fixture.Manager.OpenSceneAsync(fixture.Second).ConfigureAwait(false)).Should().BeFalse();
+        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondUri).ConfigureAwait(false)).Should().BeFalse();
 
-        _ = fixture.Project.ActiveScene.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.PasteCommand.CanExecute(null).Should().BeTrue();
         _ = fixture.Participant.Prepared.Should().BeFalse();
         _ = fixture.Documents.GetOpenDocuments(fixture.Window).Should().ContainSingle();
+        _ = fixture.FirstDocument.IsDirty.Should().BeTrue();
     }
 
     [TestMethod]
@@ -167,7 +161,7 @@ public sealed class DocumentManagerSceneLifetimeTests
         source.Name = "Changed after capture";
         source.Components.OfType<TransformComponent>().Single().LocalPosition = new System.Numerics.Vector3(100, 0, 0);
 
-        _ = (await fixture.Manager.OpenSceneAsync(fixture.Second).ConfigureAwait(false)).Should().BeTrue();
+        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondUri).ConfigureAwait(false)).Should().BeTrue();
         var accepted = fixture.Explorer.Scene!.AttachedObject;
         await fixture.Explorer.PasteItemsAsync(fixture.Explorer.Scene).ConfigureAwait(false);
         await fixture.Explorer.PasteItemsAsync(fixture.Explorer.Scene).ConfigureAwait(false);
@@ -177,9 +171,9 @@ public sealed class DocumentManagerSceneLifetimeTests
         _ = pasted.Select(node => node.Id).Should().OnlyHaveUniqueItems().And.NotContain(source.Id);
         _ = pasted.Should().OnlyContain(node => node.Components.OfType<TransformComponent>().Single().LocalPosition == System.Numerics.Vector3.Zero);
         _ = pasted.Should().OnlyContain(node => ReferenceEquals(node.Scene, accepted));
-        _ = UndoRedo.GetHistory(fixture.First.Id).UndoStack.Should().BeEmpty();
-        _ = UndoRedo.GetHistory(accepted.Id).UndoStack.Should().HaveCount(2);
-        _ = fixture.Documents.GetOpenDocuments(fixture.Window).OfType<SceneDocumentMetadata>().Single().IsDirty.Should().BeTrue();
+        var destination = fixture.Files.Documents.Find(fixture.Files.PathOf("Second"))!;
+        _ = destination.History.UndoStack.Should().HaveCount(2);
+        _ = destination.IsDirty.Should().BeTrue();
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Copied);
     }
 
@@ -191,7 +185,6 @@ public sealed class DocumentManagerSceneLifetimeTests
         _ = (await fixture.Manager.OpenMaterialAsync(new Uri("asset:///Content/Materials/Test.omat.json"), "Test").ConfigureAwait(false)).Should().BeTrue();
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
-        _ = fixture.Project.ActiveScene.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.PasteCommand.CanExecute(null).Should().BeTrue();
         _ = fixture.Participant.Prepared.Should().BeFalse();
         _ = fixture.Documents.GetOpenDocuments(fixture.Window).Should().HaveCount(2);
@@ -202,10 +195,9 @@ public sealed class DocumentManagerSceneLifetimeTests
     {
         using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
 
-        fixture.Contexts.Activate(ProjectContext.FromProject(fixture.Project) with { DefaultSceneId = fixture.Second.Id });
+        fixture.Contexts.Activate(fixture.Files.Context with { DefaultSceneId = Guid.NewGuid() });
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
-        _ = fixture.Project.ActiveScene.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Cut);
         _ = fixture.Explorer.PasteCommand.CanExecute(null).Should().BeTrue();
     }
@@ -214,18 +206,16 @@ public sealed class DocumentManagerSceneLifetimeTests
     public async Task OpenSceneAsync_FailureAfterRetirementShowsUnavailableStateAndCanReloadPreviousSavedScene()
     {
         using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
-        _ = fixture.Sync.Setup(value => value.RegisterDocument(It.Is<Scene>(scene => scene.Id == fixture.Second.Id), It.IsAny<SceneDocumentMetadata>()))
-            .Returns(value: false);
+        fixture.RefusedScene = "Second";
 
-        _ = (await fixture.Manager.OpenSceneAsync(fixture.Second).ConfigureAwait(false)).Should().BeFalse();
+        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondUri).ConfigureAwait(false)).Should().BeFalse();
 
         _ = fixture.Explorer.Scene.Should().BeNull();
         _ = fixture.Explorer.ShownItems.Should().BeEmpty();
-        _ = fixture.Project.ActiveScene.Should().BeNull();
-        _ = fixture.Project.ActiveScene.Should().BeNull();
         _ = fixture.Explorer.HasUnavailableScene.Should().BeTrue();
         _ = fixture.Explorer.ReloadPreviousSceneCommand.CanExecute(null).Should().BeTrue();
         _ = fixture.Explorer.PasteCommand.CanExecute(null).Should().BeFalse();
+        _ = fixture.Files.Documents.Documents.Should().BeEmpty();
         await fixture.Explorer.ReloadPreviousSceneCommand.ExecuteAsync(null).ConfigureAwait(false);
         _ = fixture.Explorer.Scene!.AttachedObject.Id.Should().Be(fixture.First.Id);
         _ = fixture.Explorer.Scene.AttachedObject.Should().NotBeSameAs(fixture.First);
@@ -247,7 +237,7 @@ public sealed class DocumentManagerSceneLifetimeTests
         }
 
         _ = fixture.Explorer.PasteCommand.CanExecute(null).Should().BeTrue();
-        _ = fixture.Contexts.ActiveProject!.ProjectId.Should().Be(fixture.Project.ProjectInfo.Id);
+        _ = fixture.Contexts.ActiveProject!.ProjectId.Should().Be(fixture.Files.Context.ProjectId);
         fixture.PromptDecision = CloseDecision.Discard;
         using (var approved = await fixture.Documents.PrepareCloseAllWindowsAsync().ConfigureAwait(false))
         {
@@ -255,8 +245,7 @@ public sealed class DocumentManagerSceneLifetimeTests
             _ = (await approved!.CommitAsync().ConfigureAwait(false)).Should().BeTrue();
         }
 
-        var next = new Project(new ProjectInfo("Next", Category.Games, fixture.Root, "preview.png")) { Name = "Next" };
-        fixture.Contexts.Activate(ProjectContext.FromProject(next));
+        fixture.Contexts.Activate(fixture.Files.Context with { ProjectId = Guid.NewGuid(), Name = "Next" });
 
         _ = fixture.Explorer.Scene.Should().BeNull();
         _ = fixture.Explorer.ShownItems.Should().BeEmpty();
@@ -271,45 +260,33 @@ public sealed class DocumentManagerSceneLifetimeTests
         Save,
     }
 
+    /// <summary>
+    /// A workspace with the scene "First" open and one of its nodes selected and copied or cut, and the scene "Second"
+    /// saved beside it.
+    /// </summary>
     private sealed class LifetimeFixture : IDisposable
     {
-        private readonly Dictionary<SceneDocumentMetadata, Scene> registrations = [];
+        private readonly Dictionary<Guid, Scene> registrations = [];
         private readonly StrongReferenceMessenger messenger = new();
+        private readonly DocumentCloseCoordinator close;
 
         private LifetimeFixture()
         {
-            this.Root = Path.Combine(AppContext.BaseDirectory, "SceneLifetimeTests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(this.Root);
-            this.Project = new Project(new ProjectInfo("Lifetime", Category.Games, this.Root, "preview.png")) { Name = "Lifetime" };
-            this.First = new Scene(this.Project) { Name = "First" };
-            this.First.RootNodes.Add(new SceneNode(this.First) { Name = "Node" });
-            this.Second = new Scene(this.Project) { Name = "Second" };
-            this.Second.RootNodes.Add(new SceneNode(this.Second) { Name = "Destination" });
-            this.Project.Scenes.Add(this.First);
-            this.Project.Scenes.Add(this.Second);
-            this.Project.ActiveScene = this.First;
-            this.FirstMetadata = new(this.First.Id) { Title = this.First.Name };
-            this.Contexts.Activate(ProjectContext.FromProject(this.Project));
-            var owner = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()));
-            var projects = new Mock<IProjectManagerService>();
-            this.Projects = projects;
-            _ = projects.SetupGet(value => value.CurrentProject).Returns(this.Project);
-            _ = projects.Setup(value => value.StageSceneLoadAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>()))
-                .Returns((Scene scene, CancellationToken token) => owner.StageSceneLoadAsync(scene, token));
-            _ = projects.Setup(value => value.AcceptSceneLoad(It.IsAny<SceneLoadSnapshot>()))
-                .Returns((SceneLoadSnapshot snapshot) => owner.AcceptSceneLoad(snapshot));
-            _ = projects.Setup(value => value.RetireScene(It.IsAny<Scene>())).Callback<Scene>(owner.RetireScene);
-            this.SourceOwner = owner;
-            _ = this.Sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), It.IsAny<SceneDocumentMetadata>()))
-                .Returns((Scene scene, SceneDocumentMetadata metadata) =>
+            _ = this.Sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), It.IsAny<Guid>()))
+                .Returns((Scene scene, Guid documentId) =>
                 {
-                    this.registrations[metadata] = scene;
+                    if (string.Equals(scene.Name, this.RefusedScene, StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+
+                    this.registrations[documentId] = scene;
                     return true;
                 });
-            _ = this.Sync.Setup(value => value.GetDocumentScene(It.IsAny<SceneDocumentMetadata>()))
-                .Returns((SceneDocumentMetadata metadata) => this.registrations.GetValueOrDefault(metadata));
-            _ = this.Sync.Setup(value => value.CloseDocument(It.IsAny<SceneDocumentMetadata>()))
-                .Callback<SceneDocumentMetadata>(metadata => this.registrations.Remove(metadata));
+            _ = this.Sync.Setup(value => value.GetDocumentScene(It.IsAny<Guid>()))
+                .Returns((Guid documentId) => this.registrations.GetValueOrDefault(documentId));
+            _ = this.Sync.Setup(value => value.CloseDocument(It.IsAny<Guid>()))
+                .Callback<Guid>(documentId => this.registrations.Remove(documentId));
             _ = this.Sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             var prompt = new Mock<IDocumentClosePrompt>();
             _ = prompt.Setup(value => value.ConfirmAsync(It.IsAny<WindowId>(), It.IsAny<IReadOnlyList<DocumentCloseItem>>(), It.IsAny<bool>()))
@@ -331,35 +308,39 @@ public sealed class DocumentManagerSceneLifetimeTests
 
                     return true;
                 });
-            var close = new DocumentCloseCoordinator(prompt.Object, Mock.Of<IOperationResultPublisher>());
-            this.Documents = new EditorDocumentService(closeCoordinator: close);
-            this.Participant = new SceneParticipant(this);
-            close.Register(this.Window, this.First.Id, this.Participant);
+            this.close = new DocumentCloseCoordinator(prompt.Object, Mock.Of<IOperationResultPublisher>());
+            this.Documents = new EditorDocumentService(closeCoordinator: this.close);
             var selection = new SceneSelectionService();
             var commands = new SceneDocumentCommandService(
-                selection, this.Sync.Object,
-                projects.Object, this.Documents, this.Window, this.messenger, Mock.Of<IOperationResultPublisher>(),
+                selection, this.Sync.Object, this.messenger, Mock.Of<IOperationResultPublisher>(),
                 new OperationStatusReducer(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(),
                 this.Contexts, new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance));
+            this.Files = new SceneDocumentFiles(commands, this.Store);
+            this.Contexts.Activate(this.Files.Context);
+            this.Files.Write("First", SceneDocumentFiles.Data(Guid.NewGuid(), "First", "Node"));
+            this.Files.Write("Second", SceneDocumentFiles.Data(Guid.NewGuid(), "Second", "Destination"));
             this.Explorer = new SceneExplorerViewModel(
-                projects.Object, this.messenger, Mock.Of<IRouter>(), this.Documents, this.Window, this.Sync.Object,
+                this.Files.ProjectManager, this.messenger, Mock.Of<IRouter>(), this.Documents, this.Window, this.Sync.Object,
                 selection, commands, projectContexts: this.Contexts);
             this.Manager = new DocumentManager(
                 this.Documents, this.messenger, this.Contexts, Mock.Of<IProjectUsageService>(),
-                Mock.Of<IMaterialDocumentService>(), this.Window, projects.Object, this.Sync.Object, Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+                Mock.Of<IMaterialDocumentService>(), this.Window, this.Files.Documents, this.Sync.Object, Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+            this.Participant = new SceneParticipant(this);
         }
-
-        public string Root { get; }
 
         public WindowId Window { get; } = new(73);
 
-        public Project Project { get; }
+        public GatedFileStore Store { get; } = new(new NativeAtomicFileStore(new RealFileSystem()));
 
-        public Scene First { get; }
+        public SceneDocumentFiles Files { get; }
 
-        public Scene Second { get; }
+        public Uri SecondUri => this.Files.FileOf("Second").AssetUri;
 
-        public SceneDocumentMetadata FirstMetadata { get; }
+        public Document FirstDocument { get; private set; } = null!;
+
+        public Scene First => ((SceneContent)this.FirstDocument.Content).Scene;
+
+        public SceneDocumentMetadata FirstTab => this.Documents.GetOpenDocuments(this.Window).OfType<SceneDocumentMetadata>().Single(tab => ReferenceEquals(tab.Document, this.FirstDocument));
 
         public ProjectContextService Contexts { get; } = new();
 
@@ -375,23 +356,17 @@ public sealed class DocumentManagerSceneLifetimeTests
 
         public CloseDecision PromptDecision { get; set; } = CloseDecision.Discard;
 
-        public ProjectManagerService SourceOwner { get; }
-
-        public Mock<IProjectManagerService> Projects { get; }
-
-        public string SecondPath => Path.Combine(this.Root, "Content", "Scenes", this.Second.Name + Oxygen.Editor.Projects.Constants.SceneFileExtension);
+        /// <summary>Gets or sets the name of a scene the engine refuses to register.</summary>
+        public string? RefusedScene { get; set; }
 
         public static async Task<LifetimeFixture> CreateAsync(bool cut)
         {
             var fixture = new LifetimeFixture();
             try
             {
-                _ = await fixture.SourceOwner.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(fixture.Second)).ConfigureAwait(false);
-                _ = await fixture.SourceOwner.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(fixture.First)).ConfigureAwait(false);
-                _ = fixture.Sync.Object.RegisterDocument(fixture.First, fixture.FirstMetadata);
-                _ = await fixture.Documents.OpenDocumentAsync(fixture.Window, fixture.FirstMetadata, shouldSelect: false).ConfigureAwait(false);
-                await fixture.Explorer.HandleDocumentOpenedAsync(fixture.First).ConfigureAwait(false);
-                _ = await fixture.Documents.SelectDocumentAsync(fixture.Window, fixture.First.Id).ConfigureAwait(false);
+                _ = (await fixture.Manager.OpenSceneAsync(fixture.Files.FileOf("First").AssetUri).ConfigureAwait(false)).Should().BeTrue();
+                fixture.FirstDocument = fixture.Files.Documents.Find(fixture.Files.PathOf("First"))!;
+                fixture.close.Register(fixture.Window, fixture.FirstDocument.Id, fixture.Participant);
                 var adapter = await fixture.Explorer.FindAdapterByNodeIdAsync(fixture.First.RootNodes[0].Id).ConfigureAwait(false);
                 fixture.Explorer.SelectDisplayedItem(adapter!, fixture.Explorer.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
                 if (cut)
@@ -416,12 +391,11 @@ public sealed class DocumentManagerSceneLifetimeTests
         {
             this.Manager.Dispose();
             this.Explorer.Dispose();
-            UndoRedo.GetHistory(this.First.Id).Clear();
-            UndoRedo.GetHistory(this.Second.Id).Clear();
-            Directory.Delete(this.Root, recursive: true);
+            this.Files.Dispose();
         }
     }
 
+    /// <summary>Stands in for the scene editor at close: it finishes, saves or discards the first scene's edits.</summary>
     private sealed class SceneParticipant(LifetimeFixture fixture) : IDocumentCloseParticipant
     {
         public bool PendingEdit { get; set; }
@@ -439,33 +413,50 @@ public sealed class DocumentManagerSceneLifetimeTests
             this.Prepared = true;
             if (this.PendingEdit)
             {
-                fixture.FirstMetadata.IsDirty = true;
+                fixture.FirstDocument.History.AddChange("Pending edit", static () => { });
                 this.PendingEdit = false;
             }
+
+            // The scene editor keeps its tab showing the document's state.
+            _ = fixture.FirstTab.Refresh();
 
             return Task.CompletedTask;
         }
 
-        public Task<bool> SaveForCloseAsync()
+        public async Task<bool> SaveForCloseAsync()
         {
-            if (this.SaveSucceeds)
-            {
-                fixture.FirstMetadata.IsDirty = false;
-            }
-
-            return Task.FromResult(this.SaveSucceeds);
+            var saved = this.SaveSucceeds && (await fixture.FirstDocument.SaveAsync().ConfigureAwait(false)).Succeeded;
+            _ = fixture.FirstTab.Refresh();
+            return saved;
         }
 
         public Task CloseAsync(bool discard)
         {
             this.Closed = true;
-            fixture.Sync.Object.CloseDocument(fixture.FirstMetadata);
-            SceneAuthoringGate.Retire(fixture.First);
-            UndoRedo.GetHistory(fixture.First.Id).Clear();
-            fixture.SourceOwner.RetireScene(fixture.First);
+            fixture.Sync.Object.CloseDocument(fixture.FirstDocument.Id);
+            fixture.Files.Documents.Close(fixture.FirstDocument);
             return Task.CompletedTask;
         }
 
         public void ResumeEditing() => this.Resumed = true;
+    }
+
+    /// <summary>A file store that can hold a read until the test lets it go on.</summary>
+    private sealed class GatedFileStore(IAtomicFileStore inner) : IAtomicFileStore
+    {
+        public Func<string, Task>? BeforeRead { get; set; }
+
+        public async Task<FileSnapshot> ReadAsync(string path, CancellationToken cancellationToken = default)
+        {
+            if (this.BeforeRead is { } gate)
+            {
+                await gate(path).ConfigureAwait(false);
+            }
+
+            return await inner.ReadAsync(path, cancellationToken).ConfigureAwait(false);
+        }
+
+        public Task<FileVersion> WriteAsync(string path, ReadOnlyMemory<byte> content, FileVersion expected, CancellationToken cancellationToken = default)
+            => inner.WriteAsync(path, content, expected, cancellationToken);
     }
 }

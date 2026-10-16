@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.LevelEditor;
 
 /// <summary>
@@ -9,4 +11,4 @@ namespace Oxygen.Editor.LevelEditor;
 /// </summary>
 /// <param name="NodeId">The id of the scene node that carries the camera.</param>
 /// <param name="Name">The node name shown in the viewport camera menu.</param>
-public sealed record SceneCameraChoice(Guid NodeId, string Name);
+public sealed record SceneCameraChoice(NodeId NodeId, string Name);

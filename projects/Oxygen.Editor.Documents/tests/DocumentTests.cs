@@ -207,6 +207,20 @@ public sealed class DocumentTests : DocumentTestBase
     }
 
     [TestMethod]
+    public async Task CheckFileAsync_WhenTheFileChangesDuringAnEditInProgress_KeepsTheEdit()
+    {
+        var (document, note) = await this.OpenNoteAsync("Wood").ConfigureAwait(false);
+        note.Pending = "typing";
+        this.WriteNote("Wood", "theirs");
+
+        var state = await document.CheckFileAsync(this.Token).ConfigureAwait(false);
+
+        _ = state.Should().Be(DocumentFileState.ChangedOnDisk);
+        _ = document.Content.Should().BeSameAs(note);
+        _ = note.Pending.Should().Be("typing");
+    }
+
+    [TestMethod]
     public async Task CheckFileAsync_WhenTheChangedFileDoesNotDecode_MarksItChangedOnDisk()
     {
         var (document, note) = await this.OpenNoteAsync("Wood").ConfigureAwait(false);
@@ -305,7 +319,7 @@ public sealed class DocumentTests : DocumentTestBase
         var written = (await this.Store.ReadAsync(PathOf("Timber"), this.Token).ConfigureAwait(false)).Version;
 
         await document.FollowRelocationAsync(
-            new DocumentRelocation(FileOf("Timber"), written, new Dictionary<Uri, Uri> { [UriOf("Wood")] = UriOf("Timber"), [oak] = pine }),
+            new DocumentRelocation(FileOf("Timber"), written, Moves(new Dictionary<Uri, Uri> { [UriOf("Wood")] = UriOf("Timber"), [oak] = pine })),
             this.Token).ConfigureAwait(false);
 
         _ = document.Title.Should().Be("Timber");
@@ -327,7 +341,7 @@ public sealed class DocumentTests : DocumentTestBase
         note.Edit("mine");
 
         var follow = () => document.FollowRelocationAsync(
-            new DocumentRelocation(FileOf("Timber"), document.Version, new Dictionary<Uri, Uri>()),
+            new DocumentRelocation(FileOf("Timber"), document.Version, static _ => null),
             this.Token);
 
         _ = await follow.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
@@ -362,4 +376,7 @@ public sealed class DocumentTests : DocumentTestBase
         _ = result.Outcome.Should().Be(DocumentSaveOutcome.Conflict);
         _ = this.ReadText("Oak").Should().Be("oak");
     }
+
+    private static Func<string, string?> Moves(Dictionary<Uri, Uri> moves)
+        => reference => moves.TryGetValue(new Uri(reference), out var moved) ? moved.ToString() : null;
 }

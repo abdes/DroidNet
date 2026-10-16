@@ -14,6 +14,7 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.WorldEditor.SceneEditor;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Workspace;
@@ -58,14 +59,14 @@ public sealed partial class ViewportStateService(
     // Loads and writes run one at a time, in request order.
     private Task persistence = Task.CompletedTask;
     private ProjectContext? activeProject;
-    private Dictionary<Guid, SceneViewportState> scenes = [];
+    private Dictionary<SceneId, SceneViewportState> scenes = [];
     private long activation;
 
     /// <summary>Gets the state kept for a scene, loading the project's state on first use.</summary>
     /// <param name="project">The project that owns the scene.</param>
     /// <param name="sceneId">The scene identity.</param>
     /// <returns>The kept state, or <see langword="null"/> when the scene has none.</returns>
-    public async Task<SceneViewportState?> RestoreAsync(ProjectContext project, Guid sceneId)
+    public async Task<SceneViewportState?> RestoreAsync(ProjectContext project, SceneId sceneId)
     {
         ArgumentNullException.ThrowIfNull(project);
         var scenesOfProject = this.Activate(project);
@@ -77,7 +78,7 @@ public sealed partial class ViewportStateService(
     /// <param name="project">The project that owns the scene.</param>
     /// <param name="sceneId">The scene identity.</param>
     /// <param name="state">The scene's current viewport state.</param>
-    public void Update(ProjectContext project, Guid sceneId, SceneViewportState state)
+    public void Update(ProjectContext project, SceneId sceneId, SceneViewportState state)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(state);
@@ -111,7 +112,7 @@ public sealed partial class ViewportStateService(
                 && Enum.IsDefined(pane.ViewMode)
                 && pane.EditorCamera?.IsFinite() != false);
 
-    private Dictionary<Guid, SceneViewportState> Activate(ProjectContext project)
+    private Dictionary<SceneId, SceneViewportState> Activate(ProjectContext project)
     {
         if (IsSameProject(this.activeProject, project))
         {
@@ -126,7 +127,7 @@ public sealed partial class ViewportStateService(
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Unreadable viewport state is discarded with a warning; it must never block opening a scene.")]
-    private async Task LoadAfterAsync(Task previous, ProjectContext project, Dictionary<Guid, SceneViewportState> target, long generation)
+    private async Task LoadAfterAsync(Task previous, ProjectContext project, Dictionary<SceneId, SceneViewportState> target, long generation)
     {
         await previous.ConfigureAwait(true);
         ProjectViewports? stored;
@@ -173,7 +174,7 @@ public sealed partial class ViewportStateService(
         {
             var (root, write) = this.pendingWrites.First();
             _ = this.pendingWrites.Remove(root);
-            var value = new ProjectViewports(write.Project.ProjectId, CurrentVersion, new Dictionary<Guid, SceneViewportState>(write.Scenes));
+            var value = new ProjectViewports(write.Project.ProjectId, CurrentVersion, new Dictionary<SceneId, SceneViewportState>(write.Scenes));
             try
             {
                 await settings.SaveSettingAsync(Key, value, SettingContext.Project(root)).ConfigureAwait(true);
@@ -226,9 +227,9 @@ public sealed partial class ViewportStateService(
     internal sealed record ProjectViewports(
         Guid ProjectId,
         int Version,
-        IReadOnlyDictionary<Guid, SceneViewportState> Scenes);
+        IReadOnlyDictionary<SceneId, SceneViewportState> Scenes);
 
-    private readonly record struct PendingWrite(ProjectContext Project, Dictionary<Guid, SceneViewportState> Scenes);
+    private readonly record struct PendingWrite(ProjectContext Project, Dictionary<SceneId, SceneViewportState> Scenes);
 }
 
 /// <summary>The kept viewport state of one scene.</summary>
@@ -259,7 +260,7 @@ public sealed record ViewportPaneState(
     CameraType CameraType,
     CameraControlMode ControlMode,
     ViewportCameraState? EditorCamera,
-    Guid? SceneCameraId,
+    NodeId? SceneCameraId,
     ViewportViewMode ViewMode = ViewportViewMode.Lit,
     bool ShowGrid = true,
     bool ShowCameraPreview = true,

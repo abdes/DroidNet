@@ -27,12 +27,12 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = interaction.IsHidden(node.Id).Should().BeTrue("the batch was requested hidden");
 
         // The ratified exception (D8 R4): undoable but never dirties the document.
-        _ = context.Metadata.IsDirty.Should().BeFalse("editor hide is workspace presentation state, not authored content");
+        _ = context.IsDirty().Should().BeFalse("editor hide is workspace presentation state, not authored content");
         _ = context.History.UndoStack.Should().ContainSingle("one batch is one undo step");
 
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = interaction.IsHidden(node.Id).Should().BeFalse("undo restores the prior shown state");
-        _ = context.Metadata.IsDirty.Should().BeFalse("undo of a non-dirtying step stays non-dirtying");
+        _ = context.IsDirty().Should().BeFalse("undo of a non-dirtying step stays non-dirtying");
         _ = context.History.RedoStack.Should().ContainSingle();
 
         await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);

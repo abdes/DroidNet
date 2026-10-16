@@ -2,29 +2,27 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Editor.Documents;
+using Oxygen.Editor.Projects;
+using Oxygen.Editor.World.Documents;
+using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
 /// <summary>
-/// Keeps the open scene in step with Content Browser changes without reloading it: as a relocation participant it
-/// re-points its affected references in memory, and it renames itself when the browser renames it. The runtime keeps
-/// showing the re-pointed nodes as they were until the asset feed reports their new assets mounted, whoever cooks them.
+/// Keeps the open scene in step with relocations without reloading it: as a relocation participant its document follows
+/// its file and re-points the affected references in memory. The runtime keeps showing the re-pointed nodes as they were
+/// until the asset feed reports their new assets mounted, whoever cooks them.
 /// </summary>
 public partial class SceneEditorViewModel
 {
     private readonly RelocatedRuntimeRefresh relocatedRuntime = new();
     private IDisposable? relocationParticipant;
     private IDisposable? relocatedContent;
-
-    private string? SceneSourcePath => this.scene?.Project.ProjectInfo.Location is { } root
-        ? Path.GetFullPath(Path.Combine(root, Oxygen.Editor.Projects.Constants.ContentFolderName, Oxygen.Editor.Projects.Constants.ScenesFolderName, this.scene.Name + Oxygen.Editor.Projects.Constants.SceneFileExtension))
-        : null;
 
     private void RegisterRelocationMessages()
     {
@@ -34,17 +32,8 @@ public partial class SceneEditorViewModel
         }
         else
         {
-            this.LogRelocationUnavailable(this.Metadata.Title);
+            this.LogRelocationUnavailable(this.Document.Title);
         }
-
-        this.messenger.Register<SceneAssetCommandMessage>(this, (_, message) =>
-        {
-            if (message.Command == SceneAssetCommand.Rename && !message.HasReceivedResponse && this.scene is { } current
-                && string.Equals(current.Name, message.SceneName, StringComparison.OrdinalIgnoreCase) && message.NewName is { } name)
-            {
-                message.Reply(this.RenameOpenSceneAsync(name));
-            }
-        });
     }
 
     private void DisposeRelocationParticipant()
@@ -58,24 +47,38 @@ public partial class SceneEditorViewModel
 
     private async Task FollowRelocationAsync(AssetRelocationChange change)
     {
-        if (this.isDisposed || this.scene is null || this.SceneSourcePath is not { } path)
+        if (this.isDisposed || this.scene is null
+            || this.container.Resolve<IProjectContextService>(IfUnresolved.ReturnDefault)?.ActiveProject is not { } project)
         {
-            this.LogRelocationSkipped(this.Metadata.Title, "the scene is not loaded");
+            this.LogRelocationSkipped(this.Document.Title, "the scene is not loaded");
             return;
         }
 
-        if (change.FindRewrite(path) is not { } rewrite)
+        if (DocumentRelocations.Map(this.Document, change, project, out var skipped) is not { } relocation)
         {
-            this.LogRelocationSkipped(this.scene.Name, "the relocation did not rewrite " + path);
+            this.LogRelocationSkipped(this.Document.Title, skipped!);
             return;
         }
 
-        // The command service logs the outcome, including why the scene could not follow.
-        var result = await this.commandService.FollowRelocationAsync(this.CreateCommandContext(), change, rewrite).ConfigureAwait(true);
-        if (result.Succeeded && (result.RuntimeNodes.Count != 0 || result.RuntimeEnvironment))
+        // The content names what the engine must show again as it applies the relocation.
+        SceneRelocatedEventArgs? relocated = null;
+        void OnRelocated(object? sender, SceneRelocatedEventArgs args) => relocated = args;
+        var content = (SceneContent)this.Document.Content;
+        content.Relocated += OnRelocated;
+        try
         {
-            this.relocatedRuntime.Add(result);
-            this.LogRelocatedContentAwaited(this.Metadata.Title, result.RuntimeNodes.Count, result.RuntimeEnvironment);
+            await this.Document.FollowRelocationAsync(relocation).ConfigureAwait(true);
+        }
+        finally
+        {
+            content.Relocated -= OnRelocated;
+        }
+
+        this.RefreshPlayScene();
+        if (relocated is { } runtime && (runtime.GeometryNodes.Count != 0 || runtime.Environment))
+        {
+            this.relocatedRuntime.Add(new SceneRelocationResult(Succeeded: true, runtime.GeometryNodes, runtime.Environment));
+            this.LogRelocatedContentAwaited(this.Document.Title, runtime.GeometryNodes.Count, runtime.Environment);
             this.ObserveRelocatedContent();
         }
     }
@@ -90,7 +93,7 @@ public partial class SceneEditorViewModel
 
         if (this.container.Resolve<IAssetFeed>(IfUnresolved.ReturnDefault) is not { } feed)
         {
-            this.LogRelocatedContentUnobservable(this.Metadata.Title);
+            this.LogRelocatedContentUnobservable(this.Document.Title);
             this.relocatedRuntime.Clear();
             return;
         }
@@ -128,20 +131,6 @@ public partial class SceneEditorViewModel
         {
             await this.commandService.RefreshRelocatedRuntimeAsync(this.CreateCommandContext(), ready.Nodes, ready.Environment).ConfigureAwait(true);
         }
-    }
-
-    private async Task<string?> RenameOpenSceneAsync(string name)
-    {
-        var previous = this.scene?.Name ?? string.Empty;
-        var result = await this.commandService.RenameSceneAsync(this.CreateCommandContext(), name).ConfigureAwait(true);
-        if (result.Succeeded)
-        {
-            this.LogOpenSceneRenamed(previous, name);
-            return null;
-        }
-
-        this.LogOpenSceneNotRenamed(previous, name);
-        return $"Scene '{previous}' could not be renamed to '{name}'. The scene editor's result shows why.";
     }
 
     /// <summary>Runs the scene's follow-up on its UI thread; the relocation calls participants from a worker.</summary>

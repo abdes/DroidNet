@@ -14,6 +14,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Presentation;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -30,13 +31,13 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     private readonly IAssetFeed? assetProvider;
     private readonly IScheduler observerScheduler;
     private readonly Func<Uri, InputContextSource> contextSource;
-    private readonly Func<Guid, Task>? inspectSceneNode;
+    private readonly Func<NodeId, Task>? inspectSceneNode;
     private readonly Func<Uri, Task>? revealAsset;
     private readonly List<AssetEntry> assets = [];
     private IDisposable? assetSubscription;
     private bool catalogLoaded;
     private Scene? scene;
-    private Guid? automaticCamera;
+    private NodeId? automaticCamera;
     private Task pending = Task.CompletedTask;
     private bool isBusy;
     private bool inputEnabled = true;
@@ -58,7 +59,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         IAssetFeed? assetProvider,
         IScheduler observerScheduler,
         Func<Uri, InputContextSource>? contextSource,
-        Func<Guid, Task>? inspectSceneNode = null,
+        Func<NodeId, Task>? inspectSceneNode = null,
         Func<Uri, Task>? revealAsset = null)
     {
         this.commandService = commandService;
@@ -321,8 +322,8 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         var goneName = gone ? this.scene?.AllNodes.FirstOrDefault(node => node.Id == authored)?.Name : null;
 
         // Automatic, every camera, and the authored camera when it is gone, so the list shows what is authored.
-        var wanted = new List<(Guid? Id, string Name)> { (null, "Automatic") };
-        wanted.AddRange(cameras.Select(static camera => ((Guid?)camera.Id, camera.Name)));
+        var wanted = new List<(NodeId? Id, string Name)> { (null, "Automatic") };
+        wanted.AddRange(cameras.Select(static camera => ((NodeId?)camera.Id, camera.Name)));
         if (gone)
         {
             wanted.Add((authored, goneName ?? "Missing camera"));

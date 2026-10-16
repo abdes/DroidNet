@@ -1,0 +1,1405 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using System.Numerics;
+using DroidNet.TimeMachine;
+using Oxygen.Editor.World;
+using Oxygen.Editor.World.Documents.Commands;
+using Oxygen.Editor.World.SceneExplorer.Operations;
+using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
+
+namespace Oxygen.Editor.WorldEditor.Documents.Commands;
+
+/// <summary>
+/// Identity-based hierarchy authoring commands for <see cref="SceneDocumentCommandService"/>.
+/// </summary>
+/// <remarks>
+/// These commands are the single authority for explorer hierarchy mutation: each validates the
+/// complete request, commits graph and layout together, advances history and dirty state
+/// synchronously, then requests native convergence. Folder deletion is grouping-only; folder
+/// moves across scene scopes reparent the affected hierarchies while retaining their local transforms.
+/// </remarks>
+public sealed partial class SceneDocumentCommandService
+{
+    private static readonly StringComparer LayoutTypeComparer = StringComparer.OrdinalIgnoreCase;
+
+    /// <inheritdoc />
+    public async Task<SceneValueCommandResult<SceneNode>> CreateNodeAsync(
+        SceneDocumentCommandContext context,
+        NodeId? parentNodeId,
+        FolderId? parentFolderId,
+        string name)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return SceneCommandResults.Failure<SceneNode>();
+        }
+
+        var trimmed = (name ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return SceneCommandResults.Failure<SceneNode>(this.PublishSceneFailure(
+                SceneOperationKinds.NodeCreate,
+                DiagnosticCodes.ScenePrefix + "INVALID_NAME",
+                "Node was not created",
+                "Scene node names cannot be empty.",
+                context));
+        }
+
+        if (this.ResolveCreateParent(context, parentNodeId, parentFolderId, out var actualParent) is { } parentFailure)
+        {
+            return parentFailure;
+        }
+
+        var node = new SceneNode(context.Scene) { Name = trimmed };
+        _ = actualParent is null
+            ? this.sceneMutator.CreateNodeAtRoot(node, context.Scene)
+            : this.sceneMutator.CreateNodeUnderParent(node, actualParent, context.Scene);
+
+        if (parentFolderId.HasValue)
+        {
+            EnsureExplorerLayout(context.Scene);
+            _ = this.sceneOrganizer.MoveNodeToFolder(node.Id, parentFolderId.Value, context.Scene);
+        }
+
+        this.RecordCreateNodeUndo(context, node);
+        _ = this.AdvanceRevision(context);
+        await this.SyncCreateNodeAsync(context, node, actualParent?.Id).ConfigureAwait(true);
+        this.PublishNodeAdded(context, node);
+        return SceneCommandResults.Success(node);
+    }
+
+    /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "the failure is reported through the operation result or forwarded to the awaiting caller and must not escape")]
+    public Task<SceneValueCommandResult<FolderId>> CreateFolderAsync(
+        SceneDocumentCommandContext context,
+        FolderId? parentFolderId,
+        NodeId? parentNodeId,
+        string name)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return Task.FromResult(SceneCommandResults.Failure<FolderId>());
+        }
+
+        var trimmed = (name ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return Task.FromResult(SceneCommandResults.Failure<FolderId>(this.PublishSceneFailure(
+                SceneOperationKinds.ExplorerFolderCreate,
+                DiagnosticCodes.ScenePrefix + "INVALID_NAME",
+                "Folder was not created",
+                "Folder names cannot be empty.",
+                context)));
+        }
+
+        if (this.ValidateFolderCreateTargets(context, parentFolderId, parentNodeId) is { } targetFailure)
+        {
+            return Task.FromResult(targetFailure);
+        }
+
+        try
+        {
+            EnsureExplorerLayout(context.Scene);
+            var change = this.sceneOrganizer.CreateFolder(parentFolderId, trimmed, context.Scene, parentNodeId: parentNodeId);
+            var folderId = change.NewFolder?.FolderId ?? FolderId.Empty;
+            if (folderId.IsEmpty)
+            {
+                return Task.FromResult(SceneCommandResults.Failure<FolderId>());
+            }
+
+            this.RecordLayoutHistory(context, $"Create folder '{trimmed}'", change.PreviousLayout, change.NewLayout);
+            _ = this.AdvanceRevision(context);
+            return Task.FromResult(SceneCommandResults.Success(folderId));
+        }
+        catch (Exception ex)
+        {
+            var operationResultId = this.PublishSceneFailure(
+                SceneOperationKinds.ExplorerFolderCreate,
+                DiagnosticCodes.ScenePrefix + "CREATE_FOLDER_FAILED",
+                "Folder was not created",
+                $"The folder '{trimmed}' could not be created.",
+                context,
+                ex);
+            return Task.FromResult(SceneCommandResults.Failure<FolderId>(operationResultId));
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<SceneCommandResult> RenameNodeAsync(
+        SceneDocumentCommandContext context,
+        NodeId nodeId,
+        string newName)
+        => this.RenameNodeCoreAsync(context, nodeId, newName, enforceLock: true);
+
+    /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "the failure is reported through the operation result or forwarded to the awaiting caller and must not escape")]
+    public Task<SceneCommandResult> RenameFolderAsync(
+        SceneDocumentCommandContext context,
+        FolderId folderId,
+        string newName)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return Task.FromResult(new SceneCommandResult(Succeeded: false));
+        }
+
+        var trimmed = (newName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return Task.FromResult(this.ValidationFailure(
+                SceneOperationKinds.ExplorerFolderRename,
+                DiagnosticCodes.ScenePrefix + "INVALID_NAME",
+                "Folder was not renamed",
+                "Folder names cannot be empty.",
+                context));
+        }
+
+        try
+        {
+            if (this.ValidateFolderRenameTarget(context, folderId) is { } targetFailure)
+            {
+                return Task.FromResult(targetFailure);
+            }
+
+            EnsureExplorerLayout(context.Scene);
+            var change = this.sceneOrganizer.RenameFolder(folderId, trimmed, context.Scene);
+            this.RecordLayoutHistory(context, $"Rename folder to '{trimmed}'", change.PreviousLayout, change.NewLayout);
+            _ = this.AdvanceRevision(context);
+            return Task.FromResult(SceneCommandResult.Success);
+        }
+        catch (Exception ex)
+        {
+            var operationResultId = this.PublishSceneFailure(
+                SceneOperationKinds.ExplorerFolderRename,
+                DiagnosticCodes.ScenePrefix + "RENAME_FAILED",
+                "Folder was not renamed",
+                "The folder could not be renamed.",
+                context,
+                ex);
+            return Task.FromResult(new SceneCommandResult(Succeeded: false, operationResultId));
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<SceneCommandResult> DeleteNodesAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<NodeId> nodeIds)
+        => this.DeleteItemsAsync(context, nodeIds, []);
+
+    /// <inheritdoc />
+    public Task<SceneCommandResult> DeleteFolderAsync(
+        SceneDocumentCommandContext context,
+        FolderId folderId)
+        => this.DeleteItemsAsync(context, [], [folderId]);
+
+    /// <inheritdoc />
+    public async Task<SceneCommandResult> DeleteItemsAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<NodeId> nodeIds,
+        IReadOnlyList<FolderId> folderIds)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
+        var topLevelIds = this.sceneOrganizer.FilterTopLevelSelectedNodeIds([.. nodeIds], context.Scene);
+
+        // Pre-validate nodes before any mutation.
+        var restores = new List<NodeRestore>(topLevelIds.Count);
+        foreach (var nodeId in topLevelIds)
+        {
+            var node = FindNode(context.Scene, nodeId);
+            if (node is null)
+            {
+                return this.ValidationFailure(
+                    SceneOperationKinds.NodeDelete,
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "Items were not deleted",
+                    "One or more selected nodes no longer exist.",
+                    context);
+            }
+
+            restores.Add(NodeRestore.Capture(node));
+        }
+
+        var affectedNodes = CollectAffectedNodes(context.Scene, topLevelIds.ToHashSet());
+        if (this.RejectLockedTargets(context, SceneOperationKinds.NodeDelete, affectedNodes) is { } lockFailure)
+        {
+            return lockFailure;
+        }
+
+        // Pre-validate folders before any mutation.
+        if (this.ValidateFolderDeletion(context, folderIds) is { } folderFailure)
+        {
+            return folderFailure;
+        }
+
+        // Seed the layout only after every validation passed, so a rejected delete leaves no mutation behind.
+        EnsureExplorerLayout(context.Scene);
+        this.ApplyDelete(context, restores, folderIds);
+        _ = this.AdvanceRevision(context);
+        await this.SyncRemoveNodesAsync(context, [.. topLevelIds]).ConfigureAwait(true);
+
+        foreach (var restore in restores)
+        {
+            this.PublishNodeRemoved(context, restore.Node);
+        }
+
+        return SceneCommandResult.Success;
+    }
+
+    /// <inheritdoc />
+    public async Task<SceneCommandResult> ReparentNodesAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<NodeId> nodeIds,
+        NodeId? newParentNodeId,
+        bool preserveWorldTransform,
+        NodeId? insertAfterNodeId = null)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
+        var topLevelIds = this.sceneOrganizer.FilterTopLevelSelectedNodeIds([.. nodeIds], context.Scene);
+        if (this.ResolveReparentTarget(context, newParentNodeId, insertAfterNodeId, out var newParent, out var anchorNode, out var insertIndex) is { } targetFailure)
+        {
+            return targetFailure;
+        }
+
+        if (this.CaptureReparentMoves(context, topLevelIds, newParent, preserveWorldTransform, out var moves) is { } moveFailure)
+        {
+            return moveFailure;
+        }
+
+        var affectedNodes = CollectAffectedNodes(context.Scene, topLevelIds.ToHashSet());
+        if (newParent is not null)
+        {
+            affectedNodes.Add(newParent);
+        }
+
+        if (anchorNode is not null)
+        {
+            affectedNodes.Add(anchorNode);
+        }
+
+        if (this.RejectLockedTargets(context, SceneOperationKinds.NodeReparent, affectedNodes) is { } reparentLockFailure)
+        {
+            return reparentLockFailure;
+        }
+
+        EnsureExplorerLayout(context.Scene);
+        this.ApplyReparent(context, moves, newParent, insertIndex);
+        _ = this.AdvanceRevision(context);
+
+        // Publish the compensated local TRS before reparenting native with preserve-world
+        // disabled, so the native side applies the new local TRS instead of a stale one.
+        Guid? firstOperationResultId = null;
+        foreach (var move in moves)
+        {
+            var outcome = await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
+            firstOperationResultId ??= await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.NodeReparent, outcome).ConfigureAwait(true);
+        }
+
+        await this.sceneEngineSync.ReparentHierarchiesAsync(context.Scene, [.. topLevelIds], newParent?.Id, preserveWorldTransform: false).ConfigureAwait(true);
+        return new SceneCommandResult(Succeeded: true, firstOperationResultId);
+    }
+
+    /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "the failure is reported through the operation result or forwarded to the awaiting caller and must not escape")]
+    public async Task<SceneCommandResult> MoveNodesToFolderAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<NodeId> nodeIds,
+        FolderId folderId)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
+        try
+        {
+            // Resolve the folder's scene-parent scope (the enclosing node, or root when null).
+            var (folderFound, parentFound, folderScopeParent) = ResolveFolderScope(context.Scene, folderId);
+            if (!folderFound)
+            {
+                return this.StaleTarget(SceneOperationKinds.ExplorerLayoutMoveNode, "Nodes were not grouped", "The target folder no longer exists.", context);
+            }
+
+            if (!parentFound)
+            {
+                return this.StaleTarget(SceneOperationKinds.ExplorerLayoutMoveNode, "Nodes were not grouped", "The target folder's scene parent no longer exists.", context);
+            }
+
+            // Pre-resolve every node and the reparent it needs (preserve-local), before mutating.
+            if (this.CaptureGroupMoves(context, nodeIds, folderScopeParent, out var nodes, out var reparents) is { } moveFailure)
+            {
+                return moveFailure;
+            }
+
+            var affectedNodes = CollectAffectedNodes(context.Scene, nodes.Select(static node => node.Id).ToHashSet());
+            if (folderScopeParent is not null)
+            {
+                affectedNodes.Add(folderScopeParent);
+            }
+
+            if (this.RejectLockedTargets(context, SceneOperationKinds.ExplorerLayoutMoveNode, affectedNodes) is { } lockFailure)
+            {
+                return lockFailure;
+            }
+
+            EnsureExplorerLayout(context.Scene);
+            this.ApplyGrouping(context, nodeIds, folderId, reparents);
+            _ = this.AdvanceRevision(context);
+
+            return new SceneCommandResult(Succeeded: true, await this.PushGroupedTransformsAsync(context, reparents).ConfigureAwait(true));
+        }
+        catch (Exception ex)
+        {
+            var operationResultId = this.PublishSceneFailure(
+                SceneOperationKinds.ExplorerLayoutMoveNode,
+                DiagnosticCodes.ScenePrefix + "MOVE_TO_FOLDER_FAILED",
+                "Nodes were not grouped",
+                ex.Message,
+                context,
+                ex);
+            return new SceneCommandResult(Succeeded: false, operationResultId);
+        }
+    }
+
+    /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "the failure is reported through the operation result or forwarded to the awaiting caller and must not escape")]
+    public Task<SceneCommandResult> RemoveNodesFromFolderAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<NodeId> nodeIds,
+        FolderId folderId)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return Task.FromResult(new SceneCommandResult(Succeeded: false));
+        }
+
+        var nodes = nodeIds.Select(id => FindNode(context.Scene, id)).ToArray();
+        if (nodes.Any(static node => node is null))
+        {
+            return Task.FromResult(this.StaleTarget(SceneOperationKinds.ExplorerLayoutMoveNode, "Nodes were not removed from the folder", "One or more selected nodes no longer exist.", context));
+        }
+
+        var affectedNodes = nodes.OfType<SceneNode>().ToList();
+        var (folderFound, parentFound, folderParent) = ResolveFolderScope(context.Scene, folderId);
+        if (!folderFound)
+        {
+            return Task.FromResult(this.StaleTarget(SceneOperationKinds.ExplorerLayoutMoveNode, "Nodes were not removed from the folder", "The source folder no longer exists.", context));
+        }
+
+        if (!parentFound)
+        {
+            return Task.FromResult(this.StaleTarget(SceneOperationKinds.ExplorerLayoutMoveNode, "Nodes were not removed from the folder", "The source folder's scene parent no longer exists.", context));
+        }
+
+        if (folderParent is not null)
+        {
+            affectedNodes.Add(folderParent);
+        }
+
+        if (this.RejectLockedTargets(context, SceneOperationKinds.ExplorerLayoutMoveNode, affectedNodes) is { } lockFailure)
+        {
+            return Task.FromResult(lockFailure);
+        }
+
+        try
+        {
+            EnsureExplorerLayout(context.Scene);
+            var previousLayout = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
+            foreach (var nodeId in nodeIds)
+            {
+                _ = this.sceneOrganizer.RemoveNodeFromFolder(nodeId, folderId, context.Scene);
+            }
+
+            this.RecordLayoutHistory(context, "Remove from folder", previousLayout, context.Scene.ExplorerLayout);
+            _ = this.AdvanceRevision(context);
+            return Task.FromResult(SceneCommandResult.Success);
+        }
+        catch (Exception ex)
+        {
+            var operationResultId = this.PublishSceneFailure(
+                SceneOperationKinds.ExplorerLayoutMoveNode,
+                DiagnosticCodes.ScenePrefix + "REMOVE_FROM_FOLDER_FAILED",
+                "Nodes were not removed from the folder",
+                ex.Message,
+                context,
+                ex);
+            return Task.FromResult(new SceneCommandResult(Succeeded: false, operationResultId));
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<SceneCommandResult> MoveFolderToParentAsync(
+        SceneDocumentCommandContext context,
+        FolderId folderId,
+        FolderId? newParentFolderId)
+    {
+        var captured = this.CaptureExplorerClipboard(context, [], [folderId]);
+        if (!captured.Succeeded || captured.Value is not { } payload)
+        {
+            return new SceneCommandResult(Succeeded: false, captured.OperationResultId);
+        }
+
+        return await this.PasteExplorerItemsAsync(
+            context,
+            payload,
+            cut: true,
+            parentNodeId: null,
+            newParentFolderId,
+            preserveWorld: false).ConfigureAwait(true);
+    }
+
+    /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "the failure is reported through the operation result or forwarded to the awaiting caller and must not escape")]
+    public Task<SceneCommandResult> ReorderNodesAsync(
+        SceneDocumentCommandContext context,
+        NodeId nodeId,
+        FolderId? parentFolderId,
+        NodeId? parentNodeId,
+        int index)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return Task.FromResult(new SceneCommandResult(Succeeded: false));
+        }
+
+        if (this.CollectReorderScopes(context, nodeId, parentFolderId, parentNodeId, out var affectedNodes) is { } scopeFailure)
+        {
+            return Task.FromResult(scopeFailure);
+        }
+
+        if (this.RejectLockedTargets(context, SceneOperationKinds.ExplorerLayoutMoveNode, affectedNodes) is { } lockFailure)
+        {
+            return Task.FromResult(lockFailure);
+        }
+
+        try
+        {
+            EnsureExplorerLayout(context.Scene);
+            var previousLayout = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
+            _ = this.sceneOrganizer.MoveNodeToSiblingIndex(nodeId, parentFolderId, parentNodeId, index, context.Scene);
+            this.RecordLayoutHistory(context, "Reorder", previousLayout, context.Scene.ExplorerLayout);
+            _ = this.AdvanceRevision(context);
+            return Task.FromResult(SceneCommandResult.Success);
+        }
+        catch (Exception ex)
+        {
+            var operationResultId = this.PublishSceneFailure(
+                SceneOperationKinds.ExplorerLayoutMoveNode,
+                DiagnosticCodes.ScenePrefix + "REORDER_FAILED",
+                "Node was not reordered",
+                ex.Message,
+                context,
+                ex);
+            return Task.FromResult(new SceneCommandResult(Succeeded: false, operationResultId));
+        }
+    }
+
+    private static void EnsureExplorerLayout(Scene scene)
+    {
+        if (scene.ExplorerLayout is not null)
+        {
+            return;
+        }
+
+        var layout = new List<ExplorerEntryData>(scene.RootNodes.Count);
+        foreach (var root in scene.RootNodes)
+        {
+            layout.Add(new ExplorerEntryData { Type = "Node", NodeId = root.Id });
+        }
+
+        scene.SetExplorerLayout(layout);
+    }
+
+    private static void InsertNodeAt(Scene scene, SceneNode node, SceneNode? parent, int index)
+    {
+        if (parent is null)
+        {
+            node.SetParent(newParent: null);
+            if (!scene.RootNodes.Contains(node))
+            {
+                scene.RootNodes.Add(node);
+            }
+
+            MoveToIndex(scene.RootNodes, node, index);
+        }
+        else
+        {
+            node.SetParent(parent);
+            MoveToIndex(parent.Children, node, index);
+        }
+    }
+
+    private static (bool folderFound, bool parentFound, SceneNode? parent) ResolveFolderScope(Scene scene, FolderId folderId)
+    {
+        var (found, parentNodeId) = FindFolderSceneParentNodeId(scene.ExplorerLayout, folderId);
+        if (!found)
+        {
+            return (false, false, null);
+        }
+
+        if (parentNodeId is not { } scopeId)
+        {
+            return (true, true, null);
+        }
+
+        var parent = FindNode(scene, scopeId);
+        return (true, parent is not null, parent);
+    }
+
+    private static List<SceneNode> CollectAffectedNodes(Scene scene, HashSet<NodeId> rootIds)
+        => scene.AllNodes
+            .Where(node => rootIds.Contains(node.Id) || node.Ancestors().Any(parent => rootIds.Contains(parent.Id)))
+            .ToList();
+
+    private static void MoveToIndex(System.Collections.ObjectModel.ObservableCollection<SceneNode> collection, SceneNode node, int index)
+    {
+        var target = Math.Clamp(index, 0, Math.Max(0, collection.Count - 1));
+        var current = collection.IndexOf(node);
+        if (current >= 0 && current != target)
+        {
+            collection.Move(current, target);
+        }
+    }
+
+    private static (bool found, NodeId? nodeId) FindFolderSceneParentNodeId(IList<ExplorerEntryData>? entries, FolderId folderId, NodeId? enclosingNodeId = null)
+    {
+        if (entries is null)
+        {
+            return (false, null);
+        }
+
+        foreach (var entry in entries)
+        {
+            var current = enclosingNodeId;
+            if (LayoutTypeComparer.Equals(entry.Type, "Node") && entry.NodeId.HasValue)
+            {
+                current = entry.NodeId;
+            }
+
+            if (LayoutTypeComparer.Equals(entry.Type, "Folder") && entry.FolderId == folderId)
+            {
+                return (true, current);
+            }
+
+            if (entry.Children is not null)
+            {
+                var result = FindFolderSceneParentNodeId(entry.Children, folderId, current);
+                if (result.found)
+                {
+                    return result;
+                }
+            }
+        }
+
+        return (false, null);
+    }
+
+    private static bool LayoutsEqual(IList<ExplorerEntryData>? left, IList<ExplorerEntryData>? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (!EntryEqual(left[i], right[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool EntryEqual(ExplorerEntryData left, ExplorerEntryData right)
+        => string.Equals(left.Type, right.Type, StringComparison.OrdinalIgnoreCase)
+           && left.NodeId == right.NodeId
+           && left.FolderId == right.FolderId
+           && string.Equals(left.Name, right.Name, StringComparison.Ordinal)
+           && left.IsExpanded == right.IsExpanded
+           && LayoutsEqual(left.Children, right.Children);
+
+    private async Task<SceneCommandResult> RenameNodeCoreAsync(
+        SceneDocumentCommandContext context,
+        NodeId nodeId,
+        string newName,
+        bool enforceLock)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
+        var node = FindNode(context.Scene, nodeId);
+        if (node is null)
+        {
+            return this.ValidationFailure(
+                SceneOperationKinds.NodeRename,
+                DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                "Node was not renamed",
+                "The scene node no longer exists.",
+                context);
+        }
+
+        if (enforceLock && this.RejectLockedTargets(context, SceneOperationKinds.NodeRename, [node]) is { } lockFailure)
+        {
+            return lockFailure;
+        }
+
+        var trimmed = (newName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return this.ValidationFailure(
+                SceneOperationKinds.NodeRename,
+                DiagnosticCodes.ScenePrefix + "INVALID_NAME",
+                "Node was not renamed",
+                "Scene node names cannot be empty.",
+                context);
+        }
+
+        var oldName = node.Name;
+        if (string.Equals(oldName, trimmed, StringComparison.Ordinal))
+        {
+            return SceneCommandResult.Success;
+        }
+
+        node.Name = trimmed;
+        context.History.AddChange(
+            $"Rename({oldName} -> {trimmed})",
+            async () => await this.RenameNodeCoreAsync(context, nodeId, oldName, enforceLock: false).ConfigureAwait(false));
+        _ = this.AdvanceRevision(context);
+        var outcome = await this.sceneEngineSync.RenameNodeAsync(context.Scene, nodeId, trimmed).ConfigureAwait(true);
+        var operationResultId = await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.NodeRename, outcome).ConfigureAwait(true);
+        return new SceneCommandResult(Succeeded: true, operationResultId);
+    }
+
+    private void RecordCreateNodeUndo(SceneDocumentCommandContext context, SceneNode node)
+    {
+        var restore = NodeRestore.Capture(node);
+        context.History.AddChange(
+            $"Remove {node.Name}",
+            async () => await this.RemoveNodeForUndoAsync(context, restore).ConfigureAwait(true));
+    }
+
+    private async Task RemoveNodeForUndoAsync(SceneDocumentCommandContext context, NodeRestore restore)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
+        EnsureExplorerLayout(context.Scene);
+        _ = this.sceneMutator.RemoveHierarchy(restore.Node.Id, context.Scene);
+        _ = this.sceneOrganizer.RemoveNodeFromLayout(restore.Node.Id, context.Scene);
+        this.RecordDeleteNodesUndo(context, [restore]);
+        _ = this.AdvanceRevision(context);
+        await this.SyncRemoveNodesAsync(context, [restore.Node.Id]).ConfigureAwait(true);
+        this.PublishNodeRemoved(context, restore.Node);
+    }
+
+    private void RecordDeleteNodesUndo(SceneDocumentCommandContext context, IReadOnlyList<NodeRestore> restores)
+    {
+        context.History.BeginChangeSet($"Restore {restores.Count} node(s)");
+        try
+        {
+            foreach (var restore in restores)
+            {
+                var name = restore.Node.Name;
+                context.History.AddChange(
+                    $"Restore {name}",
+                    async () => await this.RestoreNodeForUndoAsync(context, restore).ConfigureAwait(true));
+            }
+        }
+        finally
+        {
+            context.History.EndChangeSet();
+        }
+    }
+
+    private async Task RestoreNodeForUndoAsync(SceneDocumentCommandContext context, NodeRestore restore)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
+        this.RedirectCapturedSubtree(context, restore.Node);
+        InsertNodeAt(context.Scene, restore.Node, restore.Parent, restore.Index);
+        this.RecordCreateNodeUndo(context, restore.Node);
+        _ = this.AdvanceRevision(context);
+        await this.SyncNodeSubtreeAsync(context, restore.Node).ConfigureAwait(true);
+        this.PublishNodeAdded(context, restore.Node);
+    }
+
+    private void RecordReparentUndo(SceneDocumentCommandContext context, IReadOnlyList<ReparentMove> moves)
+    {
+        context.History.BeginChangeSet($"Move {moves.Count} node(s)");
+        try
+        {
+            foreach (var move in moves)
+            {
+                move.NewIndex = move.Node.Parent is null
+                    ? context.Scene.RootNodes.IndexOf(move.Node)
+                    : move.Node.Parent.Children.IndexOf(move.Node);
+                context.History.AddChange(
+                    $"Move {move.Node.Name}",
+                    async () => await this.UndoReparentAsync(context, move).ConfigureAwait(true));
+            }
+        }
+        finally
+        {
+            context.History.EndChangeSet();
+        }
+    }
+
+    private async Task UndoReparentAsync(SceneDocumentCommandContext context, ReparentMove move)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
+        move.ApplyInverse(this.sceneMutator);
+        context.History.AddChange(
+            $"Move {move.Node.Name}",
+            async () => await this.RedoReparentAsync(context, move).ConfigureAwait(true));
+        _ = this.AdvanceRevision(context);
+
+        // Surface a native rejection from inside the history delegate: operation results reach the
+        // user through the operations channel regardless of who initiated the reparent.
+        var outcome = await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
+        _ = await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.NodeReparent, outcome).ConfigureAwait(true);
+        await this.sceneEngineSync.ReparentNodeAsync(context.Scene, move.Node.Id, move.OldParent?.Id, preserveWorldTransform: false).ConfigureAwait(true);
+    }
+
+    private async Task RedoReparentAsync(SceneDocumentCommandContext context, ReparentMove move)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
+        move.ApplyForward(this.sceneMutator, this.sceneOrganizer);
+        context.History.AddChange(
+            $"Move {move.Node.Name}",
+            async () => await this.UndoReparentAsync(context, move).ConfigureAwait(true));
+        _ = this.AdvanceRevision(context);
+
+        // Surface a native rejection from inside the history delegate, as in UndoReparentAsync.
+        var outcome = await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
+        _ = await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.NodeReparent, outcome).ConfigureAwait(true);
+        await this.sceneEngineSync.ReparentNodeAsync(context.Scene, move.Node.Id, move.NewParent?.Id, preserveWorldTransform: false).ConfigureAwait(true);
+    }
+
+    private void RecordLayoutHistory(
+        SceneDocumentCommandContext context,
+        string label,
+        IList<ExplorerEntryData>? before,
+        IList<ExplorerEntryData>? after)
+    {
+        var beforeClone = this.sceneOrganizer.CloneLayout(before);
+        var afterClone = this.sceneOrganizer.CloneLayout(after);
+        if (LayoutsEqual(beforeClone, afterClone))
+        {
+            return;
+        }
+
+        context.History.AddChange(
+            label,
+            async () => await this.ApplyLayoutForHistoryAsync(context, label, beforeClone, afterClone).ConfigureAwait(true));
+    }
+
+    private async Task ApplyLayoutForHistoryAsync(
+        SceneDocumentCommandContext context,
+        string label,
+        IList<ExplorerEntryData>? layout,
+        IList<ExplorerEntryData>? inverse)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
+        context.Scene.SetExplorerLayout(this.sceneOrganizer.CloneLayout(layout));
+        context.History.AddChange(
+            label,
+            async () => await this.ApplyLayoutForHistoryAsync(context, label, inverse, layout).ConfigureAwait(true));
+        _ = this.AdvanceRevision(context);
+    }
+
+    private SceneValueCommandResult<SceneNode>? ResolveCreateParent(
+        SceneDocumentCommandContext context,
+        NodeId? parentNodeId,
+        FolderId? parentFolderId,
+        out SceneNode? actualParent)
+    {
+        actualParent = null;
+        SceneNode? parentNode = null;
+        if (parentNodeId.HasValue)
+        {
+            parentNode = FindNode(context.Scene, parentNodeId.Value);
+            if (parentNode is null)
+            {
+                return SceneCommandResults.Failure<SceneNode>(this.PublishSceneFailure(
+                    SceneOperationKinds.NodeCreate,
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "Node was not created",
+                    "The target parent node no longer exists.",
+                    context));
+            }
+        }
+
+        NodeId? folderSceneParentNodeId = null;
+        if (parentFolderId.HasValue)
+        {
+            var (found, nodeId) = FindFolderSceneParentNodeId(context.Scene.ExplorerLayout, parentFolderId.Value);
+            if (!found)
+            {
+                return SceneCommandResults.Failure<SceneNode>(this.PublishSceneFailure(
+                    SceneOperationKinds.NodeCreate,
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "Node was not created",
+                    "The target folder no longer exists.",
+                    context));
+            }
+
+            folderSceneParentNodeId = nodeId;
+        }
+
+        actualParent = parentNode ?? (folderSceneParentNodeId.HasValue ? FindNode(context.Scene, folderSceneParentNodeId.Value) : null);
+        if (actualParent is not null
+            && this.RejectLockedTargets(context, SceneOperationKinds.NodeCreate, [actualParent]) is { } parentLockFailure)
+        {
+            return SceneCommandResults.Failure<SceneNode>(parentLockFailure.OperationResultId);
+        }
+
+        return null;
+    }
+
+    // Validate the parent folder and node before seeding: the organizer resolves them against the layout and
+    // would throw after the seed, leaving an uncommitted, un-undoable mutation behind a generic failure.
+    private SceneValueCommandResult<FolderId>? ValidateFolderCreateTargets(SceneDocumentCommandContext context, FolderId? parentFolderId, NodeId? parentNodeId)
+    {
+        var destinationScopes = new List<SceneNode>();
+        if (parentFolderId.HasValue)
+        {
+            var (folderFound, parentFound, folderParent) = ResolveFolderScope(context.Scene, parentFolderId.Value);
+            if (!folderFound)
+            {
+                return this.FolderCreateStaleTarget("The target parent folder no longer exists.", context);
+            }
+
+            if (!parentFound)
+            {
+                return this.FolderCreateStaleTarget("The target folder's scene parent no longer exists.", context);
+            }
+
+            if (folderParent is not null)
+            {
+                destinationScopes.Add(folderParent);
+            }
+        }
+
+        if (parentNodeId is { } parentNodeIdValue)
+        {
+            var parentNode = FindNode(context.Scene, parentNodeIdValue);
+            if (parentNode is null)
+            {
+                return this.FolderCreateStaleTarget("The target parent node no longer exists.", context);
+            }
+
+            destinationScopes.Add(parentNode);
+        }
+
+        return this.RejectLockedTargets(context, SceneOperationKinds.ExplorerFolderCreate, destinationScopes) is { } parentLockFailure
+            ? SceneCommandResults.Failure<FolderId>(parentLockFailure.OperationResultId)
+            : null;
+    }
+
+    private SceneValueCommandResult<FolderId> FolderCreateStaleTarget(string message, SceneDocumentCommandContext context)
+        => SceneCommandResults.Failure<FolderId>(this.PublishSceneFailure(
+            SceneOperationKinds.ExplorerFolderCreate,
+            DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+            "Folder was not created",
+            message,
+            context));
+
+    private SceneCommandResult? ValidateFolderRenameTarget(SceneDocumentCommandContext context, FolderId folderId)
+    {
+        var (folderFound, parentFound, parentNode) = ResolveFolderScope(context.Scene, folderId);
+        if (!folderFound)
+        {
+            return this.ValidationFailure(
+                SceneOperationKinds.ExplorerFolderRename,
+                DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                "Folder was not renamed",
+                "The folder no longer exists.",
+                context);
+        }
+
+        if (!parentFound)
+        {
+            return this.ValidationFailure(
+                SceneOperationKinds.ExplorerFolderRename,
+                DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                "Folder was not renamed",
+                "The folder's scene parent no longer exists.",
+                context);
+        }
+
+        return parentNode is not null && this.RejectLockedTargets(context, SceneOperationKinds.ExplorerFolderRename, [parentNode]) is { } lockFailure
+            ? lockFailure
+            : null;
+    }
+
+    private SceneCommandResult? ValidateFolderDeletion(SceneDocumentCommandContext context, IReadOnlyList<FolderId> folderIds)
+    {
+        foreach (var folderId in folderIds)
+        {
+            var (found, parentFound, parentNode) = ResolveFolderScope(context.Scene, folderId);
+            if (!found)
+            {
+                return this.ValidationFailure(
+                    SceneOperationKinds.ExplorerFolderDelete,
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "Items were not deleted",
+                    "One or more selected folders no longer exist.",
+                    context);
+            }
+
+            if (!parentFound)
+            {
+                return this.ValidationFailure(
+                    SceneOperationKinds.ExplorerFolderDelete,
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "Items were not deleted",
+                    "The folder's scene parent no longer exists.",
+                    context);
+            }
+
+            if (parentNode is not null && this.RejectLockedTargets(context, SceneOperationKinds.ExplorerFolderDelete, [parentNode]) is { } folderLockFailure)
+            {
+                return folderLockFailure;
+            }
+        }
+
+        return null;
+    }
+
+    private void ApplyDelete(SceneDocumentCommandContext context, List<NodeRestore> restores, IReadOnlyList<FolderId> folderIds)
+    {
+        var layoutBefore = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
+        context.History.BeginChangeSet($"Delete {restores.Count + folderIds.Count} item(s)");
+        try
+        {
+            foreach (var restore in restores)
+            {
+                _ = this.sceneMutator.RemoveHierarchy(restore.Node.Id, context.Scene);
+                _ = this.sceneOrganizer.RemoveNodeFromLayout(restore.Node.Id, context.Scene);
+            }
+
+            this.RecordDeleteNodesUndo(context, restores);
+
+            foreach (var folderId in folderIds)
+            {
+                _ = this.sceneOrganizer.RemoveFolder(folderId, promoteChildrenToParent: true, context.Scene);
+            }
+
+            this.RecordLayoutHistory(context, "Delete folders", layoutBefore, context.Scene.ExplorerLayout);
+        }
+        finally
+        {
+            context.History.EndChangeSet();
+        }
+    }
+
+    private SceneCommandResult? ResolveReparentTarget(
+        SceneDocumentCommandContext context,
+        NodeId? newParentNodeId,
+        NodeId? insertAfterNodeId,
+        out SceneNode? newParent,
+        out SceneNode? anchorNode,
+        out int insertIndex)
+    {
+        newParent = null;
+        anchorNode = null;
+        insertIndex = -1;
+        if (newParentNodeId.HasValue)
+        {
+            newParent = FindNode(context.Scene, newParentNodeId.Value);
+            if (newParent is null)
+            {
+                return this.StaleTarget(SceneOperationKinds.NodeReparent, "Nodes were not moved", "The destination parent no longer exists.", context);
+            }
+        }
+
+        // Inserting after a sibling implies the sibling's parent.
+        if (insertAfterNodeId.HasValue)
+        {
+            anchorNode = FindNode(context.Scene, insertAfterNodeId.Value);
+            if (anchorNode is null)
+            {
+                return this.StaleTarget(SceneOperationKinds.NodeReparent, "Nodes were not moved", "The destination sibling no longer exists.", context);
+            }
+
+            newParent = anchorNode.Parent;
+            insertIndex = anchorNode.Parent is null
+                ? context.Scene.RootNodes.IndexOf(anchorNode) + 1
+                : anchorNode.Parent.Children.IndexOf(anchorNode) + 1;
+        }
+
+        return null;
+    }
+
+    private SceneCommandResult? CaptureReparentMoves(
+        SceneDocumentCommandContext context,
+        HashSet<NodeId> topLevelIds,
+        SceneNode? newParent,
+        bool preserveWorldTransform,
+        out List<ReparentMove> moves)
+    {
+        moves = new List<ReparentMove>(topLevelIds.Count);
+        foreach (var nodeId in topLevelIds)
+        {
+            var node = FindNode(context.Scene, nodeId);
+            if (node is null)
+            {
+                return this.StaleTarget(SceneOperationKinds.NodeReparent, "Nodes were not moved", "One or more selected nodes no longer exist.", context);
+            }
+
+            if (ReferenceEquals(node, newParent) || (newParent is not null && newParent.Ancestors().Contains(node)))
+            {
+                return this.ValidationFailure(
+                    SceneOperationKinds.NodeReparent,
+                    DiagnosticCodes.ScenePrefix + "INVALID_CYCLE",
+                    "Nodes were not moved",
+                    "A node cannot be moved into its own descendant.",
+                    context);
+            }
+
+            var move = ReparentMove.Capture(node, newParent, preserveWorldTransform);
+            if (move.NewTransform is null)
+            {
+                return this.ValidationFailure(
+                    SceneOperationKinds.NodeReparent,
+                    DiagnosticCodes.ScenePrefix + "TRANSFORM_UNREPRESENTABLE",
+                    "Nodes were not moved",
+                    "The destination would produce an unrepresentable transform (singular or sheared).",
+                    context);
+            }
+
+            moves.Add(move);
+        }
+
+        return null;
+    }
+
+    private void ApplyReparent(SceneDocumentCommandContext context, List<ReparentMove> moves, SceneNode? newParent, int insertIndex)
+    {
+        var layoutBefore = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
+        context.History.BeginChangeSet($"Move {moves.Count} node(s)");
+        try
+        {
+            foreach (var move in moves)
+            {
+                move.ApplyForward(this.sceneMutator, this.sceneOrganizer);
+                if (insertIndex >= 0)
+                {
+                    MoveToIndex(newParent is null ? context.Scene.RootNodes : newParent.Children, move.Node, insertIndex);
+                    insertIndex++;
+                }
+            }
+
+            this.RecordReparentUndo(context, moves);
+            this.RecordLayoutHistory(context, "Move nodes", layoutBefore, context.Scene.ExplorerLayout);
+        }
+        finally
+        {
+            context.History.EndChangeSet();
+        }
+    }
+
+    // Push each cross-scope reparent's local TRS and surface a native rejection instead of
+    // discarding it, so the grouping never diverges in the runtime silently.
+    private async Task<Guid?> PushGroupedTransformsAsync(SceneDocumentCommandContext context, List<ReparentMove> reparents)
+    {
+        Guid? firstOperationResultId = null;
+        foreach (var move in reparents)
+        {
+            var outcome = await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
+            firstOperationResultId ??= await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.ExplorerLayoutMoveNode, outcome).ConfigureAwait(true);
+            _ = this.sceneEngineSync.ReparentNodeAsync(context.Scene, move.Node.Id, move.NewParent?.Id, preserveWorldTransform: false);
+        }
+
+        return firstOperationResultId;
+    }
+
+    private SceneCommandResult StaleTarget(string operationKind, string title, string message, SceneDocumentCommandContext context)
+        => this.ValidationFailure(operationKind, DiagnosticCodes.ScenePrefix + "STALE_TARGET", title, message, context);
+
+    private SceneCommandResult? CaptureGroupMoves(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<NodeId> nodeIds,
+        SceneNode? folderScopeParent,
+        out List<SceneNode> nodes,
+        out List<ReparentMove> reparents)
+    {
+        nodes = new List<SceneNode>(nodeIds.Count);
+        reparents = [];
+        foreach (var nodeId in nodeIds)
+        {
+            var node = FindNode(context.Scene, nodeId);
+            if (node is null)
+            {
+                return this.StaleTarget(SceneOperationKinds.ExplorerLayoutMoveNode, "Nodes were not grouped", "One or more selected nodes no longer exist.", context);
+            }
+
+            nodes.Add(node);
+
+            if (node.Parent?.Id == folderScopeParent?.Id)
+            {
+                continue;
+            }
+
+            if (folderScopeParent is not null
+                && (ReferenceEquals(node, folderScopeParent) || folderScopeParent.Ancestors().Contains(node)))
+            {
+                return this.ValidationFailure(
+                    SceneOperationKinds.ExplorerLayoutMoveNode,
+                    DiagnosticCodes.ScenePrefix + "INVALID_CYCLE",
+                    "Nodes were not grouped",
+                    "A node cannot be grouped under its own descendant.",
+                    context);
+            }
+
+            reparents.Add(ReparentMove.Capture(node, folderScopeParent, preserveWorldTransform: false));
+        }
+
+        return null;
+    }
+
+    private void ApplyGrouping(SceneDocumentCommandContext context, IReadOnlyList<NodeId> nodeIds, FolderId folderId, List<ReparentMove> reparents)
+    {
+        var previousLayout = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
+        context.History.BeginChangeSet($"Group {nodeIds.Count} node(s)");
+        try
+        {
+            foreach (var move in reparents)
+            {
+                move.ApplyForward(this.sceneMutator, this.sceneOrganizer);
+            }
+
+            this.RecordReparentUndo(context, reparents);
+
+            foreach (var nodeId in nodeIds)
+            {
+                _ = this.sceneOrganizer.MoveNodeToFolder(nodeId, folderId, context.Scene);
+            }
+
+            this.RecordLayoutHistory(context, $"Group {nodeIds.Count} node(s)", previousLayout, context.Scene.ExplorerLayout);
+        }
+        finally
+        {
+            context.History.EndChangeSet();
+        }
+    }
+
+    private SceneCommandResult? CollectReorderScopes(
+        SceneDocumentCommandContext context,
+        NodeId nodeId,
+        FolderId? parentFolderId,
+        NodeId? parentNodeId,
+        out List<SceneNode> affectedNodes)
+    {
+        affectedNodes = [];
+        var node = FindNode(context.Scene, nodeId);
+        if (node is null)
+        {
+            return this.StaleTarget(SceneOperationKinds.ExplorerLayoutMoveNode, "Node was not reordered", "The scene node no longer exists.", context);
+        }
+
+        affectedNodes.Add(node);
+        if (parentNodeId is { } parentId)
+        {
+            var parent = FindNode(context.Scene, parentId);
+            if (parent is null)
+            {
+                return this.StaleTarget(SceneOperationKinds.ExplorerLayoutMoveNode, "Node was not reordered", "The target parent node no longer exists.", context);
+            }
+
+            affectedNodes.Add(parent);
+        }
+
+        if (parentFolderId is not { } targetFolderId)
+        {
+            return null;
+        }
+
+        var (folderFound, parentFound, folderParent) = ResolveFolderScope(context.Scene, targetFolderId);
+        if (!folderFound)
+        {
+            return this.StaleTarget(SceneOperationKinds.ExplorerLayoutMoveNode, "Node was not reordered", "The target folder no longer exists.", context);
+        }
+
+        if (!parentFound)
+        {
+            return this.StaleTarget(SceneOperationKinds.ExplorerLayoutMoveNode, "Node was not reordered", "The target folder's scene parent no longer exists.", context);
+        }
+
+        if (folderParent is not null)
+        {
+            affectedNodes.Add(folderParent);
+        }
+
+        return null;
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "the failure is reported through the operation result or forwarded to the awaiting caller and must not escape")]
+    private async Task SyncCreateNodeAsync(SceneDocumentCommandContext context, SceneNode node, NodeId? parentId)
+    {
+        try
+        {
+            await this.sceneEngineSync.CreateNodeAsync(node, parentId).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _ = this.PublishLiveSyncWarning(SceneOperationKinds.NodeCreate, DiagnosticCodes.LiveSyncPrefix + "CREATE_NODE_FAILED", "Scene was updated but live preview was not", context, node, ex);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "the failure is reported through the operation result or forwarded to the awaiting caller and must not escape")]
+    private async Task SyncRemoveNodesAsync(SceneDocumentCommandContext context, IReadOnlyList<NodeId> nodeIds)
+    {
+        try
+        {
+            await this.sceneEngineSync.RemoveNodeHierarchiesAsync(context.Scene, nodeIds).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _ = this.PublishSceneWarning(
+                SceneOperationKinds.NodeDelete,
+                DiagnosticCodes.LiveSyncPrefix + "REMOVE_NODE_FAILED",
+                "Scene was updated but live preview was not",
+                "Deleted nodes were authored, but the live preview did not update.",
+                context,
+                ex,
+                FailureDomain.LiveSync);
+        }
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Auto)]
+    private readonly record struct TransformSnapshot(Vector3 Position, Quaternion Rotation, Vector3 Scale)
+    {
+        public static TransformSnapshot Capture(TransformComponent? transform)
+            => transform is null
+                ? new TransformSnapshot(Vector3.Zero, Quaternion.Identity, Vector3.One)
+                : new TransformSnapshot(transform.LocalPosition, transform.LocalRotation, transform.LocalScale);
+
+        public void Apply(SceneNode node)
+        {
+            var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
+            if (transform is null)
+            {
+                return;
+            }
+
+            transform.LocalPosition = this.Position;
+            transform.LocalRotation = this.Rotation;
+            transform.LocalScale = this.Scale;
+        }
+    }
+
+    private sealed record NodeRestore(SceneNode Node, SceneNode? Parent, int Index)
+    {
+        public static NodeRestore Capture(SceneNode node)
+        {
+            var index = node.Parent is null
+                ? node.Scene.RootNodes.IndexOf(node)
+                : node.Parent.Children.IndexOf(node);
+            return new NodeRestore(node, node.Parent, index);
+        }
+    }
+
+    private sealed record ReparentMove(
+        SceneNode Node,
+        SceneNode? OldParent,
+        int OldIndex,
+        SceneNode? NewParent,
+        TransformSnapshot OldTransform,
+        TransformSnapshot? NewTransform)
+    {
+        public int NewIndex { get; set; } = -1;
+
+        public static ReparentMove Capture(SceneNode node, SceneNode? newParent, bool preserveWorldTransform)
+        {
+            var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
+            var oldTransform = TransformSnapshot.Capture(transform);
+            var oldIndex = node.Parent is null
+                ? node.Scene.RootNodes.IndexOf(node)
+                : node.Parent.Children.IndexOf(node);
+
+            TransformSnapshot? newTransform = null;
+            if (!preserveWorldTransform || node.IgnoreParentTransform)
+            {
+                newTransform = oldTransform;
+            }
+            else if (transform is not null
+                && SceneTransformMath.TryPreserveWorldLocal(node, newParent, out var position, out var rotation, out var scale))
+            {
+                newTransform = new TransformSnapshot(position, rotation, scale);
+            }
+
+            return new ReparentMove(node, node.Parent, oldIndex, newParent, oldTransform, newTransform);
+        }
+
+        public void ApplyForward(ISceneMutator mutator, ISceneOrganizer organizer)
+        {
+            this.NewTransform?.Apply(this.Node);
+            _ = mutator.ReparentNode(this.Node.Id, this.OldParent?.Id, this.NewParent?.Id, this.Node.Scene);
+            if (this.NewIndex >= 0)
+            {
+                MoveToIndex(this.NewParent is null ? this.Node.Scene.RootNodes : this.NewParent.Children, this.Node, this.NewIndex);
+            }
+
+            _ = organizer.RemoveNodeFromLayout(this.Node.Id, this.Node.Scene);
+        }
+
+        public void ApplyInverse(ISceneMutator mutator)
+        {
+            this.OldTransform.Apply(this.Node);
+            _ = mutator.ReparentNode(this.Node.Id, this.NewParent?.Id, this.OldParent?.Id, this.Node.Scene);
+            MoveToIndex(this.OldParent is null ? this.Node.Scene.RootNodes : this.OldParent.Children, this.Node, this.OldIndex);
+        }
+    }
+}

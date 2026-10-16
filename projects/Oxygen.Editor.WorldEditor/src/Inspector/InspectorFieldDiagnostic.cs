@@ -18,7 +18,4 @@ public sealed partial class InspectorFieldDiagnostic : ObservableObject
 
     /// <summary>Gets whether the field has an error to present.</summary>
     public bool HasError => this.Message.Length != 0;
-
-    /// <summary>Gets the originating document revision.</summary>
-    public long Revision { get; internal set; }
 }

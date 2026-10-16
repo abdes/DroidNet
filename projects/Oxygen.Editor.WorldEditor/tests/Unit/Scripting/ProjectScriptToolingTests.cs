@@ -128,6 +128,5 @@ public sealed class ProjectScriptToolingTests : IDisposable
             ProjectRoot = this.ProjectRoot,
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
-            Scenes = [],
         };
 }

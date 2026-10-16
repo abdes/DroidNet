@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.SavedSourceScenario;
@@ -74,9 +75,9 @@ public sealed class SavedSourceCookTests
         try
         {
             _ = generator.Scene.Should().BeNull();
-            workspace.Scene.Name = "Latest saved";
+            MarkVersion(workspace, "Latest saved");
             await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-            workspace.Scene.Name = "New unsaved edits";
+            MarkVersion(workspace, "New unsaved edits");
         }
         finally
         {
@@ -85,8 +86,8 @@ public sealed class SavedSourceCookTests
 
         _ = await first.ConfigureAwait(false);
         _ = (await cook.ConfigureAwait(false)).Status.Should().Be(OperationStatus.Succeeded);
-        _ = generator.Scene!.Name.Should().Be("Latest saved");
-        _ = workspace.Scene.Name.Should().Be("New unsaved edits");
+        _ = VersionOf(generator.Scene!).Should().Be("Latest saved");
+        _ = VersionOf(workspace.Scene).Should().Be("New unsaved edits");
     }
 
     /// <summary>Changed saved files require acknowledgement even when the document is not dirty.</summary>
@@ -157,11 +158,20 @@ public sealed class SavedSourceCookTests
         var cook = service.CookCurrentSceneAsync(new("asset:///" + relative), this.TestContext.CancellationToken);
         var runId = await blocked.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = generator.Scene.Should().BeNull();
-        workspace.Scene.Name = "Explicitly saved";
+        MarkVersion(workspace, "Explicitly saved");
         await workspace.WriteSceneAsync(relative).ConfigureAwait(false);
-        state = SavedState(path) with { DocumentId = state.DocumentId, Revision = 2, SavedRevision = 2 };
+        state = SavedState(path) with { Revision = 2, SavedRevision = 2 };
         _ = workspace.CookCoordinator.ResumeAfterSave(runId).Should().BeTrue();
         _ = (await cook.ConfigureAwait(false)).Status.Should().Be(OperationStatus.Succeeded);
-        _ = generator.Scene!.Name.Should().Be("Explicitly saved");
+        _ = VersionOf(generator.Scene!).Should().Be("Explicitly saved");
     }
+
+    // The scene's name is its file name, so a root node tells one saved version from another.
+    private static void MarkVersion(CookWorkspace workspace, string version)
+    {
+        workspace.Scene.RootNodes.Clear();
+        workspace.Scene.RootNodes.Add(new SceneNode(workspace.Scene) { Name = version });
+    }
+
+    private static string VersionOf(Scene scene) => scene.RootNodes.Single().Name;
 }

@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.TimeMachine;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.World;
@@ -33,7 +34,7 @@ public sealed partial class ContentDemandTests
         fixture.Activate();
         _ = fixture.Requests.Should().ContainSingle();
         ConfigureStructuralSync(fixture);
-        fixture.Authoring.Context.Metadata.IsDirty = true;
+        fixture.Authoring.Document.History.AddChange("Edit", static () => { });
 
         _ = (await fixture.Authoring.Commands.DeleteNodesAsync(fixture.Authoring.Context, [fixture.Authoring.Node.Id]).ConfigureAwait(true)).Succeeded.Should().BeTrue();
 
@@ -52,7 +53,7 @@ public sealed partial class ContentDemandTests
         fixture.Activate();
         _ = fixture.Requests.Should().ContainSingle();
         ConfigureStructuralSync(fixture);
-        fixture.Authoring.Context.Metadata.IsDirty = true;
+        fixture.Authoring.Document.History.AddChange("Edit", static () => { });
 
         _ = (await fixture.Authoring.Commands.RemoveComponentAsync(fixture.Authoring.Context, fixture.Authoring.Node.Id, fixture.Geometry.Id).ConfigureAwait(true)).Succeeded.Should().BeTrue();
 
@@ -68,7 +69,7 @@ public sealed partial class ContentDemandTests
         using var fixture = new DemandFixture();
         fixture.Activate();
         ConfigureStructuralSync(fixture);
-        fixture.Authoring.Context.Metadata.IsDirty = true;
+        fixture.Authoring.Document.History.AddChange("Edit", static () => { });
         var context = fixture.Authoring.Context;
 
         var created = await fixture.Authoring.Commands.CreateNodeAsync(context, parentNodeId: null, parentFolderId: null, "Created").ConfigureAwait(true);
@@ -98,7 +99,7 @@ public sealed partial class ContentDemandTests
         fixture.Activate();
         _ = fixture.Requests.Should().ContainSingle();
         ConfigureStructuralSync(fixture);
-        fixture.Authoring.Context.Metadata.IsDirty = true;
+        fixture.Authoring.Document.History.AddChange("Edit", static () => { });
         var context = fixture.Authoring.Context;
 
         var parent = await fixture.Authoring.Commands.CreateNodeAsync(context, parentNodeId: null, parentFolderId: null, "Parent").ConfigureAwait(true);
@@ -123,7 +124,7 @@ public sealed partial class ContentDemandTests
         fixture.Activate();
         _ = fixture.Requests.Should().ContainSingle();
         ConfigureStructuralSync(fixture);
-        fixture.Authoring.Context.Metadata.IsDirty = true;
+        fixture.Authoring.Document.History.AddChange("Edit", static () => { });
         var context = fixture.Authoring.Context;
 
         _ = (await fixture.Authoring.Commands.RenameNodeAsync(context, fixture.Authoring.Node.Id, "Renamed").ConfigureAwait(true)).Succeeded.Should().BeTrue();

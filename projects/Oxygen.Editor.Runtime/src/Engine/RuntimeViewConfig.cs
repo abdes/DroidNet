@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Editor view configuration; omitted optional values retain native defaults.</summary>
@@ -35,7 +37,7 @@ public sealed record RuntimeViewConfig
     public RuntimeEditorCamera? EditorCamera { get; init; }
 
     /// <summary>Gets the authored camera node the view looks through from its first frame, if any.</summary>
-    public Guid? SceneCameraNodeId { get; init; }
+    public NodeId? SceneCameraNodeId { get; init; }
 
     /// <summary>
     /// Gets the view a camera preview inset is composed over, or <see langword="null"/> for a view

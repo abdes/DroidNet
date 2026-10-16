@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
 
 namespace Oxygen.Editor.World.Messages;
@@ -22,10 +23,10 @@ namespace Oxygen.Editor.World.Messages;
 internal sealed class SceneNodeSelectionChangedMessage(
     IList<SceneNode> selectedEntities,
     SceneSelectionContext? selectionContext = null,
-    Guid? documentId = null)
+    DocumentId? documentId = null)
 {
     /// <summary>Gets the owning document identity when supplied by the publisher.</summary>
-    public Guid? DocumentId { get; } = documentId;
+    public DocumentId? DocumentId { get; } = documentId;
 
     /// <summary>
     /// Gets the list of selected <see cref="SceneNode"/> entities.

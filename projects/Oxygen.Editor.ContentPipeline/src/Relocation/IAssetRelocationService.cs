@@ -65,6 +65,11 @@ public interface IAssetRelocationService
     /// <returns>The referrers' virtual paths, sorted and without duplicates.</returns>
     public Task<IReadOnlyList<string>> FindReferrersOutsideAsync(IReadOnlyList<string> sources, CancellationToken cancellationToken);
 
+    /// <summary>Finds the open documents whose files a delete of the sources removes, so the delete can name them.</summary>
+    /// <param name="sources">The assets or folders to delete.</param>
+    /// <returns>The documents' names, each with whether it has unsaved edits, sorted by name.</returns>
+    public IReadOnlyList<(string Name, bool IsDirty)> FindOpenDocuments(IReadOnlyList<string> sources);
+
     /// <summary>Copies assets or folders into a folder under unique names; references are not rewritten.</summary>
     /// <param name="sources">The virtual paths to copy.</param>
     /// <param name="targetFolder">The destination folder.</param>

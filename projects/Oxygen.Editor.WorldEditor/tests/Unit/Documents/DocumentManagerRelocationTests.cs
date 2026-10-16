@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Storage;
 using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Relocation;
@@ -14,10 +15,11 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Services;
+using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
-/// <summary>Open material documents follow the deletes and moves the editor makes.</summary>
+/// <summary>Open material and scene documents follow the deletes and moves the editor makes.</summary>
 [TestClass]
 public sealed class DocumentManagerRelocationTests
 {
@@ -44,10 +46,10 @@ public sealed class DocumentManagerRelocationTests
             ProjectRoot = Root,
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
-            Scenes = [],
         });
         var documents = new EditorDocumentService();
         var relocation = new Mock<IAssetRelocationService>();
+        using var files = new OpenDocuments([], Mock.Of<IAtomicFileStore>());
         using var manager = new DocumentManager(
             documents,
             messenger,
@@ -55,7 +57,7 @@ public sealed class DocumentManagerRelocationTests
             Mock.Of<IProjectUsageService>(),
             Mock.Of<IMaterialDocumentService>(),
             window,
-            Mock.Of<IProjectManagerService>(),
+            files,
             Mock.Of<ISceneEngineSync>(),
             relocation.Object);
         var metadata = new MaterialDocumentMetadata(new Uri("asset:///Content/Materials/Red.omat.json")) { Title = "Red" };
@@ -78,5 +80,37 @@ public sealed class DocumentManagerRelocationTests
         await settled.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = documents.GetOpenDocuments(window).OfType<MaterialDocumentMetadata>().Should().HaveCount(deleted ? 0 : 1);
+    }
+
+    /// <summary>Deleting a scene's file in the editor closes its tab; the delete already asked about it.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task SceneDocumentClosesWhenItsFileIsDeleted()
+    {
+        var window = new WindowId(92);
+        using var scenes = new SceneDocumentFiles(Mock.Of<ISceneDocumentCommandService>());
+        var (document, _) = await scenes.CreateAsync("Main", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var projects = new ProjectContextService();
+        projects.Activate(scenes.Context);
+        var documents = new EditorDocumentService();
+        var relocation = new Mock<IAssetRelocationService>();
+        using var manager = new DocumentManager(
+            documents,
+            new StrongReferenceMessenger(),
+            projects,
+            Mock.Of<IProjectUsageService>(),
+            Mock.Of<IMaterialDocumentService>(),
+            window,
+            scenes.Documents,
+            Mock.Of<ISceneEngineSync>(),
+            relocation.Object);
+        _ = await documents.OpenDocumentAsync(window, SceneDocumentMetadata.For(document)).ConfigureAwait(false);
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        documents.DocumentClosed += (_, _) => _ = closed.TrySetResult();
+
+        relocation.Raise(value => value.FilesChanged += null, new AssetFilesChangedEventArgs([], [], [Path.GetDirectoryName(document.File.Path)!], foldersChanged: true));
+        await closed.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = documents.GetOpenDocuments(window).Should().BeEmpty();
     }
 }

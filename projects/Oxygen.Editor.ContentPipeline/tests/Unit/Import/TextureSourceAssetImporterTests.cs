@@ -202,6 +202,5 @@ public sealed class TextureSourceAssetImporterTests
         Category = Category.Games,
         AuthoringMounts = [new("Content", "Content")],
         LocalFolderMounts = [],
-        Scenes = [],
     };
 }

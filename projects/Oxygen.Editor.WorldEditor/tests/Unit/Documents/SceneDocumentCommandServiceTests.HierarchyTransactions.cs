@@ -53,14 +53,11 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeFalse();
         _ = SerializeHierarchy(scene).Should().Be(before);
         _ = node.Children.Should().ContainSingle().Which.Should().BeSameAs(child);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         _ = context.History.RedoStack.Should().BeEmpty();
         fixture.Sync.Verify(
             sync => sync.RemoveNodeHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<Guid>>()),
-            Times.Never);
-        fixture.DocumentService.Verify(
-            service => service.UpdateMetadataAsync(It.IsAny<Microsoft.UI.WindowId>(), context.DocumentId, context.Metadata),
             Times.Never);
     }
 
@@ -232,7 +229,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         AssertPasteIsolationAfterEditingFirstClone(source, child, firstClone, secondClone);
         _ = context.History.UndoStack.Should().HaveCount(2);
         _ = sourceContext.History.UndoStack.Should().BeEmpty();
-        _ = sourceContext.Metadata.IsDirty.Should().BeFalse();
+        _ = sourceContext.IsDirty().Should().BeFalse();
         _ = SerializeHierarchy(sourceScene).Should().Be(sourceBefore);
         _ = JsonSerializer.Serialize(snapshot, HierarchyJsonOptions).Should().Be(snapshotBefore);
 

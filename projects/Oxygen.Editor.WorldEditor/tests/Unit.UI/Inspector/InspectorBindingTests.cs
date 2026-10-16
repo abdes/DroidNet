@@ -341,7 +341,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
         await scenario.Model.PendingEdits.ConfigureAwait(true);
         _ = scenario.Fixture.Scene.References.ExtraAssets.Should().ContainSingle().Which.Should().Be(path);
-        _ = scenario.Fixture.Context.Metadata.IsDirty.Should().BeTrue();
+        _ = scenario.Fixture.Document.IsDirty.Should().BeTrue();
 
         var remove = await WaitForDescendantAsync(section, (Button button) => Equals(button.Content, "Remove"), "remove-extra-asset button", this.TestContext.CancellationToken).ConfigureAwait(true);
         ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(remove)
@@ -418,7 +418,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = scenario.Named("AutoExposureSpotMeterRadiusCard").Visibility.Should().Be(Visibility.Visible);
         _ = spot.ApplicabilityText.Should().Contain(AppliesInAutoExposureSpotMeteringCopy);
         _ = CardOf(spot).Content.Should().BeSameAs(originalContent);
-        _ = scenario.Fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = scenario.Fixture.Document.IsDirty.Should().BeFalse();
         _ = scenario.Fixture.Context.History.UndoStack.Should().BeEmpty();
 
         scenario.Model.Exposure.ExposureMode = Oxygen.Editor.World.Serialization.ExposureMode.Auto;

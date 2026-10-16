@@ -247,7 +247,7 @@ public sealed class ImportWorkflowTests
             var source = Path.Combine(external.FullName, "model.gltf");
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), source);
             var settingsPath = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf.import.json");
-            var state = new CookDocumentState(Guid.NewGuid(), settingsPath, "Model import settings", 1, 0, IsDirty: true, string.Empty);
+            var state = new CookDocumentState(settingsPath, "Model import settings", 1, 0, IsDirty: true, string.Empty);
             var dirty = true;
             using var registration = workspace.Documents.Register(settingsPath, _ => Task.FromResult<CookDocumentReadLease?>(dirty ? new(state, static () => { }) : null));
             var blocked = new TaskCompletionSource<Guid>(TaskCreationOptions.RunContinuationsAsynchronously);

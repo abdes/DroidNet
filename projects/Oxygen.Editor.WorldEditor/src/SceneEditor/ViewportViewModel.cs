@@ -9,9 +9,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.WorldEditor.SceneEditor;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LevelEditor;
@@ -75,7 +77,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
     /// </param>
     public ViewportViewModel(
-        Guid documentId,
+        DocumentId documentId,
         IEngineService engineService,
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
@@ -183,7 +185,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Gets the document identifier owning this viewport.
     /// </summary>
-    public Guid DocumentId { get; }
+    public DocumentId DocumentId { get; }
 
     /// <summary>
     /// Gets the unique viewport identifier.
@@ -314,19 +316,19 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Gets or sets whether a camera node is locked against edits; a locked camera cannot be piloted or aligned.
     /// </summary>
-    public Func<Guid, bool>? CameraLockProvider { get; set; }
+    public Func<NodeId, bool>? CameraLockProvider { get; set; }
 
     /// <summary>
     /// Gets or sets the authoring commit for a camera pose read from this viewport: it records an
     /// undoable edit of the node and completes with whether it applied.
     /// </summary>
-    public Func<Guid, RuntimeViewCameraPose, Task<bool>>? CameraPoseCommitter { get; set; }
+    public Func<NodeId, RuntimeViewCameraPose, Task<bool>>? CameraPoseCommitter { get; set; }
 
     /// <summary>
     /// Gets or sets the hook that runs before this pane starts piloting a camera, so the panes
     /// piloting the same camera stop first.
     /// </summary>
-    public Func<ViewportViewModel, Guid, Task>? PilotStarting { get; set; }
+    public Func<ViewportViewModel, NodeId, Task>? PilotStarting { get; set; }
 
     /// <summary>
     /// Gets or sets the editor fly movement speed.
@@ -421,7 +423,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     public ViewportSurfaceRequest CreateSurfaceRequest(string? tag = null)
         => new()
         {
-            DocumentId = this.DocumentId,
+            DocumentId = this.DocumentId.Value,
             ViewportId = this.ViewportId,
             ViewportIndex = this.ViewportIndex,
             IsPrimary = this.IsPrimaryViewport,
@@ -976,7 +978,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         _ = await this.CommitCameraPoseAsync(camera.NodeId).ConfigureAwait(true);
     }
 
-    private async Task<bool> CommitCameraPoseAsync(Guid nodeId)
+    private async Task<bool> CommitCameraPoseAsync(NodeId nodeId)
     {
         if (this.CameraPoseCommitter is not { } commit || !this.AssignedViewId.IsValid)
         {
@@ -1014,7 +1016,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
     private IReadOnlyList<SceneCameraChoice> GetSceneCameras() => this.SceneCamerasProvider?.Invoke() ?? [];
 
-    private bool IsLocked(Guid nodeId) => this.CameraLockProvider?.Invoke(nodeId) == true;
+    private bool IsLocked(NodeId nodeId) => this.CameraLockProvider?.Invoke(nodeId) == true;
 
     private async Task ApplyCameraControlModeAsync(CameraControlMode mode)
     {
@@ -1139,7 +1141,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     private AffectedScope CreateAffectedScope()
         => new()
         {
-            DocumentId = this.DocumentId,
+            DocumentId = this.DocumentId.Value,
         };
 
     private string CreateViewportTechnicalMessage(Exception? exception)

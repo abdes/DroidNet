@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Interop;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -30,17 +31,17 @@ internal sealed partial class NativeEngineSession
         => this.Runner.TrySetViewCameraPresetAsync(this.context, new(viewId.Value), NativeSessionConversions.ToNative<CameraViewPresetManaged>(preset));
 
     /// <inheritdoc />
-    public override Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, Guid? cameraNodeId)
-        => this.Runner.TrySetViewSceneCameraAsync(this.context, new(viewId.Value), cameraNodeId ?? Guid.Empty);
+    public override Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, NodeId? cameraNodeId)
+        => this.Runner.TrySetViewSceneCameraAsync(this.context, new(viewId.Value), cameraNodeId?.Value ?? Guid.Empty);
 
     /// <inheritdoc />
     public override Task<bool> SetViewScenePilotAsync(RuntimeViewId viewId, bool pilot)
         => this.Runner.TrySetViewScenePilotAsync(this.context, new(viewId.Value), pilot);
 
     /// <inheritdoc />
-    public override async Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, Guid nodeId)
+    public override async Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, NodeId nodeId)
     {
-        var pose = await this.Runner.TryGetViewCameraPoseAsync(this.context, new(viewId.Value), nodeId).ConfigureAwait(false);
+        var pose = await this.Runner.TryGetViewCameraPoseAsync(this.context, new(viewId.Value), nodeId.Value).ConfigureAwait(false);
         return pose is null ? null : new(pose.Position, pose.RotationDegrees, pose.Scale, pose.OrthographicSize, pose.FieldOfViewDegrees);
     }
 
@@ -77,13 +78,13 @@ internal sealed partial class NativeEngineSession
             await this.Runner.TryPickViewAsync(this.context, new(viewId.Value), rect.X, rect.Y, rect.Width, rect.Height).ConfigureAwait(false));
 
     /// <inheritdoc />
-    public override async Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<Guid> nodeIds)
+    public override async Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeId> nodeIds)
         => NativeSessionConversions.FromNative(
-            await this.Runner.TryFrameViewAsync(this.context, new(viewId.Value), [.. nodeIds]).ConfigureAwait(false));
+            await this.Runner.TryFrameViewAsync(this.context, new(viewId.Value), [.. nodeIds.Select(static id => id.Value)]).ConfigureAwait(false));
 
     /// <inheritdoc />
-    public override bool SetSelectionOutline(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId)
-        => this.Runner.TrySetSelectionOutline(this.context, [.. nodeIds], activeNodeId);
+    public override bool SetSelectionOutline(IReadOnlyList<NodeId> nodeIds, NodeId? activeNodeId)
+        => this.Runner.TrySetSelectionOutline(this.context, [.. nodeIds.Select(static id => id.Value)], activeNodeId?.Value);
 
     /// <inheritdoc />
     public override bool SetTransformGizmo(RuntimeTransformGizmo gizmo)
@@ -95,8 +96,8 @@ internal sealed partial class NativeEngineSession
             gizmo.Snap.Translation,
             gizmo.Snap.RotationDegrees,
             gizmo.Snap.Scale,
-            [.. gizmo.Targets],
-            gizmo.ActiveNodeId,
+            [.. gizmo.Targets.Select(static id => id.Value)],
+            gizmo.ActiveNodeId?.Value,
             gizmo.DisplayScale);
 
     /// <inheritdoc />
@@ -105,7 +106,7 @@ internal sealed partial class NativeEngineSession
 
     /// <inheritdoc />
     public override bool SetSceneHelpers(RuntimeSceneHelpers helpers)
-        => this.Runner.TrySetSceneHelpers(this.context, [.. helpers.HiddenNodeIds], [.. helpers.LockedNodeIds], helpers.DisplayScale);
+        => this.Runner.TrySetSceneHelpers(this.context, [.. helpers.HiddenNodeIds.Select(static id => id.Value)], [.. helpers.LockedNodeIds.Select(static id => id.Value)], helpers.DisplayScale);
 
     /// <inheritdoc />
     public override bool SetTransformGizmoListener(Action<RuntimeGizmoEvent>? listener)

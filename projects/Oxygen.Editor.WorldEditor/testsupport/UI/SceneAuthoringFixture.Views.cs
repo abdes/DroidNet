@@ -24,9 +24,9 @@ internal sealed partial class SceneAuthoringFixture
     {
         IList<SceneNode> selection = string.Equals(kind, "Environment", StringComparison.Ordinal) ? [] : [this.Node];
         this.Messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
-        _ = this.Documents.Setup(service => service.GetOpenDocuments(It.IsAny<WindowId>())).Returns([this.Context.Metadata]);
-        _ = this.Documents.Setup(service => service.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(this.Scene.Id);
-        _ = this.Sync.Setup(service => service.GetDocumentScene(this.Context.Metadata)).Returns(this.Scene);
+        _ = this.Documents.Setup(service => service.GetOpenDocuments(It.IsAny<WindowId>())).Returns([this.Tab]);
+        _ = this.Documents.Setup(service => service.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(this.Tab.DocumentId);
+        _ = this.Sync.Setup(service => service.GetDocumentScene(this.Tab.DocumentId)).Returns(this.Scene);
         var locator = new Mock<IViewLocator>();
         if (realizeViews)
         {

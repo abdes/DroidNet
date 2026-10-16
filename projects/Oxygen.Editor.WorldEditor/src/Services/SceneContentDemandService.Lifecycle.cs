@@ -68,7 +68,7 @@ public sealed partial class SceneContentDemandService
         this.Dispatch(() =>
         {
             var owner = this.documents.GetOpenDocuments(this.windowId).OfType<SceneDocumentMetadata>().FirstOrDefault(document => document.DocumentId == args.DocumentId);
-            if (owner is not null && this.sceneSync.GetDocumentScene(owner) is { } loaded)
+            if (owner is not null && this.sceneSync.GetDocumentScene(owner.SceneDocumentId) is { } loaded)
             {
                 this.Activate(loaded, owner);
             }

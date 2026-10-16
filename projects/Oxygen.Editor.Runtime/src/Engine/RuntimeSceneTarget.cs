@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Runtime.InteropServices;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -12,7 +13,7 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="DocumentLifetime">The identity of the open document instance.</param>
 /// <param name="ActivationId">The identity of this projection, invalidated by scene replacement.</param>
 [StructLayout(LayoutKind.Auto)]
-public readonly record struct RuntimeSceneTarget(Guid RunId, Guid SceneId, Guid DocumentLifetime, Guid ActivationId)
+public readonly record struct RuntimeSceneTarget(Guid RunId, SceneId SceneId, Guid DocumentLifetime, Guid ActivationId)
 {
     /// <summary>Gets the owning project identity for cross-workspace status isolation.</summary>
     public Guid ProjectId { get; init; }

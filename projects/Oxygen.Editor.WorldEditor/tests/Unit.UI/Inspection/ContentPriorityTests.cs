@@ -41,7 +41,6 @@ internal sealed class ContentPriorityTests : DroidNet.Tests.VisualUserInterfaceT
                 ProjectRoot = directory.FullName,
                 AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [new("First", first), new("Second", second)],
-                Scenes = [],
             };
             var model = new ContentPriorityViewModel(project);
             var view = new ContentPriorityView

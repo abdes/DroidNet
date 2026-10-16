@@ -2,8 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Immutable runtime request to remove a node's local fog volume.</summary>
 /// <param name="NodeId">The node that carries the volume.</param>
-public sealed record RuntimeDetachLocalFogVolume(Guid NodeId) : RuntimeWorldCommand;
+public sealed record RuntimeDetachLocalFogVolume(NodeId NodeId) : RuntimeWorldCommand;

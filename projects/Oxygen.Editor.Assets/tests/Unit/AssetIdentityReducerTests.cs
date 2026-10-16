@@ -279,7 +279,6 @@ public sealed partial class AssetIdentityReducerTests
             ProjectRoot = workspace.Root,
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
-            Scenes = [],
         };
 
     private static ProjectCookScope CreateCookScope(TempWorkspace workspace, ProjectContext project)

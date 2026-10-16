@@ -36,7 +36,6 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="vmToViewConverter">The converter for converting view models to views.</param>
 /// <param name="contentBrowserState">The content browser state to track selection changes.</param>
 /// <param name="projectContextService">The active project context service.</param>
-/// <param name="projectManagerService">The project manager service for creating scenes.</param>
 /// <param name="contentPipelineService">The explicit editor content-pipeline service.</param>
 /// <param name="assetProvider">The shared content-browser asset provider.</param>
 /// <param name="operationResults">The operation-result publisher.</param>
@@ -46,14 +45,13 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="windowManagerService">The window manager service.</param>
 /// <param name="shell">The clipboard and File Explorer actions.</param>
 /// <param name="relocation">The rename, move, copy and delete workflow; without it those commands are unavailable.</param>
-/// <param name="scripts">New Script and New Input File; without it those commands are unavailable.</param>
+/// <param name="creation">New Script, New Input File and New Scene; without it those commands are unavailable.</param>
 /// <param name="codeEditor">The code editor that opens scripts and input files; without it Edit is unavailable.</param>
 public partial class AssetsViewModel(
     Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
     ViewModelToView vmToViewConverter,
     ContentBrowserState contentBrowserState,
     IProjectContextService projectContextService,
-    IProjectManagerService projectManagerService,
     IAuthoringTargetResolver authoringTargetResolver,
     IContentPipelineService contentPipelineService,
     IAssetFeed assetProvider,
@@ -65,7 +63,7 @@ public partial class AssetsViewModel(
     IWindowManagerService windowManagerService,
     IAssetShell shell,
     Relocation.IAssetRelocationWorkflow? relocation = null,
-    Scripts.ScriptAssetCreation? scripts = null,
+    Authoring.AuthoredAssetCreation? creation = null,
     Scripts.ICodeEditorService? codeEditor = null) : AbstractOutletContainer, IRoutingAware
 {
     private bool disposed;
@@ -150,7 +148,7 @@ public partial class AssetsViewModel(
             // Listen for changes to ContentBrowserState selection via PropertyChanged
             contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
 
-            messenger.Register<CreateScriptRequestMessage>(this, (_, message) => message.Reply(scripts?.CreateScriptAsync() ?? Task.FromResult<string?>(null)));
+            messenger.Register<CreateScriptRequestMessage>(this, (_, message) => message.Reply(creation?.CreateScriptAsync() ?? Task.FromResult<string?>(null)));
             relocation?.Completed += this.OnRelocationCompleted;
             relocation?.HistoryChanged += this.OnRelocationHistoryChanged;
             automaticCooking.PropertyChanged += this.OnAutomaticCookingChanged;
@@ -506,21 +504,8 @@ public partial class AssetsViewModel(
         }
         else if (args.InvokedItem.Kind == AssetKind.Scene)
         {
-            var currentProject = projectManagerService.CurrentProject;
-            if (currentProject is null)
-            {
-                return;
-            }
-
-            // Update the scene explorer
-            var scene = currentProject.Scenes.FirstOrDefault(scene =>
-                string.Equals(scene.Name, args.InvokedItem.DisplayName, StringComparison.OrdinalIgnoreCase));
-            if (scene is not null)
-            {
-                // Request to open the scene document; the document/workspace owner assigns the
-                // accepted ActiveScene only after the scene has loaded.
-                _ = messenger.Send(new OpenSceneRequestMessage(scene));
-            }
+            // The scene's identity is its file; the workspace's document owner opens it.
+            _ = messenger.Send(new OpenSceneRequestMessage(args.InvokedItem.IdentityUri));
         }
         else if (args.InvokedItem.Kind == AssetKind.Folder)
         {
@@ -568,50 +553,16 @@ public partial class AssetsViewModel(
     }
 
     /// <summary>
-    ///     Creates a new scene with the specified name.
-    /// </summary>
-    /// <param name="sceneName">The name of the new scene.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    [RelayCommand]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The view owns this operation boundary and reports failures.")]
-    private async Task CreateNewSceneAsync(string? sceneName)
-    {
-        if (string.IsNullOrWhiteSpace(sceneName))
-        {
-            // TODO: Show validation error or prompt for name
-            return;
-        }
-
-        try
-        {
-            var newScene = await projectManagerService.CreateSceneAsync(sceneName).ConfigureAwait(true);
-            if (newScene is not null)
-            {
-                projectContextService.Activate(ProjectContext.FromProject(newScene.Project));
-                await assetProvider.RefreshAsync().ConfigureAwait(true);
-                _ = messenger.Send(new OpenSceneRequestMessage(newScene));
-            }
-
-            // TODO: Show error message to user about scene creation failure
-        }
-        catch (Exception ex)
-        {
-            // TODO: Show error message to user
-            Debug.WriteLine($"Failed to create scene '{sceneName}': {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    ///     Handles the creation of a new scene by prompting for a name.
+    ///     Asks for a name and folder, creates an empty scene there and opens it.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
     [RelayCommand]
     private async Task CreateNewSceneWithPromptAsync()
     {
-        var sceneCount = projectContextService.ActiveProject?.Scenes.Count ?? 0;
-        var defaultName = string.Create(CultureInfo.InvariantCulture, $"NewScene{sceneCount + 1}");
-
-        await this.CreateNewSceneAsync(defaultName).ConfigureAwait(true);
+        if (creation is not null)
+        {
+            _ = await creation.CreateSceneAsync().ConfigureAwait(true);
+        }
     }
 
     /// <summary>Turns the project's Cook on change setting on or off.</summary>

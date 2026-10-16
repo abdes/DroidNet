@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
@@ -102,14 +103,14 @@ public sealed class ScriptCookingTests : IDisposable
         _ = warning.Severity.Should().Be(DiagnosticSeverity.Warning);
         _ = warning.Code.Should().Be(ScriptDiagnosticCodes.SlotWithoutScript);
         _ = warning.SuggestedAction!.Payload["PropertyPath"].Should().Be(ScriptSlotDiagnostics.PropertyPath(empty.Id, parameter: null));
-        _ = warning.SuggestedAction.Payload["NodeId"].Should().Be(player.Id.ToString("D"));
+        _ = warning.SuggestedAction.Payload["NodeId"].Should().Be(player.Id.ToString());
     }
 
     [TestMethod]
     public async Task GenerateAsyncFailsForAMissingNodeOrScript()
     {
         var scene = this.CreateScene(out _, out var player);
-        var lost = new ScriptSlot { Script = MoveScript }.WithOverride("follow", ScriptValue.FromNode(Guid.NewGuid()));
+        var lost = new ScriptSlot { Script = MoveScript }.WithOverride("follow", ScriptValue.FromNode(NodeId.New()));
         var gone = new ScriptSlot { Script = new Uri("asset:///Content/Player/gone.oscript") };
         _ = player.AddComponent(new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [lost, gone] });
 
@@ -161,7 +162,7 @@ public sealed class ScriptCookingTests : IDisposable
     [TestMethod]
     public void SidecarDiagnosticsPointAtTheirSlotAndParameter()
     {
-        var site = new ScriptBindingSite(Guid.NewGuid(), "Player", Guid.NewGuid(), SlotNumber: 1, ["follow", "speed"]);
+        var site = new ScriptBindingSite(NodeId.New(), "Player", Guid.NewGuid(), SlotNumber: 1, ["follow", "speed"]);
         var descriptor = new SceneDescriptorGenerationResult(
             new Uri("asset:///Content/Scenes/Main.oscene.json"),
             Path.Combine(this.root, ".pipeline", "Scenes", "Main.oscene.json"),
@@ -169,7 +170,7 @@ public sealed class ScriptCookingTests : IDisposable
             Dependencies: [],
             Diagnostics: [])
         {
-            SceneId = Guid.NewGuid(),
+            SceneId = SceneId.New(),
             SceneName = "Main",
             ScriptBindings = [new ScriptSidecarBinding(1, site.SlotId.ToString("D"), "/Content/Player/move.oscript", 0, [])],
             ScriptBindingSites = [site],
@@ -195,7 +196,7 @@ public sealed class ScriptCookingTests : IDisposable
 
     private Scene CreateScene(out SceneNode target, out SceneNode player)
     {
-        var scene = new Scene(this.project) { Name = "Main", Id = Guid.NewGuid() };
+        var scene = new Scene(this.project) { Name = "Main", Id = SceneId.New() };
         scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto } });
         target = new SceneNode(scene) { Name = "Target" };
         player = new SceneNode(scene) { Name = "Player" };

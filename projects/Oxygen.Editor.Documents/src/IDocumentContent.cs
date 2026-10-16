@@ -11,6 +11,10 @@ namespace Oxygen.Editor.Documents;
 /// </remarks>
 public interface IDocumentContent
 {
+    /// <summary>Gets a value indicating whether an edit is in progress, such as an open drag, that the history has not recorded yet.</summary>
+    /// <remarks>A document with an edit in progress does not reload by itself when its file changes.</remarks>
+    public bool HasEditsInProgress { get; }
+
     /// <summary>Finishes the edits in progress, such as an open drag or edit session, as one history entry each.</summary>
     /// <param name="cancellationToken">Cancels waiting for the edits.</param>
     /// <returns>The task that completes once no edit is in progress.</returns>

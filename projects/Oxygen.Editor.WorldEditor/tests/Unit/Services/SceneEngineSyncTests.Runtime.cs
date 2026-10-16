@@ -27,7 +27,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
         using var sut = new SceneEngineSync(engine.Object);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
+        _ = sut.RegisterDocument(scene, Guid.NewGuid());
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         _ = (await sut.SyncSceneAsync(scene, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
@@ -70,7 +70,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
         using var sut = new SceneEngineSync(engine.Object);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
+        _ = sut.RegisterDocument(scene, Guid.NewGuid());
         var node = new SceneNode(scene) { Name = "Camera" };
         scene.RootNodes.Add(node);
         node.Components.Add(new PerspectiveCamera { Name = "Perspective Camera", FieldOfView = 60, AspectMode = aspectMode, AspectRatio = 1.5f, NearPlane = 0.25f, FarPlane = 500 });
@@ -105,7 +105,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
         using var sut = new SceneEngineSync(engine.Object);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
+        _ = sut.RegisterDocument(scene, Guid.NewGuid());
         var parent = new SceneNode(scene) { Name = "Hidden parent", IsVisible = false, CastsShadows = true, ReceivesShadows = false };
         var child = new SceneNode(scene) { Name = "Shown child", IsVisible = true };
         parent.AddChild(child);
@@ -157,7 +157,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
         using var sync = new SceneEngineSync(engine.Object);
         var scene = CreateScene();
-        _ = sync.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
+        _ = sync.RegisterDocument(scene, Guid.NewGuid());
         var node = new SceneNode(scene) { Name = "Saved geometry" };
         scene.RootNodes.Add(node);
         var target = new Oxygen.Editor.World.Slots.MaterialSlotTarget(

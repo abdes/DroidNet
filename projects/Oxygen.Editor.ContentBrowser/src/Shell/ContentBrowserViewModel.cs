@@ -224,7 +224,7 @@ public sealed partial class ContentBrowserViewModel(
             this.childContainer.Register<IAssetShell, WindowsAssetShell>(Reuse.Singleton);
             this.childContainer.Register<Relocation.IAssetRelocationWorkflow, Relocation.AssetRelocationWorkflow>(Reuse.Singleton);
             this.childContainer.Register<AssetDetailsViewModel>(Reuse.Singleton);
-            this.childContainer.Register<Scripts.ScriptAssetCreation>(Reuse.Singleton);
+            this.childContainer.Register<Authoring.AuthoredAssetCreation>(Reuse.Singleton);
 
             this.childContainer.Register<ProjectLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
             this.childContainer.Register<ProjectLayoutView>(Reuse.Transient);
@@ -479,11 +479,16 @@ public sealed partial class ContentBrowserViewModel(
         }
     }
 
+    // A new project's scenes are in Content/Scenes, which the browser opens on when it has no saved state.
+    private static bool HasScenesFolder(ProjectContext project)
+        => project.FindByVirtualPath("/Content/Scenes") is { } folder && Directory.Exists(folder.FilePath);
+
     private async Task<string> GetInitialContentBrowserUrlAsync()
     {
         var project = projectContextService.ActiveProject;
-        var defaultUrl = project?.Scenes.Count > 0
-            ? DefaultLocalUrl + RouteStateMapping.BuildSelectedQuery(["Content/Scenes"])
+        string[] scenesFolder = project is not null && HasScenesFolder(project) ? ["Content/Scenes"] : [];
+        var defaultUrl = scenesFolder.Length > 0
+            ? DefaultLocalUrl + RouteStateMapping.BuildSelectedQuery(scenesFolder)
             : DefaultLocalUrl;
         if (project is null)
         {
@@ -501,7 +506,7 @@ public sealed partial class ContentBrowserViewModel(
             if (TryNormalizeContentBrowserUrl(usage.ContentBrowserState, out var restoredUrl))
             {
                 return restoredUrl.Contains('?', StringComparison.Ordinal) ? restoredUrl
-                    : restoredUrl + RouteStateMapping.BuildSelectedQuery(project.Scenes.Count > 0 ? ["Content/Scenes"] : []);
+                    : restoredUrl + RouteStateMapping.BuildSelectedQuery(scenesFolder);
             }
 
             this.PublishPartialRestoreResult(

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Editing;
 
@@ -269,7 +270,7 @@ internal sealed partial class TransformEditController(
         }
 
         var property = TransformDescriptor(field).TypedId.Id;
-        var ticket = this.diagnostics.Begin([property], commandContextProvider?.Invoke()?.Metadata.ChangeVersion ?? 0);
+        var ticket = this.diagnostics.Begin([property]);
         var result = args.IsValid ? SceneCommandResult.Success : new SceneCommandResult(Succeeded: false)
         {
             ValidationCode = "TRANSFORM_INVALID",
@@ -460,10 +461,10 @@ internal sealed partial class TransformEditController(
         EditSessionToken session,
         IReadOnlyList<SceneNode> nodes,
         SceneDocumentCommandContext? context,
-        IReadOnlyDictionary<Guid, PropertyEdit>? targetEdits = null)
+        IReadOnlyDictionary<NodeId, PropertyEdit>? targetEdits = null)
     {
         var requestSession = session.Capture();
-        var diagnostic = this.diagnostics.Begin([TransformDescriptor(property).TypedId.Id], context?.Metadata.ChangeVersion ?? 0);
+        var diagnostic = this.diagnostics.Begin([TransformDescriptor(property).TypedId.Id]);
         _ = Interlocked.Increment(ref this.inFlightEdits);
         var entered = false;
         try
@@ -576,7 +577,7 @@ internal sealed partial class TransformEditController(
     private sealed record TransformEditSession(
         EditSessionToken Token,
         IReadOnlyList<SceneNode> Nodes,
-        IReadOnlyDictionary<Guid, float> OriginalValues,
+        IReadOnlyDictionary<NodeId, float> OriginalValues,
         SceneDocumentCommandContext Context,
         NumberBoxEditInteractionKind Interaction,
         TransformEdit? LastEdit);

@@ -12,6 +12,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
@@ -61,7 +62,7 @@ public partial class SceneEditorViewModel
         this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
         {
             var foreign = message.DocumentId is { } documentId
-                ? documentId != this.Metadata.DocumentId
+                ? documentId != this.Document.Id
                 : !this.IsActiveDocument();
             if (this.isDisposed || foreign)
             {
@@ -85,7 +86,7 @@ public partial class SceneEditorViewModel
         => this.Viewports.FirstOrDefault(viewport => viewport.ViewportId == this.FocusedViewportId)
             ?? this.Viewports.FirstOrDefault();
 
-    private async Task<bool> ExecuteCameraCommandAsync(Guid nodeId, SceneCameraCommand command)
+    private async Task<bool> ExecuteCameraCommandAsync(NodeId nodeId, SceneCameraCommand command)
     {
         if (this.GetActiveViewport() is not { } viewport
             || this.GetSceneCameras().FirstOrDefault(camera => camera.NodeId == nodeId) is not { } camera)
@@ -136,19 +137,19 @@ public partial class SceneEditorViewModel
                 : null;
     }
 
-    private bool IsCameraLocked(Guid nodeId)
+    private bool IsCameraLocked(NodeId nodeId)
         => this.Interaction is { } interaction
             && this.FindNode(nodeId) is { } node
             && interaction.GetLockOwner(node) is not null;
 
-    private SceneNode? FindNode(Guid nodeId)
+    private SceneNode? FindNode(NodeId nodeId)
         => this.scene?.AllNodes.FirstOrDefault(node => node.Id == nodeId);
 
     /// <summary>
     /// Records a pose read from a viewport as one undoable step on the camera node: its transform, and
     /// the view's orthographic size or field of view when those changed. Unchanged values record nothing.
     /// </summary>
-    private async Task<bool> CommitCameraPoseAsync(Guid nodeId, RuntimeViewCameraPose pose)
+    private async Task<bool> CommitCameraPoseAsync(NodeId nodeId, RuntimeViewCameraPose pose)
     {
         if (this.scene is null || this.FindNode(nodeId) is not { } node)
         {
@@ -160,8 +161,8 @@ public partial class SceneEditorViewModel
             || !HasPose(transform, pose))
         {
             var edit = new TransformEdit(
-                Position: new OptionalEditValue<Vector3>(pose.Position),
-                RotationEulerDegrees: new OptionalEditValue<Vector3>(pose.RotationEulerDegrees),
+                Position: OptionalEditValues.Supplied(pose.Position),
+                RotationEulerDegrees: OptionalEditValues.Supplied(pose.RotationEulerDegrees),
                 Scale: default);
             edits.Add(context => this.commandService.EditTransformAsync(context, [nodeId], edit, EditSessionToken.OneShot));
         }

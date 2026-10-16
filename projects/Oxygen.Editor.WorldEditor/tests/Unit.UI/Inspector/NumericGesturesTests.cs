@@ -111,7 +111,7 @@ internal sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceT
         await PendingNumericEdits(model).ConfigureAwait(true);
         _ = number.NumberValue.Should().Be(before);
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
     /// <summary>Wheel samples share a session until the idle delay has elapsed.</summary>

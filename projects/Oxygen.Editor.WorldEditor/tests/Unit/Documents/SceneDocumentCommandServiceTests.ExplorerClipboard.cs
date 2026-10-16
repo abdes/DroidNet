@@ -135,7 +135,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeFalse();
         _ = SerializeHierarchy(scene).Should().Be(before);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
     }
 
@@ -195,7 +195,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeFalse();
         _ = SerializeHierarchy(scene).Should().Be(before);
-        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.IsDirty().Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         _ = fixture.Sut.ValidateExplorerPaste(context, payload, true, null, null, false).Should().Contain("Second");
     }

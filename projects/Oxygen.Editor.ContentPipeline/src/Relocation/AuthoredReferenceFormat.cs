@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -169,8 +170,34 @@ internal static class AuthoredReferenceFormat
             changed = true;
         }
 
+        // A copied scene is a scene of its own: it takes a new identity, and the name of its file.
+        if (root is JsonObject scene && targetPath.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase))
+        {
+            scene["Id"] = Guid.NewGuid().ToString("D");
+            scene["Name"] = Path.GetFileName(targetPath)[..^AssetFileTypes.SceneDescriptor.Length];
+            changed = true;
+        }
+
         changed |= RewriteFileReferences(root, sourcePath, map, targetPath);
         return changed ? Serialize(root!, content.Span) : content.ToArray();
+    }
+
+    /// <summary>Reads the identity a scene file holds.</summary>
+    /// <param name="content">The scene file's bytes.</param>
+    /// <returns>The scene's id, or <see langword="null"/> when the file holds none.</returns>
+    public static SceneId? ReadSceneId(ReadOnlyMemory<byte> content)
+    {
+        try
+        {
+            return JsonNode.Parse(StripBom(content.Span)) is JsonObject scene && scene["Id"] is JsonValue id
+                && id.TryGetValue<string>(out var text) && Guid.TryParse(text, out var parsed)
+                    ? SceneId.FromValue(parsed)
+                    : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Maps one reference value through an identity mapping, keeping its form.</summary>

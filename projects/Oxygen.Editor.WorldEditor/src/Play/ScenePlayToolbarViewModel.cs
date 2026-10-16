@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oxygen.Editor.Documents;
 
 namespace Oxygen.Editor.World.Play;
 
@@ -39,7 +40,7 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
     ];
 
     private readonly PlaySessionService session;
-    private readonly Guid documentId;
+    private readonly DocumentId documentId;
     private readonly Func<PlayRequest?> createRequest;
     private bool hasCamera;
 
@@ -47,7 +48,7 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
     /// <param name="session">The workspace's play sessions.</param>
     /// <param name="documentId">The scene document of this toolbar.</param>
     /// <param name="createRequest">Describes the scene to play; null while the scene is not loaded.</param>
-    public ScenePlayToolbarViewModel(PlaySessionService session, Guid documentId, Func<PlayRequest?> createRequest)
+    public ScenePlayToolbarViewModel(PlaySessionService session, DocumentId documentId, Func<PlayRequest?> createRequest)
     {
         this.session = session;
         this.documentId = documentId;

@@ -54,7 +54,6 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
         _ = this.Node.AddComponent(this.Camera);
         _ = this.Node.AddComponent(new DirectionalLightComponent { Name = "Sun" });
         this.Scene.RootNodes.Add(this.Node);
-        this.Context = new(this.Scene.Id, new SceneDocumentMetadata(this.Scene.Id), this.Scene, UndoRedo.GetHistory(this.Scene.Id));
         var sync = this.Sync;
         var accepted = new SyncOutcome(SyncStatus.Accepted, "UI control command", AffectedScope.Empty);
         _ = sync.Setup(value => value.UpdateMaterialSlotAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<MaterialSlotTarget>(), It.IsAny<Uri?>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
@@ -63,10 +62,16 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
         _ = sync.Setup(value => value.UpdateEnvironmentAsync(It.IsAny<Scene>(), It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>())).ReturnsAsync(new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal)));
         _ = sync.Setup(value => value.TryPreviewSyncAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<DateTimeOffset>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>())).Returns(async (Guid _, Guid _, DateTimeOffset _, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => (SyncOutcome?)await action(token).ConfigureAwait(true));
         _ = sync.Setup(value => value.CompleteTerminalSyncAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>())).Returns((Guid _, Guid _, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => action(token));
-        var documents = this.Documents;
-        _ = documents.Setup(value => value.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>())).ReturnsAsync(value: true);
-        this.Commands = new SceneDocumentCommandService(this.Selection, sync.Object, Mock.Of<IProjectManagerService>(), documents.Object, default, this.Messenger, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer(), this.Slots.Object, this.Projects, new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance), interaction);
+        this.Commands = new SceneDocumentCommandService(this.Selection, sync.Object, this.Messenger, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer(), this.Slots.Object, this.Projects, new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance), interaction);
+        this.Tab = SceneTabs.Open(this.Scene, this.Commands);
+        this.Context = new(this.Tab.DocumentId, this.Scene, this.Document.History);
     }
+
+    /// <summary>Gets the tab of the scene's document.</summary>
+    public SceneDocumentMetadata Tab { get; }
+
+    /// <summary>Gets the scene's document, whose history the commands record into.</summary>
+    public Oxygen.Editor.Documents.Document Document => this.Tab.Document!;
 
     public ProjectContextService Projects { get; } = new();
 

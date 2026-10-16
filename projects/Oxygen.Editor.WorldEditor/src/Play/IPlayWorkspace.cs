@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Documents;
+
 namespace Oxygen.Editor.World.Play;
 
 /// <summary>
@@ -21,5 +23,5 @@ public interface IPlayWorkspace
     /// <param name="sceneDocumentId">The scene document.</param>
     /// <param name="node">The node.</param>
     /// <returns>Whether the node was selected.</returns>
-    public Task<bool> SelectNodeAsync(Guid sceneDocumentId, SceneNode node);
+    public Task<bool> SelectNodeAsync(DocumentId sceneDocumentId, SceneNode node);
 }

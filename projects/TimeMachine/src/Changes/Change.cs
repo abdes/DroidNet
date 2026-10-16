@@ -26,6 +26,9 @@ public abstract class Change : IChange
     /// </remarks>
     public required object Key { get; init; }
 
+    /// <inheritdoc/>
+    public bool ChangesState { get; init; } = true;
+
     /// <summary>
     /// Applies the change.
     /// </summary>

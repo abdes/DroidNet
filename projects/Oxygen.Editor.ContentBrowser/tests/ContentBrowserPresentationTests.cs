@@ -117,7 +117,6 @@ public sealed class ContentBrowserPresentationTests
             ProjectRoot = "C:/Sources",
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
             LocalFolderMounts = [],
-            Scenes = [],
         };
         _ = ContentBrowserViewModel.DescribeSource(project, "/Content/Materials").Should().Be("Authoring source");
         _ = ContentBrowserViewModel.DescribeSource(project, "Content/Scenes").Should().Be("Authoring source");

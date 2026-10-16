@@ -39,7 +39,6 @@ public sealed class MaterialFolderWorkflowTests
             ProjectRoot = @"C:\Project",
             AuthoringMounts = [new ProjectMountPoint("Content", "Authoring")],
             LocalFolderMounts = [],
-            Scenes = [],
         };
 
         var actual = AssetsViewModel.NormalizeMaterialFolder("Authoring/Materials/Subfolder", project);
@@ -58,7 +57,6 @@ public sealed class MaterialFolderWorkflowTests
             ProjectRoot = @"C:\Project",
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [new LocalFolderMount("StudioLibrary", @"D:\Studio\SharedContent")],
-            Scenes = [],
         };
 
         var selection = AssetsViewModel.CreateMaterialTargetSelection(project, "/StudioLibrary/Materials/Shared");

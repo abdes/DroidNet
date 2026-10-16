@@ -35,7 +35,6 @@ internal sealed class RelocationWorkspace : IDisposable
             ProjectRoot = this.Root,
             AuthoringMounts = [new ProjectMountPoint("Content", "Content"), new ProjectMountPoint("Cooked", ".cooked")],
             LocalFolderMounts = [],
-            Scenes = [],
         });
         this.Coordinator = new(this.context, NullLogger<ContentCookCoordinator>.Instance);
         this.Files = new NativeAtomicFileStore(new RealFileSystem());

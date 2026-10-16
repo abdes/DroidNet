@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
@@ -64,7 +65,7 @@ public sealed partial class NativeLoopCleanupTests
 
     private async Task CheckCookedExposureMaskAsync(RuntimeCommandDispatcher commands, RuntimeTextureReference reference)
     {
-        var target = new RuntimeSceneTarget(commands.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var target = new RuntimeSceneTarget(commands.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         _ = (await commands.ActivateSceneAsync(Guid.NewGuid(), target, "Cooked mask", this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
         var initial = EnvironmentRequest(ObservedEnvironmentValues());
         _ = commands.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, initial), this.TestContext.CancellationToken).Succeeded.Should().BeTrue();

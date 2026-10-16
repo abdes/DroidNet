@@ -7,11 +7,13 @@ using DroidNet.Hosting.WinUI;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Cooking;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.SceneExplorer;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Workspace;
@@ -26,14 +28,16 @@ public partial class WorkspaceViewModel
 
     /// <inheritdoc />
     public Task<bool> SaveListedAsync(CookRunSnapshot run)
-        => run.ProjectId == this.projectContextService.ActiveProject?.ProjectId && Dockable.FromId(this.CenterOutletName)?.ViewModel is DocumentHostViewModel host
-            ? host.SaveDocumentsAsync(run.UnsavedDocuments.Select(static document => document.DocumentId).ToArray())
+        => this.projectContextService.ActiveProject is { } project && run.ProjectId == project.ProjectId
+            && Dockable.FromId(this.CenterOutletName)?.ViewModel is DocumentHostViewModel host
+            ? host.SaveDocumentsAsync([.. run.UnsavedDocuments.Select(document => project.FindByFilePath(document.SourcePath)?.AssetUri).OfType<Uri>()])
             : Task.FromResult(false);
 
     /// <inheritdoc />
-    public Task<bool> OpenDocumentAsync(Guid documentId)
-        => Dockable.FromId(this.CenterOutletName)?.ViewModel is DocumentHostViewModel host
-            ? host.SelectDocumentAsync(documentId) : Task.FromResult(false);
+    public Task<bool> OpenDocumentAsync(string sourcePath)
+        => this.projectContextService.ActiveProject?.FindByFilePath(sourcePath) is { } location
+            && Dockable.FromId(this.CenterOutletName)?.ViewModel is DocumentHostViewModel host
+            ? host.SelectDocumentAsync(location.AssetUri) : Task.FromResult(false);
 
     /// <inheritdoc />
     public async Task<bool> GoToPropertyAsync(CookRunSnapshot run, DiagnosticRecord issue)
@@ -43,7 +47,8 @@ public partial class WorkspaceViewModel
             || issue.SuggestedAction?.Payload.TryGetValue("PropertyPath", out var property) != true
             || property is null
             || (FindScriptSlotNode(issue, property) is null && !IsSceneProperty(property))
-            || this.projectManager.CurrentProject?.Scenes.FirstOrDefault(scene => scene.Id == sceneId) is not { } scene
+            || this.projectContextService.ActiveProject is not { } project
+            || await SceneFiles.FindByIdAsync(project, sceneId).ConfigureAwait(true) is not { } scene
             || this.documentManager is null
             || issue.AffectedPath is not { } sourcePath || !File.Exists(sourcePath))
         {
@@ -56,7 +61,7 @@ public partial class WorkspaceViewModel
             explorer.SelectEnvironment(sceneId);
         }
 
-        if (!await this.documentManager.OpenSceneAsync(scene).ConfigureAwait(true)
+        if (!await this.documentManager.OpenSceneAsync(scene.AssetUri).ConfigureAwait(true)
             || Dockable.FromId("props") is not { ViewModel: SceneNodeEditorViewModel inspector } properties)
         {
             return false;
@@ -88,11 +93,11 @@ public partial class WorkspaceViewModel
         => string.Equals(property, SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal)
             || Oxygen.Editor.ContentPipeline.ScenePlayPropertyPaths.IsPlayProperty(property);
 
-    private static Guid? FindScriptSlotNode(DiagnosticRecord issue, string property)
+    private static NodeId? FindScriptSlotNode(DiagnosticRecord issue, string property)
         => Oxygen.Editor.ContentPipeline.ScriptSlotDiagnostics.TryParsePropertyPath(property, out _, out _)
             && issue.SuggestedAction?.Payload.TryGetValue("NodeId", out var text) == true
             && Guid.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, out var node)
-                ? node : null;
+                ? NodeId.FromValue(node) : null;
 
     private Task<ICookPublicationPreview?> CreatePublicationPreviewAsync(Oxygen.Editor.Projects.ProjectContext project)
         => this.cookHosting!.Dispatcher.DispatchAsync(() => Task.FromResult<ICookPublicationPreview?>(

@@ -4,6 +4,8 @@
 
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.Documents;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 
@@ -15,10 +17,10 @@ namespace Oxygen.Editor.World.SceneExplorer;
 public partial class SceneExplorerViewModel
 {
     [LoggerMessage(Level = LogLevel.Error, Message = "Scene Explorer selection update failed for document {DocumentId}.")]
-    private static partial void LogSelectionApplyFailed(ILogger logger, Exception exception, Guid documentId);
+    private static partial void LogSelectionApplyFailed(ILogger logger, Exception exception, DocumentId documentId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Scene Explorer projection update failed for document {DocumentId}.")]
-    private static partial void LogProjectionUpdateFailed(ILogger logger, Exception exception, Guid documentId);
+    private static partial void LogProjectionUpdateFailed(ILogger logger, Exception exception, DocumentId documentId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Scene Explorer search failed for query {SearchQuery}.")]
     private static partial void LogSearchFailed(ILogger logger, Exception exception, string searchQuery);
@@ -87,10 +89,10 @@ public partial class SceneExplorerViewModel
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "CreateFolderFromSelection: node adapter for {NodeId} not found when moving into folder")]
-    private static partial void LogCreateFolderNodeAdapterNotFound(ILogger logger, System.Guid nodeId);
+    private static partial void LogCreateFolderNodeAdapterNotFound(ILogger logger, NodeId nodeId);
 
     [Conditional("DEBUG")]
-    private void LogCreateFolderNodeAdapterNotFound(System.Guid nodeId)
+    private void LogCreateFolderNodeAdapterNotFound(NodeId nodeId)
         => LogCreateFolderNodeAdapterNotFound(this.logger, nodeId);
 
     [LoggerMessage(
@@ -107,9 +109,9 @@ public partial class SceneExplorerViewModel
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
         Message = "Created folder '{FolderName}' with {ChildCount} entries in scene {SceneId}")]
-    private static partial void LogCreateFolderCreated(ILogger logger, string folderName, int childCount, System.Guid sceneId);
+    private static partial void LogCreateFolderCreated(ILogger logger, string folderName, int childCount, SceneId sceneId);
 
-    private void LogCreateFolderCreated(string folderName, int childCount, System.Guid sceneId)
+    private void LogCreateFolderCreated(string folderName, int childCount, SceneId sceneId)
         => LogCreateFolderCreated(this.logger, folderName, childCount, sceneId);
 
     [LoggerMessage(
@@ -152,9 +154,9 @@ public partial class SceneExplorerViewModel
         SkipEnabledCheck = true,
         Level = LogLevel.Warning,
         Message = "Move to folder rejected for node {NodeId} into folder {FolderId}.")]
-    private static partial void LogMoveNodeToFolderRejected(ILogger logger, Exception ex, System.Guid nodeId, System.Guid folderId);
+    private static partial void LogMoveNodeToFolderRejected(ILogger logger, Exception ex, NodeId nodeId, FolderId folderId);
 
-    private void LogMoveNodeToFolderRejected(Exception ex, System.Guid nodeId, System.Guid folderId)
+    private void LogMoveNodeToFolderRejected(Exception ex, NodeId nodeId, FolderId folderId)
         => LogMoveNodeToFolderRejected(this.logger, ex, nodeId, folderId);
 
     [LoggerMessage(
@@ -181,7 +183,7 @@ public partial class SceneExplorerViewModel
         Message = "Auto-expanded and selected new folder '{FolderName}' ({FolderId}).")]
     private static partial void LogAutoExpandedSelectedFolder(ILogger logger, string folderName, string folderId);
 
-    private void LogAutoExpandedSelectedFolder(string? folderName, System.Guid? folderId)
+    private void LogAutoExpandedSelectedFolder(string? folderName, FolderId? folderId)
         => LogAutoExpandedSelectedFolder(this.logger, folderName ?? "<null>", folderId.HasValue ? folderId.Value.ToString() : "<null>");
 
     [LoggerMessage(
@@ -226,7 +228,7 @@ public partial class SceneExplorerViewModel
         Message = "Failed to apply scene change '{OperationName}' for node '{NodeName}' ({NodeId}).")]
     private static partial void LogFailedApplySceneChange(ILogger logger, Exception ex, string operationName, string nodeName, string nodeId);
 
-    private void LogFailedApplySceneChange(Exception ex, string operationName, string? nodeName, System.Guid? nodeId)
+    private void LogFailedApplySceneChange(Exception ex, string operationName, string? nodeName, NodeId? nodeId)
         => LogFailedApplySceneChange(this.logger, ex, operationName, nodeName ?? "<null>", nodeId.HasValue ? nodeId.Value.ToString() : "<null>");
 
     [LoggerMessage(
@@ -251,9 +253,9 @@ public partial class SceneExplorerViewModel
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
         Message = "Failed to finalize removal for node '{NodeName}' ({NodeId}).")]
-    private static partial void LogFailedFinalizeRemoval(ILogger logger, Exception ex, string nodeName, System.Guid nodeId);
+    private static partial void LogFailedFinalizeRemoval(ILogger logger, Exception ex, string nodeName, NodeId nodeId);
 
-    private void LogFailedFinalizeRemoval(Exception ex, string nodeName, System.Guid nodeId)
+    private void LogFailedFinalizeRemoval(Exception ex, string nodeName, NodeId nodeId)
         => LogFailedFinalizeRemoval(this.logger, ex, nodeName, nodeId);
 
     [LoggerMessage(
@@ -305,18 +307,18 @@ public partial class SceneExplorerViewModel
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
         Message = "LoadSceneAsync: loaded scene {SceneId} (Name={SceneName})")]
-    private static partial void LogSceneLoaded(ILogger logger, System.Guid sceneId, string? sceneName);
+    private static partial void LogSceneLoaded(ILogger logger, SceneId sceneId, string? sceneName);
 
-    private void LogSceneLoaded(System.Guid sceneId, string? sceneName)
+    private void LogSceneLoaded(SceneId sceneId, string? sceneName)
         => LogSceneLoaded(this.logger, sceneId, sceneName);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
         Message = "LoadSceneAsync: sending SceneLoadedMessage for scene {SceneId} at {UtcNow}")]
-    private static partial void LogSceneLoadedMessageSent(ILogger logger, System.Guid sceneId, System.DateTime utcNow);
+    private static partial void LogSceneLoadedMessageSent(ILogger logger, SceneId sceneId, System.DateTime utcNow);
 
-    private void LogSceneLoadedMessageSent(System.Guid sceneId, System.DateTime utcNow)
+    private void LogSceneLoadedMessageSent(SceneId sceneId, System.DateTime utcNow)
         => LogSceneLoadedMessageSent(this.logger, sceneId, utcNow);
 
     [LoggerMessage(
@@ -327,4 +329,7 @@ public partial class SceneExplorerViewModel
 
     private void LogDocumentActivated(System.Guid documentId)
         => LogDocumentActivated(this.logger, documentId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Scene '{Scene}' was not renamed to '{Name}': {Reason}")]
+    private partial void LogSceneRenameRejected(string scene, string name, string reason);
 }

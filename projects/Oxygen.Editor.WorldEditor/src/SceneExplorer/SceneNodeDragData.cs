@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
+using Oxygen.Managed.Core;
 using Windows.ApplicationModel.DataTransfer;
 
 namespace Oxygen.Editor.World.SceneExplorer;
@@ -19,11 +20,11 @@ internal static class SceneNodeDragData
     /// <summary>Adds the dragged nodes to a drag's data.</summary>
     /// <param name="data">The drag's data package.</param>
     /// <param name="nodes">The dragged node identities.</param>
-    public static void Write(DataPackage data, IEnumerable<Guid> nodes)
+    public static void Write(DataPackage data, IEnumerable<NodeId> nodes)
     {
         ArgumentNullException.ThrowIfNull(data);
         ArgumentNullException.ThrowIfNull(nodes);
-        var text = string.Join(';', nodes.Select(static node => node.ToString("D")));
+        var text = string.Join(';', nodes.Select(static node => node.ToString()));
         if (text.Length > 0)
         {
             data.SetData(Format, text);
@@ -38,7 +39,7 @@ internal static class SceneNodeDragData
     /// <summary>Reads the dragged nodes.</summary>
     /// <param name="data">The drag's data.</param>
     /// <returns>The node identities; empty when the drag carries none.</returns>
-    public static async Task<IReadOnlyList<Guid>> ReadAsync(DataPackageView data)
+    public static async Task<IReadOnlyList<NodeId>> ReadAsync(DataPackageView data)
     {
         if (!Contains(data) || await data.GetDataAsync(Format) is not string text)
         {
@@ -46,7 +47,7 @@ internal static class SceneNodeDragData
         }
 
         return [.. text.Split(';', StringSplitOptions.RemoveEmptyEntries)
-            .Select(static part => Guid.TryParse(part, CultureInfo.InvariantCulture, out var node) ? node : Guid.Empty)
-            .Where(static node => node != Guid.Empty)];
+            .Select(static part => Guid.TryParse(part, CultureInfo.InvariantCulture, out var node) ? NodeId.FromValue(node) : NodeId.Empty)
+            .Where(static node => !node.IsEmpty)];
     }
 }

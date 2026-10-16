@@ -8,6 +8,7 @@ using AwesomeAssertions;
 using DroidNet.Controls;
 using Moq;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Documents.Commands;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -101,7 +102,7 @@ public sealed partial class SceneExplorerAuthoringTests
 
         _ = pasteContext.Should().NotBeNull();
         _ = pasteContext!.Scene.Should().BeSameAs(destination);
-        _ = pasteContext.DocumentId.Should().Be(destination.Id);
+        _ = pasteContext.DocumentId.Should().Be(harness.Documents.Object.GetOpenDocuments(default).OfType<SceneDocumentMetadata>().Single(metadata => ReferenceEquals(metadata.Scene, destination)).DocumentId);
         _ = pasted.Should().NotBeNull();
         _ = pasted!.Name.Should().Be("Node");
         AssertClipboardWorldPose(destination, pasted, capturedWorld);

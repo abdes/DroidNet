@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
 
@@ -16,7 +17,7 @@ public sealed record ScenePlayData
     /// Gets the camera node the scene starts viewing through, or <see langword="null"/> for the first camera in
     /// hierarchy order.
     /// </summary>
-    public Guid? StartingCamera { get; init; }
+    public NodeId? StartingCamera { get; init; }
 
     /// <summary>Gets the input mapping contexts that start active, in order.</summary>
     public IList<StartingInputContextData> StartingInputContexts { get; init; } = [];

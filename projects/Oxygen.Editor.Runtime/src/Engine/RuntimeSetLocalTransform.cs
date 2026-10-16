@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -11,4 +12,4 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="Position">The Position command value.</param>
 /// <param name="Rotation">The Rotation command value.</param>
 /// <param name="Scale">The Scale command value.</param>
-public sealed record RuntimeSetLocalTransform(Guid NodeId, Vector3 Position, Quaternion Rotation, Vector3 Scale) : RuntimeWorldCommand;
+public sealed record RuntimeSetLocalTransform(NodeId NodeId, Vector3 Position, Quaternion Rotation, Vector3 Scale) : RuntimeWorldCommand;

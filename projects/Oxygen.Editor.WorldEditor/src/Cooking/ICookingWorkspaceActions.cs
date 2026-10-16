@@ -22,9 +22,9 @@ public interface ICookingWorkspaceActions
     public Task<bool> SaveListedAsync(CookRunSnapshot run);
 
     /// <summary>Activates a listed open document without hiding Cooking.</summary>
-    /// <param name="documentId">The listed document identity.</param>
+    /// <param name="sourcePath">The listed document's source file.</param>
     /// <returns>Whether the document could be activated.</returns>
-    public Task<bool> OpenDocumentAsync(Guid documentId);
+    public Task<bool> OpenDocumentAsync(string sourcePath);
 
     /// <summary>Opens a read-only report of the current published output for a completed cook's scope.</summary>
     /// <param name="run">The selected cook and its original scope.</param>

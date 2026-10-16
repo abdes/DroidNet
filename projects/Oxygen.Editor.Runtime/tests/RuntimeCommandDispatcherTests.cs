@@ -6,6 +6,7 @@ using System.Numerics;
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
@@ -35,7 +36,7 @@ public sealed class RuntimeCommandDispatcherTests
         else
         {
             _ = await sceneCreation.ConfigureAwait(false);
-            pending = sut.CreateNodeAsync(new(Guid.NewGuid(), first, new RuntimeCreateNode("Cube", Guid.NewGuid(), ParentId: null, InitializeWorldAsRoot: true)), this.TestContext.CancellationToken);
+            pending = sut.CreateNodeAsync(new(Guid.NewGuid(), first, new RuntimeCreateNode("Cube", NodeId.New(), ParentId: null, InitializeWorldAsRoot: true)), this.TestContext.CancellationToken);
         }
 
         sut.InvalidateScene(first);
@@ -48,7 +49,7 @@ public sealed class RuntimeCommandDispatcherTests
         creation.SetResult();
 
         _ = result.Status.Should().Be(RuntimeCommandStatus.Rejected);
-        var current = sut.Execute(new RuntimeWorldRequest(Guid.NewGuid(), second, new RuntimeDetachGeometry(Guid.NewGuid())), this.TestContext.CancellationToken);
+        var current = sut.Execute(new RuntimeWorldRequest(Guid.NewGuid(), second, new RuntimeDetachGeometry(NodeId.New())), this.TestContext.CancellationToken);
         _ = current.Status.Should().Be(RuntimeCommandStatus.Accepted);
         sut.EndRun();
     }
@@ -58,7 +59,7 @@ public sealed class RuntimeCommandDispatcherTests
     {
         var sut = new RuntimeCommandDispatcher();
         var operation = Guid.NewGuid();
-        var world = sut.Execute(new RuntimeWorldRequest(operation, default, new RuntimeDetachGeometry(Guid.NewGuid())), this.TestContext.CancellationToken);
+        var world = sut.Execute(new RuntimeWorldRequest(operation, default, new RuntimeDetachGeometry(NodeId.New())), this.TestContext.CancellationToken);
         var input = sut.Execute(new RuntimeInputRequest(operation, default, new RuntimeFocusLostEvent()), this.TestContext.CancellationToken);
         _ = world.Status.Should().Be(RuntimeCommandStatus.Unavailable);
         _ = input.Status.Should().Be(RuntimeCommandStatus.Unavailable);
@@ -76,13 +77,13 @@ public sealed class RuntimeCommandDispatcherTests
         var sut = Start(native.Object);
         var first = Scene(sut);
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), first, "First", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var request = new RuntimeWorldRequest(Guid.NewGuid(), first, new RuntimeCreateNode("Cube", Guid.NewGuid(), ParentId: null, InitializeWorldAsRoot: true));
+        var request = new RuntimeWorldRequest(Guid.NewGuid(), first, new RuntimeCreateNode("Cube", NodeId.New(), ParentId: null, InitializeWorldAsRoot: true));
         var pending = sut.CreateNodeAsync(request, this.TestContext.CancellationToken);
 
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), Scene(sut), "Second", this.TestContext.CancellationToken).ConfigureAwait(false);
         nodeCompletion.SetResult();
         var completion = await pending.ConfigureAwait(false);
-        var mutation = sut.Execute(request with { Command = new RuntimeDetachGeometry(Guid.NewGuid()) }, this.TestContext.CancellationToken);
+        var mutation = sut.Execute(request with { Command = new RuntimeDetachGeometry(NodeId.New()) }, this.TestContext.CancellationToken);
 
         _ = completion.Status.Should().Be(RuntimeCommandStatus.Rejected);
         _ = mutation.Status.Should().Be(RuntimeCommandStatus.Rejected);
@@ -100,7 +101,7 @@ public sealed class RuntimeCommandDispatcherTests
         _ = sut.BeginRun(native.Object, loop.Task);
         var first = Scene(sut);
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), first, "First", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var request = new RuntimeWorldRequest(Guid.NewGuid(), first, new RuntimeCreateNode("Cube", Guid.NewGuid(), ParentId: null, InitializeWorldAsRoot: true));
+        var request = new RuntimeWorldRequest(Guid.NewGuid(), first, new RuntimeCreateNode("Cube", NodeId.New(), ParentId: null, InitializeWorldAsRoot: true));
         var pending = sut.CreateNodeAsync(request, this.TestContext.CancellationToken);
 
         loop.SetResult();
@@ -123,7 +124,7 @@ public sealed class RuntimeCommandDispatcherTests
         var target = Scene(sut);
 
         var activation = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Cancelled", cancelled.Token).ConfigureAwait(false);
-        var mutation = sut.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeDetachGeometry(Guid.NewGuid())), cancelled.Token);
+        var mutation = sut.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeDetachGeometry(NodeId.New())), cancelled.Token);
         var input = sut.Execute(new RuntimeInputRequest(Guid.NewGuid(), default, new RuntimeFocusLostEvent()), cancelled.Token);
 
         _ = activation.Status.Should().Be(RuntimeCommandStatus.Cancelled);
@@ -144,7 +145,7 @@ public sealed class RuntimeCommandDispatcherTests
         var sut = Start(native.Object);
         var target = Scene(sut);
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Fixture", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var command = new RuntimeSetLocalTransform(Guid.NewGuid(), new Vector3(1, -2, 3), Quaternion.CreateFromYawPitchRoll(0.2f, -0.3f, 0.4f), new Vector3(2, 3, 4));
+        var command = new RuntimeSetLocalTransform(NodeId.New(), new Vector3(1, -2, 3), Quaternion.CreateFromYawPitchRoll(0.2f, -0.3f, 0.4f), new Vector3(2, 3, 4));
         var request = new RuntimeWorldRequest(Guid.NewGuid(), target, command);
 
         var result = sut.Execute(request, this.TestContext.CancellationToken);
@@ -179,7 +180,7 @@ public sealed class RuntimeCommandDispatcherTests
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Fixture", this.TestContext.CancellationToken).ConfigureAwait(false);
         sut.RegisterView(17, Guid.NewGuid(), Guid.NewGuid());
 
-        var world = sut.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeDetachGeometry(Guid.NewGuid())), this.TestContext.CancellationToken);
+        var world = sut.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeDetachGeometry(NodeId.New())), this.TestContext.CancellationToken);
         var input = sut.Execute(new RuntimeInputRequest(Guid.NewGuid(), sut.GetViewTarget(17)!.Value, new RuntimeFocusLostEvent()), this.TestContext.CancellationToken);
 
         _ = world.Status.Should().Be(expected);
@@ -222,5 +223,5 @@ public sealed class RuntimeCommandDispatcherTests
     }
 
     private static RuntimeSceneTarget Scene(RuntimeCommandDispatcher dispatcher)
-        => new(dispatcher.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        => new(dispatcher.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
 }

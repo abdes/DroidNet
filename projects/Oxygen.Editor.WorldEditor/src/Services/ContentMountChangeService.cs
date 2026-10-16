@@ -41,7 +41,7 @@ public sealed class ContentMountChangeService(IContentCookCoordinator coordinato
         }
 
         ValidateMountConfiguration(configuration);
-        return ProjectContext.FromProjectInfo(configuration, expected.Scenes) with
+        return ProjectContext.FromProjectInfo(configuration) with
         {
             OpenInitialScene = expected.OpenInitialScene,
             InitialSceneAssetUri = expected.InitialSceneAssetUri,

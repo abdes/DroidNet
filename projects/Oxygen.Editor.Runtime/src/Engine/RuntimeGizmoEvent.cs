@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -41,6 +42,6 @@ public sealed record RuntimeGizmoEvent(
     Vector2? PivotPixel,
     Vector2 PointerPixel,
     bool Helper = false,
-    Guid NodeId = default,
+    NodeId NodeId = default,
     RuntimeHelperHandle HelperHandle = RuntimeHelperHandle.None,
     float Value = 0f);

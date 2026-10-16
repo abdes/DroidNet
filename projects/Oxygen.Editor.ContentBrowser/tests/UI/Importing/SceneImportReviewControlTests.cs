@@ -54,7 +54,6 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
             ProjectRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
             AuthoringMounts = [new("Content", "Content")],
             LocalFolderMounts = [],
-            Scenes = [],
         };
         if (replacement)
         {

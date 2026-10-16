@@ -36,20 +36,19 @@ public sealed class InspectorFieldDiagnosticsTests
         var intensity = new PropertyId("light", "/intensity");
         var sut = new InspectorFieldDiagnostics();
         sut.Relate(near, far);
-        var first = sut.Begin([near], revision: 7);
-        var other = sut.Begin([intensity], revision: 7);
+        var first = sut.Begin([near]);
+        var other = sut.Begin([intensity]);
         var rejected = new SceneCommandResult(Succeeded: false) { ValidationCode = "INVALID", ValidationMessage = "Invalid value" };
         sut.Complete(first, rejected);
         sut.Complete(other, rejected);
 
-        var newer = sut.Begin([far], revision: 8);
+        var newer = sut.Begin([far]);
         sut.Complete(newer, SceneCommandResult.Success);
         sut.Complete(first, rejected);
 
         _ = sut.Get(near).Message.Should().BeEmpty();
         _ = sut.Get(far).Message.Should().BeEmpty();
         _ = sut.Get(intensity).Message.Should().Be("Invalid value");
-        _ = sut.Get(far).Revision.Should().Be(8);
     }
 
     [TestMethod]
@@ -57,7 +56,7 @@ public sealed class InspectorFieldDiagnosticsTests
     {
         var field = new PropertyId("camera", "/near");
         var sut = new InspectorFieldDiagnostics();
-        var pending = sut.Begin([field], revision: 3);
+        var pending = sut.Begin([field]);
         sut.Reset();
 
         sut.Complete(pending, new SceneCommandResult(Succeeded: false) { ValidationMessage = "Old document error" });

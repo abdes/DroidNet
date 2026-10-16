@@ -8,6 +8,7 @@ using System.Numerics;
 using System.Text.Json;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World;
 
@@ -128,7 +129,7 @@ public sealed partial class ScriptingComponent : GameComponent
                 "vec3" => ScriptValue.FromVector(ScriptValueKind.Vec3, ReadVector(value, 3)),
                 "vec4" => ScriptValue.FromVector(ScriptValueKind.Vec4, ReadVector(value, 4)),
                 "asset" => ScriptValue.FromAsset(new Uri(value.GetString() ?? throw new JsonException(), UriKind.Absolute)),
-                "node" => ScriptValue.FromNode(Guid.Parse(value.GetString() ?? throw new JsonException(), CultureInfo.InvariantCulture)),
+                "node" => ScriptValue.FromNode(NodeId.FromValue(Guid.Parse(value.GetString() ?? throw new JsonException(), CultureInfo.InvariantCulture))),
                 _ => throw new JsonException(),
             };
         }
@@ -168,7 +169,7 @@ public sealed partial class ScriptingComponent : GameComponent
                 ScriptValueKind.Vec2 or ScriptValueKind.Vec3 or ScriptValueKind.Vec4
                     => JsonSerializer.SerializeToElement(value.GetVectorComponents(), SceneJsonContext.Default.SingleArray),
                 ScriptValueKind.Asset => JsonSerializer.SerializeToElement(value.AssetUri!.ToString(), SceneJsonContext.Default.String),
-                ScriptValueKind.Node => JsonSerializer.SerializeToElement(value.NodeId.ToString("D"), SceneJsonContext.Default.String),
+                ScriptValueKind.Node => JsonSerializer.SerializeToElement(value.NodeId.ToString(), SceneJsonContext.Default.String),
                 _ => throw new InvalidOperationException($"Unknown script value kind {value.Kind}."),
             },
         };

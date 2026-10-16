@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>
@@ -19,6 +21,7 @@ public sealed partial class EngineService
             var runner = this.EnsureIsRunning();
             this.LogCreateView(config);
             var viewId = await this.AwaitRuntimeOperationAsync(runner.CreateViewAsync(config)).ConfigureAwait(true);
+
             // A camera preview inset receives no input: its host stays the viewport's input target.
             if (viewId.IsValid && config.InsetHost is null && config.CompositingTarget is { } viewportId)
             {
@@ -109,7 +112,7 @@ public sealed partial class EngineService
     }
 
     /// <inheritdoc/>
-    public async Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, Guid? cameraNodeId)
+    public async Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, NodeId? cameraNodeId)
     {
         await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
@@ -141,7 +144,7 @@ public sealed partial class EngineService
     }
 
     /// <inheritdoc/>
-    public async Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, Guid nodeId)
+    public async Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, NodeId nodeId)
     {
         await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
@@ -254,7 +257,7 @@ public sealed partial class EngineService
     }
 
     /// <inheritdoc/>
-    public async Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<Guid> nodeIds)
+    public async Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeId> nodeIds)
     {
         ArgumentNullException.ThrowIfNull(nodeIds);
         await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
@@ -270,7 +273,7 @@ public sealed partial class EngineService
     }
 
     /// <inheritdoc/>
-    public async Task<bool> SetSelectionOutlineAsync(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId)
+    public async Task<bool> SetSelectionOutlineAsync(IReadOnlyList<NodeId> nodeIds, NodeId? activeNodeId)
     {
         ArgumentNullException.ThrowIfNull(nodeIds);
         await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
@@ -292,12 +295,8 @@ public sealed partial class EngineService
         await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
-            if (this.State != EngineServiceState.Running || this.session is not { } running)
-            {
-                return false;
-            }
-
-            return this.EnsureGizmoListener(running) && running.SetTransformGizmo(gizmo);
+            return this.State == EngineServiceState.Running && this.session is { } running
+                && this.EnsureGizmoListener(running) && running.SetTransformGizmo(gizmo);
         }
         finally
         {

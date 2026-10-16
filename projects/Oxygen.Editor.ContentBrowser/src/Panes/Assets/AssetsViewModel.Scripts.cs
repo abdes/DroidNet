@@ -15,7 +15,7 @@ namespace Oxygen.Editor.ContentBrowser;
 public partial class AssetsViewModel
 {
     /// <summary>Gets a value indicating whether New Script and New Input File are available.</summary>
-    public bool CanCreateScripts => scripts is not null;
+    public bool CanCreateScripts => creation is not null;
 
     /// <summary>Gets the reason Edit is unavailable for the selection, or a description of what it opens.</summary>
     public string EditToolTip
@@ -68,18 +68,18 @@ public partial class AssetsViewModel
     [RelayCommand(CanExecute = nameof(CanCreateScripts))]
     private async Task CreateScriptAsync()
     {
-        if (scripts is not null)
+        if (creation is not null)
         {
-            _ = await scripts.CreateScriptAsync().ConfigureAwait(true);
+            _ = await creation.CreateScriptAsync().ConfigureAwait(true);
         }
     }
 
     [RelayCommand(CanExecute = nameof(CanCreateScripts))]
     private async Task CreateInputFileAsync()
     {
-        if (scripts is not null)
+        if (creation is not null)
         {
-            _ = await scripts.CreateInputFileAsync().ConfigureAwait(true);
+            _ = await creation.CreateInputFileAsync().ConfigureAwait(true);
         }
     }
 

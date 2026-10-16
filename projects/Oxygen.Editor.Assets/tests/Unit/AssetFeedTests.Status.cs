@@ -276,7 +276,7 @@ public sealed partial class AssetFeedTests
 
     private static IAssetRelocationService NoRelocations() => Mock.Of<IAssetRelocationService>();
 
-    private static IScriptAssetAuthoring NoAuthoring() => Mock.Of<IScriptAssetAuthoring>();
+    private static IAssetAuthoring NoAuthoring() => Mock.Of<IAssetAuthoring>();
 
     private sealed class DelegateStatusReader(Func<ProjectContext, IReadOnlyList<Uri>, CancellationToken, Task<IReadOnlyList<AssetCookStatus>>> read) : IAssetCookStatusReader
     {

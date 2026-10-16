@@ -26,23 +26,34 @@ public partial class SceneEditorViewModel
             return;
         }
 
-        this.Play = new ScenePlayToolbarViewModel(session, this.Metadata.DocumentId, this.CreatePlayRequest);
-        this.messenger.Register<SceneNodeAddedMessage>(this, (_, _) => this.RefreshPlayScene());
-        this.messenger.Register<SceneNodeRemovedMessage>(this, (_, _) => this.RefreshPlayScene());
-        this.messenger.Register<ComponentAddedMessage>(this, (_, _) => this.RefreshPlayScene());
-        this.messenger.Register<ComponentRemovedMessage>(this, (_, _) => this.RefreshPlayScene());
+        this.Play = new ScenePlayToolbarViewModel(session, this.Document.Id, this.CreatePlayRequest);
+        this.commandService.NodesAdded += this.OnSceneStructureChanged;
+        this.commandService.NodesRemoved += this.OnSceneStructureChanged;
+        this.commandService.ComponentAdded += this.OnSceneStructureChanged;
+        this.commandService.ComponentRemoved += this.OnSceneStructureChanged;
         this.RefreshPlayScene();
     }
 
     private PlayRequest? CreatePlayRequest()
-        => this.scene is { } current ? new PlayRequest(this.Metadata.DocumentId, current, GetSceneAssetUri(current)) : null;
+        => this.scene is { } current ? new PlayRequest(this.Document.Id, current, this.Document.File.AssetUri) : null;
 
     private void RefreshPlayScene()
         => this.Play?.UpdateScene(this.scene?.AllNodes.Any(static node => node.Components.OfType<CameraComponent>().Any()) == true);
 
     private void DisposePlay()
     {
+        if (this.Play is not null)
+        {
+            this.commandService.NodesAdded -= this.OnSceneStructureChanged;
+            this.commandService.NodesRemoved -= this.OnSceneStructureChanged;
+            this.commandService.ComponentAdded -= this.OnSceneStructureChanged;
+            this.commandService.ComponentRemoved -= this.OnSceneStructureChanged;
+        }
+
         this.Play?.Dispose();
         this.Play = null;
     }
+
+    // Adding or removing nodes or components can change what Play starts with.
+    private void OnSceneStructureChanged(object? sender, EventArgs args) => this.RefreshPlayScene();
 }

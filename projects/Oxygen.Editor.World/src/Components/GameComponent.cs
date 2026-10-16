@@ -25,7 +25,7 @@ public abstract class GameComponent : ScopedObservableObject, INamed, IPersisten
     /// <summary>
     /// Gets or sets the stable component identity.
     /// </summary>
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public ComponentId Id { get; set; } = ComponentId.New();
 
     /// <summary>
     /// Gets or sets the name of the component.

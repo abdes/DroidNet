@@ -18,6 +18,7 @@ using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Editor.WorldEditor.TestSupport;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -34,16 +35,15 @@ public sealed class SceneExplorerSearchTests
         var child = new SceneNode(scene) { Name = "FindMe" };
         parent.AddChild(child);
         scene.RootNodes.Add(parent);
-        project.Scenes.Add(scene);
-        var metadata = new SceneDocumentMetadata(scene.Id);
+        var metadata = SceneTabs.Open(scene);
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
         _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new Mock<IDocumentService>();
         _ = documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns([metadata]);
         _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
         var sync = new Mock<ISceneEngineSync>();
-        _ = sync.Setup(value => value.GetDocumentScene(metadata)).Returns(scene);
-        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata)).Returns(value: true);
+        _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
+        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata.DocumentId)).Returns(value: true);
         _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
         using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents.Object, default, sync.Object, new SceneSelectionService(), Mock.Of<ISceneDocumentCommandService>());
 
@@ -230,7 +230,7 @@ public sealed class SceneExplorerSearchTests
         _ = nested.IsExpanded.Should().BeFalse("clearing search should restore nested collapsed state");
         _ = expanded.IsExpanded.Should().BeTrue("clearing search must not collapse folders the search did not expand");
         _ = JsonSerializer.Serialize(scene.ExplorerLayout).Should().Be(layoutBefore, "search must not write authored layout state");
-        _ = harness.Metadata.IsDirty.Should().BeFalse("search must not dirty the document");
+        _ = harness.Metadata.Document!.IsDirty.Should().BeFalse("search must not dirty the document");
     }
 
     [TestMethod]
@@ -309,14 +309,13 @@ public sealed class SceneExplorerSearchTests
 
         _ = rebuiltFolder.IsExpanded.Should().BeFalse("clearing after a rebuild restores the prior collapsed view through the live adapter");
         _ = JsonSerializer.Serialize(scene.ExplorerLayout).Should().Be(layoutBefore, "clearing after a rebuild must still author nothing");
-        _ = harness.Metadata.IsDirty.Should().BeFalse();
+        _ = harness.Metadata.Document!.IsDirty.Should().BeFalse();
     }
 
     private static Harness CreateHarness()
     {
         var project = new Project(new ProjectInfo("Search", Category.Games, "H:/SearchTests", "preview.png")) { Name = "Search" };
         var scene = new Scene(project) { Name = "Scene" };
-        project.Scenes.Add(scene);
         return new Harness(project, scene);
     }
 
@@ -326,7 +325,7 @@ public sealed class SceneExplorerSearchTests
         {
             this.Project = project;
             this.Scene = scene;
-            this.Metadata = new SceneDocumentMetadata(scene.Id);
+            this.Metadata = SceneTabs.Open(scene);
 
             var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
             _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
@@ -338,8 +337,8 @@ public sealed class SceneExplorerSearchTests
             this.Documents = documents;
 
             var sync = new Mock<ISceneEngineSync>();
-            _ = sync.Setup(value => value.GetDocumentScene(this.Metadata)).Returns(scene);
-            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), this.Metadata)).Returns(value: true);
+            _ = sync.Setup(value => value.GetDocumentScene(this.Metadata.DocumentId)).Returns(scene);
+            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), this.Metadata.DocumentId)).Returns(value: true);
             _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             this.Sync = sync;
 

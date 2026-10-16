@@ -14,6 +14,7 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Assets;

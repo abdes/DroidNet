@@ -13,10 +13,12 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
@@ -65,10 +67,11 @@ public sealed class SceneEditorQuickAddMenuTests
     private sealed class Fixture : IDisposable
     {
         private readonly Container container = new();
+        private readonly OpenDocuments documents = new([], Mock.Of<DroidNet.Storage.IAtomicFileStore>());
 
         public Fixture()
         {
-            this.Metadata = new SceneDocumentMetadata { Title = "Quick Add" };
+            this.Metadata = SceneTabs.Open(new Scene(Mock.Of<IProject>()) { Name = "Quick Add" });
             var documents = new Mock<IDocumentService>();
             _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(this.Metadata.DocumentId);
             var input = new Mock<IDocumentInputCommitter>();
@@ -76,6 +79,7 @@ public sealed class SceneEditorQuickAddMenuTests
             this.Editor = new(
                 this.Metadata,
                 documents.Object,
+                this.documents,
                 default,
                 Mock.Of<IEngineService>(),
                 Mock.Of<ISceneEngineSync>(),
@@ -88,9 +92,7 @@ public sealed class SceneEditorQuickAddMenuTests
                 this.Messenger,
                 new SceneCookInputRegistrar(
                     new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(),
-                    Mock.Of<IProjectManagerService>(),
-                    new DroidNet.Hosting.WinUI.HostingContext { Dispatcher = null!, Application = null!, DispatcherScheduler = null! },
-                    documents.Object),
+                    new DroidNet.Hosting.WinUI.HostingContext { Dispatcher = null!, Application = null!, DispatcherScheduler = null! }),
                 new Oxygen.Editor.World.Workspace.PreviewSettingsService(
                     Mock.Of<IEngineService>(),
                     Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(),
@@ -110,6 +112,7 @@ public sealed class SceneEditorQuickAddMenuTests
             this.Editor.Dispose();
             this.Messenger.Reset();
             this.container.Dispose();
+            this.documents.Dispose();
         }
     }
 }

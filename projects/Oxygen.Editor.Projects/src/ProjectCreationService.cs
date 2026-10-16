@@ -195,7 +195,7 @@ public sealed class ProjectCreationService(
         }
     }
 
-    private static Guid? TryReadSceneId(string sceneJson)
+    private static SceneId? TryReadSceneId(string sceneJson)
     {
         // The scene schema requires an identity; tolerate payloads without one so creation
         // leaves the default unset instead of guessing an identity for the starter scene.
@@ -208,7 +208,7 @@ public sealed class ProjectCreationService(
                 && idProperty.ValueKind == JsonValueKind.String
                 && Guid.TryParse(idProperty.GetString(), out var sceneId)
                 && sceneId != Guid.Empty
-                ? sceneId
+                ? SceneId.FromValue(sceneId)
                 : null;
         }
         catch (JsonException)
@@ -253,7 +253,7 @@ public sealed class ProjectCreationService(
         IFolder projectFolder,
         ProjectCreationRequest request,
         TemplateDescriptor templateDescriptor,
-        Guid? defaultSceneId,
+        SceneId? defaultSceneId,
         CancellationToken cancellationToken)
     {
         var projectInfo = new ProjectInfo(
@@ -288,7 +288,7 @@ public sealed class ProjectCreationService(
         await manifest.WriteAllTextAsync(ProjectInfo.ToJson(projectInfo), cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<Guid?> ReadStarterSceneIdAsync(
+    private async Task<SceneId?> ReadStarterSceneIdAsync(
         IFolder projectFolder,
         TemplateDescriptor descriptor,
         CancellationToken cancellationToken)

@@ -29,7 +29,7 @@ public sealed partial class AssetFeedTests
         var blue = new AssetRecord(new Uri("asset:///Content/Materials/Blue.omat.json"));
         var catalog = new TestProjectAssetCatalog([red]);
         var relocation = new Mock<IAssetRelocationService>();
-        var authoring = new Mock<IScriptAssetAuthoring>();
+        var authoring = new Mock<IAssetAuthoring>();
         using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns(), AssetStatusFixture.CreateUnavailableRuntimeStatus(), relocation.Object, authoring.Object);
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);

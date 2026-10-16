@@ -33,7 +33,7 @@ public sealed partial class SceneEditorConflictTests
             .Returns(saved.Task);
         var preferences = new PreviewSettingsService(engine.Object, store.Object, projects, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
         await preferences.RestoreAsync(project).ConfigureAwait(false);
-        using var fixture = new Fixture(active: true, preferences, () => preferences.FrameRateCap = 45);
+        using var fixture = await Fixture.CreateAsync(this.TestContext, active: true, preferences, () => preferences.FrameRateCap = 45).ConfigureAwait(false);
 
         var close = fixture.Editor.PrepareForCloseAsync();
 

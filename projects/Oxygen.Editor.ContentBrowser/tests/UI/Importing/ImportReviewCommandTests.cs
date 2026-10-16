@@ -43,7 +43,6 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
             ProjectRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
             AuthoringMounts = [new("Content", "Content")],
             LocalFolderMounts = [],
-            Scenes = [],
         };
         projects.Activate(project);
         SceneImportRequest? submitted = null;

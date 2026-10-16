@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -30,7 +31,7 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="TransitionFraction">The TransitionFraction command value.</param>
 /// <param name="DistanceFadeoutFraction">The DistanceFadeoutFraction command value.</param>
 public sealed record RuntimeAttachDirectionalLight(
-    Guid NodeId,
+    NodeId NodeId,
     float IntensityLux,
     float AngularSizeRadians,
     Vector3 Color,

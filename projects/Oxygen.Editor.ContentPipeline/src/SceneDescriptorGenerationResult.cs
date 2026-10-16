@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -17,7 +18,7 @@ public sealed record SceneDescriptorGenerationResult(
     IReadOnlyList<DiagnosticRecord> Diagnostics)
 {
     /// <summary>Gets the scene's identity, for diagnostics that point into it.</summary>
-    public Guid SceneId { get; init; }
+    public SceneId SceneId { get; init; }
 
     /// <summary>Gets the scene's name.</summary>
     public string SceneName { get; init; } = string.Empty;
@@ -38,4 +39,4 @@ public sealed record SceneDescriptorGenerationResult(
 /// <param name="SlotId">The slot.</param>
 /// <param name="SlotNumber">The slot's 1-based position on the node.</param>
 /// <param name="ParameterNames">The names of the binding's parameter values, in binding order.</param>
-public sealed record ScriptBindingSite(Guid NodeId, string NodeName, Guid SlotId, int SlotNumber, IReadOnlyList<string> ParameterNames);
+public sealed record ScriptBindingSite(NodeId NodeId, string NodeName, Guid SlotId, int SlotNumber, IReadOnlyList<string> ParameterNames);

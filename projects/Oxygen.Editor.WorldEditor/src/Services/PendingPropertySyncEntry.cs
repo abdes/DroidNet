@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Services;
 
 /// <summary>
@@ -15,6 +17,6 @@ namespace Oxygen.Editor.World.Services;
 internal sealed record PendingPropertySyncEntry(
     Guid RequestId,
     SceneSyncRevision Revision,
-    Guid NodeId,
+    NodeId NodeId,
     IReadOnlyList<EnginePropertyValueEntry> Entries,
     SyncOutcome? Failure = null);
