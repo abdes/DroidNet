@@ -53,7 +53,10 @@ public class ChangeSet : Change
         foreach (var change in this.Changes)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await change.ApplyAsync(cancellationToken).ConfigureAwait(false);
+
+            // Each change runs on the caller's context, as the first one does: a change may record its inverse in the
+            // history, whose observers live there.
+            await change.ApplyAsync(cancellationToken).ConfigureAwait(true);
         }
     }
 

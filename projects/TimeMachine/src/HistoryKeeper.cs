@@ -277,7 +277,9 @@ public class HistoryKeeper : ITransactionManager
             using (new StateTransition<States>(this, States.Undoing))
             using (new ChangeSetUndoRedo(this, lastChange))
             {
-                await lastChange.ApplyAsync(cancellationToken).ConfigureAwait(false);
+                // The stacks are observable, and their observers, such as a view's Undo button, live on the caller's
+                // context; the history changes them only there, after a failed change as after a successful one.
+                await lastChange.ApplyAsync(cancellationToken).ConfigureAwait(true);
             }
         }
         catch
@@ -336,7 +338,8 @@ public class HistoryKeeper : ITransactionManager
             using (new StateTransition<States>(this, States.Redoing))
             using (new ChangeSetUndoRedo(this, lastChange))
             {
-                await lastChange.ApplyAsync(cancellationToken).ConfigureAwait(false);
+                // Resumes on the caller's context, where the stacks' observers live; see UndoAsync.
+                await lastChange.ApplyAsync(cancellationToken).ConfigureAwait(true);
             }
         }
         catch
