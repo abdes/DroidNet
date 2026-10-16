@@ -52,6 +52,7 @@ public partial class DynamicTree : Control
         new EventId(0, nameof(DropRejectedLog)),
         "The dynamic tree rejected a drop request.");
 
+    private readonly DisplayedTreeItems displayed = new();
     private ILogger? logger;
 
     private DynamicTree? dragOwner;
@@ -87,6 +88,9 @@ public partial class DynamicTree : Control
             this.ItemIndentWidth = configuredIndentWidth;
         }
 
+        // Set once: the repeater keeps this view as its source for the control's whole life. Switching rows and
+        // stopping on unload happen inside the view, never by changing this property (see DisplayedTreeItems).
+        this.DisplayedItems = this.displayed;
         this.Loaded += this.OnLoaded;
         this.Unloaded += this.OnUnloaded;
     }
@@ -779,11 +783,10 @@ public partial class DynamicTree : Control
 
         this.itemsRepeater?.RemoveHandler(KeyDownEvent, new KeyEventHandler(this.ItemsRepeater_OnKeyDown));
 
-        // The repeater listens to the displayed collection for as long as it is its source. The view
-        // model outlives this control, so a discarded view would keep receiving, and failing on, every
-        // change; one failing listener stops the collection from notifying the live view. Loaded binds
-        // the source again.
-        this.DisplayedItems = null;
+        // The view model may outlive this control. Stop passing its rows' changes to this repeater, or a discarded
+        // tree would keep failing on them and stop the rows from notifying the live tree. Detach touches no XAML, so
+        // it is safe while a closing window tears the tree down; Loaded attaches again (see DisplayedTreeItems).
+        this.displayed.Detach();
 
         // Remove subscriptions to the ViewModel
         this.ViewModel?.PropertyChanged -= this.ViewModel_OnPropertyChanged;
@@ -1279,7 +1282,7 @@ public partial class DynamicTree : Control
     {
         if (this.ViewModel is null)
         {
-            this.DisplayedItems = null;
+            this.displayed.Attach(rows: null);
             return;
         }
 
@@ -1294,7 +1297,9 @@ public partial class DynamicTree : Control
         var displayedItems = useFiltered
             ? this.ViewModel.FilteredItems
             : this.ViewModel.ShownItems;
-        this.DisplayedItems = displayedItems;
+        // Both sources are lists with change notifications (ShownItems is an ObservableCollection, FilteredItems a
+        // FilteredObservableCollection), which the repeater needs for indexed reads.
+        this.displayed.Attach((System.Collections.IList)displayedItems);
 
         // Keyboard navigation, typeahead and range extension follow the same scope the pointer
         // paths already honour, so one control switch describes every interaction surface.

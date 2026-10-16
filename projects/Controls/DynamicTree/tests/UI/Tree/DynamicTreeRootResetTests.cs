@@ -9,7 +9,9 @@ using DroidNet.Tests;
 namespace DroidNet.Controls.Tests.Tree;
 
 /// <summary>A view model outlives the trees that show it, as the Content Browser's does when its view is
-/// rebuilt; only a loaded tree listens to its rows, so replacing the root rebuilds the live tree.</summary>
+/// rebuilt; only a loaded tree listens to its rows, so replacing the root rebuilds the live tree. Unloading stops the
+/// listening without changing the repeater's source, because a closing window unloads while its XAML is torn down
+/// (see <c>DisplayedTreeItems</c>).</summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("DynamicTree")]
@@ -27,11 +29,14 @@ public sealed partial class DynamicTreeRootResetTests : VisualUserInterfaceTests
     {
         var tree = new TestableDynamicTree { ViewModel = this.viewModel };
         await LoadTestContentAsync(tree).ConfigureAwait(true);
-        _ = tree.DisplayedItems.Should().BeSameAs(this.viewModel!.ShownItems);
+        var view = Displayed(tree);
+        _ = view.Source.Should().BeSameAs(this.viewModel!.ShownItems);
+        _ = view.IsAttached.Should().BeTrue();
 
         await UnloadTestContentAsync(tree).ConfigureAwait(true);
 
-        _ = tree.DisplayedItems.Should().BeNull("a discarded view must not keep its repeater subscribed to the rows");
+        _ = view.IsAttached.Should().BeFalse("a discarded view must not keep its repeater listening to the rows");
+        _ = tree.DisplayedItems.Should().BeSameAs(view, "unloading must not change a XAML property");
     });
 
     [TestMethod]
@@ -43,7 +48,8 @@ public sealed partial class DynamicTreeRootResetTests : VisualUserInterfaceTests
 
         await LoadTestContentAsync(tree).ConfigureAwait(true);
 
-        _ = tree.DisplayedItems.Should().BeSameAs(this.viewModel!.ShownItems);
+        _ = Displayed(tree).Source.Should().BeSameAs(this.viewModel!.ShownItems);
+        _ = Displayed(tree).IsAttached.Should().BeTrue();
     });
 
     [TestMethod]
@@ -59,7 +65,8 @@ public sealed partial class DynamicTreeRootResetTests : VisualUserInterfaceTests
             .ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
 
-        _ = live.DisplayedItems.Should().BeSameAs(this.viewModel.ShownItems);
+        _ = Displayed(live).Source.Should().BeSameAs(this.viewModel.ShownItems);
+        _ = Displayed(discarded).IsAttached.Should().BeFalse();
         _ = this.viewModel.ShownItems.Should().ContainSingle().Which.Label.Should().Be("R2");
     });
 
@@ -77,4 +84,6 @@ public sealed partial class DynamicTreeRootResetTests : VisualUserInterfaceTests
             });
         await setup.Task.ConfigureAwait(true);
     }
+
+    private static DisplayedTreeItems Displayed(DynamicTree tree) => (DisplayedTreeItems)tree.DisplayedItems!;
 }

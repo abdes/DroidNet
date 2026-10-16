@@ -243,7 +243,11 @@ public partial class DynamicTree
     }
 
     /// <summary>
-    ///     Gets the items currently used as the ItemsRepeater source.
+    ///     Gets the rows the tree's ItemsRepeater shows, as an <see cref="IEnumerable{T}"/> of
+    ///     <see cref="ITreeItem"/>. It is the same object for the control's whole life, a view over the view model's
+    ///     shown or filtered rows, and it is never <see langword="null"/>: it shows no rows while there is no view
+    ///     model. The view exists so that unloading the tree changes no XAML property; see
+    ///     <see cref="DisplayedTreeItems"/>.
     /// </summary>
     public object? DisplayedItems
     {
