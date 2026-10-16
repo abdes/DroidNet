@@ -210,8 +210,7 @@ public sealed partial class MaterialEdits(
             return rejected;
         }
 
-        document.History.Undo();
-        return Accepted;
+        return document.History.Undo() ? Accepted : new MaterialEditResult(Succeeded: false, OperationId: null);
     }
 
     /// <summary>
@@ -231,8 +230,7 @@ public sealed partial class MaterialEdits(
             return rejected;
         }
 
-        document.History.Redo();
-        return Accepted;
+        return document.History.Redo() ? Accepted : new MaterialEditResult(Succeeded: false, OperationId: null);
     }
 
     private static MaterialContent ContentOf(Document document)

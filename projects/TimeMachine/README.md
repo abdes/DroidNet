@@ -1,12 +1,16 @@
 # TimeMachine
 
-TimeMachine is a robust, composable undo/redo module for .NET applications. It is designed for complex scenarios including nested transactions, change sets, and (new) asynchronous change application.
+TimeMachine is a robust, composable undo/redo module for .NET applications. It
+is designed for complex scenarios including nested transactions, change sets,
+and (new) asynchronous change application.
 
 ## Highlights
 
-- **Undo/Redo stacks per root** via `UndoRedo.Default[root]` (weak-keyed and GC-friendly)
+- **Undo/Redo stacks per root** via `UndoRedo.Default[root]` (weak-keyed and
+  GC-friendly)
 - **Transactions** to group multiple changes into a single undo/redo entry
-- **Change sets** to group changes produced during undo/redo of grouped operations
+- **Change sets** to group changes produced during undo/redo of grouped
+  operations
 - **Async support**: changes can be applied synchronously or asynchronously
 
 ## Technology
@@ -38,11 +42,13 @@ Changes implement `IChange` and are the unit of undo/redo.
 Async model:
 
 - By default, `ApplyAsync(...)` calls `Apply()`.
-- Async-only changes throw from `Apply()` to avoid accidental blocking/deadlocks.
+- Async-only changes throw from `Apply()` to avoid accidental
+  blocking/deadlocks.
 
 ### Transactions
 
-Transactions (`ITransaction`) are also changes, allowing a transaction to be pushed as a single entry to the undo/redo stacks.
+Transactions (`ITransaction`) are also changes, allowing a transaction to be
+pushed as a single entry to the undo/redo stacks.
 
 ## Project Structure
 
@@ -99,15 +105,19 @@ var historyKeeper = UndoRedo.Default[root];
 
 ### Mental model (undo/redo in one minute)
 
-TimeMachine can feel “backwards” at first, especially if you are new to undo/redo.
+TimeMachine can feel “backwards” at first, especially if you are new to
+undo/redo.
 
 The key idea:
 
 - When the user performs an operation, you **do the operation now**.
-- Immediately after that, you **queue the reverse operation** (the “undo”) using `AddChange(...)`.
-- When an undo runs, it can (and usually should) **queue the reverse of the undo** (the “redo”).
+- Immediately after that, you **queue the reverse operation** (the “undo”) using
+  `AddChange(...)`.
+- When an undo runs, it can (and usually should) **queue the reverse of the
+  undo** (the “redo”).
 
-So you are not telling TimeMachine “what I just did”. You are telling it “how to undo what I just did”.
+So you are not telling TimeMachine “what I just did”. You are telling it “how to
+undo what I just did”.
 
 Mermaid flow (what happens and when):
 
@@ -157,8 +167,10 @@ historyKeeper.Redo(); // value goes forward again
 TimeMachine is simple when you follow one invariant:
 
 - Every operation has a single inverse.
-- When you perform an operation **now**, you register its inverse via `AddChange(...)`.
-- When an inverse runs (during **Undo**/**Redo**), it should register the inverse of itself.
+- When you perform an operation **now**, you register its inverse via
+  `AddChange(...)`.
+- When an inverse runs (during **Undo**/**Redo**), it should register the
+  inverse of itself.
 
 That’s it.
 
@@ -171,31 +183,37 @@ That’s it.
 ### What not to do (common AI/codegen failure modes)
 
 - **Anti-pattern: queue undo and redo immediately**
-  - “I just added the component, so I’ll `AddChange(remove)` and also `AddChange(add)`.”
+  - “I just added the component, so I’ll `AddChange(remove)` and also
+    `AddChange(add)`.”
   - Result: duplicate entries / broken stacks.
 
 - **Anti-pattern: make Undo call a method that also queues history**
-  - If your “business method” always calls `AddChange`, then calling it from inside an undo change will usually create extra history entries.
-  - Fix: separate “apply mutation” from “register inverse”, or use a dedicated `ApplyXxx(...)` method for undo/redo.
+  - If your “business method” always calls `AddChange`, then calling it from
+    inside an undo change will usually create extra history entries.
+  - Fix: separate “apply mutation” from “register inverse”, or use a dedicated
+    `ApplyXxx(...)` method for undo/redo.
 
 - **Anti-pattern: use volatile UI indices for undo**
   - UI indices often depend on expansion/virtualization/filtering.
-  - Fix: store stable model coordinates (parent + child-relative index, ids, snapshots, etc.).
+  - Fix: store stable model coordinates (parent + child-relative index, ids,
+    snapshots, etc.).
 
 ## Patterns that work well
 
 ### Pattern 1: Two explicit operations (no ambiguity)
 
-Use two explicit functions: `DoX()` and `UndoX()`.
-Each one performs its work and queues only its inverse.
+Use two explicit functions: `DoX()` and `UndoX()`. Each one performs its work
+and queues only its inverse.
 
 You already saw this in the `Increment`/`Decrement` example above.
 
 ### Pattern 2: Use `AddChange(Action<TArg>, arg)` to avoid nested lambdas
 
-If you want clean code without “double lambdas” or self-referencing delegates, use the overload that takes an action + argument.
+If you want clean code without “double lambdas” or self-referencing delegates,
+use the overload that takes an action + argument.
 
-This is especially good when the inverse needs *captured data* (like a node reference + the component instance).
+This is especially good when the inverse needs _captured data_ (like a node
+reference + the component instance).
 
 ```csharp
 public sealed record ComponentOp(SceneNode Node, GameComponent Component);
@@ -221,11 +239,13 @@ Key properties of this pattern:
 
 - One user action → one `AddChange(...)` entry (the inverse)
 - Undo/redo correctness doesn’t depend on “current selection” or UI state
-- The operation argument (`op`) contains exactly what’s needed to replay the inverse
+- The operation argument (`op`) contains exactly what’s needed to replay the
+  inverse
 
 ### Pattern 3: Snapshot + apply/restore for property edits
 
-For property edits, store “before” and “after” snapshots and implement explicit apply/restore methods.
+For property edits, store “before” and “after” snapshots and implement explicit
+apply/restore methods.
 
 ```csharp
 public sealed record TransformOp(SceneNode Node, TransformSnapshot Old, TransformSnapshot New);
@@ -253,7 +273,8 @@ If you are generating code that uses TimeMachine:
 - Prefer explicit `ApplyXxx(op)` methods + `AddChange(Action<TArg>, arg)`.
 - Never queue both undo and redo for the same user action.
 - Never assume the “current selection” at undo time.
-- Store stable operands (references, ids, snapshots, parent+index), not UI indices.
+- Store stable operands (references, ids, snapshots, parent+index), not UI
+  indices.
 
 ### Add synchronous changes
 
@@ -290,11 +311,13 @@ if (historyKeeper.CanRedo)
 TimeMachine supports asynchronous changes end-to-end:
 
 - `IChange.ApplyAsync(...)` exists on the core change contract.
-- `HistoryKeeper.UndoAsync(...)` and `HistoryKeeper.RedoAsync(...)` are the async execution entry points.
+- `HistoryKeeper.UndoAsync(...)` and `HistoryKeeper.RedoAsync(...)` are the
+  async execution entry points.
 
 ### Add asynchronous changes (Task-based delegates)
 
-The extension methods accept Task-returning delegates so `async` lambdas are unambiguous.
+The extension methods accept Task-returning delegates so `async` lambdas are
+unambiguous.
 
 ```csharp
 using System.Threading.Tasks;
@@ -327,17 +350,26 @@ if (historyKeeper.CanRedo)
 
 ### Mixing synchronous and asynchronous changes
 
-You can mix synchronous and asynchronous changes in the same history (including inside transactions and change sets).
+You can mix synchronous and asynchronous changes in the same history (including
+inside transactions and change sets).
 
 Guidelines:
 
 - **Mixing is allowed:** you can register sync and async changes together.
-- **Async execution is superset:** synchronous changes are compatible with the async pipeline because the default `ApplyAsync(...)` delegates to `Apply()`.
-- **Do not use `Undo()` / `Redo()` if async-only changes may exist:** async-only changes throw from `Apply()` to prevent accidental sync execution.
+- **Async execution is superset:** synchronous changes are compatible with the
+  async pipeline because the default `ApplyAsync(...)` delegates to `Apply()`.
+- **Do not use `Undo()` / `Redo()` if async-only changes may exist:** async-only
+  changes throw from `Apply()` to prevent accidental sync execution, so `Undo()`
+  / `Redo()` return `false` and leave them in place.
+- **A failed change stays in the history:** when a change throws, `Undo()` /
+  `Redo()` return `false` and `UndoAsync()` / `RedoAsync()` rethrow; either way
+  the change goes back to its stack and position, unless it recorded part of its
+  inverse before it threw.
 
 Practical rule of thumb:
 
-- If a history may contain any async-only change, treat the whole history as async and always use `UndoAsync()` / `RedoAsync()`.
+- If a history may contain any async-only change, treat the whole history as
+  async and always use `UndoAsync()` / `RedoAsync()`.
 
 Example (mixed history, executed asynchronously):
 
@@ -426,4 +458,5 @@ dotnet build -c Release projects/TimeMachine/src/TimeMachine.csproj
 
 ## License
 
-TimeMachine is distributed under the MIT License. See the repository root LICENSE file.
+TimeMachine is distributed under the MIT License. See the repository root
+LICENSE file.

@@ -248,22 +248,44 @@ public class HistoryKeeper : ITransactionManager
     /// <summary>
     /// Undo the first available change.
     /// </summary>
-    public void Undo()
+    /// <returns>
+    /// <see langword="true"/> when a change was undone; <see langword="false"/> when there was nothing to undo, or when
+    /// the change threw, in which case it stays on the undo stack at its position, unless it recorded part of its
+    /// inverse before it threw.
+    /// </returns>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A change that fails to apply leaves the history as it was, and the result tells the caller.")]
+    public bool Undo()
     {
         if (this.transactions.Count != 0)
         {
             this.CommitTransactions();
         }
 
-        if (!this.TryPopUndoStack(out var lastChange, out this.replayPosition))
+        if (!this.TryPopUndoStack(out var lastChange, out var position))
         {
-            return;
+            return false;
         }
 
-        using (new StateTransition<States>(this, States.Undoing))
-        using (new ChangeSetUndoRedo(this, lastChange))
+        this.replayPosition = position;
+        var inverseCount = this.redoStack.Count;
+        try
         {
-            lastChange.Apply();
+            using (new StateTransition<States>(this, States.Undoing))
+            using (new ChangeSetUndoRedo(this, lastChange))
+            {
+                lastChange.Apply();
+            }
+
+            return true;
+        }
+        catch (Exception)
+        {
+            if (RemoveEmptyReplay(this.redoStack, this.redoPositions, inverseCount, this.redoStack.FirstOrDefault()))
+            {
+                this.PushToUndoStack(lastChange, position);
+            }
+
+            return false;
         }
     }
 
@@ -310,22 +332,44 @@ public class HistoryKeeper : ITransactionManager
     /// <summary>
     /// Redo the first available change.
     /// </summary>
-    public void Redo()
+    /// <returns>
+    /// <see langword="true"/> when a change was redone; <see langword="false"/> when there was nothing to redo, or when
+    /// the change threw, in which case it stays on the redo stack at its position, unless it recorded part of its
+    /// inverse before it threw.
+    /// </returns>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A change that fails to apply leaves the history as it was, and the result tells the caller.")]
+    public bool Redo()
     {
         if (this.transactions.Count != 0)
         {
             this.CommitTransactions();
         }
 
-        if (!this.TryPopRedoStack(out var lastChange, out this.replayPosition))
+        if (!this.TryPopRedoStack(out var lastChange, out var position))
         {
-            return;
+            return false;
         }
 
-        using (new StateTransition<States>(this, States.Redoing))
-        using (new ChangeSetUndoRedo(this, lastChange))
+        this.replayPosition = position;
+        var inverseCount = this.undoStack.Count;
+        try
         {
-            lastChange.Apply();
+            using (new StateTransition<States>(this, States.Redoing))
+            using (new ChangeSetUndoRedo(this, lastChange))
+            {
+                lastChange.Apply();
+            }
+
+            return true;
+        }
+        catch (Exception)
+        {
+            if (RemoveEmptyReplay(this.undoStack, this.undoPositions, inverseCount, this.undoStack.LastOrDefault()))
+            {
+                this.PushToRedoStack(lastChange, position);
+            }
+
+            return false;
         }
     }
 

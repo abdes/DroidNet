@@ -554,9 +554,9 @@ Editor's tests keep testing the views against a real `SceneAuthoring`.
 
 ## 9. Order of work
 
-Tasks 1 and 2 are done, and so is the document identity design
+Tasks 1 to 3 are done, and so is the document identity design
 ([document-identity.md](document-identity.md)) that came between tasks 2 and 3.
-The next task is 3.
+The next task is 4.
 
 Each task builds, passes its tests, and deletes the code it replaces. The old
 service and `SceneAuthoringGate` keep working until their last caller moves, so

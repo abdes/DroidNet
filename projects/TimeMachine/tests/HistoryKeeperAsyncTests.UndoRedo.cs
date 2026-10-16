@@ -67,7 +67,7 @@ public partial class HistoryKeeperAsyncTests
 
     [TestMethod]
     [TestCategory("HistoryKeeper.Undo")]
-    public void Undo_ShouldThrow_ForAsyncChange()
+    public void Undo_ShouldRefuseAndKeepAnAsyncChange()
     {
         // Arrange
         var historyKeeper = UndoRedo.Default[new object()];
@@ -77,12 +77,14 @@ public partial class HistoryKeeperAsyncTests
         }
 
         historyKeeper.AddChange("undo", Undo);
+        var change = historyKeeper.UndoStack.Single();
 
         // Act
-        var act = historyKeeper.Undo;
+        var undone = historyKeeper.Undo();
 
         // Assert
-        _ = act.Should().Throw<InvalidOperationException>();
+        _ = undone.Should().BeFalse();
+        _ = historyKeeper.UndoStack.Should().ContainSingle().Which.Should().BeSameAs(change);
     }
 
     [TestMethod]

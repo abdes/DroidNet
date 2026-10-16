@@ -130,10 +130,10 @@ public partial class HistoryKeeperTests
         historyKeeper.State = initialState;
 
         // Act
-        var act = historyKeeper.Undo;
+        var undone = historyKeeper.Undo();
 
         // Assert
-        _ = act.Should().Throw<Exception>();
+        _ = undone.Should().BeFalse();
         _ = historyKeeper.State.Should().Be(initialState);
         change.Verify(cs => cs.Apply(), Times.Once);
         _ = historyKeeper.RedoStack.Should().BeEmpty();
@@ -141,20 +141,77 @@ public partial class HistoryKeeperTests
 
     [TestMethod]
     [TestCategory("HistoryKeeper.Undo")]
-    public void Undo_ShouldNotMoveChangeToRedoStack_WhenApplyThrowsException()
+    public void Undo_ShouldRestoreChangeToUndoStack_WhenApplyThrowsException()
     {
         // Arrange
         var historyKeeper = UndoRedo.Default[new object()];
         var change = new Mock<IChange>();
         _ = change.Setup(cs => cs.Apply()).Throws<Exception>();
         historyKeeper.AddChange(change.Object);
+        var position = historyKeeper.Position;
 
         // Act
-        var act = historyKeeper.Undo;
+        var undone = historyKeeper.Undo();
 
         // Assert
-        _ = act.Should().Throw<Exception>();
+        _ = undone.Should().BeFalse();
+        _ = historyKeeper.UndoStack.Should().ContainSingle().Which.Should().BeSameAs(change.Object);
         _ = historyKeeper.RedoStack.Should().BeEmpty();
+        _ = historyKeeper.Position.Should().Be(position);
+    }
+
+    [TestMethod]
+    [TestCategory("HistoryKeeper.Undo")]
+    public void Undo_ShouldReturnFalse_WhenUndoStackIsEmpty()
+        => _ = UndoRedo.Default[new object()].Undo().Should().BeFalse();
+
+    [TestMethod]
+    [TestCategory("HistoryKeeper.Undo")]
+    public void UndoAndRedo_ShouldReturnTrue_WhenTheChangeApplies()
+    {
+        // Arrange
+        var historyKeeper = UndoRedo.Default[new object()];
+        historyKeeper.AddChange("undo", () => historyKeeper.AddChange("redo", static () => { }));
+
+        // Act and assert
+        _ = historyKeeper.Undo().Should().BeTrue();
+        _ = historyKeeper.Redo().Should().BeTrue();
+        _ = historyKeeper.Redo().Should().BeFalse();
+    }
+
+    [TestMethod]
+    [TestCategory("HistoryKeeper.Undo")]
+    public void Redo_FailureRetainsStepAtItsPositionForRetry()
+    {
+        // Arrange
+        var historyKeeper = UndoRedo.Default[new object()];
+        var fail = true;
+        historyKeeper.AddChange("undo", () => historyKeeper.AddChange("redo", () =>
+        {
+            if (fail)
+            {
+                throw new InvalidOperationException("Controlled redo failure");
+            }
+
+            historyKeeper.AddChange("undo again", static () => { });
+        }));
+        _ = historyKeeper.Undo().Should().BeTrue();
+        var redo = historyKeeper.RedoStack.Single();
+        var position = historyKeeper.Position;
+
+        // Act
+        var failed = historyKeeper.Redo();
+
+        // Assert
+        _ = failed.Should().BeFalse();
+        _ = historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
+        _ = historyKeeper.RedoStack.Should().ContainSingle().Which.Should().BeSameAs(redo);
+        _ = historyKeeper.UndoStack.Should().BeEmpty();
+        _ = historyKeeper.Position.Should().Be(position);
+        fail = false;
+        _ = historyKeeper.Redo().Should().BeTrue();
+        _ = historyKeeper.RedoStack.Should().BeEmpty();
+        _ = historyKeeper.UndoStack.Should().ContainSingle();
     }
 
     [TestMethod]
