@@ -128,6 +128,7 @@ oxygen_cooker_test(
     "Import/LooseCookedWriter_file_pairs_functional_test.cpp"
     "Import/LooseCookedWriter_identity_functional_test.cpp"
     "Import/LooseCookedWriter_path_validation_functional_test.cpp"
+    "Import/LooseCookedWriter_removal_functional_test.cpp"
     "Import/LooseCookedWriter_update_functional_test.cpp"
     "Import/LooseCookedWriterTestSupport.h"
     "Import/MaterialDescriptorImportRequestBuilder_functional_test.cpp"

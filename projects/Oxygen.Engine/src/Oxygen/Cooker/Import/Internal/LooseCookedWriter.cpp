@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -480,6 +481,7 @@ struct LooseCookedWriter::Impl final {
 
     assets_.insert_or_assign(key, record);
     key_by_virtual_path_.insert_or_assign(std::string(virtual_path), key);
+    written_virtual_paths_.emplace(virtual_path);
   }
 
   auto WriteFile(const FileKind kind, std::string_view relpath,
@@ -606,6 +608,19 @@ struct LooseCookedWriter::Impl final {
     }
     assets_.insert_or_assign(key, record);
     key_by_virtual_path_.insert_or_assign(std::string(virtual_path), key);
+    written_virtual_paths_.emplace(virtual_path);
+  }
+
+  auto RemoveAssetDescriptor(const std::string_view virtual_path) -> void
+  {
+    ValidateVirtualPath(virtual_path);
+    removed_virtual_paths_.emplace(virtual_path);
+  }
+
+  auto RemoveAuxiliaryFile(const std::string_view relpath) -> void
+  {
+    ValidateRelativePath(relpath);
+    removed_auxiliary_files_.emplace(relpath);
   }
 
   [[nodiscard]] auto Finish() -> LooseCookedWriteResult
@@ -653,6 +668,8 @@ struct LooseCookedWriter::Impl final {
       static_cast<void>(StoreFile_(std::move(file), "Finish.merge_files"));
     }
 
+    auto removed_files = ApplyRemovals_(current_files);
+
     const auto cooked_root_str = cooked_root_.string();
     LOG_SCOPE_F(INFO, "Finish {}", cooked_root_str);
 
@@ -665,11 +682,13 @@ struct LooseCookedWriter::Impl final {
       base::ToNativePath(index_path.parent_path()));
 
     WriteIndex_(index_path, source_key, content_version);
+    DeleteRemovedFiles_(removed_files);
 
     LooseCookedWriteResult out {
       .cooked_root = cooked_root_,
       .source_key = source_key,
       .content_version = content_version,
+      .removed_files = std::move(removed_files),
       .collision_summary = collision_summary_,
     };
 
@@ -712,6 +731,79 @@ struct LooseCookedWriter::Impl final {
   }
 
 private:
+  //! Requires the index file lock and the merged index.
+  [[nodiscard]] auto ApplyRemovals_(
+    const std::unordered_map<std::string, StoredFile>& session_files)
+    -> std::vector<std::string>
+  {
+    std::vector<std::string> removed;
+    for (const auto& virtual_path : removed_virtual_paths_) {
+      if (written_virtual_paths_.contains(virtual_path)) {
+        throw std::runtime_error(
+          "Cannot remove an asset this writer also writes: " + virtual_path);
+      }
+      const auto key = key_by_virtual_path_.find(virtual_path);
+      if (key == key_by_virtual_path_.end()) {
+        throw std::runtime_error(
+          "Cannot remove an asset the index does not list: " + virtual_path);
+      }
+      const auto asset = assets_.find(key->second);
+      if (asset == assets_.end()) {
+        throw std::runtime_error(
+          "Loose cooked index maps a virtual path to no asset: "
+          + virtual_path);
+      }
+      auto descriptor = asset->second.descriptor_relpath;
+      loaded_asset_keys_.erase(key->second);
+      assets_.erase(asset);
+      key_by_virtual_path_.erase(key);
+      LOG_F(INFO, "Removed cooked asset '{}' ({})", virtual_path, descriptor);
+      removed.push_back(std::move(descriptor));
+    }
+
+    for (const auto& relpath : removed_auxiliary_files_) {
+      if (const auto written = session_files.find(relpath);
+        written != session_files.end() && written->second.updated) {
+        throw std::runtime_error(
+          "Cannot remove an auxiliary file this writer also writes: "
+          + relpath);
+      }
+      const auto file = files_.find(relpath);
+      if (file == files_.end() || file->second.kind != FileKind::kAuxiliary) {
+        throw std::runtime_error(
+          "Cannot remove an auxiliary file the index does not list: "
+          + relpath);
+      }
+      files_.erase(file);
+      LOG_F(INFO, "Removed cooked auxiliary file '{}'", relpath);
+      removed.push_back(relpath);
+    }
+
+    // A descriptor still listed by a remaining asset stays on disk.
+    std::erase_if(removed, [&](const std::string& relpath) -> bool {
+      return std::ranges::any_of(assets_, [&](const auto& item) -> bool {
+        return item.second.descriptor_relpath == relpath;
+      });
+    });
+    return removed;
+  }
+
+  //! Deletes files the published index no longer lists.
+  auto DeleteRemovedFiles_(const std::vector<std::string>& relpaths) const
+    -> void
+  {
+    for (const auto& relpath : relpaths) {
+      std::error_code error;
+      std::filesystem::remove(
+        base::ToNativePath(cooked_root_ / std::filesystem::path(relpath)),
+        error);
+      if (error) {
+        throw std::system_error(
+          error, "Failed to delete removed cooked file '" + relpath + "'");
+      }
+    }
+  }
+
   [[nodiscard]] auto HasFileKind_(const FileKind kind) const -> bool
   {
     return std::ranges::any_of(files_,
@@ -1046,6 +1138,9 @@ private:
   std::unordered_map<std::string, data::AssetKey> key_by_virtual_path_;
   std::unordered_set<data::AssetKey> loaded_asset_keys_;
   std::unordered_set<std::string> replaced_loaded_virtual_paths_;
+  std::unordered_set<std::string> written_virtual_paths_;
+  std::set<std::string> removed_virtual_paths_;
+  std::set<std::string> removed_auxiliary_files_;
   LooseCookedCollisionSummary collision_summary_ {};
 };
 
@@ -1100,6 +1195,17 @@ auto LooseCookedWriter::RegisterExternalAssetDescriptor(
 {
   impl_->RegisterExternalAssetDescriptor(key, asset_type, virtual_path,
     descriptor_relpath, descriptor_size, references, descriptor_sha256);
+}
+
+auto LooseCookedWriter::RemoveAssetDescriptor(std::string_view virtual_path)
+  -> void
+{
+  impl_->RemoveAssetDescriptor(virtual_path);
+}
+
+auto LooseCookedWriter::RemoveAuxiliaryFile(std::string_view relpath) -> void
+{
+  impl_->RemoveAuxiliaryFile(relpath);
 }
 
 auto LooseCookedWriter::Finish() -> LooseCookedWriteResult

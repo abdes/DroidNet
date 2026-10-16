@@ -243,31 +243,22 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   accepts exactly those characters in a name, so every name it creates, such as
   `New folder (2)`, cooks. Gate: ContentPipeline, Assets, Content Browser and
   World Editor tests.
-- **S1.4b Shared authoring mounts.** Design first, from the scenario: a studio
-  keeps shared source content (materials, textures, models, scripts) in a folder
-  outside any project, and several projects mount it and edit, cook, rename,
-  move and delete its assets as they do their own Content. Today an editable
-  mount must sit inside the project folder: cook inputs, recorded input facts
-  and cook provenance store paths relative to the project root,
-  `CookInputResolver` rejects anything outside it, relocation and the atomic
-  file store assume project files, and the Mounts dialog adds only read-only
-  cooked libraries and derived folders. The design settles how a shared mount's
-  files are identified in snapshots and provenance, where each project's cooked
-  output of a shared mount goes and what happens when two projects cook it, how
-  a relocation updates the references of projects that are not open, how unsaved
-  documents in another editor session are protected, and how the Mounts dialog
-  adds, edits and removes such a mount. Then the implementation. Gate:
-  ContentPipeline, Assets, Projects and Content Browser tests, and the
-  reviewer's editor check of one folder mounted in two projects.
-- **S1.4c Removing one cooked product.** A loose cooked index can only add or
-  update entries, so retiring one product, as a deleted or renamed source does,
-  rebuilds its whole mount: every other product of that mount is cooked again,
-  and the delay before the old cooked row goes grows with the mount. The engine
-  gains removal of entries from a loose cooked index, and the cook repair
-  removes retired products instead of rebuilding the root. Engine work,
-  authorized with the slice. Gate: engine index tests, ContentPipeline native
-  cook repair tests, and the reviewer's check that deleting one asset of a large
-  mount no longer cooks the rest.
+- **S1.4c Removing one cooked product.** A deleted or renamed source, or an
+  import whose outputs moved to another group, no longer rebuilds its whole
+  mount. The engine's `LooseCookedWriter` removes asset entries and auxiliary
+  files from a loose cooked index (`RemoveAssetDescriptor`,
+  `RemoveAuxiliaryFile`): it publishes the index without them, then deletes
+  their files; resource table entries stay, as they do when a cook replaces an
+  asset. The ImportTool's `remove-cooked` command runs it from a JSON request.
+  The cook repair lists each inherited root's retired outputs, and the cook
+  removes them from the staged copy of the root, under its fresh generation
+  identity, before it cooks anything into it; the other products of the mount
+  are reused. A product that used a removed one is cooked again, so a scene that
+  lost its material reports it instead of keeping a reference to cooked content
+  that is gone. A root whose every product leaves, and that nothing in the cook
+  goes into, still leaves the publication. Gate: engine writer tests,
+  ContentPipeline native cook repair tests, and the reviewer's check that
+  deleting one asset of a large mount no longer cooks the rest.
 - **S1.5 Document kinds.** Design first: the contract a document type implements
   in `Oxygen.Editor.Documents` (load, save against the version it read, reload,
   commit an edit in progress, apply and revert its history changes, retarget to

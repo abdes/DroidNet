@@ -52,6 +52,8 @@ add_library(
   "PhysicsSidecarCommand.h"
   "ReclaimCommand.cpp"
   "ReclaimCommand.h"
+  "RemoveCookedCommand.cpp"
+  "RemoveCookedCommand.h"
   "ReportJson.cpp"
   "ReportJson.h"
   "SourceAnalysisCommand.cpp"

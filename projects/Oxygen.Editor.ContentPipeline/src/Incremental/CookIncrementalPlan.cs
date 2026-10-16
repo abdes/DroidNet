@@ -27,6 +27,12 @@ internal sealed record CookIncrementalPlan(
     /// </summary>
     public ImmutableHashSet<string> DroppedRoots { get; init; } = ImmutableHashSet<string>.Empty.WithComparer(StringComparer.Ordinal);
 
+    /// <summary>Gets the sources whose prior products leave the cooked content, so they are never reused.</summary>
+    public ImmutableHashSet<Uri> RemovedSources { get; init; } = [];
+
+    /// <summary>Gets the outputs removed from each inherited root that stays in the publication, by mount.</summary>
+    public ImmutableDictionary<string, CookedOutputRemoval> Removals { get; init; } = ImmutableDictionary<string, CookedOutputRemoval>.Empty.WithComparers(StringComparer.Ordinal);
+
     /// <summary>Gets output descriptors whose shared resources and own bytes remain verified.</summary>
     public ImmutableHashSet<(string rootMount, string virtualPath)> VerifiedOutputs { get; init; } = [];
 
@@ -39,8 +45,8 @@ internal sealed record CookIncrementalPlan(
     /// <summary>Gets diagnostics that still apply to reused products.</summary>
     public ImmutableArray<Oxygen.Managed.Core.Diagnostics.DiagnosticRecord> Diagnostics => [.. this.Reusable.Values.SelectMany(static product => product.Diagnostics).DistinctBy(static diagnostic => diagnostic.DiagnosticId)];
 
-    /// <summary>Gets a value indicating whether every requested product can be reused.</summary>
-    public bool IsUpToDate => this.Fingerprints.Keys.All(this.Reusable.ContainsKey);
+    /// <summary>Gets a value indicating whether every requested product can be reused and no output is removed.</summary>
+    public bool IsUpToDate => this.Fingerprints.Keys.All(this.Reusable.ContainsKey) && this.Removals.IsEmpty;
 
     /// <summary>Gets the required generated identities, including the native default material.</summary>
     /// <param name="graph">The captured dependency graph.</param>

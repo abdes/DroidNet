@@ -82,6 +82,9 @@ internal sealed class CapturingEngineContentPipelineApi(CookValidationResult val
         return Task.FromResult(Oxygen.Testing.NativeInventoryFixture.Read(root, forceFailure: !validation.Succeeded));
     }
 
+    public Task RemoveCookedOutputsAsync(string operationRoot, string cookedRoot, Guid sourceKey, global::Oxygen.Editor.ContentPipeline.Inspection.CookedOutputRemoval removal, Oxygen.Managed.Core.Compatibility.NativeArtifactLease artifacts, CancellationToken cancellationToken)
+        => throw new NotSupportedException("Controlled native output does not remove cooked outputs.");
+
     public Task<CookInspectionResult> InspectLooseCookedRootAsync(
         string cookedRoot,
         CancellationToken cancellationToken)

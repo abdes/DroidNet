@@ -42,7 +42,8 @@ public sealed partial class ContentPipelineService
         var expectedFiles = expectedInputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
         var sourceInputs = graph.Assets.ToDictionary(static input => input.AssetUri);
         var roots = previous.Roots.Where(root => !plan.DroppedRoots.Contains(root.Mount)).ToDictionary(static root => root.Mount, StringComparer.Ordinal);
-        var products = previous.Products.Where(product => !product.Outputs.Any(output => plan.DroppedRoots.Contains(output.RootMount)))
+        var products = previous.Products.Where(product => !plan.RemovedSources.Contains(product.SourceUri)
+                && !product.Outputs.Any(output => plan.DroppedRoots.Contains(output.RootMount)))
             .ToDictionary(static product => product.SourceUri);
         var inventories = plan.PriorInventories.ToBuilder();
         var invalidatedRoots = previous.Roots.Where(root => !plan.ValidSharedRoots.Contains(root.Mount)).Select(static root => root.Mount).ToHashSet(StringComparer.Ordinal);
@@ -264,9 +265,13 @@ public sealed partial class ContentPipelineService
         CookRootRepair repair,
         CancellationToken cancellationToken)
     {
-        var plan = CookIncrementalPlanner.CreatePlan(snapshot.BuildFingerprint, snapshot.Inputs, graph, previous, inventories, repair.EmptyRoots) with
+        // A root reconstructed or vacated, that nothing in this cook goes into, leaves the publication.
+        var dropped = repair.EmptyRoots.Union(repair.VacatedRoots)
+            .Where(mount => !graph.Assets.Any(input => string.Equals(input.MountName, mount, StringComparison.OrdinalIgnoreCase))).ToArray();
+        var plan = CookIncrementalPlanner.CreatePlan(snapshot.BuildFingerprint, snapshot.Inputs, graph, previous, inventories, repair.EmptyRoots, repair.RemovedSources) with
         {
-            DroppedRoots = [.. repair.EmptyRoots.Where(mount => !graph.Assets.Any(input => string.Equals(input.MountName, mount, StringComparison.OrdinalIgnoreCase)))],
+            DroppedRoots = [.. dropped],
+            Removals = repair.Removals.RemoveRange(dropped),
         };
         if (resolveScopes().Any(static scope => !scope.AllowImportedSourceChanges))
         {
@@ -343,10 +348,12 @@ public sealed partial class ContentPipelineService
         CookReferenceRoots? references = null;
         try
         {
-            staging = await this.publication.CreateStagingAsync(operation, baseline, dirtyInputs.Select(static input => input.MountName).Distinct(StringComparer.OrdinalIgnoreCase), repair.EmptyRoots, cancellationToken).ConfigureAwait(false);
+            var mounts = dirtyInputs.Select(static input => input.MountName).Concat(plan.Removals.Keys).Distinct(StringComparer.OrdinalIgnoreCase);
+            staging = await this.publication.CreateStagingAsync(operation, baseline, mounts, repair.EmptyRoots, cancellationToken).ConfigureAwait(false);
             staging.VerifyAcceptedInventories(inventories, repair.EmptyRoots);
+            var removals = await this.RemoveRetiredOutputsAsync(operation, targetKind, artifacts, staging, plan, cancellationToken).ConfigureAwait(false);
             references = await CookReferenceRoots.AcquireAsync(staging, previous, plan, this.engineContentPipelineApi, cancellationToken).ConfigureAwait(false);
-            return await this.CookAndPublishStagingAsync(operation, targetKind, artifacts, resolveScopes, snapshot, graph, previous, plan, dirtyInputs, staging, references, libraries, cancellationToken).ConfigureAwait(false);
+            return await this.CookAndPublishStagingAsync(operation, targetKind, artifacts, resolveScopes, snapshot, graph, previous, plan, dirtyInputs, staging, references, libraries, removals, cancellationToken).ConfigureAwait(false);
         }
         catch (ContentPipelineTerminationException failure) when (staging is not null)
         {
@@ -478,9 +485,11 @@ public sealed partial class ContentPipelineService
         CookStagingArea staging,
         CookReferenceRoots references,
         CookedLibraryReadSet libraries,
+        IReadOnlyList<ContentCookResult> removals,
         CancellationToken cancellationToken)
     {
-        var results = await this.CookDependencyLayersAsync(operation, targetKind, artifacts, snapshot, graph, previous, plan, dirtyInputs, staging, libraries.OrderRoots(references.Paths), cancellationToken).ConfigureAwait(false);
+        // Removal results come first: a later cook into the same root verifies it again and supersedes them.
+        List<ContentCookResult> results = [.. removals, .. await this.CookDependencyLayersAsync(operation, targetKind, artifacts, snapshot, graph, previous, plan, dirtyInputs, staging, libraries.OrderRoots(references.Paths), cancellationToken).ConfigureAwait(false)];
 
         var cooked = results.Count == 1 ? results[0] : MergeProjectResults(operation.OperationId, results);
         var result = cooked with

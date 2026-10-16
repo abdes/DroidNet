@@ -62,7 +62,7 @@ public sealed class CookRepairTests
         _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
     }
 
-    /// <summary>A renamed material leaves the cooked index under its old identity and keeps other assets.</summary>
+    /// <summary>A renamed material leaves the cooked index under its old identity, and the other materials are reused, not cooked again.</summary>
     /// <returns>The asynchronous native retirement regression.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
@@ -81,6 +81,8 @@ public sealed class CookRepairTests
 
         AssertCookSucceeded(result);
         _ = result.IsPublished.Should().BeTrue();
+        _ = result.CookedAssets.Select(static asset => asset.VirtualPath).Should().Equal("/Content/Materials/Teal.omat");
+        _ = api.Removed.Should().ContainSingle().Which.VirtualPaths.Should().Equal("/Content/Materials/Blue.omat");
         var inventory = await api.ReadInventoryAsync(workspace.CookedRoot("Content"), artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = inventory.IsValid.Should().BeTrue();
         _ = inventory.Assets.Select(static asset => asset.VirtualPath).Should()
@@ -107,7 +109,7 @@ public sealed class CookRepairTests
             .Assets.Select(static asset => asset.VirtualPath).Should().Contain("/Content/New folder (2)/Wet Rubber.omat");
     }
 
-    /// <summary>An automatic cook of a deleted source removes its cooked output and keeps every other asset.</summary>
+    /// <summary>An automatic cook of a deleted source removes its cooked output and keeps every other asset without cooking it.</summary>
     /// <returns>The asynchronous native regression.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
@@ -121,17 +123,49 @@ public sealed class CookRepairTests
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
+        var red = ReadDescriptorBytes(workspace, "Red.omat");
         File.Delete(Path.Combine(workspace.Root, "Content/Materials/Blue.omat.json"));
+        api.Imported.Clear();
 
         var result = await pipeline.CookSavedAssetAsync(new("asset:///Content/Materials/Blue.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertCookSucceeded(result);
         _ = result.IsPublished.Should().BeTrue();
+        _ = api.Imported.Should().BeEmpty();
+        _ = api.Removed.Should().ContainSingle().Which.VirtualPaths.Should().Equal("/Content/Materials/Blue.omat");
         var paths = (await api.ReadInventoryAsync(workspace.CookedRoot("Content"), artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false))
             .Assets.Select(static asset => asset.VirtualPath).ToArray();
         _ = paths.Should().NotContain("/Content/Materials/Blue.omat").And.Contain("/Content/Materials/Red.omat");
+        _ = ReadDescriptorBytes(workspace, "Red.omat").Should().Equal(red);
+        _ = Directory.EnumerateFiles(workspace.CookedRoot("Content"), "Blue.omat", SearchOption.AllDirectories).Should().BeEmpty();
 
         _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Deleting a material cooks the scene that uses it again: the scene reports the missing material, and nothing
+    /// is published until it is fixed.
+    /// </summary>
+    /// <returns>The asynchronous native regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task DeletingAMaterialCooksTheSceneThatUsesIt()
+    {
+        using var workspace = new CookWorkspace();
+        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = CreateRecordingApi(compatibility);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
+        AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
+        File.Delete(Path.Combine(workspace.Root, "Content/Materials/Blue.omat.json"));
+
+        var result = await pipeline.CookSavedAssetAsync(new("asset:///Content/Materials/Blue.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.IsPublished.Should().BeFalse();
+        _ = result.Status.Should().NotBe(OperationStatus.Succeeded);
+        _ = result.Diagnostics.Should().Contain(static diagnostic => diagnostic.Code == "scene.descriptor.reference_missing"
+            && diagnostic.Message.Contains("/Content/Materials/Blue.omat", StringComparison.Ordinal));
+        _ = api.Imported.Should().Contain(static execution => execution.Manifest.Jobs.Any(static job => job.Type == "scene-descriptor"));
     }
 
     /// <summary>
@@ -432,6 +466,10 @@ public sealed class CookRepairTests
         _ = result.CookedAssets.Select(static asset => asset.VirtualPath).Should().BeEquivalentTo(first.CookedAssets.Select(static asset => asset.VirtualPath));
         _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
     }
+
+    // The bytes of a cooked descriptor in the current Content root.
+    private static byte[] ReadDescriptorBytes(CookWorkspace workspace, string fileName)
+        => File.ReadAllBytes(Directory.EnumerateFiles(workspace.CookedRoot("Content"), fileName, SearchOption.AllDirectories).Single());
 
     // The project mounts the current publication holds a root for.
     private static string[] ReadProjectRoots(string projectRoot)

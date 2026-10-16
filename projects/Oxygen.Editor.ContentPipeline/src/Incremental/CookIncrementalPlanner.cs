@@ -41,7 +41,7 @@ internal static class CookIncrementalPlanner
     /// <summary>Compares captured inputs with verified output facts without performing more I/O.</summary>
     public static CookIncrementalPlan CreatePlan(string producer, IReadOnlyList<CookSnapshotInput> inputs,
         CookDependencyGraph graph, CookProvenance previous, ImmutableDictionary<string, CookedInventoryReport> inventories,
-        IReadOnlySet<string>? rebuiltRoots = null)
+        IReadOnlySet<string>? rebuiltRoots = null, IReadOnlySet<Uri>? removedSources = null)
     {
         var fingerprints = graph.Assets.ToImmutableDictionary(static input => input.AssetUri, input => Fingerprint(input, producer, inputs, graph));
         foreach (var builtin in CookIncrementalPlan.Builtins(graph))
@@ -73,7 +73,8 @@ internal static class CookIncrementalPlanner
             }
         }
 
-        var reused = previous.Products.Where(product => fingerprints.TryGetValue(product.SourceUri, out var fingerprint)
+        var reused = previous.Products.Where(product => removedSources?.Contains(product.SourceUri) != true
+            && fingerprints.TryGetValue(product.SourceUri, out var fingerprint)
             && string.Equals(fingerprint, product.ReuseFingerprint, StringComparison.Ordinal)
             && product.Outputs.Length != 0
             && product.Outputs.All(output => validOutputs.Contains((output.RootMount, output.Asset.VirtualPath))))
@@ -94,7 +95,12 @@ internal static class CookIncrementalPlanner
         }
         while (changed);
 
-        return new(fingerprints, reused.ToImmutable(), sharedRoots.ToImmutable()) { VerifiedOutputs = validOutputs.ToImmutableHashSet(), PriorInventories = inventories };
+        return new(fingerprints, reused.ToImmutable(), sharedRoots.ToImmutable())
+        {
+            VerifiedOutputs = validOutputs.ToImmutableHashSet(),
+            PriorInventories = inventories,
+            RemovedSources = removedSources?.ToImmutableHashSet() ?? [],
+        };
     }
 
     /// <summary>Builds an engine-generated product identity from its recipe owner and producer.</summary>

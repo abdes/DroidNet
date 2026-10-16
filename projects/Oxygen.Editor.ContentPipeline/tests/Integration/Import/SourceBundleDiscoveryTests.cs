@@ -341,6 +341,8 @@ public sealed class SourceBundleDiscoveryTests
 
         public Task<global::Oxygen.Editor.ContentPipeline.Inspection.CookedInventoryReport> ReadInventoryAsync(string cookedRoot, NativeArtifactLease? artifacts, CancellationToken cancellationToken) => throw new NotSupportedException();
 
+        public Task RemoveCookedOutputsAsync(string operationRoot, string cookedRoot, Guid sourceKey, global::Oxygen.Editor.ContentPipeline.Inspection.CookedOutputRemoval removal, NativeArtifactLease artifacts, CancellationToken cancellationToken) => throw new NotSupportedException();
+
         public Task<CookInspectionResult> InspectLooseCookedRootAsync(string cookedRoot, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<CookValidationResult> ValidateLooseCookedRootAsync(string cookedRoot, CancellationToken cancellationToken) => throw new NotSupportedException();

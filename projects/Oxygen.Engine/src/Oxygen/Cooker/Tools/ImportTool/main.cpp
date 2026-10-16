@@ -62,6 +62,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/PhysicsSidecarCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReclaimCommand.h>
+#include <Oxygen/Cooker/Tools/ImportTool/RemoveCookedCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ScriptCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ScriptingSidecarCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/SourceAnalysisCommand.h>
@@ -717,6 +718,7 @@ auto main(int argc, char** argv) -> int
     InputCommand input_command(&global_options);
     PhysicsSidecarCommand physics_sidecar_command(&global_options);
     oxygen::content::import::tool::ReclaimCommand reclaim_command;
+    oxygen::content::import::tool::RemoveCookedCommand remove_cooked_command;
     ScriptCommand script_command(&global_options);
     ScriptingSidecarCommand scripting_sidecar_command(&global_options);
     TextureCommand texture_command(&global_options);
@@ -733,6 +735,7 @@ auto main(int argc, char** argv) -> int
       &source_inspection_command,
       &source_analysis_command,
       &reclaim_command,
+      &remove_cooked_command,
     };
 
     AsyncImportService::Config service_config {};

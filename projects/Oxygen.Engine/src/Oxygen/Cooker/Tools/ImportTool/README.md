@@ -1,6 +1,7 @@
 # Oxygen.Cooker.ImportTool
 
-`Oxygen.Cooker.ImportTool` imports source assets into Oxygen loose-cooked layout.
+`Oxygen.Cooker.ImportTool` imports source assets into Oxygen loose-cooked
+layout.
 
 Supported import kinds:
 
@@ -58,7 +59,8 @@ Oxygen.Cooker.ImportTool --concurrency "t:4/64,b:2/32,g:2/32,s:2/32" batch --man
 
 Cooked root must resolve to an absolute path.
 
-Single-job commands (`texture`, `fbx`, `gltf`, `input`, `script`, `script-sidecar`, `physics-sidecar`):
+Single-job commands (`texture`, `fbx`, `gltf`, `input`, `script`,
+`script-sidecar`, `physics-sidecar`):
 
 1. `-i`, `--output` (command-local)
 2. global `-o`, `--cooked-root`
@@ -87,8 +89,8 @@ Common options:
 - `--report <path>`
 - `--content-hashing <true|false>`
 
-Texture options include intent/format/mips/cubemap/decode controls.
-Run `texture --help` for the full list.
+Texture options include intent/format/mips/cubemap/decode controls. Run
+`texture --help` for the full list.
 
 An import manifest can set `source_key` to a canonical UUIDv7 at the top level,
 in `defaults`, or on a job; the closest setting wins. Jobs writing the same
@@ -122,7 +124,8 @@ Common options:
 
 Scene controls:
 
-- `--material-slot-provenance <json-file>` (retained candidate from a prior import)
+- `--material-slot-provenance <json-file>` (retained candidate from a prior
+  import)
 - `--no-import-textures`
 - `--no-import-materials`
 - `--no-import-geometry`
@@ -162,15 +165,17 @@ The native publisher selects a validated immutable generation and its provenance
 in one atomic record replacement. Failed or interrupted attempts keep the prior
 selection. External raw sources are read only. Records follow
 `oxygen.retained-model-import.schema.json`; generated directories belong under
-`Content/.cooked/imports`. The [pipeline owner](../../Docs/Import/async_import_pipeline_v2.md#retained-model-publication)
+`Content/.cooked/imports`. The
+[pipeline owner](../../Docs/Import/async_import_pipeline_v2.md#retained-model-publication)
 defines publication and lifetime.
 
-`--recipe` applies a single-job native import manifest, including texture defaults
-and mesh settings. Relative sources resolve beside that manifest. The command
-validates format and conflicting options before changing the retained record.
-Recipe application and record replay accept reporting and execution options;
-content overrides require a direct source or an updated recipe. Worker budgets
-belong to `--thread-pool-size`/`--concurrency`, outside retained recipes.
+`--recipe` applies a single-job native import manifest, including texture
+defaults and mesh settings. Relative sources resolve beside that manifest. The
+command validates format and conflicting options before changing the retained
+record. Recipe application and record replay accept reporting and execution
+options; content overrides require a direct source or an updated recipe. Worker
+budgets belong to `--thread-pool-size`/`--concurrency`, outside retained
+recipes.
 
 Reclaim unused generations without another import:
 
@@ -181,8 +186,9 @@ Oxygen.Cooker.ImportTool reclaim --record H:/Game/Content/imports/model.import.j
 This uses the retained publisher's record lock and generation leases. It keeps
 the selected generation and any active reader/writer generations, and leaves the
 authored record and original sources unchanged. Repeat after readers release
-their old generations. The [Content workflow](../../../../../Examples/Content/README.md)
-owns the example import, recook, packaging and cleanup commands.
+their old generations. The
+[Content workflow](../../../../../Examples/Content/README.md) owns the example
+import, recook, packaging and cleanup commands.
 
 ### Staged model imports
 
@@ -191,17 +197,17 @@ owns publication of cooked output together with the returned provenance.
 
 Keep the source identity with the source asset and reuse it on every reimport.
 Successful single and batch job reports include `material_slot_provenance` when
-the importer allocates slots. Preserve that object in the host-owned source metadata;
-pass it through the CLI file option or a manifest's `material_slot_provenance`
-property. The file contains the object itself, not the surrounding job report.
-Failed or canceled jobs do not publish a candidate. Clearing cooked output does
-not erase this retained authoring data. The object follows the installed
-`oxygen.material-slot-provenance.schema.json` schema.
+the importer allocates slots. Preserve that object in the host-owned source
+metadata; pass it through the CLI file option or a manifest's
+`material_slot_provenance` property. The file contains the object itself, not
+the surrounding job report. Failed or canceled jobs do not publish a candidate.
+Clearing cooked output does not erase this retained authoring data. The object
+follows the installed `oxygen.material-slot-provenance.schema.json` schema.
 
 Manifest scene defaults and individual FBX/glTF jobs accept
 `material_slot_source_identity` and `material_slot_provenance`. Job values
-override defaults. Give independent source assets independent identities;
-do not derive identities from machine-local paths.
+override defaults. Give independent source assets independent identities; do not
+derive identities from machine-local paths.
 
 ### `script`
 
@@ -220,17 +226,19 @@ Options:
 - `--compile <true|false>`
 - `--compile-mode <debug|optimized>`
 - `--script-storage <embedded|external>`
-- `--script-source-root <directory>`: authored content root, required for external storage
+- `--script-source-root <directory>`: authored content root, required for
+  external storage
 
 Rules:
 
 - `compile=true` with `script-storage=external` embeds the bytecode and records
   the source path: the runtime prefers the source when a script source root
   contains it and runs the bytecode otherwise.
-- External source paths are stored relative to `--script-source-root`; the source file
-  must be inside that directory. In batch manifests, set `source_root` on the
-  script job or `defaults.script`. Relative roots resolve from the manifest
-  directory, independently of the input `--root` and cooked output location.
+- External source paths are stored relative to `--script-source-root`; the
+  source file must be inside that directory. In batch manifests, set
+  `source_root` on the script job or `defaults.script`. Relative roots resolve
+  from the manifest directory, independently of the input `--root` and cooked
+  output location.
 - In this tool, script compile is wired through Luau compiler callback.
 
 Script import writes script descriptors (`*.oscript`) and script payload tables:
@@ -255,14 +263,21 @@ Optional:
 
 Shipped JSON schemas:
 
-- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
-- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json`
-- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`
-- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json`
-- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json`
+- source-of-truth:
+  `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+- source-of-truth:
+  `src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json`
+- source-of-truth:
+  `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`
+- source-of-truth:
+  `src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json`
+- source-of-truth:
+  `src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json`
-- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json`
-- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
+- source-of-truth:
+  `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json`
+- source-of-truth:
+  `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
 - installed for users as: `schemas/oxygen.import-manifest.schema.json`
 - installed for users as: `schemas/oxygen.texture-descriptor.schema.json`
 - installed for users as: `schemas/oxygen.material-descriptor.schema.json`
@@ -358,8 +373,10 @@ Installed package layout:
 
 Slot names:
 
-- Canonical runtime slot names are accepted (for example: `Up`, `RightCtrl`, `PrintScreen`).
-- Authoring aliases are also accepted and normalized during import (for example: `UpArrow` -> `Up`, `RightControl` -> `RightCtrl`, `Print` -> `PrintScreen`).
+- Canonical runtime slot names are accepted (for example: `Up`, `RightCtrl`,
+  `PrintScreen`).
+- Authoring aliases are also accepted and normalized during import (for example:
+  `UpArrow` -> `Up`, `RightControl` -> `RightCtrl`, `Print` -> `PrintScreen`).
 
 ### `script-sidecar`
 
@@ -410,7 +427,8 @@ Sidecar payload shape:
 }
 ```
 
-Supported param types: `bool`, `int32`, `float`, `string`, `vec2`, `vec3`, `vec4`.
+Supported param types: `bool`, `int32`, `float`, `string`, `vec2`, `vec3`,
+`vec4`.
 
 Sidecar import writes script-binding payload tables:
 
@@ -469,6 +487,32 @@ Minimal payload example:
 
 Physics sidecar import emits a `.opscene` descriptor and does not patch the
 scene descriptor.
+
+### `remove-cooked`
+
+Removes cooked assets and auxiliary files from a loose cooked root without
+cooking, for example the outputs of a source that was deleted or renamed.
+
+```powershell
+Oxygen.Cooker.ImportTool remove-cooked H:/Game/.cooked/Content --input removal.json
+```
+
+The request lists the virtual paths of the assets and the root-relative paths of
+the auxiliary files to remove, and may name the identity the updated index
+takes:
+
+```json
+{
+  "source_key": "0199a6c4-1f2e-7b3a-9c4d-5e6f7a8b9c0d",
+  "virtual_paths": ["/Content/Materials/Blue.omat"],
+  "auxiliary_files": []
+}
+```
+
+Every listed entry must be in the index. The index is published first and the
+files are deleted after it, so the index never lists a missing file. Resource
+table entries that removed assets used stay in their tables, as they do when a
+cook replaces an asset; a rebuild of the root compacts them.
 
 ### `batch`
 
@@ -538,7 +582,8 @@ Job rules:
 - non-sidecar jobs require `source`
 - `texture-descriptor` jobs:
   - use `source` as descriptor JSON path
-  - support texture tuning keys (`intent`, `mip_policy`, `output_format`, etc.) as manifest-level defaults/job overrides
+  - support texture tuning keys (`intent`, `mip_policy`, `output_format`, etc.)
+    as manifest-level defaults/job overrides
   - reject non-texture keys (for example scene/script-specific keys)
 - `material-descriptor` jobs:
   - use `source` as descriptor JSON path
@@ -550,7 +595,8 @@ Job rules:
 - `scene-descriptor` jobs:
   - use `source` as descriptor JSON path
   - accept `output`, `name`, and `content_hashing`
-  - resolve geometry/material/script/input/physics references from mounted cooked roots
+  - resolve geometry/material/script/input/physics references from mounted
+    cooked roots
 - `input` jobs require:
   - `id`
   - `source`
@@ -625,7 +671,8 @@ Batch example with one output shared at manifest level:
 
 Notes:
 
-- Use the actual `scene` and `script` virtual paths emitted by import/report/index.
+- Use the actual `scene` and `script` virtual paths emitted by
+  import/report/index.
 - `script_virtual_path` must resolve to a script asset.
 
 ## Reports and Exit Codes

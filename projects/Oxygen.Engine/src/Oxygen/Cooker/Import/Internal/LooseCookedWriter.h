@@ -71,6 +71,8 @@ struct LooseCookedWriteResult final {
   uint16_t content_version = 0;
   std::vector<LooseCookedAssetRecord> assets {};
   std::vector<LooseCookedFileRecord> files {};
+  //! Container-relative paths of the files deleted by requested removals.
+  std::vector<std::string> removed_files {};
   LooseCookedCollisionSummary collision_summary {};
 };
 
@@ -212,6 +214,31 @@ public:
     std::string_view descriptor_relpath, uint64_t descriptor_size,
     const data::AssetReferences& references,
     std::optional<base::Sha256Digest> descriptor_sha256 = std::nullopt) -> void;
+
+  //! Remove an asset's index entry and its descriptor file.
+  /*!
+   The removal applies to the index published when `Finish()` runs, so it
+   also removes an entry another writer published since this one opened the
+   root. The descriptor file is deleted after the index no longer lists it.
+   Resource table entries the asset used stay in their tables: other assets
+   may share them, and only a rebuild of the root compacts the tables.
+
+   @param virtual_path Virtual path of the asset to remove.
+
+   @throw std::runtime_error from `Finish()` if no asset has this virtual path,
+     or if this writer also writes it.
+  */
+  OXGN_COOK_API auto RemoveAssetDescriptor(std::string_view virtual_path)
+    -> void;
+
+  //! Remove an auxiliary file's record and the file itself.
+  /*!
+   @param relpath Container-relative path of the auxiliary file.
+
+   @throw std::runtime_error from `Finish()` if the index has no auxiliary
+     file at this path, or if this writer also writes it.
+  */
+  OXGN_COOK_API auto RemoveAuxiliaryFile(std::string_view relpath) -> void;
 
   //! Finalize and write the loose cooked index.
   /*!

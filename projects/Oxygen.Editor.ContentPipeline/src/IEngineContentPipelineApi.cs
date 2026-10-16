@@ -37,6 +37,20 @@ public interface IEngineContentPipelineApi
     /// <returns>Expected inventory metadata and observed per-file failures.</returns>
     public Task<CookedInventoryReport> ReadInventoryAsync(string cookedRoot, NativeArtifactLease? artifacts, CancellationToken cancellationToken);
 
+    /// <summary>Removes cooked assets and auxiliary files from a loose cooked root the caller owns, without cooking.</summary>
+    /// <remarks>
+    /// The index is updated first and the files are deleted after it, so the index never lists a deleted file.
+    /// Resource table entries the removed assets used stay in their tables.
+    /// </remarks>
+    /// <param name="operationRoot">The operation's private working folder.</param>
+    /// <param name="cookedRoot">The writable physical root.</param>
+    /// <param name="sourceKey">The identity the updated index takes, as a cook into the root gives it.</param>
+    /// <param name="removal">The assets and auxiliary files to remove; each must be in the root's index.</param>
+    /// <param name="artifacts">The native artifact lease owned by this operation.</param>
+    /// <param name="cancellationToken">Cancels the native worker and waits for its ownership drain.</param>
+    /// <returns>A task that completes when the root no longer has the removed outputs.</returns>
+    public Task RemoveCookedOutputsAsync(string operationRoot, string cookedRoot, Guid sourceKey, CookedOutputRemoval removal, NativeArtifactLease artifacts, CancellationToken cancellationToken);
+
     /// <summary>
     /// Inspects a loose cooked root.
     /// </summary>

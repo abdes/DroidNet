@@ -26,7 +26,7 @@ public sealed partial class ContentCookCoordinator
     [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Name} waits for {Count} documents to be saved.")]
     private partial void LogRunWaitingForSave(string name, int count);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Name} removed the cooked output of {Sources}, which were moved or deleted, in {Seconds:F1} s; publishing their mount again without them cooked {Updated} assets and reused {Reused}.")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Name} removed the cooked output of {Sources}, whose sources were moved or deleted, in {Seconds:F1} s; it cooked {Updated} assets and reused {Reused}.")]
     private partial void LogRunRemovedOutput(string name, string sources, double seconds, int updated, int reused);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Cook of {Name} finished ({State}) in {Seconds:F1} s: {Updated} assets cooked, {Reused} reused.")]
