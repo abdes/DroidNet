@@ -617,24 +617,23 @@ void EditorView::UpdateCameraForFrame() {
     const float half_h = std::max(0.001f, ortho_half_height_);
     const float half_w = half_h * std::max(0.001f, aspect);
 
-    // Keep near/far in a sane range.
-    // Using fixed planes can make orthographic presets appear empty if the
-    // camera is far from the focus point (everything gets clipped).
+    // Keep near/far in a sane range. The view's planes are a minimum: fixed
+    // planes make orthographic presets appear empty when the camera is far
+    // from the focus point (everything gets clipped), so the far plane always
+    // reaches well past the focus.
     const float near_plane = camera_view_settings_overridden_
       ? camera_near_plane_
       : 0.1f;
-    float far_plane = camera_far_plane_;
-    if (!camera_view_settings_overridden_) {
-      far_plane = 1000.0f;
-      if (auto transform = camera_node_.GetTransform(); true) {
-        const glm::vec3 pos =
-          transform.GetLocalPosition().value_or(glm::vec3(0.0f, 0.0f, 0.0f));
-        const glm::vec3 focus = focus_point_;
-        const glm::vec3 d = pos - focus;
-        const float dist = std::sqrt(glm::dot(d, d));
-        if (std::isfinite(dist)) {
-          far_plane = std::max(far_plane, dist * 4.0f);
-        }
+    float far_plane
+      = camera_view_settings_overridden_ ? camera_far_plane_ : 1000.0f;
+    if (auto transform = camera_node_.GetTransform(); true) {
+      const glm::vec3 pos =
+        transform.GetLocalPosition().value_or(glm::vec3(0.0f, 0.0f, 0.0f));
+      const glm::vec3 focus = focus_point_;
+      const glm::vec3 d = pos - focus;
+      const float dist = std::sqrt(glm::dot(d, d));
+      if (std::isfinite(dist)) {
+        far_plane = std::max(far_plane, dist * 4.0f);
       }
     }
     cam.SetExtents(
@@ -810,9 +809,10 @@ auto EditorView::BeginFraming(const glm::vec3& center, const float radius)
     move.target_position = center - forward * distance;
   } else {
     move.target_ortho_half_height = fitted * std::max(1.0F, 1.0F / aspect);
-    const glm::vec3 offset = position - focus_point_;
-    const float distance = std::max(
-      std::sqrt(glm::dot(offset, offset)), 2.0F * fitted + 1.0F);
+    // Distance does not change an orthographic image, only what the depth
+    // range clips: back off from the bounds alone, never from a previous
+    // frame's distance, or one large frame pushes every later one out.
+    const float distance = 2.0F * fitted + 1.0F;
     move.target_position = center - forward * distance;
   }
   if (!IsFinite(move.target_position)

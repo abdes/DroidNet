@@ -221,6 +221,32 @@ public:
       IsNear(view.GetFocusPoint(), { 1.0F, 1.0F, 0.0F }, 1.0e-4F));
   }
 
+  //! Frame All on a large scene must not push later frames out of the depth
+  //! range: an orthographic frame backs off from its own bounds only.
+  [TestMethod]
+  void OrthographicFramingDistanceComesFromTheBoundsOnly() {
+    const auto authored = MakeScene("Authored");
+    const auto cameras = MakeScene("Cameras");
+    EditorView view(EditorView::Config { .name = "Pane",
+      .width = 320,
+      .height = 200,
+      .camera_preset = CameraViewPreset::kTop });
+    view.Initialize(*authored, *cameras);
+
+    (void)view.BeginFraming({ 0.0F, 0.0F, 0.0F }, 500.0F);
+    Settle(view);
+    const auto outcome = view.BeginFraming({ 2.0F, 0.0F, 0.0F }, 1.0F);
+    Settle(view);
+
+    Assert::IsTrue(outcome == EditorFramingOutcome::kFramed);
+    const glm::vec3 position = view.GetCameraNode()
+                                 .GetTransform()
+                                 .GetLocalPosition()
+                                 .value_or(glm::vec3 { 0.0F });
+    Assert::AreEqual(2.0F * 1.1F + 1.0F,
+      glm::length(position - glm::vec3 { 2.0F, 0.0F, 0.0F }), 1.0e-3F);
+  }
+
   [TestMethod]
   void NavigationDuringTheMoveTakesOver() {
     const auto authored = MakeScene("Authored");
