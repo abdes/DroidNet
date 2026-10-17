@@ -8,10 +8,11 @@ using AwesomeAssertions;
 using DroidNet.Documents;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
+using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Services;
@@ -47,13 +48,13 @@ public sealed partial class SceneEngineSyncTests
         _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(7)], fixture.Sync.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = scene.RootNodes.Remove(node);
         _ = fixture.Sync.AdvanceRevision(scene);
-        await fixture.Sync.RemoveNodeAsync(scene, node.Id).ConfigureAwait(false);
+        await fixture.Sync.RemoveNodeHierarchiesAsync(scene, [node.Id]).ConfigureAwait(false);
 
         creationCompletion.SetResult(Accepted(request));
         _ = (await syncing.ConfigureAwait(false)).Should().BeTrue();
 
         _ = fixture.Requests.PropertyEntries(node.Id, EngineComponentId.Transform).Should().BeEmpty("the queued edit belonged to a node deleted before readiness");
-        _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeRemoveSceneNode>().Should().ContainSingle().Which.NodeId.Should().Be(node.Id);
+        _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeRemoveSceneNodes>().Should().ContainSingle().Which.Nodes.Should().Equal(node.Id);
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
     }
 
@@ -121,10 +122,11 @@ public sealed partial class SceneEngineSyncTests
         var (active, node, _) = fixture.RegisterScene(2);
         _ = await fixture.Sync.SyncSceneAsync(active, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        await fixture.Sync.RemoveNodeAsync(inactive, node.Id).ConfigureAwait(false);
-        await fixture.Sync.ReparentNodeAsync(inactive, node.Id, newParentGuid: null).ConfigureAwait(false);
+        await fixture.Sync.RemoveNodeHierarchiesAsync(inactive, [node.Id]).ConfigureAwait(false);
+        await fixture.Sync.ReparentHierarchiesAsync(inactive, [node.Id], newParentGuid: null).ConfigureAwait(false);
 
-        _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeRemoveSceneNode>().Should().BeEmpty();
+        _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeRemoveSceneNodes>().Should().BeEmpty();
+        _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeReparentSceneNodes>().Should().BeEmpty();
         _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeReparentSceneNode>().Should().ContainSingle("only the initial full projection reparents this node");
     }
 
@@ -167,7 +169,7 @@ public sealed partial class SceneEngineSyncTests
         var result = await sync.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Should().BeFalse();
-        _ = fixture.Sync.RegisterDocument(scene, documentId).Should().BeFalse();
+        _ = fixture.Sync.RegisterDocument(fixture.TabOf(documentId).Authoring).Should().BeFalse();
         fixture.Engine.Verify(value => value.DisposeAsync(), Times.Never);
     }
 
@@ -340,12 +342,16 @@ public sealed partial class SceneEngineSyncTests
     {
         using var fixture = new ReplayFixture();
         fixture.State = EngineServiceState.Ready;
-        var (scene, node, oldDocumentId) = fixture.RegisterScene(1);
-        var old = fixture.Sync.CaptureRevision(scene);
+        var (closed, _, oldDocumentId) = fixture.RegisterScene(1);
+        var old = fixture.Sync.CaptureRevision(closed);
         fixture.Sync.CloseDocument(oldDocumentId);
-        _ = fixture.Sync.RegisterDocument(scene, oldDocumentId).Should().BeFalse();
-        var reopened = DocumentId.New();
-        _ = fixture.Sync.RegisterDocument(scene, reopened).Should().BeTrue();
+        _ = fixture.Sync.RegisterDocument(fixture.TabOf(oldDocumentId).Authoring).Should().BeFalse();
+
+        // Opening the scene's file again gives a new document with a scene of its own.
+        using var reopened = SceneTabs.Open(closed);
+        var scene = reopened.Scene;
+        var node = scene.RootNodes.Single();
+        _ = fixture.Sync.RegisterDocument(reopened.Authoring).Should().BeTrue();
         SetPosition(fixture.Sync, node, 9);
         var current = fixture.Sync.CaptureRevision(scene);
         _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(9)], current, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -373,6 +379,8 @@ public sealed partial class SceneEngineSyncTests
 
     private sealed partial class ReplayFixture : IDisposable
     {
+        private readonly Dictionary<DocumentId, SceneTab> tabs = [];
+
         public ReplayFixture()
         {
             var engine = this.Engine;
@@ -411,20 +419,32 @@ public sealed partial class SceneEngineSyncTests
 
         public ConcurrentQueue<OperationResult> Results { get; } = new();
 
-        public void Dispose() => this.Sync.Dispose();
+        public void Dispose()
+        {
+            this.Sync.Dispose();
+            foreach (var tab in this.tabs.Values)
+            {
+                tab.Dispose();
+            }
+        }
 
-        public (Scene scene, SceneNode node, DocumentId documentId) RegisterScene(float x)
+        public (Scene Scene, SceneNode Node, DocumentId DocumentId) RegisterScene(float x)
         {
             var scene = CreateScene();
             var node = new SceneNode(scene) { Name = "Cube" };
             scene.RootNodes.Add(node);
             node.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(x, 0, 0);
-            var documentId = DocumentId.New();
-            _ = this.Sync.RegisterDocument(scene, documentId);
-            return (scene, node, documentId);
+            var tab = Register(this.Sync, scene);
+            this.tabs[tab.DocumentId] = tab;
+            return (tab.Scene, tab.NodeOf(node), tab.DocumentId);
         }
 
-        public (TaskCompletionSource<RuntimeWorldRequest> request, TaskCompletionSource<RuntimeCommandResult> completion) DelayNodeCreation()
+        /// <summary>Gets the document a scene was registered with.</summary>
+        /// <param name="documentId">The document's identity.</param>
+        /// <returns>The document.</returns>
+        public SceneTab TabOf(DocumentId documentId) => this.tabs[documentId];
+
+        public (TaskCompletionSource<RuntimeWorldRequest> Request, TaskCompletionSource<RuntimeCommandResult> Completion) DelayNodeCreation()
         {
             var request = new TaskCompletionSource<RuntimeWorldRequest>(TaskCreationOptions.RunContinuationsAsynchronously);
             var completion = new TaskCompletionSource<RuntimeCommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);

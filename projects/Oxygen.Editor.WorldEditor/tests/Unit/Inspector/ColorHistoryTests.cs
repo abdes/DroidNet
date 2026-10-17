@@ -12,7 +12,7 @@ using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 
 [TestClass]
-public sealed partial class ColorHistoryTests
+public sealed class ColorHistoryTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -38,7 +38,7 @@ public sealed partial class ColorHistoryTests
             await environment.PendingEdits.ConfigureAwait(true);
         }
 
-        fixture.Context.History.Clear();
+        fixture.Document.History.Clear();
         var before = ReadSceneColor(fixture, kind);
         var owner = (IInspectorEditSessionOwner)model;
         owner.BeginEditSession(model is EnvironmentViewModel ? "SolidColor" : "Color", NumberBoxEditInteractionKind.PointerDrag);
@@ -58,17 +58,17 @@ public sealed partial class ColorHistoryTests
 
         await PendingColorEdits(model).ConfigureAwait(true);
         _ = ReadSceneColor(fixture, kind).Should().NotBe(before);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty("preview samples belong to one uncommitted edit session");
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty("preview samples belong to one uncommitted edit session");
         owner.EndEditSession(cancel ? NumberBoxEditCompletionKind.Cancel : NumberBoxEditCompletionKind.Commit);
         await PendingColorEdits(model).ConfigureAwait(true);
         var expected = cancel ? before : preview;
         AssertColorClose(ReadSceneColor(fixture, kind), expected);
-        _ = fixture.Context.History.UndoStack.Should().HaveCount(cancel ? 0 : 1);
+        _ = fixture.Document.History.UndoStack.Should().HaveCount(cancel ? 0 : 1);
         if (!cancel)
         {
-            await fixture.Context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+            await fixture.Document.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
             _ = ReadSceneColor(fixture, kind).Should().Be(before);
-            await fixture.Context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+            await fixture.Document.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
             AssertColorClose(ReadSceneColor(fixture, kind), expected);
         }
     }
@@ -79,12 +79,12 @@ public sealed partial class ColorHistoryTests
     {
         if (string.Equals(kind, "Environment", StringComparison.Ordinal))
         {
-            var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);
+            var model = new EnvironmentViewModel(() => fixture.Authoring);
             model.SetScene(fixture.Scene);
             return model;
         }
 
-        var light = new DirectionalLightViewModel(fixture.Commands, () => fixture.Context);
+        var light = new DirectionalLightViewModel(() => fixture.Authoring);
         light.UpdateValues([fixture.Node]);
         return light;
     }

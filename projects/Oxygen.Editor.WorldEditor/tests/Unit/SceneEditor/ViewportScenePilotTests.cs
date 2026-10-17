@@ -27,6 +27,8 @@ public sealed class ViewportScenePilotTests
     private static readonly RuntimeViewId ViewId = new(61);
     private static readonly RuntimeViewCameraPose Pose = new(new Vector3(1, 2, 3), new Vector3(10, 20, 30), Vector3.One, OrthographicSize: null);
 
+    public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
     public async Task TogglePilot_ShouldPilotTheViewedCamera()
     {
@@ -36,7 +38,7 @@ public sealed class ViewportScenePilotTests
 
         await sut.TogglePilotCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
 
-        engine.Verify(service => service.SetViewScenePilotAsync(It.Is<RuntimeViewId>(id => id.Value == ViewId.Value), true), Times.Once);
+        engine.Verify(service => service.SetViewScenePilotAsync(It.Is<RuntimeViewId>(id => id.Value == ViewId.Value), pilot: true), Times.Once);
         _ = sut.IsPilotingSceneCamera.Should().BeTrue();
         _ = sut.CameraMenuLabel.Should().Be("Piloting Main");
         _ = sut.PilotLabel.Should().Be("Stop piloting");
@@ -83,7 +85,7 @@ public sealed class ViewportScenePilotTests
         _ = commits.Should().ContainSingle();
         _ = sut.IsPilotingSceneCamera.Should().BeFalse();
         _ = sut.SceneCamera.Should().Be(MainCamera, "stopping the pilot keeps looking through the camera");
-        engine.Verify(service => service.SetViewScenePilotAsync(It.IsAny<RuntimeViewId>(), false), Times.Once);
+        engine.Verify(service => service.SetViewScenePilotAsync(It.IsAny<RuntimeViewId>(), pilot: false), Times.Once);
     }
 
     [TestMethod]
@@ -113,7 +115,7 @@ public sealed class ViewportScenePilotTests
         await sut.LookThroughCameraAsync(MainCamera).ConfigureAwait(false);
 
         sut.NotifyNavigationInput(inputHeld: false);
-        await Task.Delay(50).ConfigureAwait(false);
+        await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = commits.Should().BeEmpty();
         engine.Verify(service => service.GetViewCameraPoseAsync(It.IsAny<RuntimeViewId>(), It.IsAny<NodeId>()), Times.Never);

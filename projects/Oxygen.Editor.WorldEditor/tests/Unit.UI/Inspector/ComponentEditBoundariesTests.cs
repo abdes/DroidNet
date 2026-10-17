@@ -78,12 +78,12 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
 
         float ReadValue() => editor is TransformViewModel ? fixture.Node.Components.OfType<TransformComponent>().Single().LocalPosition.X : ReadNumericSource(fixture.Node, kind);
         _ = ReadValue().Should().Be(text ? edited : before, "the filter boundary must finish the original interaction before detaching its controls");
-        _ = fixture.Context.History.UndoStack.Should().HaveCount(text ? 1 : 0);
+        _ = fixture.Document.History.UndoStack.Should().HaveCount(text ? 1 : 0);
         if (text)
         {
-            await fixture.Context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+            await fixture.Document.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
             _ = ReadValue().Should().Be(before, "Undo must restore the value before the text edit");
-            await fixture.Context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+            await fixture.Document.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
             _ = ReadValue().Should().Be(edited, "Redo must restore the accepted text edit");
         }
     });
@@ -114,7 +114,7 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
         _ = transform.ScaleXDiagnostic.Message.Should().Be(message);
         _ = host.ComponentFilters.Single(option => option.ComponentType == typeof(TransformComponent)).ValidationMessage.Should().Be(message);
         _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalScale.X.Should().Be(1);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
@@ -179,12 +179,12 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
         InspectorColorEdits.Complete(light, oldField, Pick(NumberBoxEditCompletionKind.Commit));
         await WaitForRenderAsync().ConfigureAwait(true);
         await light.PendingEdits.ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty("the old pick finishing late must not commit the current gesture");
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty("the old pick finishing late must not commit the current gesture");
         _ = ReadSceneColor(fixture, "Light").Should().Be(new Vector3(0, 1, 0));
         InspectorColorEdits.Complete(light, currentField, Pick(NumberBoxEditCompletionKind.Commit));
         await light.PendingEdits.ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
-        await fixture.Context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
+        await fixture.Document.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = ReadSceneColor(fixture, "Light").Should().Be(original);
 
         static ColorBoxEditSessionEventArgs Pick(NumberBoxEditCompletionKind? completion = null)

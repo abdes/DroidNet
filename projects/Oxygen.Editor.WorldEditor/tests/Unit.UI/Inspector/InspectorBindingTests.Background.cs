@@ -6,9 +6,9 @@ using System.Numerics;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
@@ -48,7 +48,7 @@ public sealed partial class InspectorBindingTests
         await scenario.Model.PendingEdits.ConfigureAwait(true);
 
         _ = preview.Points.Select(point => (point.X, point.Y)).Should().Equal((0d, 32d), (80d, 4d), (160d, 18d));
-        await scenario.Fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        await scenario.Fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = preview.Points.Select(point => (point.X, point.Y)).Should().Equal(original);
     });
 
@@ -58,7 +58,7 @@ public sealed partial class InspectorBindingTests
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width: null, height: null, host: ScenarioHost.None).ConfigureAwait(true);
         await scenario.SearchAsync("backdrop").ConfigureAwait(true);
         var original = scenario.Fixture.Scene.Environment;
-        var count = scenario.Fixture.Context.History.UndoStack.Count;
+        var count = scenario.Fixture.Document.History.UndoStack.Count;
         var choice = scenario.View.FindDescendant<CommunityToolkit.WinUI.Controls.Segmented>(element => Equals(element.Tag, "Backdrop"));
         _ = choice.Should().NotBeNull();
 
@@ -71,15 +71,15 @@ public sealed partial class InspectorBindingTests
         _ = environment.SkySphere.Source.Should().Be(SkySphereSource.SolidColor);
         _ = environment.Background.Enabled.Should().BeFalse();
         _ = scenario.Model.Backdrop.Backdrop.Should().Be(EnvironmentBackdrop.SolidColor);
-        _ = scenario.Fixture.Context.History.UndoStack.Should().HaveCount(count + 1);
+        _ = scenario.Fixture.Document.History.UndoStack.Should().HaveCount(count + 1);
 
         scenario.Model.Backdrop.SolidColorLightsScene = false;
         await scenario.Model.PendingEdits.ConfigureAwait(true);
         _ = scenario.Fixture.Scene.Environment.Background.Enabled.Should().BeTrue();
         _ = scenario.Fixture.Scene.Environment.SkySphere.Enabled.Should().BeFalse();
 
-        await scenario.Fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
-        await scenario.Fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        await scenario.Fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        await scenario.Fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = scenario.Fixture.Scene.Environment.Should().Be(original);
         _ = choice.SelectedIndex.Should().Be(0);
     });

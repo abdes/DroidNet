@@ -11,24 +11,24 @@ using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
 /// <summary>Scene and material files in the Content mount of a temporary project, opened as documents of their kinds.</summary>
-internal sealed class SceneDocumentFiles : IDisposable
+internal sealed partial class SceneDocumentFiles : IDisposable
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "OxygenSceneDocumentTests", Guid.NewGuid().ToString("N"));
 
     /// <summary>Initializes a new instance of the <see cref="SceneDocumentFiles"/> class.</summary>
-    /// <param name="commands">The command service the opened scenes finish their edits through.</param>
     /// <param name="store">The file store documents read and write through, or the real one.</param>
-    public SceneDocumentFiles(ISceneDocumentCommandService commands, IAtomicFileStore? store = null)
+    /// <param name="interaction">The lock and hide state the opened scenes' edits respect, if any.</param>
+    public SceneDocumentFiles(IAtomicFileStore? store = null, ISceneNodeInteraction? interaction = null)
     {
         _ = Directory.CreateDirectory(Path.Combine(this.root, "Content"));
         var info = new ProjectInfo("Scene documents", Category.Games, this.root);
@@ -48,7 +48,7 @@ internal sealed class SceneDocumentFiles : IDisposable
         _ = projects.SetupGet(value => value.CurrentProject).Returns(this.Project);
         this.ProjectManager = projects.Object;
         this.Documents = new OpenDocuments(
-            [new SceneDocumentKind(projects.Object, commands), new MaterialDocumentKind(new MaterialValidation())],
+            [new SceneDocumentKind(projects.Object, interaction), new MaterialDocumentKind(new MaterialValidation())],
             store ?? new NativeAtomicFileStore(new RealFileSystem()));
     }
 
@@ -63,16 +63,6 @@ internal sealed class SceneDocumentFiles : IDisposable
 
     /// <summary>Gets the open documents.</summary>
     public OpenDocuments Documents { get; }
-
-    /// <summary>Gets the file of a scene.</summary>
-    /// <param name="name">The scene's name.</param>
-    /// <returns>The scene's file.</returns>
-    public DocumentFile FileOf(string name) => new(this.PathOf(name), new Uri($"asset:///Content/{name}.oscene.json"));
-
-    /// <summary>Gets the path of a scene's file.</summary>
-    /// <param name="name">The scene's name, after the folder it is in below the Content mount, if any.</param>
-    /// <returns>The path.</returns>
-    public string PathOf(string name) => Path.GetFullPath(Path.Combine(this.root, "Content", name + ".oscene.json"));
 
     /// <summary>Describes a scene file, its nodes complete with their default components.</summary>
     /// <param name="id">The scene's identity.</param>
@@ -89,6 +79,16 @@ internal sealed class SceneDocumentFiles : IDisposable
 
         return scene.Dehydrate() with { Id = id };
     }
+
+    /// <summary>Gets the file of a scene.</summary>
+    /// <param name="name">The scene's name.</param>
+    /// <returns>The scene's file.</returns>
+    public DocumentFile FileOf(string name) => new(this.PathOf(name), new Uri($"asset:///Content/{name}.oscene.json"));
+
+    /// <summary>Gets the path of a scene's file.</summary>
+    /// <param name="name">The scene's name, after the folder it is in below the Content mount, if any.</param>
+    /// <returns>The path.</returns>
+    public string PathOf(string name) => Path.GetFullPath(Path.Combine(this.root, "Content", name + ".oscene.json"));
 
     /// <summary>Writes a scene file.</summary>
     /// <param name="name">The scene's name, after the folder it is in below the Content mount, if any.</param>

@@ -48,7 +48,7 @@ internal sealed class DiagnosticsTests : DroidNet.Tests.VisualUserInterfaceTests
         _ = model.FarPlaneDiagnostic.Message.Should().NotBeEmpty();
         var unrelatedError = model.AspectRatioDiagnostic.Message;
         _ = unrelatedError.Should().NotBeEmpty();
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         await EnterTextAsync(far, "3000").ConfigureAwait(true);
         far.CompletePendingTextEdit();
         await model.PendingEdits.ConfigureAwait(true);

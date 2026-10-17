@@ -8,10 +8,11 @@ using DroidNet.Controls;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.World.Inspector.Environment;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -24,8 +25,7 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="EnvironmentViewModel"/> class.</summary>
-    /// <param name="commandService">The existing scene command service.</param>
-    /// <param name="commandContextProvider">The current document context provider.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     /// <param name="assetProvider">The shared content catalog.</param>
     /// <param name="inspectSceneNode">The existing hierarchy navigation operation.</param>
     /// <param name="observerScheduler">The injected catalog-notification scheduler.</param>
@@ -33,8 +33,7 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
     /// <param name="inputContextSource">Reads what the project says about a mapping context.</param>
     /// <param name="revealAsset">Shows an asset in the Content Browser.</param>
     public EnvironmentViewModel(
-        ISceneDocumentCommandService? commandService = null,
-        Func<SceneDocumentCommandContext?>? commandContextProvider = null,
+        Func<SceneAuthoring?>? authoringProvider = null,
         IAssetFeed? assetProvider = null,
         Func<NodeId, Task>? inspectSceneNode = null,
         IScheduler? observerScheduler = null,
@@ -43,7 +42,7 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         Func<Uri, Task>? revealAsset = null)
     {
         this.observeEnvironment = observeEnvironment;
-        this.EditOwner = new(commandService, commandContextProvider, this.RefreshFromScene, this.ValidationFeedback);
+        this.EditOwner = new(authoringProvider, this.RefreshFromScene, this.ValidationFeedback);
         var scheduler = observerScheduler ?? ImmediateScheduler.Instance;
         var cubeTextures = CubemapPickerModel.CubeTextures(assetProvider);
         this.Backdrop = new(this.EditOwner, cubeTextures, scheduler);
@@ -52,9 +51,9 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         this.Fog = new(this.EditOwner);
         this.Exposure = new(this.EditOwner, assetProvider, observerScheduler ?? ImmediateScheduler.Instance);
         this.PostProcessing = new(this.EditOwner);
-        this.AtmosphereLights = new(this.EditOwner, commandService, commandContextProvider, inspectSceneNode);
-        this.SceneReferences = new(commandService, commandContextProvider, assetProvider, observerScheduler ?? ImmediateScheduler.Instance);
-        this.Play = new(commandService, commandContextProvider, assetProvider, scheduler, inputContextSource, inspectSceneNode, revealAsset);
+        this.AtmosphereLights = new(this.EditOwner, authoringProvider, inspectSceneNode);
+        this.SceneReferences = new(authoringProvider, assetProvider, observerScheduler ?? ImmediateScheduler.Instance);
+        this.Play = new(authoringProvider, assetProvider, scheduler, inputContextSource, inspectSceneNode, revealAsset);
     }
 
     /// <summary>Occurs when diagnostic navigation requests realization and focus.</summary>

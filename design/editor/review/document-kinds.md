@@ -168,6 +168,9 @@ A kind does only the work that needs to know its format or its model:
 
 - **The file suffixes it opens.**
 - **Decode:** turn the file's bytes into its model, or explain why it cannot.
+  Decoding receives the document's id and history, which the document service
+  creates first, so content that records edits is complete when it is decoded
+  (section 3.13 of [scene-edits.md](scene-edits.md)).
 - **Capture and encode:** take what to save, then turn it into bytes. Capturing
   is quick and runs on the thread that edits the model. Encoding can run
   anywhere. A capture may refuse with a message, as a material's validation does

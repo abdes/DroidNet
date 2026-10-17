@@ -2,8 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas.Bindings;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -14,15 +15,13 @@ public sealed partial class SpotLightViewModel : LocalLightViewModel
     private const float DegToRad = MathF.PI / 180f;
 
     /// <summary>Initializes a new instance of the <see cref="SpotLightViewModel"/> class.</summary>
-    /// <param name="commandService">Optional command service used to apply light edits.</param>
-    /// <param name="commandContextProvider">Optional provider for the active scene command context.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     public SpotLightViewModel(
-        ISceneDocumentCommandService? commandService = null,
-        Func<SceneDocumentCommandContext?>? commandContextProvider = null)
-        : base(SceneDocumentCommandService.SpotLight, "Edit Spot Light", commandService, commandContextProvider)
+        Func<SceneAuthoring?>? authoringProvider = null)
+        : base(SceneProperties.SpotLight, "Edit Spot Light", authoringProvider)
     {
-        this.InnerConeAngleRadians = this.Register(new NumberBinding<float>(SceneDocumentCommandService.SpotLight.InnerConeAngleRadiansDescriptor!), nameof(this.InnerConeAngleDegrees));
-        this.OuterConeAngleRadians = this.Register(new NumberBinding<float>(SceneDocumentCommandService.SpotLight.OuterConeAngleRadiansDescriptor!), nameof(this.OuterConeAngleDegrees));
+        this.InnerConeAngleRadians = this.Register(new NumberBinding<float>(SceneProperties.SpotLight.InnerConeAngleRadiansDescriptor!), nameof(this.InnerConeAngleDegrees));
+        this.OuterConeAngleRadians = this.Register(new NumberBinding<float>(SceneProperties.SpotLight.OuterConeAngleRadiansDescriptor!), nameof(this.OuterConeAngleDegrees));
     }
 
     /// <summary>Gets the inner cone half-angle binding, in radians.</summary>

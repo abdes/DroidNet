@@ -4,8 +4,8 @@
 
 using AwesomeAssertions;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
@@ -49,6 +49,6 @@ public sealed partial class EnvironmentDefaultsTests : DroidNet.Tests.VisualUser
         await AssertEnvironmentFieldValuesAsync(fixture, expected, timeout.Token).ConfigureAwait(true);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
         await AssertEnvironmentFieldValuesAsync(fixture, expected, timeout.Token).ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
     });
 }

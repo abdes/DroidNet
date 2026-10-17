@@ -5,9 +5,9 @@
 using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Inspector.Presentation;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 

@@ -21,7 +21,8 @@ public interface IDocumentKind
     /// <summary>Turns a file's bytes into the content a document edits.</summary>
     /// <param name="file">The file the bytes were read from.</param>
     /// <param name="content">The file's complete bytes.</param>
+    /// <param name="context">The identity and the history of the document the content is for.</param>
     /// <param name="cancellationToken">Cancels decoding.</param>
     /// <returns>The content, or why the bytes are not a document of this kind.</returns>
-    public Task<DocumentDecodeResult> DecodeAsync(DocumentFile file, ReadOnlyMemory<byte> content, CancellationToken cancellationToken);
+    public Task<DocumentDecodeResult> DecodeAsync(DocumentFile file, ReadOnlyMemory<byte> content, DocumentDecodeContext context, CancellationToken cancellationToken);
 }

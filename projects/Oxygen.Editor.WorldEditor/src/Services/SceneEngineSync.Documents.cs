@@ -6,6 +6,10 @@ using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Changes;
+using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Services;
@@ -17,10 +21,8 @@ public sealed partial class SceneEngineSync
     private readonly Dictionary<DocumentId, DocumentRegistration> registrations = [];
     private readonly Dictionary<SceneId, DocumentLifetime> openScenes = [];
 
-    /// <inheritdoc/>
-    public bool RegisterDocument(Scene scene, DocumentId documentId)
+    private bool Register(Scene scene, DocumentId documentId)
     {
-        ArgumentNullException.ThrowIfNull(scene);
         lock (this.documentGate)
         {
             if (this.disposed)
@@ -121,8 +123,8 @@ public sealed partial class SceneEngineSync
         }
     }
 
-    /// <inheritdoc/>
-    public SceneSyncRevision CaptureRevision(Scene scene)
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal SceneSyncRevision CaptureRevision(Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
         lock (this.documentGate)
@@ -133,8 +135,8 @@ public sealed partial class SceneEngineSync
         }
     }
 
-    /// <inheritdoc/>
-    public SceneSyncRevision AdvanceRevision(Scene scene)
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal SceneSyncRevision AdvanceRevision(Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
         lock (this.documentGate)
@@ -171,6 +173,7 @@ public sealed partial class SceneEngineSync
     private void RetireDocument(DocumentLifetime lifetime)
     {
         lifetime.Retired = true;
+        this.StopProjecting(lifetime);
         this.coalescer.ResetScene(lifetime.Scene.Id);
         foreach (var pending in lifetime.PendingMutations.Values)
         {
@@ -306,6 +309,21 @@ public sealed partial class SceneEngineSync
         public RuntimeSceneTarget? LastSynchronizedTarget { get; set; }
 
         public Dictionary<Guid, PendingWorldMutation> PendingMutations { get; } = [];
+
+        public SceneAuthoring? Authoring { get; set; }
+
+        public EventHandler<SceneChangedEventArgs>? OnChanged { get; set; }
+
+        // The projection of each change set starts after the previous one finished, in the order they were raised.
+        public Task Projection { get; set; } = Task.CompletedTask;
+
+        // Nodes and the environment whose referenced assets are not mounted yet.
+        public HashSet<NodeId> AwaitingMount { get; } = [];
+
+        public bool EnvironmentAwaitsMount { get; set; }
+
+        // The material overrides each node had when the projector last saw it; an override that goes away is cleared.
+        public Dictionary<NodeId, MaterialSlotTarget[]> MaterialOverrides { get; } = [];
     }
 
     private sealed record SceneProjection(DocumentLifetime Lifetime, Scene Snapshot, SceneSyncRevision Boundary)

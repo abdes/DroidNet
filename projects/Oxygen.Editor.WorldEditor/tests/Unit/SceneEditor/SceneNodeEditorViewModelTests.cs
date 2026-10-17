@@ -5,23 +5,20 @@
 using System.Reactive.Linq;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
-using DroidNet.TimeMachine;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.Schemas;
+using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Workspace;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -44,7 +41,8 @@ public sealed class SceneNodeEditorViewModelTests
             .Setup(service => service.GetPendingPropertySyncCount(scene.Id))
             .Returns(2);
 
-        using var sut = CreateSut(sync.Object, [node]);
+        using var tab = SceneTabs.Open(node.Scene);
+        using var sut = CreateSut(sync.Object, tab, [node]);
 
         _ = sut.PendingLiveSyncEditCount.Should().Be(2);
         _ = sut.HasPendingLiveSyncEdits.Should().BeTrue();
@@ -69,7 +67,8 @@ public sealed class SceneNodeEditorViewModelTests
             scene.Id).ConfigureAwait(false);
         interaction.SetLocked(parent.Id, isLocked: true);
 
-        using var sut = CreateSut(Mock.Of<ISceneEngineSync>(), [child], interaction);
+        using var tab = SceneTabs.Open(child.Scene);
+        using var sut = CreateSut(Mock.Of<ISceneEngineSync>(), tab, [child], interaction);
 
         _ = sut.SelectedNode!.Id.Should().Be(child.Id);
         _ = sut.HasLockedSelection.Should().BeTrue();
@@ -85,7 +84,8 @@ public sealed class SceneNodeEditorViewModelTests
         _ = sync
             .Setup(service => service.GetPendingPropertySyncCount(scene.Id))
             .Returns(0);
-        using var sut = CreateSut(sync.Object, [node]);
+        using var tab = SceneTabs.Open(node.Scene);
+        using var sut = CreateSut(sync.Object, tab, [node]);
 
         sync.Raise(
             service => service.PendingPropertySyncCountChanged += null,
@@ -105,7 +105,8 @@ public sealed class SceneNodeEditorViewModelTests
         _ = sync
             .Setup(service => service.GetPendingPropertySyncCount(scene.Id))
             .Returns(1);
-        using var sut = CreateSut(sync.Object, [node]);
+        using var tab = SceneTabs.Open(node.Scene);
+        using var sut = CreateSut(sync.Object, tab, [node]);
 
         sync.Raise(
             service => service.PendingPropertySyncCountChanged += null,
@@ -124,7 +125,8 @@ public sealed class SceneNodeEditorViewModelTests
         _ = sync
             .Setup(service => service.GetPendingPropertySyncCount(scene.Id))
             .Returns(1);
-        using var sut = CreateSut(sync.Object, [node]);
+        using var tab = SceneTabs.Open(node.Scene);
+        using var sut = CreateSut(sync.Object, tab, [node]);
 
         sync.Raise(
             service => service.PendingPropertySyncCountChanged += null,
@@ -138,49 +140,41 @@ public sealed class SceneNodeEditorViewModelTests
     public async Task DirectionalLightEditor_WhenSunDirectionChanges_EditsTransformRotation()
     {
         var scene = CreateScene();
-        var node = CreateDirectionalLightNode(scene);
-        var context = CreateContext(scene);
-        var commandService = new Mock<ISceneDocumentCommandService>();
-        var editCompletion = new TaskCompletionSource<IReadOnlyDictionary<NodeId, PropertyEdit>>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _ = commandService
-            .Setup(service => service.EditPropertiesForTargetsAsync(
-                context,
-                It.IsAny<IReadOnlyDictionary<NodeId, PropertyEdit>>(),
-                It.IsAny<string>(),
-                It.IsAny<EditSessionToken>()))
-            .Callback<SceneDocumentCommandContext, IReadOnlyDictionary<NodeId, PropertyEdit>, string, EditSessionToken>(
-                (_, edits, _, _) => editCompletion.SetResult(edits))
-            .ReturnsAsync(SceneCommandResult.Success);
+        var built = CreateDirectionalLightNode(scene);
+        using var tab = SceneTabs.Open(scene);
+        var node = tab.NodeOf(built);
+        var before = node.Components.OfType<TransformComponent>().Single().LocalRotation;
 
-        using var sut = new DirectionalLightViewModel(commandService.Object, () => context);
+        using var sut = new DirectionalLightViewModel(() => tab.Authoring);
         sut.UpdateValues([node]);
         sut.SunAzimuth = 45f;
-        var edits = await editCompletion.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        var edit = edits.Should().ContainSingle().Which.Value;
-        _ = edit.Ids.Should().OnlyContain(id => id.ComponentKind == SceneDocumentCommandService.TransformKind && id.JsonPointer.StartsWith("/local_rotation_euler_degrees/", StringComparison.Ordinal));
-        _ = edit.Should().OnlyContain(pair => pair.Value is float && float.IsFinite((float)pair.Value));
+        await sut.PendingEdits.ConfigureAwait(false);
+
+        _ = node.Components.OfType<TransformComponent>().Single().LocalRotation.Should().NotBe(before);
+        _ = tab.Document.History.UndoStack.Should().ContainSingle();
     }
 
     private static SceneNodeEditorViewModel CreateSut(
         ISceneEngineSync sceneEngineSync,
+        SceneTab tab,
         IList<SceneNode> selectedNodes,
         WorkspaceInteractionService? interaction = null)
     {
         // The document edits its own copy of the scene, so the selection holds the document's nodes. They show no
         // components: the component editors need a window.
-        var tab = SceneTabs.Open(selectedNodes[0].Scene);
         var nodes = selectedNodes.Select(tab.NodeOf).ToArray();
         foreach (var node in nodes)
         {
             node.Components.Clear();
         }
+
         var messenger = new StrongReferenceMessenger();
         messenger.Register<SceneNodeSelectionRequestMessage>(
             recipient: new object(),
             handler: (_, message) => message.Reply(nodes));
 
         var documents = new TestDocumentArea(tab.Document);
-        var selectionService = new Oxygen.Editor.WorldEditor.Documents.Selection.SceneSelectionService();
+        var selectionService = new SceneSelectionService();
         selectionService.SetSelection(tab.DocumentId, nodes, "Test");
 
         return new SceneNodeEditorViewModel(
@@ -192,16 +186,15 @@ public sealed class SceneNodeEditorViewModelTests
             },
             new ViewModelToView(new Mock<IViewLocator>().Object),
             messenger,
-            new Mock<ISceneDocumentCommandService>().Object,
             documents,
             default,
             Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
             sceneEngineSync,
             selectionService,
-            new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(),
+            new Testing.BuiltinCatalogDiscoveryFixture(),
             Mock.Of<ISceneContentDemandService>(),
-            Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(),
-            Mock.Of<Oxygen.Editor.Projects.IProjectContextService>(),
+            Mock.Of<ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(),
+            Mock.Of<IProjectContextService>(),
             interaction: interaction);
     }
 
@@ -210,8 +203,6 @@ public sealed class SceneNodeEditorViewModelTests
         var project = new Mock<IProject>().Object;
         return new Scene(project) { Name = "Test Scene" };
     }
-
-    private static SceneDocumentCommandContext CreateContext(Scene scene) => new(DocumentId.New(), scene, new HistoryKeeper(scene));
 
     private static SceneNode CreateNode(Scene scene)
     {

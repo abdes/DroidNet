@@ -5,9 +5,9 @@
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 

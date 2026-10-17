@@ -4,150 +4,124 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.TimeMachine;
-using Moq;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Assets;
+using Oxygen.Editor.Scenes.Edits.Components;
+using Oxygen.Editor.Scenes.Edits.Hierarchy;
+using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
-/// <summary>
-/// Command-driven structural mutations must reach the demand service's direct reference observers.
-/// Each test dirties the document metadata up front so the invalidation under assertion cannot come
-/// from the first-dirty metadata transition, only from the observed collection graph.
-/// </summary>
+/// <summary>The demand service follows the scene document's edits: removing a reference retires its demand.</summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "partial class with public part")]
 public sealed partial class ContentDemandTests
 {
-    /// <summary>Deleting the referencing node through the document command retires the activation demand.</summary>
-    /// <returns>The asynchronous command-driven delete regression.</returns>
+    /// <summary>Deleting the referencing node retires the activation demand.</summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
-    public Task CommandDrivenDeleteRetiresSceneDemandWithoutMetadataTransition() => EnqueueAsync(async () =>
+    public Task DeletingTheNode_RetiresItsDemand() => EnqueueAsync(async () =>
     {
         using var fixture = new DemandFixture();
         fixture.Geometry.Geometry = new(fixture.GeometryUri);
         fixture.Activate();
         _ = fixture.Requests.Should().ContainSingle();
-        ConfigureStructuralSync(fixture);
-        fixture.Authoring.Document.History.AddChange("Edit", static () => { });
 
-        _ = (await fixture.Authoring.Commands.DeleteNodesAsync(fixture.Authoring.Context, [fixture.Authoring.Node.Id]).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        await ApplyAsync(fixture, new RemoveNodes([fixture.Authoring.Node.Id])).ConfigureAwait(true);
 
-        _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeTrue("the command-driven delete must retire the activation demand through the reference observers while the document is already dirty");
+        _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeTrue();
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = fixture.Requests.Should().ContainSingle();
     });
 
-    /// <summary>Removing the geometry component through the document command retires its demand.</summary>
-    /// <returns>The asynchronous command-driven component removal regression.</returns>
+    /// <summary>Removing the geometry component retires its demand.</summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
-    public Task CommandDrivenComponentRemovalRetiresSceneDemand() => EnqueueAsync(async () =>
+    public Task RemovingTheGeometry_RetiresItsDemand() => EnqueueAsync(async () =>
     {
         using var fixture = new DemandFixture();
         fixture.Geometry.Geometry = new(fixture.GeometryUri);
         fixture.Activate();
         _ = fixture.Requests.Should().ContainSingle();
-        ConfigureStructuralSync(fixture);
-        fixture.Authoring.Document.History.AddChange("Edit", static () => { });
 
-        _ = (await fixture.Authoring.Commands.RemoveComponentAsync(fixture.Authoring.Context, fixture.Authoring.Node.Id, fixture.Geometry.Id).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        await ApplyAsync(fixture, new RemoveComponent(fixture.Authoring.Node.Id, fixture.Geometry.Id)).ConfigureAwait(true);
 
-        _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeTrue("the command-driven component removal must retire the geometry demand through the Components observer");
+        _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeTrue();
         await WaitForRenderAsync().ConfigureAwait(true);
     });
 
-    /// <summary>A node and component created through commands are re-subscribed, so a later removal retires the targeted demand.</summary>
-    /// <returns>The asynchronous command-created re-subscription regression.</returns>
+    /// <summary>A node and geometry added after activation are observed, so removing the geometry retires its demand.</summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
-    public Task CommandCreatedNodeAndComponentAreResubscribedAndRetireTargetedDemand() => EnqueueAsync(async () =>
+    public Task AddedNodeAndGeometry_AreObservedAndTheirRemovalRetiresTheDemand() => EnqueueAsync(async () =>
     {
         using var fixture = new DemandFixture();
         fixture.Activate();
-        ConfigureStructuralSync(fixture);
-        fixture.Authoring.Document.History.AddChange("Edit", static () => { });
-        var context = fixture.Authoring.Context;
-
-        var created = await fixture.Authoring.Commands.CreateNodeAsync(context, parentNodeId: null, parentFolderId: null, "Created").ConfigureAwait(true);
-        _ = created.Succeeded.Should().BeTrue();
-        var component = await fixture.Authoring.Commands.AddComponentAsync(context, created.Value!.Id, typeof(GeometryComponent)).ConfigureAwait(true);
-        _ = component.Succeeded.Should().BeTrue();
-        _ = (await fixture.Authoring.Commands.EditGeometryAsync(context, [created.Value!.Id], new GeometryEdit(OptionalEditValues.Supplied<Uri?>(fixture.GeometryUri)), EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        var scene = fixture.Authoring.Scene;
+        var data = SceneNodeTemplates.Empty(scene, "Created");
+        await ApplyAsync(fixture, new InsertNodes([SceneNodeTemplates.Append(scene, data)])).ConfigureAwait(true);
+        await ApplyAsync(fixture, SceneComponents.Add(fixture.Authoring.Authoring, data.Id, SceneComponents.Geometry)).ConfigureAwait(true);
+        await ApplyAsync(fixture, new SetGeometry([data.Id], fixture.GeometryUri)).ConfigureAwait(true);
+        var created = scene.AllNodes.Single(node => node.Id == data.Id);
 
         var selection = new object();
-        fixture.Authoring.Messenger.Register<SceneNodeSelectionRequestMessage>(selection, (_, message) => message.Reply([created.Value!]));
-        fixture.Service.RequestAssignment(fixture.Authoring.Scene, [created.Value!.Id], fixture.GeometryUri, AssetKind.Geometry);
+        fixture.Authoring.Messenger.Register<SceneNodeSelectionRequestMessage>(selection, (_, message) => message.Reply([created]));
+        fixture.Service.RequestAssignment(scene, [created.Id], fixture.GeometryUri, AssetKind.Geometry);
         _ = fixture.Requests.Should().ContainSingle().Which.uri.Should().Be(fixture.GeometryUri);
 
-        _ = (await fixture.Authoring.Commands.RemoveComponentAsync(context, created.Value!.Id, component.Value!.Id).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        await ApplyAsync(fixture, new RemoveComponent(created.Id, created.Components.OfType<GeometryComponent>().Single().Id)).ConfigureAwait(true);
 
-        _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeTrue("the service must have re-subscribed the command-created node's component collections for this removal to retire the demand");
+        _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeTrue("the service must observe the added node's components for this removal to retire the demand");
         await WaitForRenderAsync().ConfigureAwait(true);
     });
 
-    /// <summary>A command-driven reparent keeps the live demand current, and deleting the new parent retires it.</summary>
-    /// <returns>The asynchronous command-driven reparent regression.</returns>
+    /// <summary>A reparent keeps the demand current, and deleting the new parent retires it.</summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
-    public Task CommandDrivenReparentKeepsDemandUntilItsReferenceIsDeleted() => EnqueueAsync(async () =>
+    public Task Reparent_KeepsTheDemandUntilTheReferenceIsDeleted() => EnqueueAsync(async () =>
     {
         using var fixture = new DemandFixture();
         fixture.Geometry.Geometry = new(fixture.GeometryUri);
         fixture.Activate();
         _ = fixture.Requests.Should().ContainSingle();
-        ConfigureStructuralSync(fixture);
-        fixture.Authoring.Document.History.AddChange("Edit", static () => { });
-        var context = fixture.Authoring.Context;
+        var scene = fixture.Authoring.Scene;
+        var parent = SceneNodeTemplates.Empty(scene, "Parent");
+        await ApplyAsync(fixture, new InsertNodes([SceneNodeTemplates.Append(scene, parent)])).ConfigureAwait(true);
 
-        var parent = await fixture.Authoring.Commands.CreateNodeAsync(context, parentNodeId: null, parentFolderId: null, "Parent").ConfigureAwait(true);
-        _ = parent.Succeeded.Should().BeTrue();
-        _ = (await fixture.Authoring.Commands.ReparentNodesAsync(context, [fixture.Authoring.Node.Id], parent.Value!.Id, preserveWorldTransform: false).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        await ApplyAsync(fixture, new ReparentNodes([fixture.Authoring.Node.Id], parent.Id, preserveWorld: false)).ConfigureAwait(true);
 
-        _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeFalse("a reparent keeps the geometry reference in the observed graph; no stale demand may be left behind and none may be retired spuriously");
+        _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeFalse("a reparent keeps the geometry reference in the observed graph");
 
-        _ = (await fixture.Authoring.Commands.DeleteNodesAsync(context, [parent.Value!.Id]).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        await ApplyAsync(fixture, new RemoveNodes([parent.Id])).ConfigureAwait(true);
 
         _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeTrue("deleting the new parent must retire the demand through the observers that followed the reparent");
         await WaitForRenderAsync().ConfigureAwait(true);
     });
 
-    /// <summary>A command-driven rename changes no reference, keeps the demand current and leaves the observers live.</summary>
-    /// <returns>The asynchronous command-driven rename regression.</returns>
+    /// <summary>A rename changes no reference: the demand stays current and the observers stay live.</summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
-    public Task CommandDrivenRenameKeepsDemandCurrentAndObserversAlive() => EnqueueAsync(async () =>
+    public Task Rename_KeepsTheDemandAndItsObservers() => EnqueueAsync(async () =>
     {
         using var fixture = new DemandFixture();
         fixture.Geometry.Geometry = new(fixture.GeometryUri);
         fixture.Activate();
         _ = fixture.Requests.Should().ContainSingle();
-        ConfigureStructuralSync(fixture);
-        fixture.Authoring.Document.History.AddChange("Edit", static () => { });
-        var context = fixture.Authoring.Context;
 
-        _ = (await fixture.Authoring.Commands.RenameNodeAsync(context, fixture.Authoring.Node.Id, "Renamed").ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        await ApplyAsync(fixture, new RenameNode(fixture.Authoring.Node.Id, "Renamed")).ConfigureAwait(true);
 
-        _ = fixture.Authoring.Node.Name.Should().Be("Renamed");
-        _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeFalse("a rename changes no reference, so the live demand stays current and none turns stale");
+        _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeFalse("a rename changes no reference");
 
-        _ = (await fixture.Authoring.Commands.DeleteNodesAsync(context, [fixture.Authoring.Node.Id]).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        await ApplyAsync(fixture, new RemoveNodes([fixture.Authoring.Node.Id])).ConfigureAwait(true);
 
-        _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeTrue("the reference observers must still track the renamed node, so the command-driven delete retires its demand");
+        _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeTrue("the observers must still track the renamed node");
         await WaitForRenderAsync().ConfigureAwait(true);
     });
 
-    private static void ConfigureStructuralSync(DemandFixture fixture)
-    {
-        var accepted = new SyncOutcome(SyncStatus.Accepted, "Structural command", AffectedScope.Empty);
-        _ = fixture.Authoring.Sync.Setup(value => value.RenameNodeAsync(It.IsAny<Scene>(), It.IsAny<NodeId>(), It.IsAny<string>())).ReturnsAsync(accepted);
-        _ = fixture.Authoring.Sync.Setup(value => value.UpdateNodeTransformAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
-        _ = fixture.Authoring.Sync.Setup(value => value.DetachGeometryAsync(It.IsAny<Scene>(), It.IsAny<NodeId>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
-        _ = fixture.Authoring.Sync.Setup(value => value.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<NodeId?>())).Returns(Task.CompletedTask);
-        _ = fixture.Authoring.Sync.Setup(value => value.RemoveNodeHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<NodeId>>())).Returns(Task.CompletedTask);
-        _ = fixture.Authoring.Sync.Setup(value => value.ReparentNodeAsync(It.IsAny<Scene>(), It.IsAny<NodeId>(), It.IsAny<NodeId?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
-        _ = fixture.Authoring.Sync.Setup(value => value.ReparentHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<NodeId?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
-    }
+    private static async Task ApplyAsync(DemandFixture fixture, ISceneEdit edit)
+        => _ = (await fixture.Authoring.Authoring.ExecuteAsync(edit).ConfigureAwait(true)).Succeeded.Should().BeTrue();
 }

@@ -16,7 +16,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 /// A project's script tooling files: created, refreshed from the SDK, and merged without overwriting user values.
 /// </summary>
 [TestClass]
-public sealed class ProjectScriptToolingTests : IDisposable
+public sealed partial class ProjectScriptToolingTests : IDisposable
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "oxygen-script-tooling-tests", Guid.NewGuid().ToString("N"));
     private readonly List<OperationResult> published = [];

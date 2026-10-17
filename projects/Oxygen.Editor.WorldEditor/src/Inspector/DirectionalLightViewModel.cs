@@ -4,12 +4,13 @@
 
 using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -25,29 +26,29 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     private readonly InspectorFieldDiagnostic unboundDiagnostic = new();
 
     private readonly InspectorEditSessionCoordinator? edits;
-    private readonly PropertyBinding<Vector3> colorBinding = new(SceneDocumentCommandService.DirectionalLight.ColorDescriptor);
-    private readonly NumberBinding<float> intensityLuxBinding = new(SceneDocumentCommandService.DirectionalLight.IntensityLuxDescriptor);
-    private readonly PropertyBinding<AtmosphereLightSlot> atmosphereSlotBinding = new(SceneDocumentCommandService.DirectionalLight.AtmosphereSlotDescriptor);
-    private readonly PropertyBinding<bool> usePerPixelAtmosphereTransmittanceBinding = new(SceneDocumentCommandService.DirectionalLight.UsePerPixelAtmosphereTransmittanceDescriptor);
-    private readonly PropertyBinding<bool> castsShadowsBinding = new(SceneDocumentCommandService.DirectionalLight.CastsShadowsDescriptor);
-    private readonly PropertyBinding<bool> affectsWorldBinding = new(SceneDocumentCommandService.DirectionalLight.AffectsWorldDescriptor);
-    private readonly NumberBinding<float> angularSizeRadiansBinding = new(SceneDocumentCommandService.DirectionalLight.AngularSizeRadiansDescriptor);
-    private readonly NumberBinding<float> exposureCompensationBinding = new(SceneDocumentCommandService.DirectionalLight.ExposureCompensationDescriptor);
-    private readonly PropertyBinding<Vector3> atmosphereDiskLuminanceScaleRgbBinding = new(SceneDocumentCommandService.DirectionalLight.AtmosphereDiskLuminanceScaleRgbDescriptor);
-    private readonly NumberBinding<float> shadowBiasBinding = new(SceneDocumentCommandService.DirectionalLight.ShadowBiasDescriptor);
-    private readonly NumberBinding<float> shadowNormalBiasBinding = new(SceneDocumentCommandService.DirectionalLight.ShadowNormalBiasDescriptor);
-    private readonly PropertyBinding<bool> contactShadowsBinding = new(SceneDocumentCommandService.DirectionalLight.ContactShadowsDescriptor);
-    private readonly PropertyBinding<ShadowResolutionHint> shadowResolutionHintBinding = new(SceneDocumentCommandService.DirectionalLight.ShadowResolutionHintDescriptor);
-    private readonly PropertyBinding<int> cascadeCountBinding = new(SceneDocumentCommandService.DirectionalLight.CascadeCountDescriptor);
-    private readonly PropertyBinding<DirectionalCsmSplitMode> splitModeBinding = new(SceneDocumentCommandService.DirectionalLight.SplitModeDescriptor);
-    private readonly NumberBinding<float> maxShadowDistanceBinding = new(SceneDocumentCommandService.DirectionalLight.MaxShadowDistanceDescriptor);
-    private readonly NumberBinding<float> cascadeDistance0Binding = new(SceneDocumentCommandService.DirectionalLight.CascadeDistance0Descriptor);
-    private readonly NumberBinding<float> cascadeDistance1Binding = new(SceneDocumentCommandService.DirectionalLight.CascadeDistance1Descriptor);
-    private readonly NumberBinding<float> cascadeDistance2Binding = new(SceneDocumentCommandService.DirectionalLight.CascadeDistance2Descriptor);
-    private readonly NumberBinding<float> cascadeDistance3Binding = new(SceneDocumentCommandService.DirectionalLight.CascadeDistance3Descriptor);
-    private readonly NumberBinding<float> distributionExponentBinding = new(SceneDocumentCommandService.DirectionalLight.DistributionExponentDescriptor);
-    private readonly NumberBinding<float> transitionFractionBinding = new(SceneDocumentCommandService.DirectionalLight.TransitionFractionDescriptor);
-    private readonly NumberBinding<float> distanceFadeoutFractionBinding = new(SceneDocumentCommandService.DirectionalLight.DistanceFadeoutFractionDescriptor);
+    private readonly PropertyBinding<Vector3> colorBinding = new(SceneProperties.DirectionalLight.ColorDescriptor);
+    private readonly NumberBinding<float> intensityLuxBinding = new(SceneProperties.DirectionalLight.IntensityLuxDescriptor);
+    private readonly PropertyBinding<AtmosphereLightSlot> atmosphereSlotBinding = new(SceneProperties.DirectionalLight.AtmosphereSlotDescriptor);
+    private readonly PropertyBinding<bool> usePerPixelAtmosphereTransmittanceBinding = new(SceneProperties.DirectionalLight.UsePerPixelAtmosphereTransmittanceDescriptor);
+    private readonly PropertyBinding<bool> castsShadowsBinding = new(SceneProperties.DirectionalLight.CastsShadowsDescriptor);
+    private readonly PropertyBinding<bool> affectsWorldBinding = new(SceneProperties.DirectionalLight.AffectsWorldDescriptor);
+    private readonly NumberBinding<float> angularSizeRadiansBinding = new(SceneProperties.DirectionalLight.AngularSizeRadiansDescriptor);
+    private readonly NumberBinding<float> exposureCompensationBinding = new(SceneProperties.DirectionalLight.ExposureCompensationDescriptor);
+    private readonly PropertyBinding<Vector3> atmosphereDiskLuminanceScaleRgbBinding = new(SceneProperties.DirectionalLight.AtmosphereDiskLuminanceScaleRgbDescriptor);
+    private readonly NumberBinding<float> shadowBiasBinding = new(SceneProperties.DirectionalLight.ShadowBiasDescriptor);
+    private readonly NumberBinding<float> shadowNormalBiasBinding = new(SceneProperties.DirectionalLight.ShadowNormalBiasDescriptor);
+    private readonly PropertyBinding<bool> contactShadowsBinding = new(SceneProperties.DirectionalLight.ContactShadowsDescriptor);
+    private readonly PropertyBinding<ShadowResolutionHint> shadowResolutionHintBinding = new(SceneProperties.DirectionalLight.ShadowResolutionHintDescriptor);
+    private readonly PropertyBinding<int> cascadeCountBinding = new(SceneProperties.DirectionalLight.CascadeCountDescriptor);
+    private readonly PropertyBinding<DirectionalCsmSplitMode> splitModeBinding = new(SceneProperties.DirectionalLight.SplitModeDescriptor);
+    private readonly NumberBinding<float> maxShadowDistanceBinding = new(SceneProperties.DirectionalLight.MaxShadowDistanceDescriptor);
+    private readonly NumberBinding<float> cascadeDistance0Binding = new(SceneProperties.DirectionalLight.CascadeDistance0Descriptor);
+    private readonly NumberBinding<float> cascadeDistance1Binding = new(SceneProperties.DirectionalLight.CascadeDistance1Descriptor);
+    private readonly NumberBinding<float> cascadeDistance2Binding = new(SceneProperties.DirectionalLight.CascadeDistance2Descriptor);
+    private readonly NumberBinding<float> cascadeDistance3Binding = new(SceneProperties.DirectionalLight.CascadeDistance3Descriptor);
+    private readonly NumberBinding<float> distributionExponentBinding = new(SceneProperties.DirectionalLight.DistributionExponentDescriptor);
+    private readonly NumberBinding<float> transitionFractionBinding = new(SceneProperties.DirectionalLight.TransitionFractionDescriptor);
+    private readonly NumberBinding<float> distanceFadeoutFractionBinding = new(SceneProperties.DirectionalLight.DistanceFadeoutFractionDescriptor);
     private readonly List<IDisposable> registrations = [];
     private ICollection<SceneNode>? selectedItems;
     private bool isApplyingEditorValues;
@@ -56,15 +57,13 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     /// <summary>
     /// Initializes a new instance of the <see cref="DirectionalLightViewModel"/> class.
     /// </summary>
-    /// <param name="commandService">Optional command service used to apply light edits.</param>
-    /// <param name="commandContextProvider">Optional provider for the active scene command context.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     public DirectionalLightViewModel(
-        ISceneDocumentCommandService? commandService = null,
-        Func<SceneDocumentCommandContext?>? commandContextProvider = null)
+        Func<SceneAuthoring?>? authoringProvider = null)
     {
-        if (commandService is not null && commandContextProvider is not null)
+        if (authoringProvider is not null)
         {
-            this.edits = new(commandService, commandContextProvider, "Edit Directional Light", this.RefreshValues);
+            this.edits = new(authoringProvider, "Edit Directional Light", this.RefreshValues);
         }
 
         this.colorBinding.ValueRequested += this.OnLightVectorValueRequested;
@@ -219,10 +218,10 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     public InspectorFieldDiagnostic ColorBDiagnostic => this.edits?.Diagnostics.Get(this.colorBinding.Id.Id) ?? this.unboundDiagnostic;
 
     /// <summary>Gets current diagnostics for SunAzimuth.</summary>
-    public InspectorFieldDiagnostic SunAzimuthDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.Transform.RotationX.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic SunAzimuthDiagnostic => this.edits?.Diagnostics.Get(SceneProperties.Transform.RotationX.Id) ?? this.unboundDiagnostic;
 
     /// <summary>Gets current diagnostics for SunElevation.</summary>
-    public InspectorFieldDiagnostic SunElevationDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.Transform.RotationX.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic SunElevationDiagnostic => this.edits?.Diagnostics.Get(SceneProperties.Transform.RotationX.Id) ?? this.unboundDiagnostic;
 
     /// <summary>Gets current diagnostics for IntensityLux.</summary>
     public InspectorFieldDiagnostic IntensityLuxDiagnostic => this.edits?.Diagnostics.Get(this.intensityLuxBinding.Id.Id) ?? this.unboundDiagnostic;
@@ -477,7 +476,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
             var color = light.Color;
             color[axis] = (float)value;
-            perTarget[node.Id] = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.Color, color);
+            perTarget[node.Id] = PropertyEdit.SingleEdit(SceneProperties.DirectionalLight.Color, color);
         }
 
         this.edits?.Submit(perTarget);
@@ -538,7 +537,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
             var scale = light.AtmosphereDiskLuminanceScaleRgb;
             scale[axis] = (float)value;
-            perTarget[node.Id] = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, scale);
+            perTarget[node.Id] = PropertyEdit.SingleEdit(SceneProperties.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, scale);
         }
 
         this.edits?.Submit(perTarget);
@@ -587,10 +586,11 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         foreach (var node in this.selectedItems.Where(node => node.Components.Any(component => component is DirectionalLightComponent)))
         {
             var angles = TransformConverter.QuaternionToEulerDegrees(DirectionalLightOrientation.LocalRotation(node, (float)azimuth, (float)elevation));
-            var edit = PropertyEdit.SingleEdit(SceneDocumentCommandService.Transform.RotationX, angles.X);
-            edit.Set(SceneDocumentCommandService.Transform.RotationY, angles.Y);
-            edit.Set(SceneDocumentCommandService.Transform.RotationZ, angles.Z);
-            perTarget[node.Id] = edit;
+            perTarget[node.Id] = new PropertyEdit.Builder()
+                .Set(SceneProperties.Transform.RotationX, angles.X)
+                .Set(SceneProperties.Transform.RotationY, angles.Y)
+                .Set(SceneProperties.Transform.RotationZ, angles.Z)
+                .Build();
         }
 
         this.edits?.Submit(perTarget);

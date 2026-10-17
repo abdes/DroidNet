@@ -5,19 +5,15 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Documents;
 using DroidNet.Routing;
-using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Documents.Commands;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
@@ -25,7 +21,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
 /// <summary>Ensures scene search reveals collapsed matches and restores expansion on clear.</summary>
 [TestClass]
-public sealed class SceneExplorerSearchTests
+public sealed partial class SceneExplorerSearchTests
 {
     [TestMethod]
     public async Task SearchAsync_RevealsCollapsedDescendantAndRestoresExpansion()
@@ -36,7 +32,7 @@ public sealed class SceneExplorerSearchTests
         var child = new SceneNode(scene) { Name = "FindMe" };
         parent.AddChild(child);
         scene.RootNodes.Add(parent);
-        var metadata = SceneTabs.Open(scene);
+        using var metadata = SceneTabs.Open(scene);
         scene = metadata.Scene;
         parent = metadata.NodeOf(parent);
         child = metadata.NodeOf(child);
@@ -46,9 +42,9 @@ public sealed class SceneExplorerSearchTests
         documents.Activate(metadata.Document);
         var sync = new Mock<ISceneEngineSync>();
         _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata.DocumentId)).Returns(value: true);
+        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
         _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
-        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService(), Mock.Of<ISceneDocumentCommandService>());
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
 
@@ -66,7 +62,7 @@ public sealed class SceneExplorerSearchTests
     [TestMethod]
     public async Task SearchAsync_RevealsNodeInsideCollapsedNestedFolders()
     {
-        var harness = CreateHarness();
+        using var harness = CreateHarness();
         var scene = harness.Scene;
         var node = new SceneNode(scene) { Name = "FindMe" };
         scene.RootNodes.Add(node);
@@ -108,8 +104,8 @@ public sealed class SceneExplorerSearchTests
         _ = inner!.IsExpanded.Should().BeTrue("search must expand nested folders of a match");
         var nodeAdapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
         _ = nodeAdapter.Should().NotBeNull();
-        _ = explorer.ShownItems.Contains(nodeAdapter!).Should().BeTrue("the match must be made visible");
-        _ = explorer.FilteredItems.Contains(nodeAdapter).Should().BeTrue("the filter must report the revealed match");
+        _ = explorer.ShownItems.Should().Contain(nodeAdapter!, "the match must be made visible");
+        _ = explorer.FilteredItems.Should().Contain(nodeAdapter, "the filter must report the revealed match");
 
         await explorer.ClearSearchAsync().ConfigureAwait(false);
 
@@ -120,7 +116,7 @@ public sealed class SceneExplorerSearchTests
     [TestMethod]
     public async Task SearchAsync_CountsCollapsedFolderMatchesFromLayoutDomain()
     {
-        var harness = CreateHarness();
+        using var harness = CreateHarness();
         var scene = harness.Scene;
         var collapsedFolderId = FolderId.New();
         var matchingFolderId = FolderId.New();
@@ -159,7 +155,7 @@ public sealed class SceneExplorerSearchTests
         var matching = await explorer.FindFolderAdapterAsync(matchingFolderId).ConfigureAwait(false);
         _ = collapsed!.IsExpanded.Should().BeTrue("search must reveal collapsed ancestors of a matching folder");
         _ = matching.Should().NotBeNull();
-        _ = explorer.ShownItems.Contains(matching!).Should().BeTrue("the matching folder must be visible after its ancestors expand");
+        _ = explorer.ShownItems.Should().Contain(matching!, "the matching folder must be visible after its ancestors expand");
         _ = (await explorer.FindFolderAdapterAsync(unresolvedFolderId).ConfigureAwait(false))
             .Should().BeNull("a folder beneath an unrealized node seat remains authored but cannot be shown");
 
@@ -170,7 +166,7 @@ public sealed class SceneExplorerSearchTests
     [TestMethod]
     public async Task SearchAsync_RestoresExpansionAcrossSuccessiveQueriesWithoutAuthoringLayout()
     {
-        var harness = CreateHarness();
+        using var harness = CreateHarness();
         var scene = harness.Scene;
         var first = new SceneNode(scene) { Name = "FindOne" };
         var second = new SceneNode(scene) { Name = "FindTwo" };
@@ -179,35 +175,7 @@ public sealed class SceneExplorerSearchTests
         var collapsedId = FolderId.New();
         var expandedId = FolderId.New();
         var nestedId = FolderId.New();
-        scene.SetExplorerLayout(
-            [
-                new ExplorerEntryData
-                {
-                    Type = "Folder",
-                    FolderId = collapsedId,
-                    Name = "Collapsed",
-                    IsExpanded = false,
-                    Children = [new ExplorerEntryData { Type = "Node", NodeId = first.Id }],
-                },
-                new ExplorerEntryData
-                {
-                    Type = "Folder",
-                    FolderId = expandedId,
-                    Name = "Expanded",
-                    IsExpanded = true,
-                    Children =
-                    [
-                        new ExplorerEntryData
-                        {
-                            Type = "Folder",
-                            FolderId = nestedId,
-                            Name = "Nested",
-                            IsExpanded = false,
-                            Children = [new ExplorerEntryData { Type = "Node", NodeId = second.Id }],
-                        },
-                    ],
-                },
-            ]);
+        SetCollapsedAndNestedLayout(scene, (first.Id, collapsedId), (second.Id, expandedId, nestedId));
         using var explorer = harness.Build();
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
@@ -239,7 +207,7 @@ public sealed class SceneExplorerSearchTests
     [TestMethod]
     public async Task SearchAsync_FolderEntryWithoutFolderId_ToleratedBySearchAndClear()
     {
-        var harness = CreateHarness();
+        using var harness = CreateHarness();
         var scene = harness.Scene;
         var node = new SceneNode(scene) { Name = "FindMe" };
         scene.RootNodes.Add(node);
@@ -261,7 +229,7 @@ public sealed class SceneExplorerSearchTests
 
         _ = count.Should().Be(2, "the node match and the id-less folder match are both authored-domain matches");
         var nodeAdapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
-        _ = explorer.ShownItems.Contains(nodeAdapter!).Should().BeFalse("a folder without a stable id cannot be addressed for transient expansion");
+        _ = explorer.ShownItems.Should().NotContain(nodeAdapter!, "a folder without a stable id cannot be addressed for transient expansion");
 
         await explorer.ClearSearchAsync().ConfigureAwait(false);
     }
@@ -269,7 +237,7 @@ public sealed class SceneExplorerSearchTests
     [TestMethod]
     public async Task ReconcileDuringSearch_KeepsTransientExpansionUnauthoredAndRestorable()
     {
-        var harness = CreateHarness();
+        using var harness = CreateHarness();
         var scene = harness.Scene;
         var find = new SceneNode(scene) { Name = "FindMe" };
         var other = new SceneNode(scene) { Name = "Other" };
@@ -292,28 +260,57 @@ public sealed class SceneExplorerSearchTests
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
 
-        var layoutBefore = JsonSerializer.Serialize(scene.ExplorerLayout);
+        bool? StoredExpansion() => scene.ExplorerLayout!.Single(entry => entry.FolderId == folderId).IsExpanded;
         _ = (await explorer.SearchAsync("FindMe").ConfigureAwait(false)).Should().Be(1);
         var folder = await explorer.FindFolderAdapterAsync(folderId).ConfigureAwait(false);
         _ = folder!.IsExpanded.Should().BeTrue("search expands the collapsed match ancestry");
 
-        _ = harness.Commands
-            .Setup(value => value.CreateNodeAsync(It.IsAny<SceneDocumentCommandContext>(), null, null, It.IsAny<string>()))
-            .ReturnsAsync(SceneCommandResults.Success(new SceneNode(scene) { Name = "Added" }));
         await explorer.AddEntityCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
 
         var rebuiltFolder = await explorer.FindFolderAdapterAsync(folderId).ConfigureAwait(false);
         _ = rebuiltFolder.Should().NotBeNull();
-        _ = ReferenceEquals(rebuiltFolder, folder).Should().BeFalse("the command rebuild retires the old adapters");
+        _ = ReferenceEquals(rebuiltFolder, folder).Should().BeFalse("the rebuild after an edit retires the old adapters");
         _ = rebuiltFolder!.IsExpanded.Should().BeTrue("the transient search expansion must survive the rebuild on the fresh adapter");
-        _ = JsonSerializer.Serialize(scene.ExplorerLayout).Should().Be(layoutBefore, "restoring expansion during reconcile must not re-author entry.IsExpanded");
+        _ = StoredExpansion().Should().BeFalse("restoring expansion during reconcile must not re-author entry.IsExpanded");
 
         await explorer.ClearSearchAsync().ConfigureAwait(false);
 
         _ = rebuiltFolder.IsExpanded.Should().BeFalse("clearing after a rebuild restores the prior collapsed view through the live adapter");
-        _ = JsonSerializer.Serialize(scene.ExplorerLayout).Should().Be(layoutBefore, "clearing after a rebuild must still author nothing");
-        _ = harness.Metadata.Document.IsDirty.Should().BeFalse();
+        _ = StoredExpansion().Should().BeFalse("clearing after a rebuild must still author nothing");
+        _ = harness.Metadata.Document.History.UndoStack.Should().ContainSingle("only the added node is authored");
     }
+
+    // A collapsed folder holding one node, and an expanded folder holding a collapsed folder that holds the other.
+    private static void SetCollapsedAndNestedLayout(Scene scene, (NodeId Node, FolderId Folder) collapsed, (NodeId Node, FolderId Outer, FolderId Folder) nested)
+        => scene.SetExplorerLayout(
+            [
+                new ExplorerEntryData
+                {
+                    Type = "Folder",
+                    FolderId = collapsed.Folder,
+                    Name = "Collapsed",
+                    IsExpanded = false,
+                    Children = [new ExplorerEntryData { Type = "Node", NodeId = collapsed.Node }],
+                },
+                new ExplorerEntryData
+                {
+                    Type = "Folder",
+                    FolderId = nested.Outer,
+                    Name = "Expanded",
+                    IsExpanded = true,
+                    Children =
+                    [
+                        new ExplorerEntryData
+                        {
+                            Type = "Folder",
+                            FolderId = nested.Folder,
+                            Name = "Nested",
+                            IsExpanded = false,
+                            Children = [new ExplorerEntryData { Type = "Node", NodeId = nested.Node }],
+                        },
+                    ],
+                },
+            ]);
 
     private static Harness CreateHarness()
     {
@@ -322,7 +319,7 @@ public sealed class SceneExplorerSearchTests
         return new Harness(project, scene);
     }
 
-    private sealed class Harness
+    private sealed partial class Harness : IDisposable
     {
         public Harness(Project project, Scene scene)
         {
@@ -340,11 +337,9 @@ public sealed class SceneExplorerSearchTests
 
             var sync = new Mock<ISceneEngineSync>();
             _ = sync.Setup(value => value.GetDocumentScene(this.Metadata.DocumentId)).Returns(this.Scene);
-            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), this.Metadata.DocumentId)).Returns(value: true);
+            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
             _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             this.Sync = sync;
-
-            this.Commands = new Mock<ISceneDocumentCommandService>(MockBehavior.Strict);
         }
 
         public Project Project { get; }
@@ -358,11 +353,11 @@ public sealed class SceneExplorerSearchTests
         public TestDocumentArea Documents { get; }
 
         /// <summary>Gets the open documents that hold the harness's first scene.</summary>
-        public Oxygen.Editor.Documents.OpenDocuments OpenDocuments => this.Metadata.Documents;
+        public Editor.Documents.OpenDocuments OpenDocuments => this.Metadata.Documents;
 
         public Mock<ISceneEngineSync> Sync { get; }
 
-        public Mock<ISceneDocumentCommandService> Commands { get; }
+        public void Dispose() => this.Metadata.Dispose();
 
         public SceneExplorerViewModel Build()
             => new(
@@ -373,7 +368,6 @@ public sealed class SceneExplorerSearchTests
                 this.OpenDocuments,
                 default,
                 this.Sync.Object,
-                new SceneSelectionService(),
-                this.Commands.Object);
+                new SceneSelectionService());
     }
 }

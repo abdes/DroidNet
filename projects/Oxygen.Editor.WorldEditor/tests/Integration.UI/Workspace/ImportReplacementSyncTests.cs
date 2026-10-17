@@ -8,7 +8,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.ModelImportScenario;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
@@ -44,10 +44,10 @@ public sealed class ImportReplacementSyncTests : DroidNet.Tests.VisualUserInterf
         var material = first.CookedAssets.Single(static asset => asset.Kind == ContentCookAssetKind.Material).CookedAssetUri;
         var node = fixture.Source.RootNodes[0].Id;
         var slot = await fixture.ReadSingleMaterialSlotAsync(node, timeout.Token).ConfigureAwait(true);
-        _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [node], slot, material, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await fixture.Authoring.ExecuteAsync(new SetMaterialSlot([node], slot, material)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         var before = await WaitForNodeAsync(fixture, node, static value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.8f, 0.2f, 0.1f, 1)) < 0.001f, timeout.Token).ConfigureAwait(true);
         var revision = fixture.Document.History.Position;
-        var history = fixture.Context.History.UndoStack.Count;
+        var history = fixture.Document.History.UndoStack.Count;
         var dirty = fixture.Document.IsDirty;
 
         var path = Path.Combine(fixture.ProjectRoot, "Incoming", "Triangle." + format);
@@ -61,7 +61,7 @@ public sealed class ImportReplacementSyncTests : DroidNet.Tests.VisualUserInterf
         var after = await WaitForNodeAsync(fixture, node, static value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.1f, 0.8f, 0.2f, 1)) < 0.001f, timeout.Token).ConfigureAwait(true);
         _ = after.MaterialKeys.Should().Equal(before.MaterialKeys);
         _ = fixture.Document.History.Position.Should().Be(revision);
-        _ = fixture.Context.History.UndoStack.Should().HaveCount(history);
+        _ = fixture.Document.History.UndoStack.Should().HaveCount(history);
         _ = fixture.Document.IsDirty.Should().Be(dirty);
     });
 

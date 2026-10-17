@@ -35,6 +35,10 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Cooking;
@@ -42,14 +46,11 @@ using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneEditor;
-using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.World.Workspace;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -167,8 +168,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         container.RegisterInstance(appearance.Object);
         container.RegisterInstance<IMessenger>(this.messenger);
         container.RegisterInstance<ISceneEngineSync>(this.sync);
-        container.RegisterInstance<ISceneDocumentCommandService>(this.Commands);
-        container.RegisterInstance(Mock.Of<IDocumentInputCommitter>());
+                container.RegisterInstance(Mock.Of<IDocumentInputCommitter>());
         container.RegisterInstance(Mock.Of<IDocumentConflictPrompt>());
         container.RegisterInstance<IContentPipelineService>(services.Pipeline);
         container.RegisterInstance<IProjectContextService>(services.Projects);
@@ -179,7 +179,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         var cook = new MaterialCookService(services.Pipeline, services.Projects, NullLogger<MaterialCookService>.Instance);
         DocumentEditorDescriptor[] editors =
         [
-            new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.TransitionArea!, windowId, this.engine, this.sync, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), this.Commands, services.Pipeline, container, this.messenger, preferences)) { IsClosable = false },
+            new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.TransitionArea!, windowId, this.engine, this.sync, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, this.messenger, preferences)) { IsClosable = false },
             new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Projects, windowId: windowId)),
         ];
         this.TransitionArea = new DocumentArea(documents, this.sceneDocuments, editors, windowId, static _ => { });
@@ -255,8 +255,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     ///     gives the fixture its own engine and stops the shared one for the duration of the test.
     /// </param>
     /// <param name="loggerFactory">Receives native engine logs; implies a fixture-owned engine.</param>
-    /// <param name="hierarchyAuthoring">Whether hierarchy commands use the real mutator and organizer.</param>
-    public NativeSceneFixture(bool automatic, Action<Scene>? seed = null, EngineSettings? engineSettings = null, ILoggerFactory? loggerFactory = null, bool hierarchyAuthoring = false)
+    public NativeSceneFixture(bool automatic, Action<Scene>? seed = null, EngineSettings? engineSettings = null, ILoggerFactory? loggerFactory = null)
     {
         var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
         this.hosting = new HostingContext
@@ -300,16 +299,15 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         seed?.Invoke(this.Source);
         _ = this.AssetCatalog.Setup(value => value.Items).Returns(this.feedAssets);
         _ = this.AssetCatalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        this.Commands = new SceneDocumentCommandService(new SceneSelectionService(), this.sync, results, new OperationStatusReducer(), this.materialSlotProvider.Object, this.projectContexts, hierarchyAuthoring ? new SceneMutator(NullLogger<SceneMutator>.Instance) : Mock.Of<ISceneMutator>(), hierarchyAuthoring ? new SceneOrganizer(NullLogger<SceneOrganizer>.Instance) : Mock.Of<ISceneOrganizer>());
 
         // The scene is a document of the project, saved where the editor saves scenes.
         var scenes = new Mock<IProjectManagerService>();
         _ = scenes.SetupGet(value => value.CurrentProject).Returns(project);
-        this.sceneKind = new SceneDocumentKind(scenes.Object, this.Commands);
+        this.sceneKind = new SceneDocumentKind(scenes.Object);
         this.materialKind = new MaterialDocumentKind(this.materialValidation);
         this.sceneDocuments = new OpenDocuments([this.sceneKind, this.materialKind], new ImmediateReadFileStore(new NativeAtomicFileStore(new RealFileSystem())));
         this.OpenScene(this.WriteScene(this.Source));
-        this.Model = new EnvironmentViewModel(this.Commands, () => this.Context);
+        this.Model = new EnvironmentViewModel(() => this.Authoring);
         this.Model.SetScene(this.Source);
         this.sync.SceneSynchronized += (_, args) =>
         {
@@ -322,7 +320,8 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
 
     public Scene Source { get; private set; }
 
-    public SceneDocumentCommandContext Context { get; private set; }
+    /// <summary>Gets what edits the document's scene.</summary>
+    public SceneAuthoring Authoring => ((SceneContent)this.Document.Content).Authoring;
 
     /// <summary>Gets the scene's document.</summary>
     public Oxygen.Editor.Documents.Document Document { get; private set; }
@@ -334,8 +333,6 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     public OpenDocuments OpenDocuments => this.sceneDocuments;
 
     public EnvironmentViewModel Model { get; }
-
-    public SceneDocumentCommandService Commands { get; }
 
     public Mock<Oxygen.Editor.Assets.IAssetFeed> AssetCatalog { get; } = new();
 
@@ -399,7 +396,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     {
         this.activeMaterialSlotProvider = materialSlots ?? this.materialPipeline.Pipeline;
         this.messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
-        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.Commands, this.area, default, assets ?? this.AssetCatalog.Object, this.sync, new SceneSelectionService(), builtins ?? new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.materialSlotProvider.Object, this.projectContexts);
+        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.area, default, assets ?? this.AssetCatalog.Object, this.sync, new SceneSelectionService(), builtins ?? new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.materialSlotProvider.Object, this.projectContexts);
     }
 
     /// <summary>Opens the fixture's scene on a running engine, starting the shared engine only if it is not running.</summary>
@@ -501,7 +498,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     private async Task SynchronizeAsync(CancellationToken cancellationToken)
     {
         this.target = null;
-        _ = this.sync.RegisterDocument(this.Source, this.Document.Id).Should().BeTrue();
+        _ = this.sync.RegisterDocument(this.Authoring).Should().BeTrue();
         _ = (await this.sync.SyncSceneWhenReadyAsync(this.Source, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
         _ = this.target.Should().NotBeNull();
     }
@@ -533,7 +530,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     }
 
     // Opens the scene's file as its document; the file store reads at once, so this completes before it returns.
-    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(Document), nameof(Tab), nameof(Source), nameof(Context))]
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(Document), nameof(Tab), nameof(Source))]
     private void OpenScene(DocumentFile file)
     {
         var opening = this.sceneDocuments.OpenAsync(file);
@@ -547,7 +544,6 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         this.Tab = new DocumentTab(document, new DocumentEditorDescriptor(this.sceneKind, static _ => new object()) { IsClosable = false });
         this.area.Activate(document);
         this.Source = content.Scene;
-        this.Context = new(document.Id, this.Source, document.History);
     }
 
     private void CloseScene()
@@ -562,7 +558,6 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     private async Task AdoptContentAsync(CancellationToken cancellationToken)
     {
         this.Source = ((SceneContent)this.Document.Content).Scene;
-        this.Context = new(this.Document.Id, this.Source, this.Document.History);
         this.Model.SetScene(this.Source);
         if (this.target is not null)
         {
@@ -611,7 +606,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
         var preferences = new Oxygen.Editor.World.Workspace.PreviewSettingsService(this.engine, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), this.projectContexts, publisher.Object, new OperationStatusReducer());
         await preferences.RestoreAsync(this.projectContexts.ActiveProject!).ConfigureAwait(true);
-        return new(this.Tab, this.area, default, this.engine, this.sync, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), this.Commands, Mock.Of<IContentPipelineService>(), container, this.messenger, preferences);
+        return new(this.Tab, this.area, default, this.engine, this.sync, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), Mock.Of<IContentPipelineService>(), container, this.messenger, preferences);
     }
 
     public IDisposable RegisterWorkspacePublication(CatalogWorkloadServices services, IAssetPublicationTarget catalog)

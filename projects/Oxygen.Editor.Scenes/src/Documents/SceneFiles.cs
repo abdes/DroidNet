@@ -7,7 +7,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Documents;
+namespace Oxygen.Editor.Scenes.Documents;
 
 /// <summary>The scenes of a project: its scene files, in any folder of its authoring mounts.</summary>
 /// <remarks>A scene's name is its file name; its identity is the id inside the file.</remarks>

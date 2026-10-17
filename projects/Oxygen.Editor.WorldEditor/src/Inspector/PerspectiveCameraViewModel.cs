@@ -2,9 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.World.Inspector.Editing;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -15,21 +16,19 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     private readonly InspectorFieldDiagnostic unboundDiagnostic = new();
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly List<IInspectorBindingRefresh> registrations = [];
-    private readonly PropertyBinding<CameraAspectMode> aspectModeBinding = new(SceneDocumentCommandService.PerspectiveCamera.AspectModeDescriptor);
+    private readonly PropertyBinding<CameraAspectMode> aspectModeBinding = new(SceneProperties.PerspectiveCamera.AspectModeDescriptor);
     private ICollection<SceneNode>? selectedItems;
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="PerspectiveCameraViewModel"/> class.</summary>
-    /// <param name="commandService">The existing camera command service.</param>
-    /// <param name="commandContextProvider">The current captured document context.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     public PerspectiveCameraViewModel(
-        ISceneDocumentCommandService? commandService = null,
-        Func<SceneDocumentCommandContext?>? commandContextProvider = null)
+        Func<SceneAuthoring?>? authoringProvider = null)
     {
-        this.StartingCamera = new(commandService, commandContextProvider);
-        if (commandService is not null && commandContextProvider is not null)
+        this.StartingCamera = new(authoringProvider);
+        if (authoringProvider is not null)
         {
-            this.edits = new(commandService, commandContextProvider, "Edit Camera", this.RefreshValues);
+            this.edits = new(authoringProvider, "Edit Camera", this.RefreshValues);
             this.edits.Diagnostics.Relate(this.NearPlane.Id.Id, this.FarPlane.Id.Id);
         }
 
@@ -47,7 +46,7 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     public StartingCameraToggle StartingCamera { get; }
 
     /// <summary>Gets the degree-valued FOV binding and its mixed state.</summary>
-    public NumberBinding<float> FieldOfView { get; } = new(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegreesDescriptor);
+    public NumberBinding<float> FieldOfView { get; } = new(SceneProperties.PerspectiveCamera.FieldOfViewDegreesDescriptor);
 
     /// <summary>Gets or sets the framing policy through its guarded binding.</summary>
     public CameraAspectMode AspectMode
@@ -60,22 +59,22 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     public IReadOnlyList<CameraAspectMode> AspectModeOptions { get; } = Enum.GetValues<CameraAspectMode>();
 
     /// <summary>Gets the aspect-ratio binding and its mixed state.</summary>
-    public NumberBinding<float> AspectRatio { get; } = new(SceneDocumentCommandService.PerspectiveCamera.AspectRatioDescriptor);
+    public NumberBinding<float> AspectRatio { get; } = new(SceneProperties.PerspectiveCamera.AspectRatioDescriptor);
 
     /// <summary>Gets the near-plane binding and its mixed state.</summary>
-    public NumberBinding<float> NearPlane { get; } = new(SceneDocumentCommandService.PerspectiveCamera.NearPlaneDescriptor);
+    public NumberBinding<float> NearPlane { get; } = new(SceneProperties.PerspectiveCamera.NearPlaneDescriptor);
 
     /// <summary>Gets the far-plane binding and its mixed state.</summary>
-    public NumberBinding<float> FarPlane { get; } = new(SceneDocumentCommandService.PerspectiveCamera.FarPlaneDescriptor);
+    public NumberBinding<float> FarPlane { get; } = new(SceneProperties.PerspectiveCamera.FarPlaneDescriptor);
 
     /// <summary>Gets the aperture f-number binding and its mixed state.</summary>
-    public NumberBinding<float> ApertureF { get; } = new(SceneDocumentCommandService.PerspectiveCamera.ApertureFDescriptor);
+    public NumberBinding<float> ApertureF { get; } = new(SceneProperties.PerspectiveCamera.ApertureFDescriptor);
 
     /// <summary>Gets the shutter-rate binding and its mixed state.</summary>
-    public NumberBinding<float> ShutterRate { get; } = new(SceneDocumentCommandService.PerspectiveCamera.ShutterRateDescriptor);
+    public NumberBinding<float> ShutterRate { get; } = new(SceneProperties.PerspectiveCamera.ShutterRateDescriptor);
 
     /// <summary>Gets the ISO binding and its mixed state.</summary>
-    public NumberBinding<float> Iso { get; } = new(SceneDocumentCommandService.PerspectiveCamera.IsoDescriptor);
+    public NumberBinding<float> Iso { get; } = new(SceneProperties.PerspectiveCamera.IsoDescriptor);
 
     /// <summary>Gets FOV feedback.</summary>
     public InspectorFieldDiagnostic FieldOfViewDiagnostic => this.edits?.Diagnostics.Get(this.FieldOfView.Id.Id) ?? this.unboundDiagnostic;

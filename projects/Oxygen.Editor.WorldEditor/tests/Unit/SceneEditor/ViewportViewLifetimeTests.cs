@@ -9,7 +9,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -37,7 +36,7 @@ public sealed class ViewportViewLifetimeTests
         var engine = new FakeEngine();
         using var sut = CreateViewport(engine.Service.Object);
         await sut.CreateViewAsync(Surface, "Pane", 640, 480).ConfigureAwait(false);
-        await sut.OrthographicViews.Single(option => option.Label == "Top").ChooseCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        await sut.OrthographicViews.Single(option => string.Equals(option.Label, "Top", StringComparison.Ordinal)).ChooseCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
 
         await sut.ReleaseViewAsync().ConfigureAwait(false);
         await sut.CreateViewAsync(Surface, "Pane", 640, 480).ConfigureAwait(false);
@@ -63,7 +62,7 @@ public sealed class ViewportViewLifetimeTests
         await sut.CreateViewAsync(Surface, "Pane", 640, 480).ConfigureAwait(false);
 
         _ = engine.Created[1].SceneCameraNodeId.Should().Be(MainCamera.NodeId, "the viewed camera is part of the view's creation");
-        engine.Service.Verify(service => service.SetViewScenePilotAsync(engine.Ids[1], true), Times.Once);
+        engine.Service.Verify(service => service.SetViewScenePilotAsync(engine.Ids[1], pilot: true), Times.Once);
     }
 
     [TestMethod]
@@ -130,9 +129,8 @@ public sealed class ViewportViewLifetimeTests
         _ = sut.IsPilotingSceneCamera.Should().BeTrue();
     }
 
-    private static ViewportViewModel CreateViewport(IEngineService engine)
-    {
-        return new ViewportViewModel(
+    private static ViewportViewModel CreateViewport(IEngineService engine) =>
+        new(
             DocumentId.New(),
             engine,
             Mock.Of<IOperationResultPublisher>(),
@@ -142,7 +140,6 @@ public sealed class ViewportViewLifetimeTests
             SceneCamerasProvider = () => [MainCamera],
             PilotCommitDelay = TimeSpan.Zero,
         };
-    }
 
     /// <summary>An engine that records view creation and destruction and reports a moved editor camera.</summary>
     private sealed class FakeEngine

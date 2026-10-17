@@ -56,6 +56,12 @@ public abstract class PropertyDescriptor
     public string EngineCommandKey { get; }
 
     /// <summary>
+    /// Gets where the property's value goes in the engine, or <see langword="null"/> when the engine takes the
+    /// property another way, such as with its whole component.
+    /// </summary>
+    public EngineFieldMapping? Engine { get; init; }
+
+    /// <summary>
     /// Reads the current value from a target object as a boxed value.
     /// </summary>
     /// <param name="target">The component / model object.</param>

@@ -4,7 +4,8 @@
 
 using DroidNet.Documents;
 using Oxygen.Editor.Documents;
-namespace Oxygen.Editor.World.Services;
+using Oxygen.Editor.World;
+namespace Oxygen.Editor.Scenes.Engine;
 
 /// <summary>Identifies an accepted scene projection and its open-document owner.</summary>
 /// <param name="scene">The authoring scene that was projected.</param>

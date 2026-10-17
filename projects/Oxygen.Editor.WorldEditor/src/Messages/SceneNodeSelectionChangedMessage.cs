@@ -4,7 +4,7 @@
 
 using DroidNet.Documents;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Editor.Scenes.Selection;
 
 namespace Oxygen.Editor.World.Messages;
 

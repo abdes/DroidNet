@@ -4,6 +4,9 @@
 
 using AwesomeAssertions;
 using DroidNet.Tests;
+using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.Scenes.Edits.Components;
+using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Services;
@@ -41,23 +44,23 @@ public sealed partial class ComponentLifetimeTests : DroidNet.Tests.VisualUserIn
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await AssertTransformRemovalDeniedAsync(fixture, view, timeout.Token).ConfigureAwait(true);
         var type = camera ? typeof(PerspectiveCamera) : typeof(DirectionalLightComponent);
-        var added = await fixture.Commands.AddComponentAsync(fixture.Context, node.Id, type).ConfigureAwait(true);
+        var added = await fixture.Authoring.ExecuteAsync(SceneComponents.Add(fixture.Authoring, node.Id, camera ? SceneComponents.PerspectiveCamera : SceneComponents.DirectionalLight)).ConfigureAwait(true);
         _ = added.Succeeded.Should().BeTrue();
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         await AssertComponentPresenceAsync(fixture, host, node.Id, camera, present: true, timeout.Token).ConfigureAwait(true);
-        await fixture.Context.History.UndoAsync(timeout.Token).ConfigureAwait(true);
+        await fixture.Document.History.UndoAsync(timeout.Token).ConfigureAwait(true);
         await AssertComponentPresenceAsync(fixture, host, node.Id, camera, present: false, timeout.Token).ConfigureAwait(true);
-        await fixture.Context.History.RedoAsync(timeout.Token).ConfigureAwait(true);
+        await fixture.Document.History.RedoAsync(timeout.Token).ConfigureAwait(true);
         await AssertComponentPresenceAsync(fixture, host, node.Id, camera, present: true, timeout.Token).ConfigureAwait(true);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
         await AssertComponentPresenceAsync(fixture, host, node.Id, camera, present: true, timeout.Token).ConfigureAwait(true);
         var reopened = fixture.Source.RootNodes.Single();
         var component = reopened.Components.Single(value => value.GetType() == type);
-        _ = (await fixture.Commands.RemoveComponentAsync(fixture.Context, reopened.Id, component.Id).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await fixture.Authoring.ExecuteAsync(new RemoveComponent(reopened.Id, component.Id)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         await AssertComponentPresenceAsync(fixture, host, node.Id, camera, present: false, timeout.Token).ConfigureAwait(true);
-        await fixture.Context.History.UndoAsync(timeout.Token).ConfigureAwait(true);
+        await fixture.Document.History.UndoAsync(timeout.Token).ConfigureAwait(true);
         await AssertComponentPresenceAsync(fixture, host, node.Id, camera, present: true, timeout.Token).ConfigureAwait(true);
-        await fixture.Context.History.RedoAsync(timeout.Token).ConfigureAwait(true);
+        await fixture.Document.History.RedoAsync(timeout.Token).ConfigureAwait(true);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
         await AssertComponentPresenceAsync(fixture, host, node.Id, camera, present: false, timeout.Token).ConfigureAwait(true);
         view.Node = null;
@@ -73,8 +76,8 @@ public sealed partial class ComponentLifetimeTests : DroidNet.Tests.VisualUserIn
         }).ConfigureAwait(true);
         var delete = (DroidNet.Controls.ToolBarButton)view.FindName("DeleteComponentButton");
         _ = delete.IsEnabled.Should().BeFalse();
-        _ = (await fixture.Commands.RemoveComponentAsync(fixture.Context, node.Id, transform.Id).ConfigureAwait(true)).Succeeded.Should().BeFalse();
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = (await fixture.Authoring.ExecuteAsync(new RemoveComponent(node.Id, transform.Id)).ConfigureAwait(true)).Succeeded.Should().BeFalse();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         var native = await fixture.ReadNodeAsync(node.Id, cancellationToken).ConfigureAwait(true);
         _ = native.Properties.Where(static value => value.ComponentId == (ushort)EngineComponentId.Transform).Select(static value => value.FieldId)
             .Should().BeEquivalentTo(Enum.GetValues<TransformField>().Select(static field => (ushort)field), "the denied removal must leave the native transform intact");

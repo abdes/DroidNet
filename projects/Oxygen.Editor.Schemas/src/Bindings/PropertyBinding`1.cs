@@ -20,9 +20,8 @@ namespace Oxygen.Editor.Schemas.Bindings;
 /// <para>
 /// Setting <see cref="Value"/> from the view raises a
 /// <see cref="ValueRequested"/> event; the binding does not apply to the
-/// model directly. The owning component is expected to route the event
-/// through a <c>CommitGroupController</c> or directly to the command
-/// service.
+/// model directly. The owning component routes the event to the edit
+/// that changes the model.
 /// </para>
 /// <para>
 /// "Mixed" is a state of the binding, not two parallel observable

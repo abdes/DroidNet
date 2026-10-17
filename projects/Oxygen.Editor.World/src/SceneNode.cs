@@ -333,12 +333,14 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
         var oldParent = this.Parent;
         this.Parent = newParent;
 
-        _ = oldParent?.Children.Remove(this);
-
+        // Joining the new parent before leaving the old one keeps the node in the graph throughout, so observers of the
+        // graph never see it removed.
         if (newParent?.Children.Contains(this) == false)
         {
             newParent.Children.Add(this);
         }
+
+        _ = oldParent?.Children.Remove(this);
     }
 
     /// <summary>

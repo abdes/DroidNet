@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Messaging;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -14,9 +15,9 @@ public sealed partial class DocumentManager
     /// <returns>Whether the previous saved scene was successfully staged and installed.</returns>
     public Task<bool> ReloadPreviousSceneAsync()
         => this.previousSavedScene is { } previous && this.projectContextService.ActiveProject is { } project
-            && project.ProjectId == previous.projectId
-            && string.Equals(project.ProjectRoot, previous.projectRoot, StringComparison.OrdinalIgnoreCase)
-                ? this.OpenSceneAsync(previous.sceneUri)
+            && project.ProjectId == previous.ProjectId
+            && string.Equals(project.ProjectRoot, previous.ProjectRoot, StringComparison.OrdinalIgnoreCase)
+                ? this.OpenSceneAsync(previous.SceneUri)
                 : Task.FromResult(false);
 
     private void PublishSceneLoadFailure(Uri sceneUri, bool unavailable, string? problem = null)

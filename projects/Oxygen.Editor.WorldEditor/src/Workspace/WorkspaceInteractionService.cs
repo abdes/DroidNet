@@ -42,7 +42,7 @@ public sealed partial class WorkspaceInteractionService(
     IEditorSettingsManager settings,
     IOperationResultPublisher results,
     IStatusReducer status,
-    ILoggerFactory? loggerFactory = null) : ObservableObject, Oxygen.Editor.Scenes.Interaction.ISceneNodeInteraction
+    ILoggerFactory? loggerFactory = null) : ObservableObject, Oxygen.Editor.Scenes.Authoring.ISceneNodeInteraction
 {
     /// <summary>The project-scoped interaction identity in the editor database.</summary>
     internal static readonly SettingKey<ProjectInteraction> Key = new("WorldEditor", "SceneInteraction");

@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.World.Services;
+namespace Oxygen.Editor.Scenes.Engine;
 
 /// <summary>Why the engine's sky light casts no light.</summary>
 public enum SceneSkyLightUnavailableReason

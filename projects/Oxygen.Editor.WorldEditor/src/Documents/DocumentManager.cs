@@ -11,6 +11,8 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Shell.Documents;
 
 namespace Oxygen.Editor.World.Documents;
@@ -27,14 +29,17 @@ public sealed partial class DocumentManager : IDisposable
     private readonly IProjectUsageService projectUsage;
     private readonly WindowId windowId;
     private readonly OpenDocuments documents;
-    private readonly Services.ISceneEngineSync sceneEngineSync;
+    private readonly ISceneEngineSync sceneEngineSync;
     private readonly IAssetRelocationService relocation;
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "An open in flight releases the gate after Dispose; the gate holds no wait handle.")]
     private readonly SemaphoreSlim sceneReplacementGate = new(1, 1);
     private readonly Oxygen.Managed.Core.Diagnostics.IOperationResultPublisher? operationResults;
     private readonly Oxygen.Managed.Core.Diagnostics.IStatusReducer? statusReducer;
     private long sceneRequestId;
-    private (Guid projectId, string projectRoot, Uri sceneUri)? previousSavedScene;
+    private (Guid ProjectId, string ProjectRoot, Uri SceneUri)? previousSavedScene;
     private bool disposed;
+    private DocumentFile? installing;
 
     /// <summary>Initializes a new instance of the <see cref="DocumentManager"/> class.</summary>
     /// <param name="documentArea">The document area of the window whose requests this manager answers.</param>
@@ -56,7 +61,7 @@ public sealed partial class DocumentManager : IDisposable
         IProjectUsageService projectUsage,
         WindowId windowId,
         OpenDocuments documents,
-        Services.ISceneEngineSync sceneEngineSync,
+        ISceneEngineSync sceneEngineSync,
         IAssetRelocationService relocation,
         ILoggerFactory? loggerFactory = null,
         Oxygen.Managed.Core.Diagnostics.IOperationResultPublisher? operationResults = null,
@@ -93,7 +98,6 @@ public sealed partial class DocumentManager : IDisposable
         _ = Interlocked.Increment(ref this.sceneRequestId);
         this.messenger.UnregisterAll(this);
         this.relocation.FilesChanged -= this.OnFilesChanged;
-        this.sceneReplacementGate.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -124,6 +128,13 @@ public sealed partial class DocumentManager : IDisposable
         }
 
         var file = new DocumentFile(location.FilePath, location.AssetUri);
+
+        // Showing the incoming scene's tab activates it; the request that shows it already owns its installation.
+        if (this.installing is { } installing && installing.IsAt(file.Path))
+        {
+            return false;
+        }
+
         var requestId = Interlocked.Increment(ref this.sceneRequestId);
         try
         {
@@ -291,10 +302,17 @@ public sealed partial class DocumentManager : IDisposable
     {
         var scene = ((SceneContent)document.Content).Scene;
         replacement.Incoming = document;
-        SceneAuthoringGate.BeginInstall(scene);
-        if (!await this.documentArea.ShowAsync(document).ConfigureAwait(true))
+        this.installing = document.File;
+        try
         {
-            return false;
+            if (!await this.documentArea.ShowAsync(document).ConfigureAwait(true))
+            {
+                return false;
+            }
+        }
+        finally
+        {
+            this.installing = null;
         }
 
         var installation = this.messenger.Send(new InstallSceneRequestMessage(this.windowId, scene, document));
@@ -307,7 +325,6 @@ public sealed partial class DocumentManager : IDisposable
         }
 
         replacement.Installed = true;
-        SceneAuthoringGate.CompleteInstall(scene);
         this.LogOpenedNewScene(scene);
         await this.MarkSceneActivatedAsync(scene).ConfigureAwait(true);
         return true;

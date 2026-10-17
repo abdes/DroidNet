@@ -4,8 +4,9 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Controls;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -17,22 +18,20 @@ public sealed class SceneEnvironmentEditOwner : ObservableObject, IInspectorEdit
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="SceneEnvironmentEditOwner"/> class.</summary>
-    /// <param name="commands">The existing scene command service.</param>
-    /// <param name="context">The current document context provider.</param>
+    /// <param name="authoring">The authoring of the scene being inspected.</param>
     /// <param name="refresh">The owning parent's scene refresh.</param>
     /// <param name="diagnostics">The canonical scene feedback.</param>
     internal SceneEnvironmentEditOwner(
-        ISceneDocumentCommandService? commands,
-        Func<SceneDocumentCommandContext?>? context,
+        Func<SceneAuthoring?>? authoring,
         Action refresh,
         InspectorFieldDiagnostics diagnostics)
     {
         this.Diagnostics = diagnostics;
-        if (commands is not null && context is not null)
+        if (authoring is not null)
         {
-            this.coordinator = new(commands, context, "Edit Environment", refresh, environment: true, diagnostics);
-            diagnostics.Relate(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinEv.Id, SceneDocumentCommandService.SceneEnvironment.AutoExposureMaxEv.Id);
-            diagnostics.Relate(SceneDocumentCommandService.SceneEnvironment.AutoExposureLowPercentile.Id, SceneDocumentCommandService.SceneEnvironment.AutoExposureHighPercentile.Id);
+            this.coordinator = new(authoring, "Edit Environment", refresh, environment: true, diagnostics);
+            diagnostics.Relate(SceneProperties.SceneEnvironment.AutoExposureMinEv.Id, SceneProperties.SceneEnvironment.AutoExposureMaxEv.Id);
+            diagnostics.Relate(SceneProperties.SceneEnvironment.AutoExposureLowPercentile.Id, SceneProperties.SceneEnvironment.AutoExposureHighPercentile.Id);
         }
     }
 

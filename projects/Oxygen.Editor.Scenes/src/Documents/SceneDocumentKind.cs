@@ -3,19 +3,26 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Documents;
+namespace Oxygen.Editor.Scenes.Documents;
 
 /// <summary>The scene document kind: opens <c>.oscene.json</c> files as scenes of the current project.</summary>
 /// <param name="projects">The current project, which a decoded scene belongs to.</param>
-/// <param name="commands">The command service, which owns each scene's edits in progress.</param>
-public sealed class SceneDocumentKind(IProjectManagerService projects, ISceneDocumentCommandService commands) : IDocumentKind
+/// <param name="interaction">The nodes hidden and locked in the editor, if the editor keeps them.</param>
+/// <param name="redirects">The session's asset renames and moves, if the editor tracks them.</param>
+public sealed class SceneDocumentKind(
+    IProjectManagerService projects,
+    ISceneNodeInteraction? interaction = null,
+    IAssetRedirects? redirects = null) : IDocumentKind
 {
     /// <inheritdoc/>
     public string Name => "Scene";
@@ -28,9 +35,10 @@ public sealed class SceneDocumentKind(IProjectManagerService projects, ISceneDoc
     /// The scene takes its name from its file. Its node identities must be present and unique, and its explorer layout
     /// must name each folder once and only nodes of the scene, each once.
     /// </remarks>
-    public async Task<DocumentDecodeResult> DecodeAsync(DocumentFile file, ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
+    public async Task<DocumentDecodeResult> DecodeAsync(DocumentFile file, ReadOnlyMemory<byte> content, DocumentDecodeContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(file);
+        ArgumentNullException.ThrowIfNull(context);
         if (projects.CurrentProject is not { } project)
         {
             return DocumentDecodeResult.Failed("No project is open.");
@@ -61,7 +69,10 @@ public sealed class SceneDocumentKind(IProjectManagerService projects, ISceneDoc
         }
 
         scene.Name = SceneContent.NameOf(file.Path);
-        return DocumentDecodeResult.Decoded(new SceneContent(scene, commands));
+
+        // Every node gets an explorer entry now, so edits always find one and their reverts restore it exactly.
+        SceneLayout.Complete(scene);
+        return DocumentDecodeResult.Decoded(new SceneContent(scene, context, interaction, redirects));
     }
 
     private static bool IsLayoutValid(IEnumerable<ExplorerEntryData>? entries, HashSet<NodeId> nodeIds, HashSet<FolderId> folderIds, HashSet<NodeId> layoutNodeIds)

@@ -208,7 +208,7 @@ public sealed class OpenDocumentCookInputsTests : IDisposable
 
         public IReadOnlyList<string> FileSuffixes { get; } = [".note"];
 
-        public Task<DocumentDecodeResult> DecodeAsync(DocumentFile file, ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
+        public Task<DocumentDecodeResult> DecodeAsync(DocumentFile file, ReadOnlyMemory<byte> content, DocumentDecodeContext context, CancellationToken cancellationToken)
             => Task.FromResult(DocumentDecodeResult.Decoded(new NoteContent(Encoding.UTF8.GetString(content.Span))));
     }
 

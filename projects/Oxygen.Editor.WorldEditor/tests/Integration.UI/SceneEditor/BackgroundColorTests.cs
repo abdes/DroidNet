@@ -22,14 +22,14 @@ using Moq;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -90,12 +90,11 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         var data = new SceneData { Id = SceneId.New(), Name = "Background", Environment = new SceneEnvironmentData { AtmosphereEnabled = true } };
         await File.WriteAllBytesAsync(path, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData), cancellationToken).ConfigureAwait(true);
         var file = new DocumentFile(path, new Uri("asset:///Content/Scenes/Background.oscene.json"));
-        var commands = new SceneDocumentCommandService(new SceneSelectionService(), sync, results, new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>(), Moq.Mock.Of<ISceneMutator>(), Moq.Mock.Of<ISceneOrganizer>());
         var projects = new Mock<IProjectManagerService>();
         _ = projects.SetupGet(value => value.CurrentProject).Returns(project);
-        using var scenes = new OpenDocuments([new SceneDocumentKind(projects.Object, commands)], new NativeAtomicFileStore(new RealFileSystem()));
+        using var scenes = new OpenDocuments([new SceneDocumentKind(projects.Object)], new NativeAtomicFileStore(new RealFileSystem()));
         var document = await OpenAndShowAsync(scenes, file, sync, cancellationToken).ConfigureAwait(true);
-        await EditSaveBackgroundAsync(engine, commands, document, document.Target, cancellationToken).ConfigureAwait(true);
+        await EditSaveBackgroundAsync(engine, document, document.Target, cancellationToken).ConfigureAwait(true);
         sync.CloseDocument(document.Document.Id);
         scenes.Close(document.Document);
         var reopened = await OpenAndShowAsync(scenes, file, sync, cancellationToken).ConfigureAwait(true);
@@ -128,7 +127,7 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         sync.SceneSynchronized += OnSynchronized;
         try
         {
-            _ = sync.RegisterDocument(scene, document.Id).Should().BeTrue();
+            _ = sync.RegisterDocument(((SceneContent)document.Content).Authoring).Should().BeTrue();
             _ = (await sync.SyncSceneWhenReadyAsync(scene, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
             return new(document, scene, await ready.Task.WaitAsync(cancellationToken).ConfigureAwait(true));
         }
@@ -138,11 +137,11 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         }
     }
 
-    private static async Task EditSaveBackgroundAsync(EngineService engine, SceneDocumentCommandService commands, OpenScene opened, RuntimeSceneTarget target, CancellationToken cancellationToken)
+    private static async Task EditSaveBackgroundAsync(EngineService engine, OpenScene opened, RuntimeSceneTarget target, CancellationToken cancellationToken)
     {
         var scene = opened.Scene;
-        var context = new SceneDocumentCommandContext(opened.Document.Id, scene, opened.Document.History);
-        var model = new EnvironmentViewModel(commands, () => context);
+        var authoring = ((SceneContent)opened.Document.Content).Authoring;
+        var model = new EnvironmentViewModel(() => authoring);
         using (model)
         {
             model.SetScene(scene);
@@ -171,11 +170,11 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
             await model.PendingEdits.ConfigureAwait(true);
             var expected = scene.Environment.Background.ColorRgb;
             AssertColorClose(expected, new Vector3(0.12743768f, 0.05126946f, 0.2158605f));
-            _ = context.History.UndoStack.Should().HaveCount(3);
+            _ = opened.Document.History.UndoStack.Should().HaveCount(3);
             _ = (await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true)).Background.ColorRgb.Should().Be(expected);
-            await context.History.UndoAsync(cancellationToken).ConfigureAwait(true);
+            await opened.Document.History.UndoAsync(cancellationToken).ConfigureAwait(true);
             _ = (await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true)).Background.ColorRgb.Should().Be(original.Background.ColorRgb);
-            await context.History.RedoAsync(cancellationToken).ConfigureAwait(true);
+            await opened.Document.History.RedoAsync(cancellationToken).ConfigureAwait(true);
             _ = (await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true)).Background.ColorRgb.Should().Be(expected);
             _ = (await opened.Document.SaveAsync(cancellationToken).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         }

@@ -8,6 +8,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Cooking;
 using Oxygen.Editor.World.Documents;

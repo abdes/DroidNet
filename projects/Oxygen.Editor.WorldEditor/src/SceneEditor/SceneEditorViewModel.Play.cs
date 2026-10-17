@@ -4,6 +4,8 @@
 
 using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Play;
@@ -16,6 +18,8 @@ namespace Oxygen.Editor.World.SceneEditor;
 /// </summary>
 public partial class SceneEditorViewModel
 {
+    private SceneAuthoring? playAuthoring;
+
     /// <summary>Gets the Play controls of this scene's toolbar; null without the workspace's play sessions.</summary>
     public ScenePlayToolbarViewModel? Play { get; private set; }
 
@@ -27,33 +31,52 @@ public partial class SceneEditorViewModel
         }
 
         this.Play = new ScenePlayToolbarViewModel(session, this.Document.Id, this.CreatePlayRequest);
-        this.commandService.NodesAdded += this.OnSceneStructureChanged;
-        this.commandService.NodesRemoved += this.OnSceneStructureChanged;
-        this.commandService.ComponentAdded += this.OnSceneStructureChanged;
-        this.commandService.ComponentRemoved += this.OnSceneStructureChanged;
         this.RefreshPlayScene();
     }
 
     private PlayRequest? CreatePlayRequest()
         => this.scene is { } current ? new PlayRequest(this.Document.Id, current, this.Document.File.AssetUri) : null;
 
+    // Also follows the current authoring, which a reload replaces.
     private void RefreshPlayScene()
-        => this.Play?.UpdateScene(this.scene?.AllNodes.Any(static node => node.Components.OfType<CameraComponent>().Any()) == true);
+    {
+        var current = this.Play is null ? null : this.Authoring;
+        if (!ReferenceEquals(current, this.playAuthoring))
+        {
+            this.StopObservingPlayScene();
+            this.playAuthoring = current;
+            if (current is not null)
+            {
+                current.Changed += this.OnSceneStructureChanged;
+            }
+        }
+
+        this.Play?.UpdateScene(this.scene?.AllNodes.Any(static node => node.Components.OfType<CameraComponent>().Any()) == true);
+    }
 
     private void DisposePlay()
     {
-        if (this.Play is not null)
-        {
-            this.commandService.NodesAdded -= this.OnSceneStructureChanged;
-            this.commandService.NodesRemoved -= this.OnSceneStructureChanged;
-            this.commandService.ComponentAdded -= this.OnSceneStructureChanged;
-            this.commandService.ComponentRemoved -= this.OnSceneStructureChanged;
-        }
-
+        this.StopObservingPlayScene();
         this.Play?.Dispose();
         this.Play = null;
     }
 
+    private void StopObservingPlayScene()
+    {
+        if (this.playAuthoring is { } observed)
+        {
+            observed.Changed -= this.OnSceneStructureChanged;
+        }
+
+        this.playAuthoring = null;
+    }
+
     // Adding or removing nodes or components can change what Play starts with.
-    private void OnSceneStructureChanged(object? sender, EventArgs args) => this.RefreshPlayScene();
+    private void OnSceneStructureChanged(object? sender, SceneChangedEventArgs args)
+    {
+        if (args.Changes.Any(static change => change is SceneChange.NodesAdded or SceneChange.NodesRemoved or SceneChange.ComponentAdded or SceneChange.ComponentRemoved))
+        {
+            this.RefreshPlayScene();
+        }
+    }
 }

@@ -4,7 +4,7 @@
 
 using System.Runtime.InteropServices;
 
-namespace Oxygen.Editor.World.Services;
+namespace Oxygen.Editor.Scenes.Engine;
 
 /// <summary>Captures authoring identity and delivery order before asynchronous sync work.</summary>
 /// <param name="DocumentLifetime">The owning open-document lifetime.</param>

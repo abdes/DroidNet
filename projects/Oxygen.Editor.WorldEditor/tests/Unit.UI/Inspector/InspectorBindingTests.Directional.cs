@@ -41,7 +41,7 @@ public sealed partial class InspectorBindingTests
         _ = model.ColorValue.Should().Be(authored);
         _ = SwatchColor(field).Should().Be(display);
         _ = light.Color.Should().Be(authored);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.IsDirty.Should().BeFalse();
 
         await PickDisplayColorAsync(swatch, Windows.UI.Color.FromArgb(255, 64, 128, 32)).ConfigureAwait(true);
@@ -49,8 +49,8 @@ public sealed partial class InspectorBindingTests
         _ = light.Color.X.Should().BeApproximately(authored.Y, 0.000001f);
         _ = light.Color.Y.Should().BeApproximately(authored.X, 0.000001f);
         _ = light.Color.Z.Should().BeApproximately(authored.Z, 0.000001f);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
-        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
+        await fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         _ = light.Color.Should().Be(authored);
         _ = model.ColorValue.Should().Be(authored);
@@ -96,12 +96,12 @@ public sealed partial class InspectorBindingTests
         red.CompletePendingTextEdit();
         await model.PendingEdits.ConfigureAwait(true);
         _ = Read().Should().Be(new Vector3(0.25f, original.Y, original.Z));
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
-        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
+        await fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         _ = Read().Should().Be(original);
         _ = red.NumberValue.Should().Be(original.X);
-        await fixture.Context.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
+        await fixture.Document.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         _ = Read().X.Should().Be(0.25f);
         _ = red.NumberValue.Should().Be(0.25f);
@@ -110,6 +110,6 @@ public sealed partial class InspectorBindingTests
         red.CancelEdit();
         await model.PendingEdits.ConfigureAwait(true);
         _ = Read().X.Should().Be(0.25f);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
     });
 }

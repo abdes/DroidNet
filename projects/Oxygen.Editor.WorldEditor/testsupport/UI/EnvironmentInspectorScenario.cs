@@ -116,7 +116,7 @@ internal sealed class EnvironmentInspectorScenario : IDisposable
         => _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
 
     internal void AssertCleanHistory()
-        => _ = this.Fixture.Context.History.UndoStack.Should().BeEmpty();
+        => _ = this.Fixture.Document.History.UndoStack.Should().BeEmpty();
 
     public void Dispose()
     {

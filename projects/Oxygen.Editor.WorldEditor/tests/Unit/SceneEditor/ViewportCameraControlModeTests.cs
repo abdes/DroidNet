@@ -279,7 +279,7 @@ public sealed partial class ViewportCameraControlModeTests
             .Setup(service => service.SetViewSceneCameraAsync(It.Is<RuntimeViewId>(id => id.Value == viewId.Value), MainCamera.NodeId))
             .ReturnsAsync(value: true);
         _ = engine.InSequence(sequence)
-            .Setup(service => service.SetViewSceneCameraAsync(It.Is<RuntimeViewId>(id => id.Value == viewId.Value), null))
+            .Setup(service => service.SetViewSceneCameraAsync(It.Is<RuntimeViewId>(id => id.Value == viewId.Value), cameraNodeId: null))
             .ReturnsAsync(value: true);
         _ = engine.InSequence(sequence)
             .Setup(service => service.SetViewCameraPresetAsync(It.Is<RuntimeViewId>(id => id.Value == viewId.Value), CameraViewPreset.Top))
@@ -316,7 +316,7 @@ public sealed partial class ViewportCameraControlModeTests
 
         sut.RefreshSceneCameras();
 
-        engine.Verify(service => service.SetViewSceneCameraAsync(It.IsAny<RuntimeViewId>(), null), Times.Once);
+        engine.Verify(service => service.SetViewSceneCameraAsync(It.IsAny<RuntimeViewId>(), cameraNodeId: null), Times.Once);
         _ = sut.SceneCamera.Should().BeNull();
         _ = sut.SceneCameraOptions.Select(option => option.Label).Should().Equal("Main");
     }

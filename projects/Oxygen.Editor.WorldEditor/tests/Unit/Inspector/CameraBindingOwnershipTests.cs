@@ -15,7 +15,7 @@ public sealed class CameraBindingOwnershipTests
     public async Task CameraBinding_RejectsRestoresAndDetachesWithoutParallelScalarState()
     {
         using var fixture = new SceneAuthoringFixture();
-        var model = new PerspectiveCameraViewModel(fixture.Commands, () => fixture.Context);
+        var model = new PerspectiveCameraViewModel(() => fixture.Authoring);
         model.UpdateValues([fixture.Node]);
         var near = model.NearPlane;
         var original = near.Value;
@@ -27,18 +27,18 @@ public sealed class CameraBindingOwnershipTests
         await model.PendingEdits.ConfigureAwait(false);
         _ = model.NearPlane.Should().BeSameAs(near);
         _ = model.NearPlaneDiagnostic.HasError.Should().BeFalse();
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         model.Dispose();
         near.Value = original * 3;
         await model.PendingEdits.ConfigureAwait(false);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
     }
 
     [TestMethod]
     public async Task CameraBinding_EditsPhysicalExposureRejectsNonPositiveAndUndoes()
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new PerspectiveCameraViewModel(fixture.Commands, () => fixture.Context);
+        using var model = new PerspectiveCameraViewModel(() => fixture.Authoring);
         model.UpdateValues([fixture.Node]);
         var originalAperture = fixture.Camera.ApertureF;
 
@@ -53,9 +53,9 @@ public sealed class CameraBindingOwnershipTests
         _ = fixture.Camera.Iso.Should().Be(100f);
         _ = model.IsoDiagnostic.HasError.Should().BeTrue();
 
-        while (fixture.Context.History.UndoStack.Count > 0)
+        while (fixture.Document.History.UndoStack.Count > 0)
         {
-            await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(false);
+            await fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(false);
         }
 
         _ = fixture.Camera.ApertureF.Should().Be(originalAperture);

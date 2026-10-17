@@ -17,9 +17,10 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Settings;
 using Oxygen.Editor.World.Problems;
 using Oxygen.Editor.World.Scripting;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -34,8 +35,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <summary>The native asset type of scripts.</summary>
     private const byte ScriptAssetType = 4;
 
-    private readonly ISceneDocumentCommandService? commands;
-    private readonly Func<SceneDocumentCommandContext?>? contextProvider;
+    private readonly Func<SceneAuthoring?>? authoringProvider;
     private readonly IAssetFeed? assetProvider;
     private readonly IScriptAnalysisService? analysis;
     private readonly ICodeEditorService? codeEditor;
@@ -53,8 +53,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="ScriptingViewModel"/> class.</summary>
-    /// <param name="commands">The scene command service.</param>
-    /// <param name="contextProvider">The current document command context.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     /// <param name="assetProvider">The shared asset catalog, for script and asset pickers.</param>
     /// <param name="analysis">The script analysis, for declared parameters and problems.</param>
     /// <param name="codeEditor">The code editor, for Edit.</param>
@@ -63,8 +62,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <param name="scheduler">The UI scheduler that catalog and analysis updates are observed on.</param>
     /// <param name="declarationProvider">The declarations of library scripts, which have no source to analyze.</param>
     public ScriptingViewModel(
-        ISceneDocumentCommandService? commands = null,
-        Func<SceneDocumentCommandContext?>? contextProvider = null,
+        Func<SceneAuthoring?>? authoringProvider = null,
         IAssetFeed? assetProvider = null,
         IScriptAnalysisService? analysis = null,
         ICodeEditorService? codeEditor = null,
@@ -73,8 +71,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         IScheduler? scheduler = null,
         IScriptDeclarationProvider? declarationProvider = null)
     {
-        this.commands = commands;
-        this.contextProvider = contextProvider;
+        this.authoringProvider = authoringProvider;
         this.assetProvider = assetProvider;
         this.analysis = analysis;
         this.codeEditor = codeEditor;
@@ -120,7 +117,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
 
     /// <summary>Gets a value indicating whether slots can be changed.</summary>
     public bool CanEdit => !this.disposed && !this.isBusy && this.IsInputEnabled && this.scripting is not null
-        && this.commands is not null && this.contextProvider?.Invoke() is { } context && ReferenceEquals(context.Scene, this.node?.Scene);
+        && this.authoringProvider?.Invoke() is { } authoring && ReferenceEquals(authoring.Scene, this.node?.Scene);
 
     /// <summary>Gets completion of the change in flight.</summary>
     internal Task Pending => this.pending;
@@ -156,7 +153,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     internal async Task EditAsync(Func<ImmutableArray<ScriptSlot>, ImmutableArray<ScriptSlot>> change)
     {
         if (!this.CanEdit || this.scripting is not { } component || this.node is not { } owner
-            || this.commands is not { } service || this.contextProvider?.Invoke() is not { } context)
+            || this.authoringProvider?.Invoke() is not { } authoring)
         {
             this.Rebuild();
             return;
@@ -172,10 +169,10 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         this.SetBusy(busy: true);
         try
         {
-            var edit = service.EditScriptSlotsAsync(context, owner.Id, slots);
+            var edit = authoring.ExecuteAsync(new SetScriptSlots(owner.Id, slots));
             this.pending = edit;
             var result = await edit.ConfigureAwait(true);
-            this.ErrorMessage = result.Succeeded ? string.Empty : result.ValidationMessage ?? "The scripts could not be changed.";
+            this.ErrorMessage = result.Succeeded ? string.Empty : result.Diagnostics.FirstOrDefault(static diagnostic => diagnostic.IsError)?.Message ?? "The scripts could not be changed.";
         }
         finally
         {

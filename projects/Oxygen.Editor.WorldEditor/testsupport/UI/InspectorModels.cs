@@ -29,28 +29,28 @@ internal static class InspectorModels
         switch (kind)
         {
             case "Transform":
-                var transform = new TransformViewModel(commandService: fixture.Commands, commandContextProvider: () => fixture.Context)
+                var transform = new TransformViewModel(authoringProvider: () => fixture.Authoring)
                 {
                     IsExpanded = true,
                 };
                 transform.UpdateValues([fixture.Node]);
                 return transform;
             case "Camera":
-                var camera = new PerspectiveCameraViewModel(fixture.Commands, () => fixture.Context)
+                var camera = new PerspectiveCameraViewModel(() => fixture.Authoring)
                 {
                     IsExpanded = true,
                 };
                 camera.UpdateValues([fixture.Node]);
                 return camera;
             case "Light":
-                var light = new DirectionalLightViewModel(fixture.Commands, () => fixture.Context)
+                var light = new DirectionalLightViewModel(() => fixture.Authoring)
                 {
                     IsExpanded = true,
                 };
                 light.UpdateValues([fixture.Node]);
                 return light;
             case "Environment":
-                var environment = new EnvironmentViewModel(fixture.Commands, () => fixture.Context)
+                var environment = new EnvironmentViewModel(() => fixture.Authoring)
                 {
                     IsExpanded = true,
                 };
@@ -58,21 +58,21 @@ internal static class InspectorModels
                 return environment;
             case "OrthographicCamera":
                 ReplaceComponent<Oxygen.Editor.World.Components.CameraComponent>(fixture, new OrthographicCamera { Name = "Orthographic Camera", AspectMode = Oxygen.Managed.Core.CameraAspectMode.Auto });
-                var orthographic = new OrthographicCameraViewModel(fixture.Commands, () => fixture.Context) { IsExpanded = true };
+                var orthographic = new OrthographicCameraViewModel(() => fixture.Authoring) { IsExpanded = true };
                 orthographic.UpdateValues([fixture.Node]);
                 return orthographic;
             case "PointLight":
                 ReplaceComponent<LightComponent>(fixture, new PointLightComponent { Name = "Point Light", Range = 10f });
-                var point = new PointLightViewModel(fixture.Commands, () => fixture.Context) { IsExpanded = true };
+                var point = new PointLightViewModel(() => fixture.Authoring) { IsExpanded = true };
                 point.UpdateValues([fixture.Node]);
                 return point;
             case "SpotLight":
                 ReplaceComponent<LightComponent>(fixture, new SpotLightComponent { Name = "Spot Light", Range = 10f, InnerConeAngleRadians = 0.3f, OuterConeAngleRadians = 0.5f });
-                var spot = new SpotLightViewModel(fixture.Commands, () => fixture.Context) { IsExpanded = true };
+                var spot = new SpotLightViewModel(() => fixture.Authoring) { IsExpanded = true };
                 spot.UpdateValues([fixture.Node]);
                 return spot;
             case "Rendering":
-                var rendering = new NodeRenderingViewModel(fixture.Commands, () => fixture.Context) { IsExpanded = true };
+                var rendering = new NodeRenderingViewModel(() => fixture.Authoring) { IsExpanded = true };
                 rendering.UpdateValues([fixture.Node]);
                 return rendering;
             case "Material":

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="MSTest.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+
+        <RootNamespace>Oxygen.Editor.Scenes.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\src\Oxygen.Editor.Scenes.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Moq" />
+    </ItemGroup>
+</Project>

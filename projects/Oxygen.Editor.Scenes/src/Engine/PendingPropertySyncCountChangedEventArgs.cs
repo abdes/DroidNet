@@ -4,7 +4,7 @@
 
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Services;
+namespace Oxygen.Editor.Scenes.Engine;
 
 /// <summary>
 ///     Provides the pending property-sync count for a scene after the buffered live-sync queue changes.

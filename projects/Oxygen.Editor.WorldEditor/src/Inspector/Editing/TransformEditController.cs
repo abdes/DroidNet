@@ -2,13 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Numerics;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Editing;
@@ -16,30 +17,33 @@ namespace Oxygen.Editor.World.Inspector.Editing;
 /// <summary>
 /// Owns captured-target Transform gestures, relative input, serialized requests and pending terminal work.
 /// </summary>
+/// <remarks>
+/// Each control gesture is one scene gesture over the axis it edits: its values preview, and ending it commits or
+/// cancels once. A value outside a gesture is one edit.
+/// </remarks>
 /// <param name="loggerFactory">
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
-/// <param name="commandService">The existing transform command service.</param>
-/// <param name="commandContextProvider">The current document context provider.</param>
+/// <param name="authoringProvider">The authoring of the scene being inspected.</param>
 /// <param name="inputEnabled">The owning model's input/lifetime gate.</param>
 /// <param name="refresh">The owning model's value refresh operation.</param>
 /// <param name="diagnostics">The borrowed canonical Transform feedback.</param>
 internal sealed partial class TransformEditController(
     ILoggerFactory? loggerFactory,
-    ISceneDocumentCommandService? commandService,
-    Func<SceneDocumentCommandContext?>? commandContextProvider,
+    Func<SceneAuthoring?> authoringProvider,
     Func<bool> inputEnabled,
     Action<ICollection<SceneNode>> refresh,
     InspectorFieldDiagnostics diagnostics) : IDisposable
 {
+    private const string Label = "Edit Transform";
     private static readonly TimeSpan MouseWheelCommitDelay = TimeSpan.FromMilliseconds(250);
+    private static readonly SceneEditResult Nothing = new(SceneEditOutcome.Applied, []);
 
     private readonly ILogger logger = loggerFactory?.CreateLogger<TransformEditController>() ?? NullLoggerFactory.Instance.CreateLogger<TransformEditController>();
     private readonly InspectorFieldDiagnostics diagnostics = diagnostics;
     private readonly HashSet<string> supersededFields = [with(StringComparer.Ordinal)];
 
-    private readonly SemaphoreSlim editGate = new(initialCount: 1, maxCount: 1);
     private readonly Dictionary<string, TransformEditSession> activeSessions = [with(StringComparer.Ordinal)];
     private readonly Dictionary<string, NumericInputExpression> pendingRelativeEdits = [with(StringComparer.Ordinal)];
     private readonly Dictionary<string, CancellationTokenSource> wheelIdleCommits = [with(StringComparer.Ordinal)];
@@ -52,8 +56,9 @@ internal sealed partial class TransformEditController(
     // Guard against re-entrant callbacks while refreshing values after an authoring request.
     private bool isApplyingEditorChanges;
 
+    // Requests reach the scene in the order they were made.
+    private Task<SceneEditResult> lastRequest = Task.FromResult(Nothing);
     private int inFlightEdits;
-    private int editGateDisposed;
     private bool isDisposed;
 
     /// <summary>
@@ -83,56 +88,13 @@ internal sealed partial class TransformEditController(
         this.wheelIdleCommits.Clear();
         this.pendingRelativeEdits.Clear();
 
-        foreach (var sessionEntry in this.activeSessions.ToList())
+        foreach (var field in this.activeSessions.Keys.ToArray())
         {
-            sessionEntry.Value.Token.Cancel();
-            _ = this.ApplyTransformEditAsync(
-                sessionEntry.Key,
-                sessionEntry.Value.LastEdit ?? EmptyEdit(),
-                sessionEntry.Value.Token,
-                sessionEntry.Value.Nodes,
-                sessionEntry.Value.Context);
+            _ = this.CompleteActiveSessionAsync(field, NumberBoxEditCompletionKind.Cancel);
         }
 
-        this.activeSessions.Clear();
-        this.TryDisposeEditGate();
         GC.SuppressFinalize(this);
     }
-
-    /// <summary>Creates an axis-specific edit without supplying untouched components.</summary>
-    /// <param name="positionX">Optional X position.</param>
-    /// <param name="positionY">Optional Y position.</param>
-    /// <param name="positionZ">Optional Z position.</param>
-    /// <param name="rotationX">Optional X rotation in degrees.</param>
-    /// <param name="rotationY">Optional Y rotation in degrees.</param>
-    /// <param name="rotationZ">Optional Z rotation in degrees.</param>
-    /// <param name="scaleX">Optional X scale.</param>
-    /// <param name="scaleY">Optional Y scale.</param>
-    /// <param name="scaleZ">Optional Z scale.</param>
-    /// <returns>The partial authored edit.</returns>
-    internal static TransformEdit NewEdit(
-        double? positionX = null,
-        double? positionY = null,
-        double? positionZ = null,
-        double? rotationX = null,
-        double? rotationY = null,
-        double? rotationZ = null,
-        double? scaleX = null,
-        double? scaleY = null,
-        double? scaleZ = null)
-        => new(
-            OptionalEditValues.Unspecified<Vector3>(),
-            OptionalEditValues.Unspecified<Vector3>(),
-            OptionalEditValues.Unspecified<Vector3>(),
-            PositionX: positionX.HasValue ? OptionalEditValues.Supplied((float)positionX.Value) : OptionalEditValues.Unspecified<float>(),
-            PositionY: positionY.HasValue ? OptionalEditValues.Supplied((float)positionY.Value) : OptionalEditValues.Unspecified<float>(),
-            PositionZ: positionZ.HasValue ? OptionalEditValues.Supplied((float)positionZ.Value) : OptionalEditValues.Unspecified<float>(),
-            RotationXDegrees: rotationX.HasValue ? OptionalEditValues.Supplied((float)rotationX.Value) : OptionalEditValues.Unspecified<float>(),
-            RotationYDegrees: rotationY.HasValue ? OptionalEditValues.Supplied((float)rotationY.Value) : OptionalEditValues.Unspecified<float>(),
-            RotationZDegrees: rotationZ.HasValue ? OptionalEditValues.Supplied((float)rotationZ.Value) : OptionalEditValues.Unspecified<float>(),
-            ScaleX: scaleX.HasValue ? OptionalEditValues.Supplied((float)scaleX.Value) : OptionalEditValues.Unspecified<float>(),
-            ScaleY: scaleY.HasValue ? OptionalEditValues.Supplied((float)scaleY.Value) : OptionalEditValues.Unspecified<float>(),
-            ScaleZ: scaleZ.HasValue ? OptionalEditValues.Supplied((float)scaleZ.Value) : OptionalEditValues.Unspecified<float>());
 
     /// <summary>Rebinds selection, cancelling captured old-target gestures before accepting later input.</summary>
     /// <param name="items">The new selection.</param>
@@ -169,7 +131,7 @@ internal sealed partial class TransformEditController(
         var property = ToPropertyName(group, args.Component);
         _ = this.pendingRelativeEdits.Remove(property);
         _ = this.supersededFields.Remove(property);
-        if (this.activeSessions.ContainsKey(property))
+        if (this.activeSessions.ContainsKey(property) || authoringProvider() is not { } authoring)
         {
             return;
         }
@@ -179,19 +141,11 @@ internal sealed partial class TransformEditController(
         var originalValues = nodes.ToDictionary(
             static node => node.Id,
             node => descriptor.Read(node.Components.OfType<TransformComponent>().Single()));
-        var context = commandContextProvider?.Invoke();
-        if (context is null || commandService is null)
-        {
-            return;
-        }
-
         this.activeSessions[property] = new TransformEditSession(
-            EditSessionToken.Begin(nodes.ConvertAll(static node => node.Id), property),
+            authoring.BeginGestureAsync([.. nodes.Select(static node => node.Id)], [descriptor.Id], Label),
             nodes,
             originalValues,
-            context,
-            args.InteractionKind,
-            LastEdit: null);
+            args.InteractionKind);
     }
 
     /// <summary>
@@ -269,27 +223,25 @@ internal sealed partial class TransformEditController(
             }
         }
 
-        var property = TransformDescriptor(field).TypedId.Id;
+        var property = TransformDescriptor(field).Id;
         var ticket = this.diagnostics.Begin([property]);
-        var result = args.IsValid ? SceneCommandResult.Success : new SceneCommandResult(Succeeded: false)
-        {
-            ValidationCode = "TRANSFORM_INVALID",
-            ValidationMessage = group switch
+        var result = args.IsValid ? Nothing : new SceneEditResult(
+            SceneEditOutcome.Invalid,
+            [SceneDiagnostic.Error(SceneEditCodes.PropertyOutOfRange, group switch
             {
                 TransformEditFieldGroup.Position => "Position must be finite.",
                 TransformEditFieldGroup.Rotation => "Rotation must be finite and between -180 and 180 degrees.",
                 _ => "Scale must be finite and have magnitude at least 0.001.",
-            },
-        };
+            }, property: property)]);
         this.diagnostics.Complete(ticket, result);
     }
 
-    /// <summary>Submits an absolute value or preview using the existing target/session policy.</summary>
+    /// <summary>Submits an absolute value: a preview within the axis's gesture, otherwise one edit.</summary>
     /// <param name="property">The canonical axis key.</param>
-    /// <param name="edit">The partial axis edit.</param>
-    internal void ApplyTransformEdit(string property, TransformEdit edit)
+    /// <param name="value">The axis value.</param>
+    internal void ApplyTransformEdit(string property, double value)
     {
-        if (this.isDisposed || !inputEnabled() || this.isApplyingEditorChanges || this.selectedItems is null || commandService is null || commandContextProvider is null)
+        if (this.isDisposed || !inputEnabled() || this.isApplyingEditorChanges || this.selectedItems is null || authoringProvider() is not { } authoring)
         {
             return;
         }
@@ -305,17 +257,19 @@ internal sealed partial class TransformEditController(
             return;
         }
 
-        this.LogApplyingChange(property, ExtractValue(edit), this.selectedItems.Count);
-        if (this.activeSessions.TryGetValue(property, out var existing))
+        this.LogApplyingChange(property, (float)value, this.selectedItems.Count);
+        var descriptor = TransformDescriptor(property);
+        if (this.activeSessions.TryGetValue(property, out var session))
         {
-            this.activeSessions[property] = existing with { LastEdit = edit };
-            _ = this.ApplyTransformEditAsync(property, edit, existing.Token, existing.Nodes, existing.Context);
+            var edits = session.Nodes.ToDictionary(static node => node.Id, _ => PropertyEdit.SingleEdit(descriptor.TypedId, (float)value));
+            _ = this.RequestAsync(property, session.Nodes, validates: true, async () =>
+                await (await session.Gesture.ConfigureAwait(true)).PreviewAsync(new SetProperties(edits, Label)).ConfigureAwait(true));
             return;
         }
 
         var nodes = this.selectedItems.ToList();
-        var context = commandContextProvider.Invoke();
-        _ = this.ApplyTransformEditAsync(property, edit, EditSessionToken.OneShot, nodes, context);
+        var oneShot = nodes.ToDictionary(static node => node.Id, _ => PropertyEdit.SingleEdit(descriptor.TypedId, (float)value));
+        _ = this.RequestAsync(property, nodes, validates: true, () => authoring.ExecuteAsync(new SetProperties(oneShot, Label)));
     }
 
     /// <summary>Settles hidden drafts, cancelling pointer/wheel work and committing text by existing policy.</summary>
@@ -333,21 +287,6 @@ internal sealed partial class TransformEditController(
             }
         }
     }
-
-    private static TransformEdit EmptyEdit()
-        => new(OptionalEditValues.Unspecified<Vector3>(), OptionalEditValues.Unspecified<Vector3>(), OptionalEditValues.Unspecified<Vector3>());
-
-    private static float ExtractValue(TransformEdit edit)
-        => edit.PositionX.HasValue ? edit.PositionX.Value! :
-           edit.PositionY.HasValue ? edit.PositionY.Value! :
-           edit.PositionZ.HasValue ? edit.PositionZ.Value! :
-           edit.RotationXDegrees.HasValue ? edit.RotationXDegrees.Value! :
-           edit.RotationYDegrees.HasValue ? edit.RotationYDegrees.Value! :
-           edit.RotationZDegrees.HasValue ? edit.RotationZDegrees.Value! :
-           edit.ScaleX.HasValue ? edit.ScaleX.Value! :
-           edit.ScaleY.HasValue ? edit.ScaleY.Value! :
-           edit.ScaleZ.HasValue ? edit.ScaleZ.Value! :
-           0f;
 
     private static string ToPropertyName(TransformEditFieldGroup group, Component component)
         => group switch
@@ -375,15 +314,15 @@ internal sealed partial class TransformEditController(
     private static PropertyDescriptor<float> TransformDescriptor(string property)
         => property switch
         {
-            "PositionX" => SceneDocumentCommandService.Transform.PositionXDescriptor,
-            "PositionY" => SceneDocumentCommandService.Transform.PositionYDescriptor,
-            "PositionZ" => SceneDocumentCommandService.Transform.PositionZDescriptor,
-            "RotationX" => SceneDocumentCommandService.Transform.RotationXDescriptor,
-            "RotationY" => SceneDocumentCommandService.Transform.RotationYDescriptor,
-            "RotationZ" => SceneDocumentCommandService.Transform.RotationZDescriptor,
-            "ScaleX" => SceneDocumentCommandService.Transform.ScaleXDescriptor,
-            "ScaleY" => SceneDocumentCommandService.Transform.ScaleYDescriptor,
-            "ScaleZ" => SceneDocumentCommandService.Transform.ScaleZDescriptor,
+            "PositionX" => SceneProperties.Transform.PositionXDescriptor,
+            "PositionY" => SceneProperties.Transform.PositionYDescriptor,
+            "PositionZ" => SceneProperties.Transform.PositionZDescriptor,
+            "RotationX" => SceneProperties.Transform.RotationXDescriptor,
+            "RotationY" => SceneProperties.Transform.RotationYDescriptor,
+            "RotationZ" => SceneProperties.Transform.RotationZDescriptor,
+            "ScaleX" => SceneProperties.Transform.ScaleXDescriptor,
+            "ScaleY" => SceneProperties.Transform.ScaleYDescriptor,
+            "ScaleZ" => SceneProperties.Transform.ScaleZDescriptor,
             _ => throw new ArgumentOutOfRangeException(nameof(property)),
         };
 
@@ -396,16 +335,22 @@ internal sealed partial class TransformEditController(
             return;
         }
 
-        if (completionKind == NumberBoxEditCompletionKind.Cancel)
-        {
-            session.Token.Cancel();
-            await this.ApplyTransformEditAsync(property, session.LastEdit ?? EmptyEdit(), session.Token, session.Nodes, session.Context).ConfigureAwait(true);
-            return;
-        }
-
-        session.Token.Commit();
-        await this.ApplyTransformEditAsync(property, session.LastEdit ?? EmptyEdit(), session.Token, session.Nodes, session.Context).ConfigureAwait(true);
+        await this.EndAsync(property, session, completionKind).ConfigureAwait(true);
     }
+
+    // A terminal request closes the gesture; it does not validate a new field value.
+    private Task EndAsync(string property, TransformEditSession session, NumberBoxEditCompletionKind completionKind)
+        => this.RequestAsync(property, session.Nodes, validates: false, async () =>
+        {
+            var gesture = await session.Gesture.ConfigureAwait(true);
+            if (completionKind == NumberBoxEditCompletionKind.Cancel)
+            {
+                await gesture.CancelAsync().ConfigureAwait(true);
+                return Nothing;
+            }
+
+            return await gesture.CommitAsync().ConfigureAwait(true);
+        });
 
     private void ScheduleMouseWheelCommit(string property)
     {
@@ -455,40 +400,24 @@ internal sealed partial class TransformEditController(
         cts.Dispose();
     }
 
-    private async Task ApplyTransformEditAsync(
-        string property,
-        TransformEdit edit,
-        EditSessionToken session,
-        IReadOnlyList<SceneNode> nodes,
-        SceneDocumentCommandContext? context,
-        IReadOnlyDictionary<NodeId, PropertyEdit>? targetEdits = null)
+    // Runs a request after the previous one, then refreshes the fields and reports the result.
+    private async Task RequestAsync(string property, IReadOnlyList<SceneNode> nodes, bool validates, Func<Task<SceneEditResult>> request)
     {
-        var requestSession = session.Capture();
-        var diagnostic = this.diagnostics.Begin([TransformDescriptor(property).TypedId.Id]);
+        var diagnostic = this.diagnostics.Begin([TransformDescriptor(property).Id]);
         _ = Interlocked.Increment(ref this.inFlightEdits);
-        var entered = false;
+        var previous = this.lastRequest;
+        var current = RunAfterAsync(previous, request);
+        this.lastRequest = current;
         try
         {
-            await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
-            entered = true;
-
-            if (nodes.Count == 0 || context is null || commandService is null)
-            {
-                return;
-            }
-
-            var result = targetEdits is null
-                ? await commandService.EditTransformAsync(context, [.. nodes.Select(static node => node.Id)], edit, requestSession).ConfigureAwait(true)
-                : await commandService.EditPropertiesForTargetsAsync(context, targetEdits, "Edit Transform", requestSession).ConfigureAwait(true);
+            var result = await current.ConfigureAwait(true);
             if (!this.isDisposed && this.SelectionMatches(nodes))
             {
                 this.isApplyingEditorChanges = true;
                 try
                 {
                     refresh([.. nodes]);
-
-                    // A terminal request closes the gesture; it does not validate a new field value.
-                    if (requestSession.IsOneShot || requestSession.State == EditSessionState.Open)
+                    if (validates)
                     {
                         this.diagnostics.Complete(diagnostic, result);
                     }
@@ -499,26 +428,20 @@ internal sealed partial class TransformEditController(
                 }
             }
         }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (InvalidOperationException ex)
-        {
-            this.LogApplyFailed(property, ex);
-        }
-        catch (ArgumentException ex)
+        catch (SceneEditRefusedException ex)
         {
             this.LogApplyFailed(property, ex);
         }
         finally
         {
-            if (entered)
-            {
-                _ = this.editGate.Release();
-            }
-
             _ = Interlocked.Decrement(ref this.inFlightEdits);
-            this.TryDisposeEditGate();
+        }
+
+        static async Task<SceneEditResult> RunAfterAsync(Task<SceneEditResult> previous, Func<Task<SceneEditResult>> request)
+        {
+            // A failed earlier request does not stop this one; SuppressThrowing needs the non-generic task.
+            await ((Task)previous).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            return await request().ConfigureAwait(true);
         }
     }
 
@@ -533,6 +456,7 @@ internal sealed partial class TransformEditController(
         return this.selectedItems.All(node => expectedIds.Contains(node.Id));
     }
 
+    // A relative entry ("+=5") applies to each target's own starting value, then ends the gesture.
     private async Task CompleteRelativeEditSessionAsync(string property, NumericInputExpression expression, TransformEditSession session)
     {
         this.CancelPendingMouseWheelCommit(property);
@@ -544,13 +468,10 @@ internal sealed partial class TransformEditController(
         var descriptor = TransformDescriptor(property);
         var edits = session.Nodes.ToDictionary(
             static node => node.Id,
-            node => PropertyEdit.SingleEdit(
-                descriptor.TypedId,
-                (float)expression.Apply(session.OriginalValues[node.Id])));
-        var empty = EmptyEdit();
-        await this.ApplyTransformEditAsync(property, empty, session.Token, session.Nodes, session.Context, edits).ConfigureAwait(true);
-        session.Token.Commit();
-        await this.ApplyTransformEditAsync(property, empty, session.Token, session.Nodes, session.Context).ConfigureAwait(true);
+            node => PropertyEdit.SingleEdit(descriptor.TypedId, (float)expression.Apply(session.OriginalValues[node.Id])));
+        await this.RequestAsync(property, session.Nodes, validates: true, async () =>
+            await (await session.Gesture.ConfigureAwait(true)).PreviewAsync(new SetProperties(edits, Label)).ConfigureAwait(true)).ConfigureAwait(true);
+        await this.EndAsync(property, session, NumberBoxEditCompletionKind.Commit).ConfigureAwait(true);
     }
 
     private async Task WaitForPendingEditsAsync()
@@ -561,24 +482,9 @@ internal sealed partial class TransformEditController(
         }
     }
 
-    private void TryDisposeEditGate()
-    {
-        if (!this.isDisposed || Volatile.Read(ref this.inFlightEdits) != 0)
-        {
-            return;
-        }
-
-        if (Interlocked.Exchange(ref this.editGateDisposed, 1) == 0)
-        {
-            this.editGate.Dispose();
-        }
-    }
-
     private sealed record TransformEditSession(
-        EditSessionToken Token,
+        Task<SceneGesture> Gesture,
         IReadOnlyList<SceneNode> Nodes,
         IReadOnlyDictionary<NodeId, float> OriginalValues,
-        SceneDocumentCommandContext Context,
-        NumberBoxEditInteractionKind Interaction,
-        TransformEdit? LastEdit);
+        NumberBoxEditInteractionKind Interaction);
 }

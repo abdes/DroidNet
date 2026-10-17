@@ -78,9 +78,12 @@ public sealed class PlayerSettingsSyncTests
     [TestMethod]
     public async Task ARefusedSettingIsReportedAndTheOthersStillApply()
     {
-        this.reply = (method, _) => method == PlayerSettingsSync.WindowSizeMethod
-            ? Task.FromException(new PlayerCommandException(-32000, "the window is full screen", data: null))
-            : Task.CompletedTask;
+        this.reply = (method, _) => string.Equals(
+            method,
+            PlayerSettingsSync.WindowSizeMethod,
+            StringComparison.Ordinal)
+                ? Task.FromException(new PlayerCommandException(-32000, "the window is full screen", data: null))
+                : Task.CompletedTask;
         using var sut = this.CreateSync();
 
         sut.SendAll();

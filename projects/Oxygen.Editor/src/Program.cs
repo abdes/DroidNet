@@ -280,7 +280,7 @@ public static partial class Program
             Reuse.Singleton);
 
         // Scene commands obey the same hide / lock state through the Scenes interface.
-        container.RegisterMapping<Oxygen.Editor.Scenes.Interaction.ISceneNodeInteraction, WorkspaceInteractionService>();
+        container.RegisterMapping<Oxygen.Editor.Scenes.Authoring.ISceneNodeInteraction, WorkspaceInteractionService>();
 
         // Scene viewport layout and pane cameras: user-local workspace state, serialized writes.
         container.RegisterDelegate(

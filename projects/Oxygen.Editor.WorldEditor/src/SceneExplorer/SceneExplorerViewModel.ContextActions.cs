@@ -9,12 +9,16 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
 using DroidNet.Controls.Menus;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.EditorView;
+using Oxygen.Editor.Scenes.Edits.Hierarchy;
+using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Nodes;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;
@@ -26,9 +30,7 @@ public partial class SceneExplorerViewModel
     private readonly Dictionary<MenuItemData, SceneExplorerCommandKind> openMenuActions = [];
     private CapturedExplorerContext? openMenuContext;
     private IMenuSource? openMenuSource;
-    private SceneExplorerClipboard? explorerClipboard;
-    private IReadOnlyList<SceneNodeData> clipboardLocalSnapshots = [];
-    private bool clipboardWorldPoseAvailable = true;
+    private SceneClipboard? explorerClipboard;
     private int clipboardGeneration;
 
     /// <summary>Raised when the open menu's immutable targets are no longer current.</summary>
@@ -76,7 +78,7 @@ public partial class SceneExplorerViewModel
     /// <returns>Whether the invocation still belongs to the loaded document.</returns>
     public async Task<bool> PrepareContextMenuAsync(ITreeItem? anchor)
     {
-        if (this.CreateCommandContext() is not { } document || this.isDisposed)
+        if (this.CurrentAuthoring() is not { } authoring)
         {
             return false;
         }
@@ -86,10 +88,8 @@ public partial class SceneExplorerViewModel
             return true;
         }
 
-        await this.commandService.CompleteEditSessionsAsync(document.Scene, commit: true).ConfigureAwait(true);
-        if (!ReferenceEquals(this.CreateCommandContext()?.Scene, document.Scene)
-            || this.CreateCommandContext()?.DocumentId != document.DocumentId
-            || !this.IsShown(anchor))
+        await authoring.FinishEditsAsync().ConfigureAwait(true);
+        if (!ReferenceEquals(this.CurrentAuthoring(), authoring) || !this.IsShown(anchor))
         {
             return false;
         }
@@ -191,15 +191,11 @@ public partial class SceneExplorerViewModel
 
     private Task StageExplorerClipboardAsync(IReadOnlyList<ITreeItem> items, bool cut)
     {
-        if (this.CreateCommandContext() is not { } context)
-        {
-            return Task.CompletedTask;
-        }
-
-        var captured = this.commandService.CaptureExplorerClipboard(context,
-            items.OfType<SceneNodeAdapter>().Select(static row => row.AttachedObject.Id).ToArray(),
-            items.OfType<FolderAdapter>().Select(static row => row.Id).ToArray());
-        if (!captured.Succeeded || captured.Value is not { } payload)
+        if (this.CurrentAuthoring() is not { } authoring
+            || SceneClipboard.Capture(
+                authoring.Scene,
+                [.. items.OfType<SceneNodeAdapter>().Select(static row => row.AttachedObject.Id)],
+                [.. items.OfType<FolderAdapter>().Select(static row => row.Id)]) is not { } payload)
         {
             return Task.CompletedTask;
         }
@@ -207,8 +203,6 @@ public partial class SceneExplorerViewModel
         this.explorerClipboard = payload;
         this.clipboardNodeIds.Clear();
         this.clipboardNodeIds.AddRange(payload.Nodes.Select(static data => data.Id));
-        this.clipboardSnapshots.Clear();
-        this.clipboardLocalSnapshots = [];
         this.clipboardIsCut = cut;
         this.StampClipboardOrigin();
         this.ClearCutMarks();
@@ -229,13 +223,12 @@ public partial class SceneExplorerViewModel
 
     private CapturedExplorerContext? CaptureExplorerContext(ITreeItem? anchor, bool background)
     {
-        if (this.isDisposed || this.CreateCommandContext() is not { } document
-            || SceneAuthoringGate.IsInstalling(document.Scene) || SceneAuthoringGate.IsRetired(document.Scene))
+        if (this.CurrentAuthoring() is not { } authoring)
         {
             return null;
         }
 
-        var selection = this.selectionService.GetContext(document.DocumentId);
+        var selection = this.selectionService.GetContext(authoring.Document);
         var selected = this.GetSelectedItems().ToArray();
 
         // Authoritative identities can include collapsed/unrealized rows. Never silently shrink that batch.
@@ -265,7 +258,7 @@ public partial class SceneExplorerViewModel
         var destination = background || anchor is SceneAdapter || targets.Length == 0
             ? this.Scene
             : targets.Length == 1 ? targets[0] : this.ResolveSharedPasteTarget(targets);
-        return new(document, this.projectManager.CurrentProject, selection, Array.AsReadOnly(selected),
+        return new(authoring, this.projectManager.CurrentProject, selection, Array.AsReadOnly(selected),
             Array.AsReadOnly(targets), anchor, destination, background,
             selected.Select(static row => (Row: row, Parent: row.Parent,
                 SceneParent: (row as SceneNodeAdapter)?.AttachedObject.Parent)).ToArray(), this.projectContexts?.ActiveProject);
@@ -284,16 +277,12 @@ public partial class SceneExplorerViewModel
 
     private bool IsContextCurrent(CapturedExplorerContext context)
     {
-        var current = this.CreateCommandContext();
         return !this.isDisposed
             && ReferenceEquals(this.projectManager.CurrentProject, context.Project)
             && ReferenceEquals(this.projectContexts?.ActiveProject, context.ProjectActivation)
-            && ReferenceEquals(current?.Scene, context.Document.Scene)
-            && current?.DocumentId == context.Document.DocumentId
-            && !SceneAuthoringGate.IsInstalling(context.Document.Scene)
-            && !SceneAuthoringGate.IsRetired(context.Document.Scene)
-            && ReferenceEquals(this.sceneEngineSync.GetDocumentScene(context.Document.DocumentId), context.Document.Scene)
-            && SameSelection(this.selectionService.GetContext(context.Document.DocumentId), context.Selection)
+            && ReferenceEquals(this.CurrentAuthoring(), context.Authoring)
+            && ReferenceEquals(this.sceneEngineSync.GetDocumentScene(context.Authoring.Document), context.Authoring.Scene)
+            && SameSelection(this.selectionService.GetContext(context.Authoring.Document), context.Selection)
             && context.Selection.SelectedNodeIds.All(id => this.projection.GetNode(id) is not null)
             && context.Selection.SelectedFolderIds.All(id => this.projection.GetFolder(id) is not null)
             && context.SelectedRows.All(this.IsCurrentContextRow)
@@ -526,7 +515,7 @@ public partial class SceneExplorerViewModel
                 return "The selection has no unambiguous paste destination.";
             }
 
-            if ((this.clipboardNodeIds.Count == 0 && this.explorerClipboard is null) || !this.ClipboardLifetimeIsCurrent())
+            if (this.explorerClipboard is null || !this.ClipboardLifetimeIsCurrent())
             {
                 return "The clipboard has no payload for this scene.";
             }
@@ -536,82 +525,15 @@ public partial class SceneExplorerViewModel
                 return $"Locked by {locked.Label}.";
             }
 
-            if (this.explorerClipboard is { } payload)
+            if (this.explorerClipboard is not { } payload)
             {
-                var (parentId, folderId, _) = this.ResolveCapturedPasteDestination(context, kind == SceneExplorerCommandKind.PasteAsChild);
-                return this.commandService.ValidateExplorerPaste(context.Document, payload, this.clipboardIsCut,
-                    parentId, folderId, preserveWorld: kind == SceneExplorerCommandKind.PasteAsChild);
+                return "The clipboard has no payload for this scene.";
             }
 
-            if (kind == SceneExplorerCommandKind.PasteAsChild && !this.clipboardWorldPoseAvailable)
+            var asChild = kind == SceneExplorerCommandKind.PasteAsChild;
+            if (!payload.TryPaste(context.Authoring.Scene, this.PasteTargetOf(context, asChild), this.clipboardIsCut, preserveWorld: asChild, out _, out var refused))
             {
-                return "The copied world pose cannot be represented without shear.";
-            }
-
-            if (!this.clipboardIsCut && kind == SceneExplorerCommandKind.PasteAsChild)
-            {
-                var parent = (destination as SceneNodeAdapter)?.AttachedObject;
-                foreach (var snapshot in this.clipboardSnapshots)
-                {
-                    var copied = SceneNode.CreateAndHydrate(context.Document.Scene, snapshot);
-                    if (!SceneTransformMath.TryPreserveWorldLocal(copied, parent, out _, out _, out _))
-                    {
-                        return "The destination cannot represent every copied world pose.";
-                    }
-                }
-            }
-
-            if (this.clipboardIsCut && this.clipboardNodeIds.Any(id => this.projection.GetNode(id) is not { } source || this.FindLockedContextRow(source) is not null))
-            {
-                return "A staged source was deleted or locked.";
-            }
-
-            if (this.clipboardIsCut)
-            {
-                foreach (var sourceId in this.clipboardNodeIds)
-                {
-                    foreach (var child in this.projection.GetNode(sourceId)!.AttachedObject.Descendants())
-                    {
-                        if (this.projection.GetNode(child.Id) is { } row && this.FindLockedContextRow(row) is { } lockedChild)
-                        {
-                            return $"The staged hierarchy contains a node locked by {lockedChild.Label}.";
-                        }
-                    }
-                }
-            }
-
-            if (this.clipboardIsCut)
-            {
-                var resolvedParent = kind == SceneExplorerCommandKind.PasteAsChild
-                    ? (destination as SceneNodeAdapter)?.AttachedObject
-                    : (destination as SceneNodeAdapter)?.AttachedObject.Parent;
-                if (destination is FolderAdapter destinationFolder)
-                {
-                    for (var owner = destinationFolder.Parent; owner is not null; owner = owner.Parent)
-                    {
-                        if (owner is SceneNodeAdapter scope)
-                        {
-                            resolvedParent = scope.AttachedObject;
-                            break;
-                        }
-                    }
-                }
-
-                for (var current = resolvedParent; current is not null; current = current.Parent)
-                {
-                    if (this.clipboardNodeIds.Contains(current.Id))
-                    {
-                        return "A cut hierarchy cannot be pasted into itself or its descendants.";
-                    }
-                }
-
-                foreach (var id in kind == SceneExplorerCommandKind.PasteAsChild ? this.clipboardNodeIds : [])
-                {
-                    if (!SceneTransformMath.TryPreserveWorldLocal(this.projection.GetNode(id)!.AttachedObject, resolvedParent, out _, out _, out _))
-                    {
-                        return "The staged world poses cannot be represented at this destination.";
-                    }
-                }
+                return refused.Message;
             }
         }
 
@@ -649,12 +571,6 @@ public partial class SceneExplorerViewModel
             return;
         }
 
-        using var authoring = SceneAuthoringGate.TryEnter(context.Document.Scene);
-        if (authoring is null)
-        {
-            return;
-        }
-
         var previousSuppression = this.suppressNodeMessages;
         this.suppressNodeMessages = true;
         try
@@ -678,19 +594,30 @@ public partial class SceneExplorerViewModel
             ? this.ShownItems.Skip(anchorIndex + 1).Concat(this.ShownItems.Take(Math.Max(0, anchorIndex)).Reverse())
                 .Where(row => !context.Targets.Contains(row)).ToArray()
             : [];
-        SceneCommandResult? result = null;
+        var authoring = context.Authoring;
+        var scene = authoring.Scene;
+        SceneEditResult? result = null;
         switch (kind)
         {
             case SceneExplorerCommandKind.NewNode:
-                var createdNode = await this.commandService.CreateNodeAsync(context.Document,
-                    (target as SceneNodeAdapter)?.AttachedObject.Id, (target as FolderAdapter)?.Id, this.GetNextEntityName()).ConfigureAwait(true);
-                result = new SceneCommandResult(createdNode.Succeeded, createdNode.OperationResultId);
+                var node = SceneNodeTemplates.Empty(scene, this.GetNextEntityName());
+                var folder = (target as FolderAdapter)?.Id;
+                NodeId? parent = (target as SceneNodeAdapter)?.AttachedObject.Id;
+                if (folder is { } inFolder && LayoutScopes.TryScopeOf(scene, LayoutEntryId.Of(inFolder), out var folderScope))
+                {
+                    parent = folderScope;
+                }
+
+                result = await authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(scene, node, parent, folder)])).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.NewFolder:
-                var container = target is SceneNodeAdapter ? target.Parent : target;
-                var createdFolder = await this.commandService.CreateFolderAsync(context.Document,
-                    (container as FolderAdapter)?.Id, (container as SceneNodeAdapter)?.AttachedObject.Id, "New Folder").ConfigureAwait(true);
-                result = new SceneCommandResult(createdFolder.Succeeded, createdFolder.OperationResultId);
+                var container = (target is SceneNodeAdapter ? target.Parent : target) switch
+                {
+                    FolderAdapter folderRow => LayoutPosition.InFolder(folderRow.Id, 0),
+                    SceneNodeAdapter nodeRow => LayoutPosition.UnderNode(nodeRow.AttachedObject.Id, 0),
+                    _ => LayoutPosition.AtRoot(0),
+                };
+                result = await authoring.ExecuteAsync(new CreateFolder(FolderId.New(), LayoutScopes.EndOf(scene, container), "New Folder")).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.Rename:
                 this.RenameRequested?.Invoke(this, new RenameRequestedEventArgs(target ?? context.Anchor!));
@@ -702,19 +629,19 @@ public partial class SceneExplorerViewModel
                 await this.CutItemsAsync(context.Targets).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.Delete:
-                result = await this.commandService.DeleteItemsAsync(context.Document, nodes, folders).ConfigureAwait(true);
+                result = await authoring.ExecuteAsync(DeleteEdit(scene, nodes, folders)).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.Paste:
             case SceneExplorerCommandKind.PasteAsChild:
                 result = await this.PasteCapturedAsync(context, kind == SceneExplorerCommandKind.PasteAsChild).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.RemoveFromFolder:
-                result = await this.commandService.RemoveNodesFromFolderAsync(context.Document, nodes, ((FolderAdapter)target!.Parent!).Id).ConfigureAwait(true);
+                result = await OutOfFolderAsync(authoring, nodes, ((FolderAdapter)target!.Parent!).Id).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.MoveToSceneRoot:
                 result = target!.Parent is FolderAdapter sourceFolder && ((SceneNodeAdapter)target).AttachedObject.Parent is null
-                    ? await this.commandService.RemoveNodesFromFolderAsync(context.Document, nodes, sourceFolder.Id).ConfigureAwait(true)
-                    : await this.commandService.ReparentNodesAsync(context.Document, nodes, newParentNodeId: null, preserveWorldTransform: false).ConfigureAwait(true);
+                    ? await OutOfFolderAsync(authoring, nodes, sourceFolder.Id).ConfigureAwait(true)
+                    : await authoring.ExecuteAsync(new ReparentNodes(nodes, parent: null, preserveWorld: false)).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.Expand:
                 await this.ExpandItemAsync(context.Anchor!).ConfigureAwait(true);
@@ -724,7 +651,7 @@ public partial class SceneExplorerViewModel
                 break;
             case SceneExplorerCommandKind.Hide:
             case SceneExplorerCommandKind.Show:
-                result = await this.commandService.SetEditorHiddenAsync(context.Document, nodes, kind == SceneExplorerCommandKind.Hide).ConfigureAwait(true);
+                result = await authoring.ExecuteAsync(new SetEditorHidden(nodes, kind == SceneExplorerCommandKind.Hide)).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.Lock:
             case SceneExplorerCommandKind.Unlock:
@@ -740,22 +667,21 @@ public partial class SceneExplorerViewModel
                 await this.RequestCameraCommandAsync(kind, nodes[0]).ConfigureAwait(true);
                 return;
             case SceneExplorerCommandKind.ShowAll:
-                result = await this.commandService.SetEditorHiddenAsync(context.Document,
-                    this.projection.Nodes.Select(static row => row.AttachedObject.Id).ToArray(), hidden: false).ConfigureAwait(true);
+                result = await authoring.ExecuteAsync(new SetEditorHidden([.. this.projection.Nodes.Select(static row => row.AttachedObject.Id)], hidden: false)).ConfigureAwait(true);
                 break;
         }
 
         // A command may have awaited live sync while the user changed documents. Only reconcile its original owner.
         if (result?.Succeeded == true
             && kind is not (SceneExplorerCommandKind.Hide or SceneExplorerCommandKind.Show or SceneExplorerCommandKind.ShowAll)
-            && ReferenceEquals(this.CreateCommandContext()?.Scene, context.Document.Scene))
+            && ReferenceEquals(this.CurrentAuthoring(), context.Authoring))
         {
             var restoreDeleteNeighbor = kind == SceneExplorerCommandKind.Delete
                 && selectionGeneration == this.selectionApplyGeneration
-                && SameSelection(this.selectionService.GetContext(context.Document.DocumentId), context.Selection);
+                && SameSelection(this.selectionService.GetContext(context.Authoring.Document), context.Selection);
             await this.ReconcileProjectionAsync().ConfigureAwait(true);
             if (restoreDeleteNeighbor && this.SelectedItemsCount == 0
-                && ReferenceEquals(this.CreateCommandContext()?.Scene, context.Document.Scene))
+                && ReferenceEquals(this.CurrentAuthoring(), context.Authoring))
             {
                 foreach (var oldRow in neighbors)
                 {
@@ -807,64 +733,69 @@ public partial class SceneExplorerViewModel
         return (parentId, folder?.Id, !asChild ? node?.AttachedObject.Id : null);
     }
 
-    private async Task<SceneCommandResult> PasteCapturedAsync(CapturedExplorerContext context, bool asChild)
+    // Deleting folders deletes what they hold: their nodes first, then the folders, innermost first.
+    private static SceneEditBatch DeleteEdit(Scene scene, IReadOnlyList<NodeId> nodes, IReadOnlyList<FolderId> folders)
+    {
+        var heldNodes = new List<NodeId>(nodes);
+        var heldFolders = new List<FolderId>();
+        void Collect(FolderId folder)
+        {
+            foreach (var entry in LayoutScopes.EntriesOf(scene, LayoutPosition.InFolder(folder, 0)))
+            {
+                if (entry.Folder is { } inner)
+                {
+                    Collect(inner);
+                }
+                else if (entry.Node is { } node)
+                {
+                    heldNodes.Add(node);
+                }
+            }
+
+            heldFolders.Add(folder);
+        }
+
+        foreach (var folder in folders)
+        {
+            Collect(folder);
+        }
+
+        List<ISceneEdit> edits = [];
+        if (heldNodes.Count > 0)
+        {
+            edits.Add(new RemoveNodes([.. heldNodes.Distinct()]));
+        }
+
+        edits.AddRange(heldFolders.Distinct().Select(static folder => new RemoveFolder(folder, PromoteChildren: false)));
+        return new SceneEditBatch("Delete", edits);
+    }
+
+    // The entries go right after the folder, in the folder's own container.
+    private static Task<SceneEditResult> OutOfFolderAsync(SceneAuthoring authoring, IReadOnlyList<NodeId> nodes, FolderId folder)
+        => LayoutScopes.PositionOf(authoring.Scene, LayoutEntryId.Of(folder)) is { } place
+            ? authoring.ExecuteAsync(new MoveLayoutEntries([.. nodes.Select(LayoutEntryId.Of)], place with { Index = place.Index + 1 }))
+            : Task.FromResult(new SceneEditResult(SceneEditOutcome.Invalid, [SceneDiagnostic.Error(SceneEditCodes.FolderMissing, "The folder no longer exists.")]));
+
+    private PasteTarget PasteTargetOf(CapturedExplorerContext context, bool asChild)
     {
         var (parentId, folderId, insertAfterId) = this.ResolveCapturedPasteDestination(context, asChild);
-        var stagedIds = this.clipboardNodeIds.ToArray();
-        var stagedSnapshots = asChild ? this.clipboardSnapshots.ToArray() : this.clipboardLocalSnapshots.ToArray();
+        return new PasteTarget(parentId, folderId, insertAfterId);
+    }
+
+    private async Task<SceneEditResult?> PasteCapturedAsync(CapturedExplorerContext context, bool asChild)
+    {
         var isCut = this.clipboardIsCut;
-        var payload = this.explorerClipboard;
         var clipboardVersion = this.clipboardGeneration;
-        SceneCommandResult result;
-        if (payload is not null)
+        if (this.explorerClipboard is not { } payload
+            || !payload.TryPaste(context.Authoring.Scene, this.PasteTargetOf(context, asChild), isCut, preserveWorld: asChild, out var paste, out var refused))
         {
-            result = await this.commandService.PasteExplorerItemsAsync(context.Document, payload, isCut,
-                parentId, folderId, preserveWorld: asChild, insertAfterId).ConfigureAwait(true);
-        }
-        else if (isCut)
-        {
-            result = folderId is { } folder
-                ? await this.commandService.MoveNodesToFolderAsync(context.Document, stagedIds, folder).ConfigureAwait(true)
-                : await this.commandService.ReparentNodesAsync(context.Document, stagedIds, parentId,
-                    preserveWorldTransform: asChild, insertAfterId).ConfigureAwait(true);
-        }
-        else
-        {
-            var parent = parentId is { } id ? this.projection.GetNode(id)?.AttachedObject : null;
-            var data = new List<SceneNodeData>();
-            foreach (var snapshot in stagedSnapshots)
-            {
-                if (!asChild)
-                {
-                    data.Add(snapshot);
-                    continue;
-                }
-
-                var transient = SceneNode.CreateAndHydrate(context.Document.Scene, snapshot);
-                if (!SceneTransformMath.TryPreserveWorldLocal(transient, parent, out var position, out var rotation, out var scale))
-                {
-                    return new SceneCommandResult(Succeeded: false) { ValidationMessage = "The pasted world pose cannot be represented." };
-                }
-
-                data.Add(snapshot with
-                {
-                    Components = snapshot.Components.Select(component => component is TransformData transform
-                        ? transform with { Position = position, Rotation = rotation, Scale = scale } : component).ToList(),
-                });
-            }
-
-            if (!this.IsContextCurrent(context))
-            {
-                return new SceneCommandResult(Succeeded: false);
-            }
-
-            var duplicated = await this.commandService.DuplicateNodesFromDataAsync(context.Document, data, parentId, folderId, insertAfterId).ConfigureAwait(true);
-            result = new SceneCommandResult(duplicated.Succeeded, duplicated.OperationResultId);
+            return null;
         }
 
-        if (result.Succeeded && isCut && this.clipboardIsCut && stagedIds.SequenceEqual(this.clipboardNodeIds)
-            && clipboardVersion == this.clipboardGeneration && ReferenceEquals(payload, this.explorerClipboard)
-            && ReferenceEquals(this.CreateCommandContext()?.Scene, context.Document.Scene))
+        _ = refused;
+        var result = await context.Authoring.ExecuteAsync(paste).ConfigureAwait(true);
+        if (result.Succeeded && isCut && this.clipboardIsCut && clipboardVersion == this.clipboardGeneration
+            && ReferenceEquals(payload, this.explorerClipboard) && ReferenceEquals(this.CurrentAuthoring(), context.Authoring))
         {
             this.OnClipboardCleared();
             this.ClipboardStateStore = ClipboardState.Empty;
@@ -942,7 +873,7 @@ public partial class SceneExplorerViewModel
     }
 
     private sealed record CapturedExplorerContext(
-        SceneDocumentCommandContext Document,
+        SceneAuthoring Authoring,
         IProject? Project,
         SceneSelectionContext Selection,
         IReadOnlyList<ITreeItem> SelectedRows,

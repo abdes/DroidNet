@@ -10,10 +10,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Settings;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Presentation;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
@@ -26,8 +27,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
 {
     private const string SearchText = "Play Starting camera Starting input contexts Priority Game start";
 
-    private readonly ISceneDocumentCommandService? commandService;
-    private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
+    private readonly Func<SceneAuthoring?>? authoringProvider;
     private readonly IAssetFeed? assetProvider;
     private readonly IScheduler observerScheduler;
     private readonly Func<Uri, InputContextSource> contextSource;
@@ -45,8 +45,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="PlaySectionViewModel"/> class.</summary>
-    /// <param name="commandService">The command service that applies play edits.</param>
-    /// <param name="commandContextProvider">The current document command context.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     /// <param name="assetProvider">The shared content catalog that offers mapping contexts.</param>
     /// <param name="observerScheduler">The scheduler used for catalog notifications.</param>
     /// <param name="contextSource">Reads what the project says about a mapping context: whether an input file
@@ -54,16 +53,14 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     /// <param name="inspectSceneNode">Selects a node in the Scene Explorer.</param>
     /// <param name="revealAsset">Shows an asset in the Content Browser.</param>
     internal PlaySectionViewModel(
-        ISceneDocumentCommandService? commandService,
-        Func<SceneDocumentCommandContext?>? commandContextProvider,
+        Func<SceneAuthoring?>? authoringProvider,
         IAssetFeed? assetProvider,
         IScheduler observerScheduler,
         Func<Uri, InputContextSource>? contextSource,
         Func<NodeId, Task>? inspectSceneNode = null,
         Func<Uri, Task>? revealAsset = null)
     {
-        this.commandService = commandService;
-        this.commandContextProvider = commandContextProvider;
+        this.authoringProvider = authoringProvider;
         this.assetProvider = assetProvider;
         this.observerScheduler = observerScheduler;
         this.contextSource = contextSource ?? (static _ => InputContextSource.External);
@@ -122,9 +119,8 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     /// <summary>Gets a value indicating whether the play settings can be edited.</summary>
     public bool CanEdit => !this.disposed && !this.isBusy && this.inputEnabled
         && this.scene is { } current
-        && this.commandService is not null
-        && this.commandContextProvider?.Invoke() is { } context
-        && ReferenceEquals(context.Scene, current);
+        && this.authoringProvider?.Invoke() is { } authoring
+        && ReferenceEquals(authoring.Scene, current);
 
     /// <summary>Gets a value indicating whether an input context can be added.</summary>
     public bool CanAddContext => this.CanEdit && this.ContextCandidates.Count > 0;
@@ -285,26 +281,26 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
 
     private Task ApplyAsync(ScenePlayData play)
     {
-        if (!this.CanEdit || this.commandService is not { } service || this.commandContextProvider?.Invoke() is not { } context)
+        if (!this.CanEdit || this.authoringProvider?.Invoke() is not { } authoring)
         {
             this.Refresh();
             return Task.CompletedTask;
         }
 
-        this.pending = this.ApplyCoreAsync(service, context, play);
+        this.pending = this.ApplyCoreAsync(authoring, play);
         return this.pending;
     }
 
-    private async Task ApplyCoreAsync(ISceneDocumentCommandService service, SceneDocumentCommandContext context, ScenePlayData play)
+    private async Task ApplyCoreAsync(SceneAuthoring authoring, ScenePlayData play)
     {
         this.isBusy = true;
         this.ErrorMessage = string.Empty;
         try
         {
-            var result = await service.EditScenePlayAsync(context, play).ConfigureAwait(true);
+            var result = await authoring.ExecuteAsync(new SetScenePlay(play)).ConfigureAwait(true);
             if (!result.Succeeded)
             {
-                this.ErrorMessage = result.ValidationMessage ?? "The play settings could not be changed.";
+                this.ErrorMessage = result.Diagnostics.FirstOrDefault(static diagnostic => diagnostic.IsError)?.Message ?? "The play settings could not be changed.";
             }
         }
         finally

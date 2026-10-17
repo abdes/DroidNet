@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.WorldEditor.Documents.Commands;
+
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Properties;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -10,12 +12,10 @@ namespace Oxygen.Editor.World.Inspector;
 public sealed partial class PointLightViewModel : LocalLightViewModel
 {
     /// <summary>Initializes a new instance of the <see cref="PointLightViewModel"/> class.</summary>
-    /// <param name="commandService">Optional command service used to apply light edits.</param>
-    /// <param name="commandContextProvider">Optional provider for the active scene command context.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     public PointLightViewModel(
-        ISceneDocumentCommandService? commandService = null,
-        Func<SceneDocumentCommandContext?>? commandContextProvider = null)
-        : base(SceneDocumentCommandService.PointLight, "Edit Point Light", commandService, commandContextProvider)
+        Func<SceneAuthoring?>? authoringProvider = null)
+        : base(SceneProperties.PointLight, "Edit Point Light", authoringProvider)
     {
     }
 

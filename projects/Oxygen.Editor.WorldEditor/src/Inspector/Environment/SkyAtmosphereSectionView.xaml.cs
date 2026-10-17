@@ -5,8 +5,8 @@
 using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World.Inspector.Presentation;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -74,7 +74,7 @@ public sealed partial class SkyAtmosphereSectionView
     }
 
     private void OnRgbColorPicked(object? sender, ColorBoxColorPickedEventArgs args)
-        => InspectorColorEdits.Apply<SceneEnvironmentEditOwner>(sender, args, static (owner, color) => owner.Apply(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, color.ToVector3()));
+        => InspectorColorEdits.Apply<SceneEnvironmentEditOwner>(sender, args, static (owner, color) => owner.Apply(SceneProperties.SceneEnvironment.GroundAlbedo, color.ToVector3()));
 
     private void NumberEditStarted(object? sender, NumberBoxEditSessionEventArgs args)
     {

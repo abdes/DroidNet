@@ -17,11 +17,12 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -76,7 +77,6 @@ public partial class WorkspaceViewModel
             container.Resolve<IDocumentInputCommitter>(),
             container.Resolve<IOperationResultPublisher>(),
             container.Resolve<IStatusReducer>(),
-            container.Resolve<ISceneDocumentCommandService>(),
             container.Resolve<IContentPipelineService>(),
             container,
             container.Resolve<IMessenger>(),

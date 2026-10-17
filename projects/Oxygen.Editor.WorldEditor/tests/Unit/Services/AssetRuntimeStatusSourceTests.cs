@@ -77,7 +77,7 @@ public sealed class AssetRuntimeStatusSourceTests
         ];
         using var source = new AssetRuntimeStatusSource(engine.Object);
 
-        _ = source.GetStatus(ProjectId).Requests.Should().Equal(new AssetRuntimeRequest("/Content/Materials/Red.omat", false, "Material rejected"));
+        _ = source.GetStatus(ProjectId).Requests.Should().Equal(new AssetRuntimeRequest("/Content/Materials/Red.omat", Succeeded: false, "Material rejected"));
         _ = source.GetStatus(projectId: null).Requests.Should().BeEmpty();
     }
 

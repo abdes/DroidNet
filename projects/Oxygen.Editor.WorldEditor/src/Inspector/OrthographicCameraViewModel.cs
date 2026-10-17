@@ -2,9 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.World.Inspector.Editing;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -15,21 +16,19 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
     private readonly InspectorFieldDiagnostic unboundDiagnostic = new();
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly List<IInspectorBindingRefresh> registrations = [];
-    private readonly PropertyBinding<CameraAspectMode> aspectModeBinding = new(SceneDocumentCommandService.OrthographicCamera.AspectModeDescriptor);
+    private readonly PropertyBinding<CameraAspectMode> aspectModeBinding = new(SceneProperties.OrthographicCamera.AspectModeDescriptor);
     private ICollection<SceneNode>? selectedItems;
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="OrthographicCameraViewModel"/> class.</summary>
-    /// <param name="commandService">The existing camera command service.</param>
-    /// <param name="commandContextProvider">The current captured document context.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     public OrthographicCameraViewModel(
-        ISceneDocumentCommandService? commandService = null,
-        Func<SceneDocumentCommandContext?>? commandContextProvider = null)
+        Func<SceneAuthoring?>? authoringProvider = null)
     {
-        this.StartingCamera = new(commandService, commandContextProvider);
-        if (commandService is not null && commandContextProvider is not null)
+        this.StartingCamera = new(authoringProvider);
+        if (authoringProvider is not null)
         {
-            this.edits = new(commandService, commandContextProvider, "Edit Camera", this.RefreshValues);
+            this.edits = new(authoringProvider, "Edit Camera", this.RefreshValues);
             this.edits.Diagnostics.Relate(this.NearPlane.Id.Id, this.FarPlane.Id.Id);
         }
 
@@ -47,7 +46,7 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
     public StartingCameraToggle StartingCamera { get; }
 
     /// <summary>Gets the half-height binding and its mixed state.</summary>
-    public NumberBinding<float> OrthographicSize { get; } = new(SceneDocumentCommandService.OrthographicCamera.OrthographicSizeDescriptor);
+    public NumberBinding<float> OrthographicSize { get; } = new(SceneProperties.OrthographicCamera.OrthographicSizeDescriptor);
 
     /// <summary>Gets or sets the framing policy through its guarded binding.</summary>
     public CameraAspectMode AspectMode
@@ -57,22 +56,22 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
     }
 
     /// <summary>Gets the retained Fixed aspect-ratio binding and its mixed state.</summary>
-    public NumberBinding<float> AspectRatio { get; } = new(SceneDocumentCommandService.OrthographicCamera.AspectRatioDescriptor);
+    public NumberBinding<float> AspectRatio { get; } = new(SceneProperties.OrthographicCamera.AspectRatioDescriptor);
 
     /// <summary>Gets the near-plane binding and its mixed state.</summary>
-    public NumberBinding<float> NearPlane { get; } = new(SceneDocumentCommandService.OrthographicCamera.NearPlaneDescriptor);
+    public NumberBinding<float> NearPlane { get; } = new(SceneProperties.OrthographicCamera.NearPlaneDescriptor);
 
     /// <summary>Gets the far-plane binding and its mixed state.</summary>
-    public NumberBinding<float> FarPlane { get; } = new(SceneDocumentCommandService.OrthographicCamera.FarPlaneDescriptor);
+    public NumberBinding<float> FarPlane { get; } = new(SceneProperties.OrthographicCamera.FarPlaneDescriptor);
 
     /// <summary>Gets the aperture f-number binding and its mixed state.</summary>
-    public NumberBinding<float> ApertureF { get; } = new(SceneDocumentCommandService.OrthographicCamera.ApertureFDescriptor);
+    public NumberBinding<float> ApertureF { get; } = new(SceneProperties.OrthographicCamera.ApertureFDescriptor);
 
     /// <summary>Gets the shutter-rate binding and its mixed state.</summary>
-    public NumberBinding<float> ShutterRate { get; } = new(SceneDocumentCommandService.OrthographicCamera.ShutterRateDescriptor);
+    public NumberBinding<float> ShutterRate { get; } = new(SceneProperties.OrthographicCamera.ShutterRateDescriptor);
 
     /// <summary>Gets the ISO binding and its mixed state.</summary>
-    public NumberBinding<float> Iso { get; } = new(SceneDocumentCommandService.OrthographicCamera.IsoDescriptor);
+    public NumberBinding<float> Iso { get; } = new(SceneProperties.OrthographicCamera.IsoDescriptor);
 
     /// <summary>Gets the framing policies offered by the inspector.</summary>
     public IReadOnlyList<CameraAspectMode> AspectModeOptions { get; } = Enum.GetValues<CameraAspectMode>();

@@ -3,33 +3,25 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Documents;
-using DroidNet.TimeMachine;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.SceneExplorer.Operations;
-using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Workspace;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
-using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
+/// <summary>A scene document with a camera and sun node, open in a document area, for the views and models that edit it.</summary>
 internal sealed partial class SceneAuthoringFixture : IDisposable
 {
     private readonly WorkspaceInteractionService? interaction;
 
     /// <summary>Initializes a new instance of the <see cref="SceneAuthoringFixture"/> class.</summary>
-    /// <param name="interaction">Optional workspace interaction state shared with the command owner.</param>
+    /// <param name="interaction">Optional workspace interaction state the document's edits respect.</param>
     public SceneAuthoringFixture(WorkspaceInteractionService? interaction = null)
     {
         this.interaction = interaction;
@@ -54,21 +46,13 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
         });
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun" });
         scene.RootNodes.Add(node);
-        var sync = this.Sync;
-        var accepted = new SyncOutcome(SyncStatus.Accepted, "UI control command", AffectedScope.Empty);
-        _ = sync.Setup(value => value.UpdateMaterialSlotAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<MaterialSlotTarget>(), It.IsAny<Uri?>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
-        _ = sync.Setup(value => value.RestoreMaterialSlotAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<MaterialSlotTarget>(), It.IsAny<Uri?>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
-        _ = sync.Setup(value => value.UpdatePropertiesAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
-        _ = sync.Setup(value => value.UpdateEnvironmentAsync(It.IsAny<Scene>(), It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>())).ReturnsAsync(new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal)));
-        _ = sync.Setup(value => value.TryPreviewSyncAsync(It.IsAny<SceneId>(), It.IsAny<Guid>(), It.IsAny<DateTimeOffset>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>())).Returns(async (SceneId _, Guid _, DateTimeOffset _, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => (SyncOutcome?)await action(token).ConfigureAwait(true));
-        _ = sync.Setup(value => value.CompleteTerminalSyncAsync(It.IsAny<SceneId>(), It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>())).Returns((SceneId _, Guid _, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => action(token));
-        this.Commands = new SceneDocumentCommandService(this.Selection, sync.Object, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer(), this.Slots.Object, this.Projects, new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance), interaction);
-        this.Tab = SceneTabs.Open(scene, this.Commands);
+        this.Tab = SceneTabs.Open(scene, interaction);
         this.Scene = this.Tab.Scene;
         this.Node = this.Tab.NodeOf(node);
         this.Camera = this.Node.Components.OfType<PerspectiveCamera>().Single();
         this.Area = new TestDocumentArea(this.Tab.Document);
-        this.Context = new(this.Tab.DocumentId, this.Scene, this.Document.History);
+        _ = this.Sync.Setup(service => service.GetDocumentScene(this.Tab.DocumentId)).Returns(this.Scene);
+        _ = this.Sync.Setup(service => service.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
     }
 
     /// <summary>Gets the scene's document and its tab.</summary>
@@ -77,12 +61,15 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     /// <summary>Gets the document area that shows the scene's document, active.</summary>
     public TestDocumentArea Area { get; }
 
-    /// <summary>Gets the scene's document, whose history the commands record into.</summary>
-    public Oxygen.Editor.Documents.Document Document => this.Tab.Document;
+    /// <summary>Gets the scene's document, whose history the edits record into.</summary>
+    public Documents.Document Document => this.Tab.Document;
+
+    /// <summary>Gets what edits the document's scene.</summary>
+    public SceneAuthoring Authoring => this.Tab.Authoring;
 
     public ProjectContextService Projects { get; } = new();
 
-    /// <summary>Gets the shared selection authority wired into the command service, Explorer and Inspector.</summary>
+    /// <summary>Gets the shared selection authority wired into the Explorer and Inspector.</summary>
     public SceneSelectionService Selection { get; } = new();
 
     public Mock<IGeometryMaterialSlotProvider> Slots { get; } = new();
@@ -93,15 +80,11 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
 
     public PerspectiveCamera Camera { get; }
 
-    public SceneDocumentCommandContext Context { get; }
-
-    public SceneDocumentCommandService Commands { get; }
-
     public Mock<ISceneEngineSync> Sync { get; } = new();
 
     public StrongReferenceMessenger Messenger { get; } = new();
 
     public static MaterialSlotTarget TargetFor(Uri geometry) => new(geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
 
-    public void Dispose() => this.Context.History.Clear();
+    public void Dispose() => this.Tab.Dispose();
 }

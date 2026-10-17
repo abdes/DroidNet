@@ -12,8 +12,9 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Edits.Assets;
+using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
@@ -249,22 +250,22 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         await SetPublicationMaterialColorAsync(scenario.Materials, scenario.Material, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
         if (string.Equals(action, "Undo", StringComparison.Ordinal))
         {
-            await fixture.Context.History.UndoAsync(cancellationToken).ConfigureAwait(true);
+            await fixture.Document.History.UndoAsync(cancellationToken).ConfigureAwait(true);
         }
         else if (string.Equals(action, "Clear", StringComparison.Ordinal))
         {
-            _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [nodes[0].Id], await fixture.ReadSingleMaterialSlotAsync(nodes[0].Id, cancellationToken).ConfigureAwait(true), newMaterialUri: null, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+            _ = (await fixture.Authoring.ExecuteAsync(new SetMaterialSlot([nodes[0].Id], await fixture.ReadSingleMaterialSlotAsync(nodes[0].Id, cancellationToken).ConfigureAwait(true), material: null)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         }
         else
         {
             var geometry = nodes[0].Components.OfType<GeometryComponent>().Single();
-            _ = (await fixture.Commands.RemoveComponentAsync(fixture.Context, nodes[0].Id, geometry.Id).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+            _ = (await fixture.Authoring.ExecuteAsync(new RemoveComponent(nodes[0].Id, geometry.Id)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         }
 
         var expected = await WaitForNodeAsync(fixture, nodes[0].Id, value => !value.MaterialKeys.Contains(scenario.Key, StringComparer.Ordinal), cancellationToken).ConfigureAwait(true);
         _ = expected.MaterialKeys.Should().NotContain(scenario.Key);
         var revision = fixture.Document.History.Position;
-        var history = fixture.Context.History.UndoStack.Count;
+        var history = fixture.Document.History.UndoStack.Count;
         await releaseWriter().ConfigureAwait(true);
         _ = await WaitForPublicationRunAsync(scenario.Services, prior, cancellationToken).ConfigureAwait(true);
         var after = await fixture.ReadNodeAsync(nodes[0].Id, cancellationToken).ConfigureAwait(true);
@@ -278,10 +279,10 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         }
 
         _ = fixture.Document.History.Position.Should().Be(revision);
-        _ = fixture.Context.History.UndoStack.Should().HaveCount(history);
+        _ = fixture.Document.History.UndoStack.Should().HaveCount(history);
         if (string.Equals(action, "Undo", StringComparison.Ordinal))
         {
-            await fixture.Context.History.RedoAsync(cancellationToken).ConfigureAwait(true);
+            await fixture.Document.History.RedoAsync(cancellationToken).ConfigureAwait(true);
             _ = await WaitForNodeAsync(fixture, nodes[0].Id, value => value.MaterialBaseColors.Length == 1 && value.MaterialBaseColors[0] == new Vector4(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
         }
     }
@@ -384,7 +385,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         var before = await WaitForNodeAsync(fixture, node.Id, static value => value.IndexCount > 0, cancellationToken).ConfigureAwait(true);
         _ = before.MaterialKeys.Should().NotContain(scenario.Key);
         var revision = fixture.Document.History.Position;
-        var history = fixture.Context.History.UndoStack.Count;
+        var history = fixture.Document.History.UndoStack.Count;
         await releaseWriter().ConfigureAwait(true);
         _ = await WaitForPublicationRunAsync(scenario.Services, prior, cancellationToken).ConfigureAwait(true);
         _ = fixture.Source.Should().BeSameAs(current);
@@ -397,7 +398,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         }
 
         _ = fixture.Document.History.Position.Should().Be(revision);
-        _ = fixture.Context.History.UndoStack.Should().HaveCount(history);
+        _ = fixture.Document.History.UndoStack.Should().HaveCount(history);
         _ = fixture.Document.IsDirty.Should().BeFalse();
     }
 

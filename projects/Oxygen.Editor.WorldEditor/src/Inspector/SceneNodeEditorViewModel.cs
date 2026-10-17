@@ -20,13 +20,17 @@ using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Edits.Components;
+using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.Scenes.Nodes;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Workspace;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -41,7 +45,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private readonly Dictionary<Type, IPropertyEditor<SceneNode>> editorInstances = [];
     private readonly Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> propertyEditorFactories;
     private readonly IMessenger messenger;
-    private readonly ISceneDocumentCommandService commandService;
     private readonly IDocumentArea documentArea;
     private readonly ISceneEngineSync sceneEngineSync;
     private readonly WorkspaceInteractionService? interaction;
@@ -71,7 +74,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="hosting">The hosting context for WinUI dispatching.</param>
     /// <param name="vmToViewConverter">The converter for resolving views from viewmodels.</param>
     /// <param name="messenger">The messenger for MVVM messaging.</param>
-    /// <param name="commandService">The scene document command service.</param>
     /// <param name="documentArea">The window's document area, whose active scene document the inspector shows.</param>
     /// <param name="windowId">The window, which node inspection requests name.</param>
     /// <param name="assetProvider">The shared asset identity and availability feed.</param>
@@ -93,7 +95,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         HostingContext hosting,
         ViewModelToView vmToViewConverter,
         IMessenger messenger,
-        ISceneDocumentCommandService commandService,
         IDocumentArea documentArea,
         WindowId windowId,
         IAssetFeed assetProvider,
@@ -114,7 +115,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.LoggerFactory = loggerFactory;
 
         this.messenger = messenger;
-        this.commandService = commandService;
         this.documentArea = documentArea;
         this.sceneEngineSync = sceneEngineSync;
         this.interaction = interaction;
@@ -133,19 +133,17 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             materialSlots,
             projectContexts,
             loggerFactory,
-            commandService,
-            this.CreateCommandContext,
+            this.AuthoringOf,
             new InspectorScriptServices(scriptAnalysis, codeEditor, scriptDeclarations));
         this.environmentEditor = new EnvironmentViewModel(
-            commandService,
-            this.CreateCommandContext,
+            this.AuthoringOf,
             assetProvider,
             this.InspectAtmosphereSource,
             hosting.DispatcherScheduler,
             sceneEngineSync.ObserveSkyLightAsync,
             context => projectContexts.ActiveProject is { } project ? InputContextSources.Find(project, context) : InputContextSource.External,
             asset => this.RevealAssetAsync(projectContexts, asset));
-        this.renderingEditor = new NodeRenderingViewModel(commandService, this.CreateCommandContext);
+        this.renderingEditor = new NodeRenderingViewModel(this.AuthoringOf);
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;
         this.activeScene = this.items.FirstOrDefault()?.Scene;
@@ -309,7 +307,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <summary>
     /// Gets the undo/redo history for the currently selected scene document.
     /// </summary>
-    public HistoryKeeper History => this.CreateCommandContext()?.History ?? UndoRedo.Default[this];
+    public HistoryKeeper History => this.DocumentOf(this.items.FirstOrDefault()?.Scene ?? this.activeScene)?.History ?? UndoRedo.Default[this];
 
     /// <inheritdoc />
     public void Dispose()
@@ -351,6 +349,14 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.pendingEnvironmentFocus = (sceneId, property);
         this.ApplyPendingEnvironmentFocus();
     }
+
+    /// <summary>Undoes the inspected scene's last edit through its authoring.</summary>
+    /// <returns>Completion of the undo.</returns>
+    internal Task UndoAsync() => this.AuthoringOf() is { } authoring ? authoring.UndoAsync() : Task.CompletedTask;
+
+    /// <summary>Redoes the inspected scene's last undone edit through its authoring.</summary>
+    /// <returns>Completion of the redo.</returns>
+    internal Task RedoAsync() => this.AuthoringOf() is { } authoring ? authoring.RedoAsync() : Task.CompletedTask;
 
     /// <inheritdoc/>
     protected override void RefreshOwnProperties()
@@ -682,27 +688,17 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.environmentEditor.RequestFieldFocus(target.property);
     }
 
-    private SceneDocumentCommandContext? CreateCommandContext()
-    {
-        var scene = this.items.FirstOrDefault()?.Scene ?? this.activeScene;
-        return scene is null ? null : this.CreateCommandContext(scene);
-    }
+    private SceneAuthoring? AuthoringOf()
+        => this.AuthoringOf(this.items.FirstOrDefault()?.Scene ?? this.activeScene);
 
     private DocumentId? ActiveSceneDocumentId
         => this.documentArea.ActiveDocument is { Content: SceneContent } active ? active.Id : null;
 
-    private SceneDocumentCommandContext? CreateCommandContext(Scene scene)
-    {
-        if (scene is null)
-        {
-            return null;
-        }
+    private Document? DocumentOf(Scene? scene)
+        => scene is null ? null : this.documentArea.Documents.FirstOrDefault(document => document.Content is SceneContent content && ReferenceEquals(content.Scene, scene));
 
-        var document = this.documentArea.Documents.FirstOrDefault(document => document.Content is SceneContent content && ReferenceEquals(content.Scene, scene));
-        return document is null
-            ? null
-            : new SceneDocumentCommandContext(document.Id, scene, document.History);
-    }
+    private SceneAuthoring? AuthoringOf(Scene? scene)
+        => (this.DocumentOf(scene)?.Content as SceneContent)?.Authoring;
 
     private void OnPendingPropertySyncCountChanged(object? sender, PendingPropertySyncCountChangedEventArgs e)
     {
@@ -782,22 +778,22 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
     private async Task AddComponentRequestedAsync(Messages.ComponentAddRequestedMessage message)
     {
-        if (this.CreateCommandContext(message.Node.Scene) is not { } context)
+        if (this.AuthoringOf(message.Node.Scene) is not { } authoring)
         {
             return;
         }
 
-        _ = await this.commandService.AddComponentAsync(context, message.Node.Id, message.Component.GetType()).ConfigureAwait(true);
+        _ = await authoring.ExecuteAsync(SceneComponents.Add(authoring, message.Node.Id, SceneComponents.KindOf(message.Component))).ConfigureAwait(true);
     }
 
     private async Task RemoveComponentRequestedAsync(Messages.ComponentRemoveRequestedMessage message)
     {
-        if (this.CreateCommandContext(message.Node.Scene) is not { } context)
+        if (this.AuthoringOf(message.Node.Scene) is not { } authoring)
         {
             return;
         }
 
-        _ = await this.commandService.RemoveComponentAsync(context, message.Node.Id, message.Component.Id).ConfigureAwait(true);
+        _ = await authoring.ExecuteAsync(new RemoveComponent(message.Node.Id, message.Component.Id)).ConfigureAwait(true);
     }
 
     private void SubscribeToComponentCollections()

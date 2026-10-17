@@ -26,7 +26,11 @@ public sealed partial class SceneEngineSyncTests
         _ = commands.Setup(value => value.Execute(It.IsAny<RuntimeWorldRequest>(), It.IsAny<CancellationToken>()))
             .Returns((RuntimeWorldRequest request, CancellationToken _) =>
             {
-                captured = request;
+                if (request.Command is RuntimeSetMaterialOverride)
+                {
+                    captured = request;
+                }
+
                 return new RuntimeCommandResult(request.OperationId, request.Target.RunId, RuntimeCommandStatus.Accepted);
             });
         var current = true;
@@ -36,12 +40,11 @@ public sealed partial class SceneEngineSyncTests
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(results.Add);
         using var sut = new SceneEngineSync(engine.Object, operationResults: publisher.Object);
         var scene = CreateScene();
-        var documentId = DocumentId.New();
-        _ = sut.RegisterDocument(scene, documentId);
-        var node = new SceneNode(scene) { Name = "Cube" };
-        scene.RootNodes.Add(node);
+        using var document = Register(sut, scene);
+        scene = document.Scene;
+        var documentId = document.DocumentId;
+        var node = AddCubeWithMissingMaterial(scene);
         _ = await sut.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = await sut.UpdateMaterialSlotAsync(scene, node, new Oxygen.Editor.World.Slots.MaterialSlotTarget(new Uri("asset:///Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64)), new Uri("asset:///Content/Materials/Missing.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var failure = new RuntimeAssetLoadFailedEventArgs(captured!, 71, "Asset path could not be resolved");
 
         commands.Raise(value => value.AssetLoadFailed += null, failure);
@@ -59,5 +62,17 @@ public sealed partial class SceneEngineSyncTests
         _ = result.AffectedScope.DocumentLifetime.Should().Be(failure.Request.Target.DocumentLifetime);
         _ = result.Diagnostics.Should().ContainSingle().Which.Domain.Should().Be(FailureDomain.LiveSync);
         _ = result.Message.Should().Be(failure.Message);
+    }
+
+    // A cube whose one material slot names a material that does not exist, so the engine reports the material's load.
+    private static SceneNode AddCubeWithMissingMaterial(Scene scene)
+    {
+        var node = new SceneNode(scene) { Name = "Cube" };
+        scene.RootNodes.Add(node);
+        var target = new World.Slots.MaterialSlotTarget(new Uri("asset:///Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+        var geometry = new GeometryComponent { Name = "Geometry", Geometry = new(target.GeometryUri) };
+        geometry.OverrideSlots.Add(new World.Slots.MaterialsSlot { Target = target, Material = new(new Uri("asset:///Content/Materials/Missing.omat.json")) });
+        node.Components.Add(geometry);
+        return node;
     }
 }

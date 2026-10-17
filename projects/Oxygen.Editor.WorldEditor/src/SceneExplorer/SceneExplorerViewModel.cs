@@ -20,14 +20,21 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Changes;
+using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Edits.EditorView;
+using Oxygen.Editor.Scenes.Edits.Hierarchy;
+using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.Scenes.Nodes;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -50,7 +57,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly WindowId windowId;
     private readonly ISceneEngineSync sceneEngineSync;
     private readonly ISceneSelectionService selectionService;
-    private readonly ISceneDocumentCommandService commandService;
     private readonly IOperationResultPublisher? operationResults;
     private readonly IStatusReducer? statusReducer;
     private readonly Workspace.WorkspaceInteractionService? interaction;
@@ -63,7 +69,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     // Node-clipboard state: copied node identities plus whether they were cut (moved) rather than copied.
     private readonly List<NodeId> clipboardNodeIds = [];
-    private readonly List<SceneNodeData> clipboardSnapshots = [];
     private bool clipboardIsCut;
 
     // Ratified clipboard lifetime (D7): a payload is stamped with the project and scene that
@@ -88,6 +93,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     // The scene document the explorer shows: its scene, its history and its tab.
     private Document? sceneDocument;
     private bool suppressNodeMessages;
+    private SceneAuthoring? observedAuthoring;
 
     // Set while the Explorer itself writes selection or applies a foreign selection, so the
     // service echo never re-enters the row-sync path.
@@ -126,7 +132,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="windowId">The window, which the explorer's window-scoped messages name.</param>
     /// <param name="sceneEngineSync">The scene-engine synchronization service.</param>
     /// <param name="selectionService">The document selection service.</param>
-    /// <param name="commandService">The document command service.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
@@ -151,7 +156,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         WindowId windowId,
         ISceneEngineSync sceneEngineSync,
         ISceneSelectionService selectionService,
-        ISceneDocumentCommandService commandService,
         ILoggerFactory? loggerFactory = null,
         IOperationResultPublisher? operationResults = null,
         IStatusReducer? statusReducer = null,
@@ -187,7 +191,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.selectionService.SelectionChanged += this.OnSelectionServiceChanged;
         this.SelectionSettled += this.OnTreeSelectionSettled;
         this.ItemInvoked += this.OnTreeItemInvoked;
-        this.commandService = commandService;
         this.PropertyChanged += this.OnContextOwnerPropertyChanged;
         this.ClipboardContentChanged += (_, _) => this.RefreshContextActions();
 
@@ -218,11 +221,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 message.Reply(response: true);
             }
         });
-        commandService.NodesAdded += this.OnSceneNodeAdded;
-        commandService.NodesRemoved += this.OnSceneNodeRemoved;
-        commandService.ComponentAdded += this.OnComponentAdded;
-        commandService.ComponentRemoved += this.OnComponentRemoved;
-        commandService.SelectionChanged += this.OnCommandSelectionChanged;
         messenger.Register<SceneReloadedMessage>(this, (_, message) =>
         {
             if (!this.isDisposed && message.WindowId == this.windowId
@@ -419,8 +417,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     {
         ArgumentNullException.ThrowIfNull(item);
 
-        var context = this.CreateCommandContext();
-        if (context is null || !this.IsCurrentContextRow(item) || this.FindLockedContextRow(item) is not null)
+        var authoring = this.CurrentAuthoring();
+        if (authoring is null || !this.IsCurrentContextRow(item) || this.FindLockedContextRow(item) is not null)
         {
             return TreeItemRenameResult.Rejected("The row is no longer editable in the loaded scene document.");
         }
@@ -436,32 +434,36 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return TreeItemRenameResult.Success;
         }
 
-        var result = item switch
+        return item switch
         {
             SceneAdapter => await this.RenameSceneAssetAsync(trimmed).ConfigureAwait(true),
-            SceneNodeAdapter node => await this.commandService.RenameNodeAsync(context, node.AttachedObject.Id, trimmed).ConfigureAwait(true),
-            FolderAdapter folder => await this.RenameFolderAsync(context, folder, trimmed).ConfigureAwait(true),
-            _ => new SceneCommandResult(Succeeded: false),
+            SceneNodeAdapter node => Renamed(await authoring.ExecuteAsync(new RenameNode(node.AttachedObject.Id, trimmed)).ConfigureAwait(true)),
+            FolderAdapter folder => await RenameFolderAsync(authoring, folder, trimmed).ConfigureAwait(true),
+            _ => TreeItemRenameResult.Rejected("The rename was rejected."),
         };
-
-        return result.Succeeded
-            ? TreeItemRenameResult.Success
-            : TreeItemRenameResult.Rejected(result.ValidationMessage ?? "The rename was rejected.");
     }
+
+    private static TreeItemRenameResult Renamed(SceneEditResult result)
+        => result.Succeeded
+            ? TreeItemRenameResult.Success
+            : TreeItemRenameResult.Rejected(ErrorOf(result) ?? "The rename was rejected.");
+
+    private static string? ErrorOf(SceneEditResult result)
+        => result.Diagnostics.FirstOrDefault(static diagnostic => diagnostic.IsError)?.Message;
 
     // A scene's name is its file name: renaming the scene renames its file, as the Content Browser does, with one entry in
     // the global history; its document follows the file.
-    private async Task<SceneCommandResult> RenameSceneAssetAsync(string name)
+    private async Task<TreeItemRenameResult> RenameSceneAssetAsync(string name)
     {
         if (this.relocation is null || this.histories is null || this.sceneDocument is not { } document
             || this.projectContexts?.ActiveProject?.FindByFilePath(document.File.Path) is not { } location)
         {
-            return new(Succeeded: false) { ValidationMessage = "The scene's file cannot be renamed here." };
+            return TreeItemRenameResult.Rejected("The scene's file cannot be renamed here.");
         }
 
         if (Oxygen.Editor.ContentPipeline.Relocation.RelocationPaths.ValidateName(name) is { } invalid)
         {
-            return new(Succeeded: false) { ValidationMessage = invalid };
+            return TreeItemRenameResult.Rejected(invalid);
         }
 
         var target = Oxygen.Editor.ContentPipeline.Relocation.RelocationPaths.Rename(location.VirtualPath, name, isFolder: false);
@@ -472,12 +474,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 "Rename",
                 this.histories.GlobalHistory,
                 CancellationToken.None).ConfigureAwait(true);
-            return SceneCommandResult.Success;
+            return TreeItemRenameResult.Success;
         }
         catch (Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationException failure)
         {
             this.LogSceneRenameRejected(document.Title, name, failure.Message);
-            return new(Succeeded: false) { ValidationMessage = failure.Message };
+            return TreeItemRenameResult.Rejected(failure.Message);
         }
     }
 
@@ -521,15 +523,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         return await this.ApplySelectionContextAsync(context, focusPrimary: focusPrimary).ConfigureAwait(true);
     }
 
-    private async Task<SceneCommandResult> RenameFolderAsync(SceneDocumentCommandContext context, FolderAdapter folder, string newName)
+    private static async Task<TreeItemRenameResult> RenameFolderAsync(SceneAuthoring authoring, FolderAdapter folder, string newName)
     {
-        var result = await this.commandService.RenameFolderAsync(context, folder.Id, newName).ConfigureAwait(true);
+        var result = await authoring.ExecuteAsync(new RenameFolder(folder.Id, newName)).ConfigureAwait(true);
         if (result.Succeeded)
         {
             folder.Name = newName;
         }
 
-        return result;
+        return Renamed(result);
     }
 
     /// <summary>
@@ -578,11 +580,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.StopSearchOperations();
             this.sceneEngineSync.SceneSynchronized -= this.OnSceneSynchronized;
             this.selectionService.SelectionChanged -= this.OnSelectionServiceChanged;
-            this.commandService.NodesAdded -= this.OnSceneNodeAdded;
-            this.commandService.NodesRemoved -= this.OnSceneNodeRemoved;
-            this.commandService.ComponentAdded -= this.OnComponentAdded;
-            this.commandService.ComponentRemoved -= this.OnComponentRemoved;
-            this.commandService.SelectionChanged -= this.OnCommandSelectionChanged;
+            this.ObserveAuthoring(authoring: null);
             this.documentArea.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
             this.openDocuments.Closed -= this.OnSceneDocumentClosed;
             this.projectClipboardSubscription?.Dispose();
@@ -715,8 +713,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [RelayCommand]
     private async Task Undo()
     {
-        using var authoring = this.EnterTreeAuthoring();
-        if (authoring is null)
+        if (this.CurrentAuthoring() is not { } authoring)
         {
             return;
         }
@@ -724,7 +721,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.suppressNodeMessages = true;
         try
         {
-            await this.History.UndoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(true);
+            _ = await authoring.UndoAsync().ConfigureAwait(true);
             await this.ReconcileProjectionAsync().ConfigureAwait(true);
         }
         finally
@@ -736,8 +733,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [RelayCommand]
     private async Task Redo()
     {
-        using var authoring = this.EnterTreeAuthoring();
-        if (authoring is null)
+        if (this.CurrentAuthoring() is not { } authoring)
         {
             return;
         }
@@ -745,7 +741,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.suppressNodeMessages = true;
         try
         {
-            await this.History.RedoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(true);
+            _ = await authoring.RedoAsync().ConfigureAwait(true);
             await this.ReconcileProjectionAsync().ConfigureAwait(true);
         }
         finally
@@ -791,24 +787,28 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [RelayCommand(CanExecute = nameof(CanAddEntity))]
     private async Task AddEntity()
     {
-        var context = this.CreateCommandContext();
-        if (context is null)
+        if (this.CurrentAuthoring() is not { } authoring)
         {
             return;
         }
 
         var target = this.GetSingleSelectionTarget();
-        NodeId? parentNodeId = target switch { SceneNodeAdapter node => node.AttachedObject.Id, _ => null };
         FolderId? parentFolderId = target switch { FolderAdapter folder => folder.Id, _ => null };
+        NodeId? parentNodeId = target switch { SceneNodeAdapter nodeRow => nodeRow.AttachedObject.Id, _ => null };
+        if (parentFolderId is { } inFolder && LayoutScopes.TryScopeOf(authoring.Scene, LayoutEntryId.Of(inFolder), out var folderScope))
+        {
+            parentNodeId = folderScope;
+        }
 
-        var name = this.GetNextEntityName();
+        var node = SceneNodeTemplates.Empty(authoring.Scene, this.GetNextEntityName());
         this.suppressNodeMessages = true;
         try
         {
-            var result = await this.commandService.CreateNodeAsync(context, parentNodeId, parentFolderId, name).ConfigureAwait(true);
+            var result = await authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(authoring.Scene, node, parentNodeId, parentFolderId)])).ConfigureAwait(true);
             if (result.Succeeded)
             {
                 await this.ReconcileProjectionAsync().ConfigureAwait(true);
+                _ = await this.SetSelectedNodes([node.Id]).ConfigureAwait(true);
             }
         }
         finally
@@ -827,114 +827,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     /// <inheritdoc />
     public override Task CopyItemsAsync(IReadOnlyList<ITreeItem> items)
-    {
-        if (items.Any(static item => item is not SceneNodeAdapter))
-        {
-            return this.StageExplorerClipboardAsync(items, cut: false);
-        }
-
-        var selectedIds = items.OfType<SceneNodeAdapter>().Select(static row => row.AttachedObject.Id).ToHashSet();
-        var adapters = items.OfType<SceneNodeAdapter>().Where(row =>
-        {
-            for (var parent = row.AttachedObject.Parent; parent is not null; parent = parent.Parent)
-            {
-                if (selectedIds.Contains(parent.Id))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }).ToList();
-        if (adapters.Count == 0)
-        {
-            return Task.CompletedTask;
-        }
-
-        var snapshots = new List<SceneNodeData>(adapters.Count);
-        var localSnapshots = new List<SceneNodeData>(adapters.Count);
-        this.clipboardWorldPoseAvailable = true;
-        foreach (var adapter in adapters)
-        {
-            var node = adapter.AttachedObject;
-            var data = node.Dehydrate();
-            localSnapshots.Add(data);
-            if (node.Parent is not null && !node.IgnoreParentTransform)
-            {
-                if (!SceneTransformMath.TryPreserveWorldLocal(node, newParent: null, out var position, out var rotation, out var scale))
-                {
-                    this.clipboardWorldPoseAvailable = false;
-                }
-                else
-                {
-                    data = data with
-                    {
-                        Components = data.Components.Select(component => component is TransformData transform
-                            ? transform with { Position = position, Rotation = rotation, Scale = scale }
-                            : component).ToList(),
-                    };
-                }
-            }
-
-            snapshots.Add(data);
-        }
-
-        this.clipboardNodeIds.Clear();
-        this.explorerClipboard = null;
-        this.clipboardLocalSnapshots = localSnapshots;
-        this.clipboardSnapshots.Clear();
-        this.clipboardNodeIds.AddRange(adapters.Select(adapter => adapter.AttachedObject.Id));
-        this.clipboardSnapshots.AddRange(snapshots);
-
-        this.clipboardIsCut = false;
-        this.StampClipboardOrigin();
-
-        this.ClipboardItemStore = [.. items];
-        this.ClipboardStateStore = ClipboardState.Copied;
-        this.ClearCutMarks();
-        this.RaiseClipboardChanged();
-        return Task.CompletedTask;
-    }
+        => this.StageExplorerClipboardAsync(items, cut: false);
 
     /// <inheritdoc />
     public override Task CutItemsAsync(IReadOnlyList<ITreeItem> items)
-    {
-        if (items.Any(item => this.FindLockedContextRow(item) is not null))
-        {
-            return Task.CompletedTask;
-        }
-
-        if (items.Any(static item => item is FolderAdapter))
-        {
-            return this.StageExplorerClipboardAsync(items, cut: true);
-        }
-
-        var eligible = items.ToArray();
-        var nodeIds = eligible.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id).ToList();
-        if (nodeIds.Count == 0)
-        {
-            return Task.CompletedTask;
-        }
-
-        this.clipboardNodeIds.Clear();
-        this.explorerClipboard = null;
-        this.clipboardNodeIds.AddRange(nodeIds);
-        this.clipboardSnapshots.Clear();
-        this.clipboardIsCut = true;
-        this.StampClipboardOrigin();
-
-        this.ClipboardStateStore = ClipboardState.Cut;
-        this.ClearCutMarks();
-        this.CutMarkedStore = eligible;
-        foreach (var item in eligible)
-        {
-            item.IsCut = true;
-        }
-
-        this.ClipboardItemStore = eligible;
-        this.RaiseClipboardChanged();
-        return Task.CompletedTask;
-    }
+        => items.Any(item => this.FindLockedContextRow(item) is not null)
+            ? Task.CompletedTask
+            : this.StageExplorerClipboardAsync(items, cut: true);
 
     /// <inheritdoc />
     public override async Task PasteItemsAsync(ITreeItem? targetParent = null, int? insertIndex = null)
@@ -976,9 +875,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     {
         this.clipboardGeneration++;
         this.explorerClipboard = null;
-        this.clipboardLocalSnapshots = [];
         this.clipboardNodeIds.Clear();
-        this.clipboardSnapshots.Clear();
         this.clipboardIsCut = false;
         this.clipboardProjectId = null;
         this.clipboardProjectRoot = null;
@@ -1057,16 +954,18 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     private async Task RemoveFromFolderAsync(ITreeItem anchor)
     {
-        var context = this.CreateCommandContext();
-        if (context is null || anchor is not SceneNodeAdapter node || node.Parent is not FolderAdapter folder)
+        if (this.CurrentAuthoring() is not { } authoring || anchor is not SceneNodeAdapter node || node.Parent is not FolderAdapter folder
+            || LayoutScopes.PositionOf(authoring.Scene, LayoutEntryId.Of(folder.Id)) is not { } folderPlace)
         {
             return;
         }
 
+        // The node's entry goes right after its folder, in the folder's own container.
+        var entry = LayoutEntryId.Of(node.AttachedObject.Id);
         this.suppressNodeMessages = true;
         try
         {
-            var result = await this.commandService.RemoveNodesFromFolderAsync(context, [node.AttachedObject.Id], folder.Id).ConfigureAwait(true);
+            var result = await authoring.ExecuteAsync(new MoveLayoutEntries([entry], folderPlace with { Index = folderPlace.Index + 1 })).ConfigureAwait(true);
             if (result.Succeeded)
             {
                 await this.ReconcileProjectionAsync().ConfigureAwait(true);
@@ -1080,8 +979,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     private async Task MoveToSceneRootAsync(ITreeItem anchor)
     {
-        var context = this.CreateCommandContext();
-        if (context is null || anchor is not SceneNodeAdapter node)
+        if (this.CurrentAuthoring() is not { } authoring || anchor is not SceneNodeAdapter node)
         {
             return;
         }
@@ -1089,7 +987,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.suppressNodeMessages = true;
         try
         {
-            var result = await this.commandService.ReparentNodesAsync(context, [node.AttachedObject.Id], newParentNodeId: null, preserveWorldTransform: false).ConfigureAwait(true);
+            var result = await authoring.ExecuteAsync(new ReparentNodes([node.AttachedObject.Id], parent: null, preserveWorld: false)).ConfigureAwait(true);
             if (result.Succeeded)
             {
                 await this.ReconcileProjectionAsync().ConfigureAwait(true);
@@ -1104,8 +1002,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private async void OnActiveDocumentChanged(object? sender, EventArgs e)
     {
         // Only scene documents replace the shown scene; another document leaves it in place.
-        if (this.documentArea.ActiveDocument is not { Content: SceneContent { Scene: var scene } } sceneDocument
-            || SceneAuthoringGate.IsInstalling(scene))
+        if (this.documentArea.ActiveDocument is not { Content: SceneContent } sceneDocument)
         {
             return;
         }
@@ -1185,7 +1082,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.ClipboardItemStore = [];
         }
 
-        if ((this.clipboardNodeIds.Count > 0 || this.explorerClipboard is not null) && !this.ClipboardLifetimeIsCurrent())
+        if (this.explorerClipboard is not null && !this.ClipboardLifetimeIsCurrent())
         {
             this.InvalidateClipboard(this.clipboardIsCut
                 ? "The staged Cut was cancelled because its scene lifetime ended."
@@ -2056,43 +1953,46 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <inheritdoc />
     protected override bool IsIncludedInBulk(ITreeItem item) => item is not SceneAdapter;
 
-    private void OnSceneNodeAdded(object? sender, SceneNodesChangedEventArgs args)
+    // The tree follows the edits other views make; the explorer reconciles after its own.
+    private void OnSceneChanged(object? sender, SceneChangedEventArgs args)
     {
-        this.RefreshCategoryPresentation();
-        _ = this.RefreshProjectionForNodesAsync([.. args.Nodes]);
-    }
-
-    private void OnSceneNodeRemoved(object? sender, SceneNodesChangedEventArgs args)
-    {
-        this.RefreshCategoryPresentation();
-        _ = this.RefreshProjectionForNodesAsync([.. args.Nodes]);
-    }
-
-    // The window's panels follow the selection a command leaves, as they follow the explorer's own.
-    private void OnCommandSelectionChanged(object? sender, SceneCommandSelectionEventArgs args)
-        => _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([.. args.SelectedNodes], args.SelectionContext, args.DocumentId));
-
-    private void OnComponentAdded(object? sender, SceneComponentChangedEventArgs args)
-    {
-        if (this.Scene?.AttachedObject.Id == args.Node.Scene.Id)
+        if (args.Changes.Any(static change => change is SceneChange.ComponentAdded or SceneChange.ComponentRemoved
+            or SceneChange.NodesAdded or SceneChange.NodesRemoved))
         {
             this.RefreshCategoryPresentation();
         }
-    }
 
-    private void OnComponentRemoved(object? sender, SceneComponentChangedEventArgs args)
-    {
-        if (this.Scene?.AttachedObject.Id == args.Node.Scene.Id)
+        if (args.Changes.Any(static change => change is SceneChange.NodesAdded or SceneChange.NodesRemoved or SceneChange.NodesPlaced
+            or SceneChange.NodeRenamed or SceneChange.LayoutChanged))
         {
-            this.RefreshCategoryPresentation();
+            _ = this.RefreshProjectionAsync();
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Messenger callbacks report projection failures instead of losing unobserved task exceptions.")]
-    private async Task RefreshProjectionForNodesAsync(IList<SceneNode> nodes)
+    // Follows the authoring of the shown scene, which a reload replaces.
+    private void ObserveAuthoring(SceneAuthoring? authoring)
     {
-        if (this.isDisposed || this.suppressNodeMessages || this.Scene is not { } sceneAdapter
-            || !nodes.Any(node => ReferenceEquals(node.Scene, sceneAdapter.AttachedObject)))
+        if (ReferenceEquals(this.observedAuthoring, authoring))
+        {
+            return;
+        }
+
+        if (this.observedAuthoring is { } previous)
+        {
+            previous.Changed -= this.OnSceneChanged;
+        }
+
+        this.observedAuthoring = authoring;
+        if (authoring is not null)
+        {
+            authoring.Changed += this.OnSceneChanged;
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Change callbacks report projection failures instead of losing unobserved task exceptions.")]
+    private async Task RefreshProjectionAsync()
+    {
+        if (this.isDisposed || this.suppressNodeMessages || this.Scene is null)
         {
             return;
         }
@@ -2110,8 +2010,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [RelayCommand(CanExecute = nameof(CanCreateFolder))]
     private async Task CreateFolder()
     {
-        var context = this.CreateCommandContext();
-        if (context is null)
+        if (this.CurrentAuthoring() is not { } authoring)
         {
             return;
         }
@@ -2119,13 +2018,17 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.LogCreateFolderInvoked(this.SelectionModel?.GetType().Name, this.ShownItemsCount);
 
         var target = this.GetSingleSelectionTarget();
-        FolderId? parentFolderId = target switch { FolderAdapter folder => folder.Id, _ => null };
-        NodeId? parentNodeId = target switch { SceneNodeAdapter node => node.AttachedObject.Id, _ => null };
+        var container = target switch
+        {
+            FolderAdapter folder => LayoutPosition.InFolder(folder.Id, 0),
+            SceneNodeAdapter node => LayoutPosition.UnderNode(node.AttachedObject.Id, 0),
+            _ => LayoutPosition.AtRoot(0),
+        };
 
         this.suppressNodeMessages = true;
         try
         {
-            var result = await this.commandService.CreateFolderAsync(context, parentFolderId, parentNodeId, "New Folder").ConfigureAwait(true);
+            var result = await authoring.ExecuteAsync(new CreateFolder(FolderId.New(), LayoutScopes.EndOf(authoring.Scene, container), "New Folder")).ConfigureAwait(true);
             if (result.Succeeded)
             {
                 await this.ReconcileProjectionAsync().ConfigureAwait(true);
@@ -2155,25 +2058,22 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"New Entity {index}");
     }
 
-    private SceneDocumentCommandContext? CreateCommandContext()
+    // The authoring of the shown scene; none while the document shows another scene or is gone.
+    private SceneAuthoring? CurrentAuthoring()
+        => !this.isDisposed && this.sceneDocument?.Content is SceneContent { Authoring: var authoring }
+            && ReferenceEquals(authoring.Scene, this.Scene?.AttachedObject)
+                ? authoring
+                : null;
+
+    // The authoring, when a row belongs to the shown scene.
+    private SceneAuthoring? AuthoringFor(ITreeItem? item = null)
     {
-        if (this.Scene is null)
+        if (this.CurrentAuthoring() is not { } authoring)
         {
             return null;
         }
 
-        var scene = this.Scene.AttachedObject;
-        return SceneAuthoringGate.IsInstalling(scene) || this.sceneDocument is not { } document
-            ? null
-            : new SceneDocumentCommandContext(document.Id, scene, document.History);
-    }
-
-    private SceneAuthoringGate.Operation? EnterTreeAuthoring(ITreeItem? item = null)
-    {
-        if (this.isDisposed || this.Scene?.AttachedObject is not { } scene)
-        {
-            return null;
-        }
+        var scene = authoring.Scene;
 
         if (item is not null)
         {
@@ -2190,17 +2090,18 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             }
         }
 
-        return SceneAuthoringGate.TryEnter(scene);
+        return authoring;
     }
 
     private async Task<bool> InstallLoadedSceneAsync(Scene loadedScene, Document sceneDocument, CancellationToken ct)
     {
-        if (!this.sceneEngineSync.RegisterDocument(loadedScene, sceneDocument.Id))
+        if (sceneDocument.Content is not SceneContent content || !this.sceneEngineSync.RegisterDocument(content.Authoring))
         {
             return false;
         }
 
         this.sceneDocument = sceneDocument;
+        this.ObserveAuthoring(content.Authoring);
 
         await this.InitializeLoadedSceneAsync(loadedScene).ConfigureAwait(true);
 
@@ -2231,82 +2132,61 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return TreeDropResult.Rejected;
         }
 
-        var context = this.CreateCommandContext();
-        if (context is null)
+        if (this.CurrentAuthoring() is not { } authoring)
         {
             return TreeDropResult.Rejected;
         }
 
         var folderIds = request.Items.OfType<FolderAdapter>().Select(folder => folder.Id).ToList();
         var nodeIds = request.Items.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id).ToList();
-
-        if (request.Operation == TreeDropOperation.Copy)
+        var target = request.Parent switch
         {
-            // Ctrl-drag duplicates through the same deep-copy command used by Paste without
-            // touching the clipboard. Folder copy is not yet supported.
-            if (nodeIds.Count == 0)
+            FolderAdapter folder => new PasteTarget(Folder: folder.Id),
+            SceneNodeAdapter node => new PasteTarget(Parent: node.AttachedObject.Id),
+            _ => new PasteTarget(),
+        };
+
+        // A drop is a paste of the dragged items: a Ctrl-drag copies them, any other drop moves them.
+        ISceneEdit edit;
+        if (request.Operation != TreeDropOperation.Copy && nodeIds.Count == 1 && folderIds.Count == 0 && this.IsSameParentReorder(request, nodeIds[0]))
+        {
+            if (this.ReorderWithinParent(authoring.Scene, nodeIds[0], request) is not { } reorder)
             {
                 return TreeDropResult.Rejected;
             }
 
-            var (copyParentNodeId, copyParentFolderId) = ResolveDropDestination(request.Parent);
-            IReadOnlyList<SceneNode>? createdNodes;
-            this.suppressNodeMessages = true;
-            try
-            {
-                var duplicate = await this.commandService.DuplicateNodesAsync(context, nodeIds, copyParentNodeId, copyParentFolderId).ConfigureAwait(true);
-                if (!duplicate.Succeeded)
-                {
-                    return TreeDropResult.Rejected;
-                }
-
-                createdNodes = duplicate.Value;
-                await this.ReconcileProjectionAsync().ConfigureAwait(true);
-            }
-            finally
-            {
-                this.suppressNodeMessages = false;
-            }
-
-            var created = createdNodes!
-                .Select(node => (ITreeItem)this.projection.GetNode(node.Id)!)
-                .ToList();
-            return TreeDropResult.Committed(created);
+            edit = reorder;
         }
-
-        SceneCommandResult result;
-        if (folderIds.Count > 0)
-        {
-            // The command owner resolves destination folder lineage and performs any required reparent.
-            if (folderIds.Count != 1 || nodeIds.Count != 0)
-            {
-                return TreeDropResult.Rejected;
-            }
-
-            var newParentFolderId = request.Parent is FolderAdapter targetFolder ? targetFolder.Id : (FolderId?)null;
-            result = await this.commandService.MoveFolderToParentAsync(context, folderIds[0], newParentFolderId).ConfigureAwait(true);
-        }
-        else if (nodeIds.Count == 1 && this.IsSameParentReorder(request, nodeIds[0]))
-        {
-            var (parentNodeId, parentFolderId) = ResolveDropDestination(request.Parent);
-            result = await this.commandService.ReorderNodesAsync(context, nodeIds[0], parentFolderId, parentNodeId, request.Index).ConfigureAwait(true);
-        }
-        else
-        {
-            result = request.Parent switch
-            {
-                FolderAdapter folder => await this.commandService.MoveNodesToFolderAsync(context, nodeIds, folder.Id).ConfigureAwait(true),
-                SceneNodeAdapter node => await this.commandService.ReparentNodesAsync(context, nodeIds, node.AttachedObject.Id, preserveWorldTransform: false).ConfigureAwait(true),
-                _ => await this.commandService.ReparentNodesAsync(context, nodeIds, newParentNodeId: null, preserveWorldTransform: false).ConfigureAwait(true),
-            };
-        }
-
-        if (!result.Succeeded)
+        else if (SceneClipboard.Capture(authoring.Scene, nodeIds, folderIds) is not { } dragged
+            || !dragged.TryPaste(authoring.Scene, target, request.Operation != TreeDropOperation.Copy, preserveWorld: false, out var paste, out _))
         {
             return TreeDropResult.Rejected;
         }
+        else
+        {
+            edit = paste;
+        }
 
-        await this.ReconcileProjectionAsync().ConfigureAwait(true);
+        this.suppressNodeMessages = true;
+        try
+        {
+            if (!(await authoring.ExecuteAsync(edit).ConfigureAwait(true)).Succeeded)
+            {
+                return TreeDropResult.Rejected;
+            }
+
+            await this.ReconcileProjectionAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            this.suppressNodeMessages = false;
+        }
+
+        if (request.Operation == TreeDropOperation.Copy && edit is SceneEditBatch batch)
+        {
+            nodeIds = [.. batch.Edits.OfType<InsertNodes>().SelectMany(static insert => insert.Inserts).Select(static insert => insert.Node.Id)];
+            folderIds = [.. batch.Edits.OfType<CreateFolder>().Select(static folder => folder.Folder)];
+        }
 
         var moved = nodeIds
             .Where(this.projection.ContainsNode)
@@ -2316,13 +2196,23 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         return TreeDropResult.Committed(moved);
     }
 
-    private static (NodeId? ParentNodeId, FolderId? ParentFolderId) ResolveDropDestination(ITreeItem parent)
-        => parent switch
+    // The row index is a place among the parent's entries; the graph index counts the node entries before it.
+    private ReorderNode? ReorderWithinParent(Scene scene, NodeId nodeId, TreeDropRequest request)
+    {
+        var container = request.Parent is SceneNodeAdapter node ? LayoutPosition.UnderNode(node.AttachedObject.Id, 0) : LayoutPosition.AtRoot(0);
+        var self = LayoutEntryId.Of(nodeId);
+        var entries = LayoutScopes.EntriesOf(scene, container);
+        var current = entries.ToList().IndexOf(self);
+        if (current < 0)
         {
-            FolderAdapter folder => (null, folder.Id),
-            SceneNodeAdapter node => (node.AttachedObject.Id, null),
-            _ => (null, null),
-        };
+            return null;
+        }
+
+        var rest = entries.Where(entry => entry != self).ToList();
+        var index = Math.Clamp(request.Index > current ? request.Index - 1 : request.Index, 0, rest.Count);
+        var graphIndex = rest.Take(index).Count(static entry => entry.Node is not null);
+        return new ReorderNode(nodeId, new NodePosition(this.projection.GetNode(nodeId)?.AttachedObject.Parent?.Id, graphIndex), container with { Index = index });
+    }
 
     private bool IsSameParentReorder(TreeDropRequest request, NodeId nodeId)
     {
@@ -2579,7 +2469,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         var ids = this.ResolveWorkspaceTargetIds(anchor);
-        if (ids.Count == 0 || this.CreateCommandContext() is not { } context)
+        if (ids.Count == 0 || this.CurrentAuthoring() is not { } authoring)
         {
             return;
         }
@@ -2587,7 +2477,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // One intent, one undo step: the batch target is decided from the first row so a mixed
         // selection hides or shows uniformly, the way Delete and Reparent batches already do.
         var hide = !service.IsHidden(ids[0]);
-        _ = await this.commandService.SetEditorHiddenAsync(context, ids, hide).ConfigureAwait(true);
+        _ = await authoring.ExecuteAsync(new SetEditorHidden(ids, hide)).ConfigureAwait(true);
     }
 
     /// <summary>Locks or unlocks the anchor row, or the whole selection, against editing.</summary>
@@ -2626,13 +2516,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        var context = this.CreateCommandContext();
-        if (context is null)
+        if (this.CurrentAuthoring() is not { } authoring)
         {
             return;
         }
 
-        _ = await this.commandService.SetEditorHiddenAsync(context, [.. hidden], hidden: false).ConfigureAwait(true);
+        _ = await authoring.ExecuteAsync(new SetEditorHidden([.. hidden], hidden: false)).ConfigureAwait(true);
     }
 
     /// <summary>

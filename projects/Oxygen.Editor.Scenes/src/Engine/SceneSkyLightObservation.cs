@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.World.Services;
+namespace Oxygen.Editor.Scenes.Engine;
 
 /// <summary>What the engine reports about the sky light of the scene it shows.</summary>
 /// <param name="Observed">Whether the engine reported the sky light at all.</param>

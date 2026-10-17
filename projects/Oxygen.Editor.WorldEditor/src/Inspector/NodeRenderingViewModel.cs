@@ -2,9 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.World.Inspector.Editing;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -22,22 +23,20 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
 {
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly List<IInspectorBindingRefresh> registrations = [];
-    private readonly PropertyBinding<bool> isVisibleBinding = new(SceneDocumentCommandService.NodeRendering.IsVisibleDescriptor);
-    private readonly PropertyBinding<bool> castsShadowsBinding = new(SceneDocumentCommandService.NodeRendering.CastsShadowsDescriptor);
-    private readonly PropertyBinding<bool> receivesShadowsBinding = new(SceneDocumentCommandService.NodeRendering.ReceivesShadowsDescriptor);
+    private readonly PropertyBinding<bool> isVisibleBinding = new(SceneProperties.NodeRendering.IsVisibleDescriptor);
+    private readonly PropertyBinding<bool> castsShadowsBinding = new(SceneProperties.NodeRendering.CastsShadowsDescriptor);
+    private readonly PropertyBinding<bool> receivesShadowsBinding = new(SceneProperties.NodeRendering.ReceivesShadowsDescriptor);
     private ICollection<SceneNode>? selectedItems;
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="NodeRenderingViewModel"/> class.</summary>
-    /// <param name="commandService">Optional command service used to apply flag edits.</param>
-    /// <param name="commandContextProvider">Optional provider for the active scene command context.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     public NodeRenderingViewModel(
-        ISceneDocumentCommandService? commandService = null,
-        Func<SceneDocumentCommandContext?>? commandContextProvider = null)
+        Func<SceneAuthoring?>? authoringProvider = null)
     {
-        if (commandService is not null && commandContextProvider is not null)
+        if (authoringProvider is not null)
         {
-            this.edits = new(commandService, commandContextProvider, "Edit Rendering", this.RefreshValues);
+            this.edits = new(authoringProvider, "Edit Rendering", this.RefreshValues);
         }
 
         this.Register(this.isVisibleBinding, nameof(this.IsVisible));

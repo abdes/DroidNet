@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;

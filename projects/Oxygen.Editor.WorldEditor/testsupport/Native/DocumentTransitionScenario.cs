@@ -29,7 +29,8 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
     /// <returns>The asynchronous document-transition regression.</returns>
     public Task RunAsync(uint targetFps, int cycles) => EnqueueAsync(async () =>
     {
-        var fixture = new NativeSceneFixture(automatic: false, scene => SeedShadowTransitionScene(scene, 4), new EngineSettings { Graphics = new() { EnableDebugLayer = true, EnableValidation = true }, Renderer = new() { DirectionalShadowPolicy = DirectionalShadowPolicy.ConventionalOnly }, });
+        // The shared engine: the scenario is the document transition at a slow cadence, not GPU validation.
+        var fixture = new NativeSceneFixture(automatic: false, scene => SeedShadowTransitionScene(scene, 4));
         await using var lifetime = fixture.ConfigureAwait(true);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(150));
@@ -93,7 +94,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
 
     private static async Task RunMaterialTransitionsAsync(NativeSceneFixture fixture, DocumentHostViewModel host, DocumentManager manager, EditorDocumentService documents, Uri material, WindowId windowId, int cycles, CancellationToken cancellationToken)
     {
-        var mainId = fixture.Context.DocumentId;
+        var mainId = fixture.Document.Id;
         for (var cycle = 0; cycle < cycles; ++cycle)
         {
             var viewport = ((SceneEditorViewModel)host.ActiveEditor!).Viewports.Single();

@@ -4,8 +4,9 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector.Geometry;
 
@@ -58,14 +59,18 @@ public sealed partial class GeometryViewModel
     [RelayCommand]
     public async Task ClearUnresolvedMaterialSlotsAsync()
     {
-        if (this.disposed || !this.IsInputEnabled || this.commandService is null
-            || this.selectedItems is not { Count: > 0 } selected || this.commandContextProvider?.Invoke() is not { } context)
+        if (this.disposed || !this.IsInputEnabled || this.projectContexts.ActiveProject is not { } project
+            || this.selectedItems is not { Count: > 0 } selected || this.authoringProvider?.Invoke() is not { } authoring)
         {
             return;
         }
 
         var nodes = selected.ToList();
-        _ = await this.commandService.ClearUnresolvedMaterialSlotsAsync(context, nodes.ConvertAll(static node => node.Id)).ConfigureAwait(true);
+        var built = await MaterialSlotEdits.ClearUnresolvedAsync(this.materialSlots, project, authoring.Scene, nodes.ConvertAll(static node => node.Id)).ConfigureAwait(true);
+        if (built.Edit is { } edit)
+        {
+            _ = await authoring.ExecuteAsync(edit).ConfigureAwait(true);
+        }
         if (this.IsCurrentSelection(nodes))
         {
             await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);
@@ -247,5 +252,5 @@ public sealed partial class GeometryViewModel
         this.OnPropertyChanged(nameof(this.CanEditMaterialSlot));
     }
 
-    private sealed record MaterialPickerEdit(SceneDocumentCommandContext Context, List<SceneNode> Nodes, MaterialSlotTarget Target);
+    private sealed record MaterialPickerEdit(SceneAuthoring Authoring, List<SceneNode> Nodes, MaterialSlotTarget Target);
 }

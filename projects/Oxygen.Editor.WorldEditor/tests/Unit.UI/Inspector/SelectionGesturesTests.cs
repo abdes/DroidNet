@@ -48,13 +48,13 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
         number.NumberValue = 90;
         RaiseNumberEvent(number, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         await PendingNumericEdits(model).ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         _ = ReadNumericSource(fixture.Node, kind).Should().Be(90);
         _ = ReadNumericSource(second, kind).Should().Be(90);
-        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        await fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = ReadNumericSource(fixture.Node, kind).Should().Be(60);
         _ = ReadNumericSource(second, kind).Should().Be(80);
-        await fixture.Context.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
+        await fixture.Document.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = ReadNumericSource(fixture.Node, kind).Should().Be(90);
         _ = ReadNumericSource(second, kind).Should().Be(90);
     });
@@ -88,7 +88,7 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
         _ = ReadNumericSource(fixture.Node, kind).Should().Be(60, "the original target is cancelled");
         _ = ReadNumericSource(second, kind).Should().Be(80, "the new target rejects the old callback");
         _ = number.NumberValue.Should().Be(80, "the bound control refreshes after rejecting the callback");
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
@@ -126,11 +126,11 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
 
         _ = firstTransform.LocalPosition.X.Should().Be(12);
         _ = secondTransform.LocalPosition.X.Should().Be(22);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
-        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
+        await fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = firstTransform.LocalPosition.X.Should().Be(10);
         _ = secondTransform.LocalPosition.X.Should().Be(20);
-        await fixture.Context.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
+        await fixture.Document.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = firstTransform.LocalPosition.X.Should().Be(12);
         _ = secondTransform.LocalPosition.X.Should().Be(22);
     });
@@ -165,7 +165,7 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
 
         _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalPosition.X.Should().Be(10);
         _ = second.Components.OfType<TransformComponent>().Single().LocalPosition.X.Should().Be(20);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 }

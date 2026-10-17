@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -18,8 +18,7 @@ public sealed class SceneExplorerContextMenuTests
         var menu = SceneExplorerContextMenu.Build(SceneSelectionKind.Node, primaryIsInFolder: false, primaryHasChildren: false, primaryIsUnlocked: true);
 
         _ = menu.Select(entry => entry.Kind).Should().Contain(
-            new[]
-            {
+            [
                 SceneExplorerCommandKind.NewNode,
                 SceneExplorerCommandKind.Rename,
                 SceneExplorerCommandKind.Cut,
@@ -27,7 +26,7 @@ public sealed class SceneExplorerContextMenuTests
                 SceneExplorerCommandKind.Paste,
                 SceneExplorerCommandKind.PasteAsChild,
                 SceneExplorerCommandKind.Delete,
-            });
+            ]);
     }
 
     [TestMethod]
@@ -57,13 +56,12 @@ public sealed class SceneExplorerContextMenuTests
         var menu = SceneExplorerContextMenu.Build(SceneSelectionKind.Mixed, primaryIsInFolder: false, primaryHasChildren: false, primaryIsUnlocked: true);
 
         _ = menu.Select(entry => entry.Kind).Should().Contain(
-            new[]
-            {
+            [
                 SceneExplorerCommandKind.Cut,
                 SceneExplorerCommandKind.Copy,
                 SceneExplorerCommandKind.Paste,
                 SceneExplorerCommandKind.Delete,
-            });
+            ]);
         _ = menu.Select(entry => entry.Kind).Should().NotContain(SceneExplorerCommandKind.Rename);
         _ = menu.Select(entry => entry.Kind).Should().NotContain(SceneExplorerCommandKind.NewNode);
     }
@@ -74,13 +72,12 @@ public sealed class SceneExplorerContextMenuTests
         var menu = SceneExplorerContextMenu.Build(SceneSelectionKind.Scene, primaryIsInFolder: false, primaryHasChildren: false, primaryIsUnlocked: true);
 
         _ = menu.Select(entry => entry.Kind).Should().Contain(
-            new[]
-            {
+            [
                 SceneExplorerCommandKind.NewNode,
                 SceneExplorerCommandKind.NewFolder,
                 SceneExplorerCommandKind.Rename,
                 SceneExplorerCommandKind.Paste,
-            });
+            ]);
         _ = menu.Select(entry => entry.Kind).Should().NotContain(SceneExplorerCommandKind.Delete);
     }
 

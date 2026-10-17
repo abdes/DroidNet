@@ -6,7 +6,7 @@ using DroidNet.Documents;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.WorldEditor.Documents.Selection;
+namespace Oxygen.Editor.Scenes.Selection;
 
 /// <summary>
 /// Owns document-scoped scene selection state. This is the single selection

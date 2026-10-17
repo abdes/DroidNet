@@ -4,8 +4,8 @@
 
 using System.Numerics;
 using AwesomeAssertions;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 

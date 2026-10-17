@@ -15,11 +15,13 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
@@ -41,7 +43,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly IDocumentConflictPrompt? conflictPrompt;
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
-    private readonly ISceneDocumentCommandService commandService;
     private readonly IContentPipelineService contentPipelineService;
     private readonly IDocumentArea documentArea;
     private readonly WindowId windowId;
@@ -63,7 +64,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="inputCommitter">Completes the focused inspector control's text input.</param>
     /// <param name="operationResults">The visible operation-result publisher.</param>
     /// <param name="statusReducer">The diagnostic status reducer.</param>
-    /// <param name="commandService">The scene authoring command service.</param>
     /// <param name="contentPipelineService">The explicit content cooking service.</param>
     /// <param name="container">DI container used to create child services for viewports.</param>
     /// <param name="messenger">The messenger used for inter-component communication.</param>
@@ -80,7 +80,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         IDocumentInputCommitter inputCommitter,
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
-        ISceneDocumentCommandService commandService,
         IContentPipelineService contentPipelineService,
         IContainer container,
         IMessenger messenger,
@@ -96,7 +95,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.conflictPrompt = conflictPrompt;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
-        this.commandService = commandService;
         this.contentPipelineService = contentPipelineService;
         this.documentArea = documentArea;
         this.windowId = windowId;
@@ -184,9 +182,9 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
         await this.SaveViewportStateForCloseAsync().ConfigureAwait(true);
         await this.PreviewSettings.FlushAsync().ConfigureAwait(true);
-        if (this.scene is not null)
+        if (this.Authoring is { } authoring)
         {
-            await this.commandService.CompleteEditSessionsAsync(this.scene, commit: true).ConfigureAwait(true);
+            await authoring.FinishEditsAsync().ConfigureAwait(true);
         }
 
         this.isClosing = true;
@@ -209,18 +207,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             throw new InvalidOperationException("The scene has unsaved changes.");
         }
 
-        if (this.scene is not null)
-        {
-            await this.commandService.CompleteEditSessionsAsync(this.scene, commit: false).ConfigureAwait(true);
-        }
-
-        using var replacement = this.scene is null ? null
-            : await SceneAuthoringGate.BeginReplacementAsync(this.scene, CancellationToken.None).ConfigureAwait(true);
-        if (this.scene is not null && replacement is null)
-        {
-            throw new InvalidOperationException("A scene operation is still finishing. Try closing again.");
-        }
-
+        // Closing the document disposes its content, which cancels the gestures still open and retires the authoring.
         if ((this.Document.IsDirty && !discard) || this.Document.History.IsBusy)
         {
             throw new InvalidOperationException("The scene changed while preparing to close. Review its changes before closing.");
@@ -228,7 +215,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
         // The engine lets the scene go; the document area closes the document once its tab has closed.
         this.sceneEngineSync.CloseDocument(this.Document.Id);
-        replacement?.Retire();
     }
 
     /// <inheritdoc/>
@@ -247,10 +233,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.Document.ContentReplaced -= this.OnDocumentContentReplaced;
             this.StopWatchingSourcePresence();
             this.DisposeRelocationParticipant();
-            if (this.scene is not null)
-            {
-                SceneAuthoringGate.Retire(this.scene);
-            }
 
             this.sceneEngineSync.SceneSynchronized -= this.OnSceneSynchronized;
             this.sceneEngineSync.CloseDocument(this.Document.Id);
@@ -414,7 +396,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         }
 
         var replacement = current.Scene;
-        _ = this.sceneEngineSync.RegisterDocument(replacement, this.Document.Id);
+        _ = this.sceneEngineSync.RegisterDocument(current.Authoring);
         this.scene = replacement;
         this.sceneReady = false;
         this.HasSaveConflict = false;
@@ -559,9 +541,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.UpdateTransformGizmo();
     }
 
-    private SceneDocumentCommandContext CreateCommandContext()
-        => new(
-            this.Document.Id,
-            this.scene ?? throw new InvalidOperationException("Scene is not loaded."),
-            this.Document.History);
+    // The authoring of the document's current content; a reload replaces it.
+    private SceneAuthoring? Authoring => (this.Document.Content as SceneContent)?.Authoring;
 }

@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
@@ -103,7 +104,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         _ = model.IsAllComponentsSelected.Should().BeTrue();
         _ = model.PropertyEditors.Should().Equal(original);
         _ = fixture.Document.History.Position.Should().Be(version);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
@@ -139,7 +140,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         _ = model.IsAllComponentsSelected.Should().BeTrue();
         _ = model.ComponentFilters.Should().BeEmpty();
         _ = model.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<EnvironmentViewModel>();
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
     });
 
     /// <summary>Component edits keep valid filters and removal returns to All, including through history replay.</summary>
@@ -153,15 +154,15 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         _ = fixture.Node.AddComponent(new GeometryComponent { Name = "Geometry" });
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.SelectedComponentType.Should().Be<PerspectiveCamera>();
-        _ = (await fixture.Commands.RemoveComponentAsync(fixture.Context, fixture.Node.Id, fixture.Camera.Id).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await fixture.Authoring.ExecuteAsync(new RemoveComponent(fixture.Node.Id, fixture.Camera.Id)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.IsAllComponentsSelected.Should().BeTrue();
         _ = model.ComponentFilters.Should().NotContain(option => option.ComponentType == typeof(PerspectiveCamera));
-        await fixture.Context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        await fixture.Document.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.ComponentFilters.Should().Contain(option => option.ComponentType == typeof(PerspectiveCamera) && option.IsAvailable);
         _ = model.IsAllComponentsSelected.Should().BeTrue();
-        await fixture.Context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        await fixture.Document.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.ComponentFilters.Should().NotContain(option => option.ComponentType == typeof(PerspectiveCamera));
     });
@@ -192,7 +193,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         RaiseNumberEvent(number, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         await camera.PendingEdits.ConfigureAwait(true);
         _ = fixture.Camera.FieldOfView.Should().Be(60);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
@@ -225,7 +226,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = fixture.Node.Components.Should().NotContain(point);
         _ = model.IsAllComponentsSelected.Should().BeTrue();
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
     });
 
     /// <summary>Switching the scene document cannot carry a prior component filter into its selection.</summary>
@@ -246,7 +247,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         };
         _ = node.AddComponent(new GeometryComponent { Name = "Geometry" });
         scene.RootNodes.Add(node);
-        var metadata = SceneTabs.Open(scene);
+        using var metadata = SceneTabs.Open(scene);
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
         _ = fixture.Sync.Setup(service => service.GetDocumentScene(metadata.DocumentId)).Returns(scene);
@@ -260,7 +261,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
             typeof(TransformViewModel), typeof(GeometryViewModel), typeof(NodeRenderingViewModel));
         _ = model.ComponentFilters.Should().NotContain(option => option.ComponentType == typeof(PerspectiveCamera));
         _ = metadata.Document.IsDirty.Should().BeFalse();
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
     });
 
     /// <summary>A filter change opens its section at the top instead of retaining an unrelated scroll offset.</summary>
@@ -327,6 +328,6 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         _ = header.ViewModel.SelectedComponent.Should().BeNull();
         _ = header.DeleteSelectedComponent().Should().BeFalse();
         _ = fixture.Node.Components.Should().Contain(component);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
     });
 }

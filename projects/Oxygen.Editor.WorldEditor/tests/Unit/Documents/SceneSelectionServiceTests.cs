@@ -5,9 +5,9 @@
 using AwesomeAssertions;
 using DroidNet.Documents;
 using Moq;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
@@ -70,7 +70,7 @@ public sealed class SceneSelectionServiceTests
     {
         var documentId = DocumentId.New();
         var folderId = FolderId.New();
-        var context = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], null, folderId);
+        var context = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId);
         var sut = new SceneSelectionService();
 
         sut.Publish(documentId, context, "test");
@@ -93,7 +93,7 @@ public sealed class SceneSelectionServiceTests
     {
         var documentId = DocumentId.New();
         var folderId = FolderId.New();
-        var context = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], null, folderId);
+        var context = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId);
         var sut = new SceneSelectionService();
         SceneSelectionChangedEventArgs? received = null;
         sut.SelectionChanged += (_, args) => received = args;
@@ -161,7 +161,7 @@ public sealed class SceneSelectionServiceTests
         var sut = new SceneSelectionService();
         sut.Publish(
             SceneDocument,
-            new SceneSelectionContext(SceneSelectionKind.Mixed, [selected.Id, stale.Id], [folderId], stale.Id, null),
+            new SceneSelectionContext(SceneSelectionKind.Mixed, [selected.Id, stale.Id], [folderId], stale.Id, PrimaryFolderId: null),
             "SceneExplorer");
 
         var reconciled = sut.Reconcile(SceneDocument, scene);
@@ -199,7 +199,7 @@ public sealed class SceneSelectionServiceTests
         var folderId = FolderId.New();
         var nodes = new List<NodeId> { nodeId };
         var folders = new List<FolderId> { folderId };
-        var context = new SceneSelectionContext(SceneSelectionKind.Mixed, nodes, folders, nodeId, null);
+        var context = new SceneSelectionContext(SceneSelectionKind.Mixed, nodes, folders, nodeId, PrimaryFolderId: null);
 
         nodes.Clear();
         folders.Clear();
@@ -217,7 +217,7 @@ public sealed class SceneSelectionServiceTests
         var folderId = FolderId.New();
         scene.SetExplorerLayout([new ExplorerEntryData { Type = "Folder", FolderId = folderId }]);
         var sut = new SceneSelectionService();
-        var context = new SceneSelectionContext(SceneSelectionKind.Mixed, [node.Id], [folderId], null, folderId);
+        var context = new SceneSelectionContext(SceneSelectionKind.Mixed, [node.Id], [folderId], PrimaryNodeId: null, folderId);
         sut.Publish(SceneDocument, context, "test");
 
         _ = sut.Reconcile(SceneDocument, scene);
@@ -244,7 +244,7 @@ public sealed class SceneSelectionServiceTests
                 },
             ]);
         var sut = new SceneSelectionService();
-        sut.Publish(SceneDocument, new SceneSelectionContext(SceneSelectionKind.Folder, [], [first, second, deleted], null, deleted), "test");
+        sut.Publish(SceneDocument, new SceneSelectionContext(SceneSelectionKind.Folder, [], [first, second, deleted], PrimaryNodeId: null, deleted), "test");
 
         _ = sut.Reconcile(SceneDocument, scene);
 
@@ -260,7 +260,7 @@ public sealed class SceneSelectionServiceTests
         var scene = CreateScene();
         var folderId = FolderId.New();
         var sut = new SceneSelectionService();
-        sut.Publish(SceneDocument, new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], null, folderId), "test");
+        sut.Publish(SceneDocument, new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId), "test");
 
         _ = sut.Reconcile(SceneDocument, scene);
 
@@ -277,7 +277,7 @@ public sealed class SceneSelectionServiceTests
         scene.RootNodes.Add(second);
         var deletedId = NodeId.New();
         var sut = new SceneSelectionService();
-        sut.Publish(SceneDocument, new SceneSelectionContext(SceneSelectionKind.Node, [first.Id, second.Id, deletedId], [], deletedId, null), "test");
+        sut.Publish(SceneDocument, new SceneSelectionContext(SceneSelectionKind.Node, [first.Id, second.Id, deletedId], [], deletedId, PrimaryFolderId: null), "test");
 
         _ = sut.Reconcile(SceneDocument, scene);
 

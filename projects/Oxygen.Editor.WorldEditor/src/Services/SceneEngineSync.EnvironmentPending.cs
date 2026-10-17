@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -26,8 +27,8 @@ public sealed partial class SceneEngineSync
             : null;
     }
 
-    /// <inheritdoc/>
-    public async Task<EnvironmentSyncResult> UpdateEnvironmentAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal async Task<EnvironmentSyncResult> UpdateEnvironmentAsync(
         Scene scene,
         SceneEnvironmentData environment,
         SceneSyncRevision revision,

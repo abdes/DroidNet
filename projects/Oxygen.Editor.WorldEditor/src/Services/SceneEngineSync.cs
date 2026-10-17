@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
@@ -24,11 +25,13 @@ namespace Oxygen.Editor.World.Services;
 /// <param name="loggerFactory">The optional diagnostic logger factory.</param>
 /// <param name="operationResults">The shared operation-result publisher.</param>
 /// <param name="hostingContext">The application's UI dispatcher context.</param>
+/// <param name="assetFeed">Reports which assets are mounted, so geometry waits for its asset.</param>
 public sealed partial class SceneEngineSync(
     IEngineService engineService,
     ILoggerFactory? loggerFactory = null,
     IOperationResultPublisher? operationResults = null,
-    DroidNet.Hosting.WinUI.HostingContext? hostingContext = null) : ISceneEngineSync, IDisposable
+    DroidNet.Hosting.WinUI.HostingContext? hostingContext = null,
+    Oxygen.Editor.Assets.IAssetFeed? assetFeed = null) : ISceneEngineSync, IDisposable
 {
     private static readonly TimeSpan NodeCreationTimeout = TimeSpan.FromSeconds(10);
 
@@ -95,8 +98,8 @@ public sealed partial class SceneEngineSync(
     public Task<bool> SyncSceneAsync(Scene scene, CancellationToken cancellationToken = default)
         => this.SyncSceneCoreAsync(scene, skipIfCurrent: false, cancellationToken);
 
-    /// <inheritdoc/>
-    public Task<SyncOutcome> UpdateNodeTransformAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task<SyncOutcome> UpdateNodeTransformAsync(
         Scene scene,
         SceneNode node,
         CancellationToken cancellationToken = default)
@@ -114,8 +117,8 @@ public sealed partial class SceneEngineSync(
             cancellationToken);
     }
 
-    /// <inheritdoc/>
-    public Task<SyncOutcome> AttachGeometryAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task<SyncOutcome> AttachGeometryAsync(
         Scene scene,
         SceneNode node,
         CancellationToken cancellationToken = default)
@@ -157,8 +160,67 @@ public sealed partial class SceneEngineSync(
             cancellationToken);
     }
 
-    /// <inheritdoc/>
-    public Task<SyncOutcome> DetachGeometryAsync(
+    /// <summary>
+    /// Sends a node's material overrides without attaching its geometry again: clears the slots whose overrides went away,
+    /// then, when asked, sets the overrides the node has.
+    /// </summary>
+    /// <remarks>Attaching the geometry again would start a new geometry load and make the engine reject these as stale.</remarks>
+    /// <param name="scene">The scene.</param>
+    /// <param name="node">The node.</param>
+    /// <param name="cleared">The slots whose overrides went away.</param>
+    /// <param name="overrides">Whether to send the overrides the node has.</param>
+    /// <param name="cancellationToken">Cancels the projection.</param>
+    /// <returns>The engine's outcome.</returns>
+    internal Task<SyncOutcome> UpdateMaterialSlotsAsync(
+        Scene scene,
+        SceneNode node,
+        IReadOnlyCollection<MaterialSlotTarget> cleared,
+        bool overrides,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(cleared);
+        var scope = Scope(scene, node, componentType: nameof(GeometryComponent));
+        return this.TryClassifyReadiness(
+                this.engineService,
+                scene,
+                SceneOperationKinds.EditGeometry,
+                scope,
+                cancellationToken,
+                out var readinessOutcome)
+            ? Task.FromResult(readinessOutcome)
+            : this.ExecuteNodeSyncAsync(
+            scene,
+            node,
+            node.Id,
+            SceneOperationKinds.EditGeometry,
+            nameof(GeometryComponent),
+            LiveSyncDiagnosticCodes.GeometryRejected,
+            LiveSyncDiagnosticCodes.GeometryFailed,
+            world =>
+            {
+                foreach (var slot in cleared)
+                {
+                    world.Execute(new RuntimeSetMaterialOverride(
+                        node.Id,
+                        GeometryPathMapper.ToEnginePath(slot.GeometryUri),
+                        slot.SlotId,
+                        slot.LayoutRevision,
+                        MaterialPath: null,
+                        MaterialSlotAssignmentIntent.RetainedAssignment));
+                }
+
+                if (overrides && node.Components.OfType<GeometryComponent>().FirstOrDefault() is { Geometry.Uri: not null } geometry)
+                {
+                    ApplyMaterialOverrides(world, node, geometry);
+                }
+            },
+            cancellationToken);
+    }
+
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task<SyncOutcome> DetachGeometryAsync(
         Scene scene,
         NodeId nodeId,
         CancellationToken cancellationToken = default)
@@ -177,8 +239,8 @@ public sealed partial class SceneEngineSync(
             cancellationToken);
     }
 
-    /// <inheritdoc/>
-    public Task<SyncOutcome> AttachLightAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task<SyncOutcome> AttachLightAsync(
         Scene scene,
         SceneNode node,
         CancellationToken cancellationToken = default)
@@ -206,8 +268,8 @@ public sealed partial class SceneEngineSync(
             cancellationToken);
     }
 
-    /// <inheritdoc/>
-    public Task<SyncOutcome> DetachLightAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task<SyncOutcome> DetachLightAsync(
         Scene scene,
         NodeId nodeId,
         CancellationToken cancellationToken = default)
@@ -226,8 +288,8 @@ public sealed partial class SceneEngineSync(
             cancellationToken);
     }
 
-    /// <inheritdoc/>
-    public Task<SyncOutcome> AttachLocalFogVolumeAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task<SyncOutcome> AttachLocalFogVolumeAsync(
         Scene scene,
         SceneNode node,
         CancellationToken cancellationToken = default)
@@ -255,8 +317,8 @@ public sealed partial class SceneEngineSync(
             cancellationToken);
     }
 
-    /// <inheritdoc/>
-    public Task<SyncOutcome> DetachLocalFogVolumeAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task<SyncOutcome> DetachLocalFogVolumeAsync(
         Scene scene,
         NodeId nodeId,
         CancellationToken cancellationToken = default)
@@ -275,8 +337,8 @@ public sealed partial class SceneEngineSync(
             cancellationToken);
     }
 
-    /// <inheritdoc/>
-    public Task<SyncOutcome> AttachCameraAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task<SyncOutcome> AttachCameraAsync(
         Scene scene,
         SceneNode node,
         CancellationToken cancellationToken = default)
@@ -316,8 +378,8 @@ public sealed partial class SceneEngineSync(
             cancellationToken);
     }
 
-    /// <inheritdoc/>
-    public Task<SyncOutcome> DetachCameraAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task<SyncOutcome> DetachCameraAsync(
         Scene scene,
         NodeId nodeId,
         CancellationToken cancellationToken = default)
@@ -336,25 +398,15 @@ public sealed partial class SceneEngineSync(
             cancellationToken);
     }
 
-    /// <inheritdoc/>
-    public Task<SyncOutcome> UpdateMaterialSlotAsync(
-        Scene scene, SceneNode node, MaterialSlotTarget target, Uri? materialUri, CancellationToken cancellationToken = default)
-        => this.SyncMaterialSlotAsync(scene, node, target, materialUri, MaterialSlotAssignmentIntent.ObservedEdit, cancellationToken);
-
-    /// <inheritdoc />
-    public Task<SyncOutcome> RestoreMaterialSlotAsync(
-        Scene scene, SceneNode node, MaterialSlotTarget target, Uri? materialUri, CancellationToken cancellationToken = default)
-        => this.SyncMaterialSlotAsync(scene, node, target, materialUri, MaterialSlotAssignmentIntent.RetainedAssignment, cancellationToken);
-
-    /// <inheritdoc/>
-    public Task<EnvironmentSyncResult> UpdateEnvironmentAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task<EnvironmentSyncResult> UpdateEnvironmentAsync(
         Scene scene,
         SceneEnvironmentData environment,
         CancellationToken cancellationToken = default)
         => this.UpdateEnvironmentAsync(scene, environment, this.CaptureRevision(scene), cancellationToken);
 
-    /// <inheritdoc/>
-    public async Task CreateNodeAsync(SceneNode node, NodeId? parentGuid = null)
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal async Task CreateNodeAsync(SceneNode node, NodeId? parentGuid = null)
     {
         ArgumentNullException.ThrowIfNull(node);
 
@@ -396,46 +448,8 @@ public sealed partial class SceneEngineSync(
         }
     }
 
-    /// <inheritdoc/>
-    public Task RemoveNodeAsync(Scene scene, NodeId nodeId)
-    {
-        var world = this.TryGetWorld(scene);
-        if (world is null)
-        {
-            this.LogCannotRemoveNode(nodeId);
-            return Task.CompletedTask;
-        }
-
-        try
-        {
-            this.ExecuteOrDefer(scene, world, new RuntimeRemoveSceneNode(nodeId));
-            this.LogRemovedNode(nodeId);
-        }
-        catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
-        {
-            this.LogFailedToRemoveNode(ex, nodeId);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task RemoveNodeHierarchyAsync(Scene scene, NodeId rootNodeId)
-    {
-        var world = this.TryGetWorld(scene);
-        if (world is null)
-        {
-            this.LogCannotRemoveNodeHierarchy(rootNodeId);
-            return Task.CompletedTask;
-        }
-
-        // OxygenWorld's RemoveSceneNode handles hierarchy destruction if children exist.
-        this.ExecuteOrDefer(scene, world, new RuntimeRemoveSceneNode(rootNodeId));
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task RemoveNodeHierarchiesAsync(Scene scene, IReadOnlyList<NodeId> rootNodeIds)
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task RemoveNodeHierarchiesAsync(Scene scene, IReadOnlyList<NodeId> rootNodeIds)
     {
         if (rootNodeIds.Count == 0)
         {
@@ -453,31 +467,8 @@ public sealed partial class SceneEngineSync(
         return Task.CompletedTask;
     }
 
-    /// <inheritdoc/>
-    public Task ReparentNodeAsync(Scene scene, NodeId nodeId, NodeId? newParentGuid, bool preserveWorldTransform = false)
-    {
-        var world = this.TryGetWorld(scene);
-        if (world is null)
-        {
-            this.LogCannotReparentNode(nodeId);
-            return Task.CompletedTask;
-        }
-
-        try
-        {
-            this.ExecuteOrDefer(scene, world, new RuntimeReparentSceneNode(nodeId, newParentGuid, preserveWorldTransform));
-            this.LogReparentedNode(nodeId, newParentGuid);
-        }
-        catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
-        {
-            this.LogFailedToReparentNode(ex, nodeId);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task ReparentHierarchiesAsync(Scene scene, IReadOnlyList<NodeId> nodeIds, NodeId? newParentGuid, bool preserveWorldTransform = false)
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task ReparentHierarchiesAsync(Scene scene, IReadOnlyList<NodeId> nodeIds, NodeId? newParentGuid, bool preserveWorldTransform = false)
     {
         if (nodeIds.Count == 0)
         {
@@ -495,8 +486,8 @@ public sealed partial class SceneEngineSync(
         return Task.CompletedTask;
     }
 
-    /// <inheritdoc/>
-    public Task<SyncOutcome> RenameNodeAsync(Scene scene, NodeId nodeId, string newName)
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task<SyncOutcome> RenameNodeAsync(Scene scene, NodeId nodeId, string newName)
     {
         ArgumentNullException.ThrowIfNull(scene);
 
@@ -512,15 +503,8 @@ public sealed partial class SceneEngineSync(
             CancellationToken.None);
     }
 
-    /// <inheritdoc/>
-    public Task UpdateNodeTransformAsync(SceneNode node)
-    {
-        ArgumentNullException.ThrowIfNull(node);
-        return this.UpdateNodeTransformAsync(node.Scene, node, CancellationToken.None);
-    }
-
-    /// <inheritdoc/>
-    public Task<SyncOutcome> UpdatePropertiesAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task<SyncOutcome> UpdatePropertiesAsync(
         Scene scene,
         SceneNode node,
         IReadOnlyList<EnginePropertyValueEntry> entries,
@@ -537,139 +521,12 @@ public sealed partial class SceneEngineSync(
         }
     }
 
-    /// <inheritdoc/>
-    public Task AttachGeometryAsync(SceneNode node, GeometryComponent geometry)
-    {
-        ArgumentNullException.ThrowIfNull(node);
-        ArgumentNullException.ThrowIfNull(geometry);
-
-        return this.ExecuteNodeSyncAsync(
-            node.Scene,
-            node,
-            node.Id,
-            SceneOperationKinds.EditGeometry,
-            nameof(GeometryComponent),
-            LiveSyncDiagnosticCodes.GeometryRejected,
-            LiveSyncDiagnosticCodes.GeometryFailed,
-            world => ApplyGeometry(world, node, geometry),
-            CancellationToken.None);
-    }
-
-    /// <inheritdoc/>
-    public Task DetachGeometryAsync(NodeId nodeId)
-    {
-        // Legacy callers do not provide a scene, so retain log-only behavior.
-        var world = this.TryGetWorld();
-        if (world is null)
-        {
-            this.LogCannotDetachGeometry(nodeId);
-            return Task.CompletedTask;
-        }
-
-        try
-        {
-            world.Execute(new RuntimeDetachGeometry(nodeId));
-            this.LogDetachedGeometry(nodeId);
-        }
-        catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
-        {
-            this.LogFailedToDetachGeometry(ex, nodeId);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task AttachLightAsync(SceneNode node, LightComponent light)
-    {
-        ArgumentNullException.ThrowIfNull(node);
-        ArgumentNullException.ThrowIfNull(light);
-
-        return this.ExecuteNodeSyncAsync(
-            node.Scene,
-            node,
-            node.Id,
-            SceneOperationKinds.EditDirectionalLight,
-            light.GetType().Name,
-            LiveSyncDiagnosticCodes.LightRejected,
-            LiveSyncDiagnosticCodes.LightFailed,
-            world => ApplyLight(world, node, light),
-            CancellationToken.None);
-    }
-
-    /// <inheritdoc/>
-    public Task DetachLightAsync(NodeId nodeId)
-    {
-        var world = this.TryGetWorld();
-        if (world is null)
-        {
-            return Task.CompletedTask;
-        }
-
-        try
-        {
-            world.Execute(new RuntimeDetachLight(nodeId));
-        }
-        catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
-        {
-            this.LogFailedToDetachLightComponent(ex, nodeId);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task AttachCameraAsync(SceneNode node, CameraComponent camera)
-    {
-        ArgumentNullException.ThrowIfNull(node);
-        ArgumentNullException.ThrowIfNull(camera);
-
-        return this.ExecuteNodeSyncAsync(
-            node.Scene,
-            node,
-            node.Id,
-            SceneOperationKinds.EditPerspectiveCamera,
-            camera.GetType().Name,
-            LiveSyncDiagnosticCodes.CameraRejected,
-            LiveSyncDiagnosticCodes.CameraFailed,
-            world => this.ApplyCamera(world, node, camera),
-            CancellationToken.None);
-    }
-
-    /// <inheritdoc/>
-    public Task DetachCameraAsync(NodeId nodeId)
-    {
-        var world = this.TryGetWorld();
-        if (world is null)
-        {
-            return Task.CompletedTask;
-        }
-
-        try
-        {
-            world.Execute(new RuntimeDetachCamera(nodeId));
-        }
-        catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
-        {
-            this.LogFailedToDetachCameraComponent(ex, nodeId);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task UpdateLodPolicyAsync(NodeId nodeId, LevelOfDetailSlot lodSlot)
-    {
-        this.LogLodPolicySyncUnsupported(nodeId);
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public bool ShouldIssuePreviewSync(SceneId sceneId, Guid previewTarget, DateTimeOffset observedAt)
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal bool ShouldIssuePreviewSync(SceneId sceneId, Guid previewTarget, DateTimeOffset observedAt)
         => this.coalescer.ShouldIssuePreview(new SyncCoalescingKey(sceneId, previewTarget), observedAt);
 
-    /// <inheritdoc/>
-    public async Task<SyncOutcome?> TryPreviewSyncAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal async Task<SyncOutcome?> TryPreviewSyncAsync(
         SceneId sceneId,
         Guid previewTarget,
         DateTimeOffset observedAt,
@@ -683,12 +540,12 @@ public sealed partial class SceneEngineSync(
             : null;
     }
 
-    /// <inheritdoc/>
-    public bool CompleteTerminalSync(SceneId sceneId, Guid previewTarget)
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal bool CompleteTerminalSync(SceneId sceneId, Guid previewTarget)
         => this.coalescer.CompleteTerminalSync(new SyncCoalescingKey(sceneId, previewTarget));
 
-    /// <inheritdoc/>
-    public async Task<SyncOutcome> CompleteTerminalSyncAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal async Task<SyncOutcome> CompleteTerminalSyncAsync(
         SceneId sceneId,
         Guid previewTarget,
         Func<CancellationToken, Task<SyncOutcome>> sync,
@@ -700,12 +557,12 @@ public sealed partial class SceneEngineSync(
         return await sync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <inheritdoc/>
-    public void CancelPreviewSync(SceneId sceneId, Guid previewTarget)
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal void CancelPreviewSync(SceneId sceneId, Guid previewTarget)
         => this.coalescer.Cancel(new SyncCoalescingKey(sceneId, previewTarget));
 
-    /// <inheritdoc/>
-    public async Task<SyncOutcome> CancelPreviewSyncAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal async Task<SyncOutcome> CancelPreviewSyncAsync(
         SceneId sceneId,
         Guid previewTarget,
         Func<CancellationToken, Task<SyncOutcome>> revertSync,
@@ -1225,50 +1082,6 @@ public sealed partial class SceneEngineSync(
         {
             return null;
         }
-    }
-
-    private Task<SyncOutcome> SyncMaterialSlotAsync(
-        Scene scene,
-        SceneNode node,
-        MaterialSlotTarget target,
-        Uri? materialUri,
-        MaterialSlotAssignmentIntent intent,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(scene);
-        ArgumentNullException.ThrowIfNull(node);
-        ArgumentNullException.ThrowIfNull(target);
-
-        var scope = Scope(
-            scene,
-            node,
-            componentType: nameof(GeometryComponent),
-            assetVirtualPath: materialUri?.ToString());
-
-        return this.TryClassifyReadiness(
-                this.engineService,
-                scene,
-                SceneOperationKinds.EditMaterialSlot,
-                scope,
-                cancellationToken,
-                out var readinessOutcome)
-            ? Task.FromResult(readinessOutcome)
-            : this.ExecuteNodeSyncAsync(
-            scene,
-            node,
-            node.Id,
-            SceneOperationKinds.EditMaterialSlot,
-            nameof(GeometryComponent),
-            LiveSyncDiagnosticCodes.MaterialRejected,
-            LiveSyncDiagnosticCodes.MaterialFailed,
-            world => world.Execute(new RuntimeSetMaterialOverride(
-                node.Id,
-                GeometryPathMapper.ToEnginePath(target.GeometryUri),
-                target.SlotId,
-                target.LayoutRevision,
-                MaterialOverridePathMapper.ToEnginePath(materialUri),
-                intent)),
-            cancellationToken);
     }
 
     private bool ApplyRenderableComponents(WorldDispatch world, SceneNode node)

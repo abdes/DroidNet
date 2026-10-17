@@ -13,7 +13,6 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -21,7 +20,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
 /// <summary>The document host makes each tab's editor from its kind's descriptor, and saves documents through their editors.</summary>
 [TestClass]
-public sealed class DocumentHostViewModelTests
+public sealed partial class DocumentHostViewModelTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -65,9 +64,9 @@ public sealed class DocumentHostViewModelTests
     }
 
     /// <summary>A document area over real tabs and open documents, with a document host whose editors record their saves.</summary>
-    private sealed class HostFixture : IDisposable
+    private sealed partial class HostFixture : IDisposable
     {
-        private readonly SceneDocumentFiles files = new(Mock.Of<ISceneDocumentCommandService>());
+        private readonly SceneDocumentFiles files = new();
 
         public HostFixture(WindowId window)
         {

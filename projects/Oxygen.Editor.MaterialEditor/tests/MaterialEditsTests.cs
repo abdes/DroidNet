@@ -69,10 +69,11 @@ public sealed class MaterialEditsTests
     {
         using var materials = new MaterialDocuments();
         var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var edit = new PropertyEdit();
-        edit.Set(MaterialDescriptors.Metalness, 0.5f);
-        edit.Set(MaterialDescriptors.Roughness, 0.25f);
-        edit.Set(MaterialDescriptors.AlphaMode, MaterialAlphaMode.Mask);
+        var edit = new PropertyEdit.Builder()
+            .Set(MaterialDescriptors.Metalness, 0.5f)
+            .Set(MaterialDescriptors.Roughness, 0.25f)
+            .Set(MaterialDescriptors.AlphaMode, MaterialAlphaMode.Mask)
+            .Build();
 
         _ = materials.Edits.Apply(document, edit).Succeeded.Should().BeTrue();
 

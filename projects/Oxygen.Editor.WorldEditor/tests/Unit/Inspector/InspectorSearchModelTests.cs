@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World.Inspector.Presentation;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 
@@ -17,9 +17,10 @@ public sealed class InspectorSearchModelTests
     {
         var model = EnvironmentFieldCatalog.Create();
         _ = model.Fields.Should().HaveCount(93);
+
         // The backdrop choice authors whether the atmosphere shows.
         _ = model.Fields.Values.Select(field => field.Property).Should().Contain(
-            SceneDocumentCommandService.SceneEnvironment.ById.Keys.Where(static property => property != SceneDocumentCommandService.SceneEnvironment.AtmosphereEnabled.Id));
+            SceneProperties.SceneEnvironment.ById.Keys.Where(static property => property != SceneProperties.SceneEnvironment.AtmosphereEnabled.Id));
         _ = model.Fields["Backdrop"].Property.Should().Be(SceneSkyFields.Backdrop.Id);
         _ = model.Fields.Values.Should().OnlyHaveUniqueItems(field => field.Key);
     }
@@ -158,7 +159,7 @@ public sealed class InspectorSearchModelTests
             _ = direction.Should().OnlyContain(entry => entry.Properties.Length == 3);
             _ = direction[0].Properties.Should().Equal(direction[1].Properties);
             _ = fields.Single(entry => entry.Role == role && string.Equals(entry.Key, "AngularSizeRadians", StringComparison.Ordinal))
-                .Properties.Should().Equal(SceneDocumentCommandService.DirectionalLight.AngularSizeRadians.Id);
+                .Properties.Should().Equal(SceneProperties.DirectionalLight.AngularSizeRadians.Id);
         }
     }
 }

@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Slots;

@@ -16,13 +16,16 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 /// The Problems panel follows script analysis: grouped by file, counted in its title, cleared when fixed.
 /// </summary>
 [TestClass]
-public sealed class ProblemsViewModelTests
+public sealed partial class ProblemsViewModelTests : IDisposable
 {
     private const string MovePath = @"C:\Project\Content\Player\move.lua";
 
     private readonly Subject<ScriptAnalysisSnapshot> changes = new();
     private readonly Mock<ICodeEditorService> codeEditor = new();
     private readonly FakeRuntimeProblems runtime = new();
+
+    /// <inheritdoc />
+    public void Dispose() => this.changes.Dispose();
 
     [TestMethod]
     public void AnalysisWithProblemsAppearsGroupedByFileWithCountsInTheTitle()
@@ -82,7 +85,7 @@ public sealed class ProblemsViewModelTests
         this.changes.OnNext(Snapshot(MovePath, Problem(ScriptProblemSeverity.Warning, 4)));
 
         this.runtime.Report(Problem(ScriptProblemSeverity.Error, 9) with { IsRuntime = true, SlotNode = "Player", SlotIndex = 0 });
-        this.runtime.Report(new ScriptProblem(ScriptProblemSeverity.Warning, "OXE.PLAY.SCENE_ISSUE", "unsupported record", string.Empty, null, null, "rendered", string.Empty) { IsRuntime = true });
+        this.runtime.Report(new ScriptProblem(ScriptProblemSeverity.Warning, "OXE.PLAY.SCENE_ISSUE", "unsupported record", string.Empty, Line: null, Column: null, "rendered", string.Empty) { IsRuntime = true });
 
         _ = model.Groups.Select(static group => group.DisplayPath).Should().Equal("Content/Player/move.lua", ProblemsViewModel.PlaySessionGroup);
         _ = model.Groups[0].Entries.Select(static entry => entry.Problem.Line).Should().Equal(4, 9);
@@ -97,7 +100,7 @@ public sealed class ProblemsViewModelTests
     public async Task ARuntimeProblemSelectsItsNodeAndOnlyAFileProblemOpens()
     {
         using var model = this.CreateModel();
-        var runtimeProblem = new ScriptProblem(ScriptProblemSeverity.Error, "S0701", "attempt to index nil", string.Empty, null, null, "rendered", string.Empty)
+        var runtimeProblem = new ScriptProblem(ScriptProblemSeverity.Error, "S0701", "attempt to index nil", string.Empty, Line: null, Column: null, "rendered", string.Empty)
         {
             IsRuntime = true,
             SlotNode = "Player",

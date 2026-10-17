@@ -1,6 +1,6 @@
 # Scene edits
 
-Status: **draft for review**, revised after review.
+Status: **implemented**.
 
 Scope: the redesign of scene commands in `Oxygen.Editor.Scenes`. It replaces
 `ISceneDocumentCommandService`, `SceneDocumentCommandService` (18 partials,
@@ -77,8 +77,8 @@ public sealed class SceneAuthoring : IDisposable
 
     public Task<SceneEditResult> ExecuteAsync(ISceneEdit edit);
     public Task<SceneEditValidation> ValidateAsync(ISceneEdit edit);  // dry run, no mutation
-    public Task<bool> UndoAsync();
-    public Task<bool> RedoAsync();
+    public Task<SceneEditResult> UndoAsync();
+    public Task<SceneEditResult> RedoAsync();
 
     public Task<SceneGesture> BeginGestureAsync(
         IReadOnlyCollection<NodeId> targets,      // empty: the scene's own properties
@@ -95,13 +95,28 @@ public sealed class SceneAuthoring : IDisposable
   `IDocumentContent.HasEditsInProgress` and `FinishEditsAsync` delegate to it.
   Its `Dispose` (content replaced by a reload, document closed) cancels open
   gestures and retires it. The content no longer holds a service.
-- It is constructed with the `SynchronizationContext` the document decoded on
-  (the UI thread in the editor, a single-threaded context in tests). Every
+- **It is complete when it is constructed.** The document service creates the
+  document's `DocumentId` and `HistoryKeeper` before it decodes the file, and
+  `IDocumentKind.DecodeAsync` receives them in a `DocumentDecodeContext` (3.13).
+  `SceneContent` builds the authoring from them at decode; the `Document` then
+  takes the same id and history. A reload decodes with the document's own id and
+  history, so the new authoring records into the same history the document
+  clears. The authoring records into the history it is given and never creates,
+  finds or clears one (decision 1 of
+  [editor-documents.md](editor-documents.md)). There is no later binding step
+  and no authoring that exists without its history.
+- It is constructed with the `SynchronizationContext` current at decode (the UI
+  thread in the editor, a single-threaded context in the Scenes tests). Every
   public call posts to that context; the edit then runs synchronously there.
   Because validation and application are synchronous and run on one thread,
   edits cannot interleave: no lock, no `AsyncLocal`, no operation counting.
   `SceneAuthoringGate` is deleted, and so is its "installing" state (3.7, engine
   registration).
+- When no `SynchronizationContext` is current at decode, every public call runs
+  inline on the caller's thread, and the caller keeps its calls serialized. The
+  editor always decodes on the UI thread; the Scenes tests that cover rule 4
+  decode under a single-threaded context. Code that opens scenes on a plain
+  thread, such as the World Editor's unit tests, works unchanged.
 - `ValidateAsync` replaces `ValidateExplorerPaste` and the views' "can execute"
   checks.
 
@@ -135,6 +150,18 @@ public abstract record SceneEditApplication
   validates everything it relies on, so it always returns `Applied`. Only a
   composite (3.5) can return `Rejected`. An exception from `Apply` is a defect,
   not a result (3.3).
+- **Nothing to change.** An edit that finds the scene already as it asks
+  (renaming to the same name, equal values, hiding a hidden node) returns
+  `Applied` with no changes. The frame then records nothing and raises nothing,
+  and the result is `Applied`. A replay always records its inverse, so undo and
+  redo stay paired.
+- **Refuse, never clamp.** A value outside its allowed range is refused as
+  `Invalid` with the range in the message; the scene holds exactly what the
+  caller sets. Clamping, where the user experience wants it, is the job of the
+  view or the remote client. Each field has one rule: its descriptor declares
+  the range (the field of view in 1–179 degrees, the sky atmosphere ranges), and
+  where a descriptor and `LightValidation` disagree, both apply the stricter
+  rule. Hydrating existing files is unaffected.
 - **Exact inverse.** The revert restores exactly the state the edit replaced,
   captured during `Apply`, including state the edit changed as a consequence
   (layout entries, compensated transforms, coupled properties). It is never a
@@ -172,7 +199,9 @@ Its `Apply` runs steps 1, 3, 4 and 6 of the frame. It skips the lock check: a
 lock protects nodes from new authoring, and replaying the history returns the
 scene to states the user already made. The inverse is recorded by the history
 itself: the entry adds it during `Undoing`/`Redoing`, which `HistoryKeeper`
-routes to the other stack.
+routes to the other stack. The entry is named after the edit people made, not
+its revert: after `RenameNode` to "Box" the history shows the rename to "Box",
+and the inverse recorded during undo or redo keeps that name.
 
 If the authoring is retired, validation fails, or `Apply` returns `Rejected`
 during replay (the scene changed in a way the entry does not expect), the entry
@@ -186,6 +215,12 @@ posts `UndoAsync`/`RedoAsync` to the scene thread and calls `Undo`/`Redo`. Every
 scene undo goes through `SceneAuthoring`; the explorer's direct
 `History.UndoAsync` calls go.
 
+`UndoAsync` and `RedoAsync` return a `SceneEditResult`, as `ExecuteAsync` does:
+`Applied` with the replay's warnings (a restored reference to an asset deleted
+since the edit reports `AssetReference.Deleted` on its node), `Invalid`
+[`Edit.Empty`] when there is nothing to undo or redo, `Refused` when the entry
+cannot replay (it stays on its stack), and `Retired`.
+
 ### 3.5 Atomic batches
 
 ```csharp
@@ -195,6 +230,8 @@ public sealed record SceneEditBatch(string Label, IReadOnlyList<ISceneEdit> Edit
 - `Targets` is empty: each inner edit is checked when it runs, against the scene
   as the previous edits left it. This is what lets a batch create a node and
   then edit it.
+- A batch with no edits is `Invalid` ("The batch has no edits."). A batch whose
+  edits change nothing records nothing, by the rule of 3.2.
 - `Apply` runs, for each inner edit in order, `scope.CheckTargets`, `Validate`
   and `Apply`. If one is refused or rejected, it applies the reverts of the
   edits already applied, in reverse order, and returns `Rejected` with that
@@ -241,6 +278,9 @@ public sealed class SceneGesture
   while an open gesture's current values differ from its before state, so a drag
   returned to its start does not hold a save or a cook. `FinishEditsAsync`
   commits them all; `Dispose` cancels them.
+- The frame never commits or cancels a gesture implicitly: an edit, undo or redo
+  runs beside an open gesture, which a removed or replaced target cancels at its
+  next call. A view that undoes during a drag calls `FinishEditsAsync` first.
 - Gestures are a UI mechanism. Remote callers use one-shot edits.
 
 ### 3.7 The change stream
@@ -250,21 +290,21 @@ raised on the scene thread after each edit, replay, preview and relocation, in
 order. A change names what changed, by id; consumers read the values from the
 scene, which already holds them.
 
-| Change                                                         | Raised by                                   |
-| -------------------------------------------------------------- | ------------------------------------------- |
-| `NodesAdded(NodeId[] roots)`                                   | insert                                      |
-| `NodesRemoved(NodeId[] roots)`                                 | remove                                      |
-| `NodesPlaced(NodeId[] nodes)`                                  | reparent, reorder, placement restore        |
-| `NodeRenamed(NodeId)`                                          | rename                                      |
-| `ComponentAdded(NodeId, ComponentId)`                          | add component                               |
-| `ComponentRemoved(NodeId, ComponentId, string kind)`           | remove component                            |
-| `PropertiesChanged(NodeId? node, PropertyId[] ids, EditPhase)` | properties (`node` null: scene)             |
-| `GeometryChanged(NodeId)`                                      | geometry asset                              |
-| `MaterialSlotsChanged(NodeId)`                                 | material slots                              |
-| `LayoutChanged`                                                | every edit that changes the explorer layout |
-| `EditorVisibilityChanged(NodeId[])`                            | hide or show in editor                      |
-| `ScenePlayChanged`, `SceneReferencesChanged`                   | scene settings                              |
-| `ScriptSlotsChanged(NodeId)`                                   | script slots                                |
+| Change                                                                                     | Raised by                                   |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| `NodesAdded(NodeId[] roots)`                                                               | insert                                      |
+| `NodesRemoved(NodeId[] roots)`                                                             | remove                                      |
+| `NodesPlaced(NodeId[] nodes)`                                                              | reparent, reorder, placement restore        |
+| `NodeRenamed(NodeId)`                                                                      | rename                                      |
+| `ComponentAdded(NodeId, ComponentId)`                                                      | add component                               |
+| `ComponentRemoved(NodeId, ComponentId, string kind)`, the kind `SceneComponents.Add` takes | remove component                            |
+| `PropertiesChanged(NodeId? node, PropertyId[] ids, EditPhase)`                             | properties (`node` null: scene)             |
+| `GeometryChanged(NodeId)`                                                                  | geometry asset                              |
+| `MaterialSlotsChanged(NodeId)`                                                             | material slots                              |
+| `LayoutChanged`                                                                            | every edit that changes the explorer layout |
+| `EditorVisibilityChanged(NodeId[])`                                                        | hide or show in editor                      |
+| `ScenePlayChanged`, `SceneReferencesChanged`                                               | scene settings                              |
+| `ScriptSlotsChanged(NodeId)`                                                               | script slots                                |
 
 Consumers:
 
@@ -299,13 +339,34 @@ Consumers:
 public sealed record SceneEditResult(
     SceneEditOutcome Outcome,                     // Applied, Refused, Invalid, Retired
     IReadOnlyList<SceneDiagnostic> Diagnostics);
+
+public sealed record SceneDiagnostic(
+    bool IsError, string Code, string Message, NodeId? Node = null, PropertyId? Property = null);
 ```
+
+- **The code is the contract.** Callers, remote clients and tests branch on
+  `Code`; the message is for people and never a contract. The codes are the
+  constants of `SceneEditCodes` (Authoring), one per rule category, each
+  documented on its constant. A new rule reuses a category; a new category is a
+  change to this design. The values keep the editor's `OXE.SCENE.` prefix, so a
+  view copies `Code` into the operation result's diagnostic unchanged.
+- A value a descriptor rejects reports `Property.OutOfRange` and names the
+  property; rules across fields or nodes report `Properties.Inconsistent`,
+  naming the node whose candidate state breaks the rule (none for the scene
+  environment) and no property, since the rule spans fields.
 
 Scenes posts nothing. `IOperationResultPublisher` and `IStatusReducer` leave the
 module. The views map results to operation results until the Shell's
 notification policy replaces them (S1.10). Engine outcomes are reported by the
 projector, not returned by `ExecuteAsync`: the edit succeeded when the scene
 changed.
+
+Layout edits name no target node, since their scope depends on where the entries
+are; they check their scope node with `SceneEditScope.CheckScope`, which refuses
+a missing or locked node as the frame does. Edits that remove or move whole
+subtrees (`RemoveNodes`, `ReparentNodes`) also refuse a locked node under a
+root, naming it, through `SceneEditScope.CheckSubtrees`. A replay checks that
+its targets exist, but no lock.
 
 ### 3.9 Ids
 
@@ -331,7 +392,13 @@ no `SceneNode` crosses those APIs.
   replaces `EditSceneEnvironmentAsync` and
   `EditSceneEnvironmentPropertiesAsync`. Each captures, during `Apply`, the
   before values of the edited properties and of the properties coupled to them;
-  its revert writes those values back.
+  its revert writes those values back. Its `PropertiesChanged` lists the edited
+  and coupled properties with the changed ones, so a view refreshes every axis a
+  rotation edit can move. The environment is the exception: one property can
+  rewrite records no property names (the backdrop rewrites the background and
+  the sky sphere), so `SetSceneProperties` and environment gestures revert with
+  `SetSceneEnvironment`, which restores the whole environment and names the
+  properties whose values differ.
 - `PropertyEdit` becomes immutable (built with a builder) so an edit can own it.
   Its keys are `PropertyId(ComponentKind, JsonPointer)` and its values are the
   descriptor's value type, which is serializable.
@@ -369,9 +436,10 @@ batch.
   Edits that carry asset references (`SetGeometry`, `SetMaterialSlot`,
   `InsertNodes`, `SetScenePlay`, `SetSceneReferences`, `SetScriptSlots`,
   `SetSceneProperties`) retarget them through `scope.Redirects` in `Validate`
-  and `Apply`, and report a reference to a deleted asset as a warning
-  diagnostic. This replaces `RedirectCaptured`, `RedirectOrNull` and
-  `WarnIfDeleted`.
+  and `Apply`, and report a reference to a deleted asset as an
+  `AssetReference.Deleted` warning naming the node that holds it (none for the
+  scene's own references). This replaces `RedirectCaptured`, `RedirectOrNull`
+  and `WarnIfDeleted`.
 - **On relocation.** `SceneContent.ApplyRelocation` changes the scene outside
   the history (the relocation's undo is global). It runs on the scene thread
   through the authoring and raises `GeometryChanged` for every retargeted node
@@ -397,6 +465,27 @@ atomic replace proceeds. The cook keeps reading the replaced file, whose bytes
 match the saved state it captured under the lease, and the save is a change of
 its own that the cook reads again.
 
+### 3.13 Decoding with the document's identity and history
+
+```csharp
+public sealed record DocumentDecodeContext(DocumentId Document, HistoryKeeper History);
+
+Task<DocumentDecodeResult> DecodeAsync(
+    DocumentFile file, ReadOnlyMemory<byte> content, DocumentDecodeContext context, CancellationToken cancellationToken);
+```
+
+- `DocumentDecodeContext` is in `Oxygen.Editor.Documents`, next to
+  `IDocumentKind`.
+- `OpenDocuments` creates the id and the history, decodes with them and
+  constructs the `Document` with the same pair; `Document` no longer creates its
+  history. On a failed decode, both are dropped.
+- `Document.ReplaceContentAsync` decodes with its own id and history, then, as
+  today, takes the new content, clears the history and disposes the replaced
+  content once its read leases are released. The replaced authoring is retired
+  by that dispose; the cleared history holds none of its entries.
+- A kind whose content needs neither (material) ignores the context. A kind
+  never stores the history beyond the content it decodes.
+
 ## 4. Edit catalogue
 
 Types used below:
@@ -408,39 +497,58 @@ public sealed record NodeInsert(SceneNodeData Node, NodePosition At, LayoutPosit
 public sealed record NodePlacementState(NodeId Node, NodePosition At, TransformData Local, LayoutPosition Layout);
 ```
 
-| Edit                                                                                | Replaces                                                                                                       | Revert                                                                                                   |
-| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `InsertNodes(NodeInsert[])`                                                         | `CreatePrimitive/Light/LocalFogVolume/Camera/EmptyNode`, `CreateNode`, the three `DuplicateNodes*`, paste-copy | `RemoveNodes(roots)`                                                                                     |
-| `RemoveNodes(NodeId[] roots)`                                                       | `DeleteNodes`                                                                                                  | `InsertNodes` with each root's data, positions and layout entry subtree (folders under it, `IsExpanded`) |
-| `RenameNode(NodeId, string)`                                                        | `RenameNode`                                                                                                   | `RenameNode` with the old name                                                                           |
-| `ReparentNodes(NodeId[], NodeId? parent, bool preserveWorld, NodeId? after)`        | `ReparentNodes`, paste-cut of nodes                                                                            | `PlaceNodes` with each node's prior placement state                                                      |
-| `ReorderNode(NodeId, NodePosition, LayoutPosition)`                                 | `ReorderNodes`                                                                                                 | `PlaceNodes` with the prior state                                                                        |
-| `PlaceNodes(NodePlacementState[])`                                                  | the reparent undo paths                                                                                        | `PlaceNodes` with the states it replaced                                                                 |
-| `CreateFolder(FolderId, LayoutPosition, string name)`                               | `CreateFolder`                                                                                                 | `RemoveFolder(id, promoteChildren: false)`                                                               |
-| `RemoveFolder(FolderId, bool promoteChildren)`                                      | `DeleteFolder`, the folder part of `DeleteItems`                                                               | `RestoreFolder` with its entry, position and its children's prior positions                              |
-| `RestoreFolder(ExplorerEntryData entry, LayoutPosition, LayoutPosition[] children)` | the folder undo paths                                                                                          | `RemoveFolder`                                                                                           |
-| `RenameFolder(FolderId, string)`                                                    | `RenameFolder`                                                                                                 | `RenameFolder` with the old name                                                                         |
-| `MoveLayoutEntries(LayoutEntryId[], LayoutPosition to)`                             | the same-scope part of `MoveNodesToFolder`, `RemoveNodesFromFolder`, `MoveFolderToParent`                      | `MoveLayoutEntries` per entry back to its prior position                                                 |
-| `AddComponent(NodeId, ComponentData, int index)`                                    | `AddComponent` (with 3.10.1)                                                                                   | `RemoveComponent`                                                                                        |
-| `RemoveComponent(NodeId, ComponentId)`                                              | `RemoveComponent`                                                                                              | `AddComponent` with its data at its old index                                                            |
-| `SetProperties`, `SetSceneProperties`                                               | 3.10                                                                                                           | the captured before values, coupled ones included                                                        |
-| `SetGeometry(NodeId[], Uri)`                                                        | `EditGeometry`                                                                                                 | per node, the old geometry                                                                               |
-| `SetMaterialSlot(NodeId[], MaterialSlotTarget, Uri?)`                               | `EditMaterialSlot`                                                                                             | per node, the old slot state                                                                             |
-| `RemoveMaterialSlots(IReadOnlyDictionary<NodeId, MaterialSlotTarget[]>)`            | `ClearUnresolvedMaterialSlots`                                                                                 | restores the removed slots                                                                               |
-| `SetScenePlay(ScenePlayData)`, `SetSceneReferences(SceneReferencesData)`            | the same methods                                                                                               | the old value                                                                                            |
-| `SetScriptSlots(NodeId, ImmutableArray<ScriptSlot>)`                                | `EditScriptSlots`                                                                                              | the old slots                                                                                            |
-| `SetEditorHidden(NodeId[], bool)` (`ChangesDocument = false`)                       | `SetEditorHidden`                                                                                              | the old flags                                                                                            |
-| `SceneEditBatch`                                                                    | change sets, `DeleteItems`, paste, the view compositions                                                       | 3.5                                                                                                      |
+| Edit                                                                               | Replaces                                                                                                       | Revert                                                                                                   |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `InsertNodes(NodeInsert[])`                                                        | `CreatePrimitive/Light/LocalFogVolume/Camera/EmptyNode`, `CreateNode`, the three `DuplicateNodes*`, paste-copy | `RemoveNodes(roots)`                                                                                     |
+| `RemoveNodes(NodeId[] roots)`                                                      | `DeleteNodes`                                                                                                  | `InsertNodes` with each root's data, positions and layout entry subtree (folders under it, `IsExpanded`) |
+| `RenameNode(NodeId, string)`                                                       | `RenameNode`                                                                                                   | `RenameNode` with the old name                                                                           |
+| `ReparentNodes(NodeId[], NodeId? parent, bool preserveWorld, NodeId? after)`       | `ReparentNodes`, paste-cut of nodes                                                                            | `PlaceNodes` with each node's prior placement state                                                      |
+| `ReorderNode(NodeId, NodePosition, LayoutPosition)`                                | `ReorderNodes`                                                                                                 | `PlaceNodes` with the prior state                                                                        |
+| `PlaceNodes(NodePlacementState[])`                                                 | the reparent undo paths                                                                                        | `PlaceNodes` with the states it replaced                                                                 |
+| `CreateFolder(FolderId, LayoutPosition, string name, bool? isExpanded)`            | `CreateFolder`                                                                                                 | `RemoveFolder(id, promoteChildren: false)`                                                               |
+| `RemoveFolder(FolderId, bool promoteChildren)`                                     | `DeleteFolder`, the folder part of `DeleteItems`                                                               | `RestoreFolder` with its entry, position and its children's prior positions                              |
+| `RestoreFolder(ExplorerEntryData entry, LayoutPosition, LayoutEntryId[] children)` | the folder undo paths                                                                                          | `RemoveFolder`                                                                                           |
+| `RenameFolder(FolderId, string)`                                                   | `RenameFolder`                                                                                                 | `RenameFolder` with the old name                                                                         |
+| `MoveLayoutEntries(LayoutEntryId[], LayoutPosition to)`                            | the same-scope part of `MoveNodesToFolder`, `RemoveNodesFromFolder`, `MoveFolderToParent`                      | `PlaceLayoutEntries` with each entry's prior position                                                    |
+| `AddComponent(NodeId, ComponentData, int index)`                                   | `AddComponent` (with 3.10.1)                                                                                   | `RemoveComponent`                                                                                        |
+| `RemoveComponent(NodeId, ComponentId)`                                             | `RemoveComponent`                                                                                              | `AddComponent` with its data at its old index                                                            |
+| `SetProperties`, `SetSceneProperties`                                              | 3.10                                                                                                           | the captured before values, coupled ones included                                                        |
+| `SetGeometry(NodeId[], Uri)`                                                       | `EditGeometry`                                                                                                 | per node, the old geometry                                                                               |
+| `SetMaterialSlot(NodeId[], MaterialSlotTarget, Uri?)`                              | `EditMaterialSlot`                                                                                             | per node, the old slot state                                                                             |
+| `RemoveMaterialSlots(IReadOnlyDictionary<NodeId, MaterialSlotTarget[]>)`           | `ClearUnresolvedMaterialSlots`                                                                                 | `RestoreMaterialSlots`, the slots at their positions                                                     |
+| `SetScenePlay(ScenePlayData)`, `SetSceneReferences(SceneReferencesData)`           | the same methods                                                                                               | the old value                                                                                            |
+| `SetScriptSlots(NodeId, ImmutableArray<ScriptSlot>)`                               | `EditScriptSlots`                                                                                              | the old slots                                                                                            |
+| `SetEditorHidden(NodeId[], bool)` (`ChangesDocument = false`)                      | `SetEditorHidden`                                                                                              | the old flags                                                                                            |
+| `SceneEditBatch`                                                                   | change sets, `DeleteItems`, paste, the view compositions                                                       | 3.5                                                                                                      |
 
-`LayoutEntryId` is a node id or a folder id. Every edit that changes the layout
-raises `LayoutChanged`.
+`LayoutEntryId` is a node id or a folder id. `PlaceLayoutEntries` puts entries
+at positions captured from one layout, so they return exactly where they were;
+`RestoreFolder` takes back, in order, the entries its removal promoted to its
+place. Every edit that changes the layout raises `LayoutChanged`.
+
+- **Positions.** An index is in `[0, count]`, where `count` appends; any other
+  index is `Invalid`, never clamped.
+- **Removing a folder.** `RemoveFolder(promoteChildren: true)` puts the folder's
+  children in its place in its parent, in their order.
+  `RemoveFolder(promoteChildren: false)` on a folder that is not empty is
+  `Invalid`; it serves as the revert of `CreateFolder`, which always meets an
+  empty folder.
+- **Hiding.** `SetEditorHidden` is presentation, not authoring: its `Targets` is
+  empty, so a lock does not refuse it, and ids no longer in the scene are
+  skipped. With no node-interaction port it is `Invalid`.
+- **The atmosphere sun.** Taking an atmosphere slot another light owns is
+  `Invalid`; nothing transfers implicitly. Moving the sun is a batch: a
+  `SetProperties` that clears the old owner's slot, then one that sets the new
+  owner's.
 
 - **Layout scope.** A node's layout entry lives in the scope of its scene
   parent: the root, or the entry of its parent node.
   `LayoutScopes.ScopeOf(LayoutPosition)` computes the scope of a position, for
   the edits and for every caller. `MoveLayoutEntries.Validate` refuses a
-  destination whose scope differs from a moved node's parent, or from the
-  parents of a moved folder's nodes. Moving into another scope is a batch:
+  destination whose scope differs from a moved node's scene parent, or from the
+  scene parents of a moved folder's nodes; an empty folder fits any scope. The
+  scene parent decides, not where the entry is, so a batch that reparents first
+  can then move the folders. Moving into another scope is a batch:
   `ReparentNodes(nodes, scope parent, preserveWorld: false, ...)` and then
   `MoveLayoutEntries`, which keeps today's behavior of grouping (the local
   transform is kept).
@@ -460,22 +568,48 @@ Supporting code, not edits:
 - **`SceneNodeTemplates`**: the default nodes for primitives, lights, cameras
   and fog volumes (`NormalizePrimitiveKind`, `CreateLightComponent`,
   `ApplyLightTransform`, `ApplyPlacement`) as functions returning
-  `SceneNodeData` with new ids.
+  `SceneNodeData` with new ids. They take enumerations of the primitive, light
+  and camera kinds; an undefined value throws `ArgumentOutOfRangeException`, and
+  parsing names belongs to the remote boundary.
 - **`SceneNodeCopies`**: captures nodes as `SceneNodeData` with new node and
   component ids, remapping node references in script slots
   (`CopiedNodeReferences`) and clearing the atmosphere slot of copied
   directional lights, with an optional transform per root. It serves duplicate,
   duplicate in place and the clipboard. `InsertNodes.Validate` applies the
-  component rules to inserted data, so a copy can never create a second sun.
+  component rules to inserted data, so a copy can never create a second sun; an
+  inserted node id already in the scene is [`Node.Exists`], a component id
+  [`Component.Duplicate`].
 - **`SceneClipboard`**: the explorer clipboard (`CaptureExplorerClipboard`, the
-  layout capture) as data. Paste is a batch built from it: `InsertNodes` and
-  layout edits for a copy, `ReparentNodes` and layout edits for a cut.
-- **Material slot inventories** are read before the edit. A helper reads the
-  inventory asynchronously and builds `SetMaterialSlot` or `RemoveMaterialSlots`
-  with the slot ids and the inventory's `LayoutRevision`. `Validate` checks that
-  each node still uses that geometry and revision.
+  layout capture) as data. `TryPaste` builds one batch from it: a copy creates
+  its folders (`CreateFolder`) and inserts its nodes (`InsertNodes`) at the
+  root; then, for a copy or a cut, `ReparentNodes` takes the top-level nodes to
+  the target parent and `MoveLayoutEntries` refills the folders and places the
+  top-level entries. Copied folders keep their names and `IsExpanded`. A cut
+  moves items from one scope (the root or one node's children), else it fails
+  [`Layout.ScopeMismatch`]; a removed cut node fails [`Target.Missing`]. Other
+  problems, such as a cycle or a lock, are the built batch's to refuse.
+  Duplicating to a target is a capture and a paste;
+  `SceneNodeCopies.DuplicateInPlace` builds the `InsertNodes` of the viewport's
+  duplicate.
+- **Material slot inventories** are read before the edit. `MaterialSlotEdits`
+  reads the inventory asynchronously and builds `SetMaterialSlot` or
+  `RemoveMaterialSlots` with the slot ids and the inventory's `LayoutRevision`,
+  refusing a slot the current inventory does not have. `Validate` checks that
+  each node still uses that geometry (a stale slot is `Invalid`
+  [`MaterialSlot.Stale`]; `Refused` is only for missing or locked targets). An
+  assignment replaces the node's override of the slot, the revision it records
+  included, whichever inventory the override came from: as in other engines, a
+  reimport never locks a slot the inspector shows. Overrides no slot resolves
+  show as unresolved, and `RemoveMaterialSlots` clears them.
   `IGeometryMaterialSlotProvider` and `IProjectContextService` leave the edit
   path.
+- **`LayoutScopes`** answers what callers need to build layout edits: the scope
+  of a place or entry, an entry's place, a container's entries and its end. A
+  drop in the explorer is a paste of the dragged items (a copy for a Ctrl-drag,
+  a cut otherwise), except a reorder under the same parent, which is a
+  `ReorderNode`.
+- **`SceneComponents.KindOf`** maps a component, such as one a menu offers, to
+  the kind `SceneComponents.Add` takes.
 
 ## 5. Callers
 
@@ -520,12 +654,20 @@ explicit interface implementations. The mutator and organizer logic becomes the
 hierarchy and layout edits; `ISceneMutator`, `ISceneOrganizer`,
 `SceneNodeChangeRecord` and `LayoutChangeRecord` go.
 
+Rule 1's JSON form is `SceneEditJson.Options` (Authoring): it round-trips every
+public `ISceneEdit` and every revert, polymorphic on `ISceneEdit` with the
+`$edit` member naming the type, property values in their descriptor's value
+type, vectors and quaternions in the scene file's form and script slots in their
+saved form.
+
 ## 7. Changes outside Scenes
 
 - **World**: typed ids (3.9).
 - **Schemas**: immutable `PropertyEdit`; descriptors carry their engine mapping.
 - **TimeMachine**: `Undo`/`Redo` return `bool` and restore a failed entry (3.4).
-- **Documents**: `DocumentId`; `Document.AcquireReadLease()` (3.12).
+- **Documents**: `DocumentId`; `Document.AcquireReadLease()` (3.12); the
+  document service creates the id and history before decoding and passes them in
+  `DocumentDecodeContext` (3.13).
 - **Engine sync**: becomes the change projector (3.7, 3.11).
 - **WorldEditor views**: section 5.
 
@@ -554,9 +696,12 @@ Editor's tests keep testing the views against a real `SceneAuthoring`.
 
 ## 9. Order of work
 
-Tasks 1 to 3 are done, and so is the document identity design
+All fourteen tasks are done, and so is the document identity design
 ([document-identity.md](document-identity.md)) that came between tasks 2 and 3.
-The next task is 4.
+The World Editor's scene tests were not moved: the scene behavior they covered
+is tested in `Oxygen.Editor.Scenes.Tests`
+([scene-edits-tests.md](scene-edits-tests.md)), and they keep only the views and
+the engine projection over a real `SceneAuthoring`.
 
 Each task builds, passes its tests, and deletes the code it replaces. The old
 service and `SceneAuthoringGate` keep working until their last caller moves, so
@@ -574,13 +719,13 @@ the gate goes only in the last task.
    boundary.
 3. **TimeMachine:** `Undo`/`Redo` return `bool` and restore a failed entry.
    Independent.
-4. **Test project:** create `Oxygen.Editor.Scenes.Tests` and move the command
-   service, selection, mutator and organizer unit tests out of the World Editor
-   as they are. After task 1.
-5. **Frame:** `SceneAuthoring`, `ISceneEdit`, `SceneEditScope`,
-   `SceneEditApplication`, batches, history entries, the change stream, results,
-   `ValidateAsync`, `UndoAsync`/`RedoAsync`, `SceneContent.Authoring`. After
-   tasks 1 to 3.
+4. **Test project:** create `Oxygen.Editor.Scenes.Tests`, referencing only
+   Scenes, never the World Editor. After task 1.
+5. **Frame:** `DocumentDecodeContext` (3.13) and its consumers in Documents,
+   Scenes, MaterialEditor and the test kinds; `SceneAuthoring`, `ISceneEdit`,
+   `SceneEditScope`, `SceneEditApplication`, batches, history entries, the
+   change stream, results, `ValidateAsync`, `UndoAsync`/`RedoAsync`,
+   `SceneContent.Authoring`, placed in the section 6 layout. After tasks 1 to 3.
 6. **Engine projector:** `SceneEngineSync` consumes `Changed` (phases,
    registration boundary, relocation mount wait, role transfer order); the
    per-operation methods stay until their last caller moves. After task 5; your

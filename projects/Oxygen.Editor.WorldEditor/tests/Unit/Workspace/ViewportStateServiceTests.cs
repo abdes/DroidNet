@@ -48,6 +48,8 @@ public sealed class ViewportStateServiceTests
         FocusedPane: 0,
         [new(CameraType.Left, CameraControlMode.OrbitTurntable, EditorCamera: null, SceneCameraId: null)]);
 
+    public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
     public async Task StateRoundTripsThroughTheSettingsStore()
     {
@@ -125,7 +127,8 @@ public sealed class ViewportStateServiceTests
         await fixture.Store.SaveSettingAsync(
             ViewportStateService.Key,
             new ViewportStateService.ProjectViewports(fixture.Project.ProjectId, ViewportStateService.CurrentVersion + 1, new Dictionary<SceneId, SceneViewportState> { [SceneA] = FourPanes }),
-            fixture.Context).ConfigureAwait(false);
+            fixture.Context,
+            ct: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var restored = await fixture.CreateService().RestoreAsync(fixture.Project, SceneA).ConfigureAwait(false);
 
@@ -139,7 +142,7 @@ public sealed class ViewportStateServiceTests
     {
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
-        await fixture.Store.SaveSettingAsync(new SettingKey<string>(ViewportStateService.Key.SettingsModule, ViewportStateService.Key.Name), "not viewport state", fixture.Context)
+        await fixture.Store.SaveSettingAsync(new SettingKey<string>(ViewportStateService.Key.SettingsModule, ViewportStateService.Key.Name), "not viewport state", fixture.Context, ct: this.TestContext.CancellationToken)
             .ConfigureAwait(false);
         var service = fixture.CreateService();
 

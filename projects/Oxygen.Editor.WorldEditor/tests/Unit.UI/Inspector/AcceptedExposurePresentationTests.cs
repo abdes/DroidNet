@@ -24,7 +24,7 @@ internal sealed class AcceptedExposurePresentationTests : VisualUserInterfaceTes
     public Task AcceptedExposureFieldsUseCleanLabels(string key, string label) => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);
+        using var model = new EnvironmentViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         var view = new EnvironmentView { ViewModel = model, Width = 480, Height = 780 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
@@ -38,7 +38,7 @@ internal sealed class AcceptedExposurePresentationTests : VisualUserInterfaceTes
             _ => throw new InvalidOperationException($"Unexpected field type {field.GetType().Name}."),
         };
         _ = actualLabel.Should().Be(label);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 }

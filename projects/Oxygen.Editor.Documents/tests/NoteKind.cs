@@ -31,7 +31,7 @@ internal sealed class NoteKind(params string[] suffixes) : IDocumentKind
     public static byte[] Encode(Uri identity, string text, params Uri[] references)
         => Encoding.UTF8.GetBytes(string.Join('\n', [identity.ToString(), text, .. references.Select(static uri => uri.ToString())]));
 
-    public async Task<DocumentDecodeResult> DecodeAsync(DocumentFile file, ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
+    public async Task<DocumentDecodeResult> DecodeAsync(DocumentFile file, ReadOnlyMemory<byte> content, DocumentDecodeContext context, CancellationToken cancellationToken)
     {
         await Task.Yield();
         this.Decodes++;

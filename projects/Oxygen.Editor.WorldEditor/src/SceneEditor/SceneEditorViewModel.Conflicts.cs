@@ -52,20 +52,11 @@ public partial class SceneEditorViewModel
             : new(Succeeded: false, (result.Message ?? "The copy could not be saved.") + " Your original document is still open.");
     });
 
-    // Commands in flight finish on the current scene before a reload replaces it; none starts until the reload ends.
+    // A reload replaces the content: the old authoring cancels its open gestures and takes no further edit.
     private async Task<DocumentReloadResult> ReplaceSceneAsync(Func<Document, Task<DocumentReloadResult>> replace)
-    {
-        if (this.scene is not { } current)
-        {
-            return new(Succeeded: false, "The scene document is no longer open.");
-        }
-
-        await this.commandService.CompleteEditSessionsAsync(current, commit: false).ConfigureAwait(true);
-        using var replacement = await SceneAuthoringGate.BeginReplacementAsync(current, CancellationToken.None).ConfigureAwait(true);
-        return replacement is null
-            ? new(Succeeded: false, "A scene operation is still finishing. Try again.")
+        => this.scene is null
+            ? new(Succeeded: false, "The scene document is no longer open.")
             : await replace(this.Document).ConfigureAwait(true);
-    }
 
     private Task<DocumentConflictResult> ResolveConflictAsync(Func<Task<DocumentConflictResult>> action)
     {

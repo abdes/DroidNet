@@ -21,11 +21,10 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 
 internal sealed partial class SceneAuthoringFixture
 {
-    public SceneNodeEditorViewModel CreateInspectorHost(string kind, bool realizeViews = false, Oxygen.Editor.WorldEditor.Documents.Commands.ISceneDocumentCommandService? commandService = null, ISceneContentDemandService? contentDemand = null, Oxygen.Editor.Assets.IAssetFeed? assetProvider = null)
+    public SceneNodeEditorViewModel CreateInspectorHost(string kind, bool realizeViews = false, ISceneContentDemandService? contentDemand = null, Oxygen.Editor.Assets.IAssetFeed? assetProvider = null)
     {
         IList<SceneNode> selection = string.Equals(kind, "Environment", StringComparison.Ordinal) ? [] : [this.Node];
         this.Messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
-        _ = this.Sync.Setup(service => service.GetDocumentScene(this.Tab.DocumentId)).Returns(this.Scene);
         var locator = new Mock<IViewLocator>();
         if (realizeViews)
         {
@@ -36,20 +35,6 @@ internal sealed partial class SceneAuthoringFixture
         _ = catalog.SetupGet(value => value.Items).Returns(System.Reactive.Linq.Observable.Empty<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>>());
         _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
-        return new(new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) }, new ViewModelToView(locator.Object), this.Messenger, commandService ?? this.Commands, this.Area, default, assetProvider ?? catalog.Object, this.Sync.Object, this.Selection, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.Slots.Object, this.Projects, interaction: this.interaction);
-    }
-
-    public void ConfigureObservedSync(SceneEngineSync throttle, List<DateTimeOffset> previews, Action terminal)
-    {
-        _ = this.Sync.Setup(value => value.TryPreviewSyncAsync(It.IsAny<SceneId>(), It.IsAny<Guid>(), It.IsAny<DateTimeOffset>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>())).Returns((SceneId sceneId, Guid nodeId, DateTimeOffset now, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => throttle.TryPreviewSyncAsync(sceneId, nodeId, now, ct =>
-        {
-            previews.Add(now);
-            return action(ct);
-        }, token));
-        _ = this.Sync.Setup(value => value.CompleteTerminalSyncAsync(It.IsAny<SceneId>(), It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>())).Returns((SceneId sceneId, Guid nodeId, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => throttle.CompleteTerminalSyncAsync(sceneId, nodeId, ct =>
-        {
-            terminal();
-            return action(ct);
-        }, token));
+        return new(new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) }, new ViewModelToView(locator.Object), this.Messenger, this.Area, default, assetProvider ?? catalog.Object, this.Sync.Object, this.Selection, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.Slots.Object, this.Projects, interaction: this.interaction);
     }
 }

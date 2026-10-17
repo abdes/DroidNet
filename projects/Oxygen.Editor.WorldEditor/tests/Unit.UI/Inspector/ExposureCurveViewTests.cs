@@ -26,7 +26,7 @@ internal sealed class ExposureCurveViewTests : VisualUserInterfaceTests
     public Task CurveViewMultipleKeysShareHeadersAndStretchPreviewWithAccessibleFields() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);
+        using var model = new EnvironmentViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         model.Exposure.AutoExposureCompensationCurve = [new(-2, 0), new(0, 1), new(2, 0)];
         await model.PendingEdits.ConfigureAwait(true);
@@ -57,11 +57,11 @@ internal sealed class ExposureCurveViewTests : VisualUserInterfaceTests
     public Task CurveViewKeyTextValidationAndRemoveKeepTheSceneTransactionOwner() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);
+        using var model = new EnvironmentViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         model.Exposure.AutoExposureCompensationCurve = [new(-2, 0), new(0, 1), new(2, 0)];
         await model.PendingEdits.ConfigureAwait(true);
-        fixture.Context.History.Clear();
+        fixture.Document.History.Clear();
         var view = new ExposureCompensationCurveEditorView { ViewModel = model.Exposure.CurveEditor, Width = 420 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -72,20 +72,20 @@ internal sealed class ExposureCurveViewTests : VisualUserInterfaceTests
         metered.CompletePendingTextEdit();
         await model.PendingEdits.ConfigureAwait(true);
         _ = key.MeteredEv.Should().Be(0);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         await EnterTextAsync(metered, "1").ConfigureAwait(true);
         metered.CompletePendingTextEdit();
         await model.PendingEdits.ConfigureAwait(true);
         _ = key.MeteredEv.Should().Be(1);
         _ = fixture.Scene.Environment.PostProcess.AutoExposureCompensationCurve[1].MeteredEv.Should().Be(1);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         var remove = view.FindDescendant<Button>(button => ReferenceEquals(button.DataContext, key)
             && Equals(ToolTipService.GetToolTip(button), "Remove curve key"))!;
         ((IInvokeProvider)new ButtonAutomationPeer(remove).GetPattern(PatternInterface.Invoke)).Invoke();
         await model.PendingEdits.ConfigureAwait(true);
         _ = model.Exposure.CurveEditor.Keys.Should().HaveCount(2);
-        _ = fixture.Context.History.UndoStack.Should().HaveCount(2);
-        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        _ = fixture.Document.History.UndoStack.Should().HaveCount(2);
+        await fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = model.Exposure.CurveEditor.Keys.Should().HaveCount(3);
     });
 }

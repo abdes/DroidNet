@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Services;
@@ -12,8 +13,8 @@ public sealed partial class SceneEngineSync
 {
     private volatile SceneProjection? projecting;
 
-    /// <inheritdoc/>
-    public Task<SyncOutcome> UpdatePropertiesAsync(
+    /// <summary>Projects one change into the engine; the projector calls it.</summary>
+    internal Task<SyncOutcome> UpdatePropertiesAsync(
         Scene scene,
         SceneNode node,
         IReadOnlyList<EnginePropertyValueEntry> entries,

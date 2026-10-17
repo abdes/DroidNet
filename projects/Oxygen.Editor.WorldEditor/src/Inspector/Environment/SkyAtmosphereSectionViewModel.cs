@@ -4,9 +4,10 @@
 
 using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -72,16 +73,16 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
     public Vector3 GroundAlbedoColor => InspectorValues.ToVector3(this.GroundAlbedoR, this.GroundAlbedoG, this.GroundAlbedoB);
 
     /// <summary>Gets canonical sun-disk feedback.</summary>
-    public InspectorFieldDiagnostic SunDiskEnabledDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.SunDiskEnabled.Id);
+    public InspectorFieldDiagnostic SunDiskEnabledDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.SunDiskEnabled.Id);
 
     /// <summary>Gets canonical radius feedback.</summary>
-    public InspectorFieldDiagnostic PlanetRadiusKmDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.PlanetRadiusMeters.Id);
+    public InspectorFieldDiagnostic PlanetRadiusKmDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.PlanetRadiusMeters.Id);
 
     /// <summary>Gets canonical height feedback.</summary>
-    public InspectorFieldDiagnostic AtmosphereHeightKmDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AtmosphereHeightMeters.Id);
+    public InspectorFieldDiagnostic AtmosphereHeightKmDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AtmosphereHeightMeters.Id);
 
     /// <summary>Gets canonical albedo feedback.</summary>
-    public InspectorFieldDiagnostic GroundAlbedoRDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo.Id);
+    public InspectorFieldDiagnostic GroundAlbedoRDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.GroundAlbedo.Id);
 
     /// <summary>Gets shared albedo feedback.</summary>
     public InspectorFieldDiagnostic GroundAlbedoGDiagnostic => this.GroundAlbedoRDiagnostic;
@@ -90,16 +91,16 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
     public InspectorFieldDiagnostic GroundAlbedoBDiagnostic => this.GroundAlbedoRDiagnostic;
 
     /// <summary>Gets canonical scattering feedback.</summary>
-    public InspectorFieldDiagnostic RayleighScaleHeightKmDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.RayleighScaleHeightMeters.Id);
+    public InspectorFieldDiagnostic RayleighScaleHeightKmDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.RayleighScaleHeightMeters.Id);
 
     /// <summary>Gets canonical scattering feedback.</summary>
-    public InspectorFieldDiagnostic MieScaleHeightKmDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.MieScaleHeightMeters.Id);
+    public InspectorFieldDiagnostic MieScaleHeightKmDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.MieScaleHeightMeters.Id);
 
     /// <summary>Gets canonical phase-function feedback.</summary>
-    public InspectorFieldDiagnostic MieAnisotropyDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.MieAnisotropy.Id);
+    public InspectorFieldDiagnostic MieAnisotropyDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.MieAnisotropy.Id);
 
     /// <summary>Gets canonical sky-multiplier feedback.</summary>
-    public InspectorFieldDiagnostic SkyLuminanceRDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.SkyLuminance.Id);
+    public InspectorFieldDiagnostic SkyLuminanceRDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.SkyLuminance.Id);
 
     /// <summary>Gets shared sky-multiplier feedback.</summary>
     public InspectorFieldDiagnostic SkyLuminanceGDiagnostic => this.SkyLuminanceRDiagnostic;
@@ -108,16 +109,16 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
     public InspectorFieldDiagnostic SkyLuminanceBDiagnostic => this.SkyLuminanceRDiagnostic;
 
     /// <summary>Gets canonical aerial-distance feedback.</summary>
-    public InspectorFieldDiagnostic AerialPerspectiveDistanceScaleDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveDistanceScale.Id);
+    public InspectorFieldDiagnostic AerialPerspectiveDistanceScaleDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AerialPerspectiveDistanceScale.Id);
 
     /// <summary>Gets canonical aerial-scattering feedback.</summary>
-    public InspectorFieldDiagnostic AerialScatteringStrengthDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AerialScatteringStrength.Id);
+    public InspectorFieldDiagnostic AerialScatteringStrengthDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AerialScatteringStrength.Id);
 
     /// <summary>Gets canonical start-distance feedback.</summary>
-    public InspectorFieldDiagnostic AerialPerspectiveStartDepthMetersDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveStartDepthMeters.Id);
+    public InspectorFieldDiagnostic AerialPerspectiveStartDepthMetersDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AerialPerspectiveStartDepthMeters.Id);
 
     /// <summary>Gets canonical fog feedback.</summary>
-    public InspectorFieldDiagnostic HeightFogContributionDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.HeightFogContribution.Id);
+    public InspectorFieldDiagnostic HeightFogContributionDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.HeightFogContribution.Id);
 
     /// <summary>Validates the distance before the NumberBox accepts its draft.</summary>
     /// <param name="value">The proposed distance in metres.</param>
@@ -125,14 +126,17 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
     public bool ValidateAerialStart(float value)
     {
         var result = SceneEnvironmentConstraints.ValidateAerialStart(value);
-        var ticket = this.EditOwner.Diagnostics.Begin([SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveStartDepthMeters.Id]);
-        this.EditOwner.Diagnostics.Complete(ticket, new(result.IsValid) { ValidationCode = result.Code, ValidationMessage = result.Message });
+        var property = SceneProperties.SceneEnvironment.AerialPerspectiveStartDepthMeters.Id;
+        var ticket = this.EditOwner.Diagnostics.Begin([property]);
+        this.EditOwner.Diagnostics.Complete(ticket, result.IsValid
+            ? new SceneEditResult(SceneEditOutcome.Applied, [])
+            : new SceneEditResult(SceneEditOutcome.Invalid, [SceneDiagnostic.Error(SceneEditCodes.PropertyOutOfRange, result.Message ?? "The distance is out of range.", property: property)]));
         return result.IsValid;
     }
 
     /// <summary>Authors complete linear albedo through the captured scene owner.</summary>
     /// <param name="color">The authored linear color.</param>
-    public void SetGroundAlbedoColor(Vector3 color) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, color);
+    public void SetGroundAlbedoColor(Vector3 color) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.GroundAlbedo, color);
 
     /// <summary>Refreshes display adapters under the parent's model-refresh guard.</summary>
     /// <param name="value">The authored atmosphere snapshot.</param>
@@ -158,17 +162,17 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
         this.OnPropertyChanged(nameof(this.GroundAlbedoColor));
     }
 
-    partial void OnSunDiskEnabledChanged(bool value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.SunDiskEnabled, value);
+    partial void OnSunDiskEnabledChanged(bool value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.SunDiskEnabled, value);
 
-    partial void OnPlanetRadiusKmChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.PlanetRadiusMeters, value * 1000f);
+    partial void OnPlanetRadiusKmChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.PlanetRadiusMeters, value * 1000f);
 
-    partial void OnAtmosphereHeightKmChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AtmosphereHeightMeters, value * 1000f);
+    partial void OnAtmosphereHeightKmChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AtmosphereHeightMeters, value * 1000f);
 
-    partial void OnRayleighScaleHeightKmChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.RayleighScaleHeightMeters, value * 1000f);
+    partial void OnRayleighScaleHeightKmChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.RayleighScaleHeightMeters, value * 1000f);
 
-    partial void OnMieScaleHeightKmChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.MieScaleHeightMeters, value * 1000f);
+    partial void OnMieScaleHeightKmChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.MieScaleHeightMeters, value * 1000f);
 
-    partial void OnMieAnisotropyChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.MieAnisotropy, value);
+    partial void OnMieAnisotropyChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.MieAnisotropy, value);
 
     partial void OnGroundAlbedoRChanged(double value) => this.ApplyAlbedo(InspectorValues.ToVector3(value, this.GroundAlbedoG, this.GroundAlbedoB));
 
@@ -176,25 +180,25 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
 
     partial void OnGroundAlbedoBChanged(double value) => this.ApplyAlbedo(InspectorValues.ToVector3(this.GroundAlbedoR, this.GroundAlbedoG, value));
 
-    partial void OnSkyLuminanceRChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.SkyLuminance, InspectorValues.ToVector3(value, this.SkyLuminanceG, this.SkyLuminanceB));
+    partial void OnSkyLuminanceRChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.SkyLuminance, InspectorValues.ToVector3(value, this.SkyLuminanceG, this.SkyLuminanceB));
 
-    partial void OnSkyLuminanceGChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.SkyLuminance, InspectorValues.ToVector3(this.SkyLuminanceR, value, this.SkyLuminanceB));
+    partial void OnSkyLuminanceGChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.SkyLuminance, InspectorValues.ToVector3(this.SkyLuminanceR, value, this.SkyLuminanceB));
 
-    partial void OnSkyLuminanceBChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.SkyLuminance, InspectorValues.ToVector3(this.SkyLuminanceR, this.SkyLuminanceG, value));
+    partial void OnSkyLuminanceBChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.SkyLuminance, InspectorValues.ToVector3(this.SkyLuminanceR, this.SkyLuminanceG, value));
 
-    partial void OnAerialPerspectiveDistanceScaleChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveDistanceScale, value);
+    partial void OnAerialPerspectiveDistanceScaleChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AerialPerspectiveDistanceScale, value);
 
-    partial void OnAerialScatteringStrengthChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AerialScatteringStrength, value);
+    partial void OnAerialScatteringStrengthChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AerialScatteringStrength, value);
 
-    partial void OnAerialPerspectiveStartDepthMetersChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveStartDepthMeters, value);
+    partial void OnAerialPerspectiveStartDepthMetersChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AerialPerspectiveStartDepthMeters, value);
 
-    partial void OnHeightFogContributionChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.HeightFogContribution, value);
+    partial void OnHeightFogContributionChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.HeightFogContribution, value);
 
     private InspectorFieldDiagnostic Diagnostic(PropertyId property) => this.EditOwner.Diagnostics.Get(property);
 
     private void ApplyAlbedo(Vector3 color)
     {
         this.OnPropertyChanged(nameof(this.GroundAlbedoColor));
-        this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, color);
+        this.EditOwner.Apply(SceneProperties.SceneEnvironment.GroundAlbedo, color);
     }
 }

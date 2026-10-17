@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Engine;
 
 namespace Oxygen.Editor.World.Services;
 
@@ -30,6 +31,8 @@ public sealed partial class SceneEngineSync
 
             this.disposed = true;
             this.requestedScene = null;
+            this.assetFeedSubscription?.Dispose();
+            this.assetFeedSubscription = null;
             if (this.observingEngine)
             {
                 this.engineService.StateChanged -= this.OnRuntimeStateChanged;

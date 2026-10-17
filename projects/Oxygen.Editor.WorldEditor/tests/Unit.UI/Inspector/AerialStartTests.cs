@@ -43,12 +43,12 @@ internal sealed class AerialStartTests : DroidNet.Tests.VisualUserInterfaceTests
         number.CompletePendingTextEdit();
         await model.PendingEdits.ConfigureAwait(true);
         _ = fixture.Scene.Environment.SkyAtmosphere.AerialPerspectiveStartDepthMeters.Should().Be(-1);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         await EnterTextAsync(number, "100").ConfigureAwait(true);
         number.CompletePendingTextEdit();
         await model.PendingEdits.ConfigureAwait(true);
         _ = fixture.Scene.Environment.SkyAtmosphere.AerialPerspectiveStartDepthMeters.Should().Be(100);
         _ = model.SkyAtmosphere.AerialPerspectiveStartDepthMetersDiagnostic.Message.Should().BeEmpty();
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
     });
 }

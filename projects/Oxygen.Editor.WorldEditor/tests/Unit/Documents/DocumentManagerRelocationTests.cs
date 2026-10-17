@@ -10,10 +10,9 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
@@ -31,7 +30,7 @@ public sealed class DocumentManagerRelocationTests
     [DataRow(false)]
     public async Task MaterialDocumentClosesOnlyWhenDeleted(bool deleted)
     {
-        using var files = new SceneDocumentFiles(Mock.Of<ISceneDocumentCommandService>());
+        using var files = new SceneDocumentFiles();
         var opening = await files.Documents.OpenAsync(files.WriteMaterial("Red"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var material = opening.Document!;
         var relocation = new Mock<IAssetRelocationService>();
@@ -43,9 +42,10 @@ public sealed class DocumentManagerRelocationTests
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         tabs.DocumentClosed += (_, _) => _ = closed.TrySetResult();
 
-        relocation.Raise(value => value.FilesChanged += null, deleted
+        var args = deleted
             ? new AssetFilesChangedEventArgs([], [], [source], foldersChanged: false)
-            : new AssetFilesChangedEventArgs([new RelocationFileMove(source, target, IsDirectory: false)], [], [], foldersChanged: false));
+            : new AssetFilesChangedEventArgs([new RelocationFileMove(source, target, IsDirectory: false)], [], [], foldersChanged: false);
+        relocation.Raise(value => value.FilesChanged += null, args);
         if (deleted)
         {
             await closed.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -60,7 +60,7 @@ public sealed class DocumentManagerRelocationTests
     [TestMethod]
     public async Task SceneDocumentClosesWhenItsFileIsDeleted()
     {
-        using var files = new SceneDocumentFiles(Mock.Of<ISceneDocumentCommandService>());
+        using var files = new SceneDocumentFiles();
         var (document, _) = await files.CreateAsync("Main", this.TestContext.CancellationToken).ConfigureAwait(false);
         var relocation = new Mock<IAssetRelocationService>();
         var (tabs, area) = CreateArea(files, new WindowId(92));

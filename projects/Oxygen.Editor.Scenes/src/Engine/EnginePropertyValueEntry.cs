@@ -4,7 +4,7 @@
 
 using System.Runtime.InteropServices;
 
-namespace Oxygen.Editor.World.Services;
+namespace Oxygen.Editor.Scenes.Engine;
 
 /// <summary>
 /// Scalar wire entry for the property-pipeline transport.

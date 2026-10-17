@@ -5,36 +5,27 @@
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
-using DroidNet.Documents;
 using DroidNet.Routing;
-using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Documents.Commands;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Editor.WorldEditor.TestSupport;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
-/// <summary>Ensures drag/drop commits go through the document command owner and reconcile the projection.</summary>
+/// <summary>Ensures a drop moves or copies the dragged items in the scene document, and the tree follows.</summary>
 [TestClass]
-public sealed class SceneExplorerDropTests
+public sealed partial class SceneExplorerDropTests
 {
     [TestMethod]
-    public async Task CommitDropAsync_RoutesNodeDropIntoNodeThroughReparentCommand()
+    public async Task CommitDropAsync_NodeOntoNode_ParentsItInOneUndoStep()
     {
-        var harness = CreateHarness(out var scene, out var parent, out var child);
-        var commands = harness.Commands;
-        _ = commands
-            .Setup(value => value.ReparentNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), parent.Id, false))
-            .ReturnsAsync(SceneCommandResult.Success);
+        using var harness = CreateHarness(out var scene, out var parent, out var child);
         using var explorer = harness.Build();
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
@@ -45,19 +36,14 @@ public sealed class SceneExplorerDropTests
 
         _ = result.Succeeded.Should().BeTrue();
         _ = result.Items.Should().ContainSingle().Which.Should().BeAssignableTo<SceneNodeAdapter>();
-        commands.Verify(
-            value => value.ReparentNodesAsync(
-                It.IsAny<SceneDocumentCommandContext>(),
-                It.Is<IReadOnlyList<NodeId>>(ids => ids.SequenceEqual(new[] { child.Id })),
-                parent.Id,
-                false),
-            Times.Once);
+        _ = scene.AllNodes.Single(node => node.Id == child.Id).Parent!.Id.Should().Be(parent.Id);
+        _ = harness.Metadata.Document.History.UndoStack.Should().ContainSingle();
     }
 
     [TestMethod]
-    public async Task CommitDropAsync_RoutesNodeDropIntoFolderThroughGroupCommand()
+    public async Task CommitDropAsync_NodeOntoFolder_GroupsItInOneUndoStep()
     {
-        var harness = CreateHarness(out var scene, out var parent, out var child, folderId: FolderId.New());
+        using var harness = CreateHarness(out var scene, out var parent, out var child, folderId: FolderId.New());
         scene.SetExplorerLayout(
             [
                 new ExplorerEntryData { Type = "Node", NodeId = parent.Id },
@@ -69,10 +55,6 @@ public sealed class SceneExplorerDropTests
                     Children = [new ExplorerEntryData { Type = "Node", NodeId = child.Id }],
                 },
             ]);
-        var commands = harness.Commands;
-        _ = commands
-            .Setup(value => value.MoveNodesToFolderAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), harness.FolderId))
-            .ReturnsAsync(SceneCommandResult.Success);
         using var explorer = harness.Build();
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
@@ -82,21 +64,14 @@ public sealed class SceneExplorerDropTests
         var result = await explorer.CommitDropAsync(new TreeDropRequest([parentAdapter!], folder!, 0, TreeDropOperation.Move)).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        commands.Verify(
-            value => value.MoveNodesToFolderAsync(
-                It.IsAny<SceneDocumentCommandContext>(),
-                It.Is<IReadOnlyList<NodeId>>(ids => ids.SequenceEqual(new[] { parent.Id })),
-                harness.FolderId),
-            Times.Once);
+        _ = scene.ExplorerLayout!.Single(entry => entry.FolderId == harness.FolderId).Children!.Select(static entry => entry.NodeId).Should().Contain(parent.Id);
+        _ = harness.Metadata.Document.History.UndoStack.Should().ContainSingle();
     }
 
     [TestMethod]
-    public async Task CommitDropAsync_CopyDropRoutesThroughDuplicateCommand()
+    public async Task CommitDropAsync_CopyDrop_AddsACopyInOneUndoStep()
     {
-        var harness = CreateHarness(out var scene, out _, out var child);
-        _ = harness.Commands
-            .Setup(value => value.DuplicateNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), null, null))
-            .ReturnsAsync(SceneCommandResults.Success<IReadOnlyList<SceneNode>>([child]));
+        using var harness = CreateHarness(out var scene, out _, out var child);
         using var explorer = harness.Build();
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
@@ -105,15 +80,14 @@ public sealed class SceneExplorerDropTests
         var result = await explorer.CommitDropAsync(new TreeDropRequest([childAdapter!], explorer.Scene!, 0, TreeDropOperation.Copy)).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        harness.Commands.Verify(
-            value => value.DuplicateNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.Is<IReadOnlyList<NodeId>>(ids => ids.SequenceEqual(new[] { child.Id })), null, null),
-            Times.Once);
+        _ = scene.RootNodes.Should().HaveCount(3);
+        _ = harness.Metadata.Document.History.UndoStack.Should().ContainSingle();
     }
 
     [TestMethod]
     public async Task FindFolderAdapterAsync_ReturnsIndexedFolderWithoutForceLoading()
     {
-        var harness = CreateHarness(out var scene, out var parent, out var child, folderId: FolderId.New());
+        using var harness = CreateHarness(out var scene, out var parent, out var child, folderId: FolderId.New());
         scene.SetExplorerLayout(
             [
                 new ExplorerEntryData
@@ -150,7 +124,7 @@ public sealed class SceneExplorerDropTests
         return harness;
     }
 
-    private sealed class Harness
+    private sealed partial class Harness : IDisposable
     {
         public Harness(Project project, Scene scene, FolderId folderId)
         {
@@ -169,11 +143,9 @@ public sealed class SceneExplorerDropTests
 
             var sync = new Mock<ISceneEngineSync>();
             _ = sync.Setup(value => value.GetDocumentScene(this.Metadata.DocumentId)).Returns(this.Scene);
-            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), this.Metadata.DocumentId)).Returns(value: true);
+            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
             _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             this.Sync = sync;
-
-            this.Commands = new Mock<ISceneDocumentCommandService>(MockBehavior.Strict);
         }
 
         public Project Project { get; }
@@ -189,13 +161,13 @@ public sealed class SceneExplorerDropTests
         public TestDocumentArea Documents { get; }
 
         /// <summary>Gets the open documents that hold the harness's first scene.</summary>
-        public Oxygen.Editor.Documents.OpenDocuments OpenDocuments => this.Metadata.Documents;
+        public Editor.Documents.OpenDocuments OpenDocuments => this.Metadata.Documents;
 
         public Mock<ISceneEngineSync> Sync { get; }
 
-        public Mock<ISceneDocumentCommandService> Commands { get; }
-
         public SceneAdapter? SceneAdapter { get; private set; }
+
+        public void Dispose() => this.Metadata.Dispose();
 
         public SceneExplorerViewModel Build()
         {
@@ -207,8 +179,7 @@ public sealed class SceneExplorerDropTests
                 this.OpenDocuments,
                 default,
                 this.Sync.Object,
-                new SceneSelectionService(),
-                this.Commands.Object);
+                new SceneSelectionService());
             this.SceneAdapter = explorer.Scene;
             return explorer;
         }

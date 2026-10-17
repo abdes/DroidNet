@@ -2,14 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>Maintains target-lifetime and property-scoped diagnostic ordering.</summary>
 internal sealed class InspectorFieldDiagnostics
 {
+    private static readonly SceneEditResult Cleared = new(SceneEditOutcome.Applied, []);
     private readonly Dictionary<PropertyId, InspectorFieldDiagnostic> fields = [];
     private readonly Dictionary<PropertyId, long> latest = [];
     private readonly Dictionary<PropertyId, HashSet<PropertyId>> dependents = [];
@@ -63,8 +64,8 @@ internal sealed class InspectorFieldDiagnostics
 
     /// <summary>Applies feedback only if the request is still current.</summary>
     /// <param name="ticket">The originating edit ticket.</param>
-    /// <param name="result">The command validation result.</param>
-    public void Complete(Ticket ticket, SceneCommandResult result)
+    /// <param name="result">The edit's result.</param>
+    public void Complete(Ticket ticket, SceneEditResult result)
     {
         if (ticket.Scope != this.scope)
         {
@@ -78,9 +79,11 @@ internal sealed class InspectorFieldDiagnostics
                 continue;
             }
 
+            // A diagnostic naming another property belongs to that field; one naming none belongs to every field.
             var field = this.Get(property);
-            field.Code = result.Succeeded ? string.Empty : result.ValidationCode ?? "PROPERTY_REJECTED";
-            field.Message = result.Succeeded ? string.Empty : result.ValidationMessage ?? "This value was rejected.";
+            var error = result.Diagnostics.FirstOrDefault(diagnostic => diagnostic.IsError && (diagnostic.Property is null || diagnostic.Property == property));
+            field.Code = result.Succeeded ? string.Empty : error?.Code ?? string.Empty;
+            field.Message = result.Succeeded ? string.Empty : error?.Message ?? string.Empty;
         }
 
         this.FeedbackChanged?.Invoke(this, EventArgs.Empty);
@@ -91,7 +94,7 @@ internal sealed class InspectorFieldDiagnostics
     public void Invalidate(PropertyId property)
     {
         var ticket = this.Begin([property]);
-        this.Complete(ticket, SceneCommandResult.Success);
+        this.Complete(ticket, Cleared);
     }
 
     /// <summary>Invalidates pending delivery and clears feedback when rebinding.</summary>

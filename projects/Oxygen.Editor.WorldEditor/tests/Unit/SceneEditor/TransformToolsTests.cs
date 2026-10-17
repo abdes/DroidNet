@@ -8,13 +8,12 @@ using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.LevelEditor;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.Workspace;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Managed.Core;
 
@@ -70,12 +69,13 @@ public sealed class TransformToolsTests
     [TestMethod]
     public void Settings_StartFromTheDefaultsAndIgnoreInvalidIncrements()
     {
-        var sut = new TransformToolSettingsService(settings: null);
+        var sut = new TransformToolSettingsService(settings: null)
+        {
+            TranslationIncrement = 0.0F,
+            ScaleIncrement = float.NaN,
+        };
 
-        sut.TranslationIncrement = 0.0F;
-        sut.ScaleIncrement = float.NaN;
-
-        _ = sut.Snap.Should().Be(new RuntimeTransformSnap(false, 0.25F, 15.0F, 0.1F));
+        _ = sut.Snap.Should().Be(new RuntimeTransformSnap(Enabled: false, 0.25F, 15.0F, 0.1F));
         _ = sut.Space.Should().Be(RuntimeTransformSpace.World);
     }
 
@@ -83,10 +83,11 @@ public sealed class TransformToolsTests
     public async Task Settings_PersistForTheUserAcrossProjects()
     {
         var store = new Mock<IEditorSettingsManager>();
-        var sut = new TransformToolSettingsService(store.Object);
-
-        sut.SnapEnabled = true;
-        sut.TranslationIncrement = 0.5F;
+        var sut = new TransformToolSettingsService(store.Object)
+        {
+            SnapEnabled = true,
+            TranslationIncrement = 0.5F,
+        };
         await sut.FlushAsync().ConfigureAwait(false);
 
         store.Verify(
@@ -102,12 +103,12 @@ public sealed class TransformToolsTests
     [TestMethod]
     public async Task Settings_RestoreStoredPreferencesAndDiscardAnUnknownVersion()
     {
-        var restored = await LoadAsync(new(TransformToolSettingsService.CurrentVersion, true, 1.0F, 90.0F, 0.5F, RuntimeTransformSpace.Local)).ConfigureAwait(false);
-        var discarded = await LoadAsync(new(TransformToolSettingsService.CurrentVersion + 1, true, 1.0F, 90.0F, 0.5F, RuntimeTransformSpace.Local)).ConfigureAwait(false);
+        var restored = await LoadAsync(new(TransformToolSettingsService.CurrentVersion, SnapEnabled: true, 1.0F, 90.0F, 0.5F, RuntimeTransformSpace.Local)).ConfigureAwait(false);
+        var discarded = await LoadAsync(new(TransformToolSettingsService.CurrentVersion + 1, SnapEnabled: true, 1.0F, 90.0F, 0.5F, RuntimeTransformSpace.Local)).ConfigureAwait(false);
 
-        _ = restored.Snap.Should().Be(new RuntimeTransformSnap(true, 1.0F, 90.0F, 0.5F));
+        _ = restored.Snap.Should().Be(new RuntimeTransformSnap(Enabled: true, 1.0F, 90.0F, 0.5F));
         _ = restored.Space.Should().Be(RuntimeTransformSpace.Local);
-        _ = discarded.Snap.Should().Be(new RuntimeTransformSnap(false, 0.25F, 15.0F, 0.1F));
+        _ = discarded.Snap.Should().Be(new RuntimeTransformSnap(Enabled: false, 0.25F, 15.0F, 0.1F));
     }
 
     [TestMethod]
@@ -126,7 +127,7 @@ public sealed class TransformToolsTests
     public void GizmoEdits_ChangeOnlyWhatTheToolMoves()
     {
         var target = new RuntimeGizmoTarget(TargetNode, new Vector3(1, 2, 3), Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2), new Vector3(2, 3, 4));
-        var transform = SceneDocumentCommandService.Transform;
+        var transform = SceneProperties.Transform;
 
         var move = SceneEditorViewModel.BuildGizmoEdits(RuntimeTransformTool.Translate, [target])[TargetNode];
         var rotate = SceneEditorViewModel.BuildGizmoEdits(RuntimeTransformTool.Rotate, [target])[TargetNode];
@@ -154,10 +155,10 @@ public sealed class TransformToolsTests
         var outer = SceneEditorViewModel.BuildHelperEdit(spot, RuntimeHelperHandle.OuterCone, 0.6F);
         var range = SceneEditorViewModel.BuildHelperEdit(point, RuntimeHelperHandle.Range, 7.5F);
 
-        _ = outer!.Ids.Should().BeEquivalentTo([SceneDocumentCommandService.SpotLight.OuterConeAngleRadiansDescriptor!.Id]);
-        _ = outer.GetTyped(new PropertyId<float>(SceneDocumentCommandService.SpotLight.OuterConeAngleRadiansDescriptor!.Id), out var radians).Should().BeTrue();
+        _ = outer!.Ids.Should().BeEquivalentTo([SceneProperties.SpotLight.OuterConeAngleRadiansDescriptor!.Id]);
+        _ = outer.GetTyped(new PropertyId<float>(SceneProperties.SpotLight.OuterConeAngleRadiansDescriptor!.Id), out var radians).Should().BeTrue();
         _ = radians.Should().Be(0.6F);
-        _ = range!.Ids.Should().BeEquivalentTo([SceneDocumentCommandService.PointLight.RangeDescriptor.Id]);
+        _ = range!.Ids.Should().BeEquivalentTo([SceneProperties.PointLight.RangeDescriptor.Id]);
         _ = SceneEditorViewModel.BuildHelperEdit(point, RuntimeHelperHandle.InnerCone, 0.2F).Should().BeNull();
         _ = SceneEditorViewModel.BuildHelperEdit(empty, RuntimeHelperHandle.Range, 1.0F).Should().BeNull();
     }

@@ -1,8 +1,8 @@
 # Issue #69: DI scope topology and WorldEditor decomposition
 
-Status: `in progress` — Phase 0 and S1.1 to S1.4 (Assets, Cook on change,
-Foreground cooks, Global history, Pipeline workflows out of UI) are done. Phase
-1 follows
+Status: `in progress` — Phase 0 and S1.1 to S1.6 (Assets, Cook on change,
+Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
+Scenes) are done. Phase 1 follows
 [editor-module-architecture.md](../review/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -288,12 +288,15 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   renames, moves, copies and deletes them like any asset, with file reports and
   global undo for all but delete; `SceneAssetCommandMessage`,
   `SceneAssetRenameOperation` and the project's scene list go. New Scene and the
-  scene rules of the relocation service live in ContentPipeline. The ten change
-  sets become TimeMachine transactions. Three commits: scenes as documents and
-  scene assets through the relocation service, in the World Editor; the module
-  and the move; transactions. Gate: Scenes tests without the WinUI host, the
-  tests of the callers, the reviewer's editor build and acceptance of the first
-  commit in the running editor.
+  scene rules of the relocation service live in ContentPipeline. Done: the
+  command service, the gate, the mutator and the organizer are replaced by scene
+  edits ([scene-edits.md](../review/scene-edits.md)): edit records run by each
+  document's `SceneAuthoring`, with atomic batches instead of change sets, and
+  an engine projector that follows its change stream. The document identity
+  design ([document-identity.md](../review/document-identity.md)) came in
+  between. Open items are in the problem register of scenes-module.md section 6.
+  Gate: Scenes tests without the WinUI host, the tests of the callers, the
+  reviewer's editor build and acceptance in the running editor.
 - **S1.7 LivePreview** (C4 implementation, C11, C13, Play). Design first.
   `Oxygen.Editor.LivePreview` takes engine sync, content demand (without its
   `WindowId`), mount changes, the runtime session start taken out of

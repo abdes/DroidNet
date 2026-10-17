@@ -4,8 +4,8 @@
 
 using System.Collections.Specialized;
 using System.ComponentModel;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
@@ -123,7 +123,7 @@ public sealed partial class AtmosphereLightsSectionViewModel
         {
             this.observedSunId = this.FindAtmosphereSource(AtmosphereLightSlot.Primary)?.Id;
             this.observedSecondarySunId = this.FindAtmosphereSource(AtmosphereLightSlot.Secondary)?.Id;
-            this.lightAssignments?.ModelChanged(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id);
+            this.lightAssignments?.ModelChanged(SceneProperties.DirectionalLight.AtmosphereSlot.Id);
             this.RefreshSunDependencies();
         }
         else
@@ -144,7 +144,7 @@ public sealed partial class AtmosphereLightsSectionViewModel
             {
                 this.observedSunId = primaryId;
                 this.observedSecondarySunId = secondaryId;
-                this.lightAssignments?.ModelChanged(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id);
+                this.lightAssignments?.ModelChanged(SceneProperties.DirectionalLight.AtmosphereSlot.Id);
             }
         }
     }
@@ -239,7 +239,7 @@ public sealed partial class AtmosphereLightsSectionViewModel
             if (!previousPrimaryTargets.SetEquals(this.SunOptions.Select(option => option.NodeId))
                 || !previousSecondaryTargets.SetEquals(this.SecondarySunOptions.Select(option => option.NodeId)))
             {
-                this.lightAssignments?.ModelChanged(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id);
+                this.lightAssignments?.ModelChanged(SceneProperties.DirectionalLight.AtmosphereSlot.Id);
             }
         }
         finally

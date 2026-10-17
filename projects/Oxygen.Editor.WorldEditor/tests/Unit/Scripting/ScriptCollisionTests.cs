@@ -11,7 +11,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 /// Two script sources with one name in one folder cook to the same asset; each reports the other.
 /// </summary>
 [TestClass]
-public sealed class ScriptCollisionTests : IDisposable
+public sealed partial class ScriptCollisionTests : IDisposable
 {
     private readonly string folder = Path.Combine(Path.GetTempPath(), "oxygen-script-collision-tests", Guid.NewGuid().ToString("N"));
 

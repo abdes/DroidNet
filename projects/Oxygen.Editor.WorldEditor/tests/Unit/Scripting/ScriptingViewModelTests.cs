@@ -2,21 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using System.Numerics;
 using System.Reactive.Subjects;
 using AwesomeAssertions;
-using DroidNet.Documents;
-using DroidNet.TimeMachine;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector.Scripting;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Managed.Core;
+using Oxygen.Editor.WorldEditor.TestSupport;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 
@@ -25,21 +20,22 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 /// slot edits.
 /// </summary>
 [TestClass]
-public sealed class ScriptingViewModelTests : IDisposable
+public sealed partial class ScriptingViewModelTests : IDisposable
 {
     private const string MovePath = @"C:\Project\Content\Player\move.lua";
     private static readonly Uri MoveScript = new("asset:///Content/Player/move.oscript");
 
     private static readonly ScriptParameter Speed = new("move_speed", ScriptParameterKind.Float, 1f, 0, Min: 0, Max: 10, Step: 0.5, "m/s", "How fast", [], IsColor: false);
-    private static readonly ScriptParameter Tint = new("tint", ScriptParameterKind.Vec3, Vector3.One, 0, null, null, null, string.Empty, string.Empty, [], IsColor: true);
-    private static readonly ScriptParameter Mode = new("mode", ScriptParameterKind.String, "walk", 0, null, null, null, string.Empty, string.Empty, ["walk", "run"], IsColor: false);
-    private static readonly ScriptParameter Follow = new("follow", ScriptParameterKind.Node, null, 0, null, null, null, string.Empty, string.Empty, [], IsColor: false);
+    private static readonly ScriptParameter Tint = new("tint", ScriptParameterKind.Vec3, Vector3.One, 0, Min: null, Max: null, Step: null, string.Empty, string.Empty, [], IsColor: true);
+    private static readonly ScriptParameter Mode = new("mode", ScriptParameterKind.String, "walk", 0, Min: null, Max: null, Step: null, string.Empty, string.Empty, ["walk", "run"], IsColor: false);
+    private static readonly ScriptParameter Follow = new("follow", ScriptParameterKind.Node, DefaultValue: null, 0, Min: null, Max: null, Step: null, string.Empty, string.Empty, [], IsColor: false);
 
     private readonly Subject<ScriptAnalysisSnapshot> changes = new();
     private readonly List<ScriptAnalysisSnapshot> current = [];
     private readonly Scene scene = new(Mock.Of<IProject>()) { Name = "Main" };
-    private readonly SceneNode player;
-    private readonly ScriptingComponent scripting = new() { Name = ScriptingComponent.DefaultName, Slots = [new ScriptSlot { Script = MoveScript }] };
+    private SceneNode player;
+    private SceneTab? tab;
+    private ScriptingComponent scripting = new() { Name = ScriptingComponent.DefaultName, Slots = [new ScriptSlot { Script = MoveScript }] };
 
     public ScriptingViewModelTests()
     {
@@ -49,7 +45,11 @@ public sealed class ScriptingViewModelTests : IDisposable
     }
 
     /// <inheritdoc />
-    public void Dispose() => this.changes.Dispose();
+    public void Dispose()
+    {
+        this.changes.Dispose();
+        this.tab?.Dispose();
+    }
 
     [TestMethod]
     public void OneCardPerSlotWithOneFieldPerDeclaredParameter()
@@ -210,15 +210,15 @@ public sealed class ScriptingViewModelTests : IDisposable
 
     private ScriptingViewModel CreateModel(Action? onEdit = null, IScriptDeclarationProvider? declarations = null)
     {
-        var context = new SceneDocumentCommandContext(DocumentId.New(), this.scene, new HistoryKeeper(this.scene));
-        var commands = new Mock<ISceneDocumentCommandService>();
-        _ = commands.Setup(service => service.EditScriptSlotsAsync(context, this.player.Id, It.IsAny<ImmutableArray<ScriptSlot>>()))
-            .Returns((SceneDocumentCommandContext _, NodeId _, ImmutableArray<ScriptSlot> slots) =>
-            {
-                onEdit?.Invoke();
-                this.scripting.Slots = slots;
-                return Task.FromResult(SceneCommandResult.Success);
-            });
+        // The document edits its own copy of the scene: the test reads the player and its slots from it.
+        this.tab = SceneTabs.Open(this.scene);
+        this.player = this.tab.NodeOf(this.player);
+        this.scripting = this.player.Components.OfType<ScriptingComponent>().Single();
+        if (onEdit is not null)
+        {
+            this.tab.Authoring.Changed += (_, _) => onEdit();
+        }
+
         var analysis = new Mock<IScriptAnalysisService>();
         _ = analysis.SetupGet(service => service.Changes).Returns(this.changes);
         _ = analysis.SetupGet(service => service.Current).Returns(this.current);
@@ -232,6 +232,6 @@ public sealed class ScriptingViewModelTests : IDisposable
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
         });
-        return new ScriptingViewModel(commands.Object, () => context, analysis: analysis.Object, projects: projects, declarationProvider: declarations);
+        return new ScriptingViewModel(() => this.tab.Authoring, analysis: analysis.Object, projects: projects, declarationProvider: declarations);
     }
 }

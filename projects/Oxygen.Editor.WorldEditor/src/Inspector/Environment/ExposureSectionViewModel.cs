@@ -9,10 +9,10 @@ using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -135,61 +135,61 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
     public bool IsAutoExposureVisible => this.ExposureMode == ExposureMode.Auto;
 
     /// <summary>Gets canonical feedback for exposure enablement.</summary>
-    public InspectorFieldDiagnostic ExposureEnabledDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.ExposureEnabled.Id);
+    public InspectorFieldDiagnostic ExposureEnabledDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.ExposureEnabled.Id);
 
     /// <summary>Gets canonical feedback for manual EV.</summary>
-    public InspectorFieldDiagnostic ManualExposureEvDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.ManualExposureEv.Id);
+    public InspectorFieldDiagnostic ManualExposureEvDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.ManualExposureEv.Id);
 
     /// <summary>Gets canonical feedback for compensation.</summary>
-    public InspectorFieldDiagnostic ExposureCompensationDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.ExposureCompensation.Id);
+    public InspectorFieldDiagnostic ExposureCompensationDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.ExposureCompensation.Id);
 
     /// <summary>Gets canonical feedback for calibration.</summary>
-    public InspectorFieldDiagnostic ExposureKeyDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.ExposureKey.Id);
+    public InspectorFieldDiagnostic ExposureKeyDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.ExposureKey.Id);
 
     /// <summary>Gets canonical metering feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureMeteringModeDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureMeteringMode.Id);
+    public InspectorFieldDiagnostic AutoExposureMeteringModeDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureMeteringMode.Id);
 
     /// <summary>Gets related minimum-bound feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureMinEvDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinEv.Id);
+    public InspectorFieldDiagnostic AutoExposureMinEvDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureMinEv.Id);
 
     /// <summary>Gets related maximum-bound feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureMaxEvDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureMaxEv.Id);
+    public InspectorFieldDiagnostic AutoExposureMaxEvDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureMaxEv.Id);
 
     /// <summary>Gets adaptation feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureSpeedUpDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedUp.Id);
+    public InspectorFieldDiagnostic AutoExposureSpeedUpDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureSpeedUp.Id);
 
     /// <summary>Gets adaptation feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureSpeedDownDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedDown.Id);
+    public InspectorFieldDiagnostic AutoExposureSpeedDownDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureSpeedDown.Id);
 
     /// <summary>Gets related percentile feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureLowPercentileDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureLowPercentile.Id);
+    public InspectorFieldDiagnostic AutoExposureLowPercentileDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureLowPercentile.Id);
 
     /// <summary>Gets related percentile feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureHighPercentileDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureHighPercentile.Id);
+    public InspectorFieldDiagnostic AutoExposureHighPercentileDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureHighPercentile.Id);
 
     /// <summary>Gets histogram feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureMinLogLuminanceDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinLogLuminance.Id);
+    public InspectorFieldDiagnostic AutoExposureMinLogLuminanceDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureMinLogLuminance.Id);
 
     /// <summary>Gets histogram feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureLogLuminanceRangeDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureLogLuminanceRange.Id);
+    public InspectorFieldDiagnostic AutoExposureLogLuminanceRangeDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureLogLuminanceRange.Id);
 
     /// <summary>Gets target feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureTargetLuminanceDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureTargetLuminance.Id);
+    public InspectorFieldDiagnostic AutoExposureTargetLuminanceDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureTargetLuminance.Id);
 
     /// <summary>Gets spot-radius feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureSpotMeterRadiusDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpotMeterRadius.Id);
+    public InspectorFieldDiagnostic AutoExposureSpotMeterRadiusDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureSpotMeterRadius.Id);
 
     /// <summary>Gets dark-sample feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureBlackInfluenceDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureBlackInfluence.Id);
+    public InspectorFieldDiagnostic AutoExposureBlackInfluenceDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureBlackInfluence.Id);
 
     /// <summary>Gets transition feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureTransitionDistanceEvDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureTransitionDistanceEv.Id);
+    public InspectorFieldDiagnostic AutoExposureTransitionDistanceEvDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureTransitionDistanceEv.Id);
 
     /// <summary>Gets authored-reference feedback.</summary>
-    public InspectorFieldDiagnostic AutoExposureMeteringMaskDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureMeteringMask.Id);
+    public InspectorFieldDiagnostic AutoExposureMeteringMaskDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureMeteringMask.Id);
 
     /// <summary>Gets curve feedback shared with the owned curve editor.</summary>
-    public InspectorFieldDiagnostic AutoExposureCompensationCurveDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AutoExposureCompensationCurve.Id);
+    public InspectorFieldDiagnostic AutoExposureCompensationCurveDiagnostic => this.Diagnostic(SceneProperties.SceneEnvironment.AutoExposureCompensationCurve.Id);
 
     /// <summary>Sets or clears the authored texture reference.</summary>
     /// <param name="textureUri">The authored texture identity, or null.</param>
@@ -252,52 +252,52 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
     {
         this.OnPropertyChanged(nameof(this.IsManualExposureVisible));
         this.OnPropertyChanged(nameof(this.IsAutoExposureVisible));
-        this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.ExposureMode, value);
+        this.EditOwner.Apply(SceneProperties.SceneEnvironment.ExposureMode, value);
     }
 
-    partial void OnExposureEnabledChanged(bool value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.ExposureEnabled, value);
+    partial void OnExposureEnabledChanged(bool value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.ExposureEnabled, value);
 
-    partial void OnManualExposureEvChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.ManualExposureEv, value);
+    partial void OnManualExposureEvChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.ManualExposureEv, value);
 
-    partial void OnExposureCompensationChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.ExposureCompensation, value);
+    partial void OnExposureCompensationChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.ExposureCompensation, value);
 
-    partial void OnExposureKeyChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.ExposureKey, value);
+    partial void OnExposureKeyChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.ExposureKey, value);
 
-    partial void OnAutoExposureMeteringModeChanged(MeteringMode value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureMeteringMode, value);
+    partial void OnAutoExposureMeteringModeChanged(MeteringMode value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureMeteringMode, value);
 
-    partial void OnAutoExposureMinEvChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinEv, value);
+    partial void OnAutoExposureMinEvChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureMinEv, value);
 
-    partial void OnAutoExposureMaxEvChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureMaxEv, value);
+    partial void OnAutoExposureMaxEvChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureMaxEv, value);
 
-    partial void OnAutoExposureSpeedUpChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedUp, value);
+    partial void OnAutoExposureSpeedUpChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureSpeedUp, value);
 
-    partial void OnAutoExposureSpeedDownChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedDown, value);
+    partial void OnAutoExposureSpeedDownChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureSpeedDown, value);
 
-    partial void OnAutoExposureLowPercentileChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureLowPercentile, value);
+    partial void OnAutoExposureLowPercentileChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureLowPercentile, value);
 
-    partial void OnAutoExposureHighPercentileChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureHighPercentile, value);
+    partial void OnAutoExposureHighPercentileChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureHighPercentile, value);
 
-    partial void OnAutoExposureMinLogLuminanceChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinLogLuminance, value);
+    partial void OnAutoExposureMinLogLuminanceChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureMinLogLuminance, value);
 
-    partial void OnAutoExposureLogLuminanceRangeChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureLogLuminanceRange, value);
+    partial void OnAutoExposureLogLuminanceRangeChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureLogLuminanceRange, value);
 
-    partial void OnAutoExposureTargetLuminanceChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureTargetLuminance, value);
+    partial void OnAutoExposureTargetLuminanceChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureTargetLuminance, value);
 
-    partial void OnAutoExposureSpotMeterRadiusChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpotMeterRadius, value);
+    partial void OnAutoExposureSpotMeterRadiusChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureSpotMeterRadius, value);
 
-    partial void OnAutoExposureBlackInfluenceChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureBlackInfluence, value);
+    partial void OnAutoExposureBlackInfluenceChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureBlackInfluence, value);
 
-    partial void OnAutoExposureTransitionDistanceEvChanged(double value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureTransitionDistanceEv, value);
+    partial void OnAutoExposureTransitionDistanceEvChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureTransitionDistanceEv, value);
 
     partial void OnAutoExposureMeteringMaskChanged(Uri? value)
     {
         this.OnPropertyChanged(nameof(this.MeteringMaskDisplayName));
-        this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureMeteringMask, value);
+        this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureMeteringMask, value);
     }
 
     partial void OnAutoExposureCompensationCurveChanged(ImmutableArray<ExposureCompensationKeyData> value)
     {
-        this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AutoExposureCompensationCurve, value);
+        this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureCompensationCurve, value);
         this.CurveEditor.Refresh(this.AutoExposureCompensationCurve);
     }
 

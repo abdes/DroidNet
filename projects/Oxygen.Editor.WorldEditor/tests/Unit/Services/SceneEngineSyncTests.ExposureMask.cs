@@ -49,7 +49,8 @@ public sealed partial class SceneEngineSyncTests
         var scene = new Scene(project) { Name = "Masked scene" };
         var mask = new Uri($"asset:///{mount}/Textures/Meter.otex.json");
         scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { AutoExposureMeteringMask = mask } });
-        _ = sut.RegisterDocument(scene, DocumentId.New());
+        using var document = Register(sut, scene);
+        scene = document.Scene;
 
         _ = (await sut.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
 

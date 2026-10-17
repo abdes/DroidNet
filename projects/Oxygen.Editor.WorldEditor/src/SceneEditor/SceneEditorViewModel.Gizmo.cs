@@ -6,13 +6,16 @@ using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Nodes;
+using Oxygen.Editor.Scenes.Properties;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.World.Workspace;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -32,8 +35,6 @@ namespace Oxygen.Editor.World.SceneEditor;
 /// </remarks>
 public partial class SceneEditorViewModel
 {
-    private const string GizmoSessionKey = "Viewport.Transform";
-    private const string HelperSessionKey = "Viewport.Helper";
 
     private SynchronizationContext? gizmoContext;
     private GizmoTransaction? gizmoTransaction;
@@ -47,30 +48,26 @@ public partial class SceneEditorViewModel
     /// <returns>One edit per target.</returns>
     internal static Dictionary<NodeId, PropertyEdit> BuildGizmoEdits(RuntimeTransformTool tool, IReadOnlyList<RuntimeGizmoTarget> targets)
     {
-        var transform = SceneDocumentCommandService.Transform;
+        var transform = SceneProperties.Transform;
         var edits = new Dictionary<NodeId, PropertyEdit>(targets.Count);
         foreach (var target in targets)
         {
             // Every drag moves positions: rotation and scale act about the pivot.
-            var edit = new PropertyEdit();
-            edit.Set(transform.PositionX, target.Position.X);
-            edit.Set(transform.PositionY, target.Position.Y);
-            edit.Set(transform.PositionZ, target.Position.Z);
+            var edit = new PropertyEdit.Builder()
+                .Set(transform.PositionX, target.Position.X)
+                .Set(transform.PositionY, target.Position.Y)
+                .Set(transform.PositionZ, target.Position.Z);
             if (tool == RuntimeTransformTool.Rotate)
             {
                 var euler = TransformConverter.QuaternionToEulerDegrees(target.Rotation);
-                edit.Set(transform.RotationX, euler.X);
-                edit.Set(transform.RotationY, euler.Y);
-                edit.Set(transform.RotationZ, euler.Z);
+                _ = edit.Set(transform.RotationX, euler.X).Set(transform.RotationY, euler.Y).Set(transform.RotationZ, euler.Z);
             }
             else if (tool == RuntimeTransformTool.Scale)
             {
-                edit.Set(transform.ScaleX, target.Scale.X);
-                edit.Set(transform.ScaleY, target.Scale.Y);
-                edit.Set(transform.ScaleZ, target.Scale.Z);
+                _ = edit.Set(transform.ScaleX, target.Scale.X).Set(transform.ScaleY, target.Scale.Y).Set(transform.ScaleZ, target.Scale.Z);
             }
 
-            edits[target.NodeId] = edit;
+            edits[target.NodeId] = edit.Build();
         }
 
         return edits;
@@ -84,8 +81,8 @@ public partial class SceneEditorViewModel
     internal static PropertyEdit? BuildHelperEdit(SceneNode node, RuntimeHelperHandle handle, float value)
     {
         ArgumentNullException.ThrowIfNull(node);
-        var descriptors = node.Components.OfType<SpotLightComponent>().Any() ? SceneDocumentCommandService.SpotLight
-            : node.Components.OfType<PointLightComponent>().Any() ? SceneDocumentCommandService.PointLight
+        var descriptors = node.Components.OfType<SpotLightComponent>().Any() ? SceneProperties.SpotLight
+            : node.Components.OfType<PointLightComponent>().Any() ? SceneProperties.PointLight
             : null;
         var descriptor = handle switch
         {
@@ -99,9 +96,7 @@ public partial class SceneEditorViewModel
             return null;
         }
 
-        var edit = new PropertyEdit();
-        edit.Set(new PropertyId<float>(descriptor.Id), value);
-        return edit;
+        return PropertyEdit.SingleEdit(new PropertyId<float>(descriptor.Id), value);
     }
 
     /// <summary>Applies one gizmo or helper interaction reported by the engine; runs on the UI thread.</summary>
@@ -125,8 +120,8 @@ public partial class SceneEditorViewModel
             case RuntimeGizmoEventKind.Hover:
                 viewport?.SetGizmoHover(gizmoEvent.Hovering);
                 break;
-            case RuntimeGizmoEventKind.Begin when viewport is not null && this.scene is not null:
-                this.gizmoTransaction = new GizmoTransaction(viewport, gizmoEvent.Tool, gizmoEvent.Duplicate, this.CreateCommandContext());
+            case RuntimeGizmoEventKind.Begin when viewport is not null && this.Authoring is { } authoring:
+                this.gizmoTransaction = new GizmoTransaction(viewport, gizmoEvent.Tool, gizmoEvent.Duplicate, authoring);
                 viewport.BeginGizmoDrag();
                 break;
             case RuntimeGizmoEventKind.Update when this.gizmoTransaction is { } transaction && ReferenceEquals(transaction.Viewport, viewport):
@@ -237,11 +232,8 @@ public partial class SceneEditorViewModel
             case RuntimeGizmoEventKind.ViewAxis when viewport is not null:
                 _ = viewport.SelectAxisViewAsync(gizmoEvent.Handle);
                 break;
-            case RuntimeGizmoEventKind.Begin when viewport is not null && this.scene is not null:
-                this.gizmoTransaction = new GizmoTransaction(viewport, RuntimeTransformTool.Select, duplicate: false, this.CreateCommandContext())
-                {
-                    SessionKey = HelperSessionKey,
-                };
+            case RuntimeGizmoEventKind.Begin when viewport is not null && this.Authoring is { } authoring:
+                this.gizmoTransaction = new GizmoTransaction(viewport, RuntimeTransformTool.Select, duplicate: false, authoring);
                 viewport.BeginGizmoDrag();
                 viewport.UpdateHelperDrag(gizmoEvent);
                 break;
@@ -392,13 +384,13 @@ public partial class SceneEditorViewModel
             while (transaction.Pending is { } edits)
             {
                 transaction.Pending = null;
-                transaction.Session ??= EditSessionToken.Begin([.. edits.Edits.Keys], transaction.SessionKey);
+                transaction.Gesture ??= transaction.Authoring.BeginGestureAsync(
+                    [.. edits.Edits.Keys],
+                    [.. edits.Edits.Values.SelectMany(static edit => edit.Ids).Distinct()],
+                    edits.Label);
                 transaction.Applied = edits;
-                _ = await this.commandService.EditPropertiesForTargetsAsync(
-                    transaction.Context,
-                    edits.Edits,
-                    edits.Label,
-                    transaction.Session).ConfigureAwait(true);
+                var gesture = await transaction.Gesture.ConfigureAwait(true);
+                _ = await gesture.PreviewAsync(new SetProperties(edits.Edits, edits.Label)).ConfigureAwait(true);
             }
         }
         finally
@@ -419,35 +411,29 @@ public partial class SceneEditorViewModel
         }
 
         await transaction.Pump.ConfigureAwait(true);
-        if (transaction.Session is not { } session || transaction.Applied is not { } applied)
+        if (transaction.Gesture is not { } started || transaction.Applied is not { } applied)
         {
             // Nothing moved: there is nothing to keep or restore.
             return;
         }
 
         // An Alt-drag keeps the originals where they were and copies them to the dragged place.
-        var keep = commit && !transaction.Duplicate;
-        if (keep)
+        var gesture = await started.ConfigureAwait(true);
+        if (commit && !transaction.Duplicate)
         {
-            session.Commit();
+            _ = await gesture.CommitAsync().ConfigureAwait(true);
         }
         else
         {
-            session.Cancel();
+            await gesture.CancelAsync().ConfigureAwait(true);
         }
-
-        _ = await this.commandService.EditPropertiesForTargetsAsync(
-            transaction.Context,
-            applied.Edits,
-            applied.Label,
-            session).ConfigureAwait(true);
 
         if (commit && transaction.Duplicate)
         {
             var transforms = applied.Targets.ToDictionary(
                 static target => target.NodeId,
                 static target => new TransformData { Name = "Transform", Position = target.Position, Rotation = target.Rotation, Scale = target.Scale });
-            await this.DuplicateInPlaceAsync(transaction.Context, [.. applied.Targets.Select(static target => target.NodeId)], transforms).ConfigureAwait(true);
+            await this.DuplicateInPlaceAsync(transaction.Authoring, [.. applied.Targets.Select(static target => target.NodeId)], transforms).ConfigureAwait(true);
         }
     }
 
@@ -463,9 +449,9 @@ public partial class SceneEditorViewModel
             case ViewportEditCommand.Duplicate:
                 var selected = this.SelectionService?.GetContext(this.Document.Id).SelectedNodeIds ?? [];
                 var roots = this.FindSelectionRoots(selected);
-                if (roots.Count > 0)
+                if (roots.Count > 0 && this.Authoring is { } authoring)
                 {
-                    await this.DuplicateInPlaceAsync(this.CreateCommandContext(), [.. roots.Select(static node => node.Id)], transforms: null).ConfigureAwait(true);
+                    await this.DuplicateInPlaceAsync(authoring, [.. roots.Select(static node => node.Id)], transforms: null).ConfigureAwait(true);
                 }
 
                 break;
@@ -485,18 +471,22 @@ public partial class SceneEditorViewModel
 
     /// <summary>Duplicates nodes beside themselves and selects the copies.</summary>
     private async Task DuplicateInPlaceAsync(
-        SceneDocumentCommandContext context,
+        SceneAuthoring authoring,
         IReadOnlyList<NodeId> nodeIds,
         IReadOnlyDictionary<NodeId, TransformData>? transforms)
     {
-        var result = await this.commandService.DuplicateNodesInPlaceAsync(context, nodeIds, transforms).ConfigureAwait(true);
-        if (!result.Succeeded || result.Value is not { Count: > 0 } copies || this.isDisposed
-            || this.SelectionService is not { } selection)
+        if (SceneNodeCopies.DuplicateInPlace(authoring.Scene, nodeIds, transforms) is not { } duplicate)
         {
             return;
         }
 
-        IReadOnlyList<NodeId> ids = [.. copies.Select(static node => node.Id)];
+        var result = await authoring.ExecuteAsync(duplicate).ConfigureAwait(true);
+        if (!result.Succeeded || this.isDisposed || this.SelectionService is not { } selection)
+        {
+            return;
+        }
+
+        IReadOnlyList<NodeId> ids = [.. duplicate.Inserts.Select(static insert => insert.Node.Id)];
         selection.Publish(
             this.Document.Id,
             new SceneSelectionContext(SceneSelectionKind.Node, ids, [], ids[^1], PrimaryFolderId: null),
@@ -508,7 +498,7 @@ public partial class SceneEditorViewModel
         ViewportViewModel viewport,
         RuntimeTransformTool tool,
         bool duplicate,
-        SceneDocumentCommandContext context)
+        SceneAuthoring authoring)
     {
         public ViewportViewModel Viewport { get; } = viewport;
 
@@ -516,14 +506,11 @@ public partial class SceneEditorViewModel
 
         public bool Duplicate { get; } = duplicate;
 
-        /// <summary>Gets the document lifetime the drag edits; a reload ends it.</summary>
-        public SceneDocumentCommandContext Context { get; } = context;
+        /// <summary>Gets the authoring the drag edits; a reload replaces it and ends the drag.</summary>
+        public SceneAuthoring Authoring { get; } = authoring;
 
-        /// <summary>Gets or sets the property gesture, opened by the first change.</summary>
-        public EditSessionToken? Session { get; set; }
-
-        /// <summary>Gets the key of the property gesture the drag opens.</summary>
-        public string SessionKey { get; init; } = GizmoSessionKey;
+        /// <summary>Gets or sets the scene gesture, opened by the first change.</summary>
+        public Task<SceneGesture>? Gesture { get; set; }
 
         /// <summary>Gets or sets the newest results not applied yet.</summary>
         public GizmoEdits? Pending { get; set; }

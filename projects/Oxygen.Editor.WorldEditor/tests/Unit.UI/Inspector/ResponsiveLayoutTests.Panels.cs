@@ -96,7 +96,7 @@ internal sealed partial class ResponsiveLayoutTests
         AssertAllToggle(view, multiple);
         await AssertScaledComponentSelectionAsync(view, multiple).ConfigureAwait(true);
         _ = fixture.Document.IsDirty.Should().BeFalse();
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         await ScaledXamlHost.ScrollToEndAsync(components, this.TestContext.CancellationToken).ConfigureAwait(true);
         await ScaledXamlHost.ScrollToEndAsync(properties, this.TestContext.CancellationToken).ConfigureAwait(true);
         await AssertExtraHeightGoesToPropertiesAsync(view, captureHost, header, properties).ConfigureAwait(true);

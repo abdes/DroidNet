@@ -34,6 +34,7 @@ namespace Oxygen.Editor.MaterialEditor;
 /// </summary>
 public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDocumentConflictParticipant, IDisposable
 {
+    private static readonly TimeSpan WheelIdleDelay = TimeSpan.FromMilliseconds(250);
     private readonly DocumentTab tab;
     private readonly Document document;
     private readonly MaterialEdits edits;
@@ -309,11 +310,12 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
 
         this.OnPropertyChanged(nameof(this.BaseColorBrush));
-        var edit = new PropertyEdit();
-        edit.Set(MaterialDescriptors.BaseColorR, (float)r);
-        edit.Set(MaterialDescriptors.BaseColorG, (float)g);
-        edit.Set(MaterialDescriptors.BaseColorB, (float)b);
-        edit.Set(MaterialDescriptors.BaseColorA, (float)a);
+        var edit = new PropertyEdit.Builder()
+            .Set(MaterialDescriptors.BaseColorR, (float)r)
+            .Set(MaterialDescriptors.BaseColorG, (float)g)
+            .Set(MaterialDescriptors.BaseColorB, (float)b)
+            .Set(MaterialDescriptors.BaseColorA, (float)a)
+            .Build();
         this.ApplyEdit(edit);
     }
 

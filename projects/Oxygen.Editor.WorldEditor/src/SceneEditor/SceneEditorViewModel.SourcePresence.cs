@@ -45,15 +45,8 @@ public partial class SceneEditorViewModel
     {
         try
         {
-            // A quiet reload replaces the scene, so commands in flight finish first; edits in progress are kept, and
-            // the document then does not reload.
-            if (this.scene is not { } current)
-            {
-                return;
-            }
-
-            using var replacement = await SceneAuthoringGate.BeginReplacementAsync(current, CancellationToken.None).ConfigureAwait(true);
-            if (replacement is not null)
+            // A quiet reload replaces the scene; with edits in progress the document keeps them and does not reload.
+            if (this.scene is not null)
             {
                 _ = await this.Document.CheckFileAsync().ConfigureAwait(true);
             }

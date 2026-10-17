@@ -6,8 +6,8 @@ using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 

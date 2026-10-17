@@ -14,6 +14,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
@@ -41,9 +42,6 @@ internal sealed partial class DemandFixture : IDisposable
             Geometry = new(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
         };
         _ = this.Authoring.Node.AddComponent(this.Geometry);
-        var accepted = new SyncOutcome(SyncStatus.Accepted, "Demand assignment", AffectedScope.Empty);
-        _ = this.Authoring.Sync.Setup(value => value.AttachGeometryAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
-        _ = this.Authoring.Sync.Setup(value => value.UpdateMaterialSlotAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<Oxygen.Editor.World.Slots.MaterialSlotTarget>(), It.IsAny<Uri?>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
         this.GeometryAsset = CreateStatusAsset(0) with
         {
             IdentityUri = this.GeometryUri,

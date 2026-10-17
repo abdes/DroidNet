@@ -20,10 +20,11 @@ using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Workspace;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
 using Windows.Foundation;
@@ -152,16 +153,16 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         _ = host.Adapter.IsLocked.Should().Be(locked);
         _ = host.Adapter.IsSelected.Should().BeFalse();
         _ = host.SecondaryAdapter.IsSelected.Should().BeTrue();
-        _ = host.Fixture.Context.History.UndoStack.Should().ContainSingle("the real command owner records one hide operation");
+        _ = host.Fixture.Document.History.UndoStack.Should().ContainSingle("the real command owner records one hide operation");
         _ = host.Fixture.Document.IsDirty.Should().BeFalse();
         _ = host.Node.IsVisible.Should().Be(authoredVisibility);
         AssertSlot(Button(host.Actions, "LockButton"), locked, hovered: true);
 
-        await host.Fixture.Context.History.UndoAsync().ConfigureAwait(true);
+        await host.Fixture.Document.History.UndoAsync().ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = host.Adapter.IsHiddenInEditor.Should().BeFalse();
         _ = Glyph(host.Actions, "EyeGlyph").Glyph.Should().Be("\uE890");
-        await host.Fixture.Context.History.RedoAsync().ConfigureAwait(true);
+        await host.Fixture.Document.History.RedoAsync().ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = host.Adapter.IsHiddenInEditor.Should().BeTrue();
         _ = Glyph(host.Actions, "EyeGlyph").Glyph.Should().Be("\uED1A");
@@ -207,7 +208,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         host.Actions.SetRowHovered(hovered: false);
         AssertSlot(Button(host.Actions, "EyeButton"), hidden, hovered: false);
         AssertSlot(Button(host.Actions, "LockButton"), suppressed: false, hovered: false);
-        _ = host.Fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = host.Fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = host.Fixture.Document.IsDirty.Should().BeFalse();
     });
 
@@ -476,7 +477,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             fixture.Node.AddChild(childNode);
             var metadata = fixture.Tab;
             _ = fixture.Sync.Setup(service => service.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-            _ = fixture.Sync.Setup(service => service.RegisterDocument(scene, metadata.DocumentId)).Returns(value: true);
+            _ = fixture.Sync.Setup(service => service.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
             _ = fixture.Sync.Setup(service => service.SyncSceneWhenReadyAsync(scene, It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             viewModel = new SceneExplorerViewModel(
                 Mock.Of<IProjectManagerService>(),
@@ -487,7 +488,6 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
                 default,
                 fixture.Sync.Object,
                 new SceneSelectionService(),
-                fixture.Commands,
                 interaction: interaction,
                 projectContexts: fixture.Projects);
             await viewModel.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);

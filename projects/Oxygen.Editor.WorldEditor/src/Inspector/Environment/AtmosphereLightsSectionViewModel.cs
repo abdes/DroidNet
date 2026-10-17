@@ -7,10 +7,12 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
@@ -18,8 +20,9 @@ namespace Oxygen.Editor.World.Inspector.Environment;
 /// <summary>Owns source roles, source observation, canonical light editors and initial-state reset snapshots.</summary>
 public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject, IDisposable
 {
+    private const string ResetLabel = "Reset Atmosphere Lights";
     private readonly InspectorEditSessionCoordinator? lightAssignments;
-    private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
+    private readonly Func<SceneAuthoring?>? authoringProvider;
     private readonly Func<NodeId, Task>? inspectSceneNode;
     private readonly ConditionalWeakTable<Scene, Dictionary<NodeId, PropertyEdit>> initialAtmosphereSources = new();
     private Scene? scene;
@@ -28,23 +31,21 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
 
     /// <summary>Initializes a new instance of the <see cref="AtmosphereLightsSectionViewModel"/> class.</summary>
     /// <param name="owner">The borrowed scene lifetime and feedback.</param>
-    /// <param name="commands">The existing light command service.</param>
-    /// <param name="context">The current document context provider.</param>
+    /// <param name="authoring">The authoring of the scene being inspected.</param>
     /// <param name="inspect">The existing hierarchy navigation operation.</param>
     internal AtmosphereLightsSectionViewModel(
         SceneEnvironmentEditOwner owner,
-        ISceneDocumentCommandService? commands,
-        Func<SceneDocumentCommandContext?>? context,
+        Func<SceneAuthoring?>? authoring,
         Func<NodeId, Task>? inspect)
     {
         this.EditOwner = owner;
-        this.commandContextProvider = context;
+        this.authoringProvider = authoring;
         this.inspectSceneNode = inspect;
-        this.PrimaryAtmosphereSource = new(commands, context);
-        this.SecondaryAtmosphereSource = new(commands, context);
-        if (commands is not null && context is not null)
+        this.PrimaryAtmosphereSource = new(authoring);
+        this.SecondaryAtmosphereSource = new(authoring);
+        if (authoring is not null)
         {
-            this.lightAssignments = new(commands, context, "Assign Atmosphere Light", this.RefreshSunDependencies, environment: false, owner.Diagnostics);
+            this.lightAssignments = new(authoring, "Assign Atmosphere Light", this.RefreshSunDependencies, environment: false, owner.Diagnostics);
         }
     }
 
@@ -76,7 +77,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
     public bool HasSecondaryAtmosphereSource => this.SelectedSecondarySun?.NodeId is not null;
 
     /// <summary>Gets the shared source-assignment feedback.</summary>
-    public InspectorFieldDiagnostic SunReferenceDiagnostic => this.EditOwner.Diagnostics.Get(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id);
+    public InspectorFieldDiagnostic SunReferenceDiagnostic => this.EditOwner.Diagnostics.Get(SceneProperties.DirectionalLight.AtmosphereSlot.Id);
 
     /// <summary>Gets completion of source-role edits.</summary>
     internal Task Pending => this.lightAssignments?.Pending ?? Task.CompletedTask;
@@ -102,12 +103,12 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
         this.SecondaryAtmosphereSource.Dispose();
     }
 
-    /// <summary>Restores initial roles and source settings as one history entry.</summary>
+    /// <summary>Restores initial roles and source settings as one edit.</summary>
     /// <returns>The reset completion.</returns>
     public async Task ResetAtmosphereSourcesAsync()
     {
         if (!this.EditOwner.IsInputEnabled || this.scene is not { } current
-            || this.lightAssignments is not { } assignments || this.commandContextProvider?.Invoke() is not { } context)
+            || this.authoringProvider?.Invoke() is not { } authoring || !ReferenceEquals(authoring.Scene, current))
         {
             return;
         }
@@ -123,46 +124,35 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
 
             if (initial.TryGetValue(node.Id, out var original))
             {
-                edits.Add(node.Id, original.Clone());
+                edits.Add(node.Id, original);
             }
             else if (light.AtmosphereSlot != AtmosphereLightSlot.None)
             {
-                edits.Add(node.Id, PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None));
+                edits.Add(node.Id, PropertyEdit.SingleEdit(SceneProperties.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None));
             }
         }
 
-        var rotationMask = PropertyEdit.SingleEdit(SceneDocumentCommandService.Transform.RotationX, 0f);
-        rotationMask.Set(SceneDocumentCommandService.Transform.RotationY, 0f);
-        rotationMask.Set(SceneDocumentCommandService.Transform.RotationZ, 0f);
-        var lightMask = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
-        lightMask.Set(SceneDocumentCommandService.DirectionalLight.AngularSizeRadians, 0f);
-        lightMask.Set(SceneDocumentCommandService.DirectionalLight.UsePerPixelAtmosphereTransmittance, value: false);
-        lightMask.Set(SceneDocumentCommandService.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, Vector3.One);
-        context.History.BeginChangeSet("Reset Atmosphere Lights");
-        try
+        var rotationMask = new PropertyEdit.Builder()
+            .Set(SceneProperties.Transform.RotationX, 0f)
+            .Set(SceneProperties.Transform.RotationY, 0f)
+            .Set(SceneProperties.Transform.RotationZ, 0f)
+            .Build();
+        var lightMask = new PropertyEdit.Builder()
+            .Set(SceneProperties.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None)
+            .Set(SceneProperties.DirectionalLight.AngularSizeRadians, 0f)
+            .Set(SceneProperties.DirectionalLight.UsePerPixelAtmosphereTransmittance, value: false)
+            .Set(SceneProperties.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, Vector3.One)
+            .Build();
+        var rotations = edits.Where(pair => pair.Value.Contains(SceneProperties.Transform.RotationX.Id))
+            .ToDictionary(pair => pair.Key, pair => pair.Value.IntersectIds(rotationMask));
+        List<ISceneEdit> steps = [new SetProperties(edits.ToDictionary(pair => pair.Key, pair => pair.Value.IntersectIds(lightMask)), ResetLabel)];
+        if (rotations.Count > 0)
         {
-            assignments.Bind(edits.Keys.ToArray());
-            assignments.Submit(edits.ToDictionary(pair => pair.Key, pair => pair.Value.IntersectIds(lightMask)));
-            await assignments.Pending.ConfigureAwait(true);
-            if (!string.IsNullOrEmpty(this.SunReferenceDiagnostic.Message) || !ReferenceEquals(this.scene, current)
-                || !this.EditOwner.IsInputEnabled || this.disposed)
-            {
-                return;
-            }
+            steps.Add(new SetProperties(rotations, ResetLabel));
+        }
 
-            var rotations = edits.Where(pair => pair.Value.Contains(SceneDocumentCommandService.Transform.RotationX.Id))
-                .ToDictionary(pair => pair.Key, pair => pair.Value.IntersectIds(rotationMask));
-            if (rotations.Count > 0)
-            {
-                assignments.Bind(rotations.Keys.ToArray());
-                assignments.Submit(rotations);
-                await assignments.Pending.ConfigureAwait(true);
-            }
-        }
-        finally
-        {
-            context.History.EndChangeSet();
-        }
+        _ = await authoring.ExecuteAsync(new SceneEditBatch(ResetLabel, steps)).ConfigureAwait(true);
+        this.RefreshSunDependencies();
     }
 
     /// <summary>Rebinds source observation and preserves per-scene initial snapshots.</summary>
@@ -200,15 +190,16 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
                 continue;
             }
 
-            var edit = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, light.AtmosphereSlot);
-            edit.Set(SceneDocumentCommandService.DirectionalLight.AngularSizeRadians, light.AngularSizeRadians);
-            edit.Set(SceneDocumentCommandService.DirectionalLight.UsePerPixelAtmosphereTransmittance, light.UsePerPixelAtmosphereTransmittance);
-            edit.Set(SceneDocumentCommandService.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, light.AtmosphereDiskLuminanceScaleRgb);
             var rotation = TransformConverter.QuaternionToEulerDegrees(node.Components.OfType<TransformComponent>().Single().LocalRotation);
-            edit.Set(SceneDocumentCommandService.Transform.RotationX, rotation.X);
-            edit.Set(SceneDocumentCommandService.Transform.RotationY, rotation.Y);
-            edit.Set(SceneDocumentCommandService.Transform.RotationZ, rotation.Z);
-            result.Add(node.Id, edit);
+            result.Add(node.Id, new PropertyEdit.Builder()
+                .Set(SceneProperties.DirectionalLight.AtmosphereSlot, light.AtmosphereSlot)
+                .Set(SceneProperties.DirectionalLight.AngularSizeRadians, light.AngularSizeRadians)
+                .Set(SceneProperties.DirectionalLight.UsePerPixelAtmosphereTransmittance, light.UsePerPixelAtmosphereTransmittance)
+                .Set(SceneProperties.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, light.AtmosphereDiskLuminanceScaleRgb)
+                .Set(SceneProperties.Transform.RotationX, rotation.X)
+                .Set(SceneProperties.Transform.RotationY, rotation.Y)
+                .Set(SceneProperties.Transform.RotationZ, rotation.Z)
+                .Build());
         }
 
         return result;
@@ -279,12 +270,12 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
         var edits = new Dictionary<NodeId, PropertyEdit>();
         if (current is not null)
         {
-            edits[current.Id] = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
+            edits[current.Id] = PropertyEdit.SingleEdit(SceneProperties.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
         }
 
         if (selected is { } selectedId)
         {
-            edits[selectedId] = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, slot);
+            edits[selectedId] = PropertyEdit.SingleEdit(SceneProperties.DirectionalLight.AtmosphereSlot, slot);
         }
 
         if (edits.Count > 0)

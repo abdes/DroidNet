@@ -5,9 +5,9 @@
 using System.Numerics;
 using System.Reactive.Concurrency;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 

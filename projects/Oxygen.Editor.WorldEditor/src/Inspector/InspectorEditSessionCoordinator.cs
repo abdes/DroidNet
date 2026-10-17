@@ -3,25 +3,28 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Controls;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
 
-/// <summary>Captures control targets and delivers one terminal command per gesture.</summary>
+/// <summary>Captures control targets and runs each control gesture as one scene gesture: previews, then one commit.</summary>
 internal sealed partial class InspectorEditSessionCoordinator(
-    ISceneDocumentCommandService service,
-    Func<SceneDocumentCommandContext?> contextProvider,
+    Func<SceneAuthoring?> authoringProvider,
     string label,
     Action refresh,
     bool environment = false,
     InspectorFieldDiagnostics? diagnostics = null) : IDisposable
 {
+    private static readonly TimeSpan WheelIdleDelay = TimeSpan.FromMilliseconds(250);
+    private static readonly SceneEditResult Nothing = new(SceneEditOutcome.Applied, []);
     private readonly List<Task> pending = [];
-    // Node targets; in environment mode the target is the bound context's scene and this stays empty.
+
+    // Node targets; in environment mode the target is the bound scene and this stays empty.
     private NodeId[] targets = [];
-    private SceneDocumentCommandContext? boundContext;
+    private SceneAuthoring? boundAuthoring;
     private Gesture? active;
     private HashSet<PropertyId>? supersededProperties;
     private bool disposed;
@@ -67,8 +70,8 @@ internal sealed partial class InspectorEditSessionCoordinator(
     /// <param name="nodeIds">The bound target identities.</param>
     public void Bind(IReadOnlyList<NodeId> nodeIds)
     {
-        var context = contextProvider();
-        if (this.IsBoundTo(context) && this.targets.ToHashSet().SetEquals(nodeIds))
+        var authoring = authoringProvider();
+        if (this.IsBoundTo(authoring) && this.targets.ToHashSet().SetEquals(nodeIds))
         {
             return;
         }
@@ -78,8 +81,8 @@ internal sealed partial class InspectorEditSessionCoordinator(
 
         // Cancellation changes the old model and can synchronously reenter Bind
         // through the inspector host. Publish the new scope before that callback.
-        this.boundContext = context;
-        this.targets = nodeIds.ToArray();
+        this.boundAuthoring = authoring;
+        this.targets = [.. nodeIds];
         this.ScopeId = Guid.NewGuid();
         this.Diagnostics.Reset();
         this.End(completion);
@@ -90,12 +93,12 @@ internal sealed partial class InspectorEditSessionCoordinator(
     /// <param name="interaction">The control interaction that owns the gesture.</param>
     public void Begin(string field, NumberBoxEditInteractionKind interaction)
     {
-        if (this.disposed || !this.inputEnabled || contextProvider() is not { } context || (!environment && this.targets.Length == 0))
+        if (this.disposed || !this.inputEnabled || authoringProvider() is not { } authoring || (!environment && this.targets.Length == 0))
         {
             return;
         }
 
-        if (this.active is { } current && string.Equals(current.Field, field, StringComparison.Ordinal) && current.Token.State == EditSessionState.Open)
+        if (this.active is { } current && string.Equals(current.Field, field, StringComparison.Ordinal))
         {
             current.Idle?.Cancel();
             return;
@@ -103,12 +106,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
 
         this.End(NumberBoxEditCompletionKind.Commit);
         this.supersededProperties = null;
-        this.active = new(
-            context,
-            this.targets,
-            field,
-            interaction,
-            EditSessionToken.Begin(this.targets, field));
+        this.active = new(authoring, this.targets, field, interaction);
     }
 
     /// <summary>Completes numeric edits, coalescing wheel events for 250 milliseconds.</summary>
@@ -131,7 +129,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
     public void Submit(PropertyEdit edit)
     {
         ArgumentNullException.ThrowIfNull(edit);
-        this.Submit(this.targets.ToDictionary(id => id, _ => edit.Clone()), uniform: edit);
+        this.Submit(this.targets.ToDictionary(id => id, _ => edit), uniform: edit);
     }
 
     /// <summary>Submits per-target values for color axes and world-space sun orientation.</summary>
@@ -150,17 +148,8 @@ internal sealed partial class InspectorEditSessionCoordinator(
 
         this.active = null;
         gesture.Idle?.Cancel();
-        if (completion == NumberBoxEditCompletionKind.Cancel)
-        {
-            gesture.Token.Cancel();
-        }
-        else
-        {
-            gesture.Token.Commit();
-        }
-
-        var empty = gesture.Targets.ToDictionary(id => id, _ => PropertyEdit.Empty);
-        this.Track(this.ObserveAsync(this.Send(gesture.Context, empty, PropertyEdit.Empty, gesture.Token), gesture.Context, gesture.Targets, ticket: null));
+        gesture.Steps = FinishAsync(gesture.Steps, gesture.Scene, completion);
+        this.Track(this.ObserveAsync(gesture.Steps, gesture.Authoring, gesture.Targets, ticket: null));
     }
 
     /// <summary>Clears field feedback after an external model change.</summary>
@@ -180,9 +169,28 @@ internal sealed partial class InspectorEditSessionCoordinator(
         this.disposed = true;
     }
 
+    // Each step of a gesture waits for the previous one, so the scene sees them in order.
+    private static async Task<SceneEditResult> FinishAsync(Task<SceneEditResult> previous, Task<SceneGesture>? scene, NumberBoxEditCompletionKind completion)
+    {
+        _ = await previous.ConfigureAwait(true);
+        if (scene is null)
+        {
+            return Nothing;
+        }
+
+        var gesture = await scene.ConfigureAwait(true);
+        if (completion == NumberBoxEditCompletionKind.Cancel)
+        {
+            await gesture.CancelAsync().ConfigureAwait(true);
+            return Nothing;
+        }
+
+        return await gesture.CommitAsync().ConfigureAwait(true);
+    }
+
     private void Submit(IReadOnlyDictionary<NodeId, PropertyEdit> edits, PropertyEdit? uniform)
     {
-        if (this.disposed || !this.inputEnabled || contextProvider() is not { } context || !this.IsBoundTo(context))
+        if (this.disposed || !this.inputEnabled || authoringProvider() is not { } authoring || !this.IsBoundTo(authoring))
         {
             return;
         }
@@ -203,26 +211,30 @@ internal sealed partial class InspectorEditSessionCoordinator(
         var ticket = this.Diagnostics.Begin(properties);
         if (gesture is not null)
         {
+            // The scene gesture starts with the first value, when its properties are known.
             gesture.Properties ??= properties;
-            this.Track(this.ObserveAsync(this.Send(gesture.Context, edits, uniform, gesture.Token), gesture.Context, gesture.Targets, ticket));
+            gesture.Scene ??= authoring.BeginGestureAsync(environment ? [] : gesture.Targets, properties, label);
+            gesture.Steps = this.PreviewAsync(gesture.Steps, gesture.Scene, edits, uniform);
+            this.Track(this.ObserveAsync(gesture.Steps, gesture.Authoring, gesture.Targets, ticket));
         }
         else
         {
-            this.Track(this.ObserveAsync(this.Send(context, edits, uniform, EditSessionToken.OneShot), context, this.targets, ticket));
+            this.Track(this.ObserveAsync(authoring.ExecuteAsync(this.EditOf(edits, uniform)), authoring, this.targets, ticket));
         }
     }
 
-    // The scene environment is edited through its own command; nodes uniformly or per target.
-    private Task<SceneCommandResult> Send(
-        SceneDocumentCommandContext context,
-        IReadOnlyDictionary<NodeId, PropertyEdit> edits,
-        PropertyEdit? uniform,
-        EditSessionToken token)
-        => environment
-            ? service.EditSceneEnvironmentPropertiesAsync(context, uniform ?? PropertyEdit.Empty, label, token)
-            : token.IsOneShot && uniform is not null && edits.Count > 0
-                ? service.EditPropertiesAsync(context, [.. edits.Keys], uniform, label, token)
-                : service.EditPropertiesForTargetsAsync(context, edits, label, token);
+    // The scene environment is edited as scene properties; nodes uniformly or per target.
+    private ISceneEdit EditOf(IReadOnlyDictionary<NodeId, PropertyEdit> edits, PropertyEdit? uniform)
+        => environment ? new SetSceneProperties(uniform ?? PropertyEdit.Empty, label) : new SetProperties(edits, label);
+
+    private async Task<SceneEditResult> PreviewAsync(Task<SceneEditResult> previous, Task<SceneGesture> scene, IReadOnlyDictionary<NodeId, PropertyEdit> edits, PropertyEdit? uniform)
+    {
+        _ = await previous.ConfigureAwait(true);
+        var gesture = await scene.ConfigureAwait(true);
+        return environment
+            ? await gesture.PreviewAsync(new SetSceneProperties(uniform ?? PropertyEdit.Empty, label)).ConfigureAwait(true)
+            : await gesture.PreviewAsync(new SetProperties(edits, label)).ConfigureAwait(true);
+    }
 
     private async Task CommitAfterIdleAsync(Gesture gesture, CancellationTokenSource idle)
     {
@@ -230,7 +242,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
         {
             // A new wheel sample, selection change or explicit end supersedes this timer; it then
             // ends quietly instead of throwing per wheel tick.
-            await Task.Delay(CommitGroupController.DefaultWheelIdleDelay, idle.Token).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            await Task.Delay(WheelIdleDelay, idle.Token).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
             if (!idle.IsCancellationRequested && ReferenceEquals(this.active, gesture) && ReferenceEquals(gesture.Idle, idle))
             {
                 this.End(NumberBoxEditCompletionKind.Commit);
@@ -247,24 +259,20 @@ internal sealed partial class InspectorEditSessionCoordinator(
         }
     }
 
-    private async Task ObserveAsync(Task<SceneCommandResult> operation, SceneDocumentCommandContext context, IReadOnlyList<NodeId> editedTargets, InspectorFieldDiagnostics.Ticket? ticket)
+    private async Task ObserveAsync(Task<SceneEditResult> operation, SceneAuthoring authoring, IReadOnlyList<NodeId> editedTargets, InspectorFieldDiagnostics.Ticket? ticket)
     {
-        var result = SceneCommandResult.Success;
+        var result = Nothing;
         try
         {
             result = await operation.ConfigureAwait(true);
         }
-        catch (OperationCanceledException)
+        catch (SceneEditRefusedException refused)
         {
-            result = new(Succeeded: false) { ValidationMessage = "The edit was cancelled." };
-        }
-        catch (InvalidOperationException exception)
-        {
-            result = new(Succeeded: false) { ValidationMessage = exception.Message };
+            result = refused.Result ?? SceneEditResult.Retired;
         }
         finally
         {
-            if (!this.disposed && this.IsBoundTo(context) && this.targets.ToHashSet().SetEquals(editedTargets))
+            if (!this.disposed && this.IsBoundTo(authoring) && this.targets.ToHashSet().SetEquals(editedTargets))
             {
                 this.refreshingResult = true;
                 try
@@ -284,9 +292,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
         }
     }
 
-    private bool IsBoundTo(SceneDocumentCommandContext? context)
-        => ReferenceEquals(this.boundContext?.Scene, context?.Scene)
-            && this.boundContext?.DocumentId == context?.DocumentId;
+    private bool IsBoundTo(SceneAuthoring? authoring) => ReferenceEquals(this.boundAuthoring, authoring);
 
     private void Track(Task operation)
     {
@@ -298,22 +304,25 @@ internal sealed partial class InspectorEditSessionCoordinator(
     {
         while (this.pending.Count > 0)
         {
-            await Task.WhenAll(this.pending.ToArray()).ConfigureAwait(true);
+            await Task.WhenAll([.. this.pending]).ConfigureAwait(true);
             _ = this.pending.RemoveAll(task => task.IsCompleted);
         }
     }
 
-    private sealed class Gesture(SceneDocumentCommandContext context, IReadOnlyList<NodeId> targets, string field, NumberBoxEditInteractionKind interaction, EditSessionToken token)
+    private sealed class Gesture(SceneAuthoring authoring, IReadOnlyList<NodeId> targets, string field, NumberBoxEditInteractionKind interaction)
     {
-        public SceneDocumentCommandContext Context { get; } = context;
+        public SceneAuthoring Authoring { get; } = authoring;
 
-        public IReadOnlyList<NodeId> Targets { get; } = targets.ToArray();
+        public IReadOnlyList<NodeId> Targets { get; } = [.. targets];
 
         public string Field { get; } = field;
 
         public NumberBoxEditInteractionKind Interaction { get; } = interaction;
 
-        public EditSessionToken Token { get; } = token;
+        public Task<SceneGesture>? Scene { get; set; }
+
+        // The last step submitted to the scene gesture; later steps wait for it.
+        public Task<SceneEditResult> Steps { get; set; } = Task.FromResult(Nothing);
 
         public HashSet<PropertyId>? Properties { get; set; }
 

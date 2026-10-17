@@ -23,7 +23,7 @@ public sealed class MaterialDocumentKind(MaterialValidation validation) : IDocum
 
     /// <inheritdoc/>
     /// <remarks>The material is named after its file, as its title is.</remarks>
-    public Task<DocumentDecodeResult> DecodeAsync(DocumentFile file, ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
+    public Task<DocumentDecodeResult> DecodeAsync(DocumentFile file, ReadOnlyMemory<byte> content, DocumentDecodeContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(file);
         cancellationToken.ThrowIfCancellationRequested();

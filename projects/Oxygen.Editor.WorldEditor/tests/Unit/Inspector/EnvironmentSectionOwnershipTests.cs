@@ -16,7 +16,7 @@ public sealed class EnvironmentSectionOwnershipTests
     public async Task SectionEdits_ShareOneSceneGestureAndCanonicalDiagnostics()
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);
+        using var model = new EnvironmentViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         _ = model.Backdrop.EditOwner.Should().BeSameAs(model.EditOwner);
         _ = model.SkyAtmosphere.EditOwner.Should().BeSameAs(model.EditOwner);
@@ -27,12 +27,12 @@ public sealed class EnvironmentSectionOwnershipTests
         model.SkyAtmosphere.EditOwner.BeginEditSession("PlanetRadiusKm", NumberBoxEditInteractionKind.PointerDrag);
         model.SkyAtmosphere.PlanetRadiusKm = 6400;
         await model.PendingEdits.ConfigureAwait(false);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         model.SkyAtmosphere.EditOwner.EndEditSession(NumberBoxEditCompletionKind.Cancel);
         await model.PendingEdits.ConfigureAwait(false);
         _ = fixture.Scene.Environment.SkyAtmosphere.PlanetRadiusMeters.Should().Be(original);
         _ = model.SkyAtmosphere.PlanetRadiusKm.Should().Be(original / 1000);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = model.Exposure.CurveEditor.Diagnostic.Should().BeSameAs(model.Exposure.AutoExposureCompensationCurveDiagnostic);
     }
 
@@ -40,22 +40,22 @@ public sealed class EnvironmentSectionOwnershipTests
     public async Task HiddenSections_RejectLateInputWithoutCreatingAnotherEditOwner()
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);
+        using var model = new EnvironmentViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         var owner = model.EditOwner;
         var sky = model.SkyAtmosphere;
         var sources = model.AtmosphereLights;
         var primary = sources.PrimaryAtmosphereSource;
         var original = fixture.Scene.Environment;
-        model.SetInputEnabled(false);
+        model.SetInputEnabled(enabled: false);
         sky.PlanetRadiusKm = 6400;
         model.Backdrop.SolidColorR = 0.25f;
         model.Exposure.ManualExposureEv = 8;
         await model.PendingEdits.ConfigureAwait(false);
         _ = fixture.Scene.Environment.Should().Be(original);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        model.SetInputEnabled(true);
-        model.SetScene(null);
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
+        model.SetInputEnabled(enabled: true);
+        model.SetScene(value: null);
         model.SetScene(fixture.Scene);
         _ = model.EditOwner.Should().BeSameAs(owner);
         _ = model.SkyAtmosphere.Should().BeSameAs(sky);

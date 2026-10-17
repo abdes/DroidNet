@@ -274,17 +274,21 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
 
 ### 6.1 Design problems in the moved code
 
-- **P1. The module has no identity.** Status: open. The namespaces are still
+- **P1. The module has no identity.** Status: closed. Every type in the module
+  is in an `Oxygen.Editor.Scenes.*` namespace that follows its folder
+  (scene-edits.md section 6). Was: The namespaces are still
   `Oxygen.Editor.WorldEditor.Documents.Commands` (51 files),
   `Oxygen.Editor.World.Services` (18),
   `Oxygen.Editor.World.SceneExplorer.Operations`,
   `Oxygen.Editor.World.Documents` and `Oxygen.Editor.World.Diagnostics`; only
   `Interaction` is in `Oxygen.Editor.Scenes`.
-- **P2. The command service is a god service.** Status: open.
-  `SceneDocumentCommandService` is 11.8k lines in 18 partials behind one
-  interface of about 40 methods: hierarchy, properties, gestures, clipboard,
-  scripting, materials and relocation in one type. Partials are file
-  organization, not design boundaries. Found in the analysis of P2:
+- **P2. The command service is a god service.** Status: closed. The service and
+  its interface are deleted; each change is an edit record run by
+  `SceneAuthoring`, which owns the frame, the history and the change stream
+  (scene-edits.md). Was: `SceneDocumentCommandService` is 11.8k lines in 18
+  partials behind one interface of about 40 methods: hierarchy, properties,
+  gestures, clipboard, scripting, materials and relocation in one type. Partials
+  are file organization, not design boundaries. Found in the analysis of P2:
   - every command repeats the same frame by hand (gate, lock check, validate,
     apply, a hand-written undo closure pair `Record*History` and
     `Apply*ForHistoryAsync`, a hand-written engine call, publish, result);
@@ -304,8 +308,9 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
   - commands call the engine port directly, and so does every undo and redo
     closure;
   - the only state in the service is the open gestures, keyed by `Scene` (P6).
-- **P3. The domain posts notifications.** Status: open. The command service
-  takes `IOperationResultPublisher` and publishes failures
+- **P3. The domain posts notifications.** Status: closed. Scenes reports through
+  `SceneEditResult` and coded diagnostics; the World Editor publishes them. Was:
+  The command service takes `IOperationResultPublisher` and publishes failures
   (`PublishSceneFailure`, about 22 call sites), against the rule that domain
   services report through results and events and the Shell decides what to show.
 - **P4. Undecided dependency on ContentPipeline.** Status: open. The commands
@@ -313,31 +318,37 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
   `ContentPipeline.Relocation.IAssetRedirects` and ContentPipeline references.
   Section 3.1 does not list ContentPipeline: either a port or a deliberate
   decision that Scenes sits downstream of it.
-- **P5. The authoring gate is static global state.** Status: open.
-  `SceneAuthoringGate` keeps a `ConditionalWeakTable<Scene, State>` and an
-  `AsyncLocal`, is called statically by commands, content and view models, and
-  was made public by the move. Exclusive access to a document's scene should be
-  owned per document and passed explicitly.
+- **P5. The authoring gate is static global state.** Status: closed.
+  `SceneAuthoringGate` is deleted; each document's `SceneAuthoring` serializes
+  its own edits. Was: `SceneAuthoringGate` keeps a
+  `ConditionalWeakTable<Scene, State>` and an `AsyncLocal`, is called statically
+  by commands, content and view models, and was made public by the move.
+  Exclusive access to a document's scene should be owned per document and passed
+  explicitly.
 - **P6. Edit-session state is owned by the service, not the content.** Status:
-  open. `SceneContent` holds the command service only to answer
-  `HasEditsInProgress` and `FinishEditsAsync`, because edit sessions live in the
-  service keyed by `Scene`.
-- **P7. The engine sync port is shaped by its implementation.** Status: open.
-  `ISceneEngineSync` has about 50 members, two API generations (scene-scoped
-  calls returning `SyncOutcome` beside fire-and-forget node calls), mixed keys
-  (document id to register; scene id for pending counts and preview sync;
-  `Scene` objects elsewhere) and exposed revisions (`CaptureRevision`,
-  `AdvanceRevision`).
-- **P8. The identity rule is not in the types.** Status: in progress. Task 1 of
-  scene-edits.md typed node, component, scene and folder ids; document ids are
-  task 2. The types exposed three places that passed a scene id as another id,
-  now fixed: the environment's property edits were sent through the node-keyed
-  edit API (the command service and the Inspector's edit coordinator), the
-  explorer logged the scene id as its document id, and the editing view mask
-  reported the scene id as a document id. Was: Document id, scene id and node id
-  are all `Guid`, so a scene id can be passed where a document id is meant; this
-  caused the selection regression. They need distinct strong types and a written
-  rule for which key each concern uses.
+  closed. Gestures belong to the document's `SceneAuthoring`, which
+  `SceneContent` holds. Was: `SceneContent` holds the command service only to
+  answer `HasEditsInProgress` and `FinishEditsAsync`, because edit sessions live
+  in the service keyed by `Scene`.
+- **P7. The engine sync port is shaped by its implementation.** Status: in
+  progress. The port has ten members and one API generation: the projector
+  follows `SceneAuthoring.Changed`, and the per-operation methods are internal
+  to the implementation. Its keys are still mixed (document id, scene id and
+  `Scene`). Was: `ISceneEngineSync` has about 50 members, two API generations
+  (scene-scoped calls returning `SyncOutcome` beside fire-and-forget node
+  calls), mixed keys (document id to register; scene id for pending counts and
+  preview sync; `Scene` objects elsewhere) and exposed revisions
+  (`CaptureRevision`, `AdvanceRevision`).
+- **P8. The identity rule is not in the types.** Status: closed. Task 1 of
+  scene-edits.md typed node, component, scene and folder ids; task 2 typed
+  document ids. The types exposed three places that passed a scene id as another
+  id, now fixed: the environment's property edits were sent through the
+  node-keyed edit API (the command service and the Inspector's edit
+  coordinator), the explorer logged the scene id as its document id, and the
+  editing view mask reported the scene id as a document id. Was: Document id,
+  scene id and node id are all `Guid`, so a scene id can be passed where a
+  document id is meant; this caused the selection regression. They need distinct
+  strong types and a written rule for which key each concern uses.
 - **P9. Decoding reads ambient project state.** Status: open.
   `SceneDocumentKind.DecodeAsync` deserializes with
   `IProjectManagerService.CurrentProject`; the project should come from the
@@ -351,8 +362,10 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
   `Scene.SetEnvironment`, `Scene.SetPlay` and `Scene.SetReferences` were made
   public so the move would compile. Their ownership must be designed, not
   inherited.
-- **P12. Multi-node actions cannot roll back.** Status: open. Eight
-  `BeginChangeSet` call sites remain (decision 11).
+- **P12. Multi-node actions cannot roll back.** Status: closed. Multi-node
+  actions are atomic batches that roll back on refusal (scene-edits.md 3.5);
+  Scenes has no `BeginChangeSet` left. Was: Eight `BeginChangeSet` call sites
+  remain (decision 11).
 - **P13. Unused package reference.** Status: open. The project references
   `CommunityToolkit.Mvvm` and uses nothing from it.
 
@@ -362,11 +375,13 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
   no longer use them (scene-edits.md 3.5); the API itself is still broken for
   any other user.
 
-- **P15. Schemas keys property targets by Guid.** Status: open, resolved by
-  scene-edits.md task 8. `PropertySnapshot`, `PropertyOp`, `IPropertyTarget` and
-  `PropertyBinding` key a target that is a node or, for the environment, the
-  scene. Scenes and the Inspector convert at that boundary; the engine port's
-  preview-sync methods take the same `Guid previewTarget` until task 6.
+- **P15. Schemas keys property targets by Guid.** Status: in progress.
+  `PropertySnapshot`, `PropertyOp` and `IPropertyTarget` are deleted (task 8);
+  `PropertyBinding` still keys its nodes by `Guid`. Was: `PropertySnapshot`,
+  `PropertyOp`, `IPropertyTarget` and `PropertyBinding` key a target that is a
+  node or, for the environment, the scene. Scenes and the Inspector convert at
+  that boundary; the engine port's preview-sync methods take the same
+  `Guid previewTarget` until task 6.
 - **P16. `NodeHandle` is unused.** Status: open.
   `Oxygen.Managed.Core.NodeHandle` has no reference anywhere.
 
@@ -380,9 +395,9 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
 
 - **D1. Material save and cook repeat as if dirty.** Status: open, not
   investigated.
-- **D2. Integration test hangs.** Status: fixed, awaiting closure. The automatic
-  cook waits for the cook writer to be idle before it reads statuses and queues
-  a run. `ClosingProjectCancelsCookAndReopensPriorNativePublication` and
+- **D2. Integration test hangs.** Status: closed. The automatic cook waits for
+  the cook writer to be idle before it reads statuses and queues a run.
+  `ClosingProjectCancelsCookAndReopensPriorNativePublication` and
   `CancelledWorkspaceCookRetainsMaterialUntilRetry` held the writer and waited
   for that run, so they waited on themselves. Both now hold the automatic cook
   at preview capture instead; a change still waiting for the writer is checked
@@ -393,10 +408,10 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
   selection keyed by document id (explorer, Inspector,
   `SceneLoadedMessage.DocumentId`); the last opened scene stored by id; the
   reload warning about the tree.
-- **D4. Test projects do not build.** Status: fixed, awaiting closure. The World
-  Editor's Unit, Unit.UI, Integration.UI and Benchmarks.UI projects build, and
-  their suites pass. `Oxygen.Editor.Scenes.Tests` does not exist yet; task 4
-  creates it.
+- **D4. Test projects do not build.** Status: closed. The World Editor's Unit,
+  Unit.UI, Integration.UI and Benchmarks.UI projects build, and their suites
+  pass on `SceneAuthoring`. `Oxygen.Editor.Scenes.Tests` holds the unit and
+  functional tests of the module.
 - **D5. This document is stale.** Status: open. Decision 13 and section 5
   describe the old commit order, not the split; `document-kinds.md` and the #69
   plan need the same revision.

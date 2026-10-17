@@ -8,7 +8,7 @@ using Oxygen.Editor.Schemas.Bindings;
 namespace Oxygen.Editor.Schemas.Tests;
 
 /// <summary>
-/// Tests the generic property edit, binding, apply, and commit-group contracts.
+/// Tests the generic property edit, binding and apply contracts.
 /// </summary>
 [TestClass]
 public sealed class PropertyPipelineContractTests
@@ -21,32 +21,6 @@ public sealed class PropertyPipelineContractTests
         static value => float.IsFinite(value) ? ValidationResult.Ok : ValidationResult.Fail("bad", "bad"),
         new EditorAnnotation { Label = "X", Renderer = "numberbox" },
         "test.x");
-
-    /// <summary>
-    /// Verifies undo and redo are the same property apply operation over opposite snapshots.
-    /// </summary>
-    /// <returns>A task that completes when the apply sequence has been verified.</returns>
-    [TestMethod]
-    public async Task ApplyAsyncPreservesStructuralIdentityWhenSnapshotsAreSwapped()
-    {
-        var nodeId = Guid.NewGuid();
-        var target = new Target { X = 1.0f };
-        var descriptors = new Dictionary<PropertyId, PropertyDescriptor> { [X.Id] = XDescriptor };
-        var before = new PropertySnapshot(new Dictionary<Guid, PropertyEdit> { [nodeId] = PropertyEdit.SingleEdit(X, 1.0f) });
-        var after = new PropertySnapshot(new Dictionary<Guid, PropertyEdit> { [nodeId] = PropertyEdit.SingleEdit(X, 5.0f) });
-        var op = new PropertyOp([nodeId], before, after, "Set X");
-        var resolver = new TargetResolver(nodeId, target);
-
-        await PropertyApply.ApplyAsync(op, ApplySide.After, resolver, descriptors).ConfigureAwait(false);
-        var stateAfterOriginalApply = target.X;
-
-        await PropertyApply.ApplyAsync(op, ApplySide.Before, resolver, descriptors).ConfigureAwait(false);
-        await PropertyApply.ApplyAsync(op, ApplySide.After, resolver, descriptors).ConfigureAwait(false);
-
-        _ = target.X.Should().Be(stateAfterOriginalApply);
-        _ = resolver.Pushed.Should().HaveCount(3);
-        _ = resolver.Pushed.Should().OnlyContain(edit => edit.Contains(X.Id));
-    }
 
     /// <summary>
     /// Verifies multi-selection mixed values are represented by the binding state.
@@ -91,60 +65,23 @@ public sealed class PropertyPipelineContractTests
     }
 
     /// <summary>
-    /// Verifies closing a commit group cancels any stale scheduled idle commit.
+    /// Verifies an edit is immutable: adding a value makes a new edit and leaves the original unchanged.
     /// </summary>
-    /// <returns>A task that completes when the idle commit delay has elapsed.</returns>
     [TestMethod]
-    public async Task CommitGroupControllerDoesNotFireStaleCommitAfterSessionCloses()
+    public void WithReturnsANewEditAndLeavesTheOriginalUnchanged()
     {
-        var controller = new CommitGroupController();
-        var nodeId = Guid.NewGuid();
-        var before = new PropertySnapshot(new Dictionary<Guid, PropertyEdit>
-        {
-            [nodeId] = PropertyEdit.SingleEdit(X, 1.0f),
-        });
-        var after = new PropertySnapshot(new Dictionary<Guid, PropertyEdit>
-        {
-            [nodeId] = PropertyEdit.SingleEdit(X, 2.0f),
-        });
-        _ = controller.Begin("test#/x", [nodeId], before, "Set X");
-        var fired = false;
+        var original = PropertyEdit.SingleEdit(X, 1.0f);
 
-        var idle = controller.ScheduleIdleCommitAsync(
-            "test#/x",
-            TimeSpan.FromMilliseconds(25),
-            () =>
-            {
-                fired = true;
-                return Task.CompletedTask;
-            });
-        _ = controller.Close("test#/x", after);
+        var changed = original.With(X, 2.0f);
 
-        await idle.ConfigureAwait(false);
-
-        _ = fired.Should().BeFalse();
+        _ = original.GetTyped(X, out var originalValue).Should().BeTrue();
+        _ = originalValue.Should().Be(1.0f);
+        _ = changed.GetTyped(X, out var changedValue).Should().BeTrue();
+        _ = changedValue.Should().Be(2.0f);
     }
 
     private sealed class Target
     {
         public float X { get; set; }
-    }
-
-    private sealed class TargetResolver(Guid nodeId, Target target) : IPropertyTarget
-    {
-        public List<PropertyEdit> Pushed { get; } = [];
-
-        public bool TryGetTarget(Guid id, out object? resolved)
-        {
-            resolved = id == nodeId ? target : null;
-            return resolved is not null;
-        }
-
-        public Task PushToEngineAsync(Guid id, PropertyEdit edit)
-        {
-            _ = id;
-            this.Pushed.Add(edit.Clone());
-            return Task.CompletedTask;
-        }
     }
 }

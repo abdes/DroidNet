@@ -4,11 +4,12 @@
 
 using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -31,17 +32,15 @@ public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDi
     /// <summary>Initializes a new instance of the <see cref="LocalLightViewModel"/> class.</summary>
     /// <param name="descriptors">The kind-qualified descriptor catalog.</param>
     /// <param name="label">The history label.</param>
-    /// <param name="commandService">Optional command service used to apply light edits.</param>
-    /// <param name="commandContextProvider">Optional provider for the active scene command context.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     private protected LocalLightViewModel(
         LocalLightDescriptors descriptors,
         string label,
-        ISceneDocumentCommandService? commandService,
-        Func<SceneDocumentCommandContext?>? commandContextProvider)
+        Func<SceneAuthoring?>? authoringProvider)
     {
-        if (commandService is not null && commandContextProvider is not null)
+        if (authoringProvider is not null)
         {
-            this.edits = new(commandService, commandContextProvider, label, this.RefreshValues);
+            this.edits = new(authoringProvider, label, this.RefreshValues);
         }
 
         this.colorBinding = new(descriptors.ColorDescriptor);

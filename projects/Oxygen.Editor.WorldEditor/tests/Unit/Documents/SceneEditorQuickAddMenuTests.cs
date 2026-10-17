@@ -5,7 +5,6 @@
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls.Menus;
-using DroidNet.Documents;
 using DryIoc;
 using Microsoft.UI;
 using Moq;
@@ -13,11 +12,9 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneEditor;
-using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -26,7 +23,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 /// <summary>Verifies the scene editor Quick Add menu: an empty node, the canonical primitives, lights and cameras.</summary>
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository's discovery configuration.")]
-public sealed class SceneEditorQuickAddMenuTests
+public sealed partial class SceneEditorQuickAddMenuTests
 {
     /// <summary>The menu offers an empty node, then shapes, lights and cameras.</summary>
     [TestMethod]
@@ -64,7 +61,7 @@ public sealed class SceneEditorQuickAddMenuTests
     private static IEnumerable<MenuItemData> Submenu(IEnumerable<MenuItemData> items, string text)
         => items.Single(item => string.Equals(item.Text, text, StringComparison.Ordinal)).SubItems;
 
-    private sealed class Fixture : IDisposable
+    private sealed partial class Fixture : IDisposable
     {
         private readonly Container container = new();
 
@@ -82,13 +79,12 @@ public sealed class SceneEditorQuickAddMenuTests
                 input.Object,
                 Mock.Of<IOperationResultPublisher>(),
                 new OperationStatusReducer(),
-                Mock.Of<ISceneDocumentCommandService>(),
                 Mock.Of<IContentPipelineService>(),
                 this.container,
                 this.Messenger,
-                new Oxygen.Editor.World.Workspace.PreviewSettingsService(
+                new World.Workspace.PreviewSettingsService(
                     Mock.Of<IEngineService>(),
-                    Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(),
+                    Mock.Of<Data.Services.IEditorSettingsManager>(),
                     Mock.Of<IProjectContextService>(),
                     Mock.Of<IOperationResultPublisher>(),
                     new OperationStatusReducer()));
@@ -105,7 +101,7 @@ public sealed class SceneEditorQuickAddMenuTests
             this.Editor.Dispose();
             this.Messenger.Reset();
             this.container.Dispose();
-            this.Metadata.Documents.Dispose();
+            this.Metadata.Dispose();
         }
     }
 }

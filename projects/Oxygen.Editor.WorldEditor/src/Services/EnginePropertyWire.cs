@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Engine;
 
 namespace Oxygen.Editor.World.Services;
 

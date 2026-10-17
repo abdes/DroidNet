@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using AwesomeAssertions;
 using DroidNet.Controls;
 using Oxygen.Editor.World.Inspector;
@@ -18,22 +17,22 @@ public sealed class ExposureCurveEditorTests
     public async Task CurveKeys_AddRemoveAndHistoryUseTheExistingSceneOwner()
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);
+        using var model = new EnvironmentViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         var editor = model.Exposure.CurveEditor;
-        editor.AddKeyCommand.Execute(null);
+        editor.AddKeyCommand.Execute(parameter: null);
         await model.PendingEdits.ConfigureAwait(false);
         _ = fixture.Scene.Environment.PostProcess.AutoExposureCompensationCurve.Should().Equal(new ExposureCompensationKeyData(0, 0));
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         var key = editor.Keys.Single();
         editor.RemoveKeyCommand.Execute(key);
         await model.PendingEdits.ConfigureAwait(false);
         _ = editor.Keys.Should().BeEmpty();
-        _ = fixture.Context.History.UndoStack.Should().HaveCount(2);
-        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(false);
+        _ = fixture.Document.History.UndoStack.Should().HaveCount(2);
+        await fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(false);
         _ = editor.Keys.Should().ContainSingle();
         _ = editor.Curve.Should().Equal(new ExposureCompensationKeyData(0, 0));
-        await fixture.Context.History.RedoAsync(CancellationToken.None).ConfigureAwait(false);
+        await fixture.Document.History.RedoAsync(CancellationToken.None).ConfigureAwait(false);
         _ = editor.Curve.Should().BeEmpty();
     }
 
@@ -41,17 +40,17 @@ public sealed class ExposureCurveEditorTests
     public async Task CurveKeyPolicy_RetainsStableRowsAndRejectsNonFiniteOrUnorderedCoordinates()
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);
+        using var model = new EnvironmentViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         model.Exposure.AutoExposureCompensationCurve = [new(-2, 0), new(0, 1), new(2, 0)];
         await model.PendingEdits.ConfigureAwait(false);
         var editor = model.Exposure.CurveEditor;
         var middle = editor.Keys[1];
-        _ = editor.Validate(middle, true, -2).Should().BeFalse();
-        _ = editor.Validate(middle, true, 2).Should().BeFalse();
-        _ = editor.Validate(middle, true, 1).Should().BeTrue();
-        _ = editor.Validate(middle, false, float.PositiveInfinity).Should().BeFalse();
-        _ = editor.Validate(middle, false, float.NaN).Should().BeFalse();
+        _ = editor.Validate(middle, editMeteredEv: true, -2).Should().BeFalse();
+        _ = editor.Validate(middle, editMeteredEv: true, 2).Should().BeFalse();
+        _ = editor.Validate(middle, editMeteredEv: true, 1).Should().BeTrue();
+        _ = editor.Validate(middle, editMeteredEv: false, float.PositiveInfinity).Should().BeFalse();
+        _ = editor.Validate(middle, editMeteredEv: false, float.NaN).Should().BeFalse();
         model.Exposure.AutoExposureCompensationCurve = [new(-2, 0), new(1, 0.5f), new(2, 0)];
         await model.PendingEdits.ConfigureAwait(false);
         _ = editor.Keys[1].Should().BeSameAs(middle);
@@ -63,42 +62,42 @@ public sealed class ExposureCurveEditorTests
     public async Task CurveKeyLimit_DisabledInputAndDisposalDoNotSubmitEdits()
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);
+        using var model = new EnvironmentViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
-        model.Exposure.AutoExposureCompensationCurve = Enumerable.Range(0, 64).Select(index => new ExposureCompensationKeyData(index, 0)).ToImmutableArray();
+        model.Exposure.AutoExposureCompensationCurve = [.. Enumerable.Range(0, 64).Select(index => new ExposureCompensationKeyData(index, 0))];
         await model.PendingEdits.ConfigureAwait(false);
         var editor = model.Exposure.CurveEditor;
-        fixture.Context.History.Clear();
-        editor.AddKeyCommand.Execute(null);
+        fixture.Document.History.Clear();
+        editor.AddKeyCommand.Execute(parameter: null);
         _ = editor.Keys.Should().HaveCount(64);
-        model.SetInputEnabled(false);
+        model.SetInputEnabled(enabled: false);
         editor.RemoveKeyCommand.Execute(editor.Keys[0]);
         _ = editor.Keys.Should().HaveCount(64);
         editor.Dispose();
         editor.Keys[0].CompensationEv = 2;
         await model.PendingEdits.ConfigureAwait(false);
         _ = fixture.Scene.Environment.PostProcess.AutoExposureCompensationCurve[0].CompensationEv.Should().Be(0);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
     }
 
     [TestMethod]
     public async Task CurveGesture_CancelRestoresTheCapturedCurveWithoutNewHistory()
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);
+        using var model = new EnvironmentViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         model.Exposure.AutoExposureCompensationCurve = [new(0, 1)];
         await model.PendingEdits.ConfigureAwait(false);
-        fixture.Context.History.Clear();
+        fixture.Document.History.Clear();
         var editor = model.Exposure.CurveEditor;
         editor.Begin(new NumberBoxEditSessionEventArgs(NumberBoxEditInteractionKind.PointerDrag));
         editor.Keys[0].CompensationEv = 2;
         await model.PendingEdits.ConfigureAwait(false);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         editor.Complete(new NumberBoxEditSessionEventArgs(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel));
         await model.PendingEdits.ConfigureAwait(false);
         _ = editor.Curve.Should().Equal(new ExposureCompensationKeyData(0, 1));
         _ = editor.Keys[0].CompensationEv.Should().Be(1);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
     }
 }

@@ -16,7 +16,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Play;
 [TestCategory("Play")]
 public sealed class PlaySessionSettingsTests
 {
-    private static PlayerWindowSizeOption FullHd => PlaySessionSettingsService.SizeOptions.Single(option => option.Name == "Full HD");
+    private static PlayerWindowSizeOption FullHd => PlaySessionSettingsService.SizeOptions.Single(option => string.Equals(option.Name, "Full HD", StringComparison.Ordinal));
 
     [TestMethod]
     public void Settings_StartFromTheDefaultsAndIgnoreValuesThePlayerRejects()
@@ -54,9 +54,10 @@ public sealed class PlaySessionSettingsTests
     [TestMethod]
     public void SizeOption_NamedSizesSetTheSizeAndCustomKeepsItEditable()
     {
-        var sut = new PlaySessionSettingsService(settings: null);
-
-        sut.SizeOption = FullHd;
+        var sut = new PlaySessionSettingsService(settings: null)
+        {
+            SizeOption = FullHd,
+        };
         var named = (sut.Width, sut.Height, sut.HasCustomSize);
         sut.SizeOption = PlayerWindowSizeOption.Custom;
         var custom = (sut.SizeOption, sut.HasCustomSize, sut.Width);
@@ -72,9 +73,13 @@ public sealed class PlaySessionSettingsTests
     [TestMethod]
     public void Borderless_LeavesTheSizeToTheDisplayAndResetRestoresEveryDefault()
     {
-        var sut = new PlaySessionSettingsService(settings: null) { SizeOption = PlayerWindowSizeOption.Custom, Width = 900, VSync = false };
-
-        sut.WindowMode = PlayerWindowMode.Borderless;
+        var sut = new PlaySessionSettingsService(settings: null)
+        {
+            SizeOption = PlayerWindowSizeOption.Custom,
+            Width = 900,
+            VSync = false,
+            WindowMode = PlayerWindowMode.Borderless,
+        };
         var borderless = sut.IsWindowed;
         sut.Reset();
 

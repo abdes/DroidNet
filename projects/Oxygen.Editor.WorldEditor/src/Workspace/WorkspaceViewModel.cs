@@ -17,6 +17,9 @@ using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World.Cooking;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
@@ -26,10 +29,7 @@ using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Output;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -271,11 +271,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
         // Register scene-engine synchronization service
         childContainer.Register<ISceneEngineSync, SceneEngineSync>(Reuse.Singleton);
-        childContainer.Register<ISceneMutator, SceneMutator>(Reuse.Singleton);
-        childContainer.Register<ISceneOrganizer, SceneOrganizer>(Reuse.Singleton);
         childContainer.Register<ISceneContentDemandService, SceneContentDemandService>(Reuse.Singleton);
         childContainer.Register<ISceneSelectionService, SceneSelectionService>(Reuse.Singleton);
-        childContainer.Register<ISceneDocumentCommandService, SceneDocumentCommandService>(Reuse.Singleton);
 
         // Everything the documents need is registered: the cook and the content demand follow them from now on.
         _ = childContainer.Resolve<OpenDocumentCookInputs>();

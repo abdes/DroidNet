@@ -169,14 +169,13 @@ public sealed partial class SceneNodeEditorView : UserControl
             return;
         }
 
-        var historyKeeper = vm.History;
-        if (historyKeeper.UndoStack.Count == 0)
+        if (vm.History.UndoStack.Count == 0)
         {
             return;
         }
 
         args.Handled = true;
-        await historyKeeper.UndoAsync().ConfigureAwait(true);
+        await vm.UndoAsync().ConfigureAwait(true);
         vm.RefreshPropertyEditorValues();
     }
 
@@ -190,14 +189,13 @@ public sealed partial class SceneNodeEditorView : UserControl
             return;
         }
 
-        var historyKeeper = vm.History;
-        if (historyKeeper.RedoStack.Count == 0)
+        if (vm.History.RedoStack.Count == 0)
         {
             return;
         }
 
         args.Handled = true;
-        await historyKeeper.RedoAsync().ConfigureAwait(true);
+        await vm.RedoAsync().ConfigureAwait(true);
         vm.RefreshPropertyEditorValues();
     }
 }

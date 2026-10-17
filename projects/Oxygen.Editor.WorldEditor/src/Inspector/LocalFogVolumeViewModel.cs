@@ -4,10 +4,11 @@
 
 using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Inspector.Editing;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -18,24 +19,22 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
     private readonly InspectorFieldDiagnostic unboundDiagnostic = new();
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly List<IInspectorBindingRefresh> registrations = [];
-    private readonly PropertyBinding<bool> enabledBinding = new(SceneDocumentCommandService.LocalFogVolume.EnabledDescriptor);
-    private readonly PropertyBinding<int> sortPriorityBinding = new(SceneDocumentCommandService.LocalFogVolume.SortPriorityDescriptor);
-    private readonly PropertyBinding<Vector3> albedoBinding = new(SceneDocumentCommandService.LocalFogVolume.FogAlbedoDescriptor);
-    private readonly PropertyBinding<Vector3> emissiveBinding = new(SceneDocumentCommandService.LocalFogVolume.FogEmissiveDescriptor);
+    private readonly PropertyBinding<bool> enabledBinding = new(SceneProperties.LocalFogVolume.EnabledDescriptor);
+    private readonly PropertyBinding<int> sortPriorityBinding = new(SceneProperties.LocalFogVolume.SortPriorityDescriptor);
+    private readonly PropertyBinding<Vector3> albedoBinding = new(SceneProperties.LocalFogVolume.FogAlbedoDescriptor);
+    private readonly PropertyBinding<Vector3> emissiveBinding = new(SceneProperties.LocalFogVolume.FogEmissiveDescriptor);
     private ICollection<SceneNode>? selectedItems;
     private bool isApplyingEditorValues;
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="LocalFogVolumeViewModel"/> class.</summary>
-    /// <param name="commandService">The existing scene command service.</param>
-    /// <param name="commandContextProvider">The current captured document context.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     public LocalFogVolumeViewModel(
-        ISceneDocumentCommandService? commandService = null,
-        Func<SceneDocumentCommandContext?>? commandContextProvider = null)
+        Func<SceneAuthoring?>? authoringProvider = null)
     {
-        if (commandService is not null && commandContextProvider is not null)
+        if (authoringProvider is not null)
         {
-            this.edits = new(commandService, commandContextProvider, "Edit Local Fog Volume", this.RefreshValues);
+            this.edits = new(authoringProvider, "Edit Local Fog Volume", this.RefreshValues);
         }
 
         this.Register(this.enabledBinding, nameof(this.Enabled));
@@ -86,19 +85,19 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
     }
 
     /// <summary>Gets the radial extinction binding and its mixed state.</summary>
-    public NumberBinding<float> RadialFogExtinction { get; } = new(SceneDocumentCommandService.LocalFogVolume.RadialFogExtinctionDescriptor);
+    public NumberBinding<float> RadialFogExtinction { get; } = new(SceneProperties.LocalFogVolume.RadialFogExtinctionDescriptor);
 
     /// <summary>Gets the height extinction binding and its mixed state.</summary>
-    public NumberBinding<float> HeightFogExtinction { get; } = new(SceneDocumentCommandService.LocalFogVolume.HeightFogExtinctionDescriptor);
+    public NumberBinding<float> HeightFogExtinction { get; } = new(SceneProperties.LocalFogVolume.HeightFogExtinctionDescriptor);
 
     /// <summary>Gets the height falloff binding and its mixed state.</summary>
-    public NumberBinding<float> HeightFogFalloff { get; } = new(SceneDocumentCommandService.LocalFogVolume.HeightFogFalloffDescriptor);
+    public NumberBinding<float> HeightFogFalloff { get; } = new(SceneProperties.LocalFogVolume.HeightFogFalloffDescriptor);
 
     /// <summary>Gets the height offset binding and its mixed state.</summary>
-    public NumberBinding<float> HeightFogOffset { get; } = new(SceneDocumentCommandService.LocalFogVolume.HeightFogOffsetDescriptor);
+    public NumberBinding<float> HeightFogOffset { get; } = new(SceneProperties.LocalFogVolume.HeightFogOffsetDescriptor);
 
     /// <summary>Gets the phase anisotropy binding and its mixed state.</summary>
-    public NumberBinding<float> FogPhaseG { get; } = new(SceneDocumentCommandService.LocalFogVolume.FogPhaseGDescriptor);
+    public NumberBinding<float> FogPhaseG { get; } = new(SceneProperties.LocalFogVolume.FogPhaseGDescriptor);
 
     /// <summary>Gets radial extinction feedback.</summary>
     public InspectorFieldDiagnostic RadialFogExtinctionDiagnostic => this.Diagnostic(this.RadialFogExtinction.Id.Id);

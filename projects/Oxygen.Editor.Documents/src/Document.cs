@@ -27,6 +27,7 @@ public sealed partial class Document : IDisposable
 {
     private readonly IAtomicFileStore files;
     private readonly ILogger logger;
+    private readonly DocumentDecodeContext context;
     private readonly SemaphoreSlim operations = new(1, 1);
     private HistoryPosition savedPosition;
     private (bool Dirty, bool Missing, bool Changed, DocumentFile File) published;
@@ -35,11 +36,12 @@ public sealed partial class Document : IDisposable
     /// <summary>Initializes a new instance of the <see cref="Document"/> class.</summary>
     /// <param name="kind">The document's kind.</param>
     /// <param name="file">The file it edits.</param>
+    /// <param name="context">The document's identity and history, which its content was decoded with.</param>
     /// <param name="content">The content decoded from the file.</param>
     /// <param name="version">The version of the file the content was decoded from.</param>
     /// <param name="files">The store that reads and writes the file.</param>
     /// <param name="logger">The logger.</param>
-    internal Document(IDocumentKind kind, DocumentFile file, IDocumentContent content, FileVersion version, IAtomicFileStore files, ILogger logger)
+    internal Document(IDocumentKind kind, DocumentFile file, DocumentDecodeContext context, IDocumentContent content, FileVersion version, IAtomicFileStore files, ILogger logger)
     {
         this.Kind = kind;
         this.File = file;
@@ -47,7 +49,7 @@ public sealed partial class Document : IDisposable
         this.Version = version;
         this.files = files;
         this.logger = logger;
-        this.History = new HistoryKeeper(this);
+        this.context = context;
         this.savedPosition = this.History.Position;
         this.published = this.CaptureState();
         ((INotifyCollectionChanged)this.History.UndoStack).CollectionChanged += this.OnHistoryChanged;
@@ -60,7 +62,7 @@ public sealed partial class Document : IDisposable
     public event EventHandler<DocumentContentReplacedEventArgs>? ContentReplaced;
 
     /// <summary>Gets the document's identity, which is also its tab's.</summary>
-    public DocumentId Id { get; } = DocumentId.New();
+    public DocumentId Id => this.context.Document;
 
     /// <summary>Gets the document's kind.</summary>
     public IDocumentKind Kind { get; }
@@ -73,7 +75,7 @@ public sealed partial class Document : IDisposable
 
     /// <summary>Gets the document's history, into which its edits are recorded.</summary>
     /// <remarks>The document never clears it, except when a reload replaces the content the entries refer to.</remarks>
-    public HistoryKeeper History { get; }
+    public HistoryKeeper History => this.context.History;
 
     /// <summary>Gets the content the document edits.</summary>
     public IDocumentContent Content { get; private set; }
@@ -359,7 +361,7 @@ public sealed partial class Document : IDisposable
     // Returns why the file did not decode, or null once the content is replaced.
     private async Task<string?> ReplaceContentAsync(FileSnapshot snapshot, CancellationToken cancellationToken)
     {
-        var decoded = await this.Kind.DecodeAsync(this.File, snapshot.Content.AsMemory(), cancellationToken).ConfigureAwait(true);
+        var decoded = await this.Kind.DecodeAsync(this.File, snapshot.Content.AsMemory(), this.context, cancellationToken).ConfigureAwait(true);
         if (decoded.Content is not { } content)
         {
             return decoded.Problem;

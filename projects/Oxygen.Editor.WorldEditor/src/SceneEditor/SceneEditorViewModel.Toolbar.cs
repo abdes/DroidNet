@@ -7,9 +7,11 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls.Menus;
 using DryIoc;
 using Oxygen.Editor.ContentBrowser.Messages;
+using Oxygen.Editor.Scenes.Edits.Hierarchy;
+using Oxygen.Editor.Scenes.Nodes;
+using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
@@ -22,18 +24,18 @@ public partial class SceneEditorViewModel
 {
     private const string SelectionSource = "SceneToolbar";
 
-    private static readonly (string Kind, string Label)[] PrimitiveKinds =
+    private static readonly (PrimitiveKind Kind, string Label)[] PrimitiveKinds =
     [
-        ("Sphere", "Sphere"),
-        ("Cube", "Cube"),
-        ("Cylinder", "Cylinder"),
-        ("Cone", "Cone"),
-        ("Plane", "Plane"),
-        ("Capsule", "Capsule"),
-        ("IcoSphere", "Icosphere"),
-        ("Torus", "Torus"),
-        ("Quad", "Quad"),
-        ("SubdividedCube", "Subdivided cube"),
+        (PrimitiveKind.Sphere, "Sphere"),
+        (PrimitiveKind.Cube, "Cube"),
+        (PrimitiveKind.Cylinder, "Cylinder"),
+        (PrimitiveKind.Cone, "Cone"),
+        (PrimitiveKind.Plane, "Plane"),
+        (PrimitiveKind.Capsule, "Capsule"),
+        (PrimitiveKind.IcoSphere, "Icosphere"),
+        (PrimitiveKind.Torus, "Torus"),
+        (PrimitiveKind.Quad, "Quad"),
+        (PrimitiveKind.SubdividedCube, "Subdivided cube"),
     ];
 
     private IReadOnlyList<SceneNode> selectedNodes = [];
@@ -80,14 +82,14 @@ public partial class SceneEditorViewModel
         });
         _ = builder.AddSubmenu("Lights", lights =>
         {
-            _ = lights.AddMenuItem("Directional light", new AsyncRelayCommand(() => this.AddLightAsync("Directional")));
-            _ = lights.AddMenuItem("Point light", new AsyncRelayCommand(() => this.AddLightAsync("Point")));
-            _ = lights.AddMenuItem("Spot light", new AsyncRelayCommand(() => this.AddLightAsync("Spot")));
+            _ = lights.AddMenuItem("Directional light", new AsyncRelayCommand(() => this.AddLightAsync(LightKind.Directional)));
+            _ = lights.AddMenuItem("Point light", new AsyncRelayCommand(() => this.AddLightAsync(LightKind.Point)));
+            _ = lights.AddMenuItem("Spot light", new AsyncRelayCommand(() => this.AddLightAsync(LightKind.Spot)));
         });
         _ = builder.AddSubmenu("Cameras", cameras =>
         {
-            _ = cameras.AddMenuItem("Perspective camera", new AsyncRelayCommand(() => this.AddCameraAsync("Perspective")));
-            _ = cameras.AddMenuItem("Orthographic camera", new AsyncRelayCommand(() => this.AddCameraAsync("Orthographic")));
+            _ = cameras.AddMenuItem("Perspective camera", new AsyncRelayCommand(() => this.AddCameraAsync(CameraKind.Perspective)));
+            _ = cameras.AddMenuItem("Orthographic camera", new AsyncRelayCommand(() => this.AddCameraAsync(CameraKind.Orthographic)));
         });
         _ = builder.AddMenuItem("Local fog volume", new AsyncRelayCommand(this.AddLocalFogVolumeAsync));
         return builder.Build();
@@ -96,52 +98,49 @@ public partial class SceneEditorViewModel
     private async Task AddEmptyNodeAsync()
     {
         this.LogQuickAddRequested("Empty");
-        if (this.scene is not null)
-        {
-            var placement = await this.GetPlacementAsync(alignToView: false).ConfigureAwait(true);
-            _ = await this.commandService.CreateEmptyNodeAsync(this.CreateCommandContext(), placement).ConfigureAwait(true);
-        }
+        var placement = await this.GetPlacementAsync(alignToView: false).ConfigureAwait(true);
+        await this.InsertAsync(scene => SceneNodeTemplates.Empty(scene, placement: placement)).ConfigureAwait(true);
     }
 
-    private async Task AddPrimitiveAsync(string kind)
+    private async Task AddPrimitiveAsync(PrimitiveKind kind)
     {
-        this.LogQuickAddRequested(kind);
-        if (this.scene is not null)
-        {
-            var placement = await this.GetPlacementAsync(alignToView: false).ConfigureAwait(true);
-            _ = await this.commandService.CreatePrimitiveAsync(this.CreateCommandContext(), kind, placement).ConfigureAwait(true);
-        }
+        this.LogQuickAddRequested(kind.ToString());
+        var placement = await this.GetPlacementAsync(alignToView: false).ConfigureAwait(true);
+        await this.InsertAsync(scene => SceneNodeTemplates.Primitive(scene, kind, placement)).ConfigureAwait(true);
     }
 
-    private async Task AddLightAsync(string kind)
+    private async Task AddLightAsync(LightKind kind)
     {
         this.LogQuickAddRequested(kind + " light");
-        if (this.scene is not null)
-        {
-            // A light keeps its kind's default orientation; only its position follows the view.
-            var placement = await this.GetPlacementAsync(alignToView: false).ConfigureAwait(true);
-            _ = await this.commandService.CreateLightAsync(this.CreateCommandContext(), kind, placement).ConfigureAwait(true);
-        }
+
+        // A light keeps its kind's default orientation; only its position follows the view.
+        var placement = await this.GetPlacementAsync(alignToView: false).ConfigureAwait(true);
+        await this.InsertAsync(scene => SceneNodeTemplates.Light(scene, kind, placement)).ConfigureAwait(true);
     }
 
     private async Task AddLocalFogVolumeAsync()
     {
         this.LogQuickAddRequested("Local fog volume");
-        if (this.scene is not null)
-        {
-            var placement = await this.GetPlacementAsync(alignToView: false).ConfigureAwait(true);
-            _ = await this.commandService.CreateLocalFogVolumeAsync(this.CreateCommandContext(), placement).ConfigureAwait(true);
-        }
+        var placement = await this.GetPlacementAsync(alignToView: false).ConfigureAwait(true);
+        await this.InsertAsync(scene => SceneNodeTemplates.LocalFogVolume(scene, placement)).ConfigureAwait(true);
     }
 
-    private async Task AddCameraAsync(string kind)
+    private async Task AddCameraAsync(CameraKind kind)
     {
         this.LogQuickAddRequested(kind + " camera");
-        if (this.scene is not null)
+
+        // A new camera sees what the focused pane sees.
+        var placement = await this.GetPlacementAsync(alignToView: true).ConfigureAwait(true);
+        await this.InsertAsync(scene => SceneNodeTemplates.Camera(scene, kind, placement)).ConfigureAwait(true);
+    }
+
+    // Quick Add appends a root node: last among the root nodes and in the explorer's root.
+    private async Task InsertAsync(Func<Scene, SceneNodeData> template)
+    {
+        if (this.Authoring is { } authoring)
         {
-            // A new camera sees what the focused pane sees.
-            var placement = await this.GetPlacementAsync(alignToView: true).ConfigureAwait(true);
-            _ = await this.commandService.CreateCameraAsync(this.CreateCommandContext(), kind, placement).ConfigureAwait(true);
+            var node = template(authoring.Scene);
+            _ = await authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(authoring.Scene, node)])).ConfigureAwait(true);
         }
     }
 

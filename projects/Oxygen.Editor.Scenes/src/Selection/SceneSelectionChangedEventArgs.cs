@@ -4,7 +4,7 @@
 
 using DroidNet.Documents;
 using Oxygen.Editor.Documents;
-namespace Oxygen.Editor.WorldEditor.Documents.Selection;
+namespace Oxygen.Editor.Scenes.Selection;
 
 /// <summary>
 /// Carries one <see cref="ISceneSelectionService.SelectionChanged"/> notification:

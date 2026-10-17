@@ -136,7 +136,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         await EnterTextAsync(number, "-2").ConfigureAwait(true);
         number.CompletePendingTextEdit();
         await fixture.Model.PendingEdits.ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Source.Environment.SkyAtmosphere.AerialPerspectiveStartDepthMeters.Should().Be(-1);
         await EnterTextAsync(number, "100").ConfigureAwait(true);
         number.CompletePendingTextEdit();

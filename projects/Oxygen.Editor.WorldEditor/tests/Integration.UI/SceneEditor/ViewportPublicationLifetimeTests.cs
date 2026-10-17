@@ -34,7 +34,7 @@ public sealed partial class ViewportPublicationLifetimeTests : DroidNet.Tests.Vi
         await LoadTestContentAsync(panel).ConfigureAwait(true);
         var request = new ViewportSurfaceRequest
         {
-            DocumentId = fixture.Context.DocumentId.Value,
+            DocumentId = fixture.Document.Id.Value,
             ViewportId = Guid.NewGuid(),
             ViewportIndex = 0,
             IsPrimary = true,
@@ -106,5 +106,5 @@ public sealed partial class ViewportPublicationLifetimeTests : DroidNet.Tests.Vi
         GC.KeepAlive(host);
     });
 
-    private static ValueTask<IViewportSurfaceLease> AttachTestPanelAsync(NativeSceneFixture fixture, SwapChainPanel panel, CancellationToken cancellationToken) => fixture.Runtime.AttachViewportAsync(new() { DocumentId = fixture.Context.DocumentId.Value, ViewportId = Guid.NewGuid(), ViewportIndex = 0, }, panel, cancellationToken);
+    private static ValueTask<IViewportSurfaceLease> AttachTestPanelAsync(NativeSceneFixture fixture, SwapChainPanel panel, CancellationToken cancellationToken) => fixture.Runtime.AttachViewportAsync(new() { DocumentId = fixture.Document.Id.Value, ViewportId = Guid.NewGuid(), ViewportIndex = 0, }, panel, cancellationToken);
 }

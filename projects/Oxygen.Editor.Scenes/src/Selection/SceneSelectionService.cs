@@ -8,7 +8,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Documents.Selection;
+namespace Oxygen.Editor.Scenes.Selection;
 
 /// <inheritdoc />
 public sealed class SceneSelectionService : ISceneSelectionService

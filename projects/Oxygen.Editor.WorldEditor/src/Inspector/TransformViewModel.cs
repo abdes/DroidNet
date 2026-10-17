@@ -5,10 +5,11 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Editor.World.Utils;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -17,29 +18,27 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
 {
     private readonly InspectorFieldDiagnostics diagnostics = new();
     private readonly TransformEditController controller;
-    private readonly NumberBinding<float> positionXBinding = new(SceneDocumentCommandService.Transform.PositionXDescriptor);
-    private readonly NumberBinding<float> positionYBinding = new(SceneDocumentCommandService.Transform.PositionYDescriptor);
-    private readonly NumberBinding<float> positionZBinding = new(SceneDocumentCommandService.Transform.PositionZDescriptor);
-    private readonly NumberBinding<float> rotationXBinding = new(SceneDocumentCommandService.Transform.RotationXDescriptor);
-    private readonly NumberBinding<float> rotationYBinding = new(SceneDocumentCommandService.Transform.RotationYDescriptor);
-    private readonly NumberBinding<float> rotationZBinding = new(SceneDocumentCommandService.Transform.RotationZDescriptor);
-    private readonly NumberBinding<float> scaleXBinding = new(SceneDocumentCommandService.Transform.ScaleXDescriptor);
-    private readonly NumberBinding<float> scaleYBinding = new(SceneDocumentCommandService.Transform.ScaleYDescriptor);
-    private readonly NumberBinding<float> scaleZBinding = new(SceneDocumentCommandService.Transform.ScaleZDescriptor);
+    private readonly NumberBinding<float> positionXBinding = new(SceneProperties.Transform.PositionXDescriptor);
+    private readonly NumberBinding<float> positionYBinding = new(SceneProperties.Transform.PositionYDescriptor);
+    private readonly NumberBinding<float> positionZBinding = new(SceneProperties.Transform.PositionZDescriptor);
+    private readonly NumberBinding<float> rotationXBinding = new(SceneProperties.Transform.RotationXDescriptor);
+    private readonly NumberBinding<float> rotationYBinding = new(SceneProperties.Transform.RotationYDescriptor);
+    private readonly NumberBinding<float> rotationZBinding = new(SceneProperties.Transform.RotationZDescriptor);
+    private readonly NumberBinding<float> scaleXBinding = new(SceneProperties.Transform.ScaleXDescriptor);
+    private readonly NumberBinding<float> scaleYBinding = new(SceneProperties.Transform.ScaleYDescriptor);
+    private readonly NumberBinding<float> scaleZBinding = new(SceneProperties.Transform.ScaleZDescriptor);
     private bool isApplyingEditorChanges;
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="TransformViewModel"/> class.</summary>
     /// <param name="loggerFactory">The scoped logging factory.</param>
-    /// <param name="commandService">The existing transform command service.</param>
-    /// <param name="commandContextProvider">The current document context provider.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     public TransformViewModel(
         ILoggerFactory? loggerFactory = null,
-        ISceneDocumentCommandService? commandService = null,
-        Func<SceneDocumentCommandContext?>? commandContextProvider = null)
+        Func<SceneAuthoring?>? authoringProvider = null)
     {
         this.LoggerFactory = loggerFactory;
-        this.controller = new(loggerFactory, commandService, commandContextProvider, () => this.IsInputEnabled && !this.disposed, this.UpdateValues, this.diagnostics);
+        this.controller = new(loggerFactory, authoringProvider ?? (static () => null), () => this.IsInputEnabled && !this.disposed, this.UpdateValues, this.diagnostics);
     }
 
     [ObservableProperty]
@@ -195,29 +194,29 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
         }
     }
 
-    partial void OnPositionXChanged(double value) => this.Apply("PositionX", TransformEditController.NewEdit(positionX: value));
+    partial void OnPositionXChanged(double value) => this.Apply("PositionX", value);
 
-    partial void OnPositionYChanged(double value) => this.Apply("PositionY", TransformEditController.NewEdit(positionY: value));
+    partial void OnPositionYChanged(double value) => this.Apply("PositionY", value);
 
-    partial void OnPositionZChanged(double value) => this.Apply("PositionZ", TransformEditController.NewEdit(positionZ: value));
+    partial void OnPositionZChanged(double value) => this.Apply("PositionZ", value);
 
-    partial void OnRotationXChanged(double value) => this.Apply("RotationX", TransformEditController.NewEdit(rotationX: value));
+    partial void OnRotationXChanged(double value) => this.Apply("RotationX", value);
 
-    partial void OnRotationYChanged(double value) => this.Apply("RotationY", TransformEditController.NewEdit(rotationY: value));
+    partial void OnRotationYChanged(double value) => this.Apply("RotationY", value);
 
-    partial void OnRotationZChanged(double value) => this.Apply("RotationZ", TransformEditController.NewEdit(rotationZ: value));
+    partial void OnRotationZChanged(double value) => this.Apply("RotationZ", value);
 
-    partial void OnScaleXChanged(double value) => this.Apply("ScaleX", TransformEditController.NewEdit(scaleX: value));
+    partial void OnScaleXChanged(double value) => this.Apply("ScaleX", value);
 
-    partial void OnScaleYChanged(double value) => this.Apply("ScaleY", TransformEditController.NewEdit(scaleY: value));
+    partial void OnScaleYChanged(double value) => this.Apply("ScaleY", value);
 
-    partial void OnScaleZChanged(double value) => this.Apply("ScaleZ", TransformEditController.NewEdit(scaleZ: value));
+    partial void OnScaleZChanged(double value) => this.Apply("ScaleZ", value);
 
-    private void Apply(string property, TransformEdit edit)
+    private void Apply(string property, double value)
     {
         if (!this.isApplyingEditorChanges)
         {
-            this.controller.ApplyTransformEdit(property, edit);
+            this.controller.ApplyTransformEdit(property, value);
         }
     }
 

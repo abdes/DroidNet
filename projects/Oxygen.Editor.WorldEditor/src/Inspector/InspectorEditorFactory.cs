@@ -9,10 +9,10 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Inspector.Scripting;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -27,8 +27,7 @@ internal static class InspectorEditorFactory
     /// <param name="slots">The geometry slot inventory.</param>
     /// <param name="projects">The active project lifetime.</param>
     /// <param name="logger">The scoped logging factory.</param>
-    /// <param name="commands">The existing authoring service.</param>
-    /// <param name="context">The current document context provider.</param>
+    /// <param name="authoring">The authoring of the scene being inspected.</param>
     /// <param name="scripts">The scripting services, when the host provides them.</param>
     /// <returns>The component construction operations.</returns>
     internal static Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> Create(
@@ -39,19 +38,18 @@ internal static class InspectorEditorFactory
         IGeometryMaterialSlotProvider slots,
         IProjectContextService projects,
         ILoggerFactory? logger,
-        ISceneDocumentCommandService commands,
-        Func<SceneDocumentCommandContext?> context,
+        Func<SceneAuthoring?> authoring,
         InspectorScriptServices? scripts = null)
         => new()
         {
-            [typeof(TransformComponent)] = _ => new TransformViewModel(logger, commands, context),
-            [typeof(GeometryComponent)] = _ => new GeometryViewModel(hosting, assets, builtins, demand, slots, projects, commands, context),
-            [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(commands, context),
-            [typeof(OrthographicCamera)] = _ => new OrthographicCameraViewModel(commands, context),
-            [typeof(DirectionalLightComponent)] = _ => new DirectionalLightViewModel(commands, context),
-            [typeof(PointLightComponent)] = _ => new PointLightViewModel(commands, context),
-            [typeof(SpotLightComponent)] = _ => new SpotLightViewModel(commands, context),
-            [typeof(LocalFogVolumeComponent)] = _ => new LocalFogVolumeViewModel(commands, context),
-            [typeof(ScriptingComponent)] = messenger => new ScriptingViewModel(commands, context, assets, scripts?.Analysis, scripts?.CodeEditor, messenger, projects, hosting.DispatcherScheduler, scripts?.Declarations),
+            [typeof(TransformComponent)] = _ => new TransformViewModel(logger, authoring),
+            [typeof(GeometryComponent)] = _ => new GeometryViewModel(hosting, assets, builtins, demand, slots, projects, authoring),
+            [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(authoring),
+            [typeof(OrthographicCamera)] = _ => new OrthographicCameraViewModel(authoring),
+            [typeof(DirectionalLightComponent)] = _ => new DirectionalLightViewModel(authoring),
+            [typeof(PointLightComponent)] = _ => new PointLightViewModel(authoring),
+            [typeof(SpotLightComponent)] = _ => new SpotLightViewModel(authoring),
+            [typeof(LocalFogVolumeComponent)] = _ => new LocalFogVolumeViewModel(authoring),
+            [typeof(ScriptingComponent)] = messenger => new ScriptingViewModel(authoring, assets, scripts?.Analysis, scripts?.CodeEditor, messenger, projects, hosting.DispatcherScheduler, scripts?.Declarations),
         };
 }

@@ -9,17 +9,17 @@ using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Settings;
 using Oxygen.Editor.World.Inspector.Presentation;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
 /// <summary>Owns typed scene asset-reference assignments and retained unresolved references.</summary>
 public sealed partial class SceneReferencesSectionViewModel : ObservableObject, IDisposable
 {
-    private readonly ISceneDocumentCommandService? commandService;
-    private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
+    private readonly Func<SceneAuthoring?>? authoringProvider;
     private readonly IAssetFeed? assetProvider;
     private readonly IScheduler observerScheduler;
     private readonly List<AssetEntry> assets = [];
@@ -31,18 +31,15 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="SceneReferencesSectionViewModel"/> class.</summary>
-    /// <param name="commandService">The command service that persists scene-reference edits.</param>
-    /// <param name="commandContextProvider">The current document command context.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     /// <param name="assetProvider">The shared content catalog used by typed pickers.</param>
     /// <param name="observerScheduler">The scheduler used for catalog notifications.</param>
     internal SceneReferencesSectionViewModel(
-        ISceneDocumentCommandService? commandService,
-        Func<SceneDocumentCommandContext?>? commandContextProvider,
+        Func<SceneAuthoring?>? authoringProvider,
         IAssetFeed? assetProvider,
         IScheduler observerScheduler)
     {
-        this.commandService = commandService;
-        this.commandContextProvider = commandContextProvider;
+        this.authoringProvider = authoringProvider;
         this.assetProvider = assetProvider;
         this.observerScheduler = observerScheduler;
         this.CatalogNotice = assetProvider is null ? "The shared content catalog is unavailable." : string.Empty;
@@ -93,9 +90,8 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
     /// <summary>Gets whether a typed reference or extra path can be authored.</summary>
     public bool CanEdit => !this.disposed && !this.isBusy && this.inputEnabled
         && this.scene is { } current
-        && this.commandService is not null
-        && this.commandContextProvider?.Invoke() is { } context
-        && ReferenceEquals(context.Scene, current);
+        && this.authoringProvider?.Invoke() is { } authoring
+        && ReferenceEquals(authoring.Scene, current);
 
     /// <summary>Gets whether the extra-path input can be added.</summary>
     public bool CanAddExtraAsset => this.CanEdit && !string.IsNullOrWhiteSpace(this.ExtraAssetText);
@@ -336,9 +332,8 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
     private async Task ApplyAsync(SceneReferencesData references)
     {
         if (!this.CanEdit || this.scene is not { } current
-            || this.commandService is not { } service
-            || this.commandContextProvider?.Invoke() is not { } context
-            || !ReferenceEquals(context.Scene, current))
+            || this.authoringProvider?.Invoke() is not { } authoring
+            || !ReferenceEquals(authoring.Scene, current))
         {
             return;
         }
@@ -348,12 +343,12 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         this.NotifyCanEditChanged();
         try
         {
-            var edit = service.EditSceneReferencesAsync(context, references);
+            var edit = authoring.ExecuteAsync(new SetSceneReferences(references));
             this.pending = edit;
             var result = await edit.ConfigureAwait(true);
             if (!result.Succeeded)
             {
-                this.SetErrorMessage(result.ValidationMessage ?? "The scene references could not be saved.");
+                this.SetErrorMessage(result.Diagnostics.FirstOrDefault(static diagnostic => diagnostic.IsError)?.Message ?? "The scene references could not be saved.");
                 return;
             }
 

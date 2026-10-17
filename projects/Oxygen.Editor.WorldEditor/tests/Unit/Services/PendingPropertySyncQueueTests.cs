@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.World.Services;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -97,7 +98,7 @@ public sealed class PendingPropertySyncQueueTests
         _ = queue.Count(scene).Should().Be(2, "reading a replay batch does not acknowledge it");
     }
 
-    private static (PendingPropertySyncQueue queue, SceneId scene, Guid lifetime, NodeId node) Create()
+    private static (PendingPropertySyncQueue Queue, SceneId Scene, Guid Lifetime, NodeId Node) Create()
     {
         var queue = new PendingPropertySyncQueue();
         var scene = SceneId.New();

@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
+using DroidNet.Storage.Native;
 using DroidNet.TimeMachine;
 using DryIoc;
 using Microsoft.UI;
@@ -13,17 +14,16 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneEditor;
-using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
@@ -105,14 +105,14 @@ public sealed partial class SceneEditorConflictTests
     public async Task CloseWaitsForPendingSceneRecovery()
     {
         using var fixture = await Fixture.CreateAsync(this.TestContext, active: false).ConfigureAwait(false);
-        var sessions = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _ = fixture.Commands.Setup(value => value.CompleteEditSessionsAsync(It.IsAny<Scene>(), false)).Returns(sessions.Task);
+        var read = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Store.BeforeRead = _ => read.Task;
         var reload = fixture.Editor.ReloadFromDiskAsync();
         var close = fixture.Editor.CloseAsync(discard: true);
 
         _ = close.IsCompleted.Should().BeFalse();
         fixture.Sync.Verify(value => value.CloseDocument(fixture.Editor.Document.Id), Times.Never);
-        sessions.SetResult();
+        read.SetResult();
         _ = (await reload.ConfigureAwait(false)).Succeeded.Should().BeTrue();
         await close.ConfigureAwait(false);
         fixture.Sync.Verify(value => value.CloseDocument(fixture.Editor.Document.Id), Times.Once);
@@ -122,9 +122,9 @@ public sealed partial class SceneEditorConflictTests
     {
         private readonly Container container = new();
 
-        private Fixture(Mock<ISceneDocumentCommandService> commands, SceneDocumentFiles files, Document document)
+        private Fixture(GatedFileStore store, SceneDocumentFiles files, Document document)
         {
-            this.Commands = commands;
+            this.Store = store;
             this.Files = files;
             this.Scene = ((SceneContent)document.Content).Scene;
             this.Tab = new DocumentTab(document, new DocumentEditorDescriptor(document.Kind, static _ => new object()) { IsClosable = false });
@@ -142,7 +142,7 @@ public sealed partial class SceneEditorConflictTests
 
         public Mock<ISceneEngineSync> Sync { get; } = new();
 
-        public Mock<ISceneDocumentCommandService> Commands { get; }
+        public GatedFileStore Store { get; }
 
         public Mock<IDocumentConflictPrompt> Prompt { get; } = new();
 
@@ -155,17 +155,16 @@ public sealed partial class SceneEditorConflictTests
         /// <param name="commitInput">Runs when the editor commits the focused control's input.</param>
         /// <param name="synchronized">Whether the scene is already in the engine.</param>
         /// <returns>The fixture.</returns>
-        public static async Task<Fixture> CreateAsync(TestContext test, bool active, Oxygen.Editor.World.Workspace.PreviewSettingsService? previewSettings = null, Action? commitInput = null, bool synchronized = false)
+        public static async Task<Fixture> CreateAsync(TestContext test, bool active, World.Workspace.PreviewSettingsService? previewSettings = null, Action? commitInput = null, bool synchronized = false)
         {
-            var commands = new Mock<ISceneDocumentCommandService>();
-            _ = commands.Setup(value => value.CompleteEditSessionsAsync(It.IsAny<Scene>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
-            var files = new SceneDocumentFiles(commands.Object);
+            var store = new GatedFileStore(new NativeAtomicFileStore(new RealFileSystem()));
+            var files = new SceneDocumentFiles(store);
             var id = SceneId.New();
             files.Write("Main", SceneDocumentFiles.Data(id, "Main"));
             var (document, _) = await files.OpenAsync("Main", test.CancellationToken).ConfigureAwait(false);
             document.History.AddChange("Edit", static () => { });
             files.Write("Main", SceneDocumentFiles.Data(id, "Main", "Outside"));
-            var fixture = new Fixture(commands, files, document);
+            var fixture = new Fixture(store, files, document);
             fixture.CreateEditor(active, previewSettings, commitInput, synchronized);
             return fixture;
         }
@@ -178,7 +177,7 @@ public sealed partial class SceneEditorConflictTests
             this.Files.Dispose();
         }
 
-        private void CreateEditor(bool active, Oxygen.Editor.World.Workspace.PreviewSettingsService? previewSettings, Action? commitInput, bool synchronized)
+        private void CreateEditor(bool active, World.Workspace.PreviewSettingsService? previewSettings, Action? commitInput, bool synchronized)
         {
             var projects = new ProjectContextService();
             projects.Activate(this.Files.Context);
@@ -194,6 +193,12 @@ public sealed partial class SceneEditorConflictTests
 
             var input = new Mock<IDocumentInputCommitter>();
             _ = input.Setup(value => value.CommitAsync(It.IsAny<WindowId>())).Callback(() => commitInput?.Invoke()).Returns(Task.CompletedTask);
+            var previewSettingsService = previewSettings ?? new World.Workspace.PreviewSettingsService(
+                    Mock.Of<IEngineService>(),
+                    Mock.Of<Data.Services.IEditorSettingsManager>(),
+                    Mock.Of<IProjectContextService>(),
+                    Mock.Of<IOperationResultPublisher>(),
+                    new OperationStatusReducer());
             this.Editor = new(
                 this.Tab,
                 documents,
@@ -203,16 +208,10 @@ public sealed partial class SceneEditorConflictTests
                 input.Object,
                 this.Results,
                 new OperationStatusReducer(),
-                this.Commands.Object,
                 Mock.Of<IContentPipelineService>(),
                 this.container,
                 this.Messenger,
-                previewSettings ?? new Oxygen.Editor.World.Workspace.PreviewSettingsService(
-                    Mock.Of<IEngineService>(),
-                    Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(),
-                    Mock.Of<IProjectContextService>(),
-                    Mock.Of<IOperationResultPublisher>(),
-                    new OperationStatusReducer()),
+                previewSettingsService,
                 conflictPrompt: this.Prompt.Object);
         }
     }

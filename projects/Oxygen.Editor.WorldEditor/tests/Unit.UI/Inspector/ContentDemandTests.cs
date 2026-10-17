@@ -15,7 +15,6 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
@@ -67,13 +66,13 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
         await PickAssetAsync(button, "Custom", material: false, this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = fixture.Geometry.Geometry!.Uri.Should().Be(fixture.GeometryUri);
         _ = fixture.Authoring.Document.IsDirty.Should().BeTrue("the accepted assignment must dirty the consuming scene");
-        _ = fixture.Authoring.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Authoring.Document.History.UndoStack.Should().ContainSingle();
         _ = fixture.Requests.Should().ContainSingle().Which.uri.Should().Be(fixture.GeometryUri);
-        await fixture.Authoring.Context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        await fixture.Authoring.Document.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = fixture.Geometry.Geometry!.Uri.Should().Be(AssetUris.BuildGeneratedUri("BasicShapes/Cube"));
         _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeTrue("Undo must detach the original geometry demand");
-        await fixture.Authoring.Context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        await fixture.Authoring.Document.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = fixture.Geometry.Geometry!.Uri.Should().Be(fixture.GeometryUri);
         _ = model.SelectedAssetName.Should().Be("Custom");
         _ = fixture.Requests.Should().ContainSingle();
@@ -111,10 +110,10 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
         await model.RefreshMaterialPickerAsync().ConfigureAwait(true);
         await model.ApplyMaterialAsync(new("Material", fixture.MaterialUri, "Material", "/Content/Material.omat.json", AssetPickerGroup.Content, IsEnabled: true, ThumbnailModel: "\uE790")).ConfigureAwait(true);
         _ = fixture.Requests.Should().ContainSingle();
-        await fixture.Authoring.Context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        await fixture.Authoring.Document.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = fixture.Requests.Single().token.IsCancellationRequested.Should().BeTrue();
-        await fixture.Authoring.Context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        await fixture.Authoring.Document.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = fixture.Requests.Should().ContainSingle();
         _ = fixture.Geometry.OverrideSlots.OfType<MaterialsSlot>().Single().Material.Uri.Should().Be(fixture.MaterialUri);
     });
@@ -165,35 +164,6 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
         fixture.Assets.Verify(value => value.ResolveAsync(AssetUris.BuildGeneratedUri("Materials/Default"), It.IsAny<CancellationToken>()), Times.Never);
     });
 
-    /// <summary>A delayed accepted edit cannot create demand or overwrite the display for a newer selection.</summary>
-    /// <returns>The asynchronous assignment-completion regression.</returns>
-    [TestMethod]
-    public Task ObsoleteGeometryAssignmentCompletionDoesNotDemandOrReplaceSelection() => EnqueueAsync(async () =>
-    {
-        using var fixture = new DemandFixture();
-        fixture.Activate();
-        var completed = new TaskCompletionSource<SceneCommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var commands = new Mock<ISceneDocumentCommandService>();
-        _ = commands.Setup(value => value.EditPropertiesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<PropertyEdit>(), It.IsAny<string>(), It.IsAny<EditSessionToken>())).Returns(completed.Task);
-        using var host = fixture.Authoring.CreateInspectorHost("Geometry", commandService: commands.Object, contentDemand: fixture.Service, assetProvider: fixture.Assets.Object);
-        var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
-        var choice = model.Groups.Single(group => string.Equals(group.Key, "Content", StringComparison.Ordinal)).Items.Single().Item;
-        var edit = model.ApplyAssetAsync(choice);
-        var other = new SceneNode(fixture.Authoring.Scene)
-        {
-            Name = "Other",
-        };
-        _ = other.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = new(AssetUris.BuildGeneratedUri("BasicShapes/Sphere")) });
-        fixture.Authoring.Scene.RootNodes.Add(other);
-        _ = fixture.Authoring.Messenger.Send(new SceneNodeSelectionChangedMessage([other]));
-        await WaitForRenderAsync().ConfigureAwait(true);
-        var expected = model.SelectedAssetUriString;
-        completed.SetResult(SceneCommandResult.Success);
-        await edit.ConfigureAwait(true);
-        _ = model.SelectedAssetUriString.Should().Be(expected).And.Contain("Sphere");
-        _ = fixture.Requests.Should().BeEmpty();
-    });
-
     /// <summary>Hiding the component editor does not discard preview demand for an accepted edit on the same nodes.</summary>
     /// <returns>The asynchronous component-filter regression.</returns>
     [TestMethod]
@@ -201,17 +171,15 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
     {
         using var fixture = new DemandFixture();
         fixture.Activate();
-        var completed = new TaskCompletionSource<SceneCommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var commands = new Mock<ISceneDocumentCommandService>();
-        _ = commands.Setup(value => value.EditPropertiesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<PropertyEdit>(), It.IsAny<string>(), It.IsAny<EditSessionToken>())).Returns(completed.Task);
-        using var host = fixture.Authoring.CreateInspectorHost("Geometry", commandService: commands.Object, contentDemand: fixture.Service, assetProvider: fixture.Assets.Object);
+        using var host = fixture.Authoring.CreateInspectorHost("Geometry", contentDemand: fixture.Service, assetProvider: fixture.Assets.Object);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         var choice = model.Groups.Single(group => string.Equals(group.Key, "Content", StringComparison.Ordinal)).Items.Single().Item;
-        var edit = model.ApplyAssetAsync(choice);
-        fixture.Geometry.Geometry = new(fixture.GeometryUri);
+        await model.ApplyAssetAsync(choice).ConfigureAwait(true);
+
         model.SetInputEnabled(enabled: false);
-        completed.SetResult(SceneCommandResult.Success);
-        await edit.ConfigureAwait(true);
-        _ = fixture.Requests.Should().ContainSingle().Which.uri.Should().Be(fixture.GeometryUri);
+
+        var demand = fixture.Requests.Should().ContainSingle().Subject;
+        _ = demand.uri.Should().Be(fixture.GeometryUri);
+        _ = demand.token.IsCancellationRequested.Should().BeFalse();
     });
 }

@@ -4,8 +4,9 @@
 
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Settings;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -13,11 +14,8 @@ namespace Oxygen.Editor.World.Inspector;
 /// The Starting camera check box of a camera section: it edits the scene's one starting camera reference, so
 /// checking a camera takes the start from any other and unchecking returns the scene to Automatic.
 /// </summary>
-/// <param name="commandService">The scene command service.</param>
-/// <param name="commandContextProvider">The current document context.</param>
-public sealed partial class StartingCameraToggle(
-    ISceneDocumentCommandService? commandService,
-    Func<SceneDocumentCommandContext?>? commandContextProvider) : ObservableObject, IDisposable
+/// <param name="authoringProvider">The authoring of the scene being inspected.</param>
+public sealed partial class StartingCameraToggle(Func<SceneAuthoring?>? authoringProvider) : ObservableObject, IDisposable
 {
     private SceneNode? camera;
     private Scene? scene;
@@ -87,8 +85,8 @@ public sealed partial class StartingCameraToggle(
 
     private async Task ApplyAsync(bool isStartingCamera)
     {
-        if (this.camera is not { } node || this.scene is not { } current || commandService is null
-            || commandContextProvider?.Invoke() is not { } context || !ReferenceEquals(context.Scene, current))
+        if (this.camera is not { } node || this.scene is not { } current
+            || authoringProvider?.Invoke() is not { } authoring || !ReferenceEquals(authoring.Scene, current))
         {
             this.Refresh();
             return;
@@ -97,7 +95,7 @@ public sealed partial class StartingCameraToggle(
         var play = current.Play with { StartingCamera = isStartingCamera ? node.Id : null };
         if (!ScenePlayData.AreEquivalent(play, current.Play))
         {
-            _ = await commandService.EditScenePlayAsync(context, play).ConfigureAwait(true);
+            _ = await authoring.ExecuteAsync(new SetScenePlay(play)).ConfigureAwait(true);
         }
 
         this.Refresh();

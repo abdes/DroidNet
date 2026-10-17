@@ -43,7 +43,7 @@ internal sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
         _ = light.CascadeDistances.Should().Be(storedDistances);
         _ = Field(view, "CascadeCount").IsEnabled.Should().BeTrue();
         _ = Field(view, "MaxShadowDistance").IsEnabled.Should().BeTrue();
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
@@ -76,11 +76,11 @@ internal sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
         _ = first.NumberValue.Should().Be(12);
         _ = light.DistributionExponent.Should().Be(exponent);
 
-        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        await fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         AssertFields(view, DirectionalCsmSplitMode.ManualDistances, 4);
         _ = light.CascadeDistances.Should().Be(distances);
-        await fixture.Context.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
+        await fixture.Document.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         AssertFields(view, DirectionalCsmSplitMode.Generated, 4);
         _ = Field(view, "CascadeDistance1").Should().BeSameAs(first);
@@ -110,7 +110,7 @@ internal sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
             _ = light.CascadeDistances.Should().Be(distances);
         }
 
-        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        await fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         AssertFields(view, DirectionalCsmSplitMode.ManualDistances, 1);
         _ = light.CascadeDistances.Should().Be(distances);
@@ -149,7 +149,7 @@ internal sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
         model.UpdateValues([fixture.Node]);
         await WaitForRenderAsync().ConfigureAwait(true);
         AssertFields(view, DirectionalCsmSplitMode.Generated, 4);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 

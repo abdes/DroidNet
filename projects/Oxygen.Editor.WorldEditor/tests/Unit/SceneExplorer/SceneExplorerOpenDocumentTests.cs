@@ -11,13 +11,14 @@ using DroidNet.TimeMachine;
 using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
@@ -27,14 +28,16 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 [TestClass]
 public sealed class SceneExplorerOpenDocumentTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
-    public async Task CommitRenameAsync_RoutesNodeRenameThroughDocumentCommand()
+    public async Task CommitRenameAsync_RenamesTheNodeInOneUndoStep()
     {
         var project = new Project(new ProjectInfo("Rename", Category.Games, "H:/RenameTreeTests", "preview.png")) { Name = "Rename" };
         var scene = new Scene(project) { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Original" };
         scene.RootNodes.Add(node);
-        var metadata = SceneTabs.Open(scene);
+        using var metadata = SceneTabs.Open(scene);
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
@@ -43,13 +46,9 @@ public sealed class SceneExplorerOpenDocumentTests
         documents.Activate(metadata.Document);
         var sync = new Mock<ISceneEngineSync>();
         _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata.DocumentId)).Returns(value: true);
+        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
         _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
-        var commands = new Mock<ISceneDocumentCommandService>(MockBehavior.Strict);
-        _ = commands
-            .Setup(value => value.RenameNodeAsync(It.IsAny<SceneDocumentCommandContext>(), node.Id, "Renamed"))
-            .ReturnsAsync(SceneCommandResult.Success);
-        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService(), commands.Object);
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -57,17 +56,18 @@ public sealed class SceneExplorerOpenDocumentTests
         var result = await explorer.CommitRenameAsync(adapter!, "  Renamed  ").ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        commands.Verify(value => value.RenameNodeAsync(It.IsAny<SceneDocumentCommandContext>(), node.Id, "Renamed"), Times.Once);
+        _ = node.Name.Should().Be("Renamed");
+        _ = metadata.Document.History.UndoStack.Should().ContainSingle();
     }
 
     [TestMethod]
-    public async Task CommitRenameAsync_RejectsEmptyNameWithoutCommand()
+    public async Task CommitRenameAsync_EmptyNameFailsAndChangesNothing()
     {
         var project = new Project(new ProjectInfo("Rename", Category.Games, "H:/RenameTreeTests", "preview.png")) { Name = "Rename" };
         var scene = new Scene(project) { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Original" };
         scene.RootNodes.Add(node);
-        var metadata = SceneTabs.Open(scene);
+        using var metadata = SceneTabs.Open(scene);
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
@@ -76,10 +76,9 @@ public sealed class SceneExplorerOpenDocumentTests
         documents.Activate(metadata.Document);
         var sync = new Mock<ISceneEngineSync>();
         _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata.DocumentId)).Returns(value: true);
+        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
         _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
-        var commands = new Mock<ISceneDocumentCommandService>(MockBehavior.Strict);
-        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService(), commands.Object);
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -87,17 +86,18 @@ public sealed class SceneExplorerOpenDocumentTests
         var result = await explorer.CommitRenameAsync(adapter!, "   ").ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
-        commands.Verify(value => value.RenameNodeAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<NodeId>(), It.IsAny<string>()), Times.Never);
+        _ = node.Name.Should().Be("Original");
+        _ = metadata.Document.History.UndoStack.Should().BeEmpty();
     }
 
     [TestMethod]
-    public async Task CommitRenameAsync_UnchangedNameSkipsCommand()
+    public async Task CommitRenameAsync_UnchangedNameRecordsNothing()
     {
         var project = new Project(new ProjectInfo("Rename", Category.Games, "H:/RenameTreeTests", "preview.png")) { Name = "Rename" };
         var scene = new Scene(project) { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Original" };
         scene.RootNodes.Add(node);
-        var metadata = SceneTabs.Open(scene);
+        using var metadata = SceneTabs.Open(scene);
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
@@ -106,10 +106,9 @@ public sealed class SceneExplorerOpenDocumentTests
         documents.Activate(metadata.Document);
         var sync = new Mock<ISceneEngineSync>();
         _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata.DocumentId)).Returns(value: true);
+        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
         _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
-        var commands = new Mock<ISceneDocumentCommandService>(MockBehavior.Strict);
-        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService(), commands.Object);
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -117,7 +116,8 @@ public sealed class SceneExplorerOpenDocumentTests
         var result = await explorer.CommitRenameAsync(adapter!, "Original").ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        commands.Verify(value => value.RenameNodeAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<NodeId>(), It.IsAny<string>()), Times.Never);
+        _ = node.Name.Should().Be("Original");
+        _ = metadata.Document.History.UndoStack.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -127,7 +127,7 @@ public sealed class SceneExplorerOpenDocumentTests
         var original = new Scene(project) { Name = "Scene" };
         var originalNode = new SceneNode(original) { Name = "Original node" };
         original.RootNodes.Add(originalNode);
-        var metadata = SceneTabs.Open(original);
+        using var metadata = SceneTabs.Open(original);
         var replacement = Scene.CreateAndHydrate(project, original.Dehydrate());
         replacement.RootNodes[0].Name = "Reloaded node";
         metadata.WriteFile(replacement);
@@ -140,13 +140,13 @@ public sealed class SceneExplorerOpenDocumentTests
         var current = original;
         var sync = new Mock<ISceneEngineSync>();
         _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(() => current);
-        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata.DocumentId)).Returns(value: true);
+        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
         _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
         var messenger = new StrongReferenceMessenger();
-        using var explorer = new SceneExplorerViewModel(manager.Object, messenger, Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService(), Mock.Of<ISceneDocumentCommandService>());
+        using var explorer = new SceneExplorerViewModel(manager.Object, messenger, Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService());
         await explorer.HandleDocumentOpenedAsync(original).ConfigureAwait(false);
         var previousAdapter = await explorer.FindAdapterByNodeIdAsync(originalNode.Id).ConfigureAwait(false);
-        _ = (await metadata.Document.ReloadAsync().ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        _ = (await metadata.Document.ReloadAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
         var reloaded = metadata.Scene;
         current = reloaded;
 
@@ -170,11 +170,11 @@ public sealed class SceneExplorerOpenDocumentTests
         var node = new SceneNode(first) { Name = "Unsaved node" };
         node.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(9, 8, 7);
         first.RootNodes.Add(node);
-        var firstMetadata = SceneTabs.Open(first);
+        using var firstMetadata = SceneTabs.Open(first);
         first = firstMetadata.Scene;
         node = firstMetadata.NodeOf(node);
         firstMetadata.Document.History.AddChange("Unsaved edit", static () => { });
-        var secondMetadata = SceneTabs.Open(second);
+        using var secondMetadata = SceneTabs.Open(second);
         second = secondMetadata.Scene;
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
         _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
@@ -182,7 +182,7 @@ public sealed class SceneExplorerOpenDocumentTests
         var sync = new Mock<ISceneEngineSync>();
         _ = sync.Setup(value => value.GetDocumentScene(firstMetadata.DocumentId)).Returns(first);
         _ = sync.Setup(value => value.GetDocumentScene(secondMetadata.DocumentId)).Returns(second);
-        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), It.IsAny<DocumentId>())).Returns(value: true);
+        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
         _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: true);
         using var explorer = new SceneExplorerViewModel(
             manager.Object,
@@ -192,8 +192,7 @@ public sealed class SceneExplorerOpenDocumentTests
             firstMetadata.Documents,
             default,
             sync.Object,
-            new SceneSelectionService(),
-            Mock.Of<ISceneDocumentCommandService>());
+            new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(first).ConfigureAwait(false);
         await explorer.HandleDocumentOpenedAsync(second).ConfigureAwait(false);

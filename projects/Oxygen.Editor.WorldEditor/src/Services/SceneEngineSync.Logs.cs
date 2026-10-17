@@ -5,6 +5,8 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Core;
 
@@ -361,4 +363,10 @@ public partial class SceneEngineSync
         var parentId = parentGuid.HasValue ? parentGuid.GetValueOrDefault().ToString() : "root";
         LogSceneTransformHasNoComponent(this.logger, node.Name, parentId);
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Projecting a scene change ({Change}) into the engine failed")]
+    private static partial void LogProjectionFailed(ILogger logger, Exception exception, string change);
+
+    private void LogProjectionFailed(Exception exception, string change)
+        => LogProjectionFailed(this.logger, exception, change);
 }

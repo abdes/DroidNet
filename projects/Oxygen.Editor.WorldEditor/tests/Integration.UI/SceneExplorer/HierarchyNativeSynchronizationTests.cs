@@ -4,6 +4,9 @@
 
 using System.Numerics;
 using AwesomeAssertions;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Hierarchy;
+using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.TestSupport;
@@ -33,8 +36,7 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
     {
         var fixture = new NativeSceneFixture(
             automatic: false,
-            scene => SeedHierarchy(scene, ignoreParentTransform),
-            hierarchyAuthoring: true);
+            scene => SeedHierarchy(scene, ignoreParentTransform));
         await using var lifetime = fixture.ConfigureAwait(true);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
@@ -46,13 +48,15 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
         var before = SourceNodeProperties(moved);
         await AssertNativeLocalTrsAsync(fixture, moved.Id, before, timeout.Token).ConfigureAwait(true);
 
-        var result = groupIntoFolder
-            ? await fixture.Commands.MoveNodesToFolderAsync(fixture.Context, [moved.Id], folderId).ConfigureAwait(true)
-            : await fixture.Commands.ReparentNodesAsync(fixture.Context, [moved.Id], destination.Id, preserveWorldTransform: true).ConfigureAwait(true);
+        // Grouping into another node's folder is the Explorer's batch: reparent keeping the local transform, then move the entry.
+        ISceneEdit edit = groupIntoFolder
+            ? new SceneEditBatch("Group", [new ReparentNodes([moved.Id], destination.Id, preserveWorld: false), new MoveLayoutEntries([LayoutEntryId.Of(moved.Id)], LayoutPosition.InFolder(folderId, 0))])
+            : new ReparentNodes([moved.Id], destination.Id, preserveWorld: true);
+        var result = await fixture.Authoring.ExecuteAsync(edit).ConfigureAwait(true);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = moved.Parent.Should().BeSameAs(destination);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         var after = SourceNodeProperties(moved);
         if (groupIntoFolder || ignoreParentTransform)
         {
@@ -65,20 +69,20 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
 
         await AssertNativeLocalTrsAsync(fixture, moved.Id, after, timeout.Token).ConfigureAwait(true);
 
-        await fixture.Context.History.UndoAsync(timeout.Token).ConfigureAwait(true);
+        await fixture.Document.History.UndoAsync(timeout.Token).ConfigureAwait(true);
 
         _ = moved.Parent.Should().BeSameAs(source);
         _ = SourceNodeProperties(moved).Should().BeEquivalentTo(before);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = fixture.Context.History.RedoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.RedoStack.Should().ContainSingle();
         await AssertNativeLocalTrsAsync(fixture, moved.Id, before, timeout.Token).ConfigureAwait(true);
 
-        await fixture.Context.History.RedoAsync(timeout.Token).ConfigureAwait(true);
+        await fixture.Document.History.RedoAsync(timeout.Token).ConfigureAwait(true);
 
         _ = moved.Parent.Should().BeSameAs(destination);
         _ = SourceNodeProperties(moved).Should().BeEquivalentTo(after);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
-        _ = fixture.Context.History.RedoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.RedoStack.Should().BeEmpty();
         await AssertNativeLocalTrsAsync(fixture, moved.Id, after, timeout.Token).ConfigureAwait(true);
     });
 
@@ -106,11 +110,13 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
             [
                 new ExplorerEntryData
                 {
+                    Type = "Node",
                     NodeId = source.Id,
-                    Children = [new ExplorerEntryData { NodeId = moved.Id }],
+                    Children = [new ExplorerEntryData { Type = "Node", NodeId = moved.Id }],
                 },
                 new ExplorerEntryData
                 {
+                    Type = "Node",
                     NodeId = destination.Id,
                     Children =
                     [

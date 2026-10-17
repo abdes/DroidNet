@@ -13,7 +13,6 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
@@ -59,32 +58,31 @@ internal sealed class ComponentFeedbackTests : DroidNet.Tests.VisualUserInterfac
         host.SelectComponentFilter(type);
         _ = editor.ValidationFeedback.Summary.Should().Be(message);
         _ = fixture.Document.IsDirty.Should().BeFalse();
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         AcceptComponentValue(editor);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = editor.ValidationFeedback.Summary.Should().BeEmpty();
         _ = option.HasValidationErrors.Should().BeFalse();
     });
 
-    /// <summary>A result for the current targets remains valid when its section becomes hidden before completion.</summary>
-    /// <returns>The asynchronous pending-result regression.</returns>
+    /// <summary>A field error stays with its component while the component's section is hidden.</summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
-    public Task PendingFieldErrorCanCompleteWhileComponentIsHidden() => EnqueueAsync(async () =>
+    public Task FieldErrorSurvivesHidingItsComponent() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
-        var pending = new TaskCompletionSource<SceneCommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var commands = new Mock<ISceneDocumentCommandService>();
-        _ = commands.Setup(service => service.EditPropertiesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<NodeId>>(), It.IsAny<PropertyEdit>(), It.IsAny<string>(), It.IsAny<EditSessionToken>())).Returns(pending.Task);
-        using var host = fixture.CreateInspectorHost("Camera", commandService: commands.Object);
+        using var host = fixture.CreateInspectorHost("Camera");
         var camera = host.PropertyEditors.OfType<PerspectiveCameraViewModel>().Single();
-        camera.NearPlane.Value = 2;
-        host.SelectComponentFilter(typeof(TransformComponent));
-        pending.SetResult(new(Succeeded: false) { ValidationCode = "TEST_REJECTED", ValidationMessage = "Pending field rejected." });
+        camera.NearPlane.Value = float.NaN;
         await camera.PendingEdits.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true);
-        _ = camera.NearPlaneDiagnostic.Message.Should().Be("Pending field rejected.");
+
+        host.SelectComponentFilter(typeof(TransformComponent));
+
+        var code = camera.NearPlaneDiagnostic.Code;
+        _ = code.Should().NotBeEmpty();
         _ = host.ComponentFilters.Single(option => option.ComponentType == typeof(PerspectiveCamera)).HasValidationErrors.Should().BeTrue();
         host.SelectComponentFilter(typeof(PerspectiveCamera));
-        _ = camera.NearPlaneDiagnostic.Message.Should().Be("Pending field rejected.");
+        _ = camera.NearPlaneDiagnostic.Code.Should().Be(code);
     });
 
     /// <summary>Errors do not carry from a hidden component into a new node selection.</summary>
@@ -153,10 +151,10 @@ internal sealed class ComponentFeedbackTests : DroidNet.Tests.VisualUserInterfac
         RaiseNumberEvent(oldNumber, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         await camera.PendingEdits.ConfigureAwait(true);
         _ = fixture.Camera.FieldOfView.Should().Be(70);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         RaiseNumberEvent(current, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         await camera.PendingEdits.ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
     });
 
     private static void RejectComponentValue(ComponentPropertyEditor editor)

@@ -63,27 +63,20 @@ internal sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceT
         var number = await this.LoadNumericFieldAsync(view, field).ConfigureAwait(true);
         _ = number.Should().NotBeNull();
         var before = number.NumberValue;
-        using var throttle = new SceneEngineSync(Mock.Of<IEngineService>());
-        var previews = new List<DateTimeOffset>();
-        var terminals = 0;
-        fixture.ConfigureObservedSync(throttle, previews, () => terminals++);
         RaiseNumberEvent(number, "OnEditSessionStarted", NumberBoxEditInteractionKind.PointerDrag);
         for (var sample = 1; sample <= 100; sample++)
         {
             number.NumberValue = before + (sample / 100f);
         }
 
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         RaiseNumberEvent(number, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         await PendingNumericEdits(model).ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
-        _ = terminals.Should().Be(1);
-        _ = previews.Should().NotBeEmpty();
-        _ = previews.Zip(previews.Skip(1), (first, second) => second - first).Should().OnlyContain(interval => interval >= TimeSpan.FromMilliseconds(16));
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         _ = number.NumberValue.Should().Be(before + 1);
-        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        await fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = number.NumberValue.Should().Be(before);
-        await fixture.Context.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
+        await fixture.Document.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = number.NumberValue.Should().Be(before + 1);
     });
 
@@ -110,7 +103,7 @@ internal sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceT
         RaiseNumberEvent(number, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel);
         await PendingNumericEdits(model).ConfigureAwait(true);
         _ = number.NumberValue.Should().Be(before);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
@@ -137,13 +130,13 @@ internal sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceT
             RaiseNumberEvent(number, "OnEditSessionCompleted", NumberBoxEditInteractionKind.MouseWheel, NumberBoxEditCompletionKind.Commit);
         }
 
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         await PendingNumericEdits(model).ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         _ = number.NumberValue.Should().Be(before + 4);
-        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        await fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = number.NumberValue.Should().Be(before);
     });
 

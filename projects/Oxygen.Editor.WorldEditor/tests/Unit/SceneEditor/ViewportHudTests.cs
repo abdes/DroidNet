@@ -52,14 +52,14 @@ public sealed class ViewportHudTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         _ = engine
-            .Setup(service => service.SetViewRenderOptionsAsync(It.Is<RuntimeViewId>(id => id.Value == ViewId.Value), new ViewportRenderOptions(ViewportViewMode.Roughness, true, true)))
+            .Setup(service => service.SetViewRenderOptionsAsync(It.Is<RuntimeViewId>(id => id.Value == ViewId.Value), new ViewportRenderOptions(ViewportViewMode.Roughness, ShowGrid: true, ShowSelectionOutline: true)))
             .ReturnsAsync(value: true);
         using var sut = CreateViewport(engine.Object);
         sut.AssignedViewId = ViewId;
         var stateChanges = 0;
         sut.StateChanged += (_, _) => stateChanges++;
 
-        await sut.ViewModeGroups.SelectMany(group => group.Options).Single(option => option.Label == "Roughness")
+        await sut.ViewModeGroups.SelectMany(group => group.Options).Single(option => string.Equals(option.Label, "Roughness", StringComparison.Ordinal))
             .ChooseCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
 
         engine.VerifyAll();
@@ -74,7 +74,7 @@ public sealed class ViewportHudTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         _ = engine
-            .Setup(service => service.SetViewRenderOptionsAsync(It.Is<RuntimeViewId>(id => id.Value == ViewId.Value), new ViewportRenderOptions(ViewportViewMode.Lit, false, true)))
+            .Setup(service => service.SetViewRenderOptionsAsync(It.Is<RuntimeViewId>(id => id.Value == ViewId.Value), new ViewportRenderOptions(ViewportViewMode.Lit, ShowGrid: false, ShowSelectionOutline: true)))
             .ReturnsAsync(value: true);
         using var sut = CreateViewport(engine.Object);
         sut.AssignedViewId = ViewId;
@@ -91,7 +91,7 @@ public sealed class ViewportHudTests
         _ = engine
             .Setup(service => service.SetViewRenderOptionsAsync(
                 It.Is<RuntimeViewId>(id => id.Value == ViewId.Value),
-                new ViewportRenderOptions(ViewportViewMode.Lit, true, false)))
+                new ViewportRenderOptions(ViewportViewMode.Lit, ShowGrid: true, ShowSelectionOutline: false)))
             .ReturnsAsync(value: true);
         using var sut = CreateViewport(engine.Object);
         sut.AssignedViewId = ViewId;
@@ -112,7 +112,7 @@ public sealed class ViewportHudTests
         _ = engine
             .Setup(service => service.SetViewRenderOptionsAsync(
                 It.Is<RuntimeViewId>(id => id.Value == ViewId.Value),
-                new ViewportRenderOptions(ViewportViewMode.Lit, true, true, false)))
+                new ViewportRenderOptions(ViewportViewMode.Lit, ShowGrid: true, ShowSelectionOutline: true, ShowIcons: false)))
             .ReturnsAsync(value: true);
         using var sut = CreateViewport(engine.Object);
         sut.AssignedViewId = ViewId;
@@ -132,7 +132,7 @@ public sealed class ViewportHudTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         _ = engine
-            .Setup(service => service.SetViewRenderOptionsAsync(It.IsAny<RuntimeViewId>(), new ViewportRenderOptions(ViewportViewMode.Wireframe, true, true)))
+            .Setup(service => service.SetViewRenderOptionsAsync(It.IsAny<RuntimeViewId>(), new ViewportRenderOptions(ViewportViewMode.Wireframe, ShowGrid: true, ShowSelectionOutline: true)))
             .ReturnsAsync(value: false);
         var results = new Mock<IOperationResultPublisher>();
         using var sut = CreateViewport(engine.Object, results.Object);
@@ -215,7 +215,7 @@ public sealed class ViewportHudTests
     public void RestoreState_ShouldRestoreTheFormerFlyModeAsTurntable()
     {
         using var sut = CreateViewport(new Mock<IEngineService>(MockBehavior.Loose).Object);
-        var formerFly = (CameraControlMode)2;
+        const CameraControlMode formerFly = (CameraControlMode)2;
 
         sut.RestoreState(new ViewportPaneState(CameraType.Perspective, formerFly, EditorCamera: null, SceneCameraId: null), sceneCamera: null);
 

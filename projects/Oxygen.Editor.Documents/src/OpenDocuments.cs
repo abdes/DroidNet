@@ -4,6 +4,7 @@
 
 using DroidNet.Documents;
 using DroidNet.Storage;
+using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -169,13 +170,14 @@ public sealed partial class OpenDocuments : IDisposable
                 return this.OpenFailed(file, $"'{file.Path}' does not exist.");
             }
 
-            var decoded = await kind.DecodeAsync(file, snapshot.Content.AsMemory(), CancellationToken.None).ConfigureAwait(true);
+            var context = new DocumentDecodeContext(DocumentId.New(), new HistoryKeeper(file));
+            var decoded = await kind.DecodeAsync(file, snapshot.Content.AsMemory(), context, CancellationToken.None).ConfigureAwait(true);
             if (decoded.Content is not { } content)
             {
                 return this.OpenFailed(file, decoded.Problem!);
             }
 
-            var document = new Document(kind, file, content, snapshot.Version, this.files, this.loggerFactory.CreateLogger<Document>());
+            var document = new Document(kind, file, context, content, snapshot.Version, this.files, this.loggerFactory.CreateLogger<Document>());
             this.documents.Add(document);
             this.LogOpened(kind.Name, document.Title, file.Path);
             this.Opened?.Invoke(this, new DocumentEventArgs(document));

@@ -4,7 +4,7 @@
 
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.Services;
+namespace Oxygen.Editor.Scenes.Engine;
 
 /// <summary>
 /// Result of projecting one committed authoring edit into the live engine.

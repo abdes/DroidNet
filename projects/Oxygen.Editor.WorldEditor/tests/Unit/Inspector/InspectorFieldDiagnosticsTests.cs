@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 
@@ -25,7 +25,7 @@ public sealed class InspectorFieldDiagnosticsTests
         diagnostic.Message = string.Empty;
 
         _ = diagnostic.HasError.Should().BeFalse();
-        _ = notifications.Where(name => name == nameof(InspectorFieldDiagnostic.HasError)).Should().HaveCount(2);
+        _ = notifications.Where(name => string.Equals(name, nameof(InspectorFieldDiagnostic.HasError), StringComparison.Ordinal)).Should().HaveCount(2);
     }
 
     [TestMethod]
@@ -38,17 +38,17 @@ public sealed class InspectorFieldDiagnosticsTests
         sut.Relate(near, far);
         var first = sut.Begin([near]);
         var other = sut.Begin([intensity]);
-        var rejected = new SceneCommandResult(Succeeded: false) { ValidationCode = "INVALID", ValidationMessage = "Invalid value" };
+        var rejected = new SceneEditResult(SceneEditOutcome.Invalid, [SceneDiagnostic.Error("INVALID", "Invalid value")]);
         sut.Complete(first, rejected);
         sut.Complete(other, rejected);
 
         var newer = sut.Begin([far]);
-        sut.Complete(newer, SceneCommandResult.Success);
+        sut.Complete(newer, new SceneEditResult(SceneEditOutcome.Applied, []));
         sut.Complete(first, rejected);
 
-        _ = sut.Get(near).Message.Should().BeEmpty();
-        _ = sut.Get(far).Message.Should().BeEmpty();
-        _ = sut.Get(intensity).Message.Should().Be("Invalid value");
+        _ = sut.Get(near).Code.Should().BeEmpty();
+        _ = sut.Get(far).Code.Should().BeEmpty();
+        _ = sut.Get(intensity).Code.Should().Be("INVALID");
     }
 
     [TestMethod]
@@ -59,8 +59,8 @@ public sealed class InspectorFieldDiagnosticsTests
         var pending = sut.Begin([field]);
         sut.Reset();
 
-        sut.Complete(pending, new SceneCommandResult(Succeeded: false) { ValidationMessage = "Old document error" });
+        sut.Complete(pending, new SceneEditResult(SceneEditOutcome.Invalid, [SceneDiagnostic.Error("OLD", "Old document error")]));
 
-        _ = sut.Get(field).Message.Should().BeEmpty();
+        _ = sut.Get(field).Code.Should().BeEmpty();
     }
 }

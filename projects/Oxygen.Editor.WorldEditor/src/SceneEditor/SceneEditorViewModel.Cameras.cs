@@ -7,11 +7,13 @@ using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Utils;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneEditor;
@@ -156,71 +158,45 @@ public partial class SceneEditorViewModel
             return false;
         }
 
-        var edits = new List<Func<SceneDocumentCommandContext, Task<SceneCommandResult>>>();
+        var edits = new List<ISceneEdit>();
         if (node.Components.OfType<TransformComponent>().FirstOrDefault() is not { } transform
             || !HasPose(transform, pose))
         {
-            var edit = new TransformEdit(
-                Position: OptionalEditValues.Supplied(pose.Position),
-                RotationEulerDegrees: OptionalEditValues.Supplied(pose.RotationEulerDegrees),
-                Scale: default);
-            edits.Add(context => this.commandService.EditTransformAsync(context, [nodeId], edit, EditSessionToken.OneShot));
+            var values = new PropertyEdit.Builder()
+                .Set(SceneProperties.Transform.PositionX, pose.Position.X)
+                .Set(SceneProperties.Transform.PositionY, pose.Position.Y)
+                .Set(SceneProperties.Transform.PositionZ, pose.Position.Z)
+                .Set(SceneProperties.Transform.RotationX, pose.RotationEulerDegrees.X)
+                .Set(SceneProperties.Transform.RotationY, pose.RotationEulerDegrees.Y)
+                .Set(SceneProperties.Transform.RotationZ, pose.RotationEulerDegrees.Z)
+                .Build();
+            edits.Add(new SetProperties(new Dictionary<NodeId, PropertyEdit> { [nodeId] = values }, "Move Camera"));
         }
 
         if (pose.OrthographicSize is { } size
             && node.Components.OfType<OrthographicCamera>().FirstOrDefault() is { } orthographic
             && Math.Abs(orthographic.OrthographicSize - size) > SizeTolerance)
         {
-            edits.Add(context => this.commandService.EditPropertiesAsync(
-                context,
-                [nodeId],
-                PropertyEdit.SingleEdit(SceneDocumentCommandService.OrthographicCamera.OrthographicSize, size),
-                "Edit Orthographic Size",
-                EditSessionToken.OneShot));
+            var values = PropertyEdit.SingleEdit(SceneProperties.OrthographicCamera.OrthographicSize, size);
+            edits.Add(new SetProperties(new Dictionary<NodeId, PropertyEdit> { [nodeId] = values }, "Edit Orthographic Size"));
         }
 
         if (pose.FieldOfViewDegrees is { } fieldOfView
             && node.Components.OfType<PerspectiveCamera>().FirstOrDefault() is { } perspective
             && Math.Abs(perspective.FieldOfView - fieldOfView) > FieldOfViewTolerance)
         {
-            edits.Add(context => this.commandService.EditPropertiesAsync(
-                context,
-                [nodeId],
-                PropertyEdit.SingleEdit(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegrees, fieldOfView),
-                "Edit Field of View",
-                EditSessionToken.OneShot));
+            var values = PropertyEdit.SingleEdit(SceneProperties.PerspectiveCamera.FieldOfViewDegrees, fieldOfView);
+            edits.Add(new SetProperties(new Dictionary<NodeId, PropertyEdit> { [nodeId] = values }, "Edit Field of View"));
         }
 
-        if (edits.Count == 0)
+        if (edits.Count == 0 || this.Authoring is not { } authoring)
         {
             return false;
         }
 
-        var commandContext = this.CreateCommandContext();
-        var grouped = edits.Count > 1;
-        if (grouped)
-        {
-            // One undo step however many properties the view changed.
-            commandContext.History.BeginChangeSet($"Move camera '{node.Name}'");
-        }
-
-        try
-        {
-            var applied = false;
-            foreach (var edit in edits)
-            {
-                applied |= (await edit(commandContext).ConfigureAwait(true)).Succeeded;
-            }
-
-            return applied;
-        }
-        finally
-        {
-            if (grouped)
-            {
-                commandContext.History.EndChangeSet();
-            }
-        }
+        // One undo step however many properties the view changed.
+        var edit = edits.Count == 1 ? edits[0] : new SceneEditBatch($"Move camera '{node.Name}'", edits);
+        return (await authoring.ExecuteAsync(edit).ConfigureAwait(true)).Succeeded;
     }
 
     private static bool HasPose(TransformComponent transform, RuntimeViewCameraPose pose)

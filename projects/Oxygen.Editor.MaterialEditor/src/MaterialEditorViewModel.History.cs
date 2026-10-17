@@ -150,7 +150,7 @@ public sealed partial class MaterialEditorViewModel
     {
         try
         {
-            await Task.Delay(CommitGroupController.DefaultWheelIdleDelay, idle.Token).ConfigureAwait(true);
+            await Task.Delay(WheelIdleDelay, idle.Token).ConfigureAwait(true);
             if (!idle.IsCancellationRequested && ReferenceEquals(this.activeGesture, gesture) && ReferenceEquals(gesture.Idle, idle))
             {
                 this.EndEditSession(NumberBoxEditCompletionKind.Commit);

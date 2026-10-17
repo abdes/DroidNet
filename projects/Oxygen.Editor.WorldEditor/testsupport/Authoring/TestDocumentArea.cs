@@ -71,7 +71,7 @@ internal sealed class TestDocumentArea : IDocumentArea
         _ = this.documents.Remove(document);
         if (ReferenceEquals(this.ActiveDocument, document))
         {
-            this.Activate(null);
+            this.Activate(document: null);
         }
 
         return Task.FromResult(true);

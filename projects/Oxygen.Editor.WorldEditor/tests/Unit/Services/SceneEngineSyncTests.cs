@@ -7,11 +7,13 @@ using DroidNet.Documents;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -99,7 +101,8 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, DocumentId.New());
+        using var document = Register(sut, scene);
+        scene = document.Scene;
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         var entries = new[] { CreateTransformEntry(42.0f) };
@@ -144,7 +147,8 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Faulted);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, DocumentId.New());
+        using var document = Register(sut, scene);
+        scene = document.Scene;
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         var entries = new[] { CreateTransformEntry(42.0f) };
@@ -155,49 +159,6 @@ public sealed partial class SceneEngineSyncTests
         _ = outcome.Code.Should().Be(LiveSyncDiagnosticCodes.RuntimeFaulted);
         _ = sut.GetPendingPropertySyncCount(scene.Id).Should().Be(1);
         engine.VerifyGet(s => s.WorldCommands, Times.Never);
-    }
-
-    [TestMethod]
-    public async Task UpdateMaterialSlot_WhenEngineFaulted_ReturnsRuntimeFaulted()
-    {
-        var engine = new Mock<IEngineService>(MockBehavior.Strict);
-        _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Faulted);
-        using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
-        var scene = CreateScene();
-        var node = new SceneNode(scene) { Name = "Cube" };
-
-        var outcome = await sut.UpdateMaterialSlotAsync(
-            scene,
-            node,
-            target: new MaterialSlotTarget(new Uri("asset:///Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64)),
-            materialUri: new Uri("asset:///Materials/Test"),
-            cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        _ = outcome.Status.Should().Be(SyncStatus.SkippedNotRunning);
-        _ = outcome.Code.Should().Be(LiveSyncDiagnosticCodes.RuntimeFaulted);
-        engine.VerifyGet(s => s.WorldCommands, Times.Never);
-    }
-
-    [TestMethod]
-    public async Task UpdateMaterialSlot_WhenCancelled_ReturnsCancelled()
-    {
-        var engine = new Mock<IEngineService>(MockBehavior.Strict);
-        using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
-        var scene = CreateScene();
-        var node = new SceneNode(scene) { Name = "Cube" };
-        using var cts = new CancellationTokenSource();
-        await cts.CancelAsync().ConfigureAwait(false);
-
-        var outcome = await sut.UpdateMaterialSlotAsync(
-            scene,
-            node,
-            target: new MaterialSlotTarget(new Uri("asset:///Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64)),
-            materialUri: null,
-            cancellationToken: cts.Token).ConfigureAwait(false);
-
-        _ = outcome.Status.Should().Be(SyncStatus.Cancelled);
-        _ = outcome.Code.Should().Be(LiveSyncDiagnosticCodes.Cancelled);
-        engine.VerifyNoOtherCalls();
     }
 
     [TestMethod]
@@ -224,7 +185,8 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, DocumentId.New());
+        using var document = Register(sut, scene);
+        scene = document.Scene;
 
         var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -242,7 +204,8 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.WorldCommands).Returns((IRuntimeWorldCommands)null!);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
-        _ = sut.RegisterDocument(scene, DocumentId.New());
+        using var document = Register(sut, scene);
+        scene = document.Scene;
 
         var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -344,6 +307,15 @@ public sealed partial class SceneEngineSyncTests
     {
         var project = new Mock<IProject>().Object;
         return new Scene(project) { Name = "Test Scene" };
+    }
+
+    // The projector follows a scene document: the scene opens as one, and the document's scene is what it projects. The
+    // caller disposes the document.
+    private static SceneTab Register(SceneEngineSync sync, Scene scene)
+    {
+        var tab = SceneTabs.Open(scene);
+        _ = sync.RegisterDocument(tab.Authoring).Should().BeTrue();
+        return tab;
     }
 
     private static EnginePropertyValueEntry CreateTransformEntry(float value)

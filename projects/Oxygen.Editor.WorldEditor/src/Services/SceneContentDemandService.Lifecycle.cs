@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.Messaging;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 

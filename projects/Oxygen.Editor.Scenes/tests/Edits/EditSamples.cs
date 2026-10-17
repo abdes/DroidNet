@@ -1,0 +1,530 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using System.Numerics;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Changes;
+using Oxygen.Editor.Scenes.Edits.Assets;
+using Oxygen.Editor.Scenes.Edits.Components;
+using Oxygen.Editor.Scenes.Edits.EditorView;
+using Oxygen.Editor.Scenes.Edits.Hierarchy;
+using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Edits.Settings;
+using Oxygen.Editor.Scenes.Nodes;
+using Oxygen.Editor.Scenes.Properties;
+using Oxygen.Editor.Scenes.Tests.TestSupport;
+using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
+using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
+
+namespace Oxygen.Editor.Scenes.Tests.Edits;
+
+/// <summary>
+/// One sample per public <see cref="ISceneEdit"/> type of the Scenes assembly, plus a batch and a nested batch, all over
+/// <see cref="SampleScene"/>. <see cref="EditContractTests"/> runs every obligation of an edit over these rows.
+/// </summary>
+/// <remarks>
+/// Each sample changes the document (or, for <see cref="SetEditorHidden"/>, the hidden nodes). The ids of the nodes,
+/// components and folders the samples create are fixed here, so a sample builds the same edit every time.
+/// </remarks>
+public static class EditSamples
+{
+    /// <summary>Gets the node <see cref="InsertNodes"/> inserts.</summary>
+    public static NodeId InsertedNode { get; } = NodeId.FromValue(SampleScene.Tagged(1, "1A"));
+
+    /// <summary>Gets every sample, one row per edit type, display name = the edit type.</summary>
+    public static IEnumerable<TestDataRow<EditSample>> All => Rows(Samples);
+
+    /// <summary>Gets the samples whose edit has targets.</summary>
+    public static IEnumerable<TestDataRow<EditSample>> WithTargets => Rows(Samples.Where(static sample => sample.HasTargets));
+
+    /// <summary>
+    /// Gets the samples whose first target has a parent node that is not itself a target, so locking the parent locks
+    /// the first target alone.
+    /// </summary>
+    public static IEnumerable<TestDataRow<EditSample>> WithNestedTarget
+        => Rows(Samples.Where(static sample => sample.HasTargets && ParentOfFirstTarget(sample) is { } parent && !sample.Build(SampleScene.Build()).Targets.Contains(parent)));
+
+    /// <summary>Gets the samples that write an asset reference.</summary>
+    public static IEnumerable<TestDataRow<EditSample>> WithAssetReference => Rows(Samples.Where(static sample => sample.CarriesAssetReference));
+
+    /// <summary>Gets the samples built from serialization records or property edits the test can change afterwards.</summary>
+    public static IEnumerable<TestDataRow<EditSample>> OwningItsInput => Rows(Samples.Where(static sample => sample.Tamper is not null));
+
+    private static ComponentId InsertedGeometry { get; } = ComponentId.FromValue(SampleScene.Tagged(2, "1A"));
+
+    private static ComponentId AddedCamera { get; } = ComponentId.FromValue(SampleScene.Tagged(2, "3A"));
+
+    private static ComponentId AddedGeometry { get; } = ComponentId.FromValue(SampleScene.Tagged(2, "3B"));
+
+    private static FolderId NewFolder { get; } = FolderId.FromValue(SampleScene.Tagged(3, "2A"));
+
+    private static FolderId RestoredFolder { get; } = FolderId.FromValue(SampleScene.Tagged(3, "2B"));
+
+    private static Guid RestoredSlot { get; } = SampleScene.Tagged(4, "C2");
+
+    private static Uri GreenMaterial { get; } = new("asset:/Content/Green.omat");
+
+    private static Uri MaskTexture { get; } = new("asset:/Content/Mask.otex");
+
+    private static Uri SpinScript { get; } = new("asset:/Content/Spin.oscript");
+
+    private static Uri JumpScript { get; } = new("asset:/Content/Jump.oscript");
+
+    private static MaterialSlotTarget CubeSlotTarget => new(SampleScene.CubeGeometry, SampleScene.CubeSlot, SampleScene.CubeLayoutRevision);
+
+    private static IReadOnlyList<EditSample> Samples =>
+    [
+        InsertNodesSample,
+        RemoveNodesSample,
+        RenameNodeSample,
+        ReparentNodesSample,
+        ReorderNodeSample,
+        PlaceNodesSample,
+        CreateFolderSample,
+        RemoveFolderSample,
+        RestoreFolderSample,
+        RenameFolderSample,
+        MoveLayoutEntriesSample,
+        PlaceLayoutEntriesSample,
+        AddComponentSample,
+        RemoveComponentSample,
+        SetPropertiesSample,
+        SetScenePropertiesSample,
+        SetSceneEnvironmentSample,
+        SetGeometrySample,
+        SetMaterialSlotSample,
+        RemoveMaterialSlotsSample,
+        RestoreMaterialSlotsSample,
+        SetScenePlaySample,
+        SetSceneReferencesSample,
+        SetScriptSlotsSample,
+        SetEditorHiddenSample,
+        BatchSample,
+        NestedBatchSample,
+    ];
+
+    private static EditSample InsertNodesSample =>
+        new(
+            nameof(InsertNodes),
+            static _ => new InsertNodes([InsertAtA2(InsertedNodeData())]),
+            [new SceneChange.NodesAdded([InsertedNode]), new SceneChange.LayoutChanged()],
+            [new SceneChange.NodesRemoved([InsertedNode]), new SceneChange.LayoutChanged()])
+        {
+            HasTargets = true,
+            CarriesAssetReference = true,
+            Asset = SampleScene.SphereGeometry,
+            AssetNode = InsertedNode,
+            Tamper = static _ =>
+            {
+                var node = InsertedNodeData();
+                var inserts = new List<NodeInsert> { InsertAtA2(node) };
+                return new TamperedEdit(
+                    new InsertNodes(inserts),
+                    () =>
+                    {
+                        node.Components.Clear();
+                        inserts.Clear();
+                    });
+            },
+        };
+
+    private static EditSample RemoveNodesSample =>
+        new(
+            nameof(RemoveNodes),
+            static _ => new RemoveNodes([SampleScene.A2]),
+            [new SceneChange.NodesRemoved([SampleScene.A2]), new SceneChange.LayoutChanged()],
+            [new SceneChange.NodesAdded([SampleScene.A2]), new SceneChange.LayoutChanged()])
+        {
+            HasTargets = true,
+        };
+
+    private static EditSample RenameNodeSample =>
+        new(
+            nameof(RenameNode),
+            static _ => new RenameNode(SampleScene.A11, "Renamed"),
+            [new SceneChange.NodeRenamed(SampleScene.A11)],
+            [new SceneChange.NodeRenamed(SampleScene.A11)])
+        {
+            HasTargets = true,
+        };
+
+    private static EditSample ReparentNodesSample =>
+        new(
+            nameof(ReparentNodes),
+            static _ => new ReparentNodes([SampleScene.A11], SampleScene.B, preserveWorld: true),
+            [new SceneChange.NodesPlaced([SampleScene.A11]), new SceneChange.LayoutChanged()],
+            [new SceneChange.NodesPlaced([SampleScene.A11]), new SceneChange.LayoutChanged()])
+        {
+            HasTargets = true,
+        };
+
+    private static EditSample ReorderNodeSample =>
+        new(
+            nameof(ReorderNode),
+            static _ => new ReorderNode(SampleScene.B, new NodePosition(Parent: null, Index: 2), LayoutPosition.InFolder(SampleScene.F, 1)),
+            [new SceneChange.NodesPlaced([SampleScene.B]), new SceneChange.LayoutChanged()],
+            [new SceneChange.NodesPlaced([SampleScene.B]), new SceneChange.LayoutChanged()])
+        {
+            HasTargets = true,
+        };
+
+    private static EditSample PlaceNodesSample =>
+        new(
+            nameof(PlaceNodes),
+            static _ => new PlaceNodes(
+            [
+                new NodePlacementState(
+                    SampleScene.A2,
+                    new NodePosition(SampleScene.A, Index: 0),
+                    SampleScene.Transform(position: new Vector3(0, 2, 0)),
+                    LayoutPosition.InFolder(SampleScene.AF, 0)),
+            ]),
+            [new SceneChange.NodesPlaced([SampleScene.A2]), new SceneChange.LayoutChanged()],
+            [new SceneChange.NodesPlaced([SampleScene.A2]), new SceneChange.LayoutChanged()])
+        {
+            HasTargets = true,
+        };
+
+    private static EditSample CreateFolderSample =>
+        new(
+            nameof(CreateFolder),
+            static _ => new CreateFolder(NewFolder, LayoutPosition.UnderNode(SampleScene.A1, 0), "New"),
+            [new SceneChange.LayoutChanged()],
+            [new SceneChange.LayoutChanged()])
+        {
+            HasTargets = true,
+        };
+
+    private static EditSample RemoveFolderSample =>
+        new(
+            nameof(RemoveFolder),
+            static _ => new RemoveFolder(SampleScene.AF, PromoteChildren: true),
+            [new SceneChange.LayoutChanged()],
+            [new SceneChange.LayoutChanged()]);
+
+    private static EditSample RestoreFolderSample =>
+        new(
+            nameof(RestoreFolder),
+            static _ => RestoringFolder(RestoredChildren(), RestoredFolderEntry("Restored")),
+            [new SceneChange.LayoutChanged()],
+            [new SceneChange.LayoutChanged()])
+        {
+            Tamper = static _ =>
+            {
+                var entry = RestoredFolderEntry("Restored");
+                var children = RestoredChildren();
+                return new TamperedEdit(
+                    RestoringFolder(children, entry),
+                    () =>
+                    {
+                        entry.Name = "Mutated";
+                        entry.IsExpanded = false;
+                        entry.EnsureChildren().Add(new ExplorerEntryData { NodeId = SampleScene.B });
+                        children.Clear();
+                    });
+            },
+        };
+
+    private static EditSample RenameFolderSample =>
+        new(
+            nameof(RenameFolder),
+            static _ => new RenameFolder(SampleScene.AF, "Renamed"),
+            [new SceneChange.LayoutChanged()],
+            [new SceneChange.LayoutChanged()]);
+
+    private static EditSample MoveLayoutEntriesSample =>
+        new(
+            nameof(MoveLayoutEntries),
+            static _ => new MoveLayoutEntries([LayoutEntryId.Of(SampleScene.B)], LayoutPosition.InFolder(SampleScene.G, 0)),
+            [new SceneChange.LayoutChanged()],
+            [new SceneChange.LayoutChanged()]);
+
+    private static EditSample PlaceLayoutEntriesSample =>
+        new(
+            nameof(PlaceLayoutEntries),
+            static _ => new PlaceLayoutEntries([new LayoutEntryPosition(LayoutEntryId.Of(SampleScene.Cam), LayoutPosition.InFolder(SampleScene.G, 0))]),
+            [new SceneChange.LayoutChanged()],
+            [new SceneChange.LayoutChanged()]);
+
+    private static EditSample AddComponentSample =>
+        new(
+            nameof(AddComponent),
+            static _ => new AddComponent(SampleScene.A11, CameraToAdd(), index: 1),
+            [new SceneChange.ComponentAdded(SampleScene.A11, AddedCamera)],
+            [new SceneChange.ComponentRemoved(SampleScene.A11, AddedCamera, SceneComponents.PerspectiveCamera)])
+        {
+            HasTargets = true,
+            Tamper = static _ =>
+            {
+                var slots = new List<OverrideSlotData>();
+                var component = new GeometryComponentData
+                {
+                    Id = AddedGeometry,
+                    Name = "Geometry",
+                    GeometryUri = SampleScene.SphereGeometry.ToString(),
+                    OverrideSlots = slots,
+                };
+                return new TamperedEdit(
+                    new AddComponent(SampleScene.A11, component, index: 1),
+                    () => slots.Add(new MaterialsSlotData
+                    {
+                        GeometryUri = SampleScene.SphereGeometry,
+                        SlotId = SampleScene.CubeSlot,
+                        LayoutRevision = SampleScene.CubeLayoutRevision,
+                        MaterialUri = SampleScene.RedMaterial.ToString(),
+                    }));
+            },
+        };
+
+    private static EditSample RemoveComponentSample =>
+        new(
+            nameof(RemoveComponent),
+            static _ => new RemoveComponent(SampleScene.Lamp, SampleScene.LampLight),
+            [new SceneChange.ComponentRemoved(SampleScene.Lamp, SampleScene.LampLight, SceneComponents.PointLight)],
+            [new SceneChange.ComponentAdded(SampleScene.Lamp, SampleScene.LampLight)])
+        {
+            HasTargets = true,
+        };
+
+    private static EditSample SetPropertiesSample =>
+        new(
+            nameof(SetProperties),
+            static _ => MovingA1(),
+            [new SceneChange.PropertiesChanged(SampleScene.A1, [SceneProperties.Transform.PositionX.Id], EditPhase.Commit)],
+            [new SceneChange.PropertiesChanged(SampleScene.A1, [SceneProperties.Transform.PositionX.Id], EditPhase.Commit)])
+        {
+            HasTargets = true,
+            Tamper = static _ =>
+            {
+                var edits = new Dictionary<NodeId, PropertyEdit> { [SampleScene.A1] = PropertyEdit.SingleEdit(SceneProperties.Transform.PositionX, 5f) };
+                return new TamperedEdit(new SetProperties(edits, "Move"), edits.Clear);
+            },
+        };
+
+    private static EditSample SetScenePropertiesSample =>
+        new(
+            nameof(SetSceneProperties),
+            static _ => new SetSceneProperties(PropertyEdit.SingleEdit<Uri?>(SceneProperties.SceneEnvironment.AutoExposureMeteringMask, MaskTexture), "Set mask"),
+            [new SceneChange.PropertiesChanged(Node: null, [SceneProperties.SceneEnvironment.AutoExposureMeteringMask.Id], EditPhase.Commit)],
+            [new SceneChange.PropertiesChanged(Node: null, [SceneProperties.SceneEnvironment.AutoExposureMeteringMask.Id], EditPhase.Commit)])
+        {
+            CarriesAssetReference = true,
+            Asset = MaskTexture,
+            Tamper = static _ =>
+            {
+                var builder = new PropertyEdit.Builder().Set(SceneProperties.SceneEnvironment.ExposureCompensation, 1f);
+                return new TamperedEdit(
+                    new SetSceneProperties(builder.Build(), "Compensate"),
+                    () => builder.Set(SceneProperties.SceneEnvironment.ExposureCompensation, 2f));
+            },
+        };
+
+    private static EditSample SetSceneEnvironmentSample =>
+        new(
+            nameof(SetSceneEnvironment),
+            static data => new SetSceneEnvironment(
+                data.Environment with { PostProcess = data.Environment.PostProcess with { ExposureCompensationEv = data.Environment.PostProcess.ExposureCompensationEv + 1f } },
+                "Set environment"),
+            [new SceneChange.PropertiesChanged(Node: null, [SceneProperties.SceneEnvironment.ExposureCompensation.Id], EditPhase.Commit)],
+            [new SceneChange.PropertiesChanged(Node: null, [SceneProperties.SceneEnvironment.ExposureCompensation.Id], EditPhase.Commit)]);
+
+    private static EditSample SetGeometrySample =>
+        new(
+            nameof(SetGeometry),
+            static _ => new SetGeometry([SampleScene.Mesh], SampleScene.SphereGeometry),
+            [new SceneChange.GeometryChanged(SampleScene.Mesh)],
+            [new SceneChange.GeometryChanged(SampleScene.Mesh)])
+        {
+            HasTargets = true,
+            CarriesAssetReference = true,
+            Asset = SampleScene.SphereGeometry,
+            AssetNode = SampleScene.Mesh,
+        };
+
+    private static EditSample SetMaterialSlotSample =>
+        new(
+            nameof(SetMaterialSlot),
+            static _ => new SetMaterialSlot([SampleScene.Mesh], CubeSlotTarget, GreenMaterial),
+            [new SceneChange.MaterialSlotsChanged(SampleScene.Mesh)],
+            [new SceneChange.MaterialSlotsChanged(SampleScene.Mesh)])
+        {
+            HasTargets = true,
+            CarriesAssetReference = true,
+            Asset = GreenMaterial,
+            AssetNode = SampleScene.Mesh,
+        };
+
+    private static EditSample RemoveMaterialSlotsSample =>
+        new(
+            nameof(RemoveMaterialSlots),
+            static _ => new RemoveMaterialSlots(new Dictionary<NodeId, IReadOnlyList<MaterialSlotTarget>> { [SampleScene.Mesh] = [CubeSlotTarget] }),
+            [new SceneChange.MaterialSlotsChanged(SampleScene.Mesh)],
+            [new SceneChange.MaterialSlotsChanged(SampleScene.Mesh)])
+        {
+            HasTargets = true,
+        };
+
+    private static EditSample RestoreMaterialSlotsSample =>
+        new(
+            nameof(RestoreMaterialSlots),
+            static _ => new RestoreMaterialSlots(new Dictionary<NodeId, IReadOnlyList<RestoredMaterialSlot>>
+            {
+                [SampleScene.Mesh] =
+                [
+                    new RestoredMaterialSlot(
+                        new MaterialSlotAssignment(new MaterialSlotTarget(SampleScene.CubeGeometry, RestoredSlot, SampleScene.CubeLayoutRevision), SampleScene.RedMaterial),
+                        Index: 1),
+                ],
+            }),
+            [new SceneChange.MaterialSlotsChanged(SampleScene.Mesh)],
+            [new SceneChange.MaterialSlotsChanged(SampleScene.Mesh)])
+        {
+            HasTargets = true,
+        };
+
+    private static EditSample SetScenePlaySample =>
+        new(
+            nameof(SetScenePlay),
+            static _ => new SetScenePlay(PlayWith([new StartingInputContextData(SampleScene.PlayInput)])),
+            [new SceneChange.ScenePlayChanged()],
+            [new SceneChange.ScenePlayChanged()])
+        {
+            CarriesAssetReference = true,
+            Asset = SampleScene.PlayInput,
+            Tamper = static _ =>
+            {
+                var contexts = new List<StartingInputContextData> { new(SampleScene.PlayInput) };
+                return new TamperedEdit(new SetScenePlay(PlayWith(contexts)), contexts.Clear);
+            },
+        };
+
+    private static EditSample SetSceneReferencesSample =>
+        new(
+            nameof(SetSceneReferences),
+            static _ => new SetSceneReferences(new SceneReferencesData { Scripts = [SpinScript] }),
+            [new SceneChange.SceneReferencesChanged()],
+            [new SceneChange.SceneReferencesChanged()])
+        {
+            CarriesAssetReference = true,
+            Asset = SpinScript,
+            Tamper = static _ =>
+            {
+                var scripts = new List<Uri> { SpinScript };
+                return new TamperedEdit(new SetSceneReferences(new SceneReferencesData { Scripts = scripts }), () => scripts.Add(JumpScript));
+            },
+        };
+
+    private static EditSample SetScriptSlotsSample =>
+        new(
+            nameof(SetScriptSlots),
+            static _ => new SetScriptSlots(SampleScene.Script, [new ScriptSlot { Id = SampleScene.MoveSlot, Script = JumpScript }]),
+            [new SceneChange.ScriptSlotsChanged(SampleScene.Script)],
+            [new SceneChange.ScriptSlotsChanged(SampleScene.Script)])
+        {
+            HasTargets = true,
+            CarriesAssetReference = true,
+            Asset = JumpScript,
+            AssetNode = SampleScene.Script,
+        };
+
+    private static EditSample SetEditorHiddenSample =>
+        new(
+            nameof(SetEditorHidden),
+            static _ => new SetEditorHidden([SampleScene.B], hidden: true),
+            [new SceneChange.EditorVisibilityChanged([SampleScene.B])],
+            [new SceneChange.EditorVisibilityChanged([SampleScene.B])]);
+
+    // A batch raises its inner changes in order; its revert raises the inner reverts' in reverse order (3.5).
+    private static EditSample BatchSample =>
+        new(
+            "Batch",
+            static _ => new SceneEditBatch("Rename both", [new RenameNode(SampleScene.A, "X"), new RenameNode(SampleScene.B, "Y")]),
+            [new SceneChange.NodeRenamed(SampleScene.A), new SceneChange.NodeRenamed(SampleScene.B)],
+            [new SceneChange.NodeRenamed(SampleScene.B), new SceneChange.NodeRenamed(SampleScene.A)])
+        {
+            ChangesInOrder = true,
+        };
+
+    private static EditSample NestedBatchSample =>
+        new(
+            "NestedBatch",
+            static _ => new SceneEditBatch(
+                "Outer",
+                [
+                    new RenameNode(SampleScene.A, "X"),
+                    new SceneEditBatch("Inner", [new RenameNode(SampleScene.B, "Y"), new SetEditorHidden([SampleScene.Cam], hidden: true)]),
+                ]),
+            [new SceneChange.NodeRenamed(SampleScene.A), new SceneChange.NodeRenamed(SampleScene.B), new SceneChange.EditorVisibilityChanged([SampleScene.Cam])],
+            [new SceneChange.EditorVisibilityChanged([SampleScene.Cam]), new SceneChange.NodeRenamed(SampleScene.B), new SceneChange.NodeRenamed(SampleScene.A)])
+        {
+            ChangesInOrder = true,
+        };
+
+    /// <summary>
+    /// Gets the parent of a sample scene node.
+    /// </summary>
+    /// <param name="node">The node.</param>
+    /// <returns>Its parent, or <see langword="null"/> for a root node.</returns>
+    public static NodeId? ParentOf(NodeId node)
+        => node == SampleScene.A1 || node == SampleScene.A2 ? SampleScene.A
+        : node == SampleScene.A11 ? SampleScene.A1
+        : null;
+
+    /// <summary>
+    /// Gets where a moved asset goes: the same location with <c>-moved</c> before the extension.
+    /// </summary>
+    /// <param name="asset">The asset.</param>
+    /// <returns>The new location.</returns>
+    public static Uri MovedTo(Uri asset)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+        var text = asset.ToString();
+        var dot = text.LastIndexOf('.');
+        return new Uri(text[..dot] + "-moved" + text[dot..]);
+    }
+
+    private static NodeId? ParentOfFirstTarget(EditSample sample) => ParentOf(sample.Build(SampleScene.Build()).Targets.First());
+
+    private static IEnumerable<TestDataRow<EditSample>> Rows(IEnumerable<EditSample> samples)
+        => samples.Select(static sample => new TestDataRow<EditSample>(sample) { DisplayName = sample.Name });
+
+    private static SceneNodeData InsertedNodeData()
+        => new()
+        {
+            Id = InsertedNode,
+            Name = "Inserted",
+            IsActive = true,
+            Components =
+            [
+                new TransformData { Id = SceneBuilder.TransformId(InsertedNode), Name = "Transform" },
+                new GeometryComponentData { Id = InsertedGeometry, Name = "Geometry", GeometryUri = SampleScene.SphereGeometry.ToString() },
+            ],
+        };
+
+    private static NodeInsert InsertAtA2(SceneNodeData node)
+        => new(node, new NodePosition(SampleScene.A2, Index: 0), LayoutPosition.UnderNode(SampleScene.A2, 0));
+
+    private static ExplorerEntryData RestoredFolderEntry(string name)
+        => new() { Type = "Folder", FolderId = RestoredFolder, Name = name, IsExpanded = true, Children = [] };
+
+    private static List<LayoutEntryId> RestoredChildren() => [LayoutEntryId.Of(SampleScene.Cam), LayoutEntryId.Of(SampleScene.Ortho)];
+
+    private static RestoreFolder RestoringFolder(IReadOnlyList<LayoutEntryId> children, ExplorerEntryData entry)
+        => new(entry, LayoutPosition.AtRoot(2), children);
+
+    private static PerspectiveCameraData CameraToAdd()
+        => new() { Id = AddedCamera, Name = "Camera", NearPlane = 0.1f, FarPlane = 100f, AspectMode = CameraAspectMode.Auto };
+
+    private static SetProperties MovingA1()
+        => new(
+            new Dictionary<NodeId, PropertyEdit> { [SampleScene.A1] = PropertyEdit.SingleEdit(SceneProperties.Transform.PositionX, 5f) },
+            "Move");
+
+    private static ScenePlayData PlayWith(IList<StartingInputContextData> contexts)
+        => new() { StartingCamera = SampleScene.Cam, StartingInputContexts = contexts };
+}

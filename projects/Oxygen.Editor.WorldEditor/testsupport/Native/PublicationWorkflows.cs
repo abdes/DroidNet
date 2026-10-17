@@ -20,9 +20,9 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
@@ -47,11 +47,12 @@ internal static class PublicationWorkflows
 
     internal static async Task SetPublicationMaterialColorAsync(MaterialEdits edits, Document material, Vector4 color, CancellationToken cancellationToken)
     {
-        var edit = new PropertyEdit();
-        edit.Set(MaterialDescriptors.BaseColorR, color.X);
-        edit.Set(MaterialDescriptors.BaseColorG, color.Y);
-        edit.Set(MaterialDescriptors.BaseColorB, color.Z);
-        edit.Set(MaterialDescriptors.BaseColorA, color.W);
+        var edit = new PropertyEdit.Builder()
+            .Set(MaterialDescriptors.BaseColorR, color.X)
+            .Set(MaterialDescriptors.BaseColorG, color.Y)
+            .Set(MaterialDescriptors.BaseColorB, color.Z)
+            .Set(MaterialDescriptors.BaseColorA, color.W)
+            .Build();
         _ = edits.Apply(material, edit).Succeeded.Should().BeTrue();
         var saved = await material.SaveAsync(cancellationToken).ConfigureAwait(true);
         _ = saved.Succeeded.Should().BeTrue(saved.Message);
@@ -88,19 +89,19 @@ internal static class PublicationWorkflows
         _ = choice.RuntimeAvailability.Should().Be(AssetRuntimeAvailability.Mounted);
         _ = File.Exists(choice.CookedPath).Should().BeTrue();
         var nodes = fixture.Source.RootNodes.Select(static node => node.Id).ToArray();
-        fixture.Context.History.BeginChangeSet("Assign shared material");
+        fixture.Document.History.BeginChangeSet("Assign shared material");
         try
         {
             foreach (var nodeId in nodes)
             {
                 var target = await fixture.ReadSingleMaterialSlotAsync(nodeId, cancellationToken).ConfigureAwait(true);
-                var result = await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [nodeId], target, choice.IdentityUri, EditSessionToken.OneShot, cancellationToken).ConfigureAwait(true);
+                var result = await fixture.Authoring.ExecuteAsync(new SetMaterialSlot([nodeId], target, choice.IdentityUri)).ConfigureAwait(true);
                 _ = result.Succeeded.Should().BeTrue();
             }
         }
         finally
         {
-            fixture.Context.History.EndChangeSet();
+            fixture.Document.History.EndChangeSet();
         }
 
         var first = await WaitForNodeAsync(fixture, nodes[0], value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], red) < 0.001f, cancellationToken).ConfigureAwait(true);
@@ -118,7 +119,7 @@ internal static class PublicationWorkflows
         var green = new Vector4(0, 1, 0, 1);
         var source = fixture.Source;
         var revision = fixture.Document.History.Position;
-        var history = fixture.Context.History.UndoStack.Count;
+        var history = fixture.Document.History.UndoStack.Count;
         var dirty = fixture.Document.IsDirty;
         var prior = services.Runs.Runs.Select(static run => run.OperationId).ToHashSet();
         SetCookOnChange(services, scope is null);
@@ -152,7 +153,7 @@ internal static class PublicationWorkflows
 
         _ = fixture.Source.Should().BeSameAs(source);
         _ = fixture.Document.History.Position.Should().Be(revision);
-        _ = fixture.Context.History.UndoStack.Should().HaveCount(history);
+        _ = fixture.Document.History.UndoStack.Should().HaveCount(history);
         _ = fixture.Document.IsDirty.Should().Be(dirty);
         var updated = await feed.ResolveAsync(material.File.AssetUri, cancellationToken).ConfigureAwait(true);
         _ = updated!.CookStatus!.Freshness.Should().Be(AssetCookFreshness.Current);

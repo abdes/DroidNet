@@ -183,7 +183,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var secondary = sourceDisclosures[1];
         _ = primary.IsExpanded.Should().BeFalse();
         _ = secondary.IsExpanded.Should().BeFalse();
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
     });
 
     /// <summary>The sky section retains the sun disk switch and its four design field labels.</summary>
@@ -223,12 +223,12 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         scenario.Model.SkyAtmosphere.GroundAlbedoR = AlbedoRedLinear;
         await scenario.Model.PendingEdits.ConfigureAwait(true);
         _ = SwatchColor(albedoField).R.Should().Be(128);
-        var historyCount = scenario.Fixture.Context.History.UndoStack.Count;
+        var historyCount = scenario.Fixture.Document.History.UndoStack.Count;
         await PickDisplayColorAsync(swatch, Windows.UI.Color.FromArgb(255, 128, 64, 32)).ConfigureAwait(true);
         await scenario.Model.PendingEdits.ConfigureAwait(true);
         _ = scenario.Fixture.Scene.Environment.SkyAtmosphere.GroundAlbedoRgb.Y.Should().BeApproximately(AlbedoGreenLinearPicked, 0.000001f);
-        _ = scenario.Fixture.Context.History.UndoStack.Should().HaveCount(historyCount + 1);
-        await scenario.Fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        _ = scenario.Fixture.Document.History.UndoStack.Should().HaveCount(historyCount + 1);
+        await scenario.Fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = SwatchColor(albedoField).R.Should().Be(128);
     });
 
@@ -348,7 +348,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
         await scenario.Model.PendingEdits.ConfigureAwait(true);
         _ = scenario.Fixture.Scene.References.ExtraAssets.Should().BeEmpty();
-        _ = scenario.Fixture.Context.History.UndoStack.Should().HaveCount(2);
+        _ = scenario.Fixture.Document.History.UndoStack.Should().HaveCount(2);
     });
 
     /// <summary>The design-order sections, Play first, keep every scene card and closed secondary groups.</summary>
@@ -419,7 +419,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = spot.ApplicabilityText.Should().Contain(AppliesInAutoExposureSpotMeteringCopy);
         _ = CardOf(spot).Content.Should().BeSameAs(originalContent);
         _ = scenario.Fixture.Document.IsDirty.Should().BeFalse();
-        _ = scenario.Fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = scenario.Fixture.Document.History.UndoStack.Should().BeEmpty();
 
         scenario.Model.Exposure.ExposureMode = Oxygen.Editor.World.Serialization.ExposureMode.Auto;
         scenario.Model.Exposure.AutoExposureMeteringMode = Oxygen.Editor.World.Serialization.MeteringMode.Spot;
@@ -490,7 +490,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         await model.PendingEdits.ConfigureAwait(true);
         _ = fixture.Camera.NearPlane.Should().Be(before);
         _ = number.NumberValue.Should().Be(before);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = model.NearPlaneDiagnostic.Message.Should().NotBeEmpty();
         _ = field.HasError.Should().BeTrue();
         _ = field.ErrorText.Should().Be(model.NearPlaneDiagnostic.Message);
@@ -500,7 +500,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = fixture.Camera.NearPlane.Should().Be(2);
         _ = model.NearPlaneDiagnostic.Message.Should().BeEmpty();
         _ = field.HasError.Should().BeFalse();
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
     });
 
     /// <summary>A zero scale axis shows scoped inline feedback without changing the model or history.</summary>
@@ -530,7 +530,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
 
         // Live validation: the diagnostic surfaces while typing, before any commit.
         _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalScale.X.Should().Be(1);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = model.ScaleXDiagnostic.Message.Should().NotBeEmpty();
         _ = VisibleFeedback(view).Should().ContainSingle().Which.Should().Be("X: " + model.ScaleXDiagnostic.Message);
         number.CompletePendingTextEdit();
@@ -540,7 +540,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
 
         // Commit parity with the camera inspector: committing the rejected value changes nothing.
         _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalScale.X.Should().Be(1);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = model.ScaleXDiagnostic.Message.Should().NotBeEmpty();
         await EnterTextAsync(number, "2").ConfigureAwait(true);
         number.CompletePendingTextEdit();
@@ -550,7 +550,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalScale.X.Should().Be(2);
         _ = model.ScaleXDiagnostic.Message.Should().BeEmpty();
         _ = VisibleFeedback(view).Should().BeEmpty();
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
     });
 
     /// <summary>Vector child-control events traverse the view and group a hundred samples into one entry.</summary>
@@ -580,9 +580,9 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
 
         number.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         await scenario.Model.PendingEdits.ConfigureAwait(true);
-        _ = scenario.Fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = scenario.Fixture.Document.History.UndoStack.Should().ContainSingle();
         _ = number.NumberValue.Should().Be(0.5f);
-        await scenario.Fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        await scenario.Fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = number.NumberValue.Should().Be(before);
     });
 

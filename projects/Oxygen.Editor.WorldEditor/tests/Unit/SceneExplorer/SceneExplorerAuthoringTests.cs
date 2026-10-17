@@ -5,67 +5,54 @@
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
-using DroidNet.Documents;
 using DroidNet.Routing;
 using DroidNet.TimeMachine;
-using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Documents.Commands;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Editor.WorldEditor.TestSupport;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
-/// <summary>Ensures create and delete authoring go through the document command owner.</summary>
+/// <summary>Ensures the Explorer's create, rename and paste actions change the scene document, one undo step each.</summary>
 [TestClass]
 public sealed partial class SceneExplorerAuthoringTests
 {
     [TestMethod]
-    public async Task AddEntity_RoutesThroughCreateNodeCommand()
+    public async Task AddEntity_AddsARootNodeInOneUndoStep()
     {
-        var harness = new AuthoringHarness(out var scene, out var node);
-        _ = harness.Commands
-            .Setup(value => value.CreateNodeAsync(It.IsAny<SceneDocumentCommandContext>(), null, null, It.IsAny<string>()))
-            .ReturnsAsync(SceneCommandResults.Success(node));
+        using var harness = new AuthoringHarness(out var scene, out _);
         using var explorer = harness.Build();
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         await explorer.AddEntityCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
 
-        harness.Commands.Verify(
-            value => value.CreateNodeAsync(It.IsAny<SceneDocumentCommandContext>(), null, null, It.IsAny<string>()),
-            Times.Once);
+        _ = scene.RootNodes.Should().HaveCount(2);
+        _ = harness.History.UndoStack.Should().ContainSingle();
     }
 
     [TestMethod]
-    public async Task CreateFolder_RoutesThroughCreateFolderCommand()
+    public async Task CreateFolder_AddsANewFolderInOneUndoStep()
     {
-        var harness = new AuthoringHarness(out var scene, out _);
-        _ = harness.Commands
-            .Setup(value => value.CreateFolderAsync(It.IsAny<SceneDocumentCommandContext>(), null, null, "New Folder"))
-            .ReturnsAsync(SceneCommandResults.Success(FolderId.New()));
+        using var harness = new AuthoringHarness(out var scene, out _);
         using var explorer = harness.Build();
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         await explorer.CreateFolderCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
 
-        harness.Commands.Verify(
-            value => value.CreateFolderAsync(It.IsAny<SceneDocumentCommandContext>(), null, null, "New Folder"),
-            Times.Once);
+        _ = scene.ExplorerLayout.Should().ContainSingle(entry => entry.FolderId != null && entry.Name == "New Folder");
+        _ = harness.History.UndoStack.Should().ContainSingle();
     }
 
     [TestMethod]
     public void RenameSceneRoot_AdapterPublishesLabelChangesUntilDetached()
     {
-        _ = new AuthoringHarness(out var scene, out _);
+        using var harness = new AuthoringHarness(out var scene, out _);
         var adapter = new SceneAdapter(scene);
         var notifications = new List<string?>();
         adapter.PropertyChanged += (_, args) => notifications.Add(args.PropertyName);
@@ -84,9 +71,9 @@ public sealed partial class SceneExplorerAuthoringTests
     [TestMethod]
     public async Task RenameSceneRoot_ToolbarAndInlineRenameTheSceneFile()
     {
-        var harness = new AuthoringHarness(out var scene, out _);
+        using var harness = new AuthoringHarness(out var scene, out _);
         var relocation = new Mock<IAssetRelocationService>();
-        var histories = new Mock<Oxygen.Editor.Shell.Documents.IHistoryService>();
+        var histories = new Mock<Shell.Documents.IHistoryService>();
         var global = new HistoryKeeper(this);
         _ = histories.SetupGet(value => value.GlobalHistory).Returns(global);
         var contexts = new ProjectContextService();
@@ -94,12 +81,12 @@ public sealed partial class SceneExplorerAuthoringTests
         using var explorer = harness.Build(relocation.Object, histories.Object, contexts);
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var root = explorer.Scene!;
-        explorer.SelectDisplayedItem(root, explorer.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
+        explorer.SelectDisplayedItem(root, [.. explorer.ShownItems], isControlDown: false, isShiftDown: false);
         ITreeItem? requested = null;
         explorer.RenameRequested += (_, args) => requested = args?.Item;
 
-        _ = explorer.RenameSelectedCommand.CanExecute(null).Should().BeTrue();
-        explorer.RenameSelectedCommand.Execute(null);
+        _ = explorer.RenameSelectedCommand.CanExecute(parameter: null).Should().BeTrue();
+        explorer.RenameSelectedCommand.Execute(parameter: null);
         _ = requested.Should().BeSameAs(root);
         var renamed = await explorer.CommitRenameAsync(root, "Lantern Demo").ConfigureAwait(false);
 
@@ -135,12 +122,9 @@ public sealed partial class SceneExplorerAuthoringTests
     }
 
     [TestMethod]
-    public async Task CopyItemsThenPasteItems_RoutesThroughDeepCopyCommand()
+    public async Task CopyItemsThenPasteItems_PastesACopyInOneUndoStep()
     {
-        var harness = new AuthoringHarness(out var scene, out var node);
-        _ = harness.Commands
-            .Setup(value => value.DuplicateNodesFromDataAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<SceneNodeData>>(), null, null, null))
-            .ReturnsAsync(SceneCommandResults.Success<IReadOnlyList<SceneNode>>([node]));
+        using var harness = new AuthoringHarness(out var scene, out var node);
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -148,16 +132,15 @@ public sealed partial class SceneExplorerAuthoringTests
 
         await explorer.CopyItemsAsync([adapter!]).ConfigureAwait(false);
         _ = explorer.CurrentClipboardState.Should().Be(ClipboardState.Copied, "copy should stage the node through the deep-copy clipboard");
-        _ = explorer.PasteCommand.CanExecute(null).Should().BeTrue("copy should capture node ids for paste");
+        _ = explorer.PasteCommand.CanExecute(parameter: null).Should().BeTrue("copy should capture node ids for paste");
 
         await explorer.PasteItemsAsync(targetParent: explorer.Scene).ConfigureAwait(false);
 
-        harness.Commands.Verify(
-            value => value.DuplicateNodesFromDataAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<SceneNodeData>>(), null, null, null),
-            Times.Once);
+        _ = scene.RootNodes.Should().HaveCount(2);
+        _ = harness.History.UndoStack.Should().ContainSingle();
     }
 
-    private sealed class AuthoringHarness
+    private sealed partial class AuthoringHarness : IDisposable
     {
         private readonly Scene scene;
         private readonly List<SceneTab> openDocuments = [];
@@ -184,11 +167,9 @@ public sealed partial class SceneExplorerAuthoringTests
 
             var sync = new Mock<ISceneEngineSync>();
             _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata.DocumentId)).Returns(value: true);
+            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
             _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             this.Sync = sync;
-
-            this.Commands = new Mock<ISceneDocumentCommandService>(MockBehavior.Strict);
         }
 
         public Mock<IProjectManagerService> Manager { get; }
@@ -196,11 +177,20 @@ public sealed partial class SceneExplorerAuthoringTests
         public TestDocumentArea Documents { get; }
 
         /// <summary>Gets the open documents that hold the harness's first scene.</summary>
-        public Oxygen.Editor.Documents.OpenDocuments OpenDocuments => this.openDocuments[0].Documents;
+        public Editor.Documents.OpenDocuments OpenDocuments => this.openDocuments[0].Documents;
 
         public Mock<ISceneEngineSync> Sync { get; }
 
-        public Mock<ISceneDocumentCommandService> Commands { get; }
+        /// <summary>Gets the history of the harness's first scene.</summary>
+        public HistoryKeeper History => this.openDocuments[0].Document.History;
+
+        public void Dispose()
+        {
+            foreach (var tab in this.openDocuments)
+            {
+                tab.Dispose();
+            }
+        }
 
         public Scene AddScene(string name)
         {
@@ -210,13 +200,12 @@ public sealed partial class SceneExplorerAuthoringTests
             this.openDocuments.Add(metadata);
             this.Documents.Add(metadata.Document);
             _ = this.Sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(added);
-            _ = this.Sync.Setup(value => value.RegisterDocument(added, metadata.DocumentId)).Returns(value: true);
             return added;
         }
 
         public SceneExplorerViewModel Build(
             IAssetRelocationService? relocation = null,
-            Oxygen.Editor.Shell.Documents.IHistoryService? histories = null,
+            Shell.Documents.IHistoryService? histories = null,
             IProjectContextService? contexts = null)
             => new(
                 this.Manager.Object,
@@ -227,7 +216,6 @@ public sealed partial class SceneExplorerAuthoringTests
                 default,
                 this.Sync.Object,
                 new SceneSelectionService(),
-                this.Commands.Object,
                 projectContexts: contexts,
                 relocation: relocation,
                 histories: histories);

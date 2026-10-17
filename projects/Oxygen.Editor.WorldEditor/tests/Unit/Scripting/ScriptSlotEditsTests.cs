@@ -19,7 +19,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 public sealed class ScriptSlotEditsTests
 {
     private static readonly ScriptParameter Speed = new("speed", ScriptParameterKind.Float, 1f, 0, Min: 0, Max: null, Step: null, "m/s", string.Empty, [], IsColor: false);
-    private static readonly ScriptParameter Target = new("target", ScriptParameterKind.Node, null, 0, null, null, null, string.Empty, string.Empty, [], IsColor: false);
+    private static readonly ScriptParameter Target = new("target", ScriptParameterKind.Node, DefaultValue: null, 0, Min: null, Max: null, Step: null, string.Empty, string.Empty, [], IsColor: false);
 
     [TestMethod]
     public void SetValueStoresOnlyValuesThatDifferFromTheDefault()

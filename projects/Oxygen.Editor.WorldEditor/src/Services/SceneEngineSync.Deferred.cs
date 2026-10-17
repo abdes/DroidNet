@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;

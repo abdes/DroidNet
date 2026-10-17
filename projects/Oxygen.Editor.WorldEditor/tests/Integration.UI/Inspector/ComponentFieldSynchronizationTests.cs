@@ -58,7 +58,7 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         var control = await FindNodeFieldControlAsync(view, scroller, model, field, timeout.Token).ConfigureAwait(true);
         var before = SourceNodeProperties(node);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         await AssertNodeValuesAsync(fixture, node.Id, before, model, timeout.Token).ConfigureAwait(true);
         await SetEnvironmentControlValueAsync(control, field.ControlValue).ConfigureAwait(true);
         await WaitForNodeControlCommitAsync(fixture, model, timeout.Token).ConfigureAwait(true);
@@ -67,16 +67,16 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
             [(field.Component, field.NativeField)] = field.ExpectedValue,
         };
         await AssertNodeValuesAsync(fixture, node.Id, expected, model, timeout.Token).ConfigureAwait(true);
-        await fixture.Context.History.UndoAsync(timeout.Token).ConfigureAwait(true);
+        await fixture.Document.History.UndoAsync(timeout.Token).ConfigureAwait(true);
         await AssertNodeValuesAsync(fixture, node.Id, before, model, timeout.Token).ConfigureAwait(true);
-        await fixture.Context.History.RedoAsync(timeout.Token).ConfigureAwait(true);
+        await fixture.Document.History.RedoAsync(timeout.Token).ConfigureAwait(true);
         await AssertNodeValuesAsync(fixture, node.Id, expected, model, timeout.Token).ConfigureAwait(true);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
         {
         }).ConfigureAwait(true);
         await AssertNodeValuesAsync(fixture, node.Id, expected, model, timeout.Token).ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
     });
 
     /// <summary>The fourth cascade boundary is displayed disabled because a fifth cascade would be required to edit it, and its stored value survives Save/reopen unchanged.</summary>
@@ -110,14 +110,14 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
         _ = ((DirectionalLightViewModel)model).IsCascadeDistance4Applicable.Should().BeFalse("a manual split with the maximal cascade count still leaves the fourth boundary inapplicable");
         var expected = SourceNodeProperties(node);
         _ = expected[(field.Component, field.NativeField)].Should().BeApproximately(field.ExpectedValue, 0.0001f);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         await AssertNodeValuesAsync(fixture, node.Id, expected, model, timeout.Token).ConfigureAwait(true);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
         {
         }).ConfigureAwait(true);
         await AssertNodeValuesAsync(fixture, node.Id, expected, model, timeout.Token).ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
     });
 
     private static async Task WaitForNodeControlCommitAsync(NativeSceneFixture fixture, IPropertyEditor<SceneNode> model, CancellationToken cancellationToken)
@@ -127,12 +127,12 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
             await PendingNumericEdits(model).ConfigureAwait(true);
         }
 
-        for (var attempt = 0; attempt < 100 && fixture.Context.History.UndoStack.Count == 0; attempt++)
+        for (var attempt = 0; attempt < 100 && fixture.Document.History.UndoStack.Count == 0; attempt++)
         {
             await Task.Delay(10, cancellationToken).ConfigureAwait(true);
         }
 
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
     }
 
     private static async Task AssertNodeValuesAsync(NativeSceneFixture fixture, NodeId nodeId, Dictionary<(ushort component, ushort field), float> expected, IPropertyEditor<SceneNode> model, CancellationToken cancellationToken)

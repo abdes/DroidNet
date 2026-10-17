@@ -5,7 +5,6 @@
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.World.Workspace;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 using Oxygen.Managed.Core;
 
@@ -71,7 +70,7 @@ public sealed class WorkspaceInitialSceneTests
 
     private static SceneDocumentFiles CreateScenes()
     {
-        var scenes = new SceneDocumentFiles(Mock.Of<ISceneDocumentCommandService>());
+        var scenes = new SceneDocumentFiles();
         scenes.Write("Alpha", SceneDocumentFiles.Data(AlphaId, "Alpha"));
         scenes.Write("Beta", SceneDocumentFiles.Data(BetaId, "Beta"));
         scenes.Write("Levels/Gamma", SceneDocumentFiles.Data(GammaId, "Gamma"));

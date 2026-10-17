@@ -15,6 +15,8 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 [TestClass]
 public sealed class EnvironmentSchedulingTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
     public async Task BackgroundAssetNotificationsUseTheInjectedSchedulerAndRetainRows()
     {
@@ -28,7 +30,7 @@ public sealed class EnvironmentSchedulingTests
         model.Exposure.MeteringMaskRows.CollectionChanged += (_, _) => deliveryThreads.Add(Environment.CurrentManagedThreadId);
         var original = CreateTexture("First");
 
-        await Task.Run(() => source.OnNext([original])).ConfigureAwait(false);
+        await Task.Run(() => source.OnNext([original]), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = model.Exposure.MeteringMaskRows.Should().BeEmpty("notifications must wait for the supplied scheduler");
         var observerThread = Environment.CurrentManagedThreadId;
         scheduler.Start();
@@ -37,7 +39,7 @@ public sealed class EnvironmentSchedulingTests
         var row = model.Exposure.MeteringMaskRows[0];
         _ = row.Item.Name.Should().Be("First");
 
-        await Task.Run(() => source.OnNext([original with { DisplayName = "Renamed" }])).ConfigureAwait(false);
+        await Task.Run(() => source.OnNext([original with { DisplayName = "Renamed" }]), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = row.Item.Name.Should().Be("First");
         scheduler.Start();
         _ = model.Exposure.MeteringMaskRows[0].Should().BeSameAs(row);
@@ -93,14 +95,14 @@ public sealed class EnvironmentSchedulingTests
             name,
             AssetKind.Texture,
             AssetState.Descriptor,
-            null,
+            DerivedState: null,
             AssetRuntimeAvailability.Mounted,
             "Textures/metering-mask",
-            null,
-            null,
-            null,
-            null,
-            null,
+            SourcePath: null,
+            DescriptorPath: null,
+            CookedUri: null,
+            CookedPath: null,
+            AssetGuid: null,
             [],
             IsSelectable: true);
 }

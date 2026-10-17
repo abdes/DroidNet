@@ -135,11 +135,11 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         var original = await AssertGeometryAsync(fixture, node.Id, "Cube", cancellationToken).ConfigureAwait(true);
         var geometryButton = (SplitButton)await FindInspectorControlAsync(scroller, () => view.FindDescendant<SplitButton>(button => string.Equals(button.Name, "AssetSplitButton", StringComparison.Ordinal)), "Geometry", cancellationToken).ConfigureAwait(true);
         await DismissImportedAssetPickerAsync(geometryButton, cancellationToken).ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         await PickAssetAsync(geometryButton, geometry.DisplayName, material: false, cancellationToken).ConfigureAwait(true);
         var selected = await WaitForNodeAsync(fixture, node.Id, static value => value.IndexCount == 3, cancellationToken).ConfigureAwait(true);
         _ = selected.GeometryKey.Should().Be(ImportedNativeKey(geometry));
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
         while (model.IsMaterialSlotLoading)
         {
@@ -149,21 +149,21 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         _ = model.CanEditMaterialSlot.Should().BeTrue(model.MaterialSlotNotice);
         var materialButton = (SplitButton)await FindInspectorControlAsync(scroller, () => view.FindDescendant<SplitButton>(button => string.Equals(button.Name, "MaterialSplitButton", StringComparison.Ordinal)), "Material", cancellationToken).ConfigureAwait(true);
         await DismissImportedAssetPickerAsync(materialButton, cancellationToken).ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         await PickAssetAsync(materialButton, material.DisplayName, material: true, cancellationToken).ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().HaveCount(2, "the enabled picker must apply an authored material edit");
+        _ = fixture.Document.History.UndoStack.Should().HaveCount(2, "the enabled picker must apply an authored material edit");
         _ = ReadMaterialUri(node).Should().Be(material.IdentityUri);
         var assigned = await WaitForNodeAsync(fixture, node.Id, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.8f, 0.2f, 0.1f, 1)) < 0.001f, cancellationToken).ConfigureAwait(true);
         _ = assigned.MaterialKeys.Should().ContainSingle().Which.Should().Be(ImportedNativeKey(material));
         _ = node.Components.OfType<GeometryComponent>().Single().Geometry!.Uri.Should().Be(geometry.IdentityUri);
-        await fixture.Context.History.UndoAsync(cancellationToken).ConfigureAwait(true);
+        await fixture.Document.History.UndoAsync(cancellationToken).ConfigureAwait(true);
         _ = node.Components.OfType<GeometryComponent>().Single().OverrideSlots.Should().BeEmpty();
-        await fixture.Context.History.UndoAsync(cancellationToken).ConfigureAwait(true);
+        await fixture.Document.History.UndoAsync(cancellationToken).ConfigureAwait(true);
         _ = await WaitForNodeAsync(fixture, node.Id, value => string.Equals(value.GeometryKey, original.GeometryKey, StringComparison.Ordinal), cancellationToken).ConfigureAwait(true);
         await AssertMaterialAsync(fixture, node.Id, original.MaterialKeys.Single(), cancellationToken).ConfigureAwait(true);
-        await fixture.Context.History.RedoAsync(cancellationToken).ConfigureAwait(true);
+        await fixture.Document.History.RedoAsync(cancellationToken).ConfigureAwait(true);
         _ = await WaitForNodeAsync(fixture, node.Id, static value => value.IndexCount == 3, cancellationToken).ConfigureAwait(true);
-        await fixture.Context.History.RedoAsync(cancellationToken).ConfigureAwait(true);
+        await fixture.Document.History.RedoAsync(cancellationToken).ConfigureAwait(true);
         await AssertMaterialAsync(fixture, node.Id, assigned.MaterialKeys.Single(), cancellationToken).ConfigureAwait(true);
         await fixture.SaveAndReopenAsync(cancellationToken).ConfigureAwait(true);
         var reopened = await WaitForNodeAsync(fixture, node.Id, value => string.Equals(value.GeometryKey, selected.GeometryKey, StringComparison.Ordinal), cancellationToken).ConfigureAwait(true);

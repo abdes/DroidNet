@@ -47,7 +47,7 @@ internal sealed class SunDependenciesTests : DroidNet.Tests.VisualUserInterfaceT
         picker.SelectedItem = model.AtmosphereLights.SunOptions.Single(option => option.NodeId == fixture.Node.Id);
         await model.PendingEdits.ConfigureAwait(true);
         _ = fixture.Node.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot.Should().Be(Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         var light = fixture.Node.Components.OfType<DirectionalLightComponent>().Single();
         RemoveSunTarget(fixture, light, removeComponent);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
@@ -56,14 +56,14 @@ internal sealed class SunDependenciesTests : DroidNet.Tests.VisualUserInterfaceT
         await model.PendingEdits.ConfigureAwait(true);
         _ = ((SunLightOption)picker.SelectedItem).NodeId.Should().BeNull();
         _ = light.AtmosphereSlot.Should().Be(Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         RestoreSunTarget(fixture, light, removeComponent);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
         {
         }).ConfigureAwait(true);
         await model.PendingEdits.ConfigureAwait(true);
         _ = ((SunLightOption)picker.SelectedItem).NodeId.Should().Be(fixture.Node.Id);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         var clear = ((Grid)picker.Parent).Children.OfType<Button>().Single(button => ReferenceEquals(button.Command, model.AtmosphereLights.ClearSunCommand));
         ((IInvokeProvider)new ButtonAutomationPeer(clear).GetPattern(PatternInterface.Invoke)).Invoke();
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
@@ -71,7 +71,7 @@ internal sealed class SunDependenciesTests : DroidNet.Tests.VisualUserInterfaceT
         }).ConfigureAwait(true);
         await model.PendingEdits.ConfigureAwait(true);
         _ = light.AtmosphereSlot.Should().Be(Oxygen.Editor.World.Serialization.AtmosphereLightSlot.None);
-        _ = fixture.Context.History.UndoStack.Should().HaveCount(2);
+        _ = fixture.Document.History.UndoStack.Should().HaveCount(2);
     });
 
     /// <summary>Inspect waits for Explorer selection before applying its component filter without authoring edits.</summary>
@@ -99,7 +99,7 @@ internal sealed class SunDependenciesTests : DroidNet.Tests.VisualUserInterfaceT
         _ = host.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<DirectionalLightViewModel>();
         await model.AtmosphereLights.InspectAtmosphereSourceAsync(source).ConfigureAwait(true);
         _ = host.SelectedComponentType.Should().Be<DirectionalLightComponent>();
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
@@ -119,7 +119,7 @@ internal sealed class SunDependenciesTests : DroidNet.Tests.VisualUserInterfaceT
         model.AtmosphereLights.ClearSunCommand.Execute(parameter: null);
         await model.PendingEdits.ConfigureAwait(true);
         var editedAngularSize = light.AngularSizeRadians;
-        var historyCount = fixture.Context.History.UndoStack.Count;
+        var historyCount = fixture.Document.History.UndoStack.Count;
         var intensity = light.IntensityLux;
         await model.AtmosphereLights.ResetAtmosphereSourcesAsync().ConfigureAwait(true);
         await model.PendingEdits.ConfigureAwait(true);
@@ -127,8 +127,8 @@ internal sealed class SunDependenciesTests : DroidNet.Tests.VisualUserInterfaceT
         _ = light.AtmosphereSlot.Should().Be(Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary);
         _ = light.AngularSizeRadians.Should().Be(originalAngularSize);
         _ = light.IntensityLux.Should().Be(intensity);
-        _ = fixture.Context.History.UndoStack.Should().HaveCount(historyCount + 1);
-        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        _ = fixture.Document.History.UndoStack.Should().HaveCount(historyCount + 1);
+        await fixture.Document.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = light.AtmosphereSlot.Should().Be(Oxygen.Editor.World.Serialization.AtmosphereLightSlot.None);
         _ = light.AngularSizeRadians.Should().Be(editedAngularSize);
     });

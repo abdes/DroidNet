@@ -12,11 +12,13 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Assets;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 
@@ -38,9 +40,8 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     private readonly ISceneContentDemandService contentDemand;
     private readonly IGeometryMaterialSlotProvider materialSlots;
     private readonly IProjectContextService projectContexts;
-    private readonly ISceneDocumentCommandService? commandService;
-    private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
-    private readonly PropertyBinding<Uri?> geometryUriBinding = new(SceneDocumentCommandService.Geometry.GeometryUriDescriptor);
+    private readonly Func<SceneAuthoring?>? authoringProvider;
+    private readonly PropertyBinding<Uri?> geometryUriBinding = new(SceneProperties.Geometry.GeometryUriDescriptor);
     private readonly ObservableCollection<AssetPickerRow> contentItems = [];
     private readonly ObservableCollection<AssetPickerRow> engineItems = [];
     private readonly ObservableCollection<MaterialPickerRow> engineMaterials = [];
@@ -65,8 +66,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <param name="contentDemand">The lifetime owner for saved-asset preview requests.</param>
     /// <param name="materialSlots">The native geometry slot inventory reader.</param>
     /// <param name="projectContexts">The active project lifetime.</param>
-    /// <param name="commandService">Optional command service used to apply geometry edits.</param>
-    /// <param name="commandContextProvider">Optional provider for the active scene command context.</param>
+    /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     public GeometryViewModel(
         HostingContext hosting,
         IAssetFeed assetProvider,
@@ -74,16 +74,14 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         ISceneContentDemandService contentDemand,
         IGeometryMaterialSlotProvider materialSlots,
         IProjectContextService projectContexts,
-        ISceneDocumentCommandService? commandService = null,
-        Func<SceneDocumentCommandContext?>? commandContextProvider = null)
+        Func<SceneAuthoring?>? authoringProvider = null)
     {
         this.assetProvider = assetProvider;
         this.builtins = builtins;
         this.contentDemand = contentDemand;
         this.materialSlots = materialSlots;
         this.projectContexts = projectContexts;
-        this.commandService = commandService;
-        this.commandContextProvider = commandContextProvider;
+        this.authoringProvider = authoringProvider;
         this.dispatcherQueue = hosting.Dispatcher;
 
         this.Groups = [new AssetGroup("Engine", this.engineItems), new AssetGroup("Content", this.contentItems)];
@@ -239,18 +237,12 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
         var nodes = this.selectedItems.ToList();
         var newUri = item.Uri;
-        if (this.commandService is null || this.commandContextProvider?.Invoke() is not { } context)
+        if (this.authoringProvider?.Invoke() is not { } authoring)
         {
             return;
         }
 
-        var edit = PropertyEdit.SingleEdit(SceneDocumentCommandService.Geometry.GeometryUri, newUri);
-        var result = await this.commandService.EditPropertiesAsync(
-            context,
-            nodes.ConvertAll(static node => node.Id),
-            edit,
-            "Edit Geometry",
-            EditSessionToken.OneShot).ConfigureAwait(true);
+        var result = await authoring.ExecuteAsync(new SetGeometry(nodes.ConvertAll(static node => node.Id), newUri)).ConfigureAwait(true);
         if (!result.Succeeded || !this.IsCurrentSelection(nodes))
         {
             return;
@@ -260,7 +252,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         this.SelectedAssetUriString = newUri.ToString();
         this.SelectedAssetName = item.Name;
         this.IsMixed = false;
-        this.contentDemand.RequestAssignment(context.Scene, nodes.ConvertAll(static node => node.Id), newUri, AssetKind.Geometry);
+        this.contentDemand.RequestAssignment(authoring.Scene, nodes.ConvertAll(static node => node.Id), newUri, AssetKind.Geometry);
         await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);
     }
 
@@ -274,23 +266,25 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         var picker = this.materialEdit;
         this.materialEdit = null;
         if (!this.IsInputEnabled || item is not { IsEnabled: true } || picker is null
-            || this.commandService is null || !this.IsCurrentSelection(picker.Nodes)
-            || !ReferenceEquals(this.commandContextProvider?.Invoke()?.Scene, picker.Context.Scene))
+            || !this.IsCurrentSelection(picker.Nodes)
+            || !ReferenceEquals(this.authoringProvider?.Invoke(), picker.Authoring)
+            || this.projectContexts.ActiveProject is not { } project)
         {
             return;
         }
 
-        var result = await this.commandService.EditMaterialSlotAsync(picker.Context,
-            picker.Nodes.ConvertAll(static node => node.Id), picker.Target, item.Uri, EditSessionToken.OneShot).ConfigureAwait(true);
+        var nodeIds = picker.Nodes.ConvertAll(static node => node.Id);
+        var built = await MaterialSlotEdits.SetAsync(this.materialSlots, project, nodeIds, picker.Target, item.Uri).ConfigureAwait(true);
+        var succeeded = built.Edit is { } edit && (await picker.Authoring.ExecuteAsync(edit).ConfigureAwait(true)).Succeeded;
         if (!this.IsCurrentSelection(picker.Nodes))
         {
             return;
         }
 
-        if (result.Succeeded)
+        if (succeeded)
         {
             this.UpdateMaterialDisplay(item.Uri);
-            this.contentDemand.RequestAssignment(picker.Context.Scene, picker.Nodes.ConvertAll(static node => node.Id), item.Uri, AssetKind.Material);
+            this.contentDemand.RequestAssignment(picker.Authoring.Scene, picker.Nodes.ConvertAll(static node => node.Id), item.Uri, AssetKind.Material);
         }
 
         await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);
@@ -303,8 +297,8 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     public async Task RefreshMaterialPickerAsync()
     {
         this.materialEdit = this.SelectedMaterialSlot is { } slot && this.CanEditMaterialSlot
-            && this.selectedItems is { Count: > 0 } nodes && this.commandContextProvider?.Invoke() is { } context
-                ? new(context, nodes.ToList(), slot.Target) : null;
+            && this.selectedItems is { Count: > 0 } nodes && this.authoringProvider?.Invoke() is { } authoring
+                ? new(authoring, nodes.ToList(), slot.Target) : null;
         await this.assetProvider.RefreshAsync().ConfigureAwait(true);
         this.ApplyContentMaterials();
     }

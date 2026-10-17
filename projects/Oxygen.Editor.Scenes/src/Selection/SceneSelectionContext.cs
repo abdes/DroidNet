@@ -5,7 +5,7 @@
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Documents.Selection;
+namespace Oxygen.Editor.Scenes.Selection;
 
 /// <summary>
 /// Classifies the row kinds represented by the current Explorer selection.
