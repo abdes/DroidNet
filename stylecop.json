@@ -1,21 +1,21 @@
 {
-    "$schema": "https://raw.githubusercontent.com/DotNetAnalyzers/StyleCopAnalyzers/master/StyleCop.Analyzers/StyleCop.Analyzers/Settings/stylecop.schema.json",
-    "settings": {
-        "documentationRules": {
-            "companyName": "The Authors",
-            "copyrightText": "Distributed under the {licenseName} License. See accompanying file {licenseFile} or copy\nat https://opensource.org/licenses/{licenseName}.\nSPDX-License-Identifier: {licenseName}",
-            "variables": {
-                "licenseName": "MIT",
-                "licenseFile": "LICENSE"
-            },
-            "xmlHeader": false,
-            "fileNamingConvention": "metadata"
-        },
-        "layoutRules": {
-            "newlineAtEndOfFile": "require"
-        },
-        "namingRules": {
-            "tupleElementNameCasing": "camelCase"
-        }
+  "$schema": "https://raw.githubusercontent.com/DotNetAnalyzers/StyleCopAnalyzers/master/StyleCop.Analyzers/StyleCop.Analyzers/Settings/stylecop.schema.json",
+  "settings": {
+    "documentationRules": {
+      "companyName": "The Authors",
+      "copyrightText": "Distributed under the {licenseName} License. See accompanying file {licenseFile} or copy\nat https://opensource.org/licenses/{licenseName}.\nSPDX-License-Identifier: {licenseName}",
+      "variables": {
+        "licenseName": "MIT",
+        "licenseFile": "LICENSE"
+      },
+      "xmlHeader": false,
+      "fileNamingConvention": "metadata"
+    },
+    "layoutRules": {
+      "newlineAtEndOfFile": "require"
+    },
+    "namingRules": {
+      "tupleElementNameCasing": "PascalCase"
     }
+  }
 }
