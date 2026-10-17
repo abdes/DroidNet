@@ -103,8 +103,11 @@ namespace {
       .Build();
   }
 
+  //! Creates a pick target whose optimized clear value matches the clear the
+  //! pass records, so the clear takes the fast path.
   auto CreatePickTexture(Graphics& gfx, const ViewPickRect& rect,
-    const Format format, const bool depth) -> std::shared_ptr<graphics::Texture>
+    const Format format, const bool depth, const graphics::Color clear_value)
+    -> std::shared_ptr<graphics::Texture>
   {
     auto desc = graphics::TextureDesc {};
     desc.width = rect.width;
@@ -113,7 +116,8 @@ namespace {
     desc.texture_type = TextureType::kTexture2D;
     desc.is_render_target = true;
     desc.is_shader_resource = false;
-    desc.use_clear_value = false;
+    desc.use_clear_value = true;
+    desc.clear_value = clear_value;
     desc.initial_state = depth ? graphics::ResourceStates::kDepthWrite
                                : graphics::ResourceStates::kRenderTarget;
     desc.debug_name = depth ? "Vortex.ViewPick.Depth" : "Vortex.ViewPick.Ids";
@@ -161,8 +165,11 @@ auto ViewPickPass::Record(RenderContext& ctx,
 
   const auto& rect = request->Rect();
   const auto reverse_z = resolved_view->ReverseZ();
-  auto ids = CreatePickTexture(*gfx, rect, kPickFormat, false);
-  auto depth = CreatePickTexture(*gfx, rect, kPickDepthFormat, true);
+  const auto clear_ids = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
+  const auto clear_depth = reverse_z ? 0.0F : 1.0F;
+  auto ids = CreatePickTexture(*gfx, rect, kPickFormat, false, clear_ids);
+  auto depth = CreatePickTexture(*gfx, rect, kPickDepthFormat, true,
+    graphics::Color { clear_depth, 0.0F, 0.0F, 0.0F });
   if (ids == nullptr || depth == nullptr) {
     fail();
     return;
@@ -186,10 +193,7 @@ auto ViewPickPass::Record(RenderContext& ctx,
       *depth, graphics::ResourceStates::kDepthWrite, false);
     recorder.BindFrameBuffer(*framebuffer);
     recorder.ClearFramebuffer(*framebuffer,
-      std::vector<std::optional<graphics::Color>> {
-        graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F },
-      },
-      reverse_z ? 0.0F : 1.0F);
+      std::vector<std::optional<graphics::Color>> { clear_ids }, clear_depth);
 
     // The view's projection, with the pick rectangle moved to the origin.
     auto viewport = resolved_view->Viewport();
