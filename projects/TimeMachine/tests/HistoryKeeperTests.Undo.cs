@@ -5,7 +5,6 @@
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.TimeMachine.Changes;
-using DroidNet.TimeMachine.Transactions;
 using Moq;
 
 namespace DroidNet.TimeMachine.Tests;
@@ -59,29 +58,6 @@ public partial class HistoryKeeperTests
 
         // Assert
         change.Verify(cs => cs.Apply(), Times.Once);
-    }
-
-    [TestMethod]
-    [TestCategory("HistoryKeeper.Undo")]
-    public void Undo_ShouldCommitTransactions_WhenTransactionsExist()
-    {
-        // Arrange
-        var mockTransactionFactory = new Mock<ITransactionFactory>();
-        var mockTransaction = new Mock<ITransaction>();
-        _ = mockTransactionFactory.Setup(tf => tf.CreateTransaction(It.IsAny<object>())).Returns(mockTransaction.Object);
-
-        var historyKeeper = new HistoryKeeper(new object(), mockTransactionFactory.Object);
-        historyKeeper.AddChange(new Mock<IChange>().Object);
-
-        // Simulate an existing transaction
-        var transaction = historyKeeper.BeginTransaction("t");
-        transaction.AddChange(new Mock<IChange>().Object);
-
-        // Act
-        historyKeeper.Undo();
-
-        // Assert
-        mockTransaction.Verify(t => t.Commit(), Times.Once);
     }
 
     [TestMethod]
@@ -212,29 +188,6 @@ public partial class HistoryKeeperTests
         _ = historyKeeper.Redo().Should().BeTrue();
         _ = historyKeeper.RedoStack.Should().BeEmpty();
         _ = historyKeeper.UndoStack.Should().ContainSingle();
-    }
-
-    [TestMethod]
-    public void Redo_ShouldCommitTransactions_WhenTransactionsExist()
-    {
-        // Arrange
-        var mockTransactionFactory = new Mock<ITransactionFactory>();
-        var mockTransaction = new Mock<ITransaction>();
-        _ = mockTransactionFactory.Setup(tf => tf.CreateTransaction(It.IsAny<object>())).Returns(mockTransaction.Object);
-
-        var historyKeeper = new HistoryKeeper(new object(), mockTransactionFactory.Object);
-        historyKeeper.AddChange(new Mock<IChange>().Object);
-        historyKeeper.Undo();
-
-        // Simulate an existing transaction
-        var transaction = historyKeeper.BeginTransaction("t");
-        transaction.AddChange(new Mock<IChange>().Object);
-
-        // Act
-        historyKeeper.Redo();
-
-        // Assert
-        mockTransaction.Verify(t => t.Commit(), Times.Once);
     }
 
     [TestMethod]

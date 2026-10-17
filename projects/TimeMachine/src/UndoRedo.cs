@@ -21,12 +21,16 @@ namespace DroidNet.TimeMachine;
 /// var rootObject = new object();
 /// var historyKeeper = UndoRedo.Default[rootObject];
 ///
-/// using (var transaction = historyKeeper.BeginTransaction("exampleTransaction"))
+/// historyKeeper.BeginChangeSet("exampleChangeSet");
+/// try
 /// {
 ///     historyKeeper.AddChange("ChangeLabel1", targetObject, t => t.SomeMethod());
 ///     historyKeeper.AddChange("ChangeLabel2", arg => Console.WriteLine(arg), "Hello, World!");
 ///     historyKeeper.AddChange("ChangeLabel3", () => Console.WriteLine("Action executed"));
-///     transaction.Commit();
+/// }
+/// finally
+/// {
+///     historyKeeper.EndChangeSet();
 /// }
 ///
 /// historyKeeper.Undo();

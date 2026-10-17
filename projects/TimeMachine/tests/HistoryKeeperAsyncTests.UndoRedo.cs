@@ -5,7 +5,6 @@
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.TimeMachine.Changes;
-using DroidNet.TimeMachine.Transactions;
 using Moq;
 
 namespace DroidNet.TimeMachine.Tests;
@@ -116,28 +115,6 @@ public partial class HistoryKeeperAsyncTests
 
         // Assert
         _ = historyKeeper.UndoStack.Should().NotBeEmpty();
-    }
-
-    [TestMethod]
-    [TestCategory("HistoryKeeper.UndoAsync")]
-    public async Task UndoAsync_ShouldCommitTransactions_WhenTransactionsExist()
-    {
-        // Arrange
-        var mockTransactionFactory = new Mock<ITransactionFactory>();
-        var mockTransaction = new Mock<ITransaction>();
-        _ = mockTransactionFactory.Setup(tf => tf.CreateTransaction(It.IsAny<object>())).Returns(mockTransaction.Object);
-
-        var historyKeeper = new HistoryKeeper(new object(), mockTransactionFactory.Object);
-        historyKeeper.AddChange("undo", () => Task.CompletedTask);
-
-        var transaction = historyKeeper.BeginTransaction("t");
-        transaction.AddChange(new Mock<IChange>().Object);
-
-        // Act
-        await historyKeeper.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        // Assert
-        mockTransaction.Verify(t => t.Commit(), Times.Once);
     }
 
     [TestMethod]

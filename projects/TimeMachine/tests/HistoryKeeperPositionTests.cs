@@ -6,7 +6,6 @@ using System.Collections.Specialized;
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.TimeMachine.Changes;
-using DroidNet.TimeMachine.Transactions;
 
 namespace DroidNet.TimeMachine.Tests;
 
@@ -108,24 +107,6 @@ public class HistoryKeeperPositionTests
     }
 
     [TestMethod]
-    public void Position_OfTransaction_IsOneState()
-    {
-        var history = new HistoryKeeper(this);
-        var start = history.Position;
-
-        var transaction = history.BeginTransaction("both");
-        this.Set(history, transaction, 1);
-        this.Set(history, transaction, 2);
-        transaction.Commit();
-        var after = history.Position;
-
-        history.Undo();
-        _ = history.Position.Should().Be(start);
-        history.Redo();
-        _ = history.Position.Should().Be(after);
-    }
-
-    [TestMethod]
     public void Position_AfterClear_IsNew()
     {
         var history = new HistoryKeeper(this);
@@ -194,13 +175,6 @@ public class HistoryKeeperPositionTests
         var previous = this.value;
         this.value = next;
         history.AddChange($"Set {next}", () => this.Set(history, previous));
-    }
-
-    private void Set(HistoryKeeper history, ITransaction transaction, int next)
-    {
-        var previous = this.value;
-        this.value = next;
-        transaction.AddChange(new SimpleAction(() => this.Set(history, previous)) { Key = $"Set {next}" });
     }
 
     private void SetAsync(HistoryKeeper history, int next)

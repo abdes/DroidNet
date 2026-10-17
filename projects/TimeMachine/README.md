@@ -1,16 +1,14 @@
 # TimeMachine
 
 TimeMachine is a robust, composable undo/redo module for .NET applications. It
-is designed for complex scenarios including nested transactions, change sets,
-and (new) asynchronous change application.
+groups changes into change sets and applies changes synchronously or
+asynchronously.
 
 ## Highlights
 
 - **Undo/Redo stacks per root** via `UndoRedo.Default[root]` (weak-keyed and
   GC-friendly)
-- **Transactions** to group multiple changes into a single undo/redo entry
-- **Change sets** to group changes produced during undo/redo of grouped
-  operations
+- **Change sets** to group multiple changes into a single undo/redo entry
 - **Async support**: changes can be applied synchronously or asynchronously
 
 ## Technology
@@ -29,7 +27,6 @@ Key capabilities:
 
 - Tracks `UndoStack` and `RedoStack`
 - Clears redo history when new (non-undo/redo) changes are added
-- Supports nested `ITransaction` blocks
 - Supports change sets for atomic undo/redo of grouped operations
 
 ### Changes
@@ -44,11 +41,6 @@ Async model:
 - By default, `ApplyAsync(...)` calls `Apply()`.
 - Async-only changes throw from `Apply()` to avoid accidental
   blocking/deadlocks.
-
-### Transactions
-
-Transactions (`ITransaction`) are also changes, allowing a transaction to be
-pushed as a single entry to the undo/redo stacks.
 
 ## Project Structure
 
@@ -71,11 +63,6 @@ projects/TimeMachine/
 │   │   ├── AsyncSimpleAction.cs
 │   │   ├── AsyncActionWithArgument`1.cs
 │   │   └── AsyncLambdaExpressionOnTarget`1.cs
-│   ├── Transactions/
-│   │   ├── ITransaction.cs
-│   │   ├── Transaction.cs
-│   │   ├── ITransactionFactory.cs
-│   │   └── ITransactionManager.cs
 │   └── Properties/
 ├── tests/
 │   ├── TimeMachine.Tests.csproj
@@ -351,7 +338,7 @@ if (historyKeeper.CanRedo)
 ### Mixing synchronous and asynchronous changes
 
 You can mix synchronous and asynchronous changes in the same history (including
-inside transactions and change sets).
+inside change sets).
 
 Guidelines:
 
@@ -383,21 +370,6 @@ historyKeeper.AddChange("async-undo", async () =>
 
 await historyKeeper.UndoAsync().ConfigureAwait(false);
 ```
-
-## Transactions
-
-Use transactions to group multiple changes into a single undo/redo entry.
-
-```csharp
-using (var transaction = historyKeeper.BeginTransaction("edit-document"))
-{
-    historyKeeper.AddChange("set-title", document, d => d.SetTitle("New"));
-    historyKeeper.AddChange("set-author", document, d => d.SetAuthor("You"));
-    transaction.Commit();
-}
-```
-
-Nested transactions are supported.
 
 ## Change Sets
 

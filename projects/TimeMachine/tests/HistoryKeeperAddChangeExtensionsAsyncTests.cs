@@ -5,7 +5,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using DroidNet.TimeMachine.Changes;
-using DroidNet.TimeMachine.Transactions;
 using Moq;
 
 namespace DroidNet.TimeMachine.Tests;
@@ -15,7 +14,7 @@ namespace DroidNet.TimeMachine.Tests;
 [TestCategory($"{nameof(HistoryKeeper)}.AddChangeExtensions.Async")]
 public class HistoryKeeperAddChangeExtensionsAsyncTests
 {
-    private readonly Mock<HistoryKeeper> historyKeeperMock = new(new object(), new Mock<ITransactionFactory>().Object);
+    private readonly Mock<HistoryKeeper> historyKeeperMock = new(new object());
 
     public TestContext TestContext { get; set; }
 

@@ -5,7 +5,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TimeMachine.Changes;
-using DroidNet.TimeMachine.Transactions;
 
 namespace DroidNet.TimeMachine;
 
@@ -14,8 +13,7 @@ namespace DroidNet.TimeMachine;
 /// </summary>
 /// <remarks>
 /// The <see cref="HistoryKeeper"/> class tracks changes and manages undo/redo operations for a specific root object.
-/// It supports nested transactions and change sets, allowing for complex scenarios where multiple changes need to be
-/// grouped and managed as a single unit.
+/// Change sets group several changes into one entry, which undoes and redoes as a single unit.
 /// </remarks>
 /// <example>
 /// <para><strong>Example Usage:</strong></para>
@@ -23,24 +21,26 @@ namespace DroidNet.TimeMachine;
 /// var rootObject = new object();
 /// var historyKeeper = new HistoryKeeper(rootObject);
 ///
-/// using (var transaction = historyKeeper.BeginTransaction("exampleTransaction"))
+/// historyKeeper.BeginChangeSet("exampleChangeSet");
+/// try
 /// {
-///     var change = new CustomChange { Key = "change1" };
-///     transaction.AddChange(change);
-///     transaction.Commit();
+///     historyKeeper.AddChange(new CustomChange { Key = "change1" });
+///     historyKeeper.AddChange(new CustomChange { Key = "change2" });
+/// }
+/// finally
+/// {
+///     historyKeeper.EndChangeSet();
 /// }
 ///
 /// historyKeeper.Undo();
 /// historyKeeper.Redo();
 /// ]]></code>
 /// </example>
-public class HistoryKeeper : ITransactionManager
+public class HistoryKeeper
 {
     private readonly ObservableCollection<IChange> redoStack = [];
     private readonly WeakReference root;
 
-    private readonly ITransactionFactory? transactionFactory;
-    private readonly Stack<ITransaction> transactions = new();
     private readonly ObservableCollection<IChange> undoStack = [];
 
     // The position each undo entry leads to, and the position redoing each redo entry leads to, aligned with the stacks.
@@ -56,13 +56,11 @@ public class HistoryKeeper : ITransactionManager
     private long replayPosition;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="HistoryKeeper"/> class with the specified root object and optional transaction factory.
+    /// Initializes a new instance of the <see cref="HistoryKeeper"/> class with the specified root object.
     /// </summary>
     /// <param name="root">The root object for which changes are tracked.</param>
-    /// <param name="transactionFactory">An optional factory for creating transactions.</param>
-    public HistoryKeeper(object root, ITransactionFactory? transactionFactory = null)
+    public HistoryKeeper(object root)
     {
-        this.transactionFactory = transactionFactory;
         this.root = new WeakReference(root);
 
         this.RedoStack = new ReadOnlyObservableCollection<IChange>(this.redoStack);
@@ -88,16 +86,6 @@ public class HistoryKeeper : ITransactionManager
         /// A redo operation is in progress.
         /// </summary>
         Redoing = 2,
-
-        /// <summary>
-        /// Batched changes within a transaction are being committed.
-        /// </summary>
-        Committing = 3,
-
-        /// <summary>
-        /// Batched changes within a transaction are being rolled back.
-        /// </summary>
-        RollingBack = 4,
     }
 
     /// <summary>
@@ -124,8 +112,8 @@ public class HistoryKeeper : ITransactionManager
     /// <remarks>It changes before the stacks do, so an observer of <see cref="UndoStack"/> reads the new position.</remarks>
     public HistoryPosition Position => new(this.undoPositions.Count == 0 ? this.emptyPosition : this.undoPositions[^1]);
 
-    /// <summary>Gets a value indicating whether replay, a transaction or a change set is in progress.</summary>
-    public bool IsBusy => this.State != States.Idle || this.transactions.Count != 0 || this.isCollectingChangesCounter != 0;
+    /// <summary>Gets a value indicating whether replay or a change set is in progress.</summary>
+    public bool IsBusy => this.State != States.Idle || this.isCollectingChangesCounter != 0;
 
     /// <summary>
     /// Gets the instance that represents the root (or document) for this set of changes.
@@ -145,76 +133,6 @@ public class HistoryKeeper : ITransactionManager
     /// manage the state transitions during undo, redo, commit, and rollback operations.
     /// </remarks>
     internal States State { get; set; } = States.Idle;
-
-    /// <inheritdoc />
-    public ITransaction BeginTransaction(object key)
-    {
-        var transaction = this.transactionFactory is null
-            ? new Transaction(this, key)
-            : this.transactionFactory.CreateTransaction(key);
-
-        this.transactions.Push(transaction);
-
-        return transaction;
-    }
-
-    /// <inheritdoc />
-    public void CommitTransaction(ITransaction transaction)
-    {
-        // Only switch the state to Committing if we are not doing another task (e.g. undoing).
-        var currentState = this.State == States.Idle ? States.Committing : this.State;
-
-        using (new StateTransition<States>(this, currentState))
-        {
-            while (this.transactions.TryPop(out var toCommit))
-            {
-                try
-                {
-                    if (toCommit.Equals(transaction))
-                    {
-                        if (this.State == States.Undoing)
-                        {
-                            this.PushToRedoStack(transaction);
-                        }
-                        else
-                        {
-                            this.PushToUndoStack(transaction);
-                        }
-
-                        break;
-                    }
-
-                    if (this.transactions.Count != 0)
-                    {
-                        this.transactions.Peek().AddChange(toCommit);
-                    }
-
-                    toCommit = null;
-                }
-                finally
-                {
-                    toCommit?.Dispose();
-                }
-            }
-        }
-    }
-
-    /// <inheritdoc />
-    public void RollbackTransaction(ITransaction transaction)
-    {
-        // Only switch the state to RollingBack if we are not doing another task (e.g. undoing).
-        var currentState = this.State == States.Idle ? States.RollingBack : this.State;
-
-        using (new StateTransition<States>(this, currentState))
-        {
-#pragma warning disable CA2000 // toRollback.Rollback() is already a Dispose method
-            while (this.transactions.TryPop(out var toRollback) && toRollback != transaction)
-#pragma warning restore CA2000
-            {
-                toRollback.Rollback();
-            }
-        }
-    }
 
     /// <summary>
     /// Adds a change to the undo stack or the current change set.
@@ -256,11 +174,6 @@ public class HistoryKeeper : ITransactionManager
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A change that fails to apply leaves the history as it was, and the result tells the caller.")]
     public bool Undo()
     {
-        if (this.transactions.Count != 0)
-        {
-            this.CommitTransactions();
-        }
-
         if (!this.TryPopUndoStack(out var lastChange, out var position))
         {
             return false;
@@ -296,11 +209,6 @@ public class HistoryKeeper : ITransactionManager
     /// <returns>A task-like object that represents the asynchronous operation.</returns>
     public async ValueTask UndoAsync(CancellationToken cancellationToken = default)
     {
-        if (this.transactions.Count != 0)
-        {
-            this.CommitTransactions();
-        }
-
         if (!this.TryPopUndoStack(out var lastChange, out var position))
         {
             return;
@@ -340,11 +248,6 @@ public class HistoryKeeper : ITransactionManager
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A change that fails to apply leaves the history as it was, and the result tells the caller.")]
     public bool Redo()
     {
-        if (this.transactions.Count != 0)
-        {
-            this.CommitTransactions();
-        }
-
         if (!this.TryPopRedoStack(out var lastChange, out var position))
         {
             return false;
@@ -380,11 +283,6 @@ public class HistoryKeeper : ITransactionManager
     /// <returns>A task-like object that represents the asynchronous operation.</returns>
     public async ValueTask RedoAsync(CancellationToken cancellationToken = default)
     {
-        if (this.transactions.Count != 0)
-        {
-            this.CommitTransactions();
-        }
-
         if (!this.TryPopRedoStack(out var lastChange, out var position))
         {
             return;
@@ -561,8 +459,6 @@ public class HistoryKeeper : ITransactionManager
         this.redoPositions.Clear();
         this.redoStack.Clear();
     }
-
-    private void CommitTransactions() => this.transactions.FirstOrDefault()?.Commit();
 
     private sealed class ChangeSetUndoRedo : IDisposable
     {
