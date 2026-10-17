@@ -6,13 +6,12 @@
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
 
         <Title>Oxygen editor scene authoring.</Title>
-        <Description>Oxygen.Editor.Scenes holds scene authoring without any UI: the scene document kind, the command service with its edit sessions and records, selection, the hierarchy mutator and organizer, and the engine sync port.</Description>
+        <Description>Oxygen.Editor.Scenes holds scene authoring without any UI: the scene document kind, scene edits run by each document's SceneAuthoring, selection, node lock and visibility, and the engine sync port.</Description>
         <PackageTags>editor;scenes;authoring</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     </ItemGroup>
 
