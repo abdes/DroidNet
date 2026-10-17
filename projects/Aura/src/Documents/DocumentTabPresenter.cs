@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
@@ -29,6 +30,9 @@ public sealed partial class DocumentTabPresenter : IDisposable
     private readonly ILogger logger;
     private readonly Dictionary<DocumentId, Controls.TabItem> tabMap = [];
     private readonly Dictionary<DocumentId, IDocumentMetadata> observed = [];
+
+    // Documents the service has closed or detached whose tabs are still waiting for the dispatcher to remove them.
+    private readonly ConcurrentDictionary<DocumentId, byte> leaving = [];
     private bool isUpdatingSelectionFromService;
 
     /// <summary>
@@ -104,7 +108,15 @@ public sealed partial class DocumentTabPresenter : IDisposable
             return;
         }
 
-        _ = this.documentService.SelectDocumentAsync(this.hostWindow.Id, DocumentId.FromValue(newItem.ContentId));
+        // Removing a tab selects a neighbor, which may belong to a document the service has already closed (closing a
+        // window closes all its documents before their tabs go); that document cannot be activated.
+        var documentId = DocumentId.FromValue(newItem.ContentId);
+        if (this.leaving.ContainsKey(documentId))
+        {
+            return;
+        }
+
+        _ = this.documentService.SelectDocumentAsync(this.hostWindow.Id, documentId);
     }
 
     private async void TabStrip_TabCloseRequested(object? sender, Controls.TabCloseRequestedEventArgs e)
@@ -186,6 +198,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
             return;
         }
 
+        _ = this.leaving.TryAdd(e.Metadata.DocumentId, 0);
         _ = this.dispatcher.TryEnqueue(() =>
         {
             this.RemoveTab(e.Metadata.DocumentId);
@@ -200,6 +213,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
             return;
         }
 
+        _ = this.leaving.TryAdd(e.Metadata.DocumentId, 0);
         _ = this.dispatcher.TryEnqueue(() =>
         {
             this.RemoveTab(e.Metadata.DocumentId);
@@ -278,6 +292,8 @@ public sealed partial class DocumentTabPresenter : IDisposable
         {
             _ = this.tabStrip.Items.Remove(tab);
         }
+
+        _ = this.leaving.TryRemove(documentId, out _);
     }
 
     // A tab follows its metadata from the moment it is added until it closes or detaches.

@@ -262,6 +262,36 @@ public class DocumentTabPresenterTests : TabStripTestsBase
     });
 
     [TestMethod]
+    public Task DocumentsClosedTogether_DoNotSelectAClosedDocument_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = this.CreateTabStrip(0);
+        await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
+
+        var window = VisualUserInterfaceTestsApp.MainWindow;
+        var ds = new TestDocumentService();
+        var ctx = ManagedWindowFactory.CreateForWindow(window);
+        using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
+        var first = new TestDocumentMetadata { Title = "First" };
+        var second = new TestDocumentMetadata { Title = "Second" };
+        _ = await ds.OpenDocumentAsync(ctx.Id, first, -1, shouldSelect: true).ConfigureAwait(true);
+        _ = await ds.OpenDocumentAsync(ctx.Id, second, -1, shouldSelect: false).ConfigureAwait(true);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+        tabStrip.SelectedIndex = 0;
+        await WaitForRenderCompletion().ConfigureAwait(true);
+        ds.SelectedIds.Clear();
+
+        // Act - the service closes both documents before the dispatcher removes their tabs, as closing a window does
+        _ = await ds.CloseDocumentAsync(ctx.Id, first.DocumentId, force: true).ConfigureAwait(true);
+        _ = await ds.CloseDocumentAsync(ctx.Id, second.DocumentId, force: true).ConfigureAwait(true);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert
+        _ = tabStrip.Items.Should().BeEmpty();
+        _ = ds.SelectedIds.Should().BeEmpty();
+    });
+
+    [TestMethod]
     public Task DocumentAttached_AddsTab_Async() => EnqueueAsync(async () =>
     {
         // Arrange
@@ -594,6 +624,8 @@ public class DocumentTabPresenterTests : TabStripTestsBase
 
         public List<DocumentId> DetachedIds { get; } = [];
 
+        public List<DocumentId> SelectedIds { get; } = [];
+
         public int CloseCallCount { get; private set; }
 
         public bool RefusesDetach { get; init; }
@@ -654,6 +686,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
 
         public Task<bool> SelectDocumentAsync(WindowId windowId, DocumentId documentId)
         {
+            this.SelectedIds.Add(documentId);
             this.DocumentActivated?.Invoke(this, new DocumentActivatedEventArgs(windowId, documentId));
             return Task.FromResult(true);
         }
