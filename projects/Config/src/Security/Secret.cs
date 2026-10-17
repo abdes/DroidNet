@@ -24,7 +24,7 @@ public static class Secret
     /// <typeparam name="T">The type of the secret value.</typeparam>
     /// <param name="secret">The <see cref="Secret{T}"/> instance to extract the value from.</param>
     /// <returns>The underlying value contained in the secret.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if <paramref name="secret"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="secret"/> is <see langword="null"/>.</exception>
     public static T FromSecret<T>(Secret<T> secret)
         => (secret ?? throw new ArgumentNullException(nameof(secret))).Value;
 }

@@ -100,7 +100,7 @@ public sealed partial class SettingsManager
     /// </summary>
     /// <param name="owner">Reference to the parent <see cref="SettingsManager"/> that owns this helper.</param>
     /// <param name="serviceInstances">Collection of registered settings services to monitor and save.</param>
-    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="serviceInstances"/> is <c>null</c>.</exception>
+    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="serviceInstances"/> is <see langword="null"/>.</exception>
     /// <remarks>
     ///     The <c>AutoSaver</c> subscribes to <see cref="INotifyPropertyChanged"/> notifications from
     ///     monitored services and debounces saves using <see cref="SettingsManager.AutoSaveDelay"/>. It

@@ -385,8 +385,8 @@ public sealed partial class SettingsManager(
     }
 
     private (
-        Dictionary<string, Dictionary<string, object>> sectionsBySource,
-        Dictionary<string, Dictionary<string, SettingsSectionMetadata>> metadataBySource)
+        Dictionary<string, Dictionary<string, object>> SectionsBySource,
+        Dictionary<string, Dictionary<string, SettingsSectionMetadata>> MetadataBySource)
         GroupSectionsBySource(
             IReadOnlyDictionary<string, object> sectionsData,
             IReadOnlyDictionary<string, SettingsSectionMetadata> sectionsMetadata)
@@ -400,9 +400,9 @@ public sealed partial class SettingsManager(
 
             if (!sectionsBySource.TryGetValue(targetSourceId, out var value))
             {
-                value = new Dictionary<string, object>(StringComparer.Ordinal);
+                value = [with(StringComparer.Ordinal)];
                 sectionsBySource[targetSourceId] = value;
-                metadataBySource[targetSourceId] = new Dictionary<string, SettingsSectionMetadata>(StringComparer.Ordinal);
+                metadataBySource[targetSourceId] = [with(StringComparer.Ordinal)];
             }
 
             value[sectionName] = sectionData;

@@ -114,8 +114,8 @@ public readonly struct Result<T>(T? value, Exception? error) : System.IEquatable
     ///     Deconstructs the result into its components for use in pattern matching.
     /// </summary>
     /// <param name="isSuccess">Whether the result is successful.</param>
-    /// <param name="val">The value if successful, otherwise <c>default</c>.</param>
-    /// <param name="err">The error if failed, otherwise <c>null</c>.</param>
+    /// <param name="val">The value if successful, otherwise <see langword="default"/>.</param>
+    /// <param name="err">The error if failed, otherwise <see langword="null"/>.</param>
     /// <example>
     ///     <code><![CDATA[
     ///     var result = Result<int>.Ok(10);

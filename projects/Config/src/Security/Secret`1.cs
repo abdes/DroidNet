@@ -91,10 +91,7 @@ public sealed class Secret<T>(T value) : IEquatable<Secret<T>>, IDisposable
     /// </summary>
     /// <param name="obj">The object to compare with the current secret.</param>
     /// <returns>true if the specified object is equal to the current secret; otherwise, false.</returns>
-    public override bool Equals(object? obj)
-    {
-        return this.Equals(obj as Secret<T>);
-    }
+    public override bool Equals(object? obj) => this.Equals(obj as Secret<T>);
 
     /// <summary>
     /// Serves as the default hash function.

@@ -84,7 +84,7 @@ public interface ISettingsService : INotifyPropertyChanged, IDisposable
     ///     The method is used by the <c>SettingsManager</c> to update the service when storage sources change.
     /// </summary>
     /// <param name="data">
-    ///     The cached data to apply. Can be <c>null</c> to indicate that defaults should be used or the
+    ///     The cached data to apply. Can be <see langword="null"/> to indicate that defaults should be used or the
     ///     section was removed from storage.
     /// </param>
     /// <remarks>

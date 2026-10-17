@@ -378,7 +378,7 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
          *    "poolSize": 5
          * }
          */
-        (JsonElement sectionObject, SettingsSectionMetadata? meta) ExtractSection(string sectionName, JsonElement element)
+        (JsonElement SectionObject, SettingsSectionMetadata? Meta) ExtractSection(string sectionName, JsonElement element)
         {
             if (element.ValueKind != JsonValueKind.Object)
             {
@@ -418,7 +418,7 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
         }
     }
 
-    private async Task<(Dictionary<string, object> sections, Dictionary<string, SettingsSectionMetadata> metadata)> MergeWithExistingSectionsAsync(
+    private async Task<(Dictionary<string, object> Sections, Dictionary<string, SettingsSectionMetadata> Metadata)> MergeWithExistingSectionsAsync(
         IReadOnlyDictionary<string, object> sectionsData,
         IReadOnlyDictionary<string, SettingsSectionMetadata> sectionMetadata,
         CancellationToken cancellationToken)
@@ -442,8 +442,8 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
         }
         else
         {
-            mergedSections = new Dictionary<string, object>(StringComparer.Ordinal);
-            mergedMetadata = new Dictionary<string, SettingsSectionMetadata>(StringComparer.Ordinal);
+            mergedSections = [with(StringComparer.Ordinal)];
+            mergedMetadata = [with(StringComparer.Ordinal)];
         }
 
         // Merge new sections and metadata

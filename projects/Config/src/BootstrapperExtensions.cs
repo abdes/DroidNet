@@ -43,7 +43,7 @@ public static class BootstrapperExtensions
     ///     Call this before adding config sources or settings services. This sets up the core infrastructure for
     ///     configuration and settings management.
     /// </remarks>
-    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="container"/> is <c>null</c>.</exception>
+    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="container"/> is <see langword="null"/>.</exception>
     public static IContainer WithConfig(this IContainer container)
     {
         ArgumentNullException.ThrowIfNull(container);
@@ -84,7 +84,7 @@ public static class BootstrapperExtensions
     ///     should depend on <typeparamref name="TSettingsInterface"/>; resolving that interface will return a
     ///     singleton delegate which proxies to <see cref="SettingsManager.GetService{T}()"/>.
     /// </remarks>
-    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="container"/> is <c>null</c>.</exception>
+    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="container"/> is <see langword="null"/>.</exception>
     public static IContainer WithSettings<TSettingsInterface, TService>(this IContainer container)
         where TSettingsInterface : class
         where TService : ISettingsService<TSettingsInterface>
@@ -124,9 +124,9 @@ public static class BootstrapperExtensions
     ///     <see cref="IFileSystem"/>, an <see cref="ILoggerFactory"/>, and optionally an implementation of the
     ///     <see cref="IEncryptionProvider"/> type passed via <paramref name="encryption"/>.
     /// </remarks>
-    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="container"/> is <c>null</c>.</exception>
+    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="container"/> is <see langword="null"/>.</exception>
     /// <exception cref="System.ArgumentException">
-    ///     Thrown when <paramref name="id"/> or <paramref name="filePath"/> is <c>null</c>, empty, or whitespace, or when
+    ///     Thrown when <paramref name="id"/> or <paramref name="filePath"/> is <see langword="null"/>, empty, or whitespace, or when
     ///     <paramref name="encryption"/> is supplied but does not implement <see cref="IEncryptionProvider"/>.
     /// </exception>
     public static IContainer WithJsonConfigSource(
