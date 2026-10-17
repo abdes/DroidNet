@@ -317,15 +317,6 @@ public partial class SceneExplorerViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "LoadSceneAsync: sending SceneLoadedMessage for scene {SceneId} at {UtcNow}")]
-    private static partial void LogSceneLoadedMessageSent(ILogger logger, SceneId sceneId, System.DateTime utcNow);
-
-    private void LogSceneLoadedMessageSent(SceneId sceneId, System.DateTime utcNow)
-        => LogSceneLoadedMessageSent(this.logger, sceneId, utcNow);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
         Message = "Scene explorer switching to active document {DocumentId}")]
     private static partial void LogDocumentActivated(ILogger logger, DroidNet.Documents.DocumentId documentId);
 

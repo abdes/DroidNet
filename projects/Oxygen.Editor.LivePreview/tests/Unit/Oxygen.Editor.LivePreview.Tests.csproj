@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="MSTest.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+
+        <RootNamespace>Oxygen.Editor.LivePreview.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Oxygen.Editor.LivePreview.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Moq" />
+        <PackageReference Include="Testably.Abstractions" />
+    </ItemGroup>
+
+    <ItemGroup Condition="Exists('$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin')">
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin/*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Include="..\TestSupport\*.cs" Link="TestSupport\%(Filename)%(Extension)" />
+    </ItemGroup>
+</Project>

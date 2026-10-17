@@ -29,7 +29,7 @@ public sealed partial class EngineService(
     HostingContext hostingContext,
     IOperationResultPublisher operationResults,
     ILoggerFactory? loggerFactory = null,
-    ISettingsService<IEngineSettings>? engineSettings = null,
+    ISettingsService<IEngineStartupSettings>? engineSettings = null,
     IPathFinder? pathFinder = null,
     INativeCompatibilityService? nativeCompatibility = null) : IEngineService
 {
@@ -37,7 +37,8 @@ public sealed partial class EngineService(
 
     private readonly HostingContext hostingContext = hostingContext;
     private readonly IOperationResultPublisher operationResults = operationResults;
-    private readonly IEngineSettings engineSettings = engineSettings?.Settings ?? new EngineSettings();
+    private readonly IEngineStartupSettings engineSettings = engineSettings?.Settings ?? new EngineStartupSettings();
+    private readonly ISettingsService<IEngineStartupSettings>? engineSettingsService = engineSettings;
     private readonly IPathFinder? pathFinder = pathFinder;
     private readonly ILogger<EngineService> logger = loggerFactory?.CreateLogger<EngineService>() ?? NullLoggerFactory.Instance.CreateLogger<EngineService>();
 
@@ -45,7 +46,7 @@ public sealed partial class EngineService(
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Cleanup remains callable after disposal; SemaphoreSlim.AvailableWaitHandle is never used.")]
     private readonly SemaphoreSlim lifecycleGate = new(1, 1);
     private readonly Func<CancellationToken, Task<EngineSession>> sessionFactory = token => CreateCompatibleSessionAsync(hostingContext, nativeCompatibility, token);
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, int> documentSurfaceCounts = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<SurfaceOwnerId, int> ownerSurfaceCounts = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<ViewportSurfaceKey, ViewportSurfaceLease> activeLeases = new();
     private readonly RuntimeCommandDispatcher commandDispatcher = new();
     private int reservedSurfaceCount;
@@ -54,14 +55,16 @@ public sealed partial class EngineService(
     private Task? engineLoopTask;
     private volatile EngineServiceState state = EngineServiceState.NoEngine;
     private volatile bool disposalRequested;
+    private bool watchingEngineSettings;
 
     /// <summary>Initializes a new instance of the <see cref="EngineService"/> class with a native ownership factory.</summary>
     /// <param name="hostingContext">The UI context.</param>
     /// <param name="sessionFactory">Creates the native ownership boundary.</param>
     /// <param name="operationResults">The runtime diagnostics publisher.</param>
     /// <param name="loggerFactory">The optional logger factory.</param>
-    internal EngineService(HostingContext hostingContext, Func<EngineSession> sessionFactory, IOperationResultPublisher operationResults, ILoggerFactory? loggerFactory = null)
-        : this(hostingContext, operationResults, loggerFactory)
+    /// <param name="engineSettings">The optional engine startup settings.</param>
+    internal EngineService(HostingContext hostingContext, Func<EngineSession> sessionFactory, IOperationResultPublisher operationResults, ILoggerFactory? loggerFactory = null, ISettingsService<IEngineStartupSettings>? engineSettings = null)
+        : this(hostingContext, operationResults, loggerFactory, engineSettings)
     {
         this.sessionFactory = _ => Task.FromResult(sessionFactory());
     }

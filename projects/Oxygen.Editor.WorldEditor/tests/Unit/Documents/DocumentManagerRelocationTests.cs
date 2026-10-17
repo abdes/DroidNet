@@ -10,7 +10,6 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Documents;
 
@@ -99,7 +98,6 @@ public sealed class DocumentManagerRelocationTests
             Mock.Of<IProjectUsageService>(),
             new WindowId(90),
             files.Documents,
-            Mock.Of<ISceneEngineSync>(),
             relocation);
     }
 }

@@ -28,7 +28,7 @@ public sealed partial class EngineService
                 var lease = this.activeLeases.Values.FirstOrDefault(value => value.Key.ViewportId == viewportId);
                 if (lease is not null)
                 {
-                    this.commandDispatcher.RegisterView(viewId.Value, lease.Key.DocumentId, viewportId);
+                    this.commandDispatcher.RegisterView(viewId.Value, lease.Key.Owner.Value, viewportId);
                 }
             }
 

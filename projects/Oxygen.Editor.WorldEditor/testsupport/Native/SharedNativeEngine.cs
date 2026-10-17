@@ -42,8 +42,8 @@ internal static class SharedNativeEngine
                     DispatcherScheduler = new DispatcherQueueScheduler(dispatcher),
                     IsRunning = true,
                 };
-                var settings = new Mock<DroidNet.Config.ISettingsService<IEngineSettings>>();
-                _ = settings.SetupGet(value => value.Settings).Returns(new EngineSettings());
+                var settings = new Mock<DroidNet.Config.ISettingsService<IEngineStartupSettings>>();
+                _ = settings.SetupGet(value => value.Settings).Returns(new EngineStartupSettings());
                 compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
                 engine = new EngineService(hosting, Results, loggerFactory: null, engineSettings: settings.Object, nativeCompatibility: compatibility);
             }

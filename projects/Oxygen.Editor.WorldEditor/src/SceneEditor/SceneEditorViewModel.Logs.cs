@@ -19,15 +19,6 @@ public partial class SceneEditorViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Registering for SceneLoadedMessage for document {DocumentId}")]
-    private static partial void LogRegisteringForSceneLoaded(ILogger logger, DocumentId documentId);
-
-    private void LogRegisteringForSceneLoaded(DocumentId documentId)
-        => LogRegisteringForSceneLoaded(this.logger, documentId);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
         Message = "Unregistering from messages for document {DocumentId}")]
     private static partial void LogUnregisteringFromMessages(ILogger logger, DocumentId documentId);
 
@@ -112,7 +103,7 @@ public partial class SceneEditorViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "SceneLoadedMessage received for document {DocumentId} ; restoring layout {Layout}")]
+        Message = "The engine shows the scene of document {DocumentId}; restoring layout {Layout}")]
     private static partial void LogSceneLoadedReceived(ILogger logger, DocumentId documentId, SceneViewLayout layout);
 
     private void LogSceneLoadedReceived(SceneViewLayout layout)
@@ -167,11 +158,6 @@ public partial class SceneEditorViewModel
     private partial void LogRelocationUnavailable(string scene);
 
 
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Scene Explorer could not show the reloaded scene of document {DocumentId}.")]
-    private static partial void LogTreeNotRefreshed(ILogger logger, DroidNet.Documents.DocumentId documentId);
-
-    private void LogTreeNotRefreshed() => LogTreeNotRefreshed(this.logger, this.Document.Id);
 
     [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Open scene '{Scene}' has nothing to follow: {Reason}.")]
     private static partial void LogRelocationSkipped(ILogger logger, string scene, string reason);

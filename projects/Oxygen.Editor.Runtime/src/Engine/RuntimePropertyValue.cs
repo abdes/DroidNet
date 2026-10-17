@@ -3,12 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 using System.Runtime.InteropServices;
+using Oxygen.Interop;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>A scalar component property at the managed runtime boundary.</summary>
-/// <param name="ComponentId">The stable component identifier.</param>
-/// <param name="FieldId">The component-local property identifier.</param>
+/// <param name="ComponentId">The component the property belongs to.</param>
+/// <param name="FieldId">The component-local field, a value of that component's Interop field enumeration.</param>
 /// <param name="Value">The authored scalar value in engine units.</param>
 [StructLayout(LayoutKind.Auto)]
-public readonly record struct RuntimePropertyValue(ushort ComponentId, ushort FieldId, float Value);
+public readonly record struct RuntimePropertyValue(EngineComponentId ComponentId, ushort FieldId, float Value);

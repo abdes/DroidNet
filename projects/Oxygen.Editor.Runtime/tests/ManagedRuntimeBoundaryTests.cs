@@ -36,7 +36,7 @@ public sealed class ManagedRuntimeBoundaryTests
                 }
             }
 
-            var settingsType = assembly.GetType(typeof(EngineSettings).FullName!, throwOnError: true)!;
+            var settingsType = assembly.GetType(typeof(EngineStartupSettings).FullName!, throwOnError: true)!;
             _ = JsonSerializer.Serialize(Activator.CreateInstance(settingsType), settingsType).Should().NotBeEmpty();
             var diagnostic = new DiagnosticRecord { OperationId = Guid.NewGuid(), Domain = FailureDomain.RuntimeDiscovery, Severity = DiagnosticSeverity.Error, Code = NativeCompatibilityDiagnosticCodes.ArtifactMismatch, Message = "SDK changed" };
             var compatibility = new Mock<INativeCompatibilityService>();

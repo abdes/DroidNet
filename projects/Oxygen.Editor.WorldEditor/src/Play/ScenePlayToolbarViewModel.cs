@@ -6,8 +6,10 @@ using System.ComponentModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
-using Oxygen.Editor.Documents;
+using Oxygen.Editor.LivePreview.Play;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Play;
 
@@ -15,6 +17,10 @@ namespace Oxygen.Editor.World.Play;
 /// The Play transport of one scene's toolbar: Play (Restart while this scene plays) with the player launch settings,
 /// Stop (Cancel while Play is on its way), and the status of the workspace's Play.
 /// </summary>
+/// <remarks>
+/// Play saves the open documents first, then plays the scene. Clicking the status shows what it is about: the player
+/// window while one runs, otherwise the panel that explains the step on its way or the step that failed.
+/// </remarks>
 public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDisposable
 {
     private const string PlayGlyph = "";
@@ -40,29 +46,32 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
         nameof(CanShowStatus),
     ];
 
-    private readonly PlaySessionService session;
+    private readonly PlaySession session;
     private readonly DocumentId documentId;
-    private readonly Func<PlayRequest?> createRequest;
+    private readonly Func<Task<bool>> saveAll;
+    private readonly IMessenger messenger;
     private bool hasCamera;
 
     /// <summary>Initializes a new instance of the <see cref="ScenePlayToolbarViewModel"/> class.</summary>
     /// <param name="session">The workspace's play sessions.</param>
     /// <param name="documentId">The scene document of this toolbar.</param>
-    /// <param name="createRequest">Describes the scene to play; null while the scene is not loaded.</param>
-    public ScenePlayToolbarViewModel(PlaySessionService session, DocumentId documentId, Func<PlayRequest?> createRequest)
+    /// <param name="saveAll">Saves the open documents, through the ordinary Save; false when one stays unsaved.</param>
+    /// <param name="messenger">The workspace messenger, which brings panels forward.</param>
+    public ScenePlayToolbarViewModel(PlaySession session, DocumentId documentId, Func<Task<bool>> saveAll, IMessenger messenger)
     {
         this.session = session;
         this.documentId = documentId;
-        this.createRequest = createRequest;
+        this.saveAll = saveAll;
+        this.messenger = messenger;
         this.session.PropertyChanged += this.OnSessionChanged;
         _ = this.session.Settings.EnsureLoadedAsync();
     }
 
     /// <summary>Gets the player launch settings the flyout edits.</summary>
-    public PlaySessionSettingsService Settings => this.session.Settings;
+    public PlaySettings Settings => this.session.Settings;
 
     /// <summary>Gets the entries of the window size list.</summary>
-    public IReadOnlyList<PlayerWindowSizeOption> SizeOptions => PlaySessionSettingsService.SizeOptions;
+    public IReadOnlyList<PlayerWindowSizeOption> SizeOptions => PlaySettings.SizeOptions;
 
     /// <summary>Gets the Play button's text: Restart while this scene plays, otherwise Play.</summary>
     public string PrimaryLabel => this.IsPlayingThisScene ? "Restart" : "Play";
@@ -154,7 +163,7 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
         { Activity: PlayActivity.StartingPlayer or PlayActivity.LoadingScene } => "The player is loading the scene. Click to show its output.",
         { IsRunning: true, IsStale: true } => "A document changed since the session started; Restart (F5) plays your changes. Click to bring the player to the front.",
         { IsRunning: true } or { Activity: PlayActivity.PlayerIdle } => "Click to bring the player to the front.",
-        { Failure: { } failure } => failure.Panel switch
+        { Failure: { } failure } => PanelOf(failure) switch
         {
             PlayPanel.Problems => $"{failure.Message} Click to show Problems.",
             PlayPanel.Cooking => $"{failure.Message} Click to show the Cooking panel.",
@@ -168,13 +177,43 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
     public bool StatusRevealsPlayer => this.Status.IsRunning || this.Status.Activity == PlayActivity.PlayerIdle;
 
     /// <summary>Gets a value indicating whether clicking the status shows something.</summary>
-    public bool CanShowStatus => this.session.StatusTarget != PlayStatusTarget.None;
+    public bool CanShowStatus => TargetOf(this.Status) != PlayStatusTarget.None;
 
     private PlayStatus Status => this.session.Status;
 
     private bool IsThisScene => this.Status.DocumentId == this.documentId;
 
     private bool IsPlayingThisScene => this.Status.IsRunning && this.IsThisScene;
+
+    /// <summary>Gets what clicking a status shows.</summary>
+    /// <param name="status">The status.</param>
+    /// <returns>The player window while one runs, otherwise the panel that explains the step.</returns>
+    internal static PlayStatusTarget TargetOf(PlayStatus status) => status switch
+    {
+        { Activity: PlayActivity.Cooking } => PlayStatusTarget.Cooking,
+        { Activity: PlayActivity.StartingPlayer or PlayActivity.LoadingScene } => PlayStatusTarget.Output,
+        { IsRunning: true } or { Activity: PlayActivity.PlayerIdle } => PlayStatusTarget.Player,
+        { Failure: { } failure } => PanelOf(failure) switch
+        {
+            PlayPanel.Problems => PlayStatusTarget.Problems,
+            PlayPanel.Cooking => PlayStatusTarget.Cooking,
+            PlayPanel.Output => PlayStatusTarget.Output,
+            _ => PlayStatusTarget.None,
+        },
+        _ => PlayStatusTarget.None,
+    };
+
+    /// <summary>Gets the panel with the details of a failure.</summary>
+    /// <param name="failure">The failure.</param>
+    /// <returns>The panel; <see cref="PlayPanel.None"/> when no panel explains it.</returns>
+    internal static PlayPanel PanelOf(PlayFailure failure) => failure.Stage switch
+    {
+        PlayStage.Scene => PlayPanel.Problems,
+        PlayStage.Cook => PlayPanel.Cooking,
+        PlayStage.Launch when failure.Code != PlayDiagnosticCodes.PlayerMissing => PlayPanel.Output,
+        PlayStage.Run => PlayPanel.Output,
+        _ => PlayPanel.None,
+    };
 
     /// <summary>Reads the scene again: whether it has a camera to play through.</summary>
     /// <param name="sceneHasCamera">Whether the scene has a camera.</param>
@@ -192,10 +231,19 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
         this.PrimaryCommand.NotifyCanExecuteChanged();
     }
 
-    /// <summary>Plays or restarts the scene, when the Play button can be pressed.</summary>
+    /// <summary>Saves the open documents, then plays or restarts the scene, when the Play button can be pressed.</summary>
+    /// <remarks>A document that stays unsaved makes Play fail at its save step.</remarks>
     /// <returns>A task that completes when the session began or Play stopped.</returns>
-    public Task PlayAsync()
-        => this.CanPrimary && this.createRequest() is { } request ? this.session.PlayAsync(request) : Task.CompletedTask;
+    public async Task PlayAsync()
+    {
+        if (!this.CanPrimary)
+        {
+            return;
+        }
+
+        _ = await this.saveAll().ConfigureAwait(true);
+        await this.session.PlayAsync(this.documentId).ConfigureAwait(true);
+    }
 
     /// <summary>Cancels Play or closes the player, when there is one.</summary>
     /// <returns>A task that completes when the player ended.</returns>
@@ -213,14 +261,34 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
     // Always executable: a disabled button would grey the status out. A status with nothing to show is not hit-test
     // visible instead.
     [RelayCommand]
-    private void ShowStatus() => this.session.RevealStatus();
+    private void ShowStatus()
+    {
+        var target = TargetOf(this.Status);
+        if (target == PlayStatusTarget.Player)
+        {
+            _ = this.session.BringPlayerToFront();
+            return;
+        }
+
+        var panel = target switch
+        {
+            PlayStatusTarget.Problems => PlayPanel.Problems,
+            PlayStatusTarget.Cooking => PlayPanel.Cooking,
+            PlayStatusTarget.Output => PlayPanel.Output,
+            _ => PlayPanel.None,
+        };
+        if (panel != PlayPanel.None)
+        {
+            _ = this.messenger.Send(new RevealPlayPanelMessage(panel));
+        }
+    }
 
     [RelayCommand]
     private void ResetSettings() => this.Settings.Reset();
 
     private void OnSessionChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (!string.Equals(args.PropertyName, nameof(PlaySessionService.Status), StringComparison.Ordinal))
+        if (!string.Equals(args.PropertyName, nameof(PlaySession.Status), StringComparison.Ordinal))
         {
             return;
         }

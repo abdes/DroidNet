@@ -1,13 +1,16 @@
 # Live Engine Sync LLD
 
-Status: `Canonical V0.1 production contract; implementation and qualification tracked by ED-M08`
+Status:
+`Canonical V0.1 production contract; implementation and qualification tracked by ED-M08`
 
 ## 1. Purpose
 
-Project committed authoring changes into the embedded engine through one
-`SceneEngineSync` owner. This contract covers current-state convergence, typed
-runtime transport, asset intent, cancellation and diagnostics. Engine lifecycle,
-view ownership and mounting belong to [runtime-integration.md](runtime-integration.md).
+Project committed authoring changes into the embedded engine through one owner,
+LivePreview's scene preview (`IScenePreview`), which follows the open scene
+document. This contract covers current-state convergence, typed runtime
+transport, asset intent, cancellation and diagnostics. Engine lifecycle, view
+ownership and mounting belong to
+[runtime-integration.md](runtime-integration.md).
 
 Normal scene synchronization is production behavior. Saved-revision capture
 isolation, parity checkpoints and qualification orchestration belong only to
@@ -23,21 +26,28 @@ opt-in development adapters; they are not production services or dependencies.
 
 ## 3. Architecture Links
 
-- [property-pipeline.md](property-pipeline.md): edit revisions and gesture ownership.
-- [property-inspector.md](property-inspector.md): node, geometry, camera and light fields.
-- [environment-authoring.md](environment-authoring.md): canonical environment/role semantics.
-- [material-editor.md](material-editor.md): source versus published material state.
-- [content-pipeline.md](content-pipeline.md): slot identity, publication and native readers.
-- [standalone-runtime-validation.md](standalone-runtime-validation.md): development-only capture ownership.
+- [property-pipeline.md](property-pipeline.md): edit revisions and gesture
+  ownership.
+- [property-inspector.md](property-inspector.md): node, geometry, camera and
+  light fields.
+- [environment-authoring.md](environment-authoring.md): canonical
+  environment/role semantics.
+- [material-editor.md](material-editor.md): source versus published material
+  state.
+- [content-pipeline.md](content-pipeline.md): slot identity, publication and
+  native readers.
+- [standalone-runtime-validation.md](standalone-runtime-validation.md):
+  development-only capture ownership.
 
 ## 4. Existing Integration Points
 
-Reuse `ISceneEngineSync`, `SyncOutcome`, document metadata registrations,
-`SceneSyncRevision`, the property replay/coalescing path and Runtime-owned world
-commands. Native `SceneAssetRequests` owns scene sessions, request generations,
-completion inboxes and scene-mutation acceptance. Extend these mechanisms for
-stable slot IDs and canonical camera/flag/light payloads; do not create competing
-counters in an inspector or a second synchronization orchestrator.
+Reuse LivePreview's scene preview, `SyncOutcome`, the open-document
+registrations, `SceneSyncRevision`, the property replay/coalescing path and
+Runtime-owned world commands. Native `SceneAssetRequests` owns scene sessions,
+request generations, completion inboxes and scene-mutation acceptance. Extend
+these mechanisms for stable slot IDs and canonical camera/flag/light payloads;
+do not create competing counters in an inspector or a second synchronization
+orchestrator.
 
 Current index-based slot transport and old sun/camera/boolean flag payloads are
 migration targets. The canonical runtime consumes only the replacement contract
@@ -48,7 +58,7 @@ source/API presence alone is not proof of the newly required rendered effects.
 
 ```text
 Command validates -> commits authored values/revision/history
-  -> SceneEngineSync captures immutable target and intent
+  -> the scene preview captures immutable target and intent
   -> Runtime world capability validates target and queues native mutation
   -> native completion is accepted only for the current target/generation
   -> current readiness/diagnostics update; newer authoring remains authoritative
@@ -61,8 +71,9 @@ Invariants:
    does not start it merely to deliver an edit.
 3. Acceptance means a command was accepted/queued, not loaded assets or a
    presented frame. Completion/readiness and rendering evidence remain distinct.
-4. A failed required capability is visible and fails qualification; `Unsupported`
-   is a diagnostic state, not permission to ship an inert editable field.
+4. A failed required capability is visible and fails qualification;
+   `Unsupported` is a diagnostic state, not permission to ship an inert editable
+   field.
 5. Full projection and later mutations share one document/runtime lifetime and
    revision order. A stale completion cannot overwrite the latest intent.
 6. Source saving/cooking/mounting and production view navigation remain with
@@ -73,7 +84,7 @@ Invariants:
 | Owner                       | Responsibility                                                           |
 | --------------------------- | ------------------------------------------------------------------------ |
 | Scene document commands     | Validate/mutate source, history and immutable revision-stamped delivery. |
-| SceneEngineSync             | Current-state projection, ordering, coalescing and classified results.   |
+| LivePreview scene preview   | Current-state projection, ordering, coalescing and classified results.   |
 | Runtime world capabilities  | Engine-run/scene-target validation and managed DTO transport.            |
 | Interop                     | Narrow native dispatch; no authoring policy or independent asset state.  |
 | Native scene/content/Vortex | Asset readiness, mutation-phase application and actual rendering.        |
@@ -90,24 +101,25 @@ qualification dependency.
 scope, code/message and optional technical exception. Existing statuses are
 Accepted, SkippedNotRunning, Unsupported, Rejected, Failed and Cancelled.
 
-Expected contention, missing resources and unsupported capabilities are classified
-results rather than repeated first-chance exception loops. Authoring success and
-preview success are separate; a preview failure cannot undo a valid scene edit.
+Expected contention, missing resources and unsupported capabilities are
+classified results rather than repeated first-chance exception loops. Authoring
+success and preview success are separate; a preview failure cannot undo a valid
+scene edit.
 
 ### 7.2 Environment results
 
 `EnvironmentSyncResult` retains each field's outcome and an aggregate outcome.
-Background has its own scoped delivery/result. Accepting some fields cannot
-turn a missing or rejected field into Accepted. Native observations identify
-their actual scene/run/lifetime, and do not themselves prove presentation.
+Background has its own scoped delivery/result. Accepting some fields cannot turn
+a missing or rejected field into Accepted. Native observations identify their
+actual scene/run/lifetime, and do not themselves prove presentation.
 
 ### 7.3 Immutable intent and target
 
 Every payload contains its `RuntimeSceneTarget` (project, run, scene, document
-lifetime and activation), authoring revision/preview sequence, component identity
-and immutable changed values. APIs use the same classified result path for full
-and granular delivery. Remove retired overload/adapter routes after callers are
-migrated; do not retain a second path for backward compatibility.
+lifetime and activation), authoring revision/preview sequence, component
+identity and immutable changed values. APIs use the same classified result path
+for full and granular delivery. Remove retired overload/adapter routes after
+callers are migrated; do not retain a second path for backward compatibility.
 
 Material intent additionally identifies GeometryUri, MaterialSlotId and expected
 current layout revision. Runtime indices are resolved against accepted geometry
@@ -133,9 +145,9 @@ identity. See section 8.2.
 | Editor Hide                     | Editing-view representation mask only, retaining lighting and caster eligibility. It never writes source flags or triggers a cook; the eye toggle records an undo step without dirtying the document.                                       |
 
 Physical-camera inputs, general simulation activation and authored hidden-shadow
-modes are not introduced by these mappings. An explicitly selected camera remains
-usable when its node/representation is hidden. Runtime presence is derived;
-`IsActive` is not saved authored activation.
+modes are not introduced by these mappings. An explicitly selected camera
+remains usable when its node/representation is hidden. Runtime presence is
+derived; `IsActive` is not saved authored activation.
 
 ### 8.2 Material-slot V0.1 behavior
 
@@ -144,9 +156,9 @@ The canonical slot and reimport contract is
 Every existing slot, including nonzero slots and its declared LOD bindings, uses
 one identity-based transport. Remove the old first-slot/LOD-0-only route.
 
-Normalize a material source URI to the corresponding native `.omat` virtual
-path before dispatch. A null assignment clears the instance override; it does
-not substitute another material. Retired empty-URI sentinels do not form another
+Normalize a material source URI to the corresponding native `.omat` virtual path
+before dispatch. A null assignment clears the instance override; it does not
+substitute another material. Retired empty-URI sentinels do not form another
 shipping execution path.
 
 Native requests are keyed by scene session, node, accepted geometry identity and
@@ -159,13 +171,13 @@ SlotId into a changed layout; a numeric position or matching label cannot.
 Callbacks enqueue immutable results through a weak inbox. They do not retain
 scene nodes, editor contexts or modules and do not mutate the scene directly.
 During SceneMutation, queued authoring commands execute before completion
-acceptance. Deleted descendants/dead handles and obsolete failures are discarded.
-Detach retires the renderable's pending geometry and all slot intents. Scene
-replacement/shutdown retires its entire inbox.
+acceptance. Deleted descendants/dead handles and obsolete failures are
+discarded. Detach retires the renderable's pending geometry and all slot
+intents. Scene replacement/shutdown retires its entire inbox.
 
 Material results wait for transient geometry readiness. A missing geometry/slot
-while replacement is still loading is not a permanent structural rejection.
-Once geometry is accepted, resolve SlotId using its verified inventory. A missing
+while replacement is still loading is not a permanent structural rejection. Once
+geometry is accepted, resolve SlotId using its verified inventory. A missing
 identity produces repair-required status and retains authored intent; it is not
 retried endlessly or applied to another surface. Resolution/load errors retain
 node/asset/slot context and recover through existing content-demand/publication
@@ -196,32 +208,33 @@ shared 250 ms idle commit. Do not maintain a parallel history in sync.
 
 ### 8.5 Runtime-state classification
 
-NoEngine, Initializing, Ready, Starting, ShuttingDown and Faulted produce a scoped
-SkippedNotRunning/pending result. Running permits dispatch after target checks.
-A newer run/activation rejects old payloads and performs one coherent projection
-of the current open scene. Authoring remains available when preview is offline.
+NoEngine, Initializing, Ready, Starting, ShuttingDown and Faulted produce a
+scoped SkippedNotRunning/pending result. Running permits dispatch after target
+checks. A newer run/activation rejects old payloads and performs one coherent
+projection of the current open scene. Authoring remains available when preview
+is offline.
 
 ### 8.6 Cancellation
 
 Chain delivery cancellation to the originating document/scene lifetime. Observe
-actual native completion/drain where resources are in flight; a cancelled managed
-wait does not prove those resources are free. Do not retry obsolete work or cancel
-an unrelated scene/process. Current authoring remains available for later
-convergence.
+actual native completion/drain where resources are in flight; a cancelled
+managed wait does not prove those resources are free. Do not retry obsolete work
+or cancel an unrelated scene/process. Current authoring remains available for
+later convergence.
 
 ## 9. UI Surfaces
 
 Sync has no standalone panel. Consumers show current inline authoring errors,
-scoped pending/preview failures and technical operation details. Missing material
-or slot identity is visible on the corresponding slot row. Success does not add
-banner noise, and stale failures cannot replace current field state.
+scoped pending/preview failures and technical operation details. Missing
+material or slot identity is visible on the corresponding slot row. Success does
+not add banner noise, and stale failures cannot replace current field state.
 
 ## 10. Persistence
 
-Sync does not save authoring or persistent demo/view state. Commands and document
-services own source. Native target generations, runtime indices and loaded
-objects are session state; editor Hide is separate workspace state owned by the
-view/workspace service.
+Sync does not save authoring or persistent demo/view state. Commands and
+document services own source. Native target generations, runtime indices and
+loaded objects are session state; editor Hide is separate workspace state owned
+by the view/workspace service.
 
 ## 11. Sync / Cook / Runtime Behavior
 
@@ -243,15 +256,15 @@ current scene through the same projection and generation authority.
 
 Diagnostics carry scene/document lifetime, node/component identity, asset URI,
 SlotId and expected/actual geometry layout where relevant. Preserve native codes
-and context. Unresolved slot repair, missing asset, stale completion, incompatible
-schema and device/runtime failure are different conditions.
+and context. Unresolved slot repair, missing asset, stale completion,
+incompatible schema and device/runtime failure are different conditions.
 
 ## 13. Dependency Rules
 
-Commands call SceneEngineSync; SceneEngineSync uses Runtime-owned world
-capabilities; only Runtime/Interop dispatch native calls. Inspector VMs do not
-call native facades or independently drive sync. No mutation of authored values,
-source persistence, cooking or mounting occurs inside the sync adapter.
+The scene preview follows each scene's change stream and uses Runtime-owned
+world capabilities; only Runtime/Interop dispatch native calls. Inspector VMs do
+not call native facades or independently drive sync. No mutation of authored
+values, source persistence, cooking or mounting occurs inside the sync adapter.
 
 ## 14. Validation Gates
 
@@ -267,26 +280,29 @@ source persistence, cooking or mounting occurs inside the sync adapter.
 - Verify newer edits and document close/replacement defeat stale callbacks;
   restart and publication converge on current authoring without history changes.
 - Native-engine effects are validated before real editor workflows. CPU state,
-  successful enqueue and native asset loading do not substitute for rendered proof.
+  successful enqueue and native asset loading do not substitute for rendered
+  proof.
 
 ## 15. Development Capture Integration Boundary
 
 The opt-in development host may adapt existing production entry points to hold
 later deliveries while rendering a pinned saved revision. Its admission hooks,
-qualification state and capture scheduling compile only into development targets.
-Normal SceneEngineSync builds do not contain a qualification hold service,
+qualification state and capture scheduling compile only into development
+targets. Normal LivePreview builds do not contain a qualification hold service,
 protocol dependency, hidden command or always-shipping validation state.
 
 The development adapter must cover scalar edits, topology, asset completion and
-publication delivery, release after capture/readback ownership drains, and restore
-one coherent latest scene rather than replaying an obsolete snapshot. Source
-history and dirty state remain unchanged. See
+publication delivery, release after capture/readback ownership drains, and
+restore one coherent latest scene rather than replaying an obsolete snapshot.
+Source history and dirty state remain unchanged. See
 [standalone validation section 5](standalone-runtime-validation.md#5-ownership-build-isolation-and-dependency-direction)
-and [section 8.4](standalone-runtime-validation.md#84-saved-revision-embedded-capture-session).
+and
+[section 8.4](standalone-runtime-validation.md#84-saved-revision-embedded-capture-session).
 
 ## 16. Historical Evidence
 
-Earlier request-generation and replay validation remains at its recorded scope in
-[issue 5](../plan/issue-005-asset-request-generations.md), ED-M07A field/workflow
-results, ED-M07B workspace publication and material sidedness/recovery.
-The milestone ledger owns completion status for the canonical changes above.
+Earlier request-generation and replay validation remains at its recorded scope
+in [issue 5](../plan/issue-005-asset-request-generations.md), ED-M07A
+field/workflow results, ED-M07B workspace publication and material
+sidedness/recovery. The milestone ledger owns completion status for the
+canonical changes above.

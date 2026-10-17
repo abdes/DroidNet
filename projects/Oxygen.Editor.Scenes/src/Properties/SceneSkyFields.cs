@@ -293,8 +293,7 @@ public static class SceneSkyFields
             reader: target => read(Target(target).Value),
             writer: (target, value) => Target(target).Value = write(Target(target).Value, value),
             validator: validator,
-            annotation: SceneEditorSchemaAnnotations.Get(SchemaPointer(id.Id.JsonPointer)!, new EditorAnnotation { Group = "Environment", Renderer = renderer }),
-            engineCommandKey: $"environment{id.Id.JsonPointer.Replace('/', '.')}");
+            annotation: SceneEditorSchemaAnnotations.Get(SchemaPointer(id.Id.JsonPointer)!, new EditorAnnotation { Group = "Environment", Renderer = renderer }));
 
     private static PropertyDescriptor<T> Sphere<T>(
         PropertyId<T> id,

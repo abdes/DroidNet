@@ -50,6 +50,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Documents\src\Oxygen.Editor.Documents.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.MaterialEditor\src\Oxygen.Editor.MaterialEditor.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Oxygen.Editor.Interop.vcxproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.LivePreview\src\Oxygen.Editor.LivePreview.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Runtime\src\Oxygen.Editor.Runtime.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Scenes\src\Oxygen.Editor.Scenes.csproj" />

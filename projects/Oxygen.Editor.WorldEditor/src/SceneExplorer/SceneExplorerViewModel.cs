@@ -26,7 +26,6 @@ using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.EditorView;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Shell.Documents;
@@ -34,7 +33,6 @@ using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Services;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -55,7 +53,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly IDocumentArea documentArea;
     private readonly OpenDocuments openDocuments;
     private readonly WindowId windowId;
-    private readonly ISceneEngineSync sceneEngineSync;
     private readonly ISceneSelectionService selectionService;
     private readonly IOperationResultPublisher? operationResults;
     private readonly IStatusReducer? statusReducer;
@@ -128,9 +125,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="messenger">The messenger service used for cross-component communication.</param>
     /// <param name="router">The router service used for navigation events.</param>
     /// <param name="documentArea">The window's document area, whose active scene document the explorer shows.</param>
-    /// <param name="openDocuments">The open documents, whose closing ends the shown scene.</param>
+    /// <param name="openDocuments">The open documents: the explorer shows the scene document opened last, and follows its reloads.</param>
     /// <param name="windowId">The window, which the explorer's window-scoped messages name.</param>
-    /// <param name="sceneEngineSync">The scene-engine synchronization service.</param>
     /// <param name="selectionService">The document selection service.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
@@ -154,7 +150,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         IDocumentArea documentArea,
         OpenDocuments openDocuments,
         WindowId windowId,
-        ISceneEngineSync sceneEngineSync,
         ISceneSelectionService selectionService,
         ILoggerFactory? loggerFactory = null,
         IOperationResultPublisher? operationResults = null,
@@ -185,8 +180,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.documentArea = documentArea;
         this.openDocuments = openDocuments;
         this.windowId = windowId;
-        this.sceneEngineSync = sceneEngineSync;
-        this.sceneEngineSync.SceneSynchronized += this.OnSceneSynchronized;
         this.selectionService = selectionService;
         this.selectionService.SelectionChanged += this.OnSelectionServiceChanged;
         this.SelectionSettled += this.OnTreeSelectionSettled;
@@ -219,15 +212,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 && this.RunShortcut(message.Shortcut))
             {
                 message.Reply(response: true);
-            }
-        });
-        messenger.Register<SceneReloadedMessage>(this, (_, message) =>
-        {
-            if (!this.isDisposed && message.WindowId == this.windowId
-                && ReferenceEquals(this.documentArea.ActiveDocument, message.Document)
-                && !message.HasReceivedResponse)
-            {
-                message.Reply(this.ApplyReloadedSceneAsync(message));
             }
         });
 
@@ -578,11 +562,16 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         if (disposing)
         {
             this.StopSearchOperations();
-            this.sceneEngineSync.SceneSynchronized -= this.OnSceneSynchronized;
             this.selectionService.SelectionChanged -= this.OnSelectionServiceChanged;
             this.ObserveAuthoring(authoring: null);
             this.documentArea.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
+            this.openDocuments.Opened -= this.OnSceneDocumentOpened;
             this.openDocuments.Closed -= this.OnSceneDocumentClosed;
+            if (this.sceneDocument is { } shown)
+            {
+                shown.ContentReplaced -= this.OnShownContentReplaced;
+            }
+
             this.projectClipboardSubscription?.Dispose();
             if (this.interaction is { } service)
             {
@@ -1136,7 +1125,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             var ct = await this.BeginSceneLoadAsync().ConfigureAwait(true);
 
-            var loadedScene = this.sceneEngineSync.GetDocumentScene(sceneDocument.Id) ?? scene;
+            var loadedScene = scene;
 
             // Trace: scene data successfully loaded from project storage
             this.LogSceneLoaded(loadedScene.Id, loadedScene.Name ?? "<unnamed>");
@@ -1162,19 +1151,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 this.loadingDocumentId = DocumentId.Empty;
             }
         }
-    }
-
-    private void OnSceneSynchronized(object? sender, SceneSynchronizationCompletedEventArgs args)
-    {
-        if (this.isDisposed || this.loadSceneCts?.IsCancellationRequested == true
-            || this.documentArea.ActiveDocument is not { Content: SceneContent } active || active.Id != args.DocumentId
-            || !ReferenceEquals(this.Scene?.AttachedObject, args.Scene))
-        {
-            return;
-        }
-
-        this.LogSceneLoadedMessageSent(args.Scene.Id, DateTime.UtcNow);
-        _ = this.messenger.Send(new SceneLoadedMessage(args.Scene, args.DocumentId));
     }
 
     private void OnSceneNodeSelectionRequested(object recipient, SceneNodeSelectionRequestMessage message)
@@ -2095,32 +2071,17 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     private async Task<bool> InstallLoadedSceneAsync(Scene loadedScene, Document sceneDocument, CancellationToken ct)
     {
-        if (sceneDocument.Content is not SceneContent content || !this.sceneEngineSync.RegisterDocument(content.Authoring))
+        if (sceneDocument.Content is not SceneContent content)
         {
             return false;
         }
 
-        this.sceneDocument = sceneDocument;
+        this.WatchSceneDocument(sceneDocument);
         this.ObserveAuthoring(content.Authoring);
 
         await this.InitializeLoadedSceneAsync(loadedScene).ConfigureAwait(true);
-
-        if (ct.IsCancellationRequested)
-        {
-            return false;
-        }
-
-        _ = this.messenger.Send(new SceneAuthoringLoadedMessage(loadedScene, sceneDocument));
-        _ = await this.sceneEngineSync.SyncSceneWhenReadyAsync(loadedScene, ct).ConfigureAwait(true);
-        return !ct.IsCancellationRequested
-            && this.documentArea.Documents.Contains(sceneDocument)
-            && ReferenceEquals(this.Scene?.AttachedObject, loadedScene);
+        return !ct.IsCancellationRequested && ReferenceEquals(this.Scene?.AttachedObject, loadedScene);
     }
-
-    private async Task<bool> ApplyReloadedSceneAsync(SceneReloadedMessage message)
-        => ReferenceEquals(this.sceneEngineSync.GetDocumentScene(message.Document.Id), message.Scene)
-            && await this.LoadSceneAsync(message.Scene).ConfigureAwait(true)
-            && ReferenceEquals(this.Scene?.AttachedObject, message.Scene);
 
     /// <inheritdoc />
     public override async Task<TreeDropResult> CommitDropAsync(TreeDropRequest request)

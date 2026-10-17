@@ -84,7 +84,7 @@ public sealed partial class DocumentHostViewModelTests
                 window,
                 static _ => { });
             var engine = new Mock<IEngineService>();
-            _ = engine.Setup(value => value.ReleaseDocumentSurfacesAsync(It.IsAny<Guid>())).Returns(ValueTask.CompletedTask);
+            _ = engine.Setup(value => value.ReleaseOwnerSurfacesAsync(It.IsAny<SurfaceOwnerId>())).Returns(ValueTask.CompletedTask);
             this.Host = new DocumentHostViewModel(
                 tabs,
                 this.Area,

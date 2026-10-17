@@ -295,18 +295,18 @@ public sealed class SceneEnvironmentDescriptors
 
     private static void AddRootDescriptors(List<PropertyDescriptor> descriptors)
     {
-        descriptors.Add(BoolDescriptor("/atmosphere_enabled", "Enabled", static value => value.AtmosphereEnabled, static (value, next) => value with { AtmosphereEnabled = next }, "environment.atmosphere_enabled"));
+        descriptors.Add(BoolDescriptor("/atmosphere_enabled", "Enabled", static value => value.AtmosphereEnabled, static (value, next) => value with { AtmosphereEnabled = next }));
     }
 
     private static void AddExposureDescriptors(List<PropertyDescriptor> descriptors)
     {
-        descriptors.Add(EnumDescriptor("/post_process/exposure_mode", "Mode", static value => value.PostProcess.ExposureMode, WriteExposureMode, SceneDiagnosticCodes.EnvironmentExposureModeInvalid, "Exposure mode is not valid.", "environment.post_process.exposure_mode"));
-        descriptors.Add(BoolDescriptor("/post_process/exposure_enabled", "Enabled", static value => value.PostProcess.ExposureEnabled, static (value, next) => value with { PostProcess = value.PostProcess with { ExposureEnabled = next } }, "environment.post_process.exposure_enabled"));
-        descriptors.Add(FloatDescriptor("/post_process/manual_exposure_ev", "Manual EV", static value => value.PostProcess.ManualExposureEv, WriteManualExposure, SceneDiagnosticCodes.EnvironmentManualExposureInvalid, "Manual exposure must be finite.", "environment.post_process.manual_exposure_ev"));
-        descriptors.Add(FloatDescriptor("/post_process/exposure_compensation_ev", "Compensation", static value => value.PostProcess.ExposureCompensationEv, WriteExposureCompensation, SceneDiagnosticCodes.EnvironmentExposureCompensationInvalid, "Exposure compensation must be finite.", "environment.post_process.exposure_compensation_ev"));
-        descriptors.Add(FloatDescriptor("/post_process/exposure_key", "Key", static value => value.PostProcess.ExposureKey, static (value, next) => value with { PostProcess = value.PostProcess with { ExposureKey = next } }, SceneDiagnosticCodes.EnvironmentManualExposureInvalid, "Post-process values must be finite.", "environment.post_process.exposure_key"));
-        descriptors.Add(EnumDescriptor("/post_process/tone_mapper", "Mapper", static value => value.PostProcess.ToneMapper, WriteToneMapping, SceneDiagnosticCodes.EnvironmentToneMappingInvalid, "Tone mapping mode is not valid.", "environment.post_process.tone_mapper"));
-        descriptors.Add(EnumDescriptor("/post_process/auto_exposure_metering_mode", "Metering", static value => value.PostProcess.AutoExposureMeteringMode, static (value, next) => value with { PostProcess = value.PostProcess with { AutoExposureMeteringMode = next } }, SceneDiagnosticCodes.EnvironmentManualExposureInvalid, "Post-process values must be finite.", "environment.post_process.auto_exposure_metering_mode"));
+        descriptors.Add(EnumDescriptor("/post_process/exposure_mode", "Mode", static value => value.PostProcess.ExposureMode, WriteExposureMode, SceneDiagnosticCodes.EnvironmentExposureModeInvalid, "Exposure mode is not valid."));
+        descriptors.Add(BoolDescriptor("/post_process/exposure_enabled", "Enabled", static value => value.PostProcess.ExposureEnabled, static (value, next) => value with { PostProcess = value.PostProcess with { ExposureEnabled = next } }));
+        descriptors.Add(FloatDescriptor("/post_process/manual_exposure_ev", "Manual EV", static value => value.PostProcess.ManualExposureEv, WriteManualExposure, SceneDiagnosticCodes.EnvironmentManualExposureInvalid, "Manual exposure must be finite."));
+        descriptors.Add(FloatDescriptor("/post_process/exposure_compensation_ev", "Compensation", static value => value.PostProcess.ExposureCompensationEv, WriteExposureCompensation, SceneDiagnosticCodes.EnvironmentExposureCompensationInvalid, "Exposure compensation must be finite."));
+        descriptors.Add(FloatDescriptor("/post_process/exposure_key", "Key", static value => value.PostProcess.ExposureKey, static (value, next) => value with { PostProcess = value.PostProcess with { ExposureKey = next } }, SceneDiagnosticCodes.EnvironmentManualExposureInvalid, "Post-process values must be finite."));
+        descriptors.Add(EnumDescriptor("/post_process/tone_mapper", "Mapper", static value => value.PostProcess.ToneMapper, WriteToneMapping, SceneDiagnosticCodes.EnvironmentToneMappingInvalid, "Tone mapping mode is not valid."));
+        descriptors.Add(EnumDescriptor("/post_process/auto_exposure_metering_mode", "Metering", static value => value.PostProcess.AutoExposureMeteringMode, static (value, next) => value with { PostProcess = value.PostProcess with { AutoExposureMeteringMode = next } }, SceneDiagnosticCodes.EnvironmentManualExposureInvalid, "Post-process values must be finite."));
     }
 
     private static void AddPostProcessFloatDescriptors(List<PropertyDescriptor> descriptors)
@@ -376,7 +376,7 @@ public sealed class SceneEnvironmentDescriptors
         AddSkyFloat(descriptors, "/sky_atmosphere/aerial_scattering_strength", "Aerial Strength", static s => s.AerialScatteringStrength, static (s, v) => s with { AerialScatteringStrength = v });
         AddSkyFloat(descriptors, "/sky_atmosphere/aerial_perspective_start_depth_meters", "Aerial Start", static s => s.AerialPerspectiveStartDepthMeters, static (s, v) => s with { AerialPerspectiveStartDepthMeters = v });
         AddSkyFloat(descriptors, "/sky_atmosphere/height_fog_contribution", "Height Fog", static s => s.HeightFogContribution, static (s, v) => s with { HeightFogContribution = v });
-        descriptors.Add(BoolDescriptor("/sky_atmosphere/sun_disk_enabled", "Sun Disk", static value => value.SkyAtmosphere.SunDiskEnabled, static (value, next) => value with { SkyAtmosphere = value.SkyAtmosphere with { SunDiskEnabled = next } }, "environment.sky_atmosphere.sun_disk_enabled"));
+        descriptors.Add(BoolDescriptor("/sky_atmosphere/sun_disk_enabled", "Sun Disk", static value => value.SkyAtmosphere.SunDiskEnabled, static (value, next) => value with { SkyAtmosphere = value.SkyAtmosphere with { SunDiskEnabled = next } }));
     }
 
     private static void AddFogDescriptors(List<PropertyDescriptor> descriptors)
@@ -448,29 +448,25 @@ public sealed class SceneEnvironmentDescriptors
         string pointer,
         string label,
         Func<SceneEnvironmentData, bool> read,
-        Func<SceneEnvironmentData, bool, SceneEnvironmentData> write,
-        string engineCommandKey)
+        Func<SceneEnvironmentData, bool, SceneEnvironmentData> write)
         => new(
             id: new PropertyId<bool>(SceneProperties.SceneEnvironmentKind, pointer),
             reader: target => read(GetValue(target)),
             writer: (target, value) => SetValue(target, write(GetValue(target), value)),
             validator: static _ => ValidationResult.Ok,
-            annotation: Annotation(pointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "toggle" }),
-            engineCommandKey: engineCommandKey);
+            annotation: Annotation(pointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "toggle" }));
 
     private static PropertyDescriptor<Guid?> NullableGuidDescriptor(
         string pointer,
         string label,
         Func<SceneEnvironmentData, Guid?> read,
-        Func<SceneEnvironmentData, Guid?, SceneEnvironmentData> write,
-        string engineCommandKey)
+        Func<SceneEnvironmentData, Guid?, SceneEnvironmentData> write)
         => new(
             id: new PropertyId<Guid?>(SceneProperties.SceneEnvironmentKind, pointer),
             reader: target => read(GetValue(target)),
             writer: (target, value) => SetValue(target, write(GetValue(target), value)),
             validator: static _ => ValidationResult.Ok,
-            annotation: Annotation(pointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "combo" }),
-            engineCommandKey: engineCommandKey);
+            annotation: Annotation(pointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "combo" }));
 
     private static PropertyDescriptor<float> FloatDescriptor(
         string pointer,
@@ -478,8 +474,7 @@ public sealed class SceneEnvironmentDescriptors
         Func<SceneEnvironmentData, float> read,
         Func<SceneEnvironmentData, float, SceneEnvironmentData> write,
         string diagnosticCode,
-        string diagnosticMessage,
-        string engineCommandKey)
+        string diagnosticMessage)
         => new(
             id: new PropertyId<float>(SceneProperties.SceneEnvironmentKind, pointer),
             reader: target => read(GetValue(target)),
@@ -489,8 +484,7 @@ public sealed class SceneEnvironmentDescriptors
                 : !float.IsFinite(value)
                 ? ValidationResult.Fail(diagnosticCode, diagnosticMessage)
                 : InRange(pointer, label, value, value, value),
-            annotation: Annotation(pointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: engineCommandKey);
+            annotation: Annotation(pointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
     private static PropertyDescriptor<T> EnumDescriptor<T>(
         string pointer,
@@ -498,8 +492,7 @@ public sealed class SceneEnvironmentDescriptors
         Func<SceneEnvironmentData, T> read,
         Func<SceneEnvironmentData, T, SceneEnvironmentData> write,
         string diagnosticCode,
-        string diagnosticMessage,
-        string engineCommandKey)
+        string diagnosticMessage)
         where T : struct, Enum
         => new(
             id: new PropertyId<T>(SceneProperties.SceneEnvironmentKind, pointer),
@@ -508,8 +501,7 @@ public sealed class SceneEnvironmentDescriptors
             validator: value => Enum.IsDefined(value)
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(diagnosticCode, diagnosticMessage),
-            annotation: Annotation(pointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "combo" }),
-            engineCommandKey: engineCommandKey);
+            annotation: Annotation(pointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "combo" }));
 
     private static PropertyDescriptor<Vector3> VectorDescriptor(
         string pointer,
@@ -517,8 +509,7 @@ public sealed class SceneEnvironmentDescriptors
         Func<SceneEnvironmentData, Vector3> read,
         Func<SceneEnvironmentData, Vector3, SceneEnvironmentData> write,
         string diagnosticCode,
-        string diagnosticMessage,
-        string engineCommandKey)
+        string diagnosticMessage)
         => new(
             id: new PropertyId<Vector3>(SceneProperties.SceneEnvironmentKind, pointer),
             reader: target => read(GetValue(target)),
@@ -526,8 +517,7 @@ public sealed class SceneEnvironmentDescriptors
             validator: value => !IsFinite(value)
                 ? ValidationResult.Fail(diagnosticCode, diagnosticMessage)
                 : InRange(pointer, label, value.X, value.Y, value.Z),
-            annotation: Annotation(pointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "vector3-box", Step = 0.01 }),
-            engineCommandKey: engineCommandKey);
+            annotation: Annotation(pointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "vector3-box", Step = 0.01 }));
 
     // Values outside a range are refused, never clamped: the scene holds what the caller sets.
     private static ValidationResult InRange(string pointer, string label, float x, float y, float z)
@@ -609,8 +599,7 @@ public sealed class SceneEnvironmentDescriptors
             value => read(value.PostProcess),
             (value, next) => value with { PostProcess = write(value.PostProcess, next) },
             SceneDiagnosticCodes.EnvironmentManualExposureInvalid,
-            "Post-process values must be finite.",
-            $"environment{pointer.Replace('/', '.')}"));
+            "Post-process values must be finite."));
 
     private static PropertyDescriptor<T> PostProcessDescriptor<T>(
         string pointer,
@@ -628,8 +617,7 @@ public sealed class SceneEnvironmentDescriptors
                 SetValue(target, sceneEnvironment with { PostProcess = write(sceneEnvironment.PostProcess, value) });
             },
             validator: validator,
-            annotation: Annotation(pointer, new EditorAnnotation { Group = "Post-processing", Label = label, Renderer = renderer }),
-            engineCommandKey: $"environment{pointer.Replace('/', '.')}");
+            annotation: Annotation(pointer, new EditorAnnotation { Group = "Post-processing", Label = label, Renderer = renderer }));
 
     private static ValidationResult ValidateExposureCompensationCurve(ImmutableArray<ExposureCompensationKeyData> keys)
     {
@@ -664,8 +652,7 @@ public sealed class SceneEnvironmentDescriptors
             value => read(value.SkyAtmosphere),
             (value, next) => value with { SkyAtmosphere = write(value.SkyAtmosphere, next) },
             SceneDiagnosticCodes.EnvironmentSkyAtmosphereInvalid,
-            "Sky atmosphere values must be finite.",
-            $"environment{pointer.Replace('/', '.')}"));
+            "Sky atmosphere values must be finite."));
 
     private static void AddSkyVector(
         List<PropertyDescriptor> descriptors,
@@ -679,8 +666,7 @@ public sealed class SceneEnvironmentDescriptors
             value => read(value.SkyAtmosphere),
             (value, next) => value with { SkyAtmosphere = write(value.SkyAtmosphere, next) },
             SceneDiagnosticCodes.EnvironmentSkyAtmosphereInvalid,
-            "Sky atmosphere values must be finite.",
-            $"environment{pointer.Replace('/', '.')}"));
+            "Sky atmosphere values must be finite."));
 
     private static void AddFogBool(
         List<PropertyDescriptor> descriptors,
@@ -692,8 +678,7 @@ public sealed class SceneEnvironmentDescriptors
             id.Id.JsonPointer,
             label,
             value => read(value.Fog),
-            (value, next) => value with { Fog = write(value.Fog, next) },
-            $"environment{id.Id.JsonPointer.Replace('/', '.')}"));
+            (value, next) => value with { Fog = write(value.Fog, next) }));
 
     private static void AddFogFloat(
         List<PropertyDescriptor> descriptors,
@@ -708,8 +693,7 @@ public sealed class SceneEnvironmentDescriptors
             reader: target => read(GetValue(target).Fog),
             writer: (target, value) => SetFog(target, write, value),
             validator: value => ValidateFogValue(label, minimum, maximum, value),
-            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: $"environment{id.Id.JsonPointer.Replace('/', '.')}"));
+            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "numberbox", Step = 0.01 })));
 
     private static void AddFogVector(
         List<PropertyDescriptor> descriptors,
@@ -724,8 +708,7 @@ public sealed class SceneEnvironmentDescriptors
             reader: target => read(GetValue(target).Fog),
             writer: (target, value) => SetFog(target, write, value),
             validator: value => ValidateFogVector(label, minimum, maximum, value),
-            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "vector3-box", Step = 0.01 }),
-            engineCommandKey: $"environment{id.Id.JsonPointer.Replace('/', '.')}"));
+            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "vector3-box", Step = 0.01 })));
 
     private static void SetFog<T>(object target, Func<FogEnvironmentData, T, FogEnvironmentData> write, T value)
     {

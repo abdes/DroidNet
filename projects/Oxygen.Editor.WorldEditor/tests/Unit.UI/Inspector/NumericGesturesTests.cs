@@ -14,7 +14,6 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Environment;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;

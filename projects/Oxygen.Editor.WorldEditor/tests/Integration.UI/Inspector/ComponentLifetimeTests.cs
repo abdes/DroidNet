@@ -4,13 +4,12 @@
 
 using AwesomeAssertions;
 using DroidNet.Tests;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Interop;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
 
@@ -79,7 +78,7 @@ public sealed partial class ComponentLifetimeTests : DroidNet.Tests.VisualUserIn
         _ = (await fixture.Authoring.ExecuteAsync(new RemoveComponent(node.Id, transform.Id)).ConfigureAwait(true)).Succeeded.Should().BeFalse();
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         var native = await fixture.ReadNodeAsync(node.Id, cancellationToken).ConfigureAwait(true);
-        _ = native.Properties.Where(static value => value.ComponentId == (ushort)EngineComponentId.Transform).Select(static value => value.FieldId)
+        _ = native.Properties.Where(static value => value.ComponentId == EngineComponentId.Transform).Select(static value => value.FieldId)
             .Should().BeEquivalentTo(Enum.GetValues<TransformField>().Select(static field => (ushort)field), "the denied removal must leave the native transform intact");
     }
 
@@ -87,7 +86,7 @@ public sealed partial class ComponentLifetimeTests : DroidNet.Tests.VisualUserIn
     {
         var componentId = camera ? EngineComponentId.PerspectiveCamera : EngineComponentId.DirectionalLight;
         var native = await fixture.ReadNodeAsync(nodeId, cancellationToken).ConfigureAwait(true);
-        var fields = native.Properties.Where(value => value.ComponentId == (ushort)componentId).Select(static value => value.FieldId);
+        var fields = native.Properties.Where(value => value.ComponentId == componentId).Select(static value => value.FieldId);
         if (present)
         {
             var expected = camera ? Enum.GetValues<PerspectiveCameraField>().Select(static field => (ushort)field) : Enum.GetValues<DirectionalLightField>().Select(static field => (ushort)field);

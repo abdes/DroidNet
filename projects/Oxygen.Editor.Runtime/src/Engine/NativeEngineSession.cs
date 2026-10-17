@@ -36,17 +36,17 @@ internal sealed partial class NativeEngineSession(HostingContext hostingContext,
     private EngineRunner Runner => this.runner ?? throw new InvalidOperationException("Engine runner is unavailable.");
 
     /// <inheritdoc/>
-    public override void Initialize(IEngineSettings settings, string? editorCVarsArchivePath, ILogger? logger)
+    public override void Initialize(IEngineStartupSettings settings, string? editorCVarsArchivePath, ILogger? logger)
     {
         var runtimeLibrary = artifacts.GetPath(NativeArtifactInventory.RuntimeId(EditorNativeCompatibilityService.CurrentConfiguration));
         var config = CreateConfig(settings, editorCVarsArchivePath, runtimeLibrary);
         this.runner = new EngineRunner();
 
-        // Always apply the default threshold so hosts without a managed logger (tests, tools)
+        // Always apply the configured threshold so hosts without a managed logger (tests, tools)
         // do not inherit the native backend's verbose default.
         var logging = new LoggingConfig
         {
-            Verbosity = EngineConstants.DefaultLoggingVerbosity,
+            Verbosity = Math.Clamp(settings.LoggingVerbosity, EngineConstants.MinLoggingVerbosity, EngineConstants.MaxLoggingVerbosity),
             IsColored = false,
             ModuleOverrides = string.Empty,
         };
@@ -104,7 +104,7 @@ internal sealed partial class NativeEngineSession(HostingContext hostingContext,
             var (scale, width, height) = GetInitialDimensions(panel);
             return await this.Runner.TryRegisterSurfaceAsync(
                 this.context,
-                key.DocumentId,
+                key.Owner.Value,
                 key.ViewportId,
                 key.DisplayName,
                 panelPointer,

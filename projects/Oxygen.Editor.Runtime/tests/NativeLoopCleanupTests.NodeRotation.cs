@@ -5,6 +5,7 @@
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Interop;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
@@ -28,7 +29,7 @@ public sealed partial class NativeLoopCleanupTests
             var before = await commands.ObserveNodeAsync(Guid.NewGuid(), target, node, this.TestContext.CancellationToken).ConfigureAwait(false);
             AssertRotation(before, pitch, yaw, roll);
 
-            _ = commands.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetProperties(node, [new(1, 3, pitch + 5f)])), this.TestContext.CancellationToken).Succeeded.Should().BeTrue();
+            _ = commands.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetProperties(node, [new(EngineComponentId.Transform, 3, pitch + 5f)])), this.TestContext.CancellationToken).Succeeded.Should().BeTrue();
             var after = await commands.ObserveNodeAsync(Guid.NewGuid(), target, node, this.TestContext.CancellationToken).ConfigureAwait(false);
             AssertRotation(after, pitch + 5f, yaw, roll);
         });
@@ -37,8 +38,8 @@ public sealed partial class NativeLoopCleanupTests
     {
         _ = observed.Outcome.Succeeded.Should().BeTrue();
         _ = observed.State.Should().NotBeNull();
-        _ = observed.State!.Properties.Single(value => value.ComponentId == 1 && value.FieldId == 3).Value.Should().BeApproximately(pitch, 0.001f);
-        _ = observed.State.Properties.Single(value => value.ComponentId == 1 && value.FieldId == 4).Value.Should().BeApproximately(yaw, 0.001f);
-        _ = observed.State.Properties.Single(value => value.ComponentId == 1 && value.FieldId == 5).Value.Should().BeApproximately(roll, 0.001f);
+        _ = observed.State!.Properties.Single(value => value.ComponentId == EngineComponentId.Transform && value.FieldId == 3).Value.Should().BeApproximately(pitch, 0.001f);
+        _ = observed.State.Properties.Single(value => value.ComponentId == EngineComponentId.Transform && value.FieldId == 4).Value.Should().BeApproximately(yaw, 0.001f);
+        _ = observed.State.Properties.Single(value => value.ComponentId == EngineComponentId.Transform && value.FieldId == 5).Value.Should().BeApproximately(roll, 0.001f);
     }
 }

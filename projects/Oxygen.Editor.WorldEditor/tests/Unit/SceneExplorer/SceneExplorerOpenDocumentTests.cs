@@ -12,13 +12,11 @@ using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
@@ -44,11 +42,7 @@ public sealed class SceneExplorerOpenDocumentTests
         _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        var sync = new Mock<ISceneEngineSync>();
-        _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
-        _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
-        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -74,11 +68,7 @@ public sealed class SceneExplorerOpenDocumentTests
         _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        var sync = new Mock<ISceneEngineSync>();
-        _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
-        _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
-        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -104,11 +94,7 @@ public sealed class SceneExplorerOpenDocumentTests
         _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        var sync = new Mock<ISceneEngineSync>();
-        _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
-        _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
-        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -121,7 +107,7 @@ public sealed class SceneExplorerOpenDocumentTests
     }
 
     [TestMethod]
-    public async Task ReloadMessageReplacesTreeAdaptersWithoutReadingDiskOrRequiringRuntime()
+    public async Task ReloadReplacesTreeAdaptersWithoutRequiringRuntime()
     {
         var project = new Project(new ProjectInfo("Reload", Category.Games, "H:/ReloadTreeTests", "preview.png")) { Name = "Reload" };
         var original = new Scene(project) { Name = "Scene" };
@@ -137,23 +123,21 @@ public sealed class SceneExplorerOpenDocumentTests
         _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        var current = original;
-        var sync = new Mock<ISceneEngineSync>();
-        _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(() => current);
-        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
-        _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
-        var messenger = new StrongReferenceMessenger();
-        using var explorer = new SceneExplorerViewModel(manager.Object, messenger, Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, new SceneSelectionService());
         await explorer.HandleDocumentOpenedAsync(original).ConfigureAwait(false);
         var previousAdapter = await explorer.FindAdapterByNodeIdAsync(originalNode.Id).ConfigureAwait(false);
+
         _ = (await metadata.Document.ReloadAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
         var reloaded = metadata.Scene;
-        current = reloaded;
 
-        var request = messenger.Send(new SceneReloadedMessage(reloaded, metadata.Document, default));
+        // The explorer follows the reload on its own; it shows the new scene once its tree is rebuilt.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        while (!ReferenceEquals(explorer.Scene?.AttachedObject, reloaded))
+        {
+            await Task.Delay(10, timeout.Token).ConfigureAwait(false);
+        }
 
-        _ = request.HasReceivedResponse.Should().BeTrue();
-        _ = (await request.Response.ConfigureAwait(false)).Should().BeTrue();
         _ = explorer.Scene!.AttachedObject.Should().BeSameAs(reloaded);
         var adapter = await explorer.FindAdapterByNodeIdAsync(originalNode.Id).ConfigureAwait(false);
         _ = adapter.Should().NotBeSameAs(previousAdapter);
@@ -179,11 +163,6 @@ public sealed class SceneExplorerOpenDocumentTests
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
         _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new TestDocumentArea(firstMetadata.Document, secondMetadata.Document);
-        var sync = new Mock<ISceneEngineSync>();
-        _ = sync.Setup(value => value.GetDocumentScene(firstMetadata.DocumentId)).Returns(first);
-        _ = sync.Setup(value => value.GetDocumentScene(secondMetadata.DocumentId)).Returns(second);
-        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
-        _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: true);
         using var explorer = new SceneExplorerViewModel(
             manager.Object,
             new StrongReferenceMessenger(),
@@ -191,7 +170,6 @@ public sealed class SceneExplorerOpenDocumentTests
             documents,
             firstMetadata.Documents,
             default,
-            sync.Object,
             new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(first).ConfigureAwait(false);
@@ -203,8 +181,6 @@ public sealed class SceneExplorerOpenDocumentTests
         _ = firstMetadata.Document.IsDirty.Should().BeTrue();
         _ = first.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(node);
         _ = node.Components.OfType<TransformComponent>().Single().LocalPosition.Should().Be(new Vector3(9, 8, 7));
-        sync.Verify(value => value.SyncSceneWhenReadyAsync(first, It.IsAny<CancellationToken>()), Times.Exactly(2));
-        sync.Verify(value => value.SyncSceneWhenReadyAsync(second, It.IsAny<CancellationToken>()), Times.Once);
         _ = (await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false)).Should().NotBeNull();
     }
 }

@@ -7,7 +7,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Play;
+using Oxygen.Editor.LivePreview.Play;
+using Oxygen.Editor.World.Scripting;
 
 namespace Oxygen.Editor.World.Problems;
 
@@ -94,7 +95,11 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     public bool HasSelection => this.Selected is not null;
 
     /// <summary>Gets a value indicating whether the selected problem names a node of the scene that played.</summary>
-    public bool CanSelectNode => this.Selected?.Problem is { IsRuntime: true, SlotNode: not null } && this.runtime is not null;
+    public bool CanSelectNode => this.Selected?.Problem is { IsRuntime: true, SlotNode: not null } problem
+        && this.NodeSelector is not null && this.runtime?.NodeOf(problem) is not null;
+
+    /// <summary>Gets or sets what shows a runtime problem's node: its scene document, with the node selected.</summary>
+    internal Func<ScriptProblem, Task<bool>>? NodeSelector { get; set; }
 
     /// <summary>Formats the tab title.</summary>
     /// <param name="errors">The number of errors.</param>
@@ -172,9 +177,9 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanSelectNode))]
     private async Task SelectNodeAsync()
     {
-        if (this.Selected is { } entry && this.runtime is { } source)
+        if (this.Selected is { } entry && this.NodeSelector is { } select)
         {
-            _ = await source.SelectProblemNodeAsync(entry.Problem).ConfigureAwait(true);
+            _ = await select(entry.Problem).ConfigureAwait(true);
         }
     }
 

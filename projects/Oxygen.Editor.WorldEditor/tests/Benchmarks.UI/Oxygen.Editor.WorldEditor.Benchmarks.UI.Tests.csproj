@@ -20,6 +20,7 @@
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/NativeSceneAssertions.cs" Link="Support/NativeSceneAssertions.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/NativeSceneData.cs" Link="Support/NativeSceneData.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/TestDocumentArea.cs" Link="Support/TestDocumentArea.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/EngineProbe.cs" Link="Support/EngineProbe.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/NativeSceneFixture.cs" Link="Support/NativeSceneFixture.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/SharedNativeEngine.cs" Link="Support/SharedNativeEngine.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/SharedNativeEngineLifetime.cs" Link="Support/SharedNativeEngineLifetime.cs" />

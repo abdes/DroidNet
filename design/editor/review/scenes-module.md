@@ -327,16 +327,15 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
   `SceneContent` holds. Was: `SceneContent` holds the command service only to
   answer `HasEditsInProgress` and `FinishEditsAsync`, because edit sessions live
   in the service keyed by `Scene`.
-- **P7. The engine sync port is shaped by its implementation.** Status: in
-  progress. The port has ten members and one API generation: the projector
-  follows `SceneAuthoring.Changed`, and the per-operation methods are internal
-  to the implementation. Its keys are still mixed (document id, scene id and
-  `Scene`). The S1.7 LivePreview design settles them, since the implementation
-  moves there. Was: `ISceneEngineSync` has about 50 members, two API generations
-  (scene-scoped calls returning `SyncOutcome` beside fire-and-forget node
-  calls), mixed keys (document id to register; scene id for pending counts and
-  preview sync; `Scene` objects elsewhere) and exposed revisions
-  (`CaptureRevision`, `AdvanceRevision`).
+- **P7. The engine sync port is shaped by its implementation.** Status: fixed,
+  awaiting the editor check. The port left Scenes: LivePreview's `IScenePreview`
+  follows the open scene documents and keys everything a view reads by
+  `DocumentId` (readiness, pending fields, sky light), per
+  [live-preview.md](live-preview.md) decisions 1 to 3. Was: `ISceneEngineSync`
+  has about 50 members, two API generations (scene-scoped calls returning
+  `SyncOutcome` beside fire-and-forget node calls), mixed keys (document id to
+  register; scene id for pending counts and preview sync; `Scene` objects
+  elsewhere) and exposed revisions (`CaptureRevision`, `AdvanceRevision`).
 - **P8. The identity rule is not in the types.** Status: closed. Task 1 of
   scene-edits.md typed node, component, scene and folder ids; task 2 typed
   document ids. The types exposed three places that passed a scene id as another

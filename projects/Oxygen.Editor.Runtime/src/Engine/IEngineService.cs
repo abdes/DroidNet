@@ -224,12 +224,12 @@ public interface IEngineService : IAsyncDisposable
     /// </remarks>
     public ValueTask<IViewportSurfaceLease> AttachViewportAsync(ViewportSurfaceRequest request, SwapChainPanel panel, CancellationToken cancellationToken = default);
 
-    /// <summary>Releases every surface leased by the specified document.</summary>
-    /// <param name="documentId">The owning document.</param>
+    /// <summary>Releases every surface leased by the specified owner.</summary>
+    /// <param name="owner">The owner of the surfaces.</param>
     /// <returns>A task that completes after every matching release has been attempted.</returns>
     /// <exception cref="AggregateException">One or more surface releases failed.</exception>
     /// <remarks>Safe during teardown and after shutdown. Failed native releases remain tracked until cleaned up.</remarks>
-    public ValueTask ReleaseDocumentSurfacesAsync(Guid documentId);
+    public ValueTask ReleaseOwnerSurfacesAsync(SurfaceOwnerId owner);
 
     // -- View Management --
 

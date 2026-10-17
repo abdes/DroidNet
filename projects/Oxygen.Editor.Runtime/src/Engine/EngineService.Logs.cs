@@ -108,6 +108,15 @@ public sealed partial class EngineService
         => LogSetLoggingVerbosityFailed(this.logger, verbosity, exception);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "The changed logging verbosity {Verbosity} was saved but not applied to the running engine; it applies at the next start.")]
+    private static partial void LogLiveVerbosityNotApplied(ILogger logger, int verbosity, Exception exception);
+
+    private void LogLiveVerbosityNotApplied(int verbosity, Exception exception)
+        => LogLiveVerbosityNotApplied(this.logger, verbosity, exception);
+
+    [LoggerMessage(
         Level = LogLevel.Debug,
         Message = "Requesting view ('{Name}'/'{Purpose}') from the engine: Extent={Width}x{Height}, {TargetInfo}")]
     private static partial void LogCreateView(ILogger logger, string name, string purpose, uint? width, uint? height, string targetInfo);

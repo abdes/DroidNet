@@ -12,7 +12,6 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.WorldEditor.TestSupport;
@@ -75,7 +74,7 @@ public sealed partial class SceneEditorQuickAddMenuTests
                 new TestDocumentArea(this.Metadata.Document),
                 default,
                 Mock.Of<IEngineService>(),
-                Mock.Of<ISceneEngineSync>(),
+                Mock.Of<Oxygen.Editor.LivePreview.Scenes.IScenePreview>(),
                 input.Object,
                 Mock.Of<IOperationResultPublisher>(),
                 new OperationStatusReducer(),

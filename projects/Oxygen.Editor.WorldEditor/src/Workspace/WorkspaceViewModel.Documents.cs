@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Windowing;
+using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Storage;
 using DryIoc;
@@ -14,16 +15,15 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneEditor;
-using Oxygen.Editor.World.Services;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -81,7 +81,7 @@ public partial class WorkspaceViewModel
             container.Resolve<IDocumentArea>(),
             container.Resolve<WindowId>(),
             container.Resolve<IEngineService>(),
-            container.Resolve<ISceneEngineSync>(),
+            container.Resolve<IScenePreview>(),
             container.Resolve<IDocumentInputCommitter>(),
             container.Resolve<IOperationResultPublisher>(),
             container.Resolve<IStatusReducer>(),
@@ -91,7 +91,8 @@ public partial class WorkspaceViewModel
             container.Resolve<PreviewSettingsService>(),
             container.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault),
             conflictPrompt: container.Resolve<IDocumentConflictPrompt>(),
-            catalog: container.Resolve<IAssetCatalog>(IfUnresolved.ReturnDefault));
+            catalog: container.Resolve<IAssetCatalog>(IfUnresolved.ReturnDefault),
+            engineSettings: container.Resolve<ISettingsService<IEngineStartupSettings>>(IfUnresolved.ReturnDefault));
 
     private static MaterialEditorViewModel CreateMaterialEditor(IContainer container, DocumentTab tab)
         => new(

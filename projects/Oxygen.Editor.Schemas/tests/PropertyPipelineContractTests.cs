@@ -19,8 +19,7 @@ public sealed class PropertyPipelineContractTests
         static target => ((Target)target).X,
         static (target, value) => ((Target)target).X = value,
         static value => float.IsFinite(value) ? ValidationResult.Ok : ValidationResult.Fail("bad", "bad"),
-        new EditorAnnotation { Label = "X", Renderer = "numberbox" },
-        "test.x");
+        new EditorAnnotation { Label = "X", Renderer = "numberbox" });
 
     /// <summary>
     /// Verifies multi-selection mixed values are represented by the binding state.

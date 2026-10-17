@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
@@ -19,6 +20,11 @@ namespace Oxygen.Editor.World.Workspace;
 ///     Owns the active project's embedded-engine preferences, the user's ground grid preferences and their user-local
 ///     persistence.
 /// </summary>
+/// <remarks>
+///     The scene editor restores the preferences when it opens. The engine takes them only while it is ready or running:
+///     the service applies them then, and again whenever the engine enters either state, so a start after a failed one
+///     shows them too. A change while the engine is down is kept and saved, and reaches the engine when it starts.
+/// </remarks>
 /// <param name="engine">The shared embedded runtime.</param>
 /// <param name="settings">A dedicated settings manager, accessed serially by this service.</param>
 /// <param name="projects">The current project lifetime.</param>
@@ -53,6 +59,8 @@ public sealed partial class PreviewSettingsService(
     private long activation;
     private Preferences accepted = new();
     private int maxFrameRateCap = EngineConstants.DefaultFrameRateCap;
+    private SynchronizationContext? owner;
+    private bool watchingEngine;
 
     /// <summary>Gets or sets a value indicating whether presents wait for the display's vertical blank.</summary>
     public bool VSyncEnabled
@@ -89,21 +97,22 @@ public sealed partial class PreviewSettingsService(
         set => this.Apply(this.accepted with { AlwaysRenderPanes = value }, nameof(this.AlwaysRenderPanes));
     }
 
-    /// <summary>Gets or sets the accepted native logging threshold.</summary>
-    public int LoggingVerbosity
-    {
-        get => this.accepted.LoggingVerbosity;
-        set => this.Apply(this.accepted with { LoggingVerbosity = value }, nameof(this.LoggingVerbosity));
-    }
-
     /// <summary>Gets the user's ground grid preferences, applied to every viewport pane.</summary>
     public GroundGridPreferences GroundGrid => this.groundGrid ??= new(this);
 
-    /// <summary>Restores project preferences before starting or resuming its preview.</summary>
+    /// <summary>Restores the active project's preferences, unless they already are; the scene editor calls it when it opens.</summary>
+    /// <returns>The restoration task.</returns>
+    public Task EnsureRestoredAsync()
+        => projects.ActiveProject is { } project && !ReferenceEquals(project, this.requestedProject)
+            ? this.RestoreAsync(project)
+            : this.persistence;
+
+    /// <summary>Restores a project's preferences.</summary>
     /// <param name="project">The workspace's project.</param>
     /// <returns>The restoration task.</returns>
     public Task RestoreAsync(ProjectContext project)
     {
+        this.WatchEngine();
         this.activeProject = null;
         this.requestedProject = project;
         var restoration = this.RestoreAfterAsync(this.persistence, project, ++this.activation);
@@ -150,7 +159,10 @@ public sealed partial class PreviewSettingsService(
 
         try
         {
-            engine.SetGroundGrid(next);
+            if (IsLive(engine.State))
+            {
+                engine.SetGroundGrid(next);
+            }
         }
         catch (InvalidOperationException failure)
         {
@@ -172,6 +184,8 @@ public sealed partial class PreviewSettingsService(
         }
     }
 
+    private static bool IsLive(EngineServiceState state) => state is EngineServiceState.Ready or EngineServiceState.Running;
+
     private static SettingContext Context(ProjectContext project)
         => SettingContext.Project(Path.TrimEndingDirectorySeparator(Path.GetFullPath(project.ProjectRoot)).ToUpperInvariant());
 
@@ -179,7 +193,6 @@ public sealed partial class PreviewSettingsService(
     {
         nameof(VSyncEnabled) => "VSYNC_REJECTED",
         nameof(AlwaysRenderPanes) => "PANE_RENDERING_REJECTED",
-        nameof(LoggingVerbosity) => "LOGGING_VERBOSITY_REJECTED",
         _ => "TARGET_FPS_REJECTED",
     };
 
@@ -187,17 +200,16 @@ public sealed partial class PreviewSettingsService(
     private async Task RestoreAfterAsync(Task previous, ProjectContext project, long activation)
     {
         await previous.ConfigureAwait(true);
-        var maxCap = (int)engine.MaxTargetFps;
+        var maxCap = IsLive(engine.State) ? (int)engine.MaxTargetFps : int.MaxValue;
         var value = new Preferences { ProjectId = project.ProjectId };
         try
         {
             var stored = await settings.LoadSettingAsync(Key, Context(project)).ConfigureAwait(true);
             if (stored is not null && stored.ProjectId == project.ProjectId)
             {
-                if (stored.FrameRateCap < 1 || stored.FrameRateCap > maxCap
-                    || stored.LoggingVerbosity is < EngineConstants.MinLoggingVerbosity or > EngineConstants.MaxLoggingVerbosity)
+                if (stored.FrameRateCap < 1 || stored.FrameRateCap > maxCap)
                 {
-                    throw new InvalidDataException("Saved preview preferences contain an unsupported frame-rate cap or logging value.");
+                    throw new InvalidDataException("Saved preview preferences contain an unsupported frame-rate cap.");
                 }
 
                 value = stored;
@@ -209,7 +221,7 @@ public sealed partial class PreviewSettingsService(
                 project,
                 "LOAD_FAILED",
                 "Preview preferences could not be restored",
-                "Using vsync, no frame-rate cap and Error logging. See Details for the storage error.",
+                "Using vsync and no frame-rate cap. See Details for the storage error.",
                 failure);
         }
 
@@ -219,9 +231,21 @@ public sealed partial class PreviewSettingsService(
             return;
         }
 
-        this.MaxFrameRateCap = maxCap;
-        this.ApplyToEngine(previous: null, value);
-        engine.SetGroundGrid(grid);
+        if (IsLive(engine.State))
+        {
+            this.MaxFrameRateCap = maxCap;
+            try
+            {
+                this.ApplyToEngine(previous: null, value);
+                engine.SetGroundGrid(grid);
+            }
+            catch (InvalidOperationException failure)
+            {
+                // The preferences stay accepted; the engine takes them again when it next starts running.
+                this.ReportFailure(project, "APPLY_FAILED", "Preview settings were not applied", "The runtime rejected the restored preview settings.", failure);
+            }
+        }
+
         this.activeProject = project;
         this.saveFailed = false;
         this.groundGridSaveFailed = false;
@@ -263,14 +287,17 @@ public sealed partial class PreviewSettingsService(
             {
                 ProjectId = project.ProjectId,
                 FrameRateCap = Math.Clamp(requested.FrameRateCap, 1, this.MaxFrameRateCap),
-                LoggingVerbosity = Math.Clamp(requested.LoggingVerbosity, EngineConstants.MinLoggingVerbosity, EngineConstants.MaxLoggingVerbosity),
             };
             if (next == this.accepted && !this.saveFailed)
             {
                 return;
             }
 
-            this.ApplyToEngine(this.accepted, next);
+            if (IsLive(engine.State))
+            {
+                this.ApplyToEngine(this.accepted, next);
+            }
+
             this.SetAccepted(next);
             this.pendingWrite = new(project, next);
             if (this.savePump.IsCompleted)
@@ -307,10 +334,55 @@ public sealed partial class PreviewSettingsService(
         {
             engine.SetAlwaysRenderPanes(next.AlwaysRenderPanes);
         }
+    }
 
-        if (previous?.LoggingVerbosity != next.LoggingVerbosity)
+    private void WatchEngine()
+    {
+        if (this.watchingEngine)
         {
-            engine.EngineLoggingVerbosity = next.LoggingVerbosity;
+            return;
+        }
+
+        this.owner = SynchronizationContext.Current;
+        engine.StateChanged += this.OnEngineStateChanged;
+        this.watchingEngine = true;
+    }
+
+    // An engine that becomes ready or starts running takes the accepted preferences again.
+    private void OnEngineStateChanged(object? sender, EngineStateChangedEventArgs args)
+    {
+        if (!IsLive(args.State))
+        {
+            return;
+        }
+
+        if (this.owner is { } context && SynchronizationContext.Current != context)
+        {
+            context.Post(_ => this.ReapplyToEngine(), state: null);
+            return;
+        }
+
+        this.ReapplyToEngine();
+    }
+
+    private void ReapplyToEngine()
+    {
+        if (this.activeProject is not { } project || !ReferenceEquals(project, projects.ActiveProject) || !IsLive(engine.State))
+        {
+            return;
+        }
+
+        try
+        {
+            this.MaxFrameRateCap = (int)engine.MaxTargetFps;
+            var applied = this.accepted with { FrameRateCap = Math.Clamp(this.accepted.FrameRateCap, 1, this.MaxFrameRateCap) };
+            this.ApplyToEngine(previous: null, applied);
+            this.SetAccepted(applied);
+            engine.SetGroundGrid(this.GroundGrid.Value);
+        }
+        catch (InvalidOperationException failure)
+        {
+            this.ReportFailure(project, "APPLY_FAILED", "Preview settings were not applied", "The runtime rejected the preview settings when it started.", failure);
         }
     }
 
@@ -385,11 +457,6 @@ public sealed partial class PreviewSettingsService(
         {
             this.OnPropertyChanged(nameof(this.AlwaysRenderPanes));
         }
-
-        if (previous.LoggingVerbosity != value.LoggingVerbosity)
-        {
-            this.OnPropertyChanged(nameof(this.LoggingVerbosity));
-        }
     }
 
     private void ReportFailure(ProjectContext? project, string code, string title, string message, Exception exception)
@@ -410,7 +477,8 @@ public sealed partial class PreviewSettingsService(
     /// <summary>The saved user preferences, guarded by project identity.</summary>
     /// <remarks>
     ///     Defaults apply to members a stored value lacks, so preferences saved before vsync, the frame-rate cap and
-    ///     pane rendering existed restore with vsync on and no cap, keeping their logging threshold.
+    ///     pane rendering existed restore with vsync on and no cap. Engine logging verbosity is an engine startup
+    ///     setting, not a preview preference.
     /// </remarks>
     internal sealed record Preferences
     {
@@ -428,9 +496,6 @@ public sealed partial class PreviewSettingsService(
 
         /// <summary>Gets a value indicating whether every visible viewport pane renders each frame.</summary>
         public bool AlwaysRenderPanes { get; init; }
-
-        /// <summary>Gets the native logging threshold.</summary>
-        public int LoggingVerbosity { get; init; } = EngineConstants.DefaultLoggingVerbosity;
     }
 
     private sealed record PendingWrite(ProjectContext Project, Preferences Value);

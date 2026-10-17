@@ -182,7 +182,7 @@ internal static class RuntimeTransportConversion
     /// <param name="entries">The managed payload.</param>
     /// <returns>The native transport value.</returns>
     public static PropertyValueEntry[] ToNative(ImmutableArray<RuntimePropertyValue> entries)
-        => [.. entries.Select(value => new PropertyValueEntry { ComponentId = value.ComponentId, FieldId = value.FieldId, Value = value.Value })];
+        => [.. entries.Select(value => new PropertyValueEntry { ComponentId = (ushort)value.ComponentId, FieldId = value.FieldId, Value = value.Value })];
 
     /// <summary>Converts a managed payload without changing its identity or units.</summary>
     /// <param name="value">The managed payload.</param>

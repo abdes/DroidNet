@@ -115,8 +115,7 @@ public sealed class PerspectiveCameraDescriptors
                     ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")
                     : value is < 1f or > 179f
                         ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Field of view must be between 1 and 179 degrees.")
-                        : ValidationResult.Ok,
-                "perspective_camera.field_of_view_degrees"),
+                        : ValidationResult.Ok),
             aspectRatio: FloatDescriptor(
                 "/aspect_ratio",
                 "Aspect Ratio",
@@ -126,8 +125,7 @@ public sealed class PerspectiveCameraDescriptors
                     ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")
                     : value <= 0f
                         ? ValidationResult.Fail(SceneDiagnosticCodes.PerspectiveCameraAspectRatioNonPositive, "Aspect ratio must be greater than zero.")
-                        : ValidationResult.Ok,
-                "perspective_camera.aspect_ratio"),
+                        : ValidationResult.Ok),
             nearPlane: FloatDescriptor(
                 "/near_plane",
                 "Near Plane",
@@ -137,8 +135,7 @@ public sealed class PerspectiveCameraDescriptors
                     ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")
                     : value <= 0f
                         ? ValidationResult.Fail(SceneDiagnosticCodes.PerspectiveCameraNearPlaneNonPositive, "Near plane must be greater than zero.")
-                        : ValidationResult.Ok,
-                "perspective_camera.near_plane"),
+                        : ValidationResult.Ok),
             farPlane: FloatDescriptor(
                 "/far_plane",
                 "Far Plane",
@@ -146,8 +143,7 @@ public sealed class PerspectiveCameraDescriptors
                 static (camera, value) => camera.FarPlane = value,
                 static value => float.IsFinite(value)
                     ? ValidationResult.Ok
-                    : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers."),
-                "perspective_camera.far_plane"),
+                    : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")),
             aspectMode: new(
                 id: new PropertyId<CameraAspectMode>(SceneProperties.PerspectiveCameraKind, "/aspect_mode"),
                 reader: static target => ((PerspectiveCamera)target).AspectMode,
@@ -157,30 +153,25 @@ public sealed class PerspectiveCameraDescriptors
                     : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Unknown camera aspect mode."),
                 annotation: SceneEditorSchemaAnnotations.Get(
                     "#/definitions/perspective_camera/aspect_mode",
-                    new EditorAnnotation { Group = "Projection", Label = "Aspect Mode", Renderer = "combobox" }),
-                engineCommandKey: "perspective_camera.aspect_mode")
-            { Engine = SceneEngineFields.For(SceneProperties.PerspectiveCameraKind, "perspective_camera.aspect_mode") },
+                    new EditorAnnotation { Group = "Projection", Label = "Aspect Mode", Renderer = "combobox" })),
             apertureF: FloatDescriptor(
                 "/aperture_f",
                 "Aperture",
                 static camera => camera.ApertureF,
                 static (camera, value) => camera.ApertureF = value,
-                Positive("Aperture must be greater than zero."),
-                "perspective_camera.aperture_f"),
+                Positive("Aperture must be greater than zero.")),
             shutterRate: FloatDescriptor(
                 "/shutter_rate",
                 "Shutter Speed",
                 static camera => camera.ShutterRate,
                 static (camera, value) => camera.ShutterRate = value,
-                Positive("Shutter speed must be greater than zero."),
-                "perspective_camera.shutter_rate"),
+                Positive("Shutter speed must be greater than zero.")),
             iso: FloatDescriptor(
                 "/iso",
                 "ISO",
                 static camera => camera.Iso,
                 static (camera, value) => camera.Iso = value,
-                Positive("ISO must be greater than zero."),
-                "perspective_camera.iso"));
+                Positive("ISO must be greater than zero.")));
 
     private static Func<float, ValidationResult> Positive(string message)
         => value => !float.IsFinite(value)
@@ -194,29 +185,26 @@ public sealed class PerspectiveCameraDescriptors
         string label,
         Func<PerspectiveCamera, float> read,
         Action<PerspectiveCamera, float> write,
-        Func<float, ValidationResult> validate,
-        string engineCommandKey)
+        Func<float, ValidationResult> validate)
         => new(
             id: new PropertyId<float>(SceneProperties.PerspectiveCameraKind, pointer),
             reader: target => read((PerspectiveCamera)target),
             writer: (target, value) => write((PerspectiveCamera)target, value),
             validator: validate,
             annotation: SceneEditorSchemaAnnotations.Get(
-                ToSceneSchemaPointer(engineCommandKey),
-                new EditorAnnotation { Group = "Projection", Label = label, Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: engineCommandKey)
-        { Engine = SceneEngineFields.For(SceneProperties.PerspectiveCameraKind, engineCommandKey) };
+                ToSceneSchemaPointer(pointer),
+                new EditorAnnotation { Group = "Projection", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
-    private static string ToSceneSchemaPointer(string engineCommandKey)
-        => engineCommandKey switch
+    private static string ToSceneSchemaPointer(string pointer)
+        => pointer switch
         {
-            "perspective_camera.field_of_view_degrees" => "#/definitions/perspective_camera/fov_y",
-            "perspective_camera.aspect_ratio" => "#/definitions/perspective_camera/aspect_ratio",
-            "perspective_camera.near_plane" => "#/definitions/perspective_camera/near_plane",
-            "perspective_camera.far_plane" => "#/definitions/perspective_camera/far_plane",
-            "perspective_camera.aperture_f" => "#/definitions/perspective_camera/aperture_f",
-            "perspective_camera.shutter_rate" => "#/definitions/perspective_camera/shutter_rate",
-            "perspective_camera.iso" => "#/definitions/perspective_camera/iso",
-            _ => throw new ArgumentOutOfRangeException(nameof(engineCommandKey), engineCommandKey, "Unknown perspective camera command key."),
+            "/field_of_view_degrees" => "#/definitions/perspective_camera/fov_y",
+            "/aspect_ratio" => "#/definitions/perspective_camera/aspect_ratio",
+            "/near_plane" => "#/definitions/perspective_camera/near_plane",
+            "/far_plane" => "#/definitions/perspective_camera/far_plane",
+            "/aperture_f" => "#/definitions/perspective_camera/aperture_f",
+            "/shutter_rate" => "#/definitions/perspective_camera/shutter_rate",
+            "/iso" => "#/definitions/perspective_camera/iso",
+            _ => throw new ArgumentOutOfRangeException(nameof(pointer), pointer, "Unknown perspective camera property."),
         };
 }

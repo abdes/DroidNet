@@ -4,9 +4,9 @@ Status: `final V0.1 settings contract`
 
 ## 1. Purpose
 
-Define where V0.1 scene, workspace, preview and startup settings live,
-how they change, and which changes affect saved authoring data. Project content
-policy remains in the project and content-pipeline contracts.
+Define where V0.1 scene, workspace, preview and startup settings live, how they
+change, and which changes affect saved authoring data. Project content policy
+remains in the project and content-pipeline contracts.
 
 ## 2. PRD Traceability
 
@@ -27,16 +27,16 @@ policy remains in the project and content-pipeline contracts.
 
 ## 4. Service ownership
 
-- `Oxygen.Editor.Runtime/src/Engine/IEngineSettings.cs` — startup engine
+- `Oxygen.Editor.Runtime/src/Engine/IEngineStartupSettings.cs` — startup engine
   config; consumed by `EngineService.InitializeAsync`. Persisted via
-  `ISettingsService<IEngineSettings>` from DroidNet hosting.
-- `IEngineService` exposes `TargetFps : uint` (0 = no cap), `MaxTargetFps :
-uint`, `EngineLoggingVerbosity : int`, `SetVSyncEnabled(bool)` and
-  `SetAlwaysRenderPanes(bool)` (valid in `Ready`/`Running`).
+  `ISettingsService<IEngineStartupSettings>` from DroidNet hosting.
+- `IEngineService` exposes `TargetFps : uint` (0 = no cap),
+  `MaxTargetFps : uint`, `EngineLoggingVerbosity : int`, `SetVSyncEnabled(bool)`
+  and `SetAlwaysRenderPanes(bool)` (valid in `Ready`/`Running`).
 - `Scene` / `SceneNode` / components and `Scene.Environment` store authored
   values.
-- Workspace / docking layout is persisted by existing editor data services
-  and the typed settings manager.
+- Workspace / docking layout is persisted by existing editor data services and
+  the typed settings manager.
 
 ## 5. Setting placement
 
@@ -55,7 +55,7 @@ storing a setting outside its row.
 | `Scene.Environment.*`                                         | Scene                           | `EditSceneEnvironmentAsync`                       | `SceneData.Environment`                          | command                                  | yes              | per-field, see env LLD                                           |
 | Preview FPS                                                   | User/project                    | `PreviewSettingsService` → `IEngineService`       | project-scoped SQLite setting                    | preview preference                       | no               | yes (immediate)                                                  |
 | Native log verbosity                                          | User/project                    | `PreviewSettingsService` → `IEngineService`       | project-scoped SQLite setting                    | preview preference                       | no               | yes (immediate)                                                  |
-| `IEngineSettings` (startup)                                   | Editor preference               | `ISettingsService<IEngineSettings>`               | DroidNet user-local settings                     | `ISettingsService.Save`                  | no               | only on next engine init                                         |
+| `IEngineStartupSettings` (startup)                            | Editor preference               | `ISettingsService<IEngineStartupSettings>`        | DroidNet user-local settings                     | `ISettingsService.Save`                  | no               | only on next engine init                                         |
 | Appearance (theme, density)                                   | Editor preference               | `ISettingsService<IAppearanceSettings>`           | DroidNet user-local settings                     | `ISettingsService`                       | no               | yes (immediate, every open window)                               |
 | Workspace docking, recent docs                                | Workspace                       | existing editor data services                     | user-local                                       | workspace services                       | no               | n/a                                                              |
 | Viewport layout and per-pane camera state                     | Workspace per project and scene | WorldEditor viewport-state service                | `IEditorSettingsManager`, project-scoped setting | viewport UI, not authoring command       | no               | restored when the scene's panes are created                      |
@@ -68,19 +68,20 @@ The owning service enforces each mutation boundary.
 ### 5.1 Workspace visibility storage and lifetime
 
 WorldEditor owns the typed `WorldEditor/SceneInteraction` setting through
-`WorkspaceInteractionService` and the
-existing `IEditorSettingsManager`. Use `SettingContext.Project` with the
-canonical project root. The versioned payload contains the project ID and a map
-of scene IDs to explicit hidden-node IDs and locked-node IDs. Identity is the stable authored node ID, not its name or row.
+`WorkspaceInteractionService` and the existing `IEditorSettingsManager`. Use
+`SettingContext.Project` with the canonical project root. The versioned payload
+contains the project ID and a map of scene IDs to explicit hidden-node IDs and
+locked-node IDs. Identity is the stable authored node ID, not its name or row.
 One coordinated service serializes writes and suppresses stale project/scene
-restoration. The data store is user-local; no interaction state is written to scene documents, authoring
-mounts, cooked output or validation requests.
+restoration. The data store is user-local; no interaction state is written to
+scene documents, authoring mounts, cooked output or validation requests.
 
 Lock is editor editability state, independent of Hide and authored visibility;
 it is not undoable. Viewport picking has no category filter; the Explorer's
-Mesh, Light and Camera buttons filter the tree only. Explorer status indicators use two fixed-width slots, Eye then Lock.
-The chevron/icon/label area fills the remaining width. There is no configurable
-column ordering, resizing or placement state.
+Mesh, Light and Camera buttons filter the tree only. Explorer status indicators
+use two fixed-width slots, Eye then Lock. The chevron/icon/label area fills the
+remaining width. There is no configurable column ordering, resizing or placement
+state.
 
 Hiding a node drops it and its actual scene descendants from every editing
 viewport of the active scene: no geometry, no depth and no cast shadow, so the
@@ -88,19 +89,19 @@ node behaves as absent for that viewport. It does not mutate native Scene
 Visibility or light properties, leaves in-game rendering, game viewports,
 serialized content and cooked output untouched, and does not affect
 capture/validation views. A transform gizmo is an editing overlay and is still
-drawn when the hidden node is selected (individually or in a multi-selection)
-in the Scene Explorer; the node stays in the scene graph and transforms
-normally. Showing a parent removes only that parent's local Hide entry, leaving
-child entries intact; Show All clears the current scene's set. These commands
-persist workspace state, record an undo step, and never dirty the scene
-document or request cooking.
+drawn when the hidden node is selected (individually or in a multi-selection) in
+the Scene Explorer; the node stays in the scene graph and transforms normally.
+Showing a parent removes only that parent's local Hide entry, leaving child
+entries intact; Show All clears the current scene's set. These commands persist
+workspace state, record an undo step, and never dirty the scene document or
+request cooking.
 
-Apply the mask through the current runtime view generation and authored-to-native
-node map. A callback for another project, scene activation or view generation is
-discarded. Unknown node IDs have no rendering effect. Retain local entries during
-an open document's undo lifetime; prune unresolved IDs when loading a saved scene
-into a fresh document lifetime. Reject a stored project-ID mismatch even if its
-path-based settings scope is reused by a different project.
+Apply the mask through the current runtime view generation and
+authored-to-native node map. A callback for another project, scene activation or
+view generation is discarded. Unknown node IDs have no rendering effect. Retain
+local entries during an open document's undo lifetime; prune unresolved IDs when
+loading a saved scene into a fresh document lifetime. Reject a stored project-ID
+mismatch even if its path-based settings scope is reused by a different project.
 
 Controlled qualification views omit workspace masks and restore the current
 valid editing mask on return. Their opt-in adapters do not save a temporary
@@ -112,64 +113,63 @@ development-run option, not a persistent editor/project preference.
 WorldEditor owns the typed `WorldEditor/SceneViewports` setting through a
 viewport-state service and the existing `IEditorSettingsManager`, with
 `SettingContext.Project` on the canonical project root, as in §5.1. The
-versioned payload contains the project ID and a map of scene IDs to the
-layout, the focused pane index, and per pane (by layout index) the editor
-camera position, rotation and orbit focus point, view preset, orthographic
-size, camera control mode and viewed scene camera node ID. Identity is the
-stable authored node ID.
+versioned payload contains the project ID and a map of scene IDs to the layout,
+the focused pane index, and per pane (by layout index) the editor camera
+position, rotation and orbit focus point, view preset, orthographic size, camera
+control mode and viewed scene camera node ID. Identity is the stable authored
+node ID.
 
-One coordinated service serializes writes and suppresses stale restoration.
-It writes shortly after navigation stops, on layout, preset, mode or camera
-assignment changes, and on document close. An unreadable or unsupported
-payload is discarded with a warning. Nothing is written to scene documents,
-history, authoring mounts, cooked output or validation requests.
+One coordinated service serializes writes and suppresses stale restoration. It
+writes shortly after navigation stops, on layout, preset, mode or camera
+assignment changes, and on document close. An unreadable or unsupported payload
+is discarded with a warning. Nothing is written to scene documents, history,
+authoring mounts, cooked output or validation requests.
 
 ### 5.3 Transform tool preferences
 
 WorldEditor owns the typed `WorldEditor/TransformTools` setting through
 `TransformToolSettingsService` and `IEditorSettingsManager`, with
-`SettingScope.Application`, so the choice follows the user across projects.
-The versioned payload holds the snap toggle, the translation, rotation and
-scale increments and the World/Local space. Invalid increments are ignored;
-an unknown version is discarded and the defaults apply. The active tool is
-per scene and not persisted. Nothing is written to scene documents, history
-or cooked output.
+`SettingScope.Application`, so the choice follows the user across projects. The
+versioned payload holds the snap toggle, the translation, rotation and scale
+increments and the World/Local space. Invalid increments are ignored; an unknown
+version is discarded and the defaults apply. The active tool is per scene and
+not persisted. Nothing is written to scene documents, history or cooked output.
 
 ### 5.4 Ground grid preferences
 
 `PreviewSettingsService` owns the typed `WorldEditor/GroundGrid` setting with
 `SettingScope.Application`, so the grid follows the user across projects. It
-holds every `GroundGridConfig` field the engine renders: enabled, spacing,
-major lines every N, line, major and axis thickness, fade start and power,
-horizon boost, origin, smooth motion and its time, and the minor, major, X
-axis, Y axis and origin colors. Each edit applies to every viewport pane
-through `IEngineService.SetGroundGrid`, which reaches
-`Renderer::SetGroundGridConfig` as an editor command that re-renders every
-pane. The setting is restored and applied with the project preview
-preferences whenever the workspace starts or resumes the engine. An edit
-outside the engine's range is clamped, and one that is not a number keeps the
-current value; a stored value outside its range restores its default. A
-pane's own grid toggle is viewport state (§5.2) and still hides the grid in
-that pane. Nothing is written to scene documents, history or cooked output.
+holds every `GroundGridConfig` field the engine renders: enabled, spacing, major
+lines every N, line, major and axis thickness, fade start and power, horizon
+boost, origin, smooth motion and its time, and the minor, major, X axis, Y axis
+and origin colors. Each edit applies to every viewport pane through
+`IEngineService.SetGroundGrid`, which reaches `Renderer::SetGroundGridConfig` as
+an editor command that re-renders every pane. The setting is restored and
+applied with the project preview preferences whenever the workspace starts or
+resumes the engine. An edit outside the engine's range is clamped, and one that
+is not a number keeps the current value; a stored value outside its range
+restores its default. A pane's own grid toggle is viewport state (§5.2) and
+still hides the grid in that pane. Nothing is written to scene documents,
+history or cooked output.
 
 ### 5.5 Play session preferences
 
 `PlaySessionSettingsService` owns the typed `WorldEditor/PlaySession` setting
 with `SettingScope.Application`: player window width and height, VSync, and
-frame cap (off or frames per second). The Play split button's dropdown edits
-it ([script authoring](script-authoring.md#play-button)); each edit is saved
-at once and restored when the editor starts. Values are written into the next
-player launch file only. A stored value outside its range restores its
-default. Nothing is written to scene documents, history or cooked output.
+frame cap (off or frames per second). The Play split button's dropdown edits it
+([script authoring](script-authoring.md#play-button)); each edit is saved at
+once and restored when the editor starts. Values are written into the next
+player launch file only. A stored value outside its range restores its default.
+Nothing is written to scene documents, history or cooked output.
 
 ## 6. Mutation Path Rules
 
 ### 6.1 Scene-scope settings
 
 Every scene-scope setting in §5 is mutated only through
-`ISceneDocumentCommandService`. Direct property setters on `Scene`,
-`SceneNode`, components, or slots are internal and only reachable from the
-command implementation.
+`ISceneDocumentCommandService`. Direct property setters on `Scene`, `SceneNode`,
+components, or slots are internal and only reachable from the command
+implementation.
 
 ```csharp
 // allowed
@@ -196,43 +196,44 @@ frame, and native log verbosity. The defaults are **VSync on**, **no cap** (the
 cap value, kept while off, starts at 60), **idle viewports render on change**
 and **Error (`-2`)**; the editor imposes no frame rate of its own. Preferences
 saved before these settings existed restore with these defaults and keep their
-log verbosity. Every scene tab binds to the same service; edits apply through `IEngineService` and save automatically using
-`IEditorSettingsManager`, key `WorldEditor/Preview`, with `SettingContext.Project`
-for the canonical, case-insensitive Windows project root. The payload includes the project ID; a different
-project reusing that path starts with defaults.
+log verbosity. Every scene tab binds to the same service; edits apply through
+`IEngineService` and save automatically using `IEditorSettingsManager`, key
+`WorldEditor/Preview`, with `SettingContext.Project` for the canonical,
+case-insensitive Windows project root. The payload includes the project ID; a
+different project reusing that path starts with defaults.
 
-These are personal editing preferences, stored in the user-local SQLite database.
-They never dirty scenes, enter `Project.oxy`, affect cooking or travel with a copied
-project. Pause and single-step state remain temporary.
+These are personal editing preferences, stored in the user-local SQLite
+database. They never dirty scenes, enter `Project.oxy`, affect cooking or travel
+with a copied project. Pause and single-step state remain temporary.
 
 Restore before `StartAsync`, or before mounting the next project when the engine
 is already running. A retired workspace's delayed load cannot change the active
-runtime. Native startup uses the same defaults; startup JSON and CVar archives do
-not own these toolbar preferences.
+runtime. Native startup uses the same defaults; startup JSON and CVar archives
+do not own these toolbar preferences.
 
 Use a dedicated settings-manager/DbContext instance and serialize its reads and
 writes across project switches. Each write retains the originating project and
 accepted values. Slider changes retain one active write and the latest pending
 value; closing a scene commits focused input, then drains pending writes before
-workspace teardown.
-A rejected runtime write keeps the previous displayed value and publishes a
-`Runtime.Settings.Apply` failure. A storage failure keeps the live value and reports
-“Applied for this session, but could not save.” Load failures use the defaults and
-publish the error. Both paths log the exception and project identity.
+workspace teardown. A rejected runtime write keeps the previous displayed value
+and publishes a `Runtime.Settings.Apply` failure. A storage failure keeps the
+live value and reports “Applied for this session, but could not save.” Load
+failures use the defaults and publish the error. Both paths log the exception
+and project identity.
 
-### 6.3 Editor preferences (`IEngineSettings`)
+### 6.3 Editor preferences (`IEngineStartupSettings`)
 
-Read once at engine `InitializeAsync`. Editing the preference between
-sessions is allowed via existing `ISettingsService` pathways but is not part
-of the inspector. V0.1 does not add a settings panel for these preferences.
+Read once at engine `InitializeAsync`. Editing the preference between sessions
+is allowed via existing `ISettingsService` pathways but is not part of the
+inspector. V0.1 does not add a settings panel for these preferences.
 
 ### 6.4 Forbidden cross-scope writes
 
 | Forbidden                                                                                          | Why                                                                |
 | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Storing scene environment in `IEngineSettings`.                                                    | Environment is scene authoring intent.                             |
+| Storing scene environment in `IEngineStartupSettings`.                                             | Environment is scene authoring intent.                             |
 | Storing `TargetFps` in `SceneData`.                                                                | Preview preference is per user/project, not per scene.             |
-| Inspector code calling `ISettingsService<IEngineSettings>.Save` directly.                          | Inspector touches scene commands; preferences are not scene scope. |
+| Inspector code calling `ISettingsService<IEngineStartupSettings>.Save` directly.                   | Inspector touches scene commands; preferences are not scene scope. |
 | Project policy fields (cook scope, content roots) being edited from the inspector.                 | Owned by `Oxygen.Editor.Projects` and the content workflow.        |
 | Diagnostic overrides (log level via env var, runtime DLL path override) becoming durable settings. | Bootstrap/diagnostic only.                                         |
 
@@ -244,11 +245,10 @@ Settings reach the user through these surfaces:
   [property-inspector.md](./property-inspector.md).
 - Inspector Environment section — scene-scope per
   [environment-authoring.md](./environment-authoring.md).
-- Scene editor toolbar Settings flyout — VSync, frame-rate cap, idle
-  viewports and `EngineLoggingVerbosity` (writes per §6.2), and the ground
-  grid (§5.4), with a reset to the engine defaults.
-- Output/log panel + inline error placement — for `Settings`-domain
-  diagnostics.
+- Scene editor toolbar Settings flyout — VSync, frame-rate cap, idle viewports
+  and `EngineLoggingVerbosity` (writes per §6.2), and the ground grid (§5.4),
+  with a reset to the engine defaults.
+- Output/log panel + inline error placement — for `Settings`-domain diagnostics.
 - Shell Settings menu — Themes and Density radio submenus for the Appearance
   setting (§5; [application density](./application-density.md)).
 
@@ -256,19 +256,19 @@ V0.1 does not introduce a generic Settings panel.
 
 ## 8. Persistence Behavior
 
-| Setting class                         | Persisted? | When                                             |
-| ------------------------------------- | ---------- | ------------------------------------------------ |
-| Scene-scope                           | yes        | on `Scene.Save` (existing document path)         |
-| Preview FPS and logging               | yes        | automatically in project-scoped SQLite state     |
-| Pause and single-step                 | no         | session-only                                     |
-| Editor preference (`IEngineSettings`) | yes        | by `ISettingsService` save                       |
-| Diagnostic override                   | no         | command-line / env var                           |
-| Workspace layout                      | yes        | by existing editor data services                 |
-| Workspace Hide                        | yes        | through the project-scoped typed setting in §5.1 |
-| Viewport layout and camera state      | yes        | through the project-scoped typed setting in §5.2 |
-| Transform tool space and snapping     | yes        | through the application-scoped setting in §5.3   |
-| Ground grid                           | yes        | through the application-scoped setting in §5.4   |
-| Appearance (theme, density)           | yes        | on change, through `ISettingsService`            |
+| Setting class                                | Persisted? | When                                             |
+| -------------------------------------------- | ---------- | ------------------------------------------------ |
+| Scene-scope                                  | yes        | on `Scene.Save` (existing document path)         |
+| Preview FPS and logging                      | yes        | automatically in project-scoped SQLite state     |
+| Pause and single-step                        | no         | session-only                                     |
+| Editor preference (`IEngineStartupSettings`) | yes        | by `ISettingsService` save                       |
+| Diagnostic override                          | no         | command-line / env var                           |
+| Workspace layout                             | yes        | by existing editor data services                 |
+| Workspace Hide                               | yes        | through the project-scoped typed setting in §5.1 |
+| Viewport layout and camera state             | yes        | through the project-scoped typed setting in §5.2 |
+| Transform tool space and snapping            | yes        | through the application-scoped setting in §5.3   |
+| Ground grid                                  | yes        | through the application-scoped setting in §5.4   |
+| Appearance (theme, density)                  | yes        | on change, through `ISettingsService`            |
 
 Scene round trips preserve typed values, identities and source modes through
 `SceneJsonContext`. Text formatting need not match input bytes. The property
@@ -278,8 +278,8 @@ pipeline owns conversion and numerical qualification rules.
 
 Per-setting validation lives in the command/setter, not in the UI control:
 
-- Numeric ranges (camera near/far, exposure compensation, intensity ≥ 0,
-  scale axes ≠ 0, a frame-rate cap within `[1, MaxTargetFps]`) are enforced by the
+- Numeric ranges (camera near/far, exposure compensation, intensity ≥ 0, scale
+  axes ≠ 0, a frame-rate cap within `[1, MaxTargetFps]`) are enforced by the
   command/setter and surface diagnostics if rejected.
 - Enums are constrained to the declared enum's defined members.
 - The inspector, material and environment field tables define creation defaults.
@@ -310,8 +310,9 @@ Per-setting validation lives in the command/setter, not in the UI control:
 Allowed:
 
 - Inspector → `ISceneDocumentCommandService` (scene-scope).
-- Scene editor toolbar → `PreviewSettingsService` → `IEngineService` (live application) and `IEditorSettingsManager` (persistence).
-- Existing editor preference UI → `ISettingsService<IEngineSettings>`.
+- Scene editor toolbar → `PreviewSettingsService` → `IEngineService` (live
+  application) and `IEditorSettingsManager` (persistence).
+- Existing editor preference UI → `ISettingsService<IEngineStartupSettings>`.
 
 Forbidden:
 
@@ -322,26 +323,28 @@ Forbidden:
 
 ## 12. Validation Gates
 
-1. Each row of §5 has a tested mutation path going through the named API.
-   Tests mutate via API, save, reopen, assert equality (scene scope) or assert
-   live application and reopen/project-switch restoration (preview preferences).
+1. Each row of §5 has a tested mutation path going through the named API. Tests
+   mutate via API, save, reopen, assert equality (scene scope) or assert live
+   application and reopen/project-switch restoration (preview preferences).
 2. Static check (project references): inspector projects do not reference
-   `Oxygen.Editor.Runtime.Engine.EngineService` or `IEngineSettings` types.
+   `Oxygen.Editor.Runtime.Engine.EngineService` or `IEngineStartupSettings`
+   types.
 3. Scene save → reopen does not introduce any `Settings`-prefixed JSON outside
    the explicit scene authoring DTOs.
-4. Mutating `TargetFps` in `Faulted` state surfaces `OXE.SETTINGS.TARGET_FPS_REJECTED`
-   in the operation log; viewport keeps showing previous value.
-5. Workspace Hide persists independently of authored data and project publication;
-   stale project/node identities follow §5.1.
+4. Mutating `TargetFps` in `Faulted` state surfaces
+   `OXE.SETTINGS.TARGET_FPS_REJECTED` in the operation log; viewport keeps
+   showing previous value.
+5. Workspace Hide persists independently of authored data and project
+   publication; stale project/node identities follow §5.1.
 
 ## 13. V0.1 boundary
 
 Preview FPS and native log verbosity persist automatically per user/project; no
-persistence toggle or project renderer preset is introduced. Scene settings use the existing empty-
-selection Environment surface. There is no generic project settings panel.
-Projects supplies mount/cook facts to ContentPipeline; native startup preferences
-remain editor-local. Runtime capability and artifact compatibility follows the
-runtime-integration contract.
+persistence toggle or project renderer preset is introduced. Scene settings use
+the existing empty- selection Environment surface. There is no generic project
+settings panel. Projects supplies mount/cook facts to ContentPipeline; native
+startup preferences remain editor-local. Runtime capability and artifact
+compatibility follows the runtime-integration contract.
 
 The canonical [property-pipeline.md](./property-pipeline.md) governs typed
 property entry points, shared sessions/history, current field diagnostics and

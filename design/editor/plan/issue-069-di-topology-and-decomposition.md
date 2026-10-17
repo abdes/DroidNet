@@ -302,8 +302,9 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   `WindowId`), mount changes, the runtime session start taken out of
   `WorkspaceViewModel`, the Play services and the runtime problem source, and
   the adapters for the ports of Scenes and Assets. It is the only domain module
-  that references `Oxygen.Editor.Runtime` and `Oxygen.Interop`. Gate:
-  LivePreview tests and the reviewer's editor build.
+  that references `Oxygen.Editor.Runtime` and `Oxygen.Interop`. Design:
+  [live-preview.md](../review/live-preview.md). Gate: LivePreview tests and the
+  reviewer's editor build.
 - **S1.8 Models in World.** Design first. World gains `Material` over
   `MaterialSource`, `Texture`, `InputMappingContext` and `InputAction`, and
   `Script` with its source and declared parameters, each with its problems

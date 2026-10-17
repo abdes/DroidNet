@@ -283,7 +283,7 @@ public sealed partial class EngineServiceShutdownTests
     private static EngineService Create(FakeEngineSession native) => new(Context(), () => native, Mock.Of<IOperationResultPublisher>());
 
     private static Task<IViewportSurfaceLease> AttachAsync(EngineService service)
-        => service.AttachViewportCoreAsync(new ViewportSurfaceKey(Guid.NewGuid(), Guid.NewGuid()), null!).AsTask();
+        => service.AttachViewportCoreAsync(new ViewportSurfaceKey(new SurfaceOwnerId(Guid.NewGuid()), Guid.NewGuid()), null!).AsTask();
 
     private async Task<EngineService> StartAsync(FakeEngineSession native)
     {

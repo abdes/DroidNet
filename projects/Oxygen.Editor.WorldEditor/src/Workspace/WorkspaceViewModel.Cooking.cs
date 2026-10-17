@@ -3,10 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Docking;
-using DroidNet.Hosting.WinUI;
-using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Schemas;
@@ -23,9 +20,6 @@ namespace Oxygen.Editor.World.Workspace;
 public partial class WorkspaceViewModel
 {
     private CookingPanelViewModel? cookingPanel;
-    private HostingContext? cookHosting;
-    private IAssetPublicationTarget? cookedCatalog;
-    private IDisposable? publicationRegistration;
 
     /// <inheritdoc />
     public Task<bool> SaveListedAsync(CookRunSnapshot run)
@@ -101,18 +95,6 @@ public partial class WorkspaceViewModel
             && Guid.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, out var node)
                 ? NodeId.FromValue(node) : null;
 
-    private Task<ICookPublicationPreview?> CreatePublicationPreviewAsync(Oxygen.Editor.Projects.ProjectContext project)
-        => this.cookHosting!.Dispatcher.DispatchAsync(() => Task.FromResult<ICookPublicationPreview?>(
-            this.publicationRegistration is not null && ReferenceEquals(project, this.projectContextService.ActiveProject)
-                ? new WorkspacePublicationPreview(
-                    project,
-                    this.engineService,
-                    this.cookHosting,
-                    this.cookedCatalog!,
-                    () => this.publicationRegistration is not null && ReferenceEquals(project, this.projectContextService.ActiveProject),
-                    () => this.HasContentFailure = false)
-                : null));
-
     private void OnCookingRevealRequested(object? sender, EventArgs args)
     {
         if (Dockable.FromId("cook") is { } dockable)
@@ -127,19 +109,6 @@ public partial class WorkspaceViewModel
         {
             this.Docker?.PinDock(dock);
             dockable.IsActive = true;
-        }
-    }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Workspace disposal observes native teardown failures; the runtime retains readers until safe cleanup.")]
-    private async Task ReleaseCookedRootsAsync()
-    {
-        try
-        {
-            await this.engineService.RefreshProjectCookedRootsAsync([]).ConfigureAwait(true);
-        }
-        catch (Exception exception)
-        {
-            this.LogValidatedMountFailed(exception, string.Empty);
         }
     }
 

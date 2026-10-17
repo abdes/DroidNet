@@ -22,8 +22,7 @@ internal sealed class MaterialSlotsTests : DroidNet.Tests.VisualUserInterfaceTes
     [TestMethod]
     public Task MaterialPickerEditsSelectedNativeSlotAndClearRemovesIt() => EnqueueAsync(async () =>
     {
-        using var fixture = new DemandFixture();
-        fixture.Activate();
+        using var fixture = new GeometryFixture();
         var uri = fixture.Geometry.Geometry!.Uri;
         var first = SceneAuthoringFixture.TargetFor(uri);
         var second = first with
@@ -32,7 +31,7 @@ internal sealed class MaterialSlotsTests : DroidNet.Tests.VisualUserInterfaceTes
         };
         _ = fixture.Authoring.Slots.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), uri, It.IsAny<CancellationToken>())).ReturnsAsync(new GeometryMaterialSlotMetadata(uri, Guid.Parse("20000000-0000-0000-0000-000000000001"), first.LayoutRevision, [new(first.SlotId, "Surface", [new(0, 0, Guid.Empty)]), new(second.SlotId, "Surface", [new(0, 1, Guid.Empty), new(1, 2, Guid.Empty)])]));
         fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Target = first, Material = new(new Uri("asset:///Content/Materials/Body.omat.json")) });
-        using var host = fixture.Authoring.CreateInspectorHost("Geometry", contentDemand: fixture.Service, assetProvider: fixture.Assets.Object);
+        using var host = fixture.Authoring.CreateInspectorHost("Geometry", assetProvider: fixture.Assets.Object);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
         _ = model.ShowMaterialSlotSelector.Should().BeTrue();
@@ -53,10 +52,9 @@ internal sealed class MaterialSlotsTests : DroidNet.Tests.VisualUserInterfaceTes
     [TestMethod]
     public Task MaterialPickerShowsUnavailableInventory() => EnqueueAsync(async () =>
     {
-        using var fixture = new DemandFixture();
-        fixture.Activate();
+        using var fixture = new GeometryFixture();
         _ = fixture.Authoring.Slots.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<Uri>(), It.IsAny<CancellationToken>())).ReturnsAsync((GeometryMaterialSlotMetadata?)null);
-        using var host = fixture.Authoring.CreateInspectorHost("Geometry", contentDemand: fixture.Service);
+        using var host = fixture.Authoring.CreateInspectorHost("Geometry", assetProvider: fixture.Assets.Object);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
         _ = model.MaterialSlots.Should().BeEmpty();

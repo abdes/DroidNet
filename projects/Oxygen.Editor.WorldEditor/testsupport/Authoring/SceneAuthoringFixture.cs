@@ -5,9 +5,9 @@
 using CommunityToolkit.Mvvm.Messaging;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Slots;
@@ -51,8 +51,6 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
         this.Node = this.Tab.NodeOf(node);
         this.Camera = this.Node.Components.OfType<PerspectiveCamera>().Single();
         this.Area = new TestDocumentArea(this.Tab.Document);
-        _ = this.Sync.Setup(service => service.GetDocumentScene(this.Tab.DocumentId)).Returns(this.Scene);
-        _ = this.Sync.Setup(service => service.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
     }
 
     /// <summary>Gets the scene's document and its tab.</summary>
@@ -80,7 +78,8 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
 
     public PerspectiveCamera Camera { get; }
 
-    public Mock<ISceneEngineSync> Sync { get; } = new();
+    /// <summary>Gets the engine preview the views read.</summary>
+    public Mock<IScenePreview> Preview { get; } = new();
 
     public StrongReferenceMessenger Messenger { get; } = new();
 

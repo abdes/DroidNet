@@ -148,9 +148,10 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
             }
 
             project = active;
+            // The engine publishes its content changes asynchronously: the row takes the preview's state as it is now.
             if (this.items.Value.Find(uri) is { } match)
             {
-                return match;
+                return this.ApplyLiveState([match])[0];
             }
         }
 

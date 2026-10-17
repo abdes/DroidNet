@@ -64,7 +64,7 @@ public partial class SceneEditorViewModel
     partial void OnCurrentLayoutChanging(SceneViewLayout value)
     {
         // If the scene is not yet synchronized into the engine, defer
-        // creating viewports/layout until `SceneLoadedMessage` arrives.
+        // creating viewports/layout until the engine shows the scene.
         if (!this.sceneReady)
         {
             this.LogDeferringLayoutChange(value);

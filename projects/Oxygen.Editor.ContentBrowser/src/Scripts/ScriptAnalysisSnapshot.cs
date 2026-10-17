@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
+using Oxygen.Editor.World.Scripting;
 
 namespace Oxygen.Editor.ContentBrowser.Scripts;
 

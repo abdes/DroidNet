@@ -11,6 +11,7 @@ using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.WorldEditor.SceneEditor;
@@ -424,7 +425,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     public ViewportSurfaceRequest CreateSurfaceRequest(string? tag = null)
         => new()
         {
-            DocumentId = this.DocumentId.Value,
+            Owner = new SurfaceOwnerId(this.DocumentId.Value),
             ViewportId = this.ViewportId,
             ViewportIndex = this.ViewportIndex,
             IsPrimary = this.IsPrimaryViewport,

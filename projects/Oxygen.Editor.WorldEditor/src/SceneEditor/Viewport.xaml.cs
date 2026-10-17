@@ -16,6 +16,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Managed.Core.Diagnostics;
@@ -641,7 +642,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             {
                 // Subscription/subject disposed concurrently; ignore safely.
             }
-            catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
+            catch (Exception ex) when (Oxygen.Editor.Runtime.Diagnostics.EngineInteropExceptionPolicy.IsRecoverable(ex))
             {
                 this.LogResizeFailed(ex);
             }
@@ -686,7 +687,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         {
             this.LogResizeSkipped("Resize canceled");
         }
-        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
+        catch (Exception ex) when (Oxygen.Editor.Runtime.Diagnostics.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
             this.LogResizeFailed(ex);
             this.ViewModel?.PublishRuntimeWarning(
@@ -1335,7 +1336,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         {
             this.LogAttachmentCanceled(reason);
         }
-        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
+        catch (Exception ex) when (Oxygen.Editor.Runtime.Diagnostics.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
             this.LogAttachmentFailed(ex);
             viewModel.PublishRuntimeFailure(
@@ -1374,7 +1375,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             await this.surfaceLease.DisposeAsync().ConfigureAwait(true);
             this.LogLeaseDisposed(GetViewportId(this.leaseViewModel));
         }
-        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
+        catch (Exception ex) when (Oxygen.Editor.Runtime.Diagnostics.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
             this.LogLeaseDisposeFailed(ex);
         }
@@ -1403,7 +1404,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         {
             this.sizeChangedSubscription?.Dispose();
         }
-        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
+        catch (Exception ex) when (Oxygen.Editor.Runtime.Diagnostics.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
             this.LogResizeFailed(ex);
         }
@@ -1415,7 +1416,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             this.sizeChangedSubject?.OnCompleted();
             this.sizeChangedSubject?.Dispose();
         }
-        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
+        catch (Exception ex) when (Oxygen.Editor.Runtime.Diagnostics.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
             this.LogResizeFailed(ex);
         }
@@ -1481,7 +1482,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         {
             await lease.DisposeAsync().ConfigureAwait(true);
         }
-        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
+        catch (Exception ex) when (Oxygen.Editor.Runtime.Diagnostics.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
             this.LogLeaseDisposeFailed(ex);
         }

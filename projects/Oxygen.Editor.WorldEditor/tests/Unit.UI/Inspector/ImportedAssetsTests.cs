@@ -90,7 +90,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
     {
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([CreateImportedSourceRow(configured: false)]);
         var provider = CreateQueryProvider(updates);
-        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
+        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
         var view = new GeometryView
         {
             ViewModel = geometry,

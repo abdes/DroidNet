@@ -32,7 +32,6 @@ public sealed class PreviewSettingsTests
         var service = fixture.CreateService();
         await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
         _ = fixture.Engine.Object.TargetFps.Should().Be(0);
-        _ = fixture.Engine.Object.EngineLoggingVerbosity.Should().Be(EngineConstants.DefaultLoggingVerbosity);
         fixture.Engine.Verify(value => value.SetVSyncEnabled(enabled: true), Times.Once());
         fixture.Engine.Verify(value => value.SetAlwaysRenderPanes(alwaysRender: false), Times.Once());
         _ = service.MaxFrameRateCap.Should().Be(1000);
@@ -41,7 +40,6 @@ public sealed class PreviewSettingsTests
         service.FrameRateCap = 45;
         service.VSyncEnabled = false;
         service.AlwaysRenderPanes = true;
-        service.LoggingVerbosity = -2;
         await service.FlushAsync().ConfigureAwait(false);
         _ = fixture.Engine.Object.TargetFps.Should().Be(45);
         fixture.Engine.Verify(value => value.SetVSyncEnabled(enabled: false), Times.Once());
@@ -53,7 +51,6 @@ public sealed class PreviewSettingsTests
         _ = reopened.FrameRateCap.Should().Be(45);
         _ = reopened.VSyncEnabled.Should().BeFalse();
         _ = reopened.AlwaysRenderPanes.Should().BeTrue();
-        _ = reopened.LoggingVerbosity.Should().Be(-2);
         _ = fixture.Results.Should().BeEmpty();
     }
 
@@ -77,7 +74,7 @@ public sealed class PreviewSettingsTests
         _ = fixture.Engine.Object.TargetFps.Should().Be(90);
     }
 
-    /// <summary>Preferences saved before vsync and the cap existed keep their logging threshold and drop the old cap.</summary>
+    /// <summary>Preferences saved before vsync and the cap existed drop the old cap and logging threshold.</summary>
     /// <returns>The verification task.</returns>
     [TestMethod]
     public async Task EarlierPreferencesRestoreUncappedWithVSync()
@@ -98,7 +95,6 @@ public sealed class PreviewSettingsTests
 
         _ = service.FrameRateCapEnabled.Should().BeFalse();
         _ = service.VSyncEnabled.Should().BeTrue();
-        _ = service.LoggingVerbosity.Should().Be(1);
         _ = fixture.Engine.Object.TargetFps.Should().Be(0);
         _ = fixture.Results.Should().BeEmpty();
     }
@@ -159,11 +155,10 @@ public sealed class PreviewSettingsTests
         var service = fixture.CreateService(store.Object);
         var restoration = service.RestoreAsync(fixture.Project);
         service.Deactivate(fixture.Project);
-        loaded.SetResult(new() { ProjectId = fixture.Project.ProjectId, FrameRateCapEnabled = true, FrameRateCap = 15, LoggingVerbosity = 3 });
+        loaded.SetResult(new() { ProjectId = fixture.Project.ProjectId, FrameRateCapEnabled = true, FrameRateCap = 15 });
         await restoration.ConfigureAwait(false);
         fixture.Engine.VerifySet(value => value.TargetFps = It.IsAny<uint>(), Times.Never());
         fixture.Engine.Verify(value => value.SetVSyncEnabled(It.IsAny<bool>()), Times.Never());
-        _ = fixture.Engine.Object.EngineLoggingVerbosity.Should().Be(EngineConstants.DefaultLoggingVerbosity);
     }
 
     /// <summary>Persistence failure leaves the accepted live value and publishes the actual storage error.</summary>
@@ -382,6 +377,53 @@ public sealed class PreviewSettingsTests
         fixture.Engine.Verify(value => value.SetGroundGrid(new GroundGridSettings()), Times.Exactly(2));
     }
 
+    /// <summary>An engine that does not run takes no preference; it takes the accepted ones when it starts running.</summary>
+    /// <returns>The verification task.</returns>
+    [TestMethod]
+    public async Task PreferencesWaitForARunningEngine()
+    {
+        var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
+        await using var lifetime = fixture.ConfigureAwait(false);
+        fixture.EngineState = EngineServiceState.NoEngine;
+        var service = fixture.CreateService();
+        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        service.FrameRateCapEnabled = true;
+        service.FrameRateCap = 45;
+        service.GroundGrid.Spacing = 2f;
+        await service.FlushAsync().ConfigureAwait(false);
+
+        fixture.Engine.VerifySet(value => value.TargetFps = It.IsAny<uint>(), Times.Never());
+        fixture.Engine.Verify(value => value.SetVSyncEnabled(It.IsAny<bool>()), Times.Never());
+        fixture.Engine.Verify(value => value.SetGroundGrid(It.IsAny<GroundGridSettings>()), Times.Never());
+        _ = fixture.Results.Should().BeEmpty("an engine that does not run rejects nothing");
+
+        fixture.ChangeState(EngineServiceState.Running);
+
+        _ = fixture.Engine.Object.TargetFps.Should().Be(45);
+        fixture.Engine.Verify(value => value.SetVSyncEnabled(enabled: true), Times.Once());
+        fixture.Engine.Verify(value => value.SetGroundGrid(new GroundGridSettings { Spacing = 2f }), Times.Once());
+    }
+
+    /// <summary>An engine that stops and starts again takes the accepted preferences again.</summary>
+    /// <returns>The verification task.</returns>
+    [TestMethod]
+    public async Task RestartedEngineTakesThePreferencesAgain()
+    {
+        var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
+        await using var lifetime = fixture.ConfigureAwait(false);
+        var service = fixture.CreateService();
+        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        service.VSyncEnabled = false;
+        fixture.ChangeState(EngineServiceState.NoEngine);
+        fixture.Engine.Invocations.Clear();
+
+        fixture.ChangeState(EngineServiceState.Running);
+
+        fixture.Engine.Verify(value => value.SetVSyncEnabled(enabled: false), Times.Once());
+        fixture.Engine.Verify(value => value.SetGroundGrid(It.IsAny<GroundGridSettings>()), Times.Once());
+        _ = fixture.Results.Should().BeEmpty();
+    }
+
     /// <summary>The stored shape before vsync, the frame-rate cap and pane rendering were preferences.</summary>
     private sealed record EarlierPreferences(Guid ProjectId, int TargetFps, int LoggingVerbosity);
 
@@ -390,6 +432,9 @@ public sealed class PreviewSettingsTests
         private readonly Mock<IOperationResultPublisher> publisher = new();
 
         public Mock<IEngineService> Engine { get; } = new();
+
+        /// <summary>Gets or sets the engine's state; it runs unless a test stops it.</summary>
+        public EngineServiceState EngineState { get; set; } = EngineServiceState.Running;
 
         public PersistentState Database { get; } = new(new DbContextOptionsBuilder<PersistentState>().UseSqlite("Data Source=:memory:").Options);
 
@@ -406,8 +451,8 @@ public sealed class PreviewSettingsTests
             _ = await fixture.Database.Database.EnsureCreatedAsync().ConfigureAwait(false);
             fixture.Projects.Activate(fixture.Project);
             _ = fixture.Engine.SetupProperty(value => value.TargetFps, 0u);
-            _ = fixture.Engine.SetupProperty(value => value.EngineLoggingVerbosity, EngineConstants.DefaultLoggingVerbosity);
             _ = fixture.Engine.SetupGet(value => value.MaxTargetFps).Returns(1000);
+            _ = fixture.Engine.SetupGet(value => value.State).Returns(() => fixture.EngineState);
             _ = fixture.publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(fixture.Results.Add);
             return fixture;
         }
@@ -420,6 +465,15 @@ public sealed class PreviewSettingsTests
 
         public PreviewSettingsService CreateService(IEditorSettingsManager? store = null)
             => new(this.Engine.Object, store ?? new EditorSettingsManager(this.Database), this.Projects, this.publisher.Object, new OperationStatusReducer());
+
+        /// <summary>Moves the engine to another state, as the engine service reports it.</summary>
+        /// <param name="state">The new state.</param>
+        public void ChangeState(EngineServiceState state)
+        {
+            var previous = this.EngineState;
+            this.EngineState = state;
+            this.Engine.Raise(value => value.StateChanged += null, this.Engine.Object, new EngineStateChangedEventArgs(Guid.NewGuid(), previous, state));
+        }
 
         public ValueTask DisposeAsync() => this.Database.DisposeAsync();
     }

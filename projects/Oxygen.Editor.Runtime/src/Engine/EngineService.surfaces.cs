@@ -22,15 +22,15 @@ public sealed partial class EngineService
     }
 
     /// <inheritdoc/>
-    public async ValueTask ReleaseDocumentSurfacesAsync(Guid documentId)
+    public async ValueTask ReleaseOwnerSurfacesAsync(SurfaceOwnerId owner)
     {
         await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             List<Exception> failures = [];
-            foreach (var lease in this.activeLeases.Values.Where(lease => lease.Key.DocumentId == documentId).ToArray())
+            foreach (var lease in this.activeLeases.Values.Where(lease => lease.Key.Owner == owner).ToArray())
             {
-                _ = await this.TryCleanupAsync(() => this.ReleaseLeaseCoreAsync(lease), "Release document surface", failures).ConfigureAwait(true);
+                _ = await this.TryCleanupAsync(() => this.ReleaseLeaseCoreAsync(lease), "Release owner surface", failures).ConfigureAwait(true);
             }
 
             ThrowCleanupFailures(failures);
@@ -198,20 +198,20 @@ public sealed partial class EngineService
             return existing;
         }
 
-        if (this.reservedSurfaceCount >= EngineConstants.MaxTotalSurfaces || this.GetDocumentSurfaceCount(key.DocumentId) >= EngineConstants.MaxSurfacesPerDocument)
+        if (this.reservedSurfaceCount >= EngineConstants.MaxTotalSurfaces || this.GetOwnerSurfaceCount(key.Owner) >= EngineConstants.MaxSurfacesPerOwner)
         {
             throw new InvalidOperationException("The maximum number of viewport surfaces has been reached.");
         }
 
         var lease = new ViewportSurfaceLease(this, key);
         this.activeLeases[key] = lease;
-        this.documentSurfaceCounts[key.DocumentId] = this.GetDocumentSurfaceCount(key.DocumentId) + 1;
+        this.ownerSurfaceCounts[key.Owner] = this.GetOwnerSurfaceCount(key.Owner) + 1;
         ++this.reservedSurfaceCount;
         return lease;
     }
 
-    private int GetDocumentSurfaceCount(Guid documentId)
-        => this.documentSurfaceCounts.TryGetValue(documentId, out var count) ? count : 0;
+    private int GetOwnerSurfaceCount(SurfaceOwnerId owner)
+        => this.ownerSurfaceCounts.TryGetValue(owner, out var count) ? count : 0;
 
     private void RemoveLeaseReservation(ViewportSurfaceLease lease)
     {
@@ -220,14 +220,14 @@ public sealed partial class EngineService
             return;
         }
 
-        var count = this.GetDocumentSurfaceCount(lease.Key.DocumentId) - 1;
+        var count = this.GetOwnerSurfaceCount(lease.Key.Owner) - 1;
         if (count == 0)
         {
-            _ = this.documentSurfaceCounts.TryRemove(lease.Key.DocumentId, out _);
+            _ = this.ownerSurfaceCounts.TryRemove(lease.Key.Owner, out _);
         }
         else
         {
-            this.documentSurfaceCounts[lease.Key.DocumentId] = count;
+            this.ownerSurfaceCounts[lease.Key.Owner] = count;
         }
 
         --this.reservedSurfaceCount;
@@ -246,7 +246,7 @@ public sealed partial class EngineService
         public async ValueTask AttachAsync(SwapChainPanel panel, CancellationToken cancellationToken = default)
         {
             ObjectDisposedException.ThrowIf(this.releaseRequested, this);
-            _ = await owner.AttachViewportAsync(new ViewportSurfaceRequest { DocumentId = this.Key.DocumentId, ViewportId = this.Key.ViewportId, ViewportIndex = 0 }, panel, cancellationToken).ConfigureAwait(true);
+            _ = await owner.AttachViewportAsync(new ViewportSurfaceRequest { Owner = this.Key.Owner, ViewportId = this.Key.ViewportId, ViewportIndex = 0 }, panel, cancellationToken).ConfigureAwait(true);
         }
 
         public ValueTask ResizeAsync(uint pixelWidth, uint pixelHeight, CancellationToken cancellationToken = default)

@@ -7,15 +7,15 @@ using System.Runtime.InteropServices;
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>
-/// Identifies a leased composition surface by document and viewport identifiers.
+/// Identifies a leased composition surface by its owner and viewport.
 /// </summary>
-/// <param name="DocumentId">The scene document that owns the viewport.</param>
+/// <param name="Owner">The owner of the viewport.</param>
 /// <param name="ViewportId">A unique identifier for the viewport instance.</param>
 [StructLayout(LayoutKind.Auto)]
-public readonly record struct ViewportSurfaceKey(Guid DocumentId, Guid ViewportId)
+public readonly record struct ViewportSurfaceKey(SurfaceOwnerId Owner, Guid ViewportId)
 {
     /// <summary>
     /// Gets a friendly name used in logs.
     /// </summary>
-    public string DisplayName => $"doc:{this.DocumentId:N}/vp:{this.ViewportId:N}";
+    public string DisplayName => $"owner:{this.Owner.Value:N}/vp:{this.ViewportId:N}";
 }

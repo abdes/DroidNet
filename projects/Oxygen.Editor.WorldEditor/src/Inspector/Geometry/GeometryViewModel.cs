@@ -18,7 +18,6 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Inspector.Editing;
-using Oxygen.Editor.World.Services;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 
@@ -37,7 +36,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 {
     private readonly IAssetFeed assetProvider;
     private readonly IBuiltinCatalogDiscovery builtins;
-    private readonly ISceneContentDemandService contentDemand;
     private readonly IGeometryMaterialSlotProvider materialSlots;
     private readonly IProjectContextService projectContexts;
     private readonly Func<SceneAuthoring?>? authoringProvider;
@@ -63,7 +61,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <param name="hosting">The WinUI hosting context used for UI-thread dispatch.</param>
     /// <param name="assetProvider">The shared asset identity, cook status and runtime availability feed.</param>
     /// <param name="builtins">The shared engine-provided catalog and last-known availability.</param>
-    /// <param name="contentDemand">The lifetime owner for saved-asset preview requests.</param>
     /// <param name="materialSlots">The native geometry slot inventory reader.</param>
     /// <param name="projectContexts">The active project lifetime.</param>
     /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
@@ -71,14 +68,12 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         HostingContext hosting,
         IAssetFeed assetProvider,
         IBuiltinCatalogDiscovery builtins,
-        ISceneContentDemandService contentDemand,
         IGeometryMaterialSlotProvider materialSlots,
         IProjectContextService projectContexts,
         Func<SceneAuthoring?>? authoringProvider = null)
     {
         this.assetProvider = assetProvider;
         this.builtins = builtins;
-        this.contentDemand = contentDemand;
         this.materialSlots = materialSlots;
         this.projectContexts = projectContexts;
         this.authoringProvider = authoringProvider;
@@ -252,7 +247,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         this.SelectedAssetUriString = newUri.ToString();
         this.SelectedAssetName = item.Name;
         this.IsMixed = false;
-        this.contentDemand.RequestAssignment(authoring.Scene, nodes.ConvertAll(static node => node.Id), newUri, AssetKind.Geometry);
         await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);
     }
 
@@ -284,7 +278,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         if (succeeded)
         {
             this.UpdateMaterialDisplay(item.Uri);
-            this.contentDemand.RequestAssignment(picker.Authoring.Scene, picker.Nodes.ConvertAll(static node => node.Id), item.Uri, AssetKind.Material);
         }
 
         await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);

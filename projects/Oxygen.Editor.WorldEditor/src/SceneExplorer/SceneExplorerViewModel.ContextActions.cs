@@ -10,6 +10,7 @@ using DroidNet.Controls;
 using DroidNet.Controls.Menus;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.EditorView;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
@@ -281,7 +282,7 @@ public partial class SceneExplorerViewModel
             && ReferenceEquals(this.projectManager.CurrentProject, context.Project)
             && ReferenceEquals(this.projectContexts?.ActiveProject, context.ProjectActivation)
             && ReferenceEquals(this.CurrentAuthoring(), context.Authoring)
-            && ReferenceEquals(this.sceneEngineSync.GetDocumentScene(context.Authoring.Document), context.Authoring.Scene)
+            && this.openDocuments.Find(context.Authoring.Document) is { Content: SceneContent { Scene: var scene } } && ReferenceEquals(scene, context.Authoring.Scene)
             && SameSelection(this.selectionService.GetContext(context.Authoring.Document), context.Selection)
             && context.Selection.SelectedNodeIds.All(id => this.projection.GetNode(id) is not null)
             && context.Selection.SelectedFolderIds.All(id => this.projection.GetFolder(id) is not null)

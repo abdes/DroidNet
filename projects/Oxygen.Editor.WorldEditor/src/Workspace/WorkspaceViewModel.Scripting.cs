@@ -35,12 +35,13 @@ public partial class WorkspaceViewModel
 
         // Analysis starts with the workspace so Problems and script badges are populated before the panel is opened.
         this.problems = childContainer.Resolve<ProblemsViewModel>();
+        this.problems.NodeSelector = this.SelectRuntimeProblemNodeAsync;
         this.problems.PropertyChanged += this.OnProblemsPropertyChanged;
         this.messenger?.Register<ShowScriptProblemMessage>(this, (_, message) => this.ShowProblem(message.Problem));
     }
 
     // A script slot's badge brings Problems forward at its problem; saves do not, so the code editor keeps focus.
-    private void ShowProblem(ContentBrowser.Scripts.ScriptProblem problem)
+    private void ShowProblem(Scripting.ScriptProblem problem)
     {
         _ = this.problems?.Select(problem);
         if (DroidNet.Docking.Dockable.FromId(ProblemsDockId) is { } dock)

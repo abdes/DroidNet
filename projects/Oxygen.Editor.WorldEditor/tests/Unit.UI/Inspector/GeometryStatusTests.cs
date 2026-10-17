@@ -47,7 +47,7 @@ internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTe
         var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        using var model = new GeometryViewModel(CreateStatusHosting(), provider.Object, builtins, Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
+        using var model = new GeometryViewModel(CreateStatusHosting(), provider.Object, builtins, Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
         {
             IsExpanded = true,
         };

@@ -1,0 +1,22 @@
+<Project Sdk="MSTest.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+        <RootNamespace>Oxygen.Editor.LivePreview.Integration.UI.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <DroidNetTestTier>Integration</DroidNetTestTier>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Oxygen.Editor.LivePreview.csproj" />
+        <PackageReference Include="Moq" />
+        <PackageReference Include="Testably.Abstractions" />
+        <Compile Include="../TestSupport/SceneDocuments.cs" Link="TestSupport/SceneDocuments.cs" />
+        <Compile Include="../TestSupport/Native/*.cs" Link="TestSupport/Native/%(Filename)%(Extension)" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Core/testsupport/TemporaryNativeArtifacts.cs" Link="Fixtures/TemporaryNativeArtifacts.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/NativeContentPipelineFixture.cs" Link="Fixtures/NativeContentPipelineFixture.cs" />
+    </ItemGroup>
+    <Import Project="$(ProjectsRoot)/UITests.Shared/src/UITests.Shared.projitems" Label="Shared" />
+    <ItemGroup Condition="Exists('$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin')">
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin/*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+</Project>

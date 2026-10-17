@@ -83,55 +83,52 @@ public sealed class MaterialDescriptors
         var unitFloat = new EditorAnnotation { Group = "Parameters", Renderer = "slider", Step = 0.01, SoftMin = 0.0, SoftMax = 1.0 };
         var byId = new Dictionary<PropertyId, PropertyDescriptor>();
 
-        Register(byId, BaseColorR, unitFloat with { Renderer = "color-rgba" }, "material.base_color.r",
+        Register(byId, BaseColorR, unitFloat with { Renderer = "color-rgba" },
             static state => state.Source.PbrMetallicRoughness.BaseColorR,
             static (state, v) => state.ReplacePbr(p => Pbr(p, baseColorR: v)),
             ValidateUnitFloat);
-        Register(byId, BaseColorG, unitFloat with { Renderer = "color-rgba" }, "material.base_color.g",
+        Register(byId, BaseColorG, unitFloat with { Renderer = "color-rgba" },
             static state => state.Source.PbrMetallicRoughness.BaseColorG,
             static (state, v) => state.ReplacePbr(p => Pbr(p, baseColorG: v)),
             ValidateUnitFloat);
-        Register(byId, BaseColorB, unitFloat with { Renderer = "color-rgba" }, "material.base_color.b",
+        Register(byId, BaseColorB, unitFloat with { Renderer = "color-rgba" },
             static state => state.Source.PbrMetallicRoughness.BaseColorB,
             static (state, v) => state.ReplacePbr(p => Pbr(p, baseColorB: v)),
             ValidateUnitFloat);
-        Register(byId, BaseColorA, unitFloat with { Renderer = "color-rgba" }, "material.base_color.a",
+        Register(byId, BaseColorA, unitFloat with { Renderer = "color-rgba" },
             static state => state.Source.PbrMetallicRoughness.BaseColorA,
             static (state, v) => state.ReplacePbr(p => Pbr(p, baseColorA: v)),
             ValidateUnitFloat);
-        Register(byId, Metalness, unitFloat, "material.metalness",
+        Register(byId, Metalness, unitFloat,
             static state => state.Source.PbrMetallicRoughness.MetallicFactor,
             static (state, v) => state.ReplacePbr(p => Pbr(p, metallicFactor: v)),
             ValidateUnitFloat);
-        Register(byId, Roughness, unitFloat, "material.roughness",
+        Register(byId, Roughness, unitFloat,
             static state => state.Source.PbrMetallicRoughness.RoughnessFactor,
             static (state, v) => state.ReplacePbr(p => Pbr(p, roughnessFactor: v)),
             ValidateUnitFloat);
-        Register(byId, AlphaCutoff, unitFloat, "material.alpha_cutoff",
+        Register(byId, AlphaCutoff, unitFloat,
             static state => state.Source.AlphaCutoff,
             static (state, v) => state.Replace(s => WithAlphaCutoff(s, v)),
             ValidateUnitFloat);
 
-        Register(byId, AmbientOcclusion, unitFloat, "material.ambient_occlusion",
+        Register(byId, AmbientOcclusion, unitFloat,
             static state => state.Source.OcclusionStrength,
             static (state, v) => state.Replace(s => WithOcclusionStrength(s, v)),
             ValidateUnitFloat);
 
         Register(byId, NormalScale,
             new EditorAnnotation { Group = "Parameters", Renderer = "numberbox", Step = 0.01, SoftMin = 0.0, SoftMax = 4.0 },
-            "material.normal_scale",
             static state => state.Source.NormalScale,
             static (state, v) => state.Replace(s => WithNormalScale(s, v)),
             ValidateNonNegativeFloat);
 
         Register(byId, DoubleSided, new EditorAnnotation { Group = "Surface", Renderer = "checkbox" },
-            "material.double_sided",
             static state => state.Source.DoubleSided,
             static (state, v) => state.Replace(s => WithDoubleSided(s, v)),
             static _ => ValidationResult.Ok);
 
         Register(byId, AlphaMode, new EditorAnnotation { Group = "Surface", Renderer = "enum-dropdown" },
-            "material.alpha_mode",
             static state => state.Source.AlphaMode,
             static (state, v) => state.SetAlphaMode(v),
             static value => Enum.IsDefined(value)
@@ -145,7 +142,6 @@ public sealed class MaterialDescriptors
         Dictionary<PropertyId, PropertyDescriptor> table,
         PropertyId<T> id,
         EditorAnnotation annotation,
-        string engineKey,
         Func<MaterialEditState, T> read,
         Action<MaterialEditState, T> write,
         Func<T, ValidationResult> validator)
@@ -157,8 +153,7 @@ public sealed class MaterialDescriptors
             reader: target => read((MaterialEditState)target),
             writer: (target, value) => write((MaterialEditState)target, value),
             validator: validator,
-            annotation: annotation,
-            engineCommandKey: engineKey);
+            annotation: annotation);
         table[id.Id] = descriptor;
     }
 

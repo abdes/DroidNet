@@ -19,7 +19,7 @@
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentBrowser/testsupport/UI/BrowserControls.cs" Link="Support/BrowserControls.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentBrowser/testsupport/UI/BrowserQuerySupport.cs" Link="Support/BrowserQuerySupport.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentBrowser/testsupport/UI/BrowserTestData.cs" Link="Support/BrowserTestData.cs" />
-        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/DemandFixture.cs" Link="Support/DemandFixture.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/GeometryFixture.cs" Link="Support/GeometryFixture.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/InspectorControls.cs" Link="Support/InspectorControls.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/EnvironmentInspectorScenario.cs" Link="Support/EnvironmentInspectorScenario.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/InspectorModels.cs" Link="Support/InspectorModels.cs" />

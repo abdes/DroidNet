@@ -1,0 +1,121 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using Microsoft.Extensions.Logging;
+using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World;
+using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
+
+namespace Oxygen.Editor.LivePreview.Scenes;
+
+/// <summary>Reports the assets the engine fails to load for the scene it shows.</summary>
+internal sealed partial class ScenePreview
+{
+    private IRuntimeWorldCommands? observedWorld;
+
+    // The native failure names each failed texture in its message but not by slot, so the
+    // failure is attributed to a texture only when the edit loads exactly one.
+    private static string? SoleEnvironmentTexture(RuntimeSetEnvironment environment)
+    {
+        RuntimeTextureReference?[] textures = [environment.AutoExposureMeteringMask, environment.SkySphereCubemap, environment.SkyLightCubemap];
+        var loaded = textures.OfType<RuntimeTextureReference>().ToArray();
+        return loaded.Length == 1 ? loaded[0].AssetUri.AbsoluteUri : null;
+    }
+
+    private void ObserveWorld(IRuntimeWorldCommands commands)
+    {
+        if (ReferenceEquals(commands, this.observedWorld))
+        {
+            return;
+        }
+
+        if (this.observedWorld is { } observedWorld)
+        {
+            observedWorld.AssetLoadFailed -= this.OnAssetLoadFailed;
+        }
+
+        this.observedWorld = commands;
+        commands.AssetLoadFailed += this.OnAssetLoadFailed;
+    }
+
+    private void OnAssetLoadFailed(object? sender, RuntimeAssetLoadFailedEventArgs args)
+    {
+        if (sender is not IRuntimeWorldCommands commands || !ReferenceEquals(commands, this.observedWorld))
+        {
+            return;
+        }
+
+        this.owner.Post(() => this.PublishAssetLoadFailure(commands, args));
+    }
+
+    private void PublishAssetLoadFailure(IRuntimeWorldCommands commands, RuntimeAssetLoadFailedEventArgs args)
+    {
+        var request = args.Request;
+        if (!ReferenceEquals(commands, this.observedWorld) || this.activeWorld?.Target != request.Target
+            || this.activeScene is not { } scene || !commands.IsCurrentAssetFailure(args))
+        {
+            return;
+        }
+
+        var (nodeId, assetPath, operationKind, code) = request.Command switch
+        {
+            RuntimeSetGeometry geometry => (geometry.NodeId, geometry.AssetPath, SceneOperationKinds.EditGeometry, LiveSyncDiagnosticCodes.GeometryUnresolvedAtRuntime),
+            RuntimeSetMaterialOverride material => (material.NodeId, material.MaterialPath, SceneOperationKinds.EditMaterialSlot, LiveSyncDiagnosticCodes.MaterialFailed),
+            RuntimeSetEnvironment environment => (NodeId.Empty, SoleEnvironmentTexture(environment), SceneOperationKinds.EditEnvironment, LiveSyncDiagnosticCodes.EnvironmentFailed),
+            _ => (NodeId.Empty, null, string.Empty, string.Empty),
+        };
+        var node = FindNode(scene, nodeId);
+        if (node is null && request.Command is not RuntimeSetEnvironment)
+        {
+            return;
+        }
+
+        this.LogAssetLoadFailed(request.OperationId, args.Generation, nodeId, args.Message);
+        if (this.GetAssetFailureScope(scene, node, assetPath, request.Target.DocumentLifetime) is not { } scope)
+        {
+            return;
+        }
+
+        this.operationResults?.Publish(new OperationResult
+        {
+            OperationId = request.OperationId,
+            OperationKind = operationKind,
+            Status = OperationStatus.PartiallySucceeded,
+            Severity = DiagnosticSeverity.Error,
+            Title = "Runtime asset load failed",
+            Message = args.Message,
+            CompletedAt = DateTimeOffset.UtcNow,
+            AffectedScope = scope,
+            Diagnostics =
+            [
+                new DiagnosticRecord
+                {
+                    OperationId = request.OperationId,
+                    Domain = FailureDomain.LiveSync,
+                    Severity = DiagnosticSeverity.Error,
+                    Code = code,
+                    Message = args.Message,
+                    TechnicalMessage = $"Native asset request generation {args.Generation}: {args.Message}",
+                    AffectedPath = assetPath,
+                    AffectedEntity = scope,
+                },
+            ],
+        });
+    }
+
+    private AffectedScope? GetAssetFailureScope(Scene scene, SceneNode? node, string? assetPath, Guid documentLifetime)
+    {
+        lock (this.documentGate)
+        {
+            return this.TryGetDocument(scene, out var lifetime) && lifetime.Id == documentLifetime
+                ? Scope(scene, node, componentType: node is null ? nameof(PostProcessEnvironmentData) : nameof(GeometryComponent), assetVirtualPath: assetPath)
+                : null;
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Runtime asset operation {OperationId}, native generation {Generation}, node {NodeId} failed: {Message}")]
+    private partial void LogAssetLoadFailed(Guid operationId, ulong generation, NodeId nodeId, string message);
+}

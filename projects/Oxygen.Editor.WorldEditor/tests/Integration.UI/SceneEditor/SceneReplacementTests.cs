@@ -37,7 +37,7 @@ public sealed partial class SceneReplacementTests : DroidNet.Tests.VisualUserInt
         _ = fixture.Runtime.ActiveSurfaceCount.Should().Be(0);
         var request = new ViewportSurfaceRequest
         {
-            DocumentId = fixture.Document.Id.Value,
+            Owner = new SurfaceOwnerId(fixture.Document.Id.Value),
             ViewportId = Guid.NewGuid(),
             ViewportIndex = 0,
             IsPrimary = true,

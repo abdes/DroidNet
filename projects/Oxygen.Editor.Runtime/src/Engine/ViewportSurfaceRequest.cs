@@ -10,12 +10,12 @@ namespace Oxygen.Editor.Runtime.Engine;
 public sealed record class ViewportSurfaceRequest
 {
     /// <summary>
-    ///     Gets the identifier of the document that owns the viewport.
+    ///     Gets the owner of the viewport.
     /// </summary>
-    public required Guid DocumentId { get; init; }
+    public required SurfaceOwnerId Owner { get; init; }
 
     /// <summary>
-    ///     Gets the stable identifier of the viewport instance inside the document.
+    ///     Gets the stable identifier of the viewport instance inside its owner.
     /// </summary>
     public required Guid ViewportId { get; init; }
 
@@ -26,7 +26,7 @@ public sealed record class ViewportSurfaceRequest
 
     /// <summary>
     ///     Gets a value indicating whether gets a flag indicating whether the viewport should be
-    ///     treated as the document's primary surface.
+    ///     treated as its owner's primary surface.
     /// </summary>
     public bool IsPrimary { get; init; }
 
@@ -39,5 +39,5 @@ public sealed record class ViewportSurfaceRequest
     ///     Creates the <see cref="ViewportSurfaceKey"/> associated with this request.
     /// </summary>
     /// <returns>The derived surface key.</returns>
-    public ViewportSurfaceKey ToKey() => new(this.DocumentId, this.ViewportId);
+    public ViewportSurfaceKey ToKey() => new(this.Owner, this.ViewportId);
 }

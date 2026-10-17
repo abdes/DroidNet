@@ -175,6 +175,9 @@
     <ClCompile Include="World\NodeObservation.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="World\WireVocabulary.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="Scripting\ScriptAnalysis.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -282,6 +285,7 @@
     <ClInclude Include="RenderThreadContext.h" />
     <ClInclude Include="UiThreadDispatcher.h" />
     <ClInclude Include="World\OxygenWorld.h" />
+    <ClInclude Include="World\WireVocabulary.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

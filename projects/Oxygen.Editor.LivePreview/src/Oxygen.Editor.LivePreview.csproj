@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+
+        <RootNamespace>Oxygen.Editor.LivePreview</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+
+        <Title>Oxygen editor live preview.</Title>
+        <Description>Oxygen.Editor.LivePreview applies authoring state to the embedded engine and controls the game player: the preview session of the open project, the projection of the open scene document, content demand, the assets' preview state and play.</Description>
+        <PackageTags>editor;preview;engine;play</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="System.Reactive" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Documents\src\Documents.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Assets\src\Oxygen.Editor.Assets.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\src\Oxygen.Editor.ContentPipeline.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Documents\src\Oxygen.Editor.Documents.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Oxygen.Editor.Interop.vcxproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Runtime\src\Oxygen.Editor.Runtime.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Scenes\src\Oxygen.Editor.Scenes.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Schemas\src\Oxygen.Editor.Schemas.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.World\src\Oxygen.Editor.World.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
+    </ItemGroup>
+</Project>

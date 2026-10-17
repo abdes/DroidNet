@@ -245,7 +245,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     }
 
     private async Task ReleaseDocumentSurfacesAsync(DocumentId documentId)
-        => await this.engineService.ReleaseDocumentSurfacesAsync(documentId.Value).ConfigureAwait(true);
+        => await this.engineService.ReleaseOwnerSurfacesAsync(new SurfaceOwnerId(documentId.Value)).ConfigureAwait(true);
 
     [RelayCommand(CanExecute = nameof(CanSaveActiveDocument))]
     private async Task SaveActiveDocument()

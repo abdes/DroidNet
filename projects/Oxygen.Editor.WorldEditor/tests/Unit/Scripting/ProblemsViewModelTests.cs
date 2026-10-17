@@ -4,11 +4,15 @@
 
 using System.Reactive.Subjects;
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Scripts;
+using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Play;
 using Oxygen.Editor.World.Problems;
+using Oxygen.Editor.World.Scripting;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 
@@ -137,7 +141,10 @@ public sealed partial class ProblemsViewModelTests : IDisposable
             AuthoringMounts = [],
             LocalFolderMounts = [],
         });
-        return new ProblemsViewModel(analysis.Object, this.codeEditor.Object, projects.Object, this.runtime);
+        return new ProblemsViewModel(analysis.Object, this.codeEditor.Object, projects.Object, this.runtime)
+        {
+            NodeSelector = this.runtime.SelectAsync,
+        };
     }
 
     private sealed class FakeRuntimeProblems : IRuntimeProblemSource
@@ -150,7 +157,15 @@ public sealed partial class ProblemsViewModelTests : IDisposable
 
         public List<ScriptProblem> Selected { get; } = [];
 
-        public Task<bool> SelectProblemNodeAsync(ScriptProblem problem)
+        public DocumentId Document { get; } = DocumentId.New();
+
+        public NodeId Node { get; } = NodeId.New();
+
+        // A problem that names a node is found in the scene that played.
+        public (DocumentId Document, NodeId Node)? NodeOf(ScriptProblem problem)
+            => problem.IsRuntime && problem.SlotNode is not null ? (this.Document, this.Node) : null;
+
+        public Task<bool> SelectAsync(ScriptProblem problem)
         {
             this.Selected.Add(problem);
             return Task.FromResult(true);

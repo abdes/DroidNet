@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Interop;
 using Oxygen.Interop.Input;
 
 namespace Oxygen.Editor.Runtime.Tests;
@@ -70,13 +71,13 @@ public sealed class RuntimeTransportConversionTests
     [TestMethod]
     public void PropertyConversion_PreservesComponentFieldAndScalarValues()
     {
-        ImmutableArray<RuntimePropertyValue> values = [new(1, 23, -4.5f), new(ushort.MaxValue, 67, float.MaxValue)];
+        ImmutableArray<RuntimePropertyValue> values = [new(EngineComponentId.Transform, 23, -4.5f), new((EngineComponentId)ushort.MaxValue, 67, float.MaxValue)];
         var native = RuntimeTransportConversion.ToNative(values);
 
         _ = native.Should().HaveCount(2);
         for (var index = 0; index < values.Length; ++index)
         {
-            _ = native[index].ComponentId.Should().Be(values[index].ComponentId);
+            _ = native[index].ComponentId.Should().Be((ushort)values[index].ComponentId);
             _ = native[index].FieldId.Should().Be(values[index].FieldId);
             _ = native[index].Value.Should().Be(values[index].Value);
         }

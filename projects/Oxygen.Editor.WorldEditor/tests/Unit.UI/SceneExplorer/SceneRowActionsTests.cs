@@ -172,8 +172,6 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         host.Actions.SetRowHovered(hovered: false);
         AssertSlot(Button(host.Actions, "EyeButton"), suppressed: false, hovered: false);
         AssertSlot(Button(host.Actions, "LockButton"), locked, hovered: false);
-        host.Fixture.Sync.Verify(value => value.GetDocumentScene(It.IsAny<DocumentId>()), Times.AtLeastOnce);
-        host.Fixture.Sync.VerifyNoOtherCalls();
     });
 
     /// <summary>Verifies lock invocation preserves eye state, selection, authored content, and history.</summary>
@@ -476,9 +474,6 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             scene.RootNodes.Add(secondaryNode);
             fixture.Node.AddChild(childNode);
             var metadata = fixture.Tab;
-            _ = fixture.Sync.Setup(service => service.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-            _ = fixture.Sync.Setup(service => service.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
-            _ = fixture.Sync.Setup(service => service.SyncSceneWhenReadyAsync(scene, It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             viewModel = new SceneExplorerViewModel(
                 Mock.Of<IProjectManagerService>(),
                 fixture.Messenger,
@@ -486,7 +481,6 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
                 fixture.Area,
                 metadata.Documents,
                 default,
-                fixture.Sync.Object,
                 new SceneSelectionService(),
                 interaction: interaction,
                 projectContexts: fixture.Projects);
@@ -498,7 +492,6 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             var view = new SceneExplorerView { ViewModel = viewModel };
             await LoadTestContentAsync(view).ConfigureAwait(true);
             await WaitForRenderAsync().ConfigureAwait(true);
-            fixture.Sync.Invocations.Clear();
             var tree = (DynamicTree)view.FindName("ExplorerTree")!;
             var row = Row(tree, adapter);
             var host = new RowHost(fixture, viewModel, view, interaction, settings, adapter, secondaryAdapter, childAdapter, tree, row, row.FindDescendant<SceneRowActions>()!);

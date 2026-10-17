@@ -109,15 +109,13 @@ public sealed class PropertyDescriptor<T> : PropertyDescriptor
     /// <param name="writer">Writes a value to the model object.</param>
     /// <param name="validator">Validates a candidate value.</param>
     /// <param name="annotation">The parsed editor annotations.</param>
-    /// <param name="engineCommandKey">The engine-side property key.</param>
     public PropertyDescriptor(
         PropertyId<T> id,
         Func<object, T> reader,
         Action<object, T> writer,
         Func<T, ValidationResult> validator,
-        EditorAnnotation annotation,
-        string engineCommandKey)
-        : base(id.Id, typeof(T), annotation, engineCommandKey)
+        EditorAnnotation annotation)
+        : base(id.Id, typeof(T), annotation)
     {
         ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(writer);

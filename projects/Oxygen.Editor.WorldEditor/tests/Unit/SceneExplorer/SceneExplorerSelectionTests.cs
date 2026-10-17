@@ -12,7 +12,6 @@ using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
@@ -435,12 +434,6 @@ public sealed partial class SceneExplorerSelectionTests
             documents.Activate(metadata.Document);
             this.Documents = documents;
 
-            var sync = new Mock<ISceneEngineSync>();
-            _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
-            _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
-            this.Sync = sync;
-
             this.SelectionService = new SceneSelectionService();
             this.Messenger = new StrongReferenceMessenger();
             this.Messenger.Register<SceneNodeSelectionChangedMessage>(this, (recipient, message) => ((SelectionHarness)recipient).Received.Add(message));
@@ -452,9 +445,6 @@ public sealed partial class SceneExplorerSelectionTests
 
         /// <summary>Gets the open documents that hold the harness's first scene.</summary>
         public Editor.Documents.OpenDocuments OpenDocuments => this.openDocuments[0].Documents;
-
-        public Mock<ISceneEngineSync> Sync { get; }
-
         public SceneSelectionService SelectionService { get; }
 
         public StrongReferenceMessenger Messenger { get; }
@@ -476,7 +466,6 @@ public sealed partial class SceneExplorerSelectionTests
             added = metadata.Scene;
             this.openDocuments.Add(metadata);
             this.Documents.Add(metadata.Document);
-            _ = this.Sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(added);
             return added;
         }
 
@@ -488,7 +477,6 @@ public sealed partial class SceneExplorerSelectionTests
                 this.Documents,
                 this.OpenDocuments,
                 default,
-                this.Sync.Object,
                 this.SelectionService);
 
         /// <summary>Appends a node to a scene of the harness through its document, as the editor's create actions do.</summary>

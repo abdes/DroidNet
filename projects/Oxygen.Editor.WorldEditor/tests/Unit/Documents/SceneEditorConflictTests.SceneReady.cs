@@ -5,9 +5,7 @@
 using AwesomeAssertions;
 using DroidNet.Documents;
 using Moq;
-using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.Scenes.Engine;
-using Oxygen.Editor.World.Services;
+using Oxygen.Editor.LivePreview.Scenes;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
@@ -24,18 +22,15 @@ public sealed partial class SceneEditorConflictTests
         _ = fixture.Editor.Viewports.Should().ContainSingle();
     }
 
-    /// <summary>
-    ///     The sync service's own notification builds the panes when the relayed scene-loaded message never
-    ///     arrives, as when another tab is active at that moment during a scene switch.
-    /// </summary>
+    /// <summary>The preview's readiness builds the panes, even while another tab is active.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
-    public async Task SynchronizationWithoutTheRelayedMessageBuildsThePanes()
+    public async Task ReadinessBuildsThePanesOfAnInactiveEditor()
     {
         using var fixture = await Fixture.CreateAsync(this.TestContext, active: false).ConfigureAwait(false);
         _ = fixture.Editor.Viewports.Should().BeEmpty();
 
-        RaiseSceneSynchronized(fixture, fixture.Tab.DocumentId);
+        RaiseReady(fixture, fixture.Tab.DocumentId);
 
         _ = fixture.Editor.Viewports.Should().ContainSingle();
     }
@@ -43,16 +38,19 @@ public sealed partial class SceneEditorConflictTests
     /// <summary>A notification for another document instance leaves the editor waiting.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
-    public async Task SynchronizationOfAnotherDocumentIsIgnored()
+    public async Task ReadinessOfAnotherDocumentIsIgnored()
     {
         using var fixture = await Fixture.CreateAsync(this.TestContext, active: true).ConfigureAwait(false);
 
-        RaiseSceneSynchronized(fixture, DocumentId.New());
+        RaiseReady(fixture, DocumentId.New());
 
         _ = fixture.Editor.Viewports.Should().BeEmpty();
     }
 
-    // The sync service raises its notification synchronously, as the engine's completion does.
-    private static void RaiseSceneSynchronized(Fixture fixture, DocumentId document)
-        => fixture.Sync.Raise(value => value.SceneSynchronized += null, fixture.Sync.Object, new SceneSynchronizationCompletedEventArgs(fixture.Scene, document));
+    // The preview raises readiness on the document's owner thread, which is the test's thread here.
+    private static void RaiseReady(Fixture fixture, DocumentId document)
+    {
+        _ = fixture.Preview.Setup(value => value.IsReady(document)).Returns(value: true);
+        fixture.Preview.Raise(value => value.ReadyChanged += null, fixture.Preview.Object, new ScenePreviewEventArgs(document));
+    }
 }

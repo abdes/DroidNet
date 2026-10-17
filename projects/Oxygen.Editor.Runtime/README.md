@@ -2,22 +2,31 @@
 
 ## Overview
 
-The **Oxygen.Editor.Runtime** module provides the infrastructure layer that bridges the managed .NET editor with the native Oxygen Engine. It serves as the runtime integration layer for all editor types, managing engine lifecycle and viewport rendering surfaces.
+The **Oxygen.Editor.Runtime** module provides the infrastructure layer that
+bridges the managed .NET editor with the native Oxygen Engine. It serves as the
+runtime integration layer for all editor types, managing engine lifecycle and
+viewport rendering surfaces.
 
-This module sits between the editor UI layer and the lower-level components, providing high-level services that editor features can consume.
+This module sits between the editor UI layer and the lower-level components,
+providing high-level services that editor features can consume.
 
 ## Purpose
 
 The Runtime module exists to:
 
-1. **Manage Engine Lifecycle** - Initialize, start, stop, and configure the embedded native engine
-2. **Arbitrate Rendering Surfaces** - Allocate and manage viewport surfaces across multiple editor documents
-3. **Provide View Management** - Create, show, hide, and destroy views in the native engine
-4. **Provide Editor Services** - Expose a clean, high-level API for editor features to consume
+1. **Manage Engine Lifecycle** - Initialize, start, stop, and configure the
+   embedded native engine
+2. **Arbitrate Rendering Surfaces** - Allocate and manage viewport surfaces
+   across multiple editor documents
+3. **Provide View Management** - Create, show, hide, and destroy views in the
+   native engine
+4. **Provide Editor Services** - Expose a clean, high-level API for editor
+   features to consume
 
 By centralizing these concerns, we achieve:
 
-- **Reusability** across different editor types (World Editor, Material Editor, Particle Editor, etc.)
+- **Reusability** across different editor types (World Editor, Material Editor,
+  Particle Editor, etc.)
 - **Clear separation** between UI concerns and engine integration
 - **Testability** through well-defined interfaces
 - **Resource Safety** via surface limits and lease patterns
@@ -26,7 +35,8 @@ By centralizing these concerns, we achieve:
 
 ### Module Layering
 
-The Runtime module occupies the integration layer between presentation and the native engine:
+The Runtime module occupies the integration layer between presentation and the
+native engine:
 
 ```mermaid
 graph TD
@@ -89,11 +99,15 @@ graph LR
 ### Responsibilities
 
 1. **Lifecycle Management**: Initialize, start, and shutdown the native engine
-2. **Viewport Surface Management**: Provide and manage rendering surfaces attached to WinUI SwapChainPanels
+2. **Viewport Surface Management**: Provide and manage rendering surfaces
+   attached to WinUI SwapChainPanels
 3. **Resource Arbitration**: Enforce surface allocation limits
-4. **Engine Configuration**: Manage engine settings (target FPS, logging verbosity)
-5. **Engine Access**: Provide a world instance for querying and mutating the engine world
-6. **View Management**: Create, destroy, show, and hide editor views in the native engine
+4. **Engine Configuration**: Manage engine settings (target FPS, logging
+   verbosity)
+5. **Engine Access**: Provide a world instance for querying and mutating the
+   engine world
+6. **View Management**: Create, destroy, show, and hide editor views in the
+   native engine
 
 ### Engine Lifecycle State Machine
 
@@ -160,7 +174,9 @@ stateDiagram-v2
 
 ### Surface Leasing Model
 
-Viewports acquire rendering surfaces through a resource lease pattern. The EngineService manages surface attachment, resizing, and cleanup. The engine must be in the Running state before surfaces can be attached:
+Viewports acquire rendering surfaces through a resource lease pattern. The
+EngineService manages surface attachment, resizing, and cleanup. The engine must
+be in the Running state before surfaces can be attached:
 
 ```mermaid
 sequenceDiagram
@@ -228,7 +244,8 @@ graph TD
 **Surface Limits:**
 
 - Maximum total surfaces: 8 (defined in `EngineConstants.MaxTotalSurfaces`)
-- Maximum surfaces per document: 4 (defined in `EngineConstants.MaxSurfacesPerDocument`)
+- Maximum surfaces per owner: 4 (defined in
+  `EngineConstants.MaxSurfacesPerOwner`)
 
 ## Design Patterns
 
@@ -246,16 +263,18 @@ graph TD
 
 ## Threading Model
 
-The Runtime module operates across **two distinct threading domains**: the editor UI thread (where WinUI operations must occur) and the managed editor code space (any thread for queries and configuration).
+The Runtime module operates across **two distinct threading domains**: the
+editor UI thread (where WinUI operations must occur) and the managed editor code
+space (any thread for queries and configuration).
 
 ### Thread Domains and Thread Safety
 
-| Component | Thread Affinity | Safety Mechanism |
-|-----------|----------------|------------------|
-| **EngineService** (queries/config) | UI thread only for surface ops | `HostingContext.Dispatcher` validation in surface attachment |
-| **EngineService** (lifecycle/properties) | UI thread | Single-threaded access via gates |
-| **EngineRunner** (Interop) | UI thread | Delegates to engine via C++/CLI bridge |
-| **WinUI SwapChainPanel** | UI thread only | WinUI framework requirement |
+| Component                                | Thread Affinity                | Safety Mechanism                                             |
+| ---------------------------------------- | ------------------------------ | ------------------------------------------------------------ |
+| **EngineService** (queries/config)       | UI thread only for surface ops | `HostingContext.Dispatcher` validation in surface attachment |
+| **EngineService** (lifecycle/properties) | UI thread                      | Single-threaded access via gates                             |
+| **EngineRunner** (Interop)               | UI thread                      | Delegates to engine via C++/CLI bridge                       |
+| **WinUI SwapChainPanel**                 | UI thread only                 | WinUI framework requirement                                  |
 
 ### Design Rationale
 
@@ -274,7 +293,10 @@ The Runtime module operates across **two distinct threading domains**: the edito
 
 ### Asynchronous Operations
 
-While surface attachment and engine operations occur on the UI thread, they are exposed as `async` / `ValueTask` methods to allow non-blocking UI updates. The underlying implementation delegates to the `EngineRunner` (C++/CLI) which communicates with the native engine asynchronously.
+While surface attachment and engine operations occur on the UI thread, they are
+exposed as `async` / `ValueTask` methods to allow non-blocking UI updates. The
+underlying implementation delegates to the `EngineRunner` (C++/CLI) which
+communicates with the native engine asynchronously.
 
 ## Performance Considerations
 
@@ -286,7 +308,8 @@ While surface attachment and engine operations occur on the UI thread, they are 
 
 ### Explicit Lifecycle Management
 
-- Engine is created during `InitializeAsync()` in headless mode (no render loop yet)
+- Engine is created during `InitializeAsync()` in headless mode (no render loop
+  yet)
 - Engine loop starts explicitly via `StartAsync()` - not automatic
 - Requires explicit `StartAsync()` call before attaching viewports
 - Caller must coordinate initialization and startup explicitly
@@ -296,7 +319,8 @@ While surface attachment and engine operations occur on the UI thread, they are 
 ### Project References
 
 - `Oxygen.Editor.Interop` - C++/CLI bridge to native engine
-- `Oxygen.Editor.World` - World domain models (Scene, SceneNode, Transform, components)
+- `Oxygen.Editor.World` - World domain models (Scene, SceneNode, Transform,
+  components)
 - `Oxygen.Editor.Projects` - Project/workspace management (Project, ProjectInfo)
 - `DroidNet.Hosting.WinUI` - UI thread context management
 
@@ -310,11 +334,15 @@ While surface attachment and engine operations occur on the UI thread, they are 
 
 ### Planned Features
 
-- **Lazy Engine Loop Start**: Automatically start the engine frame loop when the first viewport surface is attached, rather than requiring explicit `StartAsync()` call
-- **Engine Loop Auto-Tuning**: Dynamically adjust engine behavior based on rendering workload
+- **Lazy Engine Loop Start**: Automatically start the engine frame loop when the
+  first viewport surface is attached, rather than requiring explicit
+  `StartAsync()` call
+- **Engine Loop Auto-Tuning**: Dynamically adjust engine behavior based on
+  rendering workload
   - Pause render loop when no views are active (conserve CPU/GPU)
   - Resume render loop when views become active
-- **Synchronization Subsystem**: Monitor and propagate editor model changes to the engine
+- **Synchronization Subsystem**: Monitor and propagate editor model changes to
+  the engine
   - Domain model property observation
   - Batched change application for performance
   - Active/passive synchronization modes
@@ -333,16 +361,19 @@ While surface attachment and engine operations occur on the UI thread, they are 
 ## Design Principles
 
 1. **Separation of Concerns**: Lifecycle, surfaces, and views managed distinctly
-2. **Interface-Based Design**: `IEngineService` and `IViewportSurfaceLease` abstractions
+2. **Interface-Based Design**: `IEngineService` and `IViewportSurfaceLease`
+   abstractions
 3. **Resource Safety**: Lease pattern prevents surface leaks
 4. **Thread Safety**: UI thread requirements enforced at boundaries
 5. **Async/Await**: Modern async patterns for non-blocking operations
 
 ## Related Documentation
 
-- [Oxygen.Editor.Interop](../Oxygen.Editor.Interop/README.md) - Platform bridge layer
+- [Oxygen.Editor.Interop](../Oxygen.Editor.Interop/README.md) - Platform bridge
+  layer
 - [Oxygen.Editor.World](../Oxygen.Editor.World/) - World domain models
-- [Oxygen.Editor.Projects](../Oxygen.Editor.Projects/) - Project workspace management
+- [Oxygen.Editor.Projects](../Oxygen.Editor.Projects/) - Project workspace
+  management
 
 ## License
 

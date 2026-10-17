@@ -27,6 +27,6 @@ public static class EngineConstants
     /// <summary>The maximum number of simultaneously active surfaces supported by the native engine.</summary>
     public const int MaxTotalSurfaces = 8;
 
-    /// <summary>The maximum number of composition surfaces a single document may keep alive.</summary>
-    public const int MaxSurfacesPerDocument = 4;
+    /// <summary>The maximum number of composition surfaces a single owner may keep alive.</summary>
+    public const int MaxSurfacesPerOwner = 4;
 }

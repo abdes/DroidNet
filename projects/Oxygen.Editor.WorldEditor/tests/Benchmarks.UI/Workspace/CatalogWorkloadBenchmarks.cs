@@ -17,9 +17,9 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.LivePreview.Assets;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserControls;
@@ -39,7 +39,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
     [TestCategory("Performance")]
     public Task ThousandInputBrowserFiltersWithLiveHundredNodeViewport() => EnqueueAsync(async () =>
     {
-        var fixture = new NativeSceneFixture(automatic: false, engineSettings: new EngineSettings { Graphics = new() { EnableDebugLayer = false, EnableValidation = false }, Renderer = new() { DirectionalShadowPolicy = DirectionalShadowPolicy.ConventionalOnly }, Timing = new() { FixedDelta = TimeSpan.FromSeconds(1.0 / 60) }, });
+        var fixture = new NativeSceneFixture(automatic: false, engineSettings: new EngineStartupSettings { Graphics = new() { EnableDebugLayer = false, EnableValidation = false }, Renderer = new() { DirectionalShadowPolicy = DirectionalShadowPolicy.ConventionalOnly }, Timing = new() { FixedDelta = TimeSpan.FromSeconds(1.0 / 60) }, });
         await using var lifetime = fixture.ConfigureAwait(true);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(5));
@@ -109,7 +109,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
             await LoadTestContentAsync(root).ConfigureAwait(true);
             var request = new ViewportSurfaceRequest
             {
-                DocumentId = fixture.Document.Id.Value,
+                Owner = new SurfaceOwnerId(fixture.Document.Id.Value),
                 ViewportId = Guid.NewGuid(),
                 ViewportIndex = 0,
                 IsPrimary = true,

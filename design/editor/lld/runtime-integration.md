@@ -1,19 +1,20 @@
 # Runtime Integration LLD
 
-Status: `final runtime and ED-M08 integration contract; delivery evidence tracked by milestone`
+Status:
+`final runtime and ED-M08 integration contract; delivery evidence tracked by milestone`
 
 ## 1. Purpose
 
 Define the managed boundary between the WinUI editor and the embedded Oxygen
-Engine runtime. It covers runtime lifecycle, native runtime
-discovery assumptions, runtime settings, surface leases, engine view lifecycle,
-cooked-root refresh ordering, threading, and the validation evidence needed
-for the V0.1 live viewport and development-only ED-M08 qualification.
+Engine runtime. It covers runtime lifecycle, native runtime discovery
+assumptions, runtime settings, surface leases, engine view lifecycle,
+cooked-root refresh ordering, threading, and the validation evidence needed for
+the V0.1 live viewport and development-only ED-M08 qualification.
 
 Scene synchronization, cooking and viewport tools retain their own LLDs. The
-[standalone validation LLD](standalone-runtime-validation.md) owns the development
-protocol, runner and acceptance metrics; sections 17-20 here define its integration
-boundary and the ordinary runtime behavior it exercises.
+[standalone validation LLD](standalone-runtime-validation.md) owns the
+development protocol, runner and acceptance metrics; sections 17-20 here define
+its integration boundary and the ordinary runtime behavior it exercises.
 
 ED-M07 consumes this LLD only for validated cooked-root mount refresh after
 content pipeline cook. ED-M08.V1 owns multi-viewport layouts.
@@ -29,8 +30,8 @@ content pipeline cook. ED-M08.V1 owns multi-viewport layouts.
 | `SUCCESS-003` | Live editor viewport presents correctly.                                                                                                        |
 | `SUCCESS-005` | Runtime presentation is stable enough for later authoring validation.                                                                           |
 
-ED-M04 consumes this LLD for `REQ-008`, `REQ-022`, `REQ-024`, and `REQ-026`
-only to define runtime readiness, rejected runtime setting writes, and sync
+ED-M04 consumes this LLD for `REQ-008`, `REQ-022`, `REQ-024`, and `REQ-026` only
+to define runtime readiness, rejected runtime setting writes, and sync
 completion semantics. ED-M04 does not reopen surface/view lifecycle scope.
 
 ## 3. Architecture Links
@@ -48,8 +49,8 @@ completion semantics. ED-M04 does not reopen surface/view lifecycle scope.
 ## 4. Historical ED-M02 Baseline
 
 This section records the original ED-M02 baseline and evidence gaps. It is not a
-second runtime contract; subsequent sections define current ownership and behavior.
-The baseline contained these runtime pieces:
+second runtime contract; subsequent sections define current ownership and
+behavior. The baseline contained these runtime pieces:
 
 - `Oxygen.Editor.Runtime` exposes `IEngineService` and `EngineService`.
 - `EngineServiceState` models `NoEngine`, `Initializing`, `Ready`, `Starting`,
@@ -57,13 +58,14 @@ The baseline contained these runtime pieces:
 - Native runtime discovery is process bootstrap infrastructure, not a Project
   Browser responsibility. The editor now defers engine startup until workspace
   activation/runtime use.
-- `WorkspaceViewModel` starts the engine before cooked-root refresh. The
-  baseline mount logic accepted the project `.cooked/container.index.bin` and a
-  per-mount fallback. Canonical product execution uses the committed root and
-  publication contract in `content-pipeline.md`; the old fallback is not a
+- LivePreview's `PreviewSession` starts the engine before cooked-root refresh.
+  The baseline mount logic accepted the project `.cooked/container.index.bin`
+  and a per-mount fallback. Canonical product execution uses the committed root
+  and publication contract in `content-pipeline.md`; the old fallback is not a
   compatibility requirement.
-- `IEngineSettings` and `EngineSettingsService` provide startup settings.
-  `EngineSettingsExtensions` maps them to the interop engine configuration.
+- `IEngineStartupSettings` and `EngineStartupSettingsService` provide startup
+  settings. `EngineStartupSettingsExtensions` maps them to the interop engine
+  configuration.
 - `IEngineService.TargetFps`, `MaxTargetFps`, and `EngineLoggingVerbosity`
   expose runtime-adjustable settings once the engine is ready/running.
 - `ViewportSurfaceRequest`, `ViewportSurfaceKey`, and `IViewportSurfaceLease`
@@ -158,14 +160,14 @@ native engine frame loop. The ordering contract is:
 
 ## 7. Ownership
 
-| Owner                                   | Responsibility                                                                                                   |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `Oxygen.Editor`                         | Process bootstrap, DI composition, native runtime discovery setup.                                               |
-| `Oxygen.Editor.WorldEditor` workspace   | Runtime startup trigger during workspace activation; cooked-root refresh request.                                |
-| `Oxygen.Editor.WorldEditor` viewport UI | `SwapChainPanel` ownership, load/unload/size events, initial measured size, engine view request timing.          |
-| `Oxygen.Editor.Runtime`                 | Engine lifecycle, settings bridge, surface leases, view calls, input bridge access, runtime diagnostics mapping. |
-| `Oxygen.Editor.Interop`                 | Managed/native bridge calls and native handle abstractions.                                                      |
-| Oxygen Engine                           | Frame loop, rendering, content loading, composition, native resource ownership.                                  |
+| Owner                                   | Responsibility                                                                                                            |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor`                         | Process bootstrap, DI composition, native runtime discovery setup.                                                        |
+| `Oxygen.Editor.LivePreview`             | Preview session: engine start on workspace activation, cooked-root mounting and publication preview; scene preview; Play. |
+| `Oxygen.Editor.WorldEditor` viewport UI | `SwapChainPanel` ownership, load/unload/size events, initial measured size, engine view request timing.                   |
+| `Oxygen.Editor.Runtime`                 | Engine lifecycle, settings bridge, surface leases, view calls, input bridge access, runtime diagnostics mapping.          |
+| `Oxygen.Editor.Interop`                 | Managed/native bridge calls and native handle abstractions.                                                               |
+| Oxygen Engine                           | Frame loop, rendering, content loading, composition, native resource ownership.                                           |
 
 ED-M02 accepts that viewport UI currently creates engine views directly after
 surface attachment. Later runtime cleanup may wrap view lifecycle more tightly
@@ -211,42 +213,46 @@ Rules:
 - A failed surface release is recorded independently. Remaining releases and
   safe native destruction still run. Unreleased native surfaces remain tracked
   until successful release or destruction of their native owner.
-- Native loop exit ends waits for surface/view acknowledgments that can no longer
-  arrive. Stop and loop completion precede context destruction; the interop
-  `WaitForLoopCleanupAsync` signal additionally covers posted UI cleanup.
+- Native loop exit ends waits for surface/view acknowledgments that can no
+  longer arrive. Stop and loop completion precede context destruction; the
+  interop `WaitForLoopCleanupAsync` signal additionally covers posted UI
+  cleanup.
 - Native `StopEngine` must tolerate repeated calls and synchronize with removal
   of the engine owner. The stop request flag crosses threads and is atomic.
-- Shutdown/disposal cancels a pending startup wait before acquiring the lifecycle
-  gate. Native stop requests made before activation completes remain effective;
-  teardown still drains the loop and posted UI cleanup before destroying owners.
-- `ShutdownAsync` reports accumulated failures after establishing final ownership
-  state. An intermediate error can be reported even if eventual cleanup released
-  everything. `NoEngine` is never reported while native ownership remains.
+- Shutdown/disposal cancels a pending startup wait before acquiring the
+  lifecycle gate. Native stop requests made before activation completes remain
+  effective; teardown still drains the loop and posted UI cleanup before
+  destroying owners.
+- `ShutdownAsync` reports accumulated failures after establishing final
+  ownership state. An intermediate error can be reported even if eventual
+  cleanup released everything. `NoEngine` is never reported while native
+  ownership remains.
 - `DisposeAsync` uses the same teardown as a non-throwing, logged fallback. Once
   disposal is requested, new runtime operations are rejected. Cleanup remains
   callable after failure; retained resources cannot be overwritten on restart.
 - Initialization/startup exceptions retain their original cause; secondary
   cleanup failures are logged. Reinitialization first cleans any failed session.
 - The application registers `EngineShutdownService` after the UI hosted service
-  so ordinary host shutdown awaits runtime teardown before stopping the dispatcher.
-  Hosted-service construction does not resolve UI-dependent services. The `App`
-  constructor connects window tracking once the dispatcher exists, using the same
-  shutdown singleton registered with the host.
-  Final-window shutdown also runs in Aura's finalization phase, after every close
-  guard and document commit succeeds and before native window destruction.
+  so ordinary host shutdown awaits runtime teardown before stopping the
+  dispatcher. Hosted-service construction does not resolve UI-dependent
+  services. The `App` constructor connects window tracking once the dispatcher
+  exists, using the same shutdown singleton registered with the host.
+  Final-window shutdown also runs in Aura's finalization phase, after every
+  close guard and document commit succeeds and before native window destruction.
   Canceled document close does not shut down the runtime. Overlapping approved
   window closes count toward the final-window decision.
 - The application caller catches shutdown failures and publishes
   `Runtime.Shutdown` operation results and logs. Existing exit behavior is
   retained; this fix does not introduce retry dialogs or forced termination.
 
-Implementation and validation details: [issue #3 plan](../plan/issue-003-runtime-shutdown.md).
+Implementation and validation details:
+[issue #3 plan](../plan/issue-003-runtime-shutdown.md).
 
 ### Runtime Settings Snapshot
 
 Settings inputs:
 
-- startup `IEngineSettings` mapped into editor engine config during
+- startup `IEngineStartupSettings` mapped into editor engine config during
   initialization.
 - runtime `TargetFps`.
 - runtime native logging verbosity.
@@ -322,9 +328,9 @@ ED-M07 mount contract:
   succeeds.
 - Brownfield scene save, material save/cook, Content Browser import/cook, and
   catalog-only refresh paths must stop publishing unvalidated cooked-root
-  refresh messages; only a validated content-pipeline result may trigger
-  runtime mount refresh in ED-M07.
-- Workspace/runtime code still owns the actual `IEngineService` calls:
+  refresh messages; only a validated content-pipeline result may trigger runtime
+  mount refresh in ED-M07.
+- LivePreview's preview session still owns the actual `IEngineService` calls:
   the runtime mount calls. ED-M07B adds pause/drain, transaction coordination
   and rollback around these capabilities per content-pipeline section 16.
 - The path passed to runtime is the validated cooked root for the active
@@ -344,17 +350,17 @@ ED-M07 mount contract:
 
 ED-M02 service operations:
 
-| Operation              | Owner                                  | Completion Meaning                                                         |
-| ---------------------- | -------------------------------------- | -------------------------------------------------------------------------- |
-| Runtime initialize     | `IEngineService.InitializeAsync`       | Engine context created and service is `Ready`.                             |
-| Runtime start          | `IEngineService.StartAsync`            | Native startup and module registration acknowledged; service is `Running`. |
-| Runtime shutdown       | `IEngineService.ShutdownAsync`         | Engine resources released or service faulted.                              |
-| Apply startup settings | `EngineSettingsExtensions`             | Settings copied into config before context creation.                       |
-| Apply FPS/logging      | `IEngineService` properties            | Native service accepted the value.                                         |
-| Attach surface         | `AttachViewportAsync`                  | Native surface registration completed and lease is attached.               |
-| Resize surface         | `IViewportSurfaceLease.ResizeAsync`    | Native resize request accepted/queued.                                     |
-| Create/destroy view    | `CreateViewAsync` / `DestroyViewAsync` | Native view operation returned success or failure.                         |
-| Refresh cooked roots   | workspace through `IEngineService`     | Existing cooked roots are mounted or a non-fatal warning is produced.      |
+| Operation              | Owner                                     | Completion Meaning                                                         |
+| ---------------------- | ----------------------------------------- | -------------------------------------------------------------------------- |
+| Runtime initialize     | `IEngineService.InitializeAsync`          | Engine context created and service is `Ready`.                             |
+| Runtime start          | `IEngineService.StartAsync`               | Native startup and module registration acknowledged; service is `Running`. |
+| Runtime shutdown       | `IEngineService.ShutdownAsync`            | Engine resources released or service faulted.                              |
+| Apply startup settings | `EngineStartupSettingsExtensions`         | Settings copied into config before context creation.                       |
+| Apply FPS/logging      | `IEngineService` properties               | Native service accepted the value.                                         |
+| Attach surface         | `AttachViewportAsync`                     | Native surface registration completed and lease is attached.               |
+| Resize surface         | `IViewportSurfaceLease.ResizeAsync`       | Native resize request accepted/queued.                                     |
+| Create/destroy view    | `CreateViewAsync` / `DestroyViewAsync`    | Native view operation returned success or failure.                         |
+| Refresh cooked roots   | `PreviewSession` through `IEngineService` | Existing cooked roots are mounted or a non-fatal warning is produced.      |
 
 Frame-presented completion is not exposed as a managed contract in ED-M02. The
 detailed ED-M02 validation plan must therefore use visual validation and engine
@@ -366,8 +372,8 @@ ED-M02 runtime UI surfaces:
 
 - Project Browser: no runtime UI; startup failures must not block Project
   Browser visibility.
-- Workspace shell: owns the "runtime is starting / failed / cooked roots
-  missing" user-visible state.
+- Workspace shell: shows the preview session's "runtime is starting / failed /
+  cooked roots missing" state (`PreviewSession.State` and `Failure`).
 - Viewport control: owns surface attach/resize failure presentation near the
   viewport when possible.
 - Scene editor toolbar/settings surface: invokes runtime FPS/logging changes,
@@ -407,8 +413,8 @@ Later consumers:
   scene mutation sync.
 - `content-pipeline.md` owns full cooked-root mount behavior after cook.
 - `standalone-runtime-validation.md` consumes runtime/cooked parity evidence.
-- `viewport-and-tools.md` consumes surface/view contracts for layout and
-  camera validation.
+- `viewport-and-tools.md` consumes surface/view contracts for layout and camera
+  validation.
 
 ED-M02 must not add authoring-specific scene mutation semantics here.
 
@@ -439,8 +445,8 @@ preconditions that the live-sync adapter
 
 #### 12.1 Runtime readiness contract
 
-Before any `ISceneEngineSync.<Update*|Attach*|Detach*>` call hits the engine,
-the adapter MUST observe **all** of:
+Before the scene preview projects a change into the engine, the adapter MUST
+observe **all** of:
 
 | Precondition                                                              | Source                                                       | Failure classification                                                       |
 | ------------------------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------- |
@@ -449,44 +455,42 @@ the adapter MUST observe **all** of:
 | `IEngineService.State != Faulted`                                         | `EngineService.State`                                        | `SyncOutcome.SkippedNotRunning`, code `OXE.LIVESYNC.RuntimeFaulted`.         |
 | Scope cancellation token not cancelled                                    | command-supplied `CancellationToken`                         | `SyncOutcome.Failed`, code `OXE.LIVESYNC.Cancelled`.                         |
 
-The adapter performs these checks **without** taking any runtime lock other
-than reading managed state/capability availability. The Runtime adapter rechecks
-run/target identity before native dispatch. The feature never blocks
-waiting for `Running`. Calls to `SyncSceneWhenReadyAsync` (full-scene resync)
-remain the only awaiting variant and are reserved for workspace/document
-activation, not inspector edits.
+The adapter performs these checks **without** taking any runtime lock other than
+reading managed state/capability availability. The Runtime adapter rechecks
+run/target identity before native dispatch. The feature never blocks waiting for
+`Running`, and nothing polls the engine state: the scene preview shows the open
+scene document when the engine enters `Running` (`IEngineService.StateChanged`).
 
 #### 12.2 Inspector-side rules
 
 1. Inspector view-models and command services MUST NOT call
    `IEngineService.StartAsync` / `StopAsync` / `RestartAsync`. Engine lifecycle
-   stays owned by workspace activation / scene editor controls.
+   stays owned by LivePreview's `PreviewSession`.
 2. Inspector commands do not own lifecycle subscriptions. The scene sync
    orchestrator owns visibly pending work and revision-aware reconnect under
    property-pipeline section 11. Full current-scene sync supersedes older queued
    values; stale document lifetimes never replay into a later scene.
-3. Inspector commands MUST treat any thrown exception from
-   `ISceneEngineSync` as `SyncOutcome.Failed` and continue. They MUST NOT
-   re-throw to the UI.
+3. Inspector commands MUST treat any thrown exception from the scene preview as
+   `SyncOutcome.Failed` and continue. They MUST NOT re-throw to the UI.
 
 #### 12.3 What "Accepted" means
 
-`SyncOutcome.Accepted` means the engine boundary accepted the call. It does
-NOT imply:
+`SyncOutcome.Accepted` means the engine boundary accepted the call. It does NOT
+imply:
 
 - a frame has been presented,
 - the cooked geometry/material was resolved,
 - the change is visible in the active view.
 
-ED-M04 does not introduce a managed presented-frame completion contract.
-Visual confirmation remains a manual validation step.
+ED-M04 does not introduce a managed presented-frame completion contract. Visual
+confirmation remains a manual validation step.
 
 #### 12.4 Runtime setting writes
 
 Inspector-adjacent runtime setting controls (target FPS, engine logging
-verbosity) continue to use `Runtime.Settings.Apply` and the `Settings`
-failure domain — unchanged from ED-M02. These do not flow through the
-sync adapter and do not produce `OXE.LIVESYNC.*` codes.
+verbosity) continue to use `Runtime.Settings.Apply` and the `Settings` failure
+domain — unchanged from ED-M02. These do not flow through the sync adapter and
+do not produce `OXE.LIVESYNC.*` codes.
 
 ## 13. Operation Results And Diagnostics
 
@@ -506,8 +510,8 @@ Failure domains:
 - `RuntimeDiscovery` for native DLL/path discovery.
 - `RuntimeSurface` for surface attach/resize/release.
 - `RuntimeView` for engine view create/destroy/preset failures.
-- `AssetMount` for missing or failed cooked-root refresh when it affects
-  runtime content availability.
+- `AssetMount` for missing or failed cooked-root refresh when it affects runtime
+  content availability.
 - `Settings` for global runtime settings failures.
 
 Minimum ED-M02 rule:
@@ -577,10 +581,10 @@ yet a managed contract.
 
 Existing operation completion continues to mean accepted/queued where stated.
 ED-M08's development targets provide explicit observed-state/capture completion;
-normal runtime commands retain their existing semantics. Callers
-cannot reinterpret accepted as presented. Runtime status uses the existing
-workspace/viewport pending/failure surface plus operation/output details. No
-new diagnostics dashboard is required.
+normal runtime commands retain their existing semantics. Callers cannot
+reinterpret accepted as presented. Runtime status uses the existing
+workspace/viewport pending/failure surface plus operation/output details. No new
+diagnostics dashboard is required.
 
 ## 17. Native Compatibility And Publication Boundary
 
@@ -595,10 +599,10 @@ SDK data lives under `share/oxygen`: cooking reads `schemas`, and default editor
 startup reads `shaders/shaders.bin` from the selected Debug, Release or bundled
 installation. Explicit shader-library settings retain their path semantics.
 
-Settings, `IEngineService`, view IDs/configuration and camera choices use managed
-contracts. `EngineSession` exposes managed operations and ownership facts;
-`NativeEngineSession` owns native config creation, runner/context access and
-conversion. Its factory has a managed signature and cannot be inlined into
+Settings, `IEngineService`, view IDs/configuration and camera choices use
+managed contracts. `EngineSession` exposes managed operations and ownership
+facts; `NativeEngineSession` owns native config creation, runner/context access
+and conversion. Its factory has a managed signature and cannot be inlined into
 service construction. Omitted view options retain native defaults, and enum
 conversion preserves named meanings at the native boundary.
 
@@ -606,11 +610,12 @@ conversion preserves named meanings at the native boundary.
 Interop build and verifies the independently resolved runtime inventory. Cooking
 captures its producer inventory and checks matching editor/native schemas.
 Verification checks configuration and file identities, then returns an owned
-artifact lease and portable fingerprint. Windows read handles remain open through
-native execution and cleanup, preventing replacement between verification and use.
-Failure/cancellation releases acquired ownership. There is no fixed whole-editor
-qualification manifest, promotion command or development probe in the production
-startup path; managed/UI edits do not require one in Debug or Release.
+artifact lease and portable fingerprint. Windows read handles remain open
+through native execution and cleanup, preventing replacement between
+verification and use. Failure/cancellation releases acquired ownership. There is
+no fixed whole-editor qualification manifest, promotion command or development
+probe in the production startup path; managed/UI edits do not require one in
+Debug or Release.
 
 ED-M08's opt-in development tools verify the native runner and runtime inputs
 using ordinary build dependency identities. The concrete topology is
@@ -630,15 +635,15 @@ zero development dependencies. Producer provenance and runtime identity remain
 separate facts. Testing evidence is not a runtime admission manifest, and normal
 startup does not discover development tools or require a qualification result.
 
-Publication briefly pauses preview and admits a complete immutable root set.
-The runtime retains the accepted selection until replacement succeeds; reader
-leases protect old generations. ContentPipeline owns the journal, paths and
-reclamation policy.
-Development standalone validation holds an output read lease. ED-M08's opt-in
-test/tool targets observe native state and rendered frames; validation-only
-instrumentation is excluded from production build graphs. Existing accepted/queued
-responses remain insufficient for presented-frame proof. The full publication
-transaction and recovery behavior are in content-pipeline section 16.
+Publication briefly pauses preview and admits a complete immutable root set. The
+runtime retains the accepted selection until replacement succeeds; reader leases
+protect old generations. ContentPipeline owns the journal, paths and reclamation
+policy. Development standalone validation holds an output read lease. ED-M08's
+opt-in test/tool targets observe native state and rendered frames;
+validation-only instrumentation is excluded from production build graphs.
+Existing accepted/queued responses remain insufficient for presented-frame
+proof. The full publication transaction and recovery behavior are in
+content-pipeline section 16.
 
 Only one scene is live. Activation establishes document lifetime and current
 revision before scene sync; late operations from an earlier activation cannot
@@ -651,9 +656,9 @@ standalone rendered evidence in ED-M08.
 ### Capability Boundary (#10, ED-M07A.0)
 
 Runtime owns injectable, managed-only `IRuntimeWorldCommands` and
-`IRuntimeInputCommands`. IEngineService exposes WorldCommands/InputCommands,
-not concrete OxygenWorld/OxygenInput. Port all feature consumers and remove the
-old concrete properties in the same change; no forwarding compatibility facade
+`IRuntimeInputCommands`. IEngineService exposes WorldCommands/InputCommands, not
+concrete OxygenWorld/OxygenInput. Port all feature consumers and remove the old
+concrete properties in the same change; no forwarding compatibility facade
 remains public. Existing direct facade use is migration debt under the prior
 contract, not evidence that every old caller violated its accepted design.
 
@@ -668,36 +673,39 @@ UI bridge; native enum/struct/facade conversion is internal to Runtime adapters.
 
 Capability responses identify operation/run/target and Accepted, Rejected,
 Unavailable, Cancelled or Failed. Accepted remains boundary acceptance; observed
-state and captures have their separate ED-M08 completion contract. An unavailable
-capability is representable without loading the mixed-mode facade. The adapter
-checks run/target lifetime again at dispatch and preserves #5 native request
-acceptance, generation invalidation, and mutation-phase application.
+state and captures have their separate ED-M08 completion contract. An
+unavailable capability is representable without loading the mixed-mode facade.
+The adapter checks run/target lifetime again at dispatch and preserves #5 native
+request acceptance, generation invalidation, and mutation-phase application.
 
 Managed substitutes must simulate each outcome without constructing interop
 world/input objects. Adapter tests cover key/button/modifier translation,
 coordinate units, numeric payloads and identities. Dependency/call-site checks
 reject feature facade access and native input DTO construction. Existing narrow
-view configuration value types are not permission to expose world/input behavior.
+view configuration value types are not permission to expose world/input
+behavior.
 
 The managed implementation uses `RuntimeWorldRequest` with immutable
-`RuntimeWorldCommand` records and `RuntimeInputRequest` with immutable input records.
-`RuntimeSceneTarget` includes project, run, authored scene, open-document and activation IDs;
-each full scene projection creates a fresh activation. `RuntimeViewTarget` includes
-run, document, viewport, generation and the process-local view value. The service
-registers a new generation after native view creation and invalidates it before
-destruction. Input callers retain the target captured at creation.
+`RuntimeWorldCommand` records and `RuntimeInputRequest` with immutable input
+records. `RuntimeSceneTarget` includes project, run, authored scene,
+open-document and activation IDs; each full scene projection creates a fresh
+activation. `RuntimeViewTarget` includes run, document, viewport, generation and
+the process-local view value. The service registers a new generation after
+native view creation and invalidates it before destruction. Input callers retain
+the target captured at creation.
 
 `RuntimeCommandDispatcher` serializes immediate dispatch with invalidation and
 checks targets again after asynchronous acknowledgments. Run termination ends
 pending creation waits. `NativeRuntimeCommandTransport` owns both concrete
 facades; `RuntimeTransportConversion` owns native input/property DTO conversion.
-The feature's WinUI input bridge interprets keys and scales positions/deltas into
-physical viewport pixels. Scene sync keeps authoring policy and reduces managed
-results to its existing per-operation outcomes. Asynchronous asset failures retain their native generation and original immutable
-request. Native generation validation precedes the Runtime event; the feature
-rechecks request/scene/node validity after dispatching to the UI and publishes a
-LiveSync operation result. Success is reported only after native application,
-including refreshes of the same intent. Current request state retains the native
+The feature's WinUI input bridge interprets keys and scales positions/deltas
+into physical viewport pixels. Scene sync keeps authoring policy and reduces
+managed results to its existing per-operation outcomes. Asynchronous asset
+failures retain their native generation and original immutable request. Native
+generation validation precedes the Runtime event; the feature rechecks
+request/scene/node validity after dispatching to the UI and publishes a LiveSync
+operation result. Success is reported only after native application, including
+refreshes of the same intent. Current request state retains the native
 generation; a newer successful refresh invalidates queued failure feedback.
 Runtime operation correlation rejects stale notification delivery; it does not
 allocate or accept native load generations.
@@ -705,25 +713,27 @@ allocate or accept native load generations.
 `IEngineService.ContentStatus` exposes the acknowledged root set and content
 revision. Queued synchronous mounts do not establish availability. Replacement
 and paused publication remain Updating until native resume completes; failure,
-loop exit and shutdown invalidate availability. Shared asset presentation combines
-these facts with publication/freshness and current project-scoped asset outcomes.
-Native changes update the existing presentation stream without cooking or reading
-source files again. Built-in identity stays separate from preview availability.
+loop exit and shutdown invalidate availability. Shared asset presentation
+combines these facts with publication/freshness and current project-scoped asset
+outcomes. Native changes update the existing presentation stream without cooking
+or reading source files again. Built-in identity stays separate from preview
+availability.
 
 ### Active Run Observer (#6, ED-M07A.7)
 
 The rebased #3 implementation already makes State read Faulted for a completed
-loop task and ends surface waits when that task completes. Retain those safeguards.
-`EngineService` installs one observer for each started run, using the command
-dispatcher's unique run ID even if the loop completes during startup. Under the
-lifecycle gate it distinguishes requested shutdown from unexpected exit/fault
-and captures the state transition and original outcome. `StateChanged` events
-and `Runtime.Loop` operation results are then delivered in order outside that
-gate. UI subscribers marshal to the dispatcher and check the notification's run
-identity. An old observer cannot modify a new run or dispose its ownership.
+loop task and ends surface waits when that task completes. Retain those
+safeguards. `EngineService` installs one observer for each started run, using
+the command dispatcher's unique run ID even if the loop completes during
+startup. Under the lifecycle gate it distinguishes requested shutdown from
+unexpected exit/fault and captures the state transition and original outcome.
+`StateChanged` events and `Runtime.Loop` operation results are then delivered in
+order outside that gate. UI subscribers marshal to the dispatcher and check the
+notification's run identity. An old observer cannot modify a new run or dispose
+its ownership.
 
-Shutdown consumes the same captured loop completion before releasing the run,
-so an observer waiting for the gate cannot lose its diagnostic. A loop already
+Shutdown consumes the same captured loop completion before releasing the run, so
+an observer waiting for the gate cannot lose its diagnostic. A loop already
 completed when shutdown begins remains unexpected. Cancellation after a stop
 request is ordinary completion; a non-cancellation exception is still reported.
 Notifications preserve the original exception, with its type and details in the
@@ -731,40 +741,44 @@ shared operation-result store. Subscriber failure cannot interrupt cleanup or
 suppress other state-change subscribers.
 
 Resolve outstanding operation waits against run termination; no synchronous UI
-wait or indefinite frame acknowledgment is permitted. Normal stop is not a fault.
-Unexpected exit without an exception is still a diagnosed runtime failure.
-State notification and diagnostics must occur without waiting for another State
-getter or Shutdown call. Direct EngineService tests drive controlled run tasks
-through fault, unexpected exit, stop, stop/exit race and restart. This adds active
-supervision to #3; it does not repeat or weaken its cleanup contract.
+wait or indefinite frame acknowledgment is permitted. Normal stop is not a
+fault. Unexpected exit without an exception is still a diagnosed runtime
+failure. State notification and diagnostics must occur without waiting for
+another State getter or Shutdown call. Direct EngineService tests drive
+controlled run tasks through fault, unexpected exit, stop, stop/exit race and
+restart. This adds active supervision to #3; it does not repeat or weaken its
+cleanup contract.
 
 Current native asset-load failures use #5 request/session/target correlation.
 ED-M07A.0 forwards current failures through the managed runtime diagnostic/event
-boundary to existing feature result surfaces; superseded failures remain discarded.
-This is additional feature-visible reporting over the landed native mechanism,
-not a new loader-generation implementation or a change to Accepted semantics.
+boundary to existing feature result surfaces; superseded failures remain
+discarded. This is additional feature-visible reporting over the landed native
+mechanism, not a new loader-generation implementation or a change to Accepted
+semantics.
 
 ## 19. Development-Only Validation Capture Session
 
-Production camera presentation follows the Auto/Fixed authoring policy.
-Auto derives effective aspect per target while retaining vertical FOV; Fixed
-preserves its authored ratio and complete image using a centred content rectangle.
-Add bars after scene exposure/post-processing so they cannot alter metering.
-Neither policy permits viewport resizing to mutate saved camera data. The engine
-view/composition path owns this ordinary runtime behaviour; editor and development
-tools consume it. The opt-in capture records target/content rectangles and
-effective projection, and the base fixture explicitly selects Fixed 16:9.
+Production camera presentation follows the Auto/Fixed authoring policy. Auto
+derives effective aspect per target while retaining vertical FOV; Fixed
+preserves its authored ratio and complete image using a centred content
+rectangle. Add bars after scene exposure/post-processing so they cannot alter
+metering. Neither policy permits viewport resizing to mutate saved camera data.
+The engine view/composition path owns this ordinary runtime behaviour; editor
+and development tools consume it. The opt-in capture records target/content
+rectangles and effective projection, and the base fixture explicitly selects
+Fixed 16:9.
 
 The entire ED-M08 workflow is development-only. Its managed
-`EmbeddedCaptureSession` owns one run/document/activation/view-generation session
-inside the existing WinUI test host. Compile-gated delivery hooks close the real
-scene-sync scheduling boundary before matching projection/property/hierarchy/
-environment/asset jobs reach `IRuntimeWorldCommands`. Later jobs stay pending in
-the existing revision-aware machinery, while authoring and Undo/Redo continue.
-Earlier native work drains; a session control token then projects the verified
-saved snapshot through the same production projector and native commands.
-Fresh activation and native request generations reject displaced callbacks.
-The saved projection's resource completions finish normally before readiness.
+`EmbeddedCaptureSession` owns one run/document/activation/view-generation
+session inside the existing WinUI test host. Compile-gated delivery hooks close
+the real scene-sync scheduling boundary before matching
+projection/property/hierarchy/ environment/asset jobs reach
+`IRuntimeWorldCommands`. Later jobs stay pending in the existing revision-aware
+machinery, while authoring and Undo/Redo continue. Earlier native work drains; a
+session control token then projects the verified saved snapshot through the same
+production projector and native commands. Fresh activation and native request
+generations reject displaced callbacks. The saved projection's resource
+completions finish normally before readiness.
 
 Navigation/profile delivery is held only for the captured view. The test host
 reports its saved revision and later pending edits; it never claims the captured
@@ -778,19 +792,20 @@ scene/resource preparation, resets the actual scene/view histories and schedules
 completed-view checkpoints. At the final scene target boundary before UI, it
 uses Graphics `ReadbackManager` for pixels and the exposure pass's actual GPU
 result. It retains texture/buffer/ticket ownership until copy fences and worker
-encoding finish. Both embedded and standalone hosts use this module. There is
-no duplicate loader, exposure calculation, camera-fitting algorithm or renderer.
+encoding finish. Both embedded and standalone hosts use this module. There is no
+duplicate loader, exposure calculation, camera-fitting algorithm or renderer.
 
-The private [version-1 C ABI](standalone-runtime-validation.md#86-private-capture-abi-version-1)
-uses an exact packed target record, opaque engine/session tokens and an immutable
-UTF-8 request path. The development Interop hook maps actual runtime scene/view
-lifetimes into the native registry; numeric view IDs alone cannot select a target.
-Begin copies its inputs and schedules work. Poll copies bounded status JSON into
-caller-owned buffers; native code never calls managed completion delegates or
-returns allocator-owned memory. Cancel requests owner-thread teardown. Release
-succeeds only after terminal native/GPU/file drain. The host retains the DLL until
-every session and engine binding/hook is released; none of these exports or
-declarations enters the normal product ABI.
+The private
+[version-1 C ABI](standalone-runtime-validation.md#86-private-capture-abi-version-1)
+uses an exact packed target record, opaque engine/session tokens and an
+immutable UTF-8 request path. The development Interop hook maps actual runtime
+scene/view lifetimes into the native registry; numeric view IDs alone cannot
+select a target. Begin copies its inputs and schedules work. Poll copies bounded
+status JSON into caller-owned buffers; native code never calls managed
+completion delegates or returns allocator-owned memory. Cancel requests
+owner-thread teardown. Release succeeds only after terminal native/GPU/file
+drain. The host retains the DLL until every session and engine binding/hook is
+released; none of these exports or declarations enters the normal product ABI.
 
 Root/profile identity is the SHA-256 of the exact retained `roots-manifest.json`
 and `profile.json` UTF-8 file bytes referenced by the request. Both hosts verify
@@ -810,23 +825,25 @@ unavailable until normal restart/convergence.
 The project admission uses the existing cook coordinator's writer scope, then
 output/library readers; no independent validation writer is introduced. It lasts
 through native/output cleanup. Once the ordinary project/window-close or
-project-replacement decisions accept a transition, the opt-in pre-transition hook blocks new validation,
-abandons capture restoration and cancels admitted/queued validation **before**
-waiting for coordinator admission. It awaits the independent CleanupCompletion
-task, then continues normal project/runtime teardown. A canceled close dialog
-leaves validation live; ordinary same-project cook/mount changes still queue.
-Project-lifetime cancellation delivered only after replacement cannot provide
-this ordering. A document-only close/activation change invalidates its embedded
-session without closing project admission; after capture release, document
-navigation leaves an independent standalone child running.
+project-replacement decisions accept a transition, the opt-in pre-transition
+hook blocks new validation, abandons capture restoration and cancels
+admitted/queued validation **before** waiting for coordinator admission. It
+awaits the independent CleanupCompletion task, then continues normal
+project/runtime teardown. A canceled close dialog leaves validation live;
+ordinary same-project cook/mount changes still queue. Project-lifetime
+cancellation delivered only after replacement cannot provide this ordering. A
+document-only close/activation change invalidates its embedded session without
+closing project admission; after capture release, document navigation leaves an
+independent standalone child running.
 
 Cleanup and current-state convergence use an independent lifetime, never the
 canceled execution token. Bounded wait expiry transfers unresolved handles/tasks
-to their drain owner; it does not release ownership. Embedded scene/view ownership
-ends before native child launch; published-file/artifact readers remain owned
-until child and GPU work drain. Tests cover edit/Undo during warm-up, async asset
-completion, resize, late callback, fault, repeated cancellation, accepted/canceled
-close, queued mount changes, replacement and restart races.
+to their drain owner; it does not release ownership. Embedded scene/view
+ownership ends before native child launch; published-file/artifact readers
+remain owned until child and GPU work drain. Tests cover edit/Undo during
+warm-up, async asset completion, resize, late callback, fault, repeated
+cancellation, accepted/canceled close, queued mount changes, replacement and
+restart races.
 
 Preparation reuses ContentPipeline's destination-parameterized saved-snapshot
 core with the acquired read set/document gates. Normal cooking retains its
@@ -839,7 +856,8 @@ second capture implementation in the runtime adapter.
 
 ## 20. Authored Visibility And Editor View Hiding
 
-The [scene authoring model](scene-authoring-model.md#ed-m08-visibility-and-shadow-source-state)
+The
+[scene authoring model](scene-authoring-model.md#ed-m08-visibility-and-shadow-source-state)
 owns canonical Local/Inherit values and migration. The ordinary engine
 scene/rendering path owns their effective behavior; this is production behavior,
 not qualification instrumentation.
@@ -853,8 +871,8 @@ not qualification instrumentation.
   Scene maps `affects_world`; Off removes illumination/atmospheric contribution
   without rewriting intensity, colour, visibility or stored role assignment.
 - Light Cast Shadows requests shadowed illumination. Geometry Cast Shadows
-  controls occluders. Geometry Receive Shadows requires a shader-consumed
-  value that disables direct-light shadow attenuation while preserving direct
+  controls occluders. Geometry Receive Shadows requires a shader-consumed value
+  that disables direct-light shadow attenuation while preserving direct
   lighting, ambient occlusion and the surface's own casting. Qualify every
   supported surface path; a CPU observation alone is insufficient.
 - Effective flag and hierarchy changes invalidate directional-light membership
@@ -886,4 +904,5 @@ The per-light atmospheric assignment is None/Primary/Secondary, retaining
 existing native names. Both sources must illuminate and shadow, including
 Secondary alone; no automatic promotion or competing scene Sun pointer is used.
 The celestial contract defines two contributors and analytic disks for V0.1;
-sky-only authoring and lunar surface/phase/orbit features remain post-V0.1 scope.
+sky-only authoring and lunar surface/phase/orbit features remain post-V0.1
+scope.

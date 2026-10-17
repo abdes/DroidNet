@@ -2,9 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
-/// <summary>Engine-wide presentation settings applied to the running native session.</summary>
+/// <summary>Engine-wide presentation and logging settings applied to the running native session.</summary>
 public sealed partial class EngineService
 {
     /// <inheritdoc/>
@@ -27,5 +29,49 @@ public sealed partial class EngineService
         ArgumentNullException.ThrowIfNull(settings);
         this.EnsureIsReadyOrRunning().SetGroundGrid(settings);
         this.LogGroundGridSet(settings);
+    }
+
+    /// <summary>Applies startup settings that the running engine also takes live, from now on.</summary>
+    private void WatchEngineSettings()
+    {
+        if (this.watchingEngineSettings || this.engineSettingsService is null)
+        {
+            return;
+        }
+
+        this.engineSettingsService.PropertyChanged += this.OnEngineSettingsChanged;
+        this.watchingEngineSettings = true;
+    }
+
+    private void UnwatchEngineSettings()
+    {
+        if (!this.watchingEngineSettings || this.engineSettingsService is null)
+        {
+            return;
+        }
+
+        this.engineSettingsService.PropertyChanged -= this.OnEngineSettingsChanged;
+        this.watchingEngineSettings = false;
+    }
+
+    private void OnEngineSettingsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(IEngineStartupSettings.LoggingVerbosity)
+            || this.State is not (EngineServiceState.Ready or EngineServiceState.Running))
+        {
+            return;
+        }
+
+        // A setting changes from the UI: an engine that stopped meanwhile, or refused the value, keeps the saved value
+        // for its next start, and the change does not fail the settings binding.
+        var verbosity = this.engineSettings.LoggingVerbosity;
+        try
+        {
+            this.EngineLoggingVerbosity = verbosity;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException || Diagnostics.EngineInteropExceptionPolicy.IsRecoverable(exception))
+        {
+            this.LogLiveVerbosityNotApplied(verbosity, exception);
+        }
     }
 }

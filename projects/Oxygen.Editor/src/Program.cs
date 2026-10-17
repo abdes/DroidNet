@@ -245,7 +245,7 @@ public static partial class Program
             .WithSpatialMapping();
 
         // Core services
-        _ = container.WithSettings<IEngineSettings, EngineSettingsService>();
+        _ = container.WithSettings<IEngineStartupSettings, EngineStartupSettingsService>();
         container.Register<IOxygenPathFinder, OxygenPathFinder>(Reuse.Singleton);
         container.Register<NativeStorageProvider>(Reuse.Singleton);
         container.Register<IActivationService, ActivationService>(Reuse.Singleton);

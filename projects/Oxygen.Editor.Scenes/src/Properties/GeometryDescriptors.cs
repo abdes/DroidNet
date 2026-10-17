@@ -45,6 +45,5 @@ public sealed class GeometryDescriptors
                     : ValidationResult.Ok,
                 annotation: SceneEditorSchemaAnnotations.Get(
                     "#/definitions/renderable/geometry_ref",
-                    new EditorAnnotation { Group = "Geometry", Label = "Geometry", Renderer = "asset-picker" }),
-                engineCommandKey: "geometry.geometry_uri"));
+                    new EditorAnnotation { Group = "Geometry", Label = "Geometry", Renderer = "asset-picker" })));
 }

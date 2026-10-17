@@ -143,15 +143,15 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
             fixture,
             nodeId,
             state => state.Exists && expected.All(field => state.Properties.Any(
-                actual => actual.ComponentId == field.Key.component
+                actual => (ushort)actual.ComponentId == field.Key.component
                     && actual.FieldId == field.Key.field
                     && MathF.Abs(actual.Value - field.Value) <= 0.001f)),
             cancellationToken).ConfigureAwait(true);
         _ = state.Exists.Should().BeTrue();
-        _ = state.Properties.Where(property => property.ComponentId == 1).Should().HaveCount(9);
+        _ = state.Properties.Where(property => property.ComponentId == Oxygen.Interop.EngineComponentId.Transform).Should().HaveCount(9);
         foreach (var field in expected)
         {
-            var actual = state.Properties.Single(property => property.ComponentId == field.Key.component && property.FieldId == field.Key.field);
+            var actual = state.Properties.Single(property => (ushort)property.ComponentId == field.Key.component && property.FieldId == field.Key.field);
             _ = actual.Value.Should().BeApproximately(field.Value, 0.001f, "native local TRS field {0}", field.Key.field);
         }
     }

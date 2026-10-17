@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Routing;
 using DryIoc;
@@ -13,12 +12,17 @@ using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.Documents;
+using Oxygen.Editor.LivePreview.Assets;
+using Oxygen.Editor.LivePreview.Content;
+using Oxygen.Editor.LivePreview.Scenes;
+using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
+using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Documents;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World.Cooking;
 using Oxygen.Editor.World.Diagnostics;
@@ -29,7 +33,6 @@ using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Output;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Services;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -56,12 +59,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
     private readonly ILogger logger;
-    private readonly SemaphoreSlim engineStartupGate = new(initialCount: 1, maxCount: 1);
     private DocumentManager? documentManager;
     private IAssetCatalog? assetCatalog;
     private PreviewSettingsService? previewSettings;
     private Oxygen.Editor.World.Workspace.EditingViewMaskService? editingViewMask;
-    private ProjectContext? previewProject;
+    private PreviewSession? previewSession;
     private IMessenger? messenger;
     private IProject? initialSceneProject;
 
@@ -176,14 +178,12 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         this.messenger ??= this.container.Resolve<IMessenger>();
         this.messenger?.RegisterAll(this);
 
-        if (!await this.EnsureEngineRunningAsync().ConfigureAwait(true))
+        // The preview starts the engine and mounts the project's content; the start scene opens even when it fails, so
+        // authoring still works and the workspace shows why the preview is unavailable.
+        if (this.previewSession is { } session && this.projectContextService.ActiveProject is { } project)
         {
-            return;
+            _ = await session.StartAsync(project).ConfigureAwait(true);
         }
-
-        // Mount the project's cooked assets root in the engine's virtual path resolver.
-        // This allows the engine to resolve asset:/// URIs to actual files on disk.
-        await this.RefreshCookedRootsAsync().ConfigureAwait(true);
 
         await this.OpenInitialSceneAsync().ConfigureAwait(true);
     }
@@ -273,14 +273,29 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         RegisterContentServices(childContainer);
         this.assetCatalog = childContainer.Resolve<IAssetCatalog>();
 
-        // Register scene-engine synchronization service
-        childContainer.Register<ISceneEngineSync, SceneEngineSync>(Reuse.Singleton);
-        childContainer.Register<ISceneContentDemandService, SceneContentDemandService>(Reuse.Singleton);
+        // The engine preview and the preview content demand follow the open scene documents.
+        childContainer.RegisterDelegate<IScenePreview>(
+            resolver => ScenePreviews.Create(
+                resolver.Resolve<IEngineService>(),
+                resolver.Resolve<OpenDocuments>(),
+                resolver.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault),
+                resolver.Resolve<IOperationResultPublisher>(IfUnresolved.ReturnDefault),
+                resolver.Resolve<IAssetFeed>(IfUnresolved.ReturnDefault)),
+            Reuse.Singleton);
+        childContainer.RegisterDelegate(
+            resolver => new PreviewContentDemand(ContentDemands.Start(
+                resolver.Resolve<OpenDocuments>(),
+                resolver.Resolve<IAssetFeed>(),
+                resolver.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(),
+                resolver.Resolve<IProjectContextService>(),
+                resolver.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault))),
+            Reuse.Singleton);
         childContainer.Register<ISceneSelectionService, SceneSelectionService>(Reuse.Singleton);
 
-        // Everything the documents need is registered: the cook and the content demand follow them from now on.
+        // Everything the documents need is registered: the cook, the preview and the content demand follow them from now on.
         _ = childContainer.Resolve<OpenDocumentCookInputs>();
-        _ = childContainer.Resolve<ISceneContentDemandService>();
+        _ = childContainer.Resolve<IScenePreview>();
+        _ = childContainer.Resolve<PreviewContentDemand>();
 
         // The host subscribes to the window's tabs before DocumentManager starts handling open requests, and the
         // manager listens for them even before the router has navigated to an editor.
@@ -313,18 +328,20 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     {
         if (disposing)
         {
-            if (this.previewProject is { } project)
+            if (this.projectContextService.ActiveProject is { } project)
             {
                 this.previewSettings?.Deactivate(project);
             }
+
+            this.UnobservePreviewSession();
 
             this.editingViewMask?.Dispose();
             this.editingViewMask = null;
             this.DisposeScriptServices();
             this.ShutdownPlayServices();
 
-            this.publicationRegistration?.Dispose();
-            this.publicationRegistration = null;
+            _ = this.previewSession?.DisposeAsync();
+            this.previewSession = null;
 
             if (this.cookingPanel is not null)
             {
@@ -333,16 +350,10 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
                 this.cookingPanel = null;
             }
 
-            if (this.engineService.State == EngineServiceState.Running)
-            {
-                _ = this.ReleaseCookedRootsAsync();
-            }
-
             this.documentManager?.Dispose();
             this.documentManager = null;
             this.assetCatalog = null;
             this.messenger?.UnregisterAll(this);
-            this.engineStartupGate.Dispose();
         }
 
         base.Dispose(disposing);
@@ -416,13 +427,9 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
     private void RegisterOutputPanels(IContainer childContainer)
     {
-        this.cookHosting = childContainer.Resolve<DroidNet.Hosting.WinUI.HostingContext>();
-        this.cookedCatalog = childContainer.Resolve<IAssetPublicationTarget>();
-        if (this.projectContextService.ActiveProject is { } project)
-        {
-            this.publicationRegistration = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>()
-                .RegisterPreview(project, () => this.CreatePublicationPreviewAsync(project));
-        }
+        childContainer.Register<PreviewSession>(Reuse.Singleton);
+        this.previewSession = childContainer.Resolve<PreviewSession>();
+        this.ObservePreviewSession();
 
         childContainer.Register<OutputViewModel>(Reuse.Singleton);
         childContainer.Register<OutputView>(Reuse.Transient);
@@ -431,109 +438,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<CookingPanelView>(Reuse.Transient);
         this.cookingPanel = childContainer.Resolve<CookingPanelViewModel>();
         this.cookingPanel.RevealRequested += this.OnCookingRevealRequested;
-    }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The workspace reports recovery and native mount failures while preserving authoring access and runtime reader ownership.")]
-    private async Task RefreshCookedRootsAsync()
-    {
-        if (this.projectContextService.ActiveProject is not { } project)
-        {
-            return;
-        }
-
-        var stage = "publication admission";
-        var mounted = false;
-        try
-        {
-            var mountService = this.container.Resolve<Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService>();
-            var publication = this.container.Resolve<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>();
-            var (reader, mounts) = await this.AdmitCookedContentAsync(publication, mountService, project).ConfigureAwait(true);
-            using var retained = reader;
-            var bindings = reader.Roots.Zip(
-                reader.RootPaths,
-                static (root, path) => new RuntimeCookedRoot(path, root.Owner == Oxygen.Editor.ContentPipeline.Publication.CookPublicationRootOwner.Project ? root.Name : null)).ToArray();
-            stage = "native mount and preview resume";
-            await this.engineService.RefreshProjectCookedRootsAsync(bindings, mounts).ConfigureAwait(true);
-            mounted = true;
-            stage = "asset catalog refresh";
-            var catalog = this.cookedCatalog ?? throw new InvalidOperationException("The workspace asset catalog is not initialized.");
-            await catalog.UsePublicationAsync(reader, CancellationToken.None).ConfigureAwait(true);
-            this.HasContentFailure = false;
-            this.LogMountedRoots(mounts.Roots);
-            await this.MaintainPublicationAsync(publication, project).ConfigureAwait(true);
-        }
-        catch (Exception exception)
-        {
-            this.LogCookedRootRefreshFailed(exception, stage, project.ProjectRoot, mounted ? "mounted" : "unavailable");
-            this.ContentFailureTitle = mounted ? "Content Browser unavailable" : "Preview unavailable";
-            this.ContentFailureMessage = $"Failed during {stage}: {exception.Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()}";
-            this.HasContentFailure = true;
-            RuntimeOperationResults.PublishFailure(
-                this.operationResults,
-                this.statusReducer,
-                RuntimeOperationKinds.CookedRootRefresh,
-                FailureDomain.AssetMount,
-                AssetMountDiagnosticCodes.RefreshFailed,
-                this.ContentFailureTitle,
-                this.ContentFailureMessage,
-                this.CreateProjectScope(),
-                project.ProjectRoot,
-                exception,
-                exception.ToString());
-            if (!mounted)
-            {
-                await this.SuspendUnavailablePreviewAsync(project).ConfigureAwait(true);
-            }
-        }
-    }
-
-    /// <summary>Publishes from the current libraries and admits that selection, republishing once when a library is re-cooked in between.</summary>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The admitted reader transfers to the caller; every rejected reader is disposed here.")]
-    private async Task<(Oxygen.Editor.ContentPipeline.Publication.CookPublicationReadLease reader, Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountSet mounts)> AdmitCookedContentAsync(
-        Oxygen.Editor.ContentPipeline.Publication.CookPublicationService publication,
-        Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService mountService,
-        ProjectContext project)
-    {
-        var reader = await publication.AcquireForMountAsync(project, CancellationToken.None).ConfigureAwait(true);
-        try
-        {
-            try
-            {
-                return (reader, await mountService.PrepareAsync(project, reader, CancellationToken.None).ConfigureAwait(true));
-            }
-            catch (Oxygen.Editor.ContentPipeline.Publication.CookedLibraryChangedException changed)
-            {
-                this.LogCookedLibraryChanged(changed, project.ProjectRoot);
-                reader.Dispose();
-                reader = await publication.AcquireForMountAsync(project, CancellationToken.None).ConfigureAwait(true);
-                return (reader, await mountService.PrepareAsync(project, reader, CancellationToken.None).ConfigureAwait(true));
-            }
-        }
-        catch
-        {
-            reader.Dispose();
-            throw;
-        }
-    }
-
-    private async Task MaintainPublicationAsync(Oxygen.Editor.ContentPipeline.Publication.CookPublicationService publication, ProjectContext project)
-    {
-        try
-        {
-            var cleanupFailures = await publication.MaintainAsync(project, CancellationToken.None).ConfigureAwait(true);
-            if (cleanupFailures.Count != 0)
-            {
-                this.PublishCookedRootWarning(
-                    "Cook.CleanupDeferred",
-                    "Unused output cleanup deferred",
-                    string.Join(Environment.NewLine, cleanupFailures),
-                    project.ProjectRoot);
-            }
-        }
-        catch (Exception cleanup) when (cleanup is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
-        {
-            this.PublishCookedRootWarning("Cook.CleanupDeferred", "Unused output cleanup deferred", cleanup.Message, project.ProjectRoot, cleanup);
-        }
     }
 
     private async Task OpenInitialSceneAsync()
@@ -611,98 +515,4 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             this.LogSceneRestorationFailed(ex, context.Name);
         }
     }
-
-    [SuppressMessage(
-        "Design",
-        "CA1031:Do not catch general exception types",
-        Justification = "Workspace activation must fail visibly without crashing the Project Browser when runtime startup fails.")]
-    private async Task<bool> EnsureEngineRunningAsync()
-    {
-        await this.engineStartupGate.WaitAsync().ConfigureAwait(true);
-        try
-        {
-            switch (this.engineService.State)
-            {
-                case EngineServiceState.Running:
-                    await this.RestorePreviewSettingsAsync().ConfigureAwait(true);
-                    return true;
-
-                case EngineServiceState.NoEngine:
-                case EngineServiceState.Faulted:
-                    this.LogEngineStarting();
-                    _ = await this.engineService.InitializeAsync().ConfigureAwait(true);
-                    await this.RestorePreviewSettingsAsync().ConfigureAwait(true);
-                    await this.engineService.StartAsync().ConfigureAwait(true);
-                    return this.engineService.State == EngineServiceState.Running;
-
-                case EngineServiceState.Ready:
-                    this.LogInitializedEngineStarting();
-                    await this.RestorePreviewSettingsAsync().ConfigureAwait(true);
-                    await this.engineService.StartAsync().ConfigureAwait(true);
-                    return this.engineService.State == EngineServiceState.Running;
-
-                default:
-                    this.LogEngineStateNotReady(this.engineService.State);
-                    return false;
-            }
-        }
-        catch (Exception ex)
-        {
-            this.LogEngineStartFailed(ex);
-            RuntimeOperationResults.PublishFailure(
-                this.operationResults,
-                this.statusReducer,
-                RuntimeOperationKinds.Start,
-                FailureDomain.RuntimeDiscovery,
-                DiagnosticCodes.RuntimePrefix + "START_FAILED",
-                "Embedded runtime failed to start",
-                "The workspace opened, but the live engine runtime could not start.",
-                this.CreateProjectScope(),
-                exception: ex);
-            return false;
-        }
-        finally
-        {
-            _ = this.engineStartupGate.Release();
-        }
-    }
-
-    private Task RestorePreviewSettingsAsync()
-    {
-        if (this.previewSettings is null || this.projectContextService.ActiveProject is not { } project)
-        {
-            throw new InvalidOperationException("The workspace preview preferences are not initialized.");
-        }
-
-        this.previewProject = project;
-        return this.previewSettings.RestoreAsync(project);
-    }
-
-    private AffectedScope CreateProjectScope()
-        => this.projectContextService.ActiveProject is { } project
-            ? new AffectedScope
-            {
-                ProjectId = project.ProjectId,
-                ProjectName = project.Name,
-                ProjectPath = project.ProjectRoot,
-            }
-            : AffectedScope.Empty;
-
-    private void PublishCookedRootWarning(
-        string code,
-        string title,
-        string message,
-        string affectedPath,
-        Exception? exception = null)
-        => RuntimeOperationResults.PublishWarning(
-            this.operationResults,
-            this.statusReducer,
-            RuntimeOperationKinds.CookedRootRefresh,
-            FailureDomain.AssetMount,
-            code,
-            title,
-            message,
-            this.CreateProjectScope(),
-            affectedPath,
-            exception);
 }

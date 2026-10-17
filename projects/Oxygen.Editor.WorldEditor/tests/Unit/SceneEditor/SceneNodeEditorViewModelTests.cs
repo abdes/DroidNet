@@ -11,13 +11,12 @@ using DroidNet.Mvvm.Converters;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
@@ -32,17 +31,14 @@ public sealed class SceneNodeEditorViewModelTests
     public TestContext TestContext { get; set; }
 
     [TestMethod]
-    public void Constructor_WhenActiveSceneHasPendingPropertySyncs_ShowsEditorLevelPendingBanner()
+    public void Constructor_WhenActiveDocumentHasPendingFields_ShowsEditorLevelPendingBanner()
     {
         var scene = CreateScene();
         var node = CreateNode(scene);
-        var sync = new Mock<ISceneEngineSync>();
-        _ = sync
-            .Setup(service => service.GetPendingPropertySyncCount(scene.Id))
-            .Returns(2);
-
         using var tab = SceneTabs.Open(node.Scene);
-        using var sut = CreateSut(sync.Object, tab, [node]);
+        var preview = new Mock<IScenePreview>();
+        _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(2);
+        using var sut = CreateSut(preview.Object, tab, [node]);
 
         _ = sut.PendingLiveSyncEditCount.Should().Be(2);
         _ = sut.HasPendingLiveSyncEdits.Should().BeTrue();
@@ -68,7 +64,7 @@ public sealed class SceneNodeEditorViewModelTests
         interaction.SetLocked(parent.Id, isLocked: true);
 
         using var tab = SceneTabs.Open(child.Scene);
-        using var sut = CreateSut(Mock.Of<ISceneEngineSync>(), tab, [child], interaction);
+        using var sut = CreateSut(Mock.Of<IScenePreview>(), tab, [child], interaction);
 
         _ = sut.SelectedNode!.Id.Should().Be(child.Id);
         _ = sut.HasLockedSelection.Should().BeTrue();
@@ -76,20 +72,17 @@ public sealed class SceneNodeEditorViewModelTests
     }
 
     [TestMethod]
-    public void PendingPropertySyncCountChanged_WhenActiveSceneMatches_UpdatesEditorLevelPendingBanner()
+    public void PendingFieldsChanged_WhenActiveDocumentMatches_UpdatesEditorLevelPendingBanner()
     {
         var scene = CreateScene();
         var node = CreateNode(scene);
-        var sync = new Mock<ISceneEngineSync>();
-        _ = sync
-            .Setup(service => service.GetPendingPropertySyncCount(scene.Id))
-            .Returns(0);
         using var tab = SceneTabs.Open(node.Scene);
-        using var sut = CreateSut(sync.Object, tab, [node]);
+        var preview = new Mock<IScenePreview>();
+        _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(0);
+        using var sut = CreateSut(preview.Object, tab, [node]);
+        _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(1);
 
-        sync.Raise(
-            service => service.PendingPropertySyncCountChanged += null,
-            new PendingPropertySyncCountChangedEventArgs(scene.Id, pendingCount: 1));
+        preview.Raise(value => value.PendingFieldsChanged += null, preview.Object, new ScenePreviewEventArgs(tab.DocumentId));
 
         _ = sut.PendingLiveSyncEditCount.Should().Be(1);
         _ = sut.HasPendingLiveSyncEdits.Should().BeTrue();
@@ -97,40 +90,35 @@ public sealed class SceneNodeEditorViewModelTests
     }
 
     [TestMethod]
-    public void PendingPropertySyncCountChanged_WhenQueueIsEmpty_HidesEditorLevelPendingBanner()
+    public void PendingFieldsChanged_WhenNoneWait_HidesEditorLevelPendingBanner()
     {
         var scene = CreateScene();
         var node = CreateNode(scene);
-        var sync = new Mock<ISceneEngineSync>();
-        _ = sync
-            .Setup(service => service.GetPendingPropertySyncCount(scene.Id))
-            .Returns(1);
         using var tab = SceneTabs.Open(node.Scene);
-        using var sut = CreateSut(sync.Object, tab, [node]);
+        var preview = new Mock<IScenePreview>();
+        _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(1);
+        using var sut = CreateSut(preview.Object, tab, [node]);
+        _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(0);
 
-        sync.Raise(
-            service => service.PendingPropertySyncCountChanged += null,
-            new PendingPropertySyncCountChangedEventArgs(scene.Id, pendingCount: 0));
+        preview.Raise(value => value.PendingFieldsChanged += null, preview.Object, new ScenePreviewEventArgs(tab.DocumentId));
 
         _ = sut.PendingLiveSyncEditCount.Should().Be(0);
         _ = sut.HasPendingLiveSyncEdits.Should().BeFalse();
     }
 
     [TestMethod]
-    public void PendingPropertySyncCountChanged_WhenSceneDiffers_IgnoresEvent()
+    public void PendingFieldsChanged_WhenDocumentDiffers_IgnoresEvent()
     {
         var scene = CreateScene();
         var node = CreateNode(scene);
-        var sync = new Mock<ISceneEngineSync>();
-        _ = sync
-            .Setup(service => service.GetPendingPropertySyncCount(scene.Id))
-            .Returns(1);
         using var tab = SceneTabs.Open(node.Scene);
-        using var sut = CreateSut(sync.Object, tab, [node]);
+        var preview = new Mock<IScenePreview>();
+        _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(1);
+        using var sut = CreateSut(preview.Object, tab, [node]);
+        var other = DroidNet.Documents.DocumentId.New();
+        _ = preview.Setup(value => value.PendingFieldCount(other)).Returns(0);
 
-        sync.Raise(
-            service => service.PendingPropertySyncCountChanged += null,
-            new PendingPropertySyncCountChangedEventArgs(SceneId.New(), pendingCount: 0));
+        preview.Raise(value => value.PendingFieldsChanged += null, preview.Object, new ScenePreviewEventArgs(other));
 
         _ = sut.PendingLiveSyncEditCount.Should().Be(1);
         _ = sut.HasPendingLiveSyncEdits.Should().BeTrue();
@@ -155,7 +143,7 @@ public sealed class SceneNodeEditorViewModelTests
     }
 
     private static SceneNodeEditorViewModel CreateSut(
-        ISceneEngineSync sceneEngineSync,
+        IScenePreview scenePreview,
         SceneTab tab,
         IList<SceneNode> selectedNodes,
         WorkspaceInteractionService? interaction = null)
@@ -189,10 +177,9 @@ public sealed class SceneNodeEditorViewModelTests
             documents,
             default,
             Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
-            sceneEngineSync,
+            scenePreview,
             selectionService,
             new Testing.BuiltinCatalogDiscoveryFixture(),
-            Mock.Of<ISceneContentDemandService>(),
             Mock.Of<ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(),
             Mock.Of<IProjectContextService>(),
             interaction: interaction);

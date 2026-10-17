@@ -9,7 +9,6 @@ using DroidNet.Routing;
 using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer;
@@ -40,11 +39,7 @@ public sealed partial class SceneExplorerSearchTests
         _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        var sync = new Mock<ISceneEngineSync>();
-        _ = sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
-        _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
-        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, sync.Object, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
 
@@ -334,12 +329,6 @@ public sealed partial class SceneExplorerSearchTests
             var documents = new TestDocumentArea();
             documents.Activate(this.Metadata.Document);
             this.Documents = documents;
-
-            var sync = new Mock<ISceneEngineSync>();
-            _ = sync.Setup(value => value.GetDocumentScene(this.Metadata.DocumentId)).Returns(this.Scene);
-            _ = sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
-            _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
-            this.Sync = sync;
         }
 
         public Project Project { get; }
@@ -354,9 +343,6 @@ public sealed partial class SceneExplorerSearchTests
 
         /// <summary>Gets the open documents that hold the harness's first scene.</summary>
         public Editor.Documents.OpenDocuments OpenDocuments => this.Metadata.Documents;
-
-        public Mock<ISceneEngineSync> Sync { get; }
-
         public void Dispose() => this.Metadata.Dispose();
 
         public SceneExplorerViewModel Build()
@@ -367,7 +353,6 @@ public sealed partial class SceneExplorerSearchTests
                 this.Documents,
                 this.OpenDocuments,
                 default,
-                this.Sync.Object,
                 new SceneSelectionService());
     }
 }

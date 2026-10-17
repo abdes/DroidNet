@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Editor.Scenes.Engine;
+using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.World.Inspector.Environment;
-using Oxygen.Editor.World.Services;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 
@@ -13,13 +12,13 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 public sealed class SkyLightRuntimeStatusTests
 {
     [TestMethod]
-    [DataRow(SceneSkyLightUnavailableReason.MissingCubemap, "No cubemap is selected")]
-    [DataRow(SceneSkyLightUnavailableReason.ResourceResolveFailed, "failed to load")]
-    [DataRow(SceneSkyLightUnavailableReason.NotTextureCube, "is not a cubemap")]
-    [DataRow(SceneSkyLightUnavailableReason.UnsupportedFormat, "float (HDR)")]
-    [DataRow(SceneSkyLightUnavailableReason.ProcessingFailed, "failed to process")]
-    [DataRow(SceneSkyLightUnavailableReason.GpuProductsPending, "Loading the cubemap")]
-    public void UnavailableSkyLightNamesItsCause(SceneSkyLightUnavailableReason reason, string cause)
+    [DataRow(SkyLightUnavailableReason.MissingCubemap, "No cubemap is selected")]
+    [DataRow(SkyLightUnavailableReason.ResourceResolveFailed, "failed to load")]
+    [DataRow(SkyLightUnavailableReason.NotTextureCube, "is not a cubemap")]
+    [DataRow(SkyLightUnavailableReason.UnsupportedFormat, "float (HDR)")]
+    [DataRow(SkyLightUnavailableReason.ProcessingFailed, "failed to process")]
+    [DataRow(SkyLightUnavailableReason.GpuProductsPending, "Loading the cubemap")]
+    public void UnavailableSkyLightNamesItsCause(SkyLightUnavailableReason reason, string cause)
         => _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { UnavailableReason = reason })
             .Should().Contain(cause);
 
@@ -32,10 +31,10 @@ public sealed class SkyLightRuntimeStatusTests
     public void WorkingDisabledOrUnrenderedSkyLightsSayNothing()
     {
         _ = SkyLightSectionViewModel.DescribeRuntime(Rendered()).Should().BeNull();
-        _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { Enabled = false, UnavailableReason = SceneSkyLightUnavailableReason.MissingCubemap }).Should().BeNull();
-        _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { Observed = false, UnavailableReason = SceneSkyLightUnavailableReason.MissingCubemap }).Should().BeNull();
+        _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { Enabled = false, UnavailableReason = SkyLightUnavailableReason.MissingCubemap }).Should().BeNull();
+        _ = SkyLightSectionViewModel.DescribeRuntime(Rendered() with { Observed = false, UnavailableReason = SkyLightUnavailableReason.MissingCubemap }).Should().BeNull();
         _ = SkyLightSectionViewModel.DescribeRuntime(state: null).Should().BeNull();
     }
 
-    private static SceneSkyLightObservation Rendered() => new(Observed: true, Enabled: true, SceneSkyLightUnavailableReason.None, EmptyCapture: false);
+    private static SkyLightObservation Rendered() => new(Observed: true, Enabled: true, SkyLightUnavailableReason.None, EmptyCapture: false);
 }

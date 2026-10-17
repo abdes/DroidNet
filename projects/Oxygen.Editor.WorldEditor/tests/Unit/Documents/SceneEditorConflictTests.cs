@@ -12,13 +12,12 @@ using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Documents;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
@@ -41,12 +40,6 @@ public sealed partial class SceneEditorConflictTests
     public async Task ConflictReloadInstallsTheSceneOnDisk()
     {
         using var fixture = await Fixture.CreateAsync(this.TestContext, active: true).ConfigureAwait(false);
-        var reloaded = new List<Scene>();
-        fixture.Messenger.Register<SceneReloadedMessage>(this, (_, message) =>
-        {
-            reloaded.Add(message.Scene);
-            message.Reply(Task.FromResult(true));
-        });
         await fixture.Editor.PrepareForCloseAsync().ConfigureAwait(false);
         _ = (await fixture.Editor.SaveForCloseAsync().ConfigureAwait(false)).Should().BeFalse();
         _ = fixture.Editor.HasSaveConflict.Should().BeTrue();
@@ -58,26 +51,10 @@ public sealed partial class SceneEditorConflictTests
         var current = ((SceneContent)fixture.Editor.Document.Content).Scene;
         _ = current.Should().NotBeSameAs(fixture.Scene);
         _ = current!.RootNodes.Should().ContainSingle().Which.Name.Should().Be("Outside");
-        _ = reloaded.Should().Equal(current);
         _ = fixture.Editor.Document.IsDirty.Should().BeFalse();
         fixture.Prompt.Verify(value => value.ShowAsync(It.IsAny<WindowId>(), It.IsAny<IDocumentMetadata>(), It.IsAny<IDocumentConflictParticipant>()), Times.Never);
         fixture.Editor.ResumeEditing();
         _ = (await fixture.Editor.SaveForCloseAsync().ConfigureAwait(false)).Should().BeTrue();
-    }
-
-    /// <summary>A reload whose scene the Scene Explorer cannot show warns that the tab must be reopened.</summary>
-    /// <returns>The test task.</returns>
-    [TestMethod]
-    public async Task ReloadTheTreeCannotShowWarns()
-    {
-        using var fixture = await Fixture.CreateAsync(this.TestContext, active: true).ConfigureAwait(false);
-        fixture.Messenger.Register<SceneReloadedMessage>(this, (_, message) => message.Reply(Task.FromResult(false)));
-        _ = await fixture.Editor.SaveForCloseAsync().ConfigureAwait(false);
-
-        _ = (await fixture.Editor.ReloadFromDiskAsync().ConfigureAwait(false)).Succeeded.Should().BeTrue();
-
-        _ = fixture.Results.Published.Should().ContainSingle(result => result.OperationKind == SceneOperationKinds.Reload)
-            .Which.Severity.Should().Be(DiagnosticSeverity.Warning);
     }
 
     /// <summary>Saving a copy writes a separate scene and leaves the original dirty and in conflict.</summary>
@@ -111,11 +88,9 @@ public sealed partial class SceneEditorConflictTests
         var close = fixture.Editor.CloseAsync(discard: true);
 
         _ = close.IsCompleted.Should().BeFalse();
-        fixture.Sync.Verify(value => value.CloseDocument(fixture.Editor.Document.Id), Times.Never);
         read.SetResult();
         _ = (await reload.ConfigureAwait(false)).Succeeded.Should().BeTrue();
         await close.ConfigureAwait(false);
-        fixture.Sync.Verify(value => value.CloseDocument(fixture.Editor.Document.Id), Times.Once);
     }
 
     private sealed partial class Fixture : IDisposable
@@ -140,7 +115,7 @@ public sealed partial class SceneEditorConflictTests
 
         public StrongReferenceMessenger Messenger { get; } = new();
 
-        public Mock<ISceneEngineSync> Sync { get; } = new();
+        public Mock<IScenePreview> Preview { get; } = new();
 
         public GatedFileStore Store { get; }
 
@@ -182,8 +157,7 @@ public sealed partial class SceneEditorConflictTests
             var projects = new ProjectContextService();
             projects.Activate(this.Files.Context);
             this.container.RegisterInstance<IProjectContextService>(projects);
-            _ = this.Sync.Setup(value => value.GetDocumentScene(this.Tab.DocumentId)).Returns(this.Scene);
-            _ = this.Sync.Setup(value => value.IsSceneSynchronized(this.Scene)).Returns(synchronized);
+            _ = this.Preview.Setup(value => value.IsReady(this.Tab.DocumentId)).Returns(synchronized);
             _ = this.Prompt.Setup(value => value.ShowAsync(It.IsAny<WindowId>(), It.IsAny<IDocumentMetadata>(), It.IsAny<IDocumentConflictParticipant>())).Returns(Task.CompletedTask);
             var documents = new TestDocumentArea(this.Tab.Document);
             if (!active)
@@ -204,7 +178,7 @@ public sealed partial class SceneEditorConflictTests
                 documents,
                 default,
                 Mock.Of<IEngineService>(),
-                this.Sync.Object,
+                this.Preview.Object,
                 input.Object,
                 this.Results,
                 new OperationStatusReducer(),

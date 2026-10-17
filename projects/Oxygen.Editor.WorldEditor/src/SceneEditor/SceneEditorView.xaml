@@ -171,7 +171,7 @@
                                     <seg:Segmented
                                         x:Name="LogVerbositySegmented"
                                         HorizontalAlignment="Left"
-                                        SelectedIndex="{x:Bind ViewModel.PreviewSettings.LoggingVerbosity, Mode=TwoWay, Converter={StaticResource VerbosityIndexConverter}}"
+                                        SelectedIndex="{x:Bind ViewModel.EngineLoggingVerbosity, Mode=TwoWay, Converter={StaticResource VerbosityIndexConverter}}"
                                         SelectionMode="Single">
                                         <seg:SegmentedItem Content="E" ToolTipService.ToolTip="Error (ERR)" />
                                         <seg:SegmentedItem Content="W" ToolTipService.ToolTip="Warning (WARN)" />
@@ -184,7 +184,7 @@
                                         HorizontalValueAlignment="Right"
                                         Mask="#.#"
                                         Multiplier="1"
-                                        NumberValue="{x:Bind ViewModel.PreviewSettings.LoggingVerbosity, Mode=TwoWay, Converter={StaticResource IntDoubleConverter}}"
+                                        NumberValue="{x:Bind ViewModel.EngineLoggingVerbosity, Mode=TwoWay, Converter={StaticResource IntDoubleConverter}}"
                                         WithPadding="False" />
                                 </Grid>
                                 <TextBlock

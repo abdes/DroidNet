@@ -7,12 +7,11 @@ using System.Reactive.Concurrency;
 using DroidNet.Controls;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.World.Inspector.Environment;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Services;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -20,7 +19,7 @@ namespace Oxygen.Editor.World.Inspector;
 /// <summary>Owns scene identity, shared edit lifetime and parent-owned section composition.</summary>
 public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
 {
-    private readonly Func<Scene, CancellationToken, Task<SceneSkyLightObservation?>>? observeEnvironment;
+    private readonly Func<Scene, CancellationToken, Task<SkyLightObservation?>>? observeEnvironment;
     private Scene? scene;
     private bool disposed;
 
@@ -37,7 +36,7 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         IAssetFeed? assetProvider = null,
         Func<NodeId, Task>? inspectSceneNode = null,
         IScheduler? observerScheduler = null,
-        Func<Scene, CancellationToken, Task<SceneSkyLightObservation?>>? observeEnvironment = null,
+        Func<Scene, CancellationToken, Task<SkyLightObservation?>>? observeEnvironment = null,
         Func<Uri, InputContextSource>? inputContextSource = null,
         Func<Uri, Task>? revealAsset = null)
     {

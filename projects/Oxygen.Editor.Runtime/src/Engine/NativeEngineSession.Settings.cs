@@ -61,7 +61,7 @@ internal sealed partial class NativeEngineSession
     /// <param name="editorCVarsArchivePath">The editor's optional console archive.</param>
     /// <param name="runtimeLibrary">The runtime library selected and retained by the compatibility lease.</param>
     /// <returns>The native startup configuration.</returns>
-    internal static EditorEngineConfigManaged CreateConfig(IEngineSettings settings, string? editorCVarsArchivePath, string runtimeLibrary)
+    internal static EditorEngineConfigManaged CreateConfig(IEngineStartupSettings settings, string? editorCVarsArchivePath, string runtimeLibrary)
     {
         var sdkRoot = Path.GetDirectoryName(Path.GetDirectoryName(runtimeLibrary))
             ?? throw new ArgumentException("The runtime library must be inside the SDK bin directory.", nameof(runtimeLibrary));

@@ -12,14 +12,12 @@ using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
@@ -312,10 +310,6 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
             this.scene = scene;
             this.openDocuments.Add(metadata);
             this.Documents.Activate(metadata.Document);
-            this.Sync = new Mock<ISceneEngineSync>();
-            _ = this.Sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(scene);
-            _ = this.Sync.Setup(value => value.RegisterDocument(It.IsAny<SceneAuthoring>())).Returns(value: true);
-            _ = this.Sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
         }
 
         public Mock<IProjectManagerService> Manager { get; }
@@ -324,9 +318,6 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
 
         /// <summary>Gets the open documents that hold the harness's first scene.</summary>
         public Oxygen.Editor.Documents.OpenDocuments OpenDocuments => this.openDocuments[0].Documents;
-
-        public Mock<ISceneEngineSync> Sync { get; }
-
         /// <summary>Gets the history of the harness's first scene.</summary>
         public DroidNet.TimeMachine.HistoryKeeper History => this.openDocuments[0].Document.History;
 
@@ -347,13 +338,12 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
             added = metadata.Scene;
             this.openDocuments.Add(metadata);
             this.Documents.Add(metadata.Document);
-            _ = this.Sync.Setup(value => value.GetDocumentScene(metadata.DocumentId)).Returns(added);
             return added;
         }
 
         public SceneExplorerViewModel Build()
             => new(this.Manager.Object, this.Messenger, Mock.Of<IRouter>(), this.Documents,
                 this.OpenDocuments,
-                default, this.Sync.Object, new SceneSelectionService());
+                default, new SceneSelectionService());
     }
 }

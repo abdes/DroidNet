@@ -79,11 +79,11 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
     }
 
     /// <inheritdoc/>
-    public Task<bool> ActivateSceneAsync(string name)
-    {
-        this.world.DestroyScene();
-        return this.world.CreateSceneAsync(name);
-    }
+    /// <remarks>
+    /// Creating a scene replaces the current one and retargets the existing views to it: each view stays alive until its
+    /// viewport destroys it.
+    /// </remarks>
+    public Task<bool> ActivateSceneAsync(string name) => this.world.CreateSceneAsync(name);
 
     /// <inheritdoc/>
     public Task CreateNodeAsync(RuntimeCreateNode command)

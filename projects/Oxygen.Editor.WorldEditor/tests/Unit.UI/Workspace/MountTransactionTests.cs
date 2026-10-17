@@ -12,16 +12,16 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Incremental;
+using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Services;
-using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
-using static DroidNet.Tests.UiTestHosting;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Workspace;
 
@@ -44,9 +44,10 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         fixture.Store.Fail = saveFailure;
         fixture.FailNative = !saveFailure;
         var accepted = fixture.Projects.ActiveProject;
-        Func<Task> apply = () => fixture.Service.ApplyAsync(accepted!, fixture.Candidate, _ => throw new InvalidOperationException("A failed change must not publish context."), this.TestContext.CancellationToken);
+        Func<Task> apply = () => fixture.Session.ChangeMountsAsync(accepted!, fixture.Candidate, this.TestContext.CancellationToken);
         _ = await apply.Should().ThrowAsync<Exception>().ConfigureAwait(true);
         _ = fixture.Projects.ActiveProject.Should().BeSameAs(accepted);
+        _ = fixture.Activations.Should().BeEmpty("a failed change publishes no context");
         _ = fixture.Roots.Should().Equal(fixture.ProjectOutput);
         _ = fixture.Paused.Should().BeFalse();
         _ = (await File.ReadAllBytesAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().Equal(before);
@@ -62,11 +63,10 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         await fixture.InitializeAsync().ConfigureAwait(true);
         var original = await File.ReadAllBytesAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true);
         fixture.Store.AfterCommit = fixture.Projects.Close;
-        var activated = false;
-        Func<Task> apply = () => fixture.Service.ApplyAsync(fixture.Projects.ActiveProject!, fixture.Candidate, _ => activated = true, this.TestContext.CancellationToken);
+        Func<Task> apply = () => fixture.Session.ChangeMountsAsync(fixture.Projects.ActiveProject!, fixture.Candidate, this.TestContext.CancellationToken);
         _ = await apply.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(true);
         _ = fixture.Projects.ActiveProject.Should().BeNull();
-        _ = activated.Should().BeFalse();
+        _ = fixture.Activations.Should().OnlyContain(static context => context == null, "closing publishes no project, and the change publishes none");
         _ = fixture.Paused.Should().BeTrue();
         _ = (await File.ReadAllBytesAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().Equal(original);
     });
@@ -82,12 +82,14 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         using var fixture = new MountTransactionFixture(withDefaultScene);
         await fixture.InitializeAsync().ConfigureAwait(true);
         var original = fixture.Projects.ActiveProject;
-        await fixture.Service.ApplyAsync(original!, fixture.Candidate, next =>
+        fixture.OnActivated = activated =>
         {
-            _ = fixture.Projects.ActiveProject.Should().BeSameAs(original);
+            _ = activated.Should().NotBeNull();
             _ = File.ReadAllText(fixture.ManifestPath).Should().Contain("Library");
             _ = fixture.Paused.Should().BeFalse();
-        }, this.TestContext.CancellationToken).ConfigureAwait(true);
+        };
+        _ = (await fixture.Session.ChangeMountsAsync(original!, fixture.Candidate, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeTrue();
+        _ = fixture.Activations.Should().ContainSingle().Which.Should().BeSameAs(fixture.Projects.ActiveProject);
         _ = fixture.Projects.ActiveProject!.LocalFolderMounts.Should().ContainSingle();
         _ = fixture.Projects.ActiveProject.DefaultSceneId.Should().Be(original!.DefaultSceneId);
         _ = ProjectInfo.FromJson(File.ReadAllText(fixture.ManifestPath)).DefaultSceneId.Should().Be(original.DefaultSceneId);
@@ -104,7 +106,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         private readonly ProjectManagerService manager;
         private readonly Guid sourceKey = Guid.CreateVersion7();
         private readonly CookPublicationService publication;
-        private readonly IDisposable registration;
+        private IDisposable? activations;
 
         public MountTransactionFixture(bool withDefaultScene = false)
         {
@@ -133,12 +135,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             _ = catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             this.Roots = [this.ProjectOutput];
             this.ConfigureEngine();
-            var hosting = CreateStatusHosting();
-            var context = this.Projects.ActiveProject!;
-            this.registration = this.publication.RegisterPreview(context, () => Task.FromResult<ICookPublicationPreview?>(new WorkspacePublicationPreview(context, this.engine.Object, hosting, catalog.Object, () => ReferenceEquals(context, this.Projects.ActiveProject), static () =>
-            {
-            })));
-            this.Service = new(this.coordinator, this.Projects, this.publication, catalog.Object, hosting);
+            this.Session = new(this.engine.Object, this.publication, new CookedContentMountService(), catalog.Object, this.coordinator, this.Projects, this.manager, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
         }
 
         public MountAtomicStore Store { get; } = new();
@@ -147,7 +144,13 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
 
         public ProjectInfo Candidate { get; }
 
-        public ContentMountChangeService Service { get; }
+        public PreviewSession Session { get; }
+
+        /// <summary>Gets the contexts the project activated after the preview started, in order.</summary>
+        public List<ProjectContext?> Activations { get; } = [];
+
+        /// <summary>Gets or sets what runs when a context activates, before the change completes.</summary>
+        public Action<ProjectContext?>? OnActivated { get; set; }
 
         public string ProjectOutput { get; }
 
@@ -177,12 +180,28 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             var version = await this.Store.WriteAsync(path, JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), FileVersion.Missing).ConfigureAwait(true);
             var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
             _ = await this.Store.WriteAsync(CookPublicationPaths.Head(context.ProjectRoot), JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), FileVersion.Missing).ConfigureAwait(true);
+            _ = (await this.Session.StartAsync(context).ConfigureAwait(true)).Should().BeTrue();
+
+            // The project context replays the current context on subscription; only later activations count.
+            var replayed = false;
+            this.activations = this.Projects.ProjectChanged.Subscribe(next =>
+            {
+                if (!replayed)
+                {
+                    replayed = true;
+                    return;
+                }
+
+                this.Activations.Add(next);
+                this.OnActivated?.Invoke(next);
+            });
         }
 
         public void Dispose()
         {
+            this.activations?.Dispose();
+            _ = this.Session.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
             this.coordinator.Dispose();
-            this.registration.Dispose();
             this.ReleaseReaders();
             this.directory.Delete(recursive: true);
         }

@@ -1,0 +1,90 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using AwesomeAssertions;
+using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World;
+using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core.Diagnostics;
+
+namespace Oxygen.Editor.LivePreview.Tests.Scenes;
+
+public sealed partial class ScenePreviewTests
+{
+    [TestMethod]
+    public async Task AssetFailure_PublishesCurrentOperationAndDropsStaleOrDeletedTargets()
+    {
+        using var fixture = new PreviewFixture();
+        var (scene, _, _) = await fixture.OpenCubeAsync(0).ConfigureAwait(false);
+        var node = AddCubeWithMissingMaterial(scene);
+        var current = true;
+        fixture.World.IsCurrentFailure = _ => current;
+        _ = await fixture.Preview.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var material = fixture.Requests.Last(static request => request.Command is RuntimeSetMaterialOverride);
+        var failure = new RuntimeAssetLoadFailedEventArgs(material, 71, "Asset path could not be resolved");
+
+        fixture.World.RaiseAssetLoadFailed(failure);
+        current = false;
+        fixture.World.RaiseAssetLoadFailed(failure);
+        current = true;
+        _ = scene.RootNodes.Remove(node);
+        fixture.World.RaiseAssetLoadFailed(failure);
+
+        var result = fixture.Results.Should().ContainSingle().Subject;
+        _ = result.OperationId.Should().Be(failure.Request.OperationId);
+        _ = result.AffectedScope.NodeId.Should().Be(node.Id);
+        _ = result.AffectedScope.SceneId.Should().Be(scene.Id);
+        _ = result.Diagnostics.Should().ContainSingle().Which.Domain.Should().Be(FailureDomain.LiveSync);
+    }
+
+    /// <summary>Mask requests keep their source mount and report failures against the scene.</summary>
+    /// <param name="mount">The authored source mount.</param>
+    /// <returns>The synchronization check.</returns>
+    [TestMethod]
+    [DataRow("Content")]
+    [DataRow("Lighting")]
+    public async Task ExposureMaskUsesItsMountAndPublishesSceneScopedFailure(string mount)
+    {
+        using var fixture = new PreviewFixture();
+        var generation = Path.Combine(@"C:\LivePreviewTests", ".cooked", "generations", Guid.NewGuid().ToString("N"));
+        fixture.Engine.ContentStatus = new RuntimeContentSnapshot(Guid.NewGuid(), 1, RuntimeContentState.Mounted, [new(generation, mount)]);
+        var current = true;
+        fixture.World.IsCurrentFailure = _ => current;
+        var built = fixture.Documents.NewScene("Masked scene");
+        var mask = new Uri($"asset:///{mount}/Textures/Meter.otex.json");
+        built.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { AutoExposureMeteringMask = mask } });
+        var document = await fixture.OpenAsync(built).ConfigureAwait(false);
+        var scene = PreviewFixture.SceneOf(document);
+
+        _ = (await fixture.Preview.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+
+        var request = fixture.Requests.Should().ContainSingle(value => value.Command is RuntimeSetEnvironment).Subject;
+        var environment = (RuntimeSetEnvironment)request.Command;
+        _ = environment.AutoExposureMeteringMask.Should().Be(new RuntimeTextureReference(mask, generation, "Textures/Meter.otex") { ProjectMount = mount });
+        var failure = new RuntimeAssetLoadFailedEventArgs(request, 71, "Texture could not be loaded");
+        fixture.World.RaiseAssetLoadFailed(failure);
+        current = false;
+        fixture.World.RaiseAssetLoadFailed(failure);
+
+        var result = fixture.Results.Should().ContainSingle().Subject;
+        _ = result.OperationId.Should().Be(request.OperationId);
+        _ = result.AffectedScope.SceneId.Should().Be(scene.Id);
+        _ = result.AffectedScope.NodeId.Should().BeNull();
+        _ = result.AffectedScope.ComponentType.Should().Be(nameof(PostProcessEnvironmentData));
+        _ = result.Diagnostics.Should().ContainSingle().Which.AffectedPath.Should().Be(mask.AbsoluteUri);
+    }
+
+    // A cube whose one material slot names a material that does not exist, so the engine reports the material's load.
+    private static SceneNode AddCubeWithMissingMaterial(Scene scene)
+    {
+        var node = new SceneNode(scene) { Name = "Cube with a missing material" };
+        scene.RootNodes.Add(node);
+        var target = new MaterialSlotTarget(new Uri("asset:///Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+        var geometry = new GeometryComponent { Name = "Geometry", Geometry = new(target.GeometryUri) };
+        geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = new(new Uri("asset:///Content/Materials/Missing.omat.json")) });
+        node.Components.Add(geometry);
+        return node;
+    }
+}

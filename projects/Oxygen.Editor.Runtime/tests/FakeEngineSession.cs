@@ -48,8 +48,12 @@ internal sealed class FakeEngineSession : EngineSession
 
     public bool CompleteOnStop { get; set; } = true;
 
-    public override void Initialize(IEngineSettings settings, string? editorCVarsArchivePath, ILogger? logger)
+    public IEngineStartupSettings? StartupSettings { get; private set; }
+
+    public override void Initialize(IEngineStartupSettings settings, string? editorCVarsArchivePath, ILogger? logger)
     {
+        this.StartupSettings = settings;
+        this.LoggingVerbosity = settings.LoggingVerbosity;
         this.hasRunner = true;
         this.Step("Create runner");
         this.hasContext = true;

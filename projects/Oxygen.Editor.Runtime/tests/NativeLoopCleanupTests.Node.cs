@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Interop;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
@@ -18,53 +19,53 @@ public sealed partial class NativeLoopCleanupTests
 
     private static ImmutableArray<RuntimePropertyValue> ObservedNodeProperties() =>
     [
-        new(1, 0, 1f),
-        new(1, 1, 2f),
-        new(1, 2, 3f),
-        new(1, 3, 10f),
-        new(1, 4, 20f),
-        new(1, 5, 30f),
-        new(1, 6, 2f),
-        new(1, 7, 3f),
-        new(1, 8, 4f),
-        new(2, 0, 1.2f),
-        new(2, 1, 1.6f),
-        new(2, 2, 0.3f),
-        new(2, 3, 2000f),
-        new(2, 4, 8f),
-        new(2, 5, 60f),
-        new(2, 6, 200f),
-        new(2, 7, (float)Oxygen.Managed.Core.CameraAspectMode.Auto),
-        new(3, 0, 0.2f),
-        new(3, 1, 0.3f),
-        new(3, 2, 0.4f),
-        new(3, 3, 1f),
-        new(3, 5, 0f),
-        new(3, 6, 0.02f),
-        new(3, 7, 0.03f),
-        new(3, 8, 1f),
-        new(3, 9, 1f),
-        new(3, 10, 1.5f),
-        new(3, 11, 80000f),
-        new(3, 12, 0.04f),
-        new(3, 15, 4f),
-        new(3, 16, 0f),
-        new(3, 17, 1000f),
-        new(3, 18, 50f),
-        new(3, 19, 150f),
-        new(3, 20, 400f),
-        new(3, 21, 1000f),
-        new(3, 22, 2f),
-        new(3, 23, 0.15f),
-        new(3, 24, 0.2f),
-        new(3, 25, 1f),
-        new(3, 26, 1f),
-        new(3, 27, 0.5f),
-        new(3, 28, 1.25f),
-        new(3, 29, 2f),
-        new(7, 0, 1f),
-        new(7, 1, 0f),
-        new(7, 2, 1f),
+        new(EngineComponentId.Transform, 0, 1f),
+        new(EngineComponentId.Transform, 1, 2f),
+        new(EngineComponentId.Transform, 2, 3f),
+        new(EngineComponentId.Transform, 3, 10f),
+        new(EngineComponentId.Transform, 4, 20f),
+        new(EngineComponentId.Transform, 5, 30f),
+        new(EngineComponentId.Transform, 6, 2f),
+        new(EngineComponentId.Transform, 7, 3f),
+        new(EngineComponentId.Transform, 8, 4f),
+        new(EngineComponentId.PerspectiveCamera, 0, 1.2f),
+        new(EngineComponentId.PerspectiveCamera, 1, 1.6f),
+        new(EngineComponentId.PerspectiveCamera, 2, 0.3f),
+        new(EngineComponentId.PerspectiveCamera, 3, 2000f),
+        new(EngineComponentId.PerspectiveCamera, 4, 8f),
+        new(EngineComponentId.PerspectiveCamera, 5, 60f),
+        new(EngineComponentId.PerspectiveCamera, 6, 200f),
+        new(EngineComponentId.PerspectiveCamera, 7, (float)Oxygen.Managed.Core.CameraAspectMode.Auto),
+        new(EngineComponentId.DirectionalLight, 0, 0.2f),
+        new(EngineComponentId.DirectionalLight, 1, 0.3f),
+        new(EngineComponentId.DirectionalLight, 2, 0.4f),
+        new(EngineComponentId.DirectionalLight, 3, 1f),
+        new(EngineComponentId.DirectionalLight, 5, 0f),
+        new(EngineComponentId.DirectionalLight, 6, 0.02f),
+        new(EngineComponentId.DirectionalLight, 7, 0.03f),
+        new(EngineComponentId.DirectionalLight, 8, 1f),
+        new(EngineComponentId.DirectionalLight, 9, 1f),
+        new(EngineComponentId.DirectionalLight, 10, 1.5f),
+        new(EngineComponentId.DirectionalLight, 11, 80000f),
+        new(EngineComponentId.DirectionalLight, 12, 0.04f),
+        new(EngineComponentId.DirectionalLight, 15, 4f),
+        new(EngineComponentId.DirectionalLight, 16, 0f),
+        new(EngineComponentId.DirectionalLight, 17, 1000f),
+        new(EngineComponentId.DirectionalLight, 18, 50f),
+        new(EngineComponentId.DirectionalLight, 19, 150f),
+        new(EngineComponentId.DirectionalLight, 20, 400f),
+        new(EngineComponentId.DirectionalLight, 21, 1000f),
+        new(EngineComponentId.DirectionalLight, 22, 2f),
+        new(EngineComponentId.DirectionalLight, 23, 0.15f),
+        new(EngineComponentId.DirectionalLight, 24, 0.2f),
+        new(EngineComponentId.DirectionalLight, 25, 1f),
+        new(EngineComponentId.DirectionalLight, 26, 1f),
+        new(EngineComponentId.DirectionalLight, 27, 0.5f),
+        new(EngineComponentId.DirectionalLight, 28, 1.25f),
+        new(EngineComponentId.DirectionalLight, 29, 2f),
+        new(EngineComponentId.Node, 0, 1f),
+        new(EngineComponentId.Node, 1, 0f),
+        new(EngineComponentId.Node, 2, 1f),
     ];
 
     private async Task CheckNativeNodeAsync(RuntimeCommandDispatcher commands)
@@ -110,12 +111,12 @@ public sealed partial class NativeLoopCleanupTests
         _ = observed.State.VertexCount.Should().BePositive();
         _ = observed.State.IndexCount.Should().Be(36);
         _ = observed.State.MaterialKeys.Should().ContainSingle();
-        Send(new RuntimeSetProperties(node, [new(2, 7, (float)Oxygen.Managed.Core.CameraAspectMode.Fixed)]));
+        Send(new RuntimeSetProperties(node, [new(EngineComponentId.PerspectiveCamera, 7, (float)Oxygen.Managed.Core.CameraAspectMode.Fixed)]));
         var fixedCamera = await commands.ObserveNodeAsync(Guid.NewGuid(), target, node, timeout.Token).ConfigureAwait(false);
         _ = fixedCamera.Outcome.Succeeded.Should().BeTrue();
-        _ = fixedCamera.State!.Properties.Single(value => value.ComponentId == 2 && value.FieldId == 7)
+        _ = fixedCamera.State!.Properties.Single(value => value.ComponentId == EngineComponentId.PerspectiveCamera && value.FieldId == 7)
             .Value.Should().Be((float)Oxygen.Managed.Core.CameraAspectMode.Fixed);
-        _ = fixedCamera.State.Properties.Single(value => value.ComponentId == 2 && value.FieldId == 1)
+        _ = fixedCamera.State.Properties.Single(value => value.ComponentId == EngineComponentId.PerspectiveCamera && value.FieldId == 1)
             .Value.Should().Be(1.6f);
         Send(new RuntimeRemoveSceneNodes([node]));
         var missing = await commands.ObserveNodeAsync(Guid.NewGuid(), target, node, this.TestContext.CancellationToken).ConfigureAwait(false);

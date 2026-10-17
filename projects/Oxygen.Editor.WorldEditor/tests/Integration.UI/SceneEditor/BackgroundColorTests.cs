@@ -20,16 +20,15 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Documents;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -53,14 +52,6 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
     public Task BackgroundPickerUndoRedoAndReopenReachTheObservedNativeScene() => EnqueueAsync(async () =>
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
-        var hosting = new HostingContext
-        {
-            Application = Application.Current,
-            Dispatcher = dispatcher,
-            DispatcherScheduler = new DispatcherQueueScheduler(dispatcher),
-            IsRunning = true,
-        };
         var results = Mock.Of<IOperationResultPublisher>();
         var engine = SharedNativeEngine.Engine;
         var engineResults = SharedNativeEngine.RouteResults(new ConcurrentQueue<OperationResult>());
@@ -68,8 +59,7 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         try
         {
             _ = (await SharedNativeEngine.EnsureRunningAsync(timeout.Token).ConfigureAwait(true)).Should().BeTrue();
-            using var sync = new SceneEngineSync(engine, operationResults: results, hostingContext: hosting);
-            await CheckNativeBackgroundWorkflowAsync(engine, sync, results, directory.FullName, timeout.Token).ConfigureAwait(true);
+            await CheckNativeBackgroundWorkflowAsync(engine, results, directory.FullName, timeout.Token).ConfigureAwait(true);
         }
         finally
         {
@@ -79,7 +69,7 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         }
     });
 
-    private static async Task CheckNativeBackgroundWorkflowAsync(EngineService engine, SceneEngineSync sync, IOperationResultPublisher results, string directory, CancellationToken cancellationToken)
+    private static async Task CheckNativeBackgroundWorkflowAsync(EngineService engine, IOperationResultPublisher results, string directory, CancellationToken cancellationToken)
     {
         var project = new Project(new ProjectInfo("Native UI", Category.Games, directory, "preview.png"))
         {
@@ -91,11 +81,13 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         await File.WriteAllBytesAsync(path, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData), cancellationToken).ConfigureAwait(true);
         var file = new DocumentFile(path, new Uri("asset:///Content/Scenes/Background.oscene.json"));
         using var scenes = new OpenDocuments([new SceneDocumentKind(project)], new NativeAtomicFileStore(new RealFileSystem()));
-        var document = await OpenAndShowAsync(scenes, file, sync, cancellationToken).ConfigureAwait(true);
+        var (previewEngine, probe) = EngineProbe.Of(engine);
+        var preview = ScenePreviews.Create(previewEngine, scenes, operationResults: results);
+        using var previewLifetime = (IDisposable)preview;
+        var document = await OpenAndShowAsync(scenes, file, preview, probe, cancellationToken).ConfigureAwait(true);
         await EditSaveBackgroundAsync(engine, document, document.Target, cancellationToken).ConfigureAwait(true);
-        sync.CloseDocument(document.Document.Id);
         scenes.Close(document.Document);
-        var reopened = await OpenAndShowAsync(scenes, file, sync, cancellationToken).ConfigureAwait(true);
+        var reopened = await OpenAndShowAsync(scenes, file, preview, probe, cancellationToken).ConfigureAwait(true);
         var environment = reopened.Scene.Environment;
         AssertColorClose(environment.Background.ColorRgb, new Vector3(0.12743768f, 0.05126946f, 0.2158605f));
         _ = environment.Background.Enabled.Should().BeTrue();
@@ -103,35 +95,34 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         var observed = await ReadNativeBackgroundAsync(engine, reopened.Target, cancellationToken).ConfigureAwait(true);
         _ = observed.Background.ColorRgb.Should().Be(environment.Background.ColorRgb);
         _ = observed.AtmosphereEnabled.Should().BeFalse();
-        sync.CloseDocument(reopened.Document.Id);
+        scenes.Close(reopened.Document);
     }
 
-    // Opens the scene file as a document and shows its scene in the engine.
-    private static async Task<OpenScene> OpenAndShowAsync(OpenDocuments scenes, DocumentFile file, SceneEngineSync sync, CancellationToken cancellationToken)
+    // Opens the scene file as a document; the preview shows it, and the probe names the activation the engine accepted.
+    private static async Task<OpenScene> OpenAndShowAsync(OpenDocuments scenes, DocumentFile file, IScenePreview preview, EngineProbe probe, CancellationToken cancellationToken)
     {
-        var opened = await scenes.OpenAsync(file, cancellationToken).ConfigureAwait(true);
-        _ = opened.Document.Should().NotBeNull(opened.Problem);
-        var document = opened.Document!;
-        var scene = ((SceneContent)document.Content).Scene;
-        var ready = new TaskCompletionSource<RuntimeSceneTarget>(TaskCreationOptions.RunContinuationsAsynchronously);
-        void OnSynchronized(object? sender, SceneSynchronizationCompletedEventArgs args)
-        {
-            if (args.DocumentId == document.Id && sync.GetSynchronizedTarget(args.DocumentId) is { } target)
-            {
-                _ = ready.TrySetResult(target);
-            }
-        }
-
-        sync.SceneSynchronized += OnSynchronized;
+        using var changed = new SemaphoreSlim(0);
+        void OnReadyChanged(object? sender, ScenePreviewEventArgs args) => changed.Release();
+        void OnActivated(object? sender, EventArgs args) => changed.Release();
+        preview.ReadyChanged += OnReadyChanged;
+        probe.Activated += OnActivated;
         try
         {
-            _ = sync.RegisterDocument(((SceneContent)document.Content).Authoring).Should().BeTrue();
-            _ = (await sync.SyncSceneWhenReadyAsync(scene, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
-            return new(document, scene, await ready.Task.WaitAsync(cancellationToken).ConfigureAwait(true));
+            var opened = await scenes.OpenAsync(file, cancellationToken).ConfigureAwait(true);
+            _ = opened.Document.Should().NotBeNull(opened.Problem);
+            var document = opened.Document!;
+            var scene = ((SceneContent)document.Content).Scene;
+            while (!(preview.IsReady(document.Id) && probe.LastActivated is { } shown && shown.SceneId == scene.Id))
+            {
+                await changed.WaitAsync(cancellationToken).ConfigureAwait(true);
+            }
+
+            return new(document, scene, probe.LastActivated!.Value);
         }
         finally
         {
-            sync.SceneSynchronized -= OnSynchronized;
+            preview.ReadyChanged -= OnReadyChanged;
+            probe.Activated -= OnActivated;
         }
     }
 

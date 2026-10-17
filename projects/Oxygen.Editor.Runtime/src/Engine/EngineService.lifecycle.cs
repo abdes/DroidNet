@@ -119,6 +119,7 @@ public sealed partial class EngineService
     public async ValueTask DisposeAsync()
     {
         this.disposalRequested = true;
+        this.UnwatchEngineSettings();
         this.RequestShutdown();
         await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
@@ -149,6 +150,7 @@ public sealed partial class EngineService
             this.session = await this.sessionFactory(cancellationToken).ConfigureAwait(true);
             this.session.Initialize(this.engineSettings, this.pathFinder?.GetConfigFilePath(EditorCVarsArchiveFileName), loggerFactory?.CreateLogger("Oxygen.Engine"));
             this.ChangeState(EngineServiceState.Ready);
+            this.WatchEngineSettings();
             this.LogContextReady();
             return true;
         }
@@ -224,7 +226,7 @@ public sealed partial class EngineService
         }
 
         this.activeLeases.Clear();
-        this.documentSurfaceCounts.Clear();
+        this.ownerSurfaceCounts.Clear();
         this.orphanedViewportIds.Clear();
         this.reservedSurfaceCount = 0;
         this.session = null;

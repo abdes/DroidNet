@@ -33,7 +33,7 @@ internal abstract class EngineSession
     /// <param name="settings">The managed startup settings.</param>
     /// <param name="editorCVarsArchivePath">The editor configuration archive path.</param>
     /// <param name="logger">The optional native logger.</param>
-    public abstract void Initialize(IEngineSettings settings, string? editorCVarsArchivePath, ILogger? logger);
+    public abstract void Initialize(IEngineStartupSettings settings, string? editorCVarsArchivePath, ILogger? logger);
 
     /// <summary>Starts the loop and returns its lifetime task.</summary>
     /// <returns>The operation completion task.</returns>

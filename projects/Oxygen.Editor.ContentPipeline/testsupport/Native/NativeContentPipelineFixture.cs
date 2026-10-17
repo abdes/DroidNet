@@ -26,7 +26,10 @@ internal sealed partial class NativeContentPipelineFixture : IDisposable
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
         var storage = new NativeStorageProvider(new RealFileSystem());
         var files = new NativeAtomicFileStore(new RealFileSystem());
-        this.Publication = new Oxygen.Editor.ContentPipeline.Publication.CookPublicationService(coordinator, context, files,
+        this.Publication = new Oxygen.Editor.ContentPipeline.Publication.CookPublicationService(
+            coordinator,
+            context,
+            files,
             new ProjectManagerService(storage, atomicFiles: files));
         this.Pipeline = new ContentPipelineService(
             context,

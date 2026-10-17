@@ -250,9 +250,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         using var metadata = SceneTabs.Open(scene);
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
-        _ = fixture.Sync.Setup(service => service.GetDocumentScene(metadata.DocumentId)).Returns(scene);
         fixture.Area.Activate(metadata.Document);
-        _ = fixture.Messenger.Send(new SceneAuthoringLoadedMessage(scene, metadata.Document));
         _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([node]));
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.IsAllComponentsSelected.Should().BeTrue();

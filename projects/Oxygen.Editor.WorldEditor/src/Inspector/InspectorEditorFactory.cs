@@ -12,7 +12,6 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Inspector.Scripting;
-using Oxygen.Editor.World.Services;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -23,7 +22,6 @@ internal static class InspectorEditorFactory
     /// <param name="hosting">The existing WinUI hosting context.</param>
     /// <param name="assets">The shared asset catalog.</param>
     /// <param name="builtins">The native built-in catalog.</param>
-    /// <param name="demand">The saved-asset demand owner.</param>
     /// <param name="slots">The geometry slot inventory.</param>
     /// <param name="projects">The active project lifetime.</param>
     /// <param name="logger">The scoped logging factory.</param>
@@ -34,7 +32,6 @@ internal static class InspectorEditorFactory
         HostingContext hosting,
         IAssetFeed assets,
         IBuiltinCatalogDiscovery builtins,
-        ISceneContentDemandService demand,
         IGeometryMaterialSlotProvider slots,
         IProjectContextService projects,
         ILoggerFactory? logger,
@@ -43,7 +40,7 @@ internal static class InspectorEditorFactory
         => new()
         {
             [typeof(TransformComponent)] = _ => new TransformViewModel(logger, authoring),
-            [typeof(GeometryComponent)] = _ => new GeometryViewModel(hosting, assets, builtins, demand, slots, projects, authoring),
+            [typeof(GeometryComponent)] = _ => new GeometryViewModel(hosting, assets, builtins, slots, projects, authoring),
             [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(authoring),
             [typeof(OrthographicCamera)] = _ => new OrthographicCameraViewModel(authoring),
             [typeof(DirectionalLightComponent)] = _ => new DirectionalLightViewModel(authoring),

@@ -272,34 +272,34 @@ public sealed class DirectionalLightDescriptors
     private static DirectionalLightDescriptorGroup BuildLightDescriptors()
         => new(
             BuildColorDescriptor(),
-            FloatDescriptor("/intensity_lux", "Intensity", static light => light.IntensityLux, static (light, value) => light.IntensityLux = value, "directional_light.intensity_lux", minimum: 0f),
-            EnumDescriptor("/atmosphere_light_slot", "Atmosphere source", static light => light.AtmosphereSlot, static (light, value) => light.AtmosphereSlot = value, "directional_light.atmosphere_light_slot"),
-            BoolDescriptor("/use_per_pixel_atmosphere_transmittance", "Per-pixel transmittance", static light => light.UsePerPixelAtmosphereTransmittance, static (light, value) => light.UsePerPixelAtmosphereTransmittance = value, "directional_light.use_per_pixel_atmosphere_transmittance"),
-            BoolDescriptor("/casts_shadows", "Shadows", static light => light.CastsShadows, static (light, value) => light.CastsShadows = value, "directional_light.casts_shadows"),
-            BoolDescriptor("/affects_world", "Affects World", static light => light.AffectsWorld, static (light, value) => light.AffectsWorld = value, "directional_light.affects_world"),
-            FloatDescriptor("/angular_size_radians", "Angular Size", static light => light.AngularSizeRadians, static (light, value) => light.AngularSizeRadians = value, "directional_light.angular_size_radians", minimum: 0f, maximum: MathF.PI),
-            FloatDescriptor("/exposure_compensation", "Exposure Compensation", static light => light.ExposureCompensation, static (light, value) => light.ExposureCompensation = value, "directional_light.exposure_compensation"),
+            FloatDescriptor("/intensity_lux", "Intensity", static light => light.IntensityLux, static (light, value) => light.IntensityLux = value, minimum: 0f),
+            EnumDescriptor("/atmosphere_light_slot", "Atmosphere source", static light => light.AtmosphereSlot, static (light, value) => light.AtmosphereSlot = value),
+            BoolDescriptor("/use_per_pixel_atmosphere_transmittance", "Per-pixel transmittance", static light => light.UsePerPixelAtmosphereTransmittance, static (light, value) => light.UsePerPixelAtmosphereTransmittance = value),
+            BoolDescriptor("/casts_shadows", "Shadows", static light => light.CastsShadows, static (light, value) => light.CastsShadows = value),
+            BoolDescriptor("/affects_world", "Affects World", static light => light.AffectsWorld, static (light, value) => light.AffectsWorld = value),
+            FloatDescriptor("/angular_size_radians", "Angular Size", static light => light.AngularSizeRadians, static (light, value) => light.AngularSizeRadians = value, minimum: 0f, maximum: MathF.PI),
+            FloatDescriptor("/exposure_compensation", "Exposure Compensation", static light => light.ExposureCompensation, static (light, value) => light.ExposureCompensation = value),
             BuildDiskScaleDescriptor());
 
     private static DirectionalShadowDescriptorGroup BuildShadowDescriptors()
         => new(
-            FloatDescriptor("/shadow/bias", "Shadow Bias", static light => light.ShadowBias, static (light, value) => light.ShadowBias = value, "directional_light.shadow.bias", minimum: 0f),
-            FloatDescriptor("/shadow/normal_bias", "Normal Bias", static light => light.ShadowNormalBias, static (light, value) => light.ShadowNormalBias = value, "directional_light.shadow.normal_bias", minimum: 0f),
-            BoolDescriptor("/shadow/contact_shadows", "Contact Shadows", static light => light.ContactShadows, static (light, value) => light.ContactShadows = value, "directional_light.shadow.contact_shadows"),
-            EnumDescriptor("/shadow/resolution_hint", "Resolution", static light => light.ShadowResolutionHint, static (light, value) => light.ShadowResolutionHint = value, "directional_light.shadow.resolution_hint"));
+            FloatDescriptor("/shadow/bias", "Shadow Bias", static light => light.ShadowBias, static (light, value) => light.ShadowBias = value, minimum: 0f),
+            FloatDescriptor("/shadow/normal_bias", "Normal Bias", static light => light.ShadowNormalBias, static (light, value) => light.ShadowNormalBias = value, minimum: 0f),
+            BoolDescriptor("/shadow/contact_shadows", "Contact Shadows", static light => light.ContactShadows, static (light, value) => light.ContactShadows = value),
+            EnumDescriptor("/shadow/resolution_hint", "Resolution", static light => light.ShadowResolutionHint, static (light, value) => light.ShadowResolutionHint = value));
 
     private static DirectionalCsmDescriptorGroup BuildCsmDescriptors()
         => new(
-            IntDescriptor("/csm/cascade_count", "Cascade Count", static light => light.CascadeCount, static (light, value) => light.CascadeCount = value, "directional_light.cascade_count"),
-            EnumDescriptor("/csm/split_mode", "Split Mode", static light => light.SplitMode, static (light, value) => light.SplitMode = value, "directional_light.split_mode"),
-            PositiveFloatDescriptor("/csm/max_shadow_distance", "Max Distance", static light => light.MaxShadowDistance, static (light, value) => light.MaxShadowDistance = value, "directional_light.max_shadow_distance"),
-            CascadeDistanceDescriptor(0, "/csm/cascade_distances/0", "Cascade 1", "directional_light.cascade_distance_0"),
-            CascadeDistanceDescriptor(1, "/csm/cascade_distances/1", "Cascade 2", "directional_light.cascade_distance_1"),
-            CascadeDistanceDescriptor(2, "/csm/cascade_distances/2", "Cascade 3", "directional_light.cascade_distance_2"),
-            CascadeDistanceDescriptor(3, "/csm/cascade_distances/3", "Cascade 4", "directional_light.cascade_distance_3"),
+            IntDescriptor("/csm/cascade_count", "Cascade Count", static light => light.CascadeCount, static (light, value) => light.CascadeCount = value),
+            EnumDescriptor("/csm/split_mode", "Split Mode", static light => light.SplitMode, static (light, value) => light.SplitMode = value),
+            PositiveFloatDescriptor("/csm/max_shadow_distance", "Max Distance", static light => light.MaxShadowDistance, static (light, value) => light.MaxShadowDistance = value),
+            CascadeDistanceDescriptor(0, "/csm/cascade_distances/0", "Cascade 1"),
+            CascadeDistanceDescriptor(1, "/csm/cascade_distances/1", "Cascade 2"),
+            CascadeDistanceDescriptor(2, "/csm/cascade_distances/2", "Cascade 3"),
+            CascadeDistanceDescriptor(3, "/csm/cascade_distances/3", "Cascade 4"),
             BuildDistributionExponentDescriptor(),
-            FractionDescriptor("/csm/transition_fraction", "Transition", static light => light.TransitionFraction, static (light, value) => light.TransitionFraction = value, "directional_light.transition_fraction"),
-            FractionDescriptor("/csm/distance_fadeout_fraction", "Fadeout", static light => light.DistanceFadeoutFraction, static (light, value) => light.DistanceFadeoutFraction = value, "directional_light.distance_fadeout_fraction"));
+            FractionDescriptor("/csm/transition_fraction", "Transition", static light => light.TransitionFraction, static (light, value) => light.TransitionFraction = value),
+            FractionDescriptor("/csm/distance_fadeout_fraction", "Fadeout", static light => light.DistanceFadeoutFraction, static (light, value) => light.DistanceFadeoutFraction = value));
 
     private static PropertyDescriptor<Vector3> BuildColorDescriptor()
         => new(
@@ -312,10 +312,8 @@ public sealed class DirectionalLightDescriptors
                     ? ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Light color must be zero or greater.")
                     : ValidationResult.Ok,
             annotation: Annotation(
-                "directional_light.color",
-                new EditorAnnotation { Group = "Light", Label = "Color", Renderer = "color-rgb" }),
-            engineCommandKey: "directional_light.color")
-        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, "directional_light.color") };
+                "/color",
+                new EditorAnnotation { Group = "Light", Label = "Color", Renderer = "color-rgb" }));
 
     private static PropertyDescriptor<Vector3> BuildDiskScaleDescriptor()
         => new(
@@ -324,28 +322,23 @@ public sealed class DirectionalLightDescriptors
             writer: static (target, value) => ((DirectionalLightComponent)target).AtmosphereDiskLuminanceScaleRgb = value,
             validator: static value => IsFinite(value) && value.X >= 0 && value.Y >= 0 && value.Z >= 0
                 ? ValidationResult.Ok : ValidationResult.Fail("LIGHT_DISK_SCALE_INVALID", "Disk scale must be finite and nonnegative."),
-            annotation: Annotation("directional_light.atmosphere_disk_luminance_scale_rgb", new EditorAnnotation { Group = "Atmosphere", Label = "Disk luminance scale", Renderer = "color-rgb" }),
-            engineCommandKey: "directional_light.atmosphere_disk_luminance_scale_rgb")
-        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, "directional_light.atmosphere_disk_luminance_scale_rgb") };
+            annotation: Annotation("/atmosphere_disk_luminance_scale_rgb", new EditorAnnotation { Group = "Atmosphere", Label = "Disk luminance scale", Renderer = "color-rgb" }));
 
     private static PropertyDescriptor<float> CascadeDistanceDescriptor(
         int index,
         string pointer,
-        string label,
-        string engineCommandKey)
+        string label)
         => PositiveFloatDescriptor(
             pointer,
             label,
             light => ReadCascadeDistance(light, index),
-            (light, value) => WriteCascadeDistance(light, index, value),
-            engineCommandKey);
+            (light, value) => WriteCascadeDistance(light, index, value));
 
     private static PropertyDescriptor<float> FloatDescriptor(
         string pointer,
         string label,
         Func<DirectionalLightComponent, float> read,
         Action<DirectionalLightComponent, float> write,
-        string engineCommandKey,
         float minimum = float.NegativeInfinity,
         float maximum = float.PositiveInfinity)
         => new(
@@ -355,9 +348,7 @@ public sealed class DirectionalLightDescriptors
             validator: value => float.IsFinite(value) && value >= minimum && value <= maximum
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, Range(label, minimum, maximum)),
-            annotation: Annotation(engineCommandKey, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: engineCommandKey)
-        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
+            annotation: Annotation(pointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
     private static string Range(string label, float minimum, float maximum)
         => float.IsInfinity(minimum) && float.IsInfinity(maximum) ? $"{label} must be a finite number."
@@ -372,16 +363,13 @@ public sealed class DirectionalLightDescriptors
             validator: static value => float.IsFinite(value) && value >= 1f
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Distribution must be 1 or greater."),
-            annotation: Annotation("directional_light.distribution_exponent", new EditorAnnotation { Group = "Light", Label = "Distribution", Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: "directional_light.distribution_exponent")
-        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, "directional_light.distribution_exponent") };
+            annotation: Annotation("/csm/distribution_exponent", new EditorAnnotation { Group = "Light", Label = "Distribution", Renderer = "numberbox", Step = 0.01 }));
 
     private static PropertyDescriptor<float> PositiveFloatDescriptor(
         string pointer,
         string label,
         Func<DirectionalLightComponent, float> read,
-        Action<DirectionalLightComponent, float> write,
-        string engineCommandKey)
+        Action<DirectionalLightComponent, float> write)
         => new(
             id: new PropertyId<float>(SceneProperties.DirectionalLightKind, pointer),
             reader: target => read((DirectionalLightComponent)target),
@@ -389,16 +377,13 @@ public sealed class DirectionalLightDescriptors
             validator: static value => float.IsFinite(value) && value > 0f
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light values must be finite positive numbers."),
-            annotation: Annotation(engineCommandKey, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: engineCommandKey)
-        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
+            annotation: Annotation(pointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
     private static PropertyDescriptor<float> FractionDescriptor(
         string pointer,
         string label,
         Func<DirectionalLightComponent, float> read,
-        Action<DirectionalLightComponent, float> write,
-        string engineCommandKey)
+        Action<DirectionalLightComponent, float> write)
         => new(
             id: new PropertyId<float>(SceneProperties.DirectionalLightKind, pointer),
             reader: target => read((DirectionalLightComponent)target),
@@ -406,16 +391,13 @@ public sealed class DirectionalLightDescriptors
             validator: static value => float.IsFinite(value) && value is >= 0f and <= 1f
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light fractions must be finite values in [0, 1]."),
-            annotation: Annotation(engineCommandKey, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: engineCommandKey)
-        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
+            annotation: Annotation(pointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
     private static PropertyDescriptor<int> IntDescriptor(
         string pointer,
         string label,
         Func<DirectionalLightComponent, int> read,
-        Action<DirectionalLightComponent, int> write,
-        string engineCommandKey)
+        Action<DirectionalLightComponent, int> write)
         => new(
             id: new PropertyId<int>(SceneProperties.DirectionalLightKind, pointer),
             reader: target => read((DirectionalLightComponent)target),
@@ -423,16 +405,13 @@ public sealed class DirectionalLightDescriptors
             validator: static value => value is >= 1 and <= 4
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Cascade count must be between 1 and 4."),
-            annotation: Annotation(engineCommandKey, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 1 }),
-            engineCommandKey: engineCommandKey)
-        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
+            annotation: Annotation(pointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 1 }));
 
     private static PropertyDescriptor<T> EnumDescriptor<T>(
         string pointer,
         string label,
         Func<DirectionalLightComponent, T> read,
-        Action<DirectionalLightComponent, T> write,
-        string engineCommandKey)
+        Action<DirectionalLightComponent, T> write)
         where T : struct, Enum
         => new(
             id: new PropertyId<T>(SceneProperties.DirectionalLightKind, pointer),
@@ -441,56 +420,51 @@ public sealed class DirectionalLightDescriptors
             validator: static value => Enum.IsDefined(value)
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light enum value is not valid."),
-            annotation: Annotation(engineCommandKey, new EditorAnnotation { Group = "Light", Label = label, Renderer = "combo" }),
-            engineCommandKey: engineCommandKey)
-        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
+            annotation: Annotation(pointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "combo" }));
 
     private static PropertyDescriptor<bool> BoolDescriptor(
         string pointer,
         string label,
         Func<DirectionalLightComponent, bool> read,
-        Action<DirectionalLightComponent, bool> write,
-        string engineCommandKey)
+        Action<DirectionalLightComponent, bool> write)
         => new(
             id: new PropertyId<bool>(SceneProperties.DirectionalLightKind, pointer),
             reader: target => read((DirectionalLightComponent)target),
             writer: (target, value) => write((DirectionalLightComponent)target, value),
             validator: static _ => ValidationResult.Ok,
-            annotation: Annotation(engineCommandKey, new EditorAnnotation { Group = "Light", Label = label, Renderer = "toggle" }),
-            engineCommandKey: engineCommandKey)
-        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
+            annotation: Annotation(pointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "toggle" }));
 
-    private static EditorAnnotation Annotation(string engineCommandKey, EditorAnnotation fallback)
-        => SceneEditorSchemaAnnotations.Get(ToSceneSchemaPointer(engineCommandKey), fallback);
+    private static EditorAnnotation Annotation(string pointer, EditorAnnotation fallback)
+        => SceneEditorSchemaAnnotations.Get(ToSceneSchemaPointer(pointer), fallback);
 
-    private static string ToSceneSchemaPointer(string engineCommandKey)
-        => engineCommandKey switch
+    private static string ToSceneSchemaPointer(string pointer)
+        => pointer switch
         {
-            "directional_light.color" => "#/definitions/light_common/color_rgb",
-            "directional_light.intensity_lux" => "#/definitions/directional_light/intensity_lux",
-            "directional_light.atmosphere_light_slot" => "#/definitions/directional_light/atmosphere_light_slot",
-            "directional_light.use_per_pixel_atmosphere_transmittance" => "#/definitions/directional_light/use_per_pixel_atmosphere_transmittance",
-            "directional_light.casts_shadows" => "#/definitions/light_common/casts_shadows",
-            "directional_light.affects_world" => "#/definitions/light_common/affects_world",
-            "directional_light.angular_size_radians" => "#/definitions/directional_light/angular_size_radians",
-            "directional_light.exposure_compensation" => "#/definitions/light_common/exposure_compensation_ev",
-            "directional_light.atmosphere_disk_luminance_scale_rgb" => "#/definitions/directional_light/atmosphere_disk_luminance_scale_rgb",
+            "/color" => "#/definitions/light_common/color_rgb",
+            "/intensity_lux" => "#/definitions/directional_light/intensity_lux",
+            "/atmosphere_light_slot" => "#/definitions/directional_light/atmosphere_light_slot",
+            "/use_per_pixel_atmosphere_transmittance" => "#/definitions/directional_light/use_per_pixel_atmosphere_transmittance",
+            "/casts_shadows" => "#/definitions/light_common/casts_shadows",
+            "/affects_world" => "#/definitions/light_common/affects_world",
+            "/angular_size_radians" => "#/definitions/directional_light/angular_size_radians",
+            "/exposure_compensation" => "#/definitions/light_common/exposure_compensation_ev",
+            "/atmosphere_disk_luminance_scale_rgb" => "#/definitions/directional_light/atmosphere_disk_luminance_scale_rgb",
 
-            "directional_light.shadow.bias" => "#/definitions/light_shadow/bias",
-            "directional_light.shadow.normal_bias" => "#/definitions/light_shadow/normal_bias",
-            "directional_light.shadow.contact_shadows" => "#/definitions/light_shadow/contact_shadows",
-            "directional_light.shadow.resolution_hint" => "#/definitions/light_shadow/resolution_hint",
-            "directional_light.cascade_count" => "#/definitions/directional_light/cascade_count",
-            "directional_light.split_mode" => "#/definitions/directional_light/split_mode",
-            "directional_light.max_shadow_distance" => "#/definitions/directional_light/max_shadow_distance",
-            "directional_light.cascade_distance_0" => "#/definitions/directional_light/cascade_distances",
-            "directional_light.cascade_distance_1" => "#/definitions/directional_light/cascade_distances",
-            "directional_light.cascade_distance_2" => "#/definitions/directional_light/cascade_distances",
-            "directional_light.cascade_distance_3" => "#/definitions/directional_light/cascade_distances",
-            "directional_light.distribution_exponent" => "#/definitions/directional_light/distribution_exponent",
-            "directional_light.transition_fraction" => "#/definitions/directional_light/transition_fraction",
-            "directional_light.distance_fadeout_fraction" => "#/definitions/directional_light/distance_fadeout_fraction",
-            _ => throw new ArgumentOutOfRangeException(nameof(engineCommandKey), engineCommandKey, "Unknown directional light command key."),
+            "/shadow/bias" => "#/definitions/light_shadow/bias",
+            "/shadow/normal_bias" => "#/definitions/light_shadow/normal_bias",
+            "/shadow/contact_shadows" => "#/definitions/light_shadow/contact_shadows",
+            "/shadow/resolution_hint" => "#/definitions/light_shadow/resolution_hint",
+            "/csm/cascade_count" => "#/definitions/directional_light/cascade_count",
+            "/csm/split_mode" => "#/definitions/directional_light/split_mode",
+            "/csm/max_shadow_distance" => "#/definitions/directional_light/max_shadow_distance",
+            "/csm/cascade_distances/0" => "#/definitions/directional_light/cascade_distances",
+            "/csm/cascade_distances/1" => "#/definitions/directional_light/cascade_distances",
+            "/csm/cascade_distances/2" => "#/definitions/directional_light/cascade_distances",
+            "/csm/cascade_distances/3" => "#/definitions/directional_light/cascade_distances",
+            "/csm/distribution_exponent" => "#/definitions/directional_light/distribution_exponent",
+            "/csm/transition_fraction" => "#/definitions/directional_light/transition_fraction",
+            "/csm/distance_fadeout_fraction" => "#/definitions/directional_light/distance_fadeout_fraction",
+            _ => throw new ArgumentOutOfRangeException(nameof(pointer), pointer, "Unknown directional light property."),
         };
 
     private static float ReadCascadeDistance(DirectionalLightComponent light, int index)

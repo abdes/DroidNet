@@ -13,9 +13,9 @@ using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.LivePreview.Assets;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.CatalogWorkload;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
@@ -51,7 +51,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
         await using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
-        using var previewRegistration = fixture.RegisterWorkspacePublication(services, catalog);
+        await using var previewRegistration = await fixture.StartWorkspacePreviewAsync(services, catalog).ConfigureAwait(true);
         if (imported is null)
         {
             imported = await ImportTypedModelAsync(fixture, services, format, timeout.Token).ConfigureAwait(true);
@@ -72,7 +72,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         AssertImportedAssetInformation(geometryRow!, libraryOnly);
         AssertImportedAssetInformation(materialRow!, libraryOnly);
         using var demand = fixture.CreateImportedAssetDemand(services, provider);
-        using var host = fixture.CreateInspectorHost([fixture.Source.RootNodes[0]], provider, services.Builtins, demand, services.Pipeline);
+        using var host = fixture.CreateInspectorHost([fixture.Source.RootNodes[0]], provider, services.Builtins, services.Pipeline);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
         while (model.IsMaterialSlotLoading)

@@ -29,7 +29,7 @@ internal sealed class BuiltinCatalogTests : DroidNet.Tests.VisualUserInterfaceTe
         var catalog = new Mock<Oxygen.Editor.Assets.IAssetFeed>();
         _ = catalog.SetupGet(value => value.Items).Returns(Observable.Empty<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>>());
         _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, discovery, Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
+        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, discovery, Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
         {
             IsExpanded = true,
         };

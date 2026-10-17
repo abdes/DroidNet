@@ -10,6 +10,7 @@ using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;

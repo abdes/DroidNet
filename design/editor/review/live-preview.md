@@ -375,10 +375,11 @@ public interface IRuntimeProblemSource
 - `IPlayWorkspace` goes. The play bar saves open documents through a save
   delegate from `DocumentHostViewModel` before calling `PlayAsync`; `PlayAsync`
   refuses with `PlayDiagnosticCodes.SaveFailed` if a document is still dirty.
-  The failure names its stage (`PlayStage`: save, cook, launch, scene) instead
-  of a panel; the play bar maps stage and activity to the panel it reveals
-  (`RevealStatus` and `StatusTarget` move there) and calls
-  `BringPlayerToFront()` when the target is the player window.
+  The failure names its stage (`PlayStage`: save, cook, launch, scene, or run
+  for a player that fails while running) instead of a panel; the play bar maps
+  stage and activity to the panel it reveals (`RevealStatus` and `StatusTarget`
+  move there) and calls `BringPlayerToFront()` when the target is the player
+  window.
 - `LogReceived` carries player log lines, setting-refusal warnings, unexpected
   exit output, and the session-start clear (`Clear: true`), replacing the direct
   `OutputLogBuffer` dependency.
@@ -422,9 +423,9 @@ mapping across all eight `EngineComponentId` values. It is built from
 ## 7. Tests
 
 `Oxygen.Editor.LivePreview.Tests` (unit, no WinUI host) and
-`Oxygen.Editor.LivePreview.Integration.Tests` (shared real engine). Shared
-fixtures live in `tests/TestSupport`. Tests assert codes and ids, never message
-text.
+`Oxygen.Editor.LivePreview.Integration.UI.Tests` (shared real engine, which
+needs the WinUI test host's dispatcher). Shared fixtures live in
+`tests/TestSupport`. Tests assert codes and ids, never message text.
 
 **Unit.** A hand-written fake of `IEngineService` and `IRuntimeWorldCommands` in
 `tests/TestSupport` records every command and lets a test complete, reject or
@@ -445,14 +446,19 @@ over a temporary project, as Scenes' tests do.
 
 Moved with their code and rewritten on the fake where they used Moq: the seven
 `SceneEngineSyncTests` files, `PendingPropertySyncQueueTests`,
-`AssetRuntimeStatusSourceTests`, `MountTransactionTests`,
-`PlaySessionSettingsTests`, `PlayerSettingsSyncTests` and the content demand
-tests. The callers' tests mock `IScenePreview`.
+`AssetRuntimeStatusSourceTests`, `PlaySessionSettingsTests`,
+`PlayerSettingsSyncTests` and the content demand tests. The callers' tests mock
+`IScenePreview`. `MountTransactionTests` stay in the World Editor's Unit.UI
+suite on the public `PreviewSession`: they compose ContentPipeline's
+publication, whose internals LivePreview's tests do not see.
 
 **Integration.** One shared engine for the suite: a scene opens and becomes
 ready; an edit reaches the engine (observed node state); a publication swap
-keeps the scene ready. The cross-module workflows of the World Editor's
-Integration.UI suite stay there, on the new API.
+keeps the scene ready; a cook stopped while its publication preview is being
+captured, by closing the project or cancelling the cook, keeps the prior
+publication selected and mounted until the next cook. The cross-module workflows
+of the World Editor's Integration.UI suite stay there, on the new API; they
+observe the engine through a probe of the public `IEngineService`.
 
 ## 8. Sequencing
 

@@ -2,44 +2,34 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Docking;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Diagnostics;
-using Oxygen.Managed.Core.Diagnostics;
+using Oxygen.Editor.LivePreview.Session;
 
 namespace Oxygen.Editor.World.Workspace;
 
-/// <summary>Keeps content failures visible independently of which output panel is selected.</summary>
+/// <summary>Shows why the project preview is unavailable, independently of which output panel is selected.</summary>
 public partial class WorkspaceViewModel
 {
-    private bool hasContentFailure;
-    private string contentFailureTitle = string.Empty;
-    private string contentFailureMessage = string.Empty;
-
-    /// <summary>Gets or sets a value indicating whether the workspace has an unresolved content failure.</summary>
+    /// <summary>Gets a value indicating whether the engine or the project's content is unavailable.</summary>
     public bool HasContentFailure
-    {
-        get => this.hasContentFailure;
-        set => this.SetProperty(ref this.hasContentFailure, value);
-    }
+        => this.previewSession?.State is PreviewSessionState.EngineUnavailable or PreviewSessionState.ContentUnavailable;
 
-    /// <summary>Gets or sets the failed workspace capability.</summary>
-    public string ContentFailureTitle
-    {
-        get => this.contentFailureTitle;
-        set => this.SetProperty(ref this.contentFailureTitle, value);
-    }
+    /// <summary>Gets the failed capability.</summary>
+    public string ContentFailureTitle => this.previewSession?.Failure?.Title ?? string.Empty;
 
-    /// <summary>Gets or sets the failure summary displayed beside recovery actions.</summary>
-    public string ContentFailureMessage
-    {
-        get => this.contentFailureMessage;
-        set => this.SetProperty(ref this.contentFailureMessage, value);
-    }
+    /// <summary>Gets the failure summary displayed beside the recovery actions.</summary>
+    public string ContentFailureMessage => this.previewSession?.Failure?.Message ?? string.Empty;
 
     [RelayCommand]
-    private Task RetryContentAsync() => this.RefreshCookedRootsAsync();
+    private async Task RetryContentAsync()
+    {
+        if (this.previewSession is { } session)
+        {
+            _ = await session.RetryAsync().ConfigureAwait(true);
+        }
+    }
 
     [RelayCommand]
     private void ShowContentFailureDetails()
@@ -50,29 +40,26 @@ public partial class WorkspaceViewModel
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A secondary suspension failure must remain visible without escaping the refresh recovery command.")]
-    private async Task SuspendUnavailablePreviewAsync(ProjectContext project)
+    private void ObservePreviewSession()
     {
-        try
+        if (this.previewSession is { } session)
         {
-            await this.engineService.SuspendCookedContentAsync().ConfigureAwait(true);
+            session.PropertyChanged += this.OnPreviewSessionChanged;
         }
-        catch (Exception failure)
+    }
+
+    private void UnobservePreviewSession()
+    {
+        if (this.previewSession is { } session)
         {
-            this.LogCookedContentSuspensionFailed(failure, project.ProjectRoot);
-            this.ContentFailureMessage += " Preview suspension also failed; see Details.";
-            RuntimeOperationResults.PublishFailure(
-                this.operationResults,
-                this.statusReducer,
-                RuntimeOperationKinds.CookedRootRefresh,
-                FailureDomain.AssetMount,
-                AssetMountDiagnosticCodes.RefreshFailed,
-                "Preview suspension failed",
-                "The preview could not be suspended after content refresh failed.",
-                this.CreateProjectScope(),
-                project.ProjectRoot,
-                failure,
-                failure.ToString());
+            session.PropertyChanged -= this.OnPreviewSessionChanged;
         }
+    }
+
+    private void OnPreviewSessionChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        this.OnPropertyChanged(nameof(this.HasContentFailure));
+        this.OnPropertyChanged(nameof(this.ContentFailureTitle));
+        this.OnPropertyChanged(nameof(this.ContentFailureMessage));
     }
 }

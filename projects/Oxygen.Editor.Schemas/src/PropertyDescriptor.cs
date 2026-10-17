@@ -16,22 +16,18 @@ public abstract class PropertyDescriptor
     /// <param name="id">The untyped identity.</param>
     /// <param name="valueType">The value type.</param>
     /// <param name="annotation">The parsed editor annotations.</param>
-    /// <param name="engineCommandKey">The engine-side property key for the dispatch table.</param>
     protected PropertyDescriptor(
         PropertyId id,
         Type valueType,
-        EditorAnnotation annotation,
-        string engineCommandKey)
+        EditorAnnotation annotation)
     {
         ArgumentNullException.ThrowIfNull(id);
         ArgumentNullException.ThrowIfNull(valueType);
         ArgumentNullException.ThrowIfNull(annotation);
-        ArgumentException.ThrowIfNullOrWhiteSpace(engineCommandKey);
 
         this.Id = id;
         this.ValueType = valueType;
         this.Annotation = annotation;
-        this.EngineCommandKey = engineCommandKey;
     }
 
     /// <summary>
@@ -48,18 +44,6 @@ public abstract class PropertyDescriptor
     /// Gets the parsed editor annotations.
     /// </summary>
     public EditorAnnotation Annotation { get; }
-
-    /// <summary>
-    /// Gets the engine-side property key consumed by the property
-    /// dispatch table on the C++ side. Stable across versions.
-    /// </summary>
-    public string EngineCommandKey { get; }
-
-    /// <summary>
-    /// Gets where the property's value goes in the engine, or <see langword="null"/> when the engine takes the
-    /// property another way, such as with its whole component.
-    /// </summary>
-    public EngineFieldMapping? Engine { get; init; }
 
     /// <summary>
     /// Reads the current value from a target object as a boxed value.

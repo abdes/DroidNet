@@ -144,7 +144,7 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
         foreach (var (key, value) in expected)
         {
             _ = source[key].Should().BeApproximately(value, 0.0001f, "source component {0}, field {1}", key.component, key.field);
-            var actual = native.Properties.Single(property => property.ComponentId == key.component && property.FieldId == key.field);
+            var actual = native.Properties.Single(property => (ushort)property.ComponentId == key.component && property.FieldId == key.field);
             _ = actual.Value.Should().BeApproximately(value, 0.0001f, "native component {0}, field {1}", key.component, key.field);
         }
 

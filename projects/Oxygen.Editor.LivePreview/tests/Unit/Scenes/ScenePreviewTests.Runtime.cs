@@ -1,0 +1,132 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using AwesomeAssertions;
+using Oxygen.Editor.LivePreview.Scenes;
+using Oxygen.Editor.LivePreview.Tests.TestSupport;
+using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World;
+using Oxygen.Editor.World.Slots;
+using Oxygen.Interop;
+using Oxygen.Managed.Core;
+
+namespace Oxygen.Editor.LivePreview.Tests.Scenes;
+
+public sealed partial class ScenePreviewTests
+{
+    [TestMethod]
+    [DataRow(RuntimeCommandStatus.Accepted, nameof(SyncStatus.Accepted))]
+    [DataRow(RuntimeCommandStatus.Rejected, nameof(SyncStatus.Rejected))]
+    [DataRow(RuntimeCommandStatus.Unavailable, nameof(SyncStatus.SkippedNotRunning))]
+    [DataRow(RuntimeCommandStatus.Cancelled, nameof(SyncStatus.Cancelled))]
+    [DataRow(RuntimeCommandStatus.Failed, nameof(SyncStatus.Failed))]
+    public async Task EngineOutcome_DrivesThePropertyOutcome(RuntimeCommandStatus runtimeStatus, string expected)
+    {
+        using var fixture = new PreviewFixture();
+        var (scene, node, _) = await fixture.OpenCubeAsync(0).ConfigureAwait(false);
+        _ = (await fixture.Preview.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+        RuntimeWorldRequest? captured = null;
+        fixture.World.OnExecute = request =>
+        {
+            captured = request;
+            return FakeWorld.Result(request, runtimeStatus, "Controlled outcome");
+        };
+
+        var outcome = await fixture.Preview.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(42.5f)], cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = outcome.Status.Should().Be(Enum.Parse<SyncStatus>(expected));
+        _ = captured.Should().NotBeNull();
+        _ = captured!.Target.SceneId.Should().Be(scene.Id);
+        _ = captured.Target.DocumentLifetime.Should().NotBeEmpty();
+        _ = captured.Target.ActivationId.Should().NotBeEmpty();
+        var command = captured.Command.Should().BeOfType<RuntimeSetProperties>().Subject;
+        _ = command.NodeId.Should().Be(node.Id);
+        _ = command.Entries.Should().ContainSingle().Which.Value.Should().Be(42.5f);
+        _ = outcome.Scope.NodeId.Should().Be(node.Id);
+    }
+
+    [TestMethod]
+    [DataRow(CameraAspectMode.Auto)]
+    [DataRow(CameraAspectMode.Fixed)]
+    public async Task SceneProjection_PreservesCameraUnits(CameraAspectMode aspectMode)
+    {
+        using var fixture = new PreviewFixture();
+        var built = fixture.Documents.NewScene();
+        var camera = new SceneNode(built) { Name = "Camera" };
+        built.RootNodes.Add(camera);
+        camera.Components.Add(new PerspectiveCamera { Name = "Perspective Camera", FieldOfView = 60, AspectMode = aspectMode, AspectRatio = 1.5f, NearPlane = 0.25f, FarPlane = 500 });
+        var document = await fixture.OpenAsync(built).ConfigureAwait(false);
+
+        _ = (await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+
+        var attached = fixture.World.Commands.OfType<RuntimeAttachPerspectiveCamera>().Should().ContainSingle().Subject;
+        _ = attached.NodeId.Should().Be(camera.Id);
+        _ = attached.FieldOfViewYRadians.Should().BeApproximately(MathF.PI / 3, 0.00001f);
+        _ = attached.AspectRatio.Should().Be(1.5f);
+        _ = attached.AspectMode.Should().Be(aspectMode);
+        _ = attached.NearPlane.Should().Be(0.25f);
+        _ = attached.FarPlane.Should().Be(500);
+    }
+
+    [TestMethod]
+    public async Task SceneProjection_AttachesOrthographicCameraAndProjectsAuthoredFlags()
+    {
+        using var fixture = new PreviewFixture();
+        var built = fixture.Documents.NewScene();
+        var parent = new SceneNode(built) { Name = "Hidden parent", IsVisible = false, CastsShadows = true, ReceivesShadows = false };
+        var child = new SceneNode(built) { Name = "Shown child", IsVisible = true };
+        parent.AddChild(child);
+        built.RootNodes.Add(parent);
+        child.Components.Add(new OrthographicCamera
+        {
+            Name = "Top",
+            OrthographicSize = 5f,
+            AspectRatio = 2f,
+            AspectMode = CameraAspectMode.Fixed,
+            NearPlane = 0.5f,
+            FarPlane = 50f,
+        });
+        var document = await fixture.OpenAsync(built).ConfigureAwait(false);
+        var shown = PreviewFixture.SceneOf(document).AllNodes.Single(node => node.Id == child.Id);
+
+        _ = (await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+
+        var camera = fixture.World.Commands.OfType<RuntimeAttachOrthographicCamera>().Should().ContainSingle().Subject;
+        _ = camera.NodeId.Should().Be(child.Id);
+        _ = camera.OrthographicSize.Should().Be(5f);
+        _ = camera.AspectRatio.Should().Be(2f);
+        _ = camera.AspectMode.Should().Be(CameraAspectMode.Fixed);
+        _ = camera.NearPlane.Should().Be(0.5f);
+        _ = camera.FarPlane.Should().Be(50f);
+        _ = Flags(parent.Id).Should().Equal(0f, 1f, 0f);
+        _ = Flags(child.Id).Should().Equal(1f, shown.CastsShadows ? 1f : 0f, shown.ReceivesShadows ? 1f : 0f);
+
+        IEnumerable<float> Flags(NodeId nodeId)
+            => fixture.World.PropertiesOf(nodeId, EngineComponentId.Node).OrderBy(static entry => entry.FieldId).Select(static entry => entry.Value);
+    }
+
+    [TestMethod]
+    public async Task SavedMaterialProjection_UsesRetainedIdentity()
+    {
+        using var fixture = new PreviewFixture();
+        var built = fixture.Documents.NewScene();
+        var node = new SceneNode(built) { Name = "Saved geometry" };
+        built.RootNodes.Add(node);
+        var target = new MaterialSlotTarget(
+            new Uri("asset:///Engine/Generated/BasicShapes/Cube"),
+            Guid.Parse("10000000-0000-0000-0000-000000000001"),
+            new string('a', 64));
+        var geometry = new GeometryComponent { Name = "Geometry", Geometry = new(target.GeometryUri) };
+        geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = new(new Uri("asset:///Content/Materials/Saved.omat.json")) });
+        node.Components.Add(geometry);
+        var document = await fixture.OpenAsync(built).ConfigureAwait(false);
+
+        _ = (await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+
+        var projected = fixture.World.Commands.OfType<RuntimeSetMaterialOverride>().Should().ContainSingle().Which;
+        _ = projected.Intent.Should().Be(MaterialSlotAssignmentIntent.RetainedAssignment);
+        _ = projected.SlotId.Should().Be(target.SlotId);
+        _ = projected.LayoutRevision.Should().Be(target.LayoutRevision);
+    }
+}

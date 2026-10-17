@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Config;
 using DroidNet.Documents;
 using DryIoc;
 using Microsoft.Extensions.Logging;
@@ -14,14 +15,13 @@ using Microsoft.UI;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LevelEditor;
+using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
@@ -38,7 +38,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly ILogger logger;
     private readonly ILoggerFactory? loggerFactory;
     private readonly IEngineService engineService;
-    private readonly ISceneEngineSync sceneEngineSync;
+    private readonly ISettingsService<IEngineStartupSettings>? engineSettings;
+    private readonly IScenePreview scenePreview;
     private readonly IDocumentInputCommitter inputCommitter;
     private readonly IDocumentConflictPrompt? conflictPrompt;
     private readonly IOperationResultPublisher operationResults;
@@ -60,7 +61,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="documentArea">The document area of the editor's window, which says whether the scene is active.</param>
     /// <param name="windowId">The window identifier, for the window's prompts, input and shortcuts.</param>
     /// <param name="engineService">Coordinates native engine usage for the document.</param>
-    /// <param name="sceneEngineSync">Tracks the scene's runtime projection lifetime.</param>
+    /// <param name="scenePreview">Reports when the engine shows the document's scene.</param>
     /// <param name="inputCommitter">Completes the focused inspector control's text input.</param>
     /// <param name="operationResults">The visible operation-result publisher.</param>
     /// <param name="statusReducer">The diagnostic status reducer.</param>
@@ -71,12 +72,13 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="loggerFactory">The logger factory.</param>
     /// <param name="conflictPrompt">Presents recovery after an ordinary Save conflict.</param>
     /// <param name="catalog">Reports when the scene's file is removed or restored outside the editor; optional.</param>
+    /// <param name="engineSettings">The engine startup settings, whose logging verbosity the editor edits; optional.</param>
     public SceneEditorViewModel(
         DocumentTab tab,
         IDocumentArea documentArea,
         WindowId windowId,
         IEngineService engineService,
-        ISceneEngineSync sceneEngineSync,
+        IScenePreview scenePreview,
         IDocumentInputCommitter inputCommitter,
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
@@ -86,11 +88,16 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         Workspace.PreviewSettingsService previewSettings,
         ILoggerFactory? loggerFactory = null,
         IDocumentConflictPrompt? conflictPrompt = null,
-        IAssetCatalog? catalog = null)
+        IAssetCatalog? catalog = null,
+        ISettingsService<IEngineStartupSettings>? engineSettings = null)
     {
         this.engineService = engineService;
+        this.engineSettings = engineSettings;
         this.PreviewSettings = previewSettings;
-        this.sceneEngineSync = sceneEngineSync;
+
+        // The scene editor owns the preview preferences: they are restored when it opens and reach the engine once it runs.
+        _ = previewSettings.EnsureRestoredAsync();
+        this.scenePreview = scenePreview;
         this.inputCommitter = inputCommitter;
         this.conflictPrompt = conflictPrompt;
         this.operationResults = operationResults;
@@ -102,7 +109,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.Viewports = [];
         this.Tab = tab ?? throw new ArgumentNullException(nameof(tab));
         this.Document = tab.Document;
-        this.scene = sceneEngineSync.GetDocumentScene(tab.DocumentId) ?? (tab.Document.Content as SceneContent)?.Scene;
+        this.scene = (tab.Document.Content as SceneContent)?.Scene;
         this.container = container;
         this.messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger(nameof(SceneEditorViewModel));
@@ -111,19 +118,16 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         // The stored layout of the scene is restored with its viewports.
         this.CurrentLayout = SceneViewLayout.OnePane;
 
-        // Initially defer creating viewports/layout until the scene has been
-        // synchronized into the engine. SceneLoadedMessage, or the sync service's
-        // own notification for this document, triggers the actual layout
-        // restoration. This avoids creating engine views before the scene exists
-        // (prevents "frame context has no scene").
+        // Defer creating viewports until the engine shows the document's scene: the preview's readiness triggers the
+        // layout restoration, which avoids creating engine views before the scene exists ("frame context has no scene").
         this.RegisterMessages();
         this.Document.ContentReplaced += this.OnDocumentContentReplaced;
         this.InitializePlay();
-        sceneEngineSync.SceneSynchronized += this.OnSceneSynchronized;
+        scenePreview.ReadyChanged += this.OnPreviewReadyChanged;
         this.WatchSourcePresence(catalog);
-        if (this.scene is { } loaded && sceneEngineSync.IsSceneSynchronized(loaded))
+        if (this.scene is { } loaded && scenePreview.IsReady(this.Document.Id))
         {
-            // The scene finished synchronizing before this editor existed.
+            // The engine showed the scene before this editor existed.
             this.OnSceneReady(loaded);
         }
     }
@@ -155,6 +159,20 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
     /// <summary>Gets the shared project preview preferences.</summary>
     public Workspace.PreviewSettingsService PreviewSettings { get; }
+
+    /// <summary>Gets or sets the native engine logging verbosity, an engine startup setting the running engine takes live.</summary>
+    public int EngineLoggingVerbosity
+    {
+        get => this.engineSettings?.Settings.LoggingVerbosity ?? EngineConstants.DefaultLoggingVerbosity;
+        set
+        {
+            if (this.engineSettings is { } settings && settings.Settings.LoggingVerbosity != value)
+            {
+                settings.Settings.LoggingVerbosity = value;
+                this.OnPropertyChanged();
+            }
+        }
+    }
 
     /// <inheritdoc/>
     public void Dispose()
@@ -212,9 +230,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         {
             throw new InvalidOperationException("The scene changed while preparing to close. Review its changes before closing.");
         }
-
-        // The engine lets the scene go; the document area closes the document once its tab has closed.
-        this.sceneEngineSync.CloseDocument(this.Document.Id);
     }
 
     /// <inheritdoc/>
@@ -234,8 +249,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.StopWatchingSourcePresence();
             this.DisposeRelocationParticipant();
 
-            this.sceneEngineSync.SceneSynchronized -= this.OnSceneSynchronized;
-            this.sceneEngineSync.CloseDocument(this.Document.Id);
+            this.scenePreview.ReadyChanged -= this.OnPreviewReadyChanged;
             this.LogUnregisteringFromMessages(this.Document.Id);
 
             this.messenger.UnregisterAll(this);
@@ -253,17 +267,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
     private void RegisterMessages()
     {
-        this.LogRegisteringForSceneLoaded(this.Document.Id);
-        this.messenger.Register<SceneAuthoringLoadedMessage>(this, (_, message) =>
-        {
-            if (ReferenceEquals(this.Document, message.Document))
-            {
-                this.scene = message.Scene;
-                this.sceneReady = false;
-                this.RefreshPlayScene();
-            }
-        });
-        this.messenger.Register<SceneLoadedMessage>(this, (r, m) => ((SceneEditorViewModel)r).OnSceneLoadedMessage(r, m));
         this.RegisterCameraMessages();
         this.RegisterSelectionMessages();
         this.RegisterShortcutMessages();
@@ -384,7 +387,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             SceneName = this.scene?.Name,
         };
 
-    // A reload replaced the scene: the engine and the views show the new one, and the history was cleared with it.
+    // A reload replaced the scene: the engine and the views follow the document to the new one, and the history was
+    // cleared with it. The panes come back when the engine shows the new scene.
     private void OnDocumentContentReplaced(object? sender, DocumentContentReplacedEventArgs args)
     {
         if (this.isDisposed || args.Current is not SceneContent current)
@@ -392,41 +396,10 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             return;
         }
 
-        var replacement = current.Scene;
-        _ = this.sceneEngineSync.RegisterDocument(current.Authoring);
-        this.scene = replacement;
+        this.scene = current.Scene;
         this.sceneReady = false;
         this.HasSaveConflict = false;
         this.RefreshPlayScene();
-        _ = this.messenger.Send(new SceneAuthoringLoadedMessage(replacement, this.Document));
-
-        // The Scene Explorer answers when it shows this document; it shows the new scene, or the tab must be reopened.
-        var reloaded = this.messenger.Send(new SceneReloadedMessage(replacement, this.Document, this.windowId));
-        if (reloaded.HasReceivedResponse)
-        {
-            _ = this.ReportTreeRefreshAsync(reloaded.Response);
-        }
-    }
-
-    private async Task ReportTreeRefreshAsync(Task<bool> refresh)
-    {
-        if (await refresh.ConfigureAwait(true) || this.isDisposed)
-        {
-            return;
-        }
-
-        this.LogTreeNotRefreshed();
-        this.operationResults.Publish(new OperationResult
-        {
-            OperationId = Guid.NewGuid(),
-            OperationKind = SceneOperationKinds.Reload,
-            Status = OperationStatus.SucceededWithWarnings,
-            Severity = DiagnosticSeverity.Warning,
-            Title = "Scene tree not refreshed",
-            Message = "Reloaded from disk. The scene tree could not be refreshed; reopen the tab to refresh its display.",
-            AffectedScope = this.SceneScope(),
-            CompletedAt = DateTimeOffset.UtcNow,
-        });
     }
 
     private void PublishCookResult(ContentCookResult result, Uri sceneUri)
@@ -487,33 +460,14 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         });
     }
 
-    private void OnSceneLoadedMessage(object? recipient, SceneLoadedMessage msg)
-    {
-        _ = recipient;
-
-        if (msg?.Scene is null)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(msg.Scene, this.scene))
-        {
-            this.OnSceneReady(msg.Scene);
-        }
-    }
-
-    /// <summary>
-    ///     Builds the panes when the sync service reports this document's scene synchronized and no restoration
-    ///     is under way. The relayed <see cref="SceneLoadedMessage"/> is dropped while another document is active,
-    ///     for example while tabs change during a scene switch, which would leave this editor without panes.
-    /// </summary>
-    private void OnSceneSynchronized(object? sender, SceneSynchronizationCompletedEventArgs args)
+    /// <summary>Builds the panes when the engine shows this document's scene and no restoration is under way.</summary>
+    private void OnPreviewReadyChanged(object? sender, ScenePreviewEventArgs args)
     {
         _ = sender;
-        if (!this.isDisposed && args.DocumentId == this.Document.Id && !this.sceneReady
-            && !this.viewportRestorePending)
+        if (!this.isDisposed && args.Document == this.Document.Id && !this.sceneReady && !this.viewportRestorePending
+            && this.scenePreview.IsReady(args.Document) && this.scene is { } readyScene)
         {
-            this.OnSceneReady(args.Scene);
+            this.OnSceneReady(readyScene);
         }
     }
 

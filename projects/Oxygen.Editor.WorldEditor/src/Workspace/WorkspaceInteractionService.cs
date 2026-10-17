@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;

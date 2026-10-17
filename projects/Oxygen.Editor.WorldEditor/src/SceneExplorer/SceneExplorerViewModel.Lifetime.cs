@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 
@@ -28,14 +29,8 @@ public partial class SceneExplorerViewModel
 
     private void RegisterSceneLifetime()
     {
+        this.openDocuments.Opened += this.OnSceneDocumentOpened;
         this.openDocuments.Closed += this.OnSceneDocumentClosed;
-        this.messenger.Register<InstallSceneRequestMessage>(this, (_, message) =>
-        {
-            if (!this.isDisposed && message.WindowId == this.windowId && !message.HasReceivedResponse)
-            {
-                message.Reply(this.InstallAcceptedSceneAsync(message));
-            }
-        });
         this.projectClipboardSubscription = this.projectContexts?.ProjectChanged.Subscribe(new ClipboardProjectObserver(this));
         this.messenger.Register<SceneUnavailableMessage>(this, (_, message) =>
         {
@@ -47,19 +42,34 @@ public partial class SceneExplorerViewModel
         });
     }
 
-    private async Task<bool> InstallAcceptedSceneAsync(InstallSceneRequestMessage request)
+    // The explorer shows the scene document opened last: a scene that opens replaces the one shown.
+    private void OnSceneDocumentOpened(object? sender, DocumentEventArgs args)
     {
-        if (this.Scene is not null || !ReferenceEquals(this.projectManager.CurrentProject, request.Scene.Project)
-            || !this.documentArea.Documents.Contains(request.Document))
+        if (!this.isDisposed && args.Document.Content is SceneContent)
+        {
+            _ = this.InstallOpenedSceneAsync(args.Document);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Installing runs from a document event; a failure is logged and leaves the tree empty instead of terminating the editor.")]
+    private async Task<bool> InstallOpenedSceneAsync(Document document)
+    {
+        var scene = SceneContent.Of(document).Scene;
+        if (!ReferenceEquals(this.projectManager.CurrentProject, scene.Project))
         {
             return false;
         }
 
+        if (this.sceneDocument is { } previous && !ReferenceEquals(previous, document))
+        {
+            this.ReleaseShownScene(previous);
+        }
+
         var ct = await this.BeginSceneLoadAsync().ConfigureAwait(true);
-        this.loadingDocumentId = request.Document.Id;
+        this.loadingDocumentId = document.Id;
         try
         {
-            if (!await this.InstallLoadedSceneAsync(request.Scene, request.Document, ct).ConfigureAwait(true))
+            if (!await this.InstallLoadedSceneAsync(scene, document, ct).ConfigureAwait(true))
             {
                 return false;
             }
@@ -69,9 +79,21 @@ public partial class SceneExplorerViewModel
             this.CanReloadPreviousScene = false;
             return true;
         }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        catch (Exception exception)
+        {
+            this.LogAuthoringLoadFailed(exception, scene.Id, scene.Name);
+            return false;
+        }
         finally
         {
-            this.loadingDocumentId = DocumentId.Empty;
+            if (this.loadingDocumentId == document.Id)
+            {
+                this.loadingDocumentId = DocumentId.Empty;
+            }
         }
     }
 
@@ -82,8 +104,69 @@ public partial class SceneExplorerViewModel
             return;
         }
 
-        var closed = args.Document;
+        this.ReleaseShownScene(args.Document);
 
+        // A replacement that did not commit closes the incoming scene: the one still open is shown again.
+        if (!this.isDisposed && this.openDocuments.Documents.LastOrDefault(static document => document.Content is SceneContent) is { } remaining)
+        {
+            _ = this.InstallOpenedSceneAsync(remaining);
+        }
+    }
+
+    // A reload replaced the shown document's scene: the tree shows the new one.
+    private void OnShownContentReplaced(object? sender, DocumentContentReplacedEventArgs args)
+    {
+        if (!this.isDisposed && sender is Document document && ReferenceEquals(this.sceneDocument, document) && args.Current is SceneContent content)
+        {
+            _ = this.ReloadShownSceneAsync(document, content.Scene);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Reloading runs from a document event; a failure is logged and leaves the tree empty instead of terminating the editor.")]
+    private async Task ReloadShownSceneAsync(Document document, Scene scene)
+    {
+        try
+        {
+            var ct = await this.BeginSceneLoadAsync().ConfigureAwait(true);
+            this.loadingDocumentId = document.Id;
+            this.nextEntityIndex = scene.AllNodes.Count();
+            _ = await this.InstallLoadedSceneAsync(scene, document, ct).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            this.LogAuthoringLoadFailed(exception, scene.Id, scene.Name);
+        }
+        finally
+        {
+            if (this.loadingDocumentId == document.Id)
+            {
+                this.loadingDocumentId = DocumentId.Empty;
+            }
+        }
+    }
+
+    private void WatchSceneDocument(Document document)
+    {
+        if (ReferenceEquals(this.sceneDocument, document))
+        {
+            return;
+        }
+
+        if (this.sceneDocument is { } previous)
+        {
+            previous.ContentReplaced -= this.OnShownContentReplaced;
+        }
+
+        this.sceneDocument = document;
+        document.ContentReplaced += this.OnShownContentReplaced;
+    }
+
+    private void ReleaseShownScene(Document closed)
+    {
+        closed.ContentReplaced -= this.OnShownContentReplaced;
         this.loadSceneCts?.Cancel();
         this.selectionApplyGeneration++;
         _ = Interlocked.Increment(ref this.searchGeneration);

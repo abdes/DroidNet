@@ -12,7 +12,6 @@ using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Documents;
-using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Shell.Documents;
 
 namespace Oxygen.Editor.World.Documents;
@@ -20,6 +19,11 @@ namespace Oxygen.Editor.World.Documents;
 /// <summary>
 /// Opens the documents a window's open requests name, and places scenes: a window shows one scene at a time.
 /// </summary>
+/// <remarks>
+/// Opening another scene replaces the open one in three steps: its close is prepared, which asks about unsaved edits;
+/// the next scene opens; then the close commits. A cancelled prompt opens nothing, and a scene that does not open keeps
+/// the current one open and shown. The engine preview, the Scene Explorer and the Inspector follow the open documents.
+/// </remarks>
 public sealed partial class DocumentManager : IDisposable
 {
     private readonly ILogger logger;
@@ -29,7 +33,6 @@ public sealed partial class DocumentManager : IDisposable
     private readonly IProjectUsageService projectUsage;
     private readonly WindowId windowId;
     private readonly OpenDocuments documents;
-    private readonly ISceneEngineSync sceneEngineSync;
     private readonly IAssetRelocationService relocation;
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "An open in flight releases the gate after Dispose; the gate holds no wait handle.")]
@@ -48,7 +51,6 @@ public sealed partial class DocumentManager : IDisposable
     /// <param name="projectUsage">Remembers the project's last opened scene.</param>
     /// <param name="windowId">The window, which the scene messages name.</param>
     /// <param name="documents">The open documents of the session.</param>
-    /// <param name="sceneEngineSync">The engine projection of the open scenes.</param>
     /// <param name="relocation">The relocation workflow, whose deletes close open documents.</param>
     /// <param name="loggerFactory">The logger factory, if any.</param>
     /// <param name="operationResults">Publishes scene load failures, if present.</param>
@@ -61,7 +63,6 @@ public sealed partial class DocumentManager : IDisposable
         IProjectUsageService projectUsage,
         WindowId windowId,
         OpenDocuments documents,
-        ISceneEngineSync sceneEngineSync,
         IAssetRelocationService relocation,
         ILoggerFactory? loggerFactory = null,
         Oxygen.Managed.Core.Diagnostics.IOperationResultPublisher? operationResults = null,
@@ -75,7 +76,6 @@ public sealed partial class DocumentManager : IDisposable
         this.projectUsage = projectUsage;
         this.windowId = windowId;
         this.documents = documents;
-        this.sceneEngineSync = sceneEngineSync;
         this.relocation = relocation;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
@@ -228,7 +228,7 @@ public sealed partial class DocumentManager : IDisposable
 
         var openScenes = this.documentArea.Documents.Where(static document => document.Content is SceneContent).ToArray();
         var existing = openScenes.FirstOrDefault(document => document.File.IsAt(file.Path));
-        if (existing is not null && this.sceneEngineSync.GetDocumentScene(existing.Id) is { } current)
+        if (existing is { Content: SceneContent { Scene: var current } })
         {
             var selected = await this.documentArea.ShowAsync(existing).ConfigureAwait(true);
             if (selected)
@@ -239,64 +239,58 @@ public sealed partial class DocumentManager : IDisposable
             return selected;
         }
 
-        // Read the incoming scene before the current one closes: a file that does not open keeps the current scene.
-        var opened = await this.documents.OpenAsync(file, cancellationToken).ConfigureAwait(true);
-        if (opened.Document is not { Content: SceneContent } document)
+        // Ask about the current scene's unsaved edits first: a cancelled prompt opens nothing.
+        var closing = openScenes.Length == 0 ? null : await this.documentArea.PrepareCloseAsync(openScenes).ConfigureAwait(true);
+        Document document;
+        try
         {
-            this.LogSceneNotOpened(file.Path, opened.Problem ?? "it is not a scene");
-            this.PublishSceneLoadFailure(file.AssetUri, unavailable: false, opened.Problem);
-            return false;
+            cancellationToken.ThrowIfCancellationRequested();
+            if ((openScenes.Length != 0 && closing is null) || !this.IsCurrentRequest(project, requestId))
+            {
+                return false;
+            }
+
+            // Read the incoming scene before the current one closes: a file that does not open keeps the current scene.
+            var opened = await this.documents.OpenAsync(file, cancellationToken).ConfigureAwait(true);
+            if (opened.Document is not { Content: SceneContent } incoming)
+            {
+                this.LogSceneNotOpened(file.Path, opened.Problem ?? "it is not a scene");
+                this.PublishSceneLoadFailure(file.AssetUri, unavailable: false, opened.Problem);
+                return false;
+            }
+
+            if (opened.WasOpen)
+            {
+                this.LogSceneNotOpened(file.Path, "it is open in another window");
+                this.PublishSceneLoadFailure(file.AssetUri, unavailable: false, "The scene is open in another window.");
+                return false;
+            }
+
+            if (!this.IsCurrentRequest(project, requestId) || (closing is not null && !await closing.CommitAsync().ConfigureAwait(true)))
+            {
+                this.documents.Close(incoming);
+                return false;
+            }
+
+            document = incoming;
+        }
+        finally
+        {
+            // The window takes no new tab while its close is prepared.
+            closing?.Dispose();
         }
 
-        if (opened.WasOpen)
+        if (openScenes.Length != 0)
         {
-            this.LogSceneNotOpened(file.Path, "it is open in another window");
-            this.PublishSceneLoadFailure(file.AssetUri, unavailable: false, "The scene is open in another window.");
-            return false;
-        }
-
-        if (requestId != Volatile.Read(ref this.sceneRequestId)
-            || !ReferenceEquals(project, this.projectContextService.ActiveProject))
-        {
-            this.documents.Close(document);
-            return false;
-        }
-
-        if (!await this.RetireOpenScenesAsync(openScenes, project, requestId, replacement, cancellationToken).ConfigureAwait(true))
-        {
-            this.documents.Close(document);
-            return false;
+            this.previousSavedScene = (project.ProjectId, project.ProjectRoot, openScenes[^1].File.AssetUri);
+            replacement.Retired = true;
         }
 
         return await this.InstallSceneAsync(document, project, replacement).ConfigureAwait(true);
     }
 
-    private async Task<bool> RetireOpenScenesAsync(
-        Document[] openScenes,
-        ProjectContext project,
-        long requestId,
-        SceneReplacement replacement,
-        CancellationToken cancellationToken)
-    {
-        foreach (var previous in openScenes)
-        {
-            var file = previous.File;
-            using var closing = await this.documentArea.PrepareCloseAsync([previous]).ConfigureAwait(true);
-            cancellationToken.ThrowIfCancellationRequested();
-            if (closing is null || requestId != Volatile.Read(ref this.sceneRequestId)
-                || !ReferenceEquals(project, this.projectContextService.ActiveProject)
-                || !await closing.CommitAsync().ConfigureAwait(true))
-            {
-                return false;
-            }
-
-            this.previousSavedScene = (project.ProjectId, project.ProjectRoot, file.AssetUri);
-
-            replacement.Retired = true;
-        }
-
-        return true;
-    }
+    private bool IsCurrentRequest(ProjectContext project, long requestId)
+        => requestId == Volatile.Read(ref this.sceneRequestId) && ReferenceEquals(project, this.projectContextService.ActiveProject);
 
     private async Task<bool> InstallSceneAsync(Document document, ProjectContext project, SceneReplacement replacement)
     {
@@ -315,11 +309,9 @@ public sealed partial class DocumentManager : IDisposable
             this.installing = null;
         }
 
-        var installation = this.messenger.Send(new InstallSceneRequestMessage(this.windowId, scene, document));
-        if (!installation.HasReceivedResponse || !await installation.Response.ConfigureAwait(true)
-            || !ReferenceEquals(project, this.projectContextService.ActiveProject)
+        if (!ReferenceEquals(project, this.projectContextService.ActiveProject)
             || !this.documentArea.Documents.Contains(document)
-            || !ReferenceEquals(this.sceneEngineSync.GetDocumentScene(document.Id), scene))
+            || this.documents.Find(document.Id) is null)
         {
             return false;
         }

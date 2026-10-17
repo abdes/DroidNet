@@ -38,7 +38,7 @@ public sealed class ImportReplacementSyncTests : DroidNet.Tests.VisualUserInterf
         using var services = new CatalogWorkloadServices(fixture);
         await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
-        using var publication = fixture.RegisterWorkspacePublication(services, catalog);
+        await using var publication = await fixture.StartWorkspacePreviewAsync(services, catalog).ConfigureAwait(true);
 
         var first = await ImportTypedModelAsync(fixture, services, format, timeout.Token).ConfigureAwait(true);
         var material = first.CookedAssets.Single(static asset => asset.Kind == ContentCookAssetKind.Material).CookedAssetUri;
