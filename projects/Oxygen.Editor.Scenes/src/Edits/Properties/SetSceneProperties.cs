@@ -2,11 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Properties;
+using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Properties;
@@ -56,7 +56,7 @@ public sealed record SetSceneProperties(PropertyEdit Edit, string Label) : IScen
             target.Value = retargeted;
         }
 
-        scope.WarnIfDeleted(SceneReferenceRetargeting.ReferencedUris(target.Value));
+        scope.WarnIfDeleted(SceneAssetReferences.Environment(target.Value));
         rules.Commit(scope.Scene, target);
         var after = PropertyWrites.Read(rules, target, rules.Descriptors.Keys);
         var replaced = PropertyEdit.Of(before.Where(entry => !after.TryGetRaw(entry.Key, out var value) || !Equals(entry.Value, value)));

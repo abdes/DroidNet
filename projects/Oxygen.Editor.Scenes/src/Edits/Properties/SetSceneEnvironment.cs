@@ -44,7 +44,7 @@ public sealed record SetSceneEnvironment(SceneEnvironmentData Environment, strin
             return new SceneEditApplication.Applied(this, []);
         }
 
-        scope.WarnIfDeleted(SceneReferenceRetargeting.ReferencedUris(environment));
+        scope.WarnIfDeleted(SceneAssetReferences.Environment(environment));
         scope.Scene.SetEnvironment(environment);
         return new SceneEditApplication.Applied(this with { Environment = before }, [new SceneChange.PropertiesChanged(Node: null, Differences(before, environment), EditPhase.Commit)]);
     }

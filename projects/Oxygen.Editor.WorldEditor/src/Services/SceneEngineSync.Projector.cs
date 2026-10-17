@@ -210,7 +210,7 @@ public sealed partial class SceneEngineSync
         MaterialSlotTarget[] cleared = [.. lifetime.MaterialOverrides.GetValueOrDefault(node.Id, [])
             .Where(previous => !current.Any(target => target.GeometryUri == previous.GeometryUri && target.SlotId == previous.SlotId))];
         lifetime.MaterialOverrides[node.Id] = current;
-        var mounted = this.IsMounted(SceneReferenceRetargeting.RuntimeReferences(node));
+        var mounted = this.IsMounted(SceneAssetReferences.Runtime(node));
         if (!mounted)
         {
             _ = lifetime.AwaitingMount.Add(node.Id);
@@ -288,7 +288,7 @@ public sealed partial class SceneEngineSync
         Guid target;
         if (change.Node is not { } id)
         {
-            if (change.Phase == EditPhase.Commit && !this.IsMounted(SceneReferenceRetargeting.ReferencedUris(scene.Environment)))
+            if (change.Phase == EditPhase.Commit && !this.IsMounted(SceneAssetReferences.Environment(scene.Environment)))
             {
                 lifetime.EnvironmentAwaitsMount = true;
                 return;
@@ -331,7 +331,7 @@ public sealed partial class SceneEngineSync
 
     private async Task AttachGeometryWhenMountedAsync(DocumentLifetime lifetime, SceneNode node)
     {
-        if (!this.IsMounted(SceneReferenceRetargeting.RuntimeReferences(node)))
+        if (!this.IsMounted(SceneAssetReferences.Runtime(node)))
         {
             _ = lifetime.AwaitingMount.Add(node.Id);
             return;
@@ -385,10 +385,10 @@ public sealed partial class SceneEngineSync
         foreach (var lifetime in waiting)
         {
             var nodes = lifetime.AwaitingMount.Select(id => FindNode(lifetime.Scene, id)).OfType<SceneNode>()
-                .Where(node => this.IsMounted(SceneReferenceRetargeting.RuntimeReferences(node))).Select(static node => node.Id).ToList();
+                .Where(node => this.IsMounted(SceneAssetReferences.Runtime(node))).Select(static node => node.Id).ToList();
             List<SceneChange> ready = [.. nodes.Select(static id => new SceneChange.GeometryChanged(id))];
             lifetime.AwaitingMount.IntersectWith(lifetime.Scene.AllNodes.Select(static node => node.Id).Except(nodes));
-            if (lifetime.EnvironmentAwaitsMount && this.IsMounted(SceneReferenceRetargeting.ReferencedUris(lifetime.Scene.Environment)))
+            if (lifetime.EnvironmentAwaitsMount && this.IsMounted(SceneAssetReferences.Environment(lifetime.Scene.Environment)))
             {
                 lifetime.EnvironmentAwaitsMount = false;
                 ready.Add(new SceneChange.PropertiesChanged(Node: null, [], EditPhase.Commit));

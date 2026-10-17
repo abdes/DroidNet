@@ -18,18 +18,18 @@ namespace Oxygen.Editor.Scenes.Edits.Hierarchy;
 /// set (or without a parent) has <c>world = local</c>. Local matrices are composed as
 /// <c>scale * rotation * translation</c>.
 /// </remarks>
-public static class SceneTransformMath
+internal static class SceneTransformMath
 {
     private const float Tolerance = 1e-4f;
 
     /// <summary>Composes the local TRS of a transform component.</summary>
-    public static Matrix4x4 LocalMatrix(TransformComponent transform)
+    internal static Matrix4x4 LocalMatrix(TransformComponent transform)
         => Matrix4x4.CreateScale(transform.LocalScale)
            * Matrix4x4.CreateFromQuaternion(transform.LocalRotation)
            * Matrix4x4.CreateTranslation(transform.LocalPosition);
 
     /// <summary>Computes the world transform of a node, honouring <see cref="SceneNode.IgnoreParentTransform"/>.</summary>
-    public static Matrix4x4 WorldMatrix(SceneNode node)
+    internal static Matrix4x4 WorldMatrix(SceneNode node)
     {
         var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
         var local = transform is null ? Matrix4x4.Identity : LocalMatrix(transform);
@@ -50,7 +50,7 @@ public static class SceneTransformMath
     /// <see langword="true"/> when the result is representable without shear; otherwise
     /// <see langword="false"/> (singular parent, non-finite values, or unrepresentable shear).
     /// </returns>
-    public static bool TryPreserveWorldLocal(
+    internal static bool TryPreserveWorldLocal(
         SceneNode node,
         SceneNode? newParent,
         out Vector3 position,

@@ -4,7 +4,6 @@
 
 using System.Collections.Immutable;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets.Model;
@@ -16,13 +15,13 @@ namespace Oxygen.Editor.Scenes.Edits.Assets;
 /// and targeted), slot targets, script slots, scene references, starting input contexts and the environment's metering mask. Used when an open scene follows
 /// a relocation, and when undo, redo or paste restores references captured before a relocation.
 /// </summary>
-public static class SceneReferenceRetargeting
+internal static class SceneReferenceRetargeting
 {
     /// <summary>Re-points one node's own components.</summary>
     /// <param name="node">The node.</param>
     /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
     /// <returns>Whether any reference changed.</returns>
-    public static bool RetargetNode(SceneNode node, Func<Uri, Uri?> map)
+    internal static bool RetargetNode(SceneNode node, Func<Uri, Uri?> map)
     {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(map);
@@ -67,7 +66,7 @@ public static class SceneReferenceRetargeting
     /// <param name="slots">The slots.</param>
     /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
     /// <returns>The re-pointed slots, or null when nothing changed.</returns>
-    public static ImmutableArray<ScriptSlot>? Retarget(ImmutableArray<ScriptSlot> slots, Func<Uri, Uri?> map)
+    internal static ImmutableArray<ScriptSlot>? Retarget(ImmutableArray<ScriptSlot> slots, Func<Uri, Uri?> map)
     {
         ArgumentNullException.ThrowIfNull(map);
         var changed = false;
@@ -88,34 +87,11 @@ public static class SceneReferenceRetargeting
         return changed ? result : null;
     }
 
-    /// <summary>Gets the asset references the runtime shows for a node: its geometry and material slots.</summary>
-    /// <param name="node">The node.</param>
-    /// <returns>The geometry and the materials of its component and targeted slots.</returns>
-    public static IEnumerable<Uri> RuntimeReferences(SceneNode node)
-    {
-        ArgumentNullException.ThrowIfNull(node);
-        return node.Components.OfType<GeometryComponent>().SelectMany(static geometry => new[] { geometry.Geometry?.Uri }
-            .Concat(geometry.OverrideSlots.Concat(geometry.TargetedOverrides.SelectMany(static target => target.OverrideSlots))
-                .OfType<MaterialsSlot>().Select(static slot => (Uri?)slot.Material.Uri)))
-            .OfType<Uri>();
-    }
-
-    /// <summary>Gets the asset references a node's script slots hold.</summary>
-    /// <param name="node">The node.</param>
-    /// <returns>The scripts and asset parameter values.</returns>
-    public static IEnumerable<Uri> ScriptReferences(SceneNode node)
-    {
-        ArgumentNullException.ThrowIfNull(node);
-        return node.Components.OfType<ScriptingComponent>().SelectMany(static scripting => scripting.Slots)
-            .SelectMany(static slot => new[] { slot.Script }.Concat(slot.Overrides.Values.Select(static value => value.AssetUri)))
-            .OfType<Uri>();
-    }
-
     /// <summary>Re-points a node and every node below it.</summary>
     /// <param name="node">The subtree root.</param>
     /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
     /// <returns>The nodes that changed.</returns>
-    public static IReadOnlyList<SceneNode> RetargetSubtree(SceneNode node, Func<Uri, Uri?> map)
+    internal static IReadOnlyList<SceneNode> RetargetSubtree(SceneNode node, Func<Uri, Uri?> map)
     {
         ArgumentNullException.ThrowIfNull(node);
         return [.. new[] { node }.Concat(node.Descendants()).Where(item => RetargetNode(item, map))];
@@ -125,7 +101,7 @@ public static class SceneReferenceRetargeting
     /// <param name="references">The references.</param>
     /// <param name="map">Returns the new reference, keeping its form, or null when it does not move.</param>
     /// <returns>The re-pointed references, or null when nothing changed.</returns>
-    public static SceneReferencesData? Retarget(SceneReferencesData references, Func<string, string?> map)
+    internal static SceneReferencesData? Retarget(SceneReferencesData references, Func<string, string?> map)
     {
         ArgumentNullException.ThrowIfNull(references);
         ArgumentNullException.ThrowIfNull(map);
@@ -163,7 +139,7 @@ public static class SceneReferenceRetargeting
     /// <param name="play">The play settings.</param>
     /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
     /// <returns>The re-pointed play settings, or null when nothing changed.</returns>
-    public static ScenePlayData? Retarget(ScenePlayData play, Func<Uri, Uri?> map)
+    internal static ScenePlayData? Retarget(ScenePlayData play, Func<Uri, Uri?> map)
     {
         ArgumentNullException.ThrowIfNull(play);
         ArgumentNullException.ThrowIfNull(map);
@@ -185,7 +161,7 @@ public static class SceneReferenceRetargeting
     /// <param name="environment">The environment.</param>
     /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
     /// <returns>The re-pointed environment, or null when nothing changed.</returns>
-    public static SceneEnvironmentData? Retarget(SceneEnvironmentData environment, Func<Uri, Uri?> map)
+    internal static SceneEnvironmentData? Retarget(SceneEnvironmentData environment, Func<Uri, Uri?> map)
     {
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(map);
@@ -208,14 +184,5 @@ public static class SceneReferenceRetargeting
         return ReferenceEquals(result, environment) ? null : result;
 
         static Uri? Moved(Uri? reference, Func<Uri, Uri?> map) => reference is null ? null : map(reference);
-    }
-
-    /// <summary>Gets the asset references an environment holds.</summary>
-    /// <param name="environment">The environment.</param>
-    /// <returns>The metering mask and sky cubemaps that are set.</returns>
-    public static IEnumerable<Uri> ReferencedUris(SceneEnvironmentData environment)
-    {
-        ArgumentNullException.ThrowIfNull(environment);
-        return new[] { environment.PostProcess.AutoExposureMeteringMask, environment.SkySphere.Cubemap, environment.SkyLight.Cubemap }.OfType<Uri>();
     }
 }
