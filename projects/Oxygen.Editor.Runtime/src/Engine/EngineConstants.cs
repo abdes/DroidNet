@@ -15,8 +15,8 @@ public static class EngineConstants
     /// <summary>The frame-rate cap offered when the user first turns the cap on.</summary>
     public const int DefaultFrameRateCap = 60;
 
-    /// <summary>The default native logging threshold (Error).</summary>
-    public const int DefaultLoggingVerbosity = -2;
+    /// <summary>The default native logging threshold (Warning): errors and warnings, nothing below.</summary>
+    public const int DefaultLoggingVerbosity = -1;
 
     /// <summary>The minimum allowed logging verbosity for the native engine.</summary>
     public const int MinLoggingVerbosity = -9; // loguru's minimum verbosity

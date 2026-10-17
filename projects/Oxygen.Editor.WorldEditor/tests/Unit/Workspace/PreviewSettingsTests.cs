@@ -22,11 +22,8 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
 [SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes.")]
 public sealed class PreviewSettingsTests
 {
-    /// <summary>
-    /// The defaults impose no frame rate: vsync on, no cap, idle panes left idle. Accepted edits reach the engine
-    /// and survive a fresh service and settings cache.
-    /// </summary>
-    /// <returns>The verification task.</returns>
+    public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
     public async Task PreferencesRoundTripThroughSqlite()
     {
@@ -35,20 +32,20 @@ public sealed class PreviewSettingsTests
         var service = fixture.CreateService();
         await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
         _ = fixture.Engine.Object.TargetFps.Should().Be(0);
-        _ = fixture.Engine.Object.EngineLoggingVerbosity.Should().Be(-2);
-        fixture.Engine.Verify(value => value.SetVSyncEnabled(true), Times.Once());
-        fixture.Engine.Verify(value => value.SetAlwaysRenderPanes(false), Times.Once());
+        _ = fixture.Engine.Object.EngineLoggingVerbosity.Should().Be(EngineConstants.DefaultLoggingVerbosity);
+        fixture.Engine.Verify(value => value.SetVSyncEnabled(enabled: true), Times.Once());
+        fixture.Engine.Verify(value => value.SetAlwaysRenderPanes(alwaysRender: false), Times.Once());
         _ = service.MaxFrameRateCap.Should().Be(1000);
 
         service.FrameRateCapEnabled = true;
         service.FrameRateCap = 45;
         service.VSyncEnabled = false;
         service.AlwaysRenderPanes = true;
-        service.LoggingVerbosity = -1;
+        service.LoggingVerbosity = -2;
         await service.FlushAsync().ConfigureAwait(false);
         _ = fixture.Engine.Object.TargetFps.Should().Be(45);
-        fixture.Engine.Verify(value => value.SetVSyncEnabled(false), Times.Once());
-        fixture.Engine.Verify(value => value.SetAlwaysRenderPanes(true), Times.Once());
+        fixture.Engine.Verify(value => value.SetVSyncEnabled(enabled: false), Times.Once());
+        fixture.Engine.Verify(value => value.SetAlwaysRenderPanes(alwaysRender: true), Times.Once());
 
         var reopened = fixture.CreateService();
         await reopened.RestoreAsync(fixture.Project).ConfigureAwait(false);
@@ -56,7 +53,7 @@ public sealed class PreviewSettingsTests
         _ = reopened.FrameRateCap.Should().Be(45);
         _ = reopened.VSyncEnabled.Should().BeFalse();
         _ = reopened.AlwaysRenderPanes.Should().BeTrue();
-        _ = reopened.LoggingVerbosity.Should().Be(-1);
+        _ = reopened.LoggingVerbosity.Should().Be(-2);
         _ = fixture.Results.Should().BeEmpty();
     }
 
@@ -92,7 +89,8 @@ public sealed class PreviewSettingsTests
         await store.SaveSettingAsync(
             new SettingKey<EarlierPreferences>("WorldEditor", "Preview"),
             new EarlierPreferences(fixture.Project.ProjectId, 60, 1),
-            context).ConfigureAwait(false);
+            context,
+            ct: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         // A later session reads the stored row, not the writer's typed cache.
         var service = fixture.CreateService();
@@ -165,7 +163,7 @@ public sealed class PreviewSettingsTests
         await restoration.ConfigureAwait(false);
         fixture.Engine.VerifySet(value => value.TargetFps = It.IsAny<uint>(), Times.Never());
         fixture.Engine.Verify(value => value.SetVSyncEnabled(It.IsAny<bool>()), Times.Never());
-        _ = fixture.Engine.Object.EngineLoggingVerbosity.Should().Be(-2);
+        _ = fixture.Engine.Object.EngineLoggingVerbosity.Should().Be(EngineConstants.DefaultLoggingVerbosity);
     }
 
     /// <summary>Persistence failure leaves the accepted live value and publishes the actual storage error.</summary>
@@ -349,7 +347,8 @@ public sealed class PreviewSettingsTests
         await store.SaveSettingAsync(
             PreviewSettingsService.GroundGridKey,
             new GroundGridSettings { Spacing = -1f, MajorEvery = 0, HorizonBoost = 0.8f, AxisColorX = new(2f, 0f, 0f, 1f) },
-            SettingContext.Application()).ConfigureAwait(false);
+            SettingContext.Application(),
+            ct: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var service = fixture.CreateService();
         await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
@@ -388,12 +387,11 @@ public sealed class PreviewSettingsTests
 
     private sealed class Fixture : IAsyncDisposable
     {
-        private readonly PersistentState database = new(new DbContextOptionsBuilder<PersistentState>().UseSqlite("Data Source=:memory:").Options);
         private readonly Mock<IOperationResultPublisher> publisher = new();
 
         public Mock<IEngineService> Engine { get; } = new();
 
-        public PersistentState Database => this.database;
+        public PersistentState Database { get; } = new(new DbContextOptionsBuilder<PersistentState>().UseSqlite("Data Source=:memory:").Options);
 
         public ProjectContextService Projects { get; } = new();
 
@@ -404,11 +402,11 @@ public sealed class PreviewSettingsTests
         public static async Task<Fixture> CreateAsync()
         {
             var fixture = new Fixture();
-            await fixture.database.Database.OpenConnectionAsync().ConfigureAwait(false);
-            _ = await fixture.database.Database.EnsureCreatedAsync().ConfigureAwait(false);
+            await fixture.Database.Database.OpenConnectionAsync().ConfigureAwait(false);
+            _ = await fixture.Database.Database.EnsureCreatedAsync().ConfigureAwait(false);
             fixture.Projects.Activate(fixture.Project);
             _ = fixture.Engine.SetupProperty(value => value.TargetFps, 0u);
-            _ = fixture.Engine.SetupProperty(value => value.EngineLoggingVerbosity, -2);
+            _ = fixture.Engine.SetupProperty(value => value.EngineLoggingVerbosity, EngineConstants.DefaultLoggingVerbosity);
             _ = fixture.Engine.SetupGet(value => value.MaxTargetFps).Returns(1000);
             _ = fixture.publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(fixture.Results.Add);
             return fixture;
@@ -423,6 +421,6 @@ public sealed class PreviewSettingsTests
         public PreviewSettingsService CreateService(IEditorSettingsManager? store = null)
             => new(this.Engine.Object, store ?? new EditorSettingsManager(this.Database), this.Projects, this.publisher.Object, new OperationStatusReducer());
 
-        public ValueTask DisposeAsync() => this.database.DisposeAsync();
+        public ValueTask DisposeAsync() => this.Database.DisposeAsync();
     }
 }
