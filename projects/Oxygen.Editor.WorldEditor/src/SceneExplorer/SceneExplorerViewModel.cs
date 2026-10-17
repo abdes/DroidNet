@@ -949,7 +949,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             DiagnosticCodes.ScenePrefix + "CLIPBOARD_INVALIDATED",
             "Clipboard was cleared",
             reason,
-            new AffectedScope { DocumentId = this.sceneDocument?.Id.Value });
+            new AffectedScope { SceneId = this.Scene?.AttachedObject.Id });
     }
 
     private async Task RemoveFromFolderAsync(ITreeItem anchor)
@@ -2561,6 +2561,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             DiagnosticCodes.SettingsPrefix + "WORKSPACE_STATE_UNAVAILABLE",
             action + " is unavailable",
             "The workspace interaction service is not composed in this window, so " + action.ToLowerInvariant() + " did nothing.",
-            new AffectedScope { DocumentId = this.sceneDocument?.Id.Value });
+            new AffectedScope { SceneId = this.Scene?.AttachedObject.Id });
     }
 }

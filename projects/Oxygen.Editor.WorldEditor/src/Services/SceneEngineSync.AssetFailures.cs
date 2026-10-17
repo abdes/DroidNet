@@ -121,11 +121,7 @@ public sealed partial class SceneEngineSync
         lock (this.documentGate)
         {
             return this.TryGetDocument(scene, out var lifetime) && lifetime.Id == documentLifetime
-                ? Scope(scene, node, componentType: node is null ? nameof(PostProcessEnvironmentData) : nameof(GeometryComponent), assetVirtualPath: assetPath) with
-                {
-                    DocumentId = lifetime.DocumentId.Value,
-                    DocumentLifetime = lifetime.Id,
-                }
+                ? Scope(scene, node, componentType: node is null ? nameof(PostProcessEnvironmentData) : nameof(GeometryComponent), assetVirtualPath: assetPath)
                 : null;
         }
     }

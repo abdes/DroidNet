@@ -341,7 +341,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
                 Severity = DiagnosticSeverity.Warning,
                 Title = "Scene snapshot saved",
                 Message = "Saved; newer changes remain unsaved",
-                AffectedScope = this.DocumentScope(),
+                AffectedScope = this.SceneScope(),
                 CompletedAt = DateTimeOffset.UtcNow,
             });
         }
@@ -360,7 +360,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             Severity = DiagnosticSeverity.Error,
             Title = code == "Conflict" ? "Scene changed outside this document" : "Scene was not saved",
             Message = message,
-            AffectedScope = this.DocumentScope(),
+            AffectedScope = this.SceneScope(),
             CompletedAt = DateTimeOffset.UtcNow,
             Diagnostics =
             [
@@ -371,18 +371,15 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
                     Severity = DiagnosticSeverity.Error,
                     Code = DiagnosticCodes.DocumentPrefix + code,
                     Message = message,
-                    AffectedEntity = this.DocumentScope(),
+                    AffectedEntity = this.SceneScope(),
                 },
             ],
         });
     }
 
-    private AffectedScope DocumentScope()
+    private AffectedScope SceneScope()
         => new()
         {
-            DocumentId = this.Document.Id.Value,
-            DocumentName = this.Document.Title,
-            DocumentPath = this.Document.File.Path,
             SceneId = this.scene?.Id,
             SceneName = this.scene?.Name,
         };
@@ -427,7 +424,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             Severity = DiagnosticSeverity.Warning,
             Title = "Scene tree not refreshed",
             Message = "Reloaded from disk. The scene tree could not be refreshed; reopen the tab to refresh its display.",
-            AffectedScope = this.DocumentScope(),
+            AffectedScope = this.SceneScope(),
             CompletedAt = DateTimeOffset.UtcNow,
         });
     }
@@ -450,8 +447,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             CompletedAt = DateTimeOffset.UtcNow,
             AffectedScope = new AffectedScope
             {
-                DocumentId = this.Document.Id.Value,
-                DocumentName = this.Document.Title,
                 AssetId = sceneUri.ToString(),
                 AssetVirtualPath = sceneUri.AbsolutePath,
                 SceneId = this.scene?.Id,
@@ -485,8 +480,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             CompletedAt = DateTimeOffset.UtcNow,
             AffectedScope = new AffectedScope
             {
-                DocumentId = this.Document.Id.Value,
-                DocumentName = this.Document.Title,
                 SceneId = this.scene?.Id,
                 SceneName = this.scene?.Name,
             },

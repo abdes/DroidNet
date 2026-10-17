@@ -63,33 +63,16 @@ public sealed partial class SceneEngineSync
             {
                 var pending = RuntimeWorldUnavailable(SceneOperationKinds.EditEnvironment, scope) with { Message = "The environment will replay after the current scene snapshot." };
                 this.OnPendingPropertySyncCountChanged(scene.Id, this.GetPendingPropertySyncCount(scene.Id));
-                return ScopeEnvironmentResult(EnvironmentResult(pending), lifetime, revision);
+                return EnvironmentResult(pending);
             }
 
             application = this.ApplyEnvironmentAsync(scene, environment, cancellationToken);
         }
 
-        var result = ScopeEnvironmentResult(await application.ConfigureAwait(false), lifetime, revision);
+        var result = await application.ConfigureAwait(false);
         this.CompleteEnvironmentDelivery(lifetime, request, result);
         return result;
     }
-
-    private static EnvironmentSyncResult ScopeEnvironmentResult(EnvironmentSyncResult result, DocumentLifetime lifetime, SceneSyncRevision revision)
-        => result with
-        {
-            PerField = result.PerField.ToDictionary(
-                pair => pair.Key,
-                pair => pair.Value with
-                {
-                    Scope = pair.Value.Scope with
-                    {
-                        DocumentId = lifetime.DocumentId.Value,
-                        DocumentLifetime = lifetime.Id,
-                        AuthoringRevision = revision.Revision,
-                    },
-                },
-                StringComparer.Ordinal),
-        };
 
     private void CompleteEnvironmentDelivery(DocumentLifetime lifetime, PendingEnvironmentSync request, EnvironmentSyncResult result)
     {
@@ -135,7 +118,7 @@ public sealed partial class SceneEngineSync
             application = this.ApplyEnvironmentAsync(projection.Lifetime.Scene, request.Environment, world.CancellationToken, world);
         }
 
-        var result = ScopeEnvironmentResult(await application.ConfigureAwait(false), projection.Lifetime, request.Revision);
+        var result = await application.ConfigureAwait(false);
         this.CompleteEnvironmentDelivery(projection.Lifetime, request, result);
         if (result.Overall != SyncStatus.Accepted && this.IsDocumentCurrent(projection.Lifetime))
         {

@@ -68,7 +68,6 @@ public sealed partial class MissingAssetRecoveryTests : DroidNet.Tests.VisualUse
         var failure = fixture.Results.Last(result => string.Equals(result.OperationKind, SceneOperationKinds.EditGeometry, StringComparison.Ordinal));
         _ = failure.Status.Should().Be(OperationStatus.PartiallySucceeded);
         _ = failure.AffectedScope.NodeId.Should().Be(nodeId);
-        _ = failure.AffectedScope.DocumentId.Should().Be(fixture.Document.Id.Value);
         _ = failure.AffectedScope.AssetVirtualPath.Should().Contain("DoesNotExist.ogeo");
         _ = failure.Diagnostics.Should().ContainSingle().Which.Code.Should().Be(LiveSyncDiagnosticCodes.GeometryUnresolvedAtRuntime);
         _ = failure.Message.Should().NotBeNullOrEmpty();

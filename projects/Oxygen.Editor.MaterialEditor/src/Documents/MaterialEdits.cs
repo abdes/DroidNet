@@ -365,9 +365,6 @@ public sealed partial class MaterialEdits(
         var virtualPath = Uri.UnescapeDataString(document.File.AssetUri.AbsolutePath);
         var scope = new AffectedScope
         {
-            DocumentId = document.Id.Value,
-            DocumentPath = document.File.Path,
-            DocumentName = document.Title,
             AssetId = document.File.AssetUri.ToString(),
             AssetSourcePath = document.File.Path,
             AssetVirtualPath = virtualPath,

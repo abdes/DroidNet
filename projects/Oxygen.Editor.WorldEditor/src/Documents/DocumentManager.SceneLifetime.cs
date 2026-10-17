@@ -45,6 +45,6 @@ public sealed partial class DocumentManager
             DiagnosticCodes.DocumentPrefix + (unavailable ? "SCENE_UNAVAILABLE" : "SCENE_LOAD_FAILED"),
             title,
             message,
-            new AffectedScope { DocumentName = SceneContent.NameOf(Uri.UnescapeDataString(sceneUri.AbsolutePath)), AssetVirtualPath = Uri.UnescapeDataString(sceneUri.AbsolutePath) });
+            new AffectedScope { SceneName = SceneContent.NameOf(Uri.UnescapeDataString(sceneUri.AbsolutePath)), AssetVirtualPath = Uri.UnescapeDataString(sceneUri.AbsolutePath) });
     }
 }

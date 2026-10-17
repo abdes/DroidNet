@@ -42,7 +42,6 @@ public sealed partial class SceneEngineSyncTests
         var scene = CreateScene();
         using var document = Register(sut, scene);
         scene = document.Scene;
-        var documentId = document.DocumentId;
         var node = AddCubeWithMissingMaterial(scene);
         _ = await sut.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         var failure = new RuntimeAssetLoadFailedEventArgs(captured!, 71, "Asset path could not be resolved");
@@ -58,8 +57,6 @@ public sealed partial class SceneEngineSyncTests
         _ = result.OperationId.Should().Be(failure.Request.OperationId);
         _ = result.AffectedScope.NodeId.Should().Be(node.Id);
         _ = result.AffectedScope.SceneId.Should().Be(scene.Id);
-        _ = result.AffectedScope.DocumentId.Should().Be(documentId.Value);
-        _ = result.AffectedScope.DocumentLifetime.Should().Be(failure.Request.Target.DocumentLifetime);
         _ = result.Diagnostics.Should().ContainSingle().Which.Domain.Should().Be(FailureDomain.LiveSync);
         _ = result.Message.Should().Be(failure.Message);
     }

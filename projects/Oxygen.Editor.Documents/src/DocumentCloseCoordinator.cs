@@ -161,17 +161,15 @@ public sealed partial class DocumentCloseCoordinator(IDocumentClosePrompt prompt
     private void PublishFailure(IDocumentMetadata? metadata, string operationKind, string message)
     {
         var operationId = Guid.NewGuid();
-        var scope = new AffectedScope { DocumentId = metadata?.DocumentId.Value, DocumentName = metadata?.Title };
         operationResults.Publish(new OperationResult
         {
             OperationId = operationId,
             OperationKind = operationKind,
             Status = OperationStatus.Failed,
             Severity = DiagnosticSeverity.Error,
-            Title = "Document kept open",
+            Title = metadata is null ? "Document kept open" : $"{metadata.Title} kept open",
             Message = message,
             CompletedAt = DateTimeOffset.UtcNow,
-            AffectedScope = scope,
             Diagnostics =
             [
                 new DiagnosticRecord
@@ -181,7 +179,6 @@ public sealed partial class DocumentCloseCoordinator(IDocumentClosePrompt prompt
                     Severity = DiagnosticSeverity.Error,
                     Code = DiagnosticCodes.DocumentPrefix + "CLOSE_FAILED",
                     Message = message,
-                    AffectedEntity = scope,
                 },
             ],
         });

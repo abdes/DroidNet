@@ -89,7 +89,7 @@ public sealed class DocumentCloseWorkflowTests
         _ = fixture.Participants.Should().OnlyContain(participant => participant.CloseCalls == 0 && !participant.IsPreparing);
         fixture.Results.Verify(
             publisher => publisher.Publish(It.Is<OperationResult>(result =>
-                result.Status == OperationStatus.Failed && result.AffectedScope.DocumentId == failed.Metadata.DocumentId.Value)),
+                result.Status == OperationStatus.Failed)),
             Times.Once);
     }
 

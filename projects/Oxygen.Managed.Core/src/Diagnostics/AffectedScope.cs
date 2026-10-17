@@ -30,27 +30,6 @@ public sealed record AffectedScope
     public string? ProjectName { get; init; }
 
     /// <summary>
-    /// Gets the affected document identity.
-    /// </summary>
-    public Guid? DocumentId { get; init; }
-
-    /// <summary>Gets the open-document lifetime that originated the operation.</summary>
-    public Guid? DocumentLifetime { get; init; }
-
-    /// <summary>Gets the authoring revision captured with the operation payload.</summary>
-    public long? AuthoringRevision { get; init; }
-
-    /// <summary>
-    /// Gets the affected document path.
-    /// </summary>
-    public string? DocumentPath { get; init; }
-
-    /// <summary>
-    /// Gets the affected document display name.
-    /// </summary>
-    public string? DocumentName { get; init; }
-
-    /// <summary>
     /// Gets the affected asset identity.
     /// </summary>
     public string? AssetId { get; init; }

@@ -257,7 +257,7 @@ public sealed partial class SceneEngineSyncTests
     public async Task FailedReplay_RemainsVisibleUntilACompleteCurrentSnapshotSucceeds()
     {
         using var fixture = new ReplayFixture();
-        var (scene, node, documentId) = fixture.RegisterScene(1);
+        var (scene, node, _) = fixture.RegisterScene(1);
         var (createdRequest, creationCompletion) = fixture.DelayNodeCreation();
         var sync = fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken);
         var request = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -271,7 +271,7 @@ public sealed partial class SceneEngineSyncTests
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(1);
         var failure = fixture.Results.Should().ContainSingle().Which;
         _ = failure.Message.Should().Be("Controlled property rejection");
-        _ = failure.AffectedScope.DocumentId.Should().Be(documentId.Value);
+        _ = failure.AffectedScope.SceneId.Should().Be(scene.Id);
         fixture.RejectedPropertyComponent = null;
         fixture.ResumeNodeCreation();
         _ = (await fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();

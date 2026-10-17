@@ -466,7 +466,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             code,
             title,
             message,
-            this.CreateAffectedScope(),
+            AffectedScope.Empty,
             exception: exception,
             technicalMessage: this.CreateViewportTechnicalMessage(exception));
 
@@ -494,7 +494,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             code,
             title,
             message,
-            this.CreateAffectedScope(),
+            AffectedScope.Empty,
             exception: exception,
             technicalMessage: this.CreateViewportTechnicalMessage(exception));
 
@@ -1138,12 +1138,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
                 ex);
         }
     }
-
-    private AffectedScope CreateAffectedScope()
-        => new()
-        {
-            DocumentId = this.DocumentId.Value,
-        };
 
     private string CreateViewportTechnicalMessage(Exception? exception)
     {
