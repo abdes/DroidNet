@@ -90,9 +90,7 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         var data = new SceneData { Id = SceneId.New(), Name = "Background", Environment = new SceneEnvironmentData { AtmosphereEnabled = true } };
         await File.WriteAllBytesAsync(path, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData), cancellationToken).ConfigureAwait(true);
         var file = new DocumentFile(path, new Uri("asset:///Content/Scenes/Background.oscene.json"));
-        var projects = new Mock<IProjectManagerService>();
-        _ = projects.SetupGet(value => value.CurrentProject).Returns(project);
-        using var scenes = new OpenDocuments([new SceneDocumentKind(projects.Object)], new NativeAtomicFileStore(new RealFileSystem()));
+        using var scenes = new OpenDocuments([new SceneDocumentKind(project)], new NativeAtomicFileStore(new RealFileSystem()));
         var document = await OpenAndShowAsync(scenes, file, sync, cancellationToken).ConfigureAwait(true);
         await EditSaveBackgroundAsync(engine, document, document.Target, cancellationToken).ConfigureAwait(true);
         sync.CloseDocument(document.Document.Id);

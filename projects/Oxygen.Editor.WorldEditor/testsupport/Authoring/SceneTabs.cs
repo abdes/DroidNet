@@ -6,7 +6,6 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using DroidNet.Documents;
 using DroidNet.Storage;
-using Moq;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
@@ -46,9 +45,7 @@ internal static class SceneTabs
     public static SceneTab Open(Scene scene, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var projects = new Mock<IProjectManagerService>();
-        _ = projects.SetupGet(value => value.CurrentProject).Returns(scene.Project);
-        var kind = new SceneDocumentKind(projects.Object, interaction, redirects);
+        var kind = new SceneDocumentKind(scene.Project, interaction, redirects);
         var files = new MemoryFileStore();
         var name = string.IsNullOrEmpty(scene.Name) ? "Scene" : scene.Name;
         var file = new DocumentFile(Path.Combine(Root, "Content", name + ".oscene.json"), new Uri($"asset:///Content/{name}.oscene.json"));

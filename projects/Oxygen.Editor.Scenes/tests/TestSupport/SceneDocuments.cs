@@ -5,7 +5,6 @@
 using System.Text.Json;
 using Moq;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
@@ -24,8 +23,7 @@ public sealed partial class SceneDocuments : IDisposable
     /// </summary>
     public SceneDocuments()
     {
-        var projects = Mock.Of<IProjectManagerService>(service => service.CurrentProject == Mock.Of<IProject>());
-        this.Open = new OpenDocuments([new SceneDocumentKind(projects, this.Interaction, this.Redirects)], this.Files);
+        this.Open = new OpenDocuments([new SceneDocumentKind(Mock.Of<IProject>(), this.Interaction, this.Redirects)], this.Files);
     }
 
     /// <summary>Gets the open documents.</summary>

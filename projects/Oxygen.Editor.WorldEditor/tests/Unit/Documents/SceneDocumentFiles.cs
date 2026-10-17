@@ -48,7 +48,7 @@ internal sealed partial class SceneDocumentFiles : IDisposable
         _ = projects.SetupGet(value => value.CurrentProject).Returns(this.Project);
         this.ProjectManager = projects.Object;
         this.Documents = new OpenDocuments(
-            [new SceneDocumentKind(projects.Object, interaction), new MaterialDocumentKind(new MaterialValidation())],
+            [new SceneDocumentKind(this.Project, interaction), new MaterialDocumentKind(new MaterialValidation())],
             store ?? new NativeAtomicFileStore(new RealFileSystem()));
     }
 

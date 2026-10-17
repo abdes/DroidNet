@@ -7,7 +7,6 @@ using DroidNet.Documents;
 using DroidNet.TimeMachine;
 using Moq;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World;
@@ -155,8 +154,7 @@ public sealed partial class AuthoringFixture : IDisposable
 
     private static async Task<SceneContent> DecodeAsync(SceneData data, DocumentId document, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, HistoryKeeper history)
     {
-        var projects = Mock.Of<IProjectManagerService>(service => service.CurrentProject == Mock.Of<IProject>());
-        var kind = new SceneDocumentKind(projects, interaction, redirects);
+        var kind = new SceneDocumentKind(Mock.Of<IProject>(), interaction, redirects);
         var file = new DocumentFile(
             Path.Combine(Path.GetTempPath(), "Content", data.Name + AssetFileTypes.SceneDescriptor),
             new Uri($"asset:/Content/{data.Name}{AssetFileTypes.SceneDescriptor}"));

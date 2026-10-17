@@ -17,6 +17,7 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Engine;
 using Oxygen.Editor.Shell.Documents;
@@ -32,9 +33,16 @@ namespace Oxygen.Editor.World.Workspace;
 public partial class WorkspaceViewModel
 {
     // Each file opens once, as a document of the kind registered for its suffix, shown by that kind's editor.
+    // A workspace belongs to one project: activating another project closes every window first.
     private static void RegisterDocuments(IContainer childContainer)
     {
-        childContainer.Register<SceneDocumentKind>(Reuse.Singleton);
+        childContainer.RegisterDelegate(
+            resolver => new SceneDocumentKind(
+                resolver.Resolve<IProjectManagerService>().CurrentProject
+                    ?? throw new InvalidOperationException("A workspace opens only with a project."),
+                resolver.Resolve<ISceneNodeInteraction>(IfUnresolved.ReturnDefault),
+                resolver.Resolve<IAssetRedirects>(IfUnresolved.ReturnDefault)),
+            Reuse.Singleton);
         childContainer.Register<MaterialDocumentKind>(Reuse.Singleton);
         childContainer.Register<MaterialEdits>(Reuse.Singleton);
         childContainer.RegisterDelegate(

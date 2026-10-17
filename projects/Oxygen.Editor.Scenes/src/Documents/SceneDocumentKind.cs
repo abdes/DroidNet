@@ -5,7 +5,6 @@
 using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.World;
@@ -15,12 +14,12 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Documents;
 
-/// <summary>The scene document kind: opens <c>.oscene.json</c> files as scenes of the current project.</summary>
-/// <param name="projects">The current project, which a decoded scene belongs to.</param>
+/// <summary>The scene document kind: opens <c>.oscene.json</c> files as scenes of a project.</summary>
+/// <param name="project">The project that every scene this kind decodes belongs to.</param>
 /// <param name="interaction">The nodes hidden and locked in the editor, if the editor keeps them.</param>
 /// <param name="redirects">The session's asset renames and moves, if the editor tracks them.</param>
 public sealed class SceneDocumentKind(
-    IProjectManagerService projects,
+    IProject project,
     ISceneNodeInteraction? interaction = null,
     IAssetRedirects? redirects = null) : IDocumentKind
 {
@@ -39,10 +38,6 @@ public sealed class SceneDocumentKind(
     {
         ArgumentNullException.ThrowIfNull(file);
         ArgumentNullException.ThrowIfNull(context);
-        if (projects.CurrentProject is not { } project)
-        {
-            return DocumentDecodeResult.Failed("No project is open.");
-        }
 
         Scene scene;
         try

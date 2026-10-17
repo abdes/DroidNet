@@ -301,9 +301,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         _ = this.AssetCatalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         // The scene is a document of the project, saved where the editor saves scenes.
-        var scenes = new Mock<IProjectManagerService>();
-        _ = scenes.SetupGet(value => value.CurrentProject).Returns(project);
-        this.sceneKind = new SceneDocumentKind(scenes.Object);
+        this.sceneKind = new SceneDocumentKind(project);
         this.materialKind = new MaterialDocumentKind(this.materialValidation);
         this.sceneDocuments = new OpenDocuments([this.sceneKind, this.materialKind], new ImmediateReadFileStore(new NativeAtomicFileStore(new RealFileSystem())));
         this.OpenScene(this.WriteScene(this.Source));
