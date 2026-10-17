@@ -1,6 +1,6 @@
 # Document kinds
 
-Status: **agreed design**.
+Status: **implemented**.
 
 Scope: slice S1.5 of
 [issue-069-di-topology-and-decomposition.md](../plan/issue-069-di-topology-and-decomposition.md).
@@ -20,7 +20,7 @@ The actors:
 - the relocation workflow, which renames, moves and deletes assets;
 - Play and Cook, which ask which of their inputs have unsaved edits.
 
-Document kinds today: scenes and materials. Coming next: textures, input mapping
+Document kinds: scenes and materials. Coming next: textures, input mapping
 contexts and input actions. Hair, water and physics are future families that
 will need kinds of their own.
 
@@ -58,9 +58,9 @@ will need kinds of their own.
 9. **Inspect cooked output.** The user opens the cooked package inspection for a
    folder. It shows in a tab, but it edits no file.
 
-## 2. What happens today
+## 2. What happened before this design
 
-The facts below are measured on the current tree.
+The facts below were measured before S1.5.
 
 | Concern                  | Scene                                                                                                         | Material                                                                                                                        | Cooked inspection                     |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
@@ -177,7 +177,7 @@ A kind does only the work that needs to know its format or its model:
   today. A capture for a copy takes the new asset's identity, because a scene
   file holds its own id.
 - **Tell whether an edit is in progress,** and **finish its edits in progress,**
-  such as an open drag or an open edit session, as one history entry each.
+  such as an open drag, as one history entry each.
 - **Apply a relocation to its model:** its new file, and a mapping that gives
   each moved reference its new value. A mapping, not a list of URIs, because a
   moved folder moves every reference inside it.
@@ -221,7 +221,6 @@ is computed. It rejects:
 
 Every copy listed in stiffness 7 uses it, and the cook-specific derivations
 (native virtual paths, descriptor suffixes, writable mounts) are built on it.
-The scene-specific parts of Projects go in S1.6, as the plan says.
 
 ### 3.5 The history's position
 
@@ -251,8 +250,7 @@ marked changed on disk.
    _how_. `IUnsavedDocuments` (S1.11) is answered from Documents.
 2. **Dirty follows the history's position (3.5).** Undoing back to the saved
    point makes a document clean. Every change to content that is saved is
-   recorded in the history; each of the 46 calls in the scene command service
-   that mark the scene dirty does so today.
+   recorded in the history.
 3. **The kind's contract has no "apply or revert a history change".** A history
    change carries its own inverse. The global history's multi-document entries
    reach documents through follow (3.1): undoing a rename runs the reverse
@@ -280,9 +278,7 @@ marked changed on disk.
    rule per kind.
 9. **One scene per window is a placement rule of the scene editor (S1.10),** not
    part of a kind.
-10. **S1.5 replaces every copy in stiffness 7 with the mapping of 3.4,** except
-    the scene paths inside `ProjectManagerService`, which move with the scene
-    parts in S1.6.
+10. **Every copy in stiffness 7 uses the mapping of 3.4.**
 11. **S1.5 removes `Oxygen.Editor.Runtime`'s unused reference to
     `Oxygen.Editor.Documents`.**
 
@@ -304,12 +300,10 @@ marked changed on disk.
   replaced, and their modules' tests.
 - The unused reference of decision 11 removed.
 
-Existing code stays where it is until its owner exists (plan decision 9):
-
-- `EditorDocumentService`, `BaseDocumentMetadata`, the close coordinator and the
-  prompts, until the Shell's document service replaces them in S1.10;
-- the scene kind, in S1.6;
-- the material kind, in S1.8.
+Scenes implements the scene kind (S1.6) and the Material Editor the material
+kind. `EditorDocumentService`, `BaseDocumentMetadata`, the close coordinator and
+the prompts stay until the Shell's document service replaces them in S1.10 (plan
+decision 9).
 
 No adapter is written that a later slice has to remove.
 

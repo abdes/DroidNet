@@ -1,6 +1,6 @@
 # Scenes module
 
-Status: **agreed design**.
+Status: **implemented**. Open problems are in the register (section 6).
 
 Scope: slice S1.6 of
 [issue-069-di-topology-and-decomposition.md](../plan/issue-069-di-topology-and-decomposition.md):
@@ -106,19 +106,17 @@ Schemas, Documents, Projects, Managed, TimeMachine and Storage. It holds:
 
 - **The scene document kind** (`.oscene.json`): decode, capture, capture for a
   copy, finish edits, apply a relocation (S1.5). Its content holds the `Scene`
-  and the scene's authoring gate. The decode takes over the checks that Projects
-  makes when it stages a load: unique node ids, and an explorer layout that owns
-  its ids.
-- **The command service,** with its edit sessions, results, edit records,
-  descriptors and field helpers. It records into the history of the scene's
-  document, and it raises .NET events instead of sending messages.
-- **Selection,** the **mutator** and the **organizer** without its unused
-  adapter code.
-- **Node lock and visibility,** behind an interface, because the commands obey
-  it.
+  and the document's `SceneAuthoring`. The decode checks that node ids are
+  unique and that the explorer layout owns its ids.
+- **Scene edits** (3.6): the edit records, `SceneAuthoring`, results, coded
+  diagnostics, descriptors and field helpers. `SceneAuthoring` records into the
+  history of the scene's document and reports every change on one stream
+  (`Changed`).
+- **Selection,** with its own event.
+- **Node lock and visibility,** behind an interface, because edits obey it.
 - **The engine sync port** (`ISceneEngineSync`), with its own value types and no
-  Runtime type. `SceneEngineSync` stays in the World Editor until S1.7 moves it
-  to LivePreview.
+  Runtime type. `SceneEngineSync` and its projector stay in the World Editor
+  until S1.7 moves them to LivePreview.
 
 Creating a scene and the scene rules of the relocation service are not in
 Scenes: they live in ContentPipeline, beside the other kinds' (3.3).
@@ -131,10 +129,10 @@ views listen to the document: when a reload replaces the content, they show the
 new scene and the engine sync registers it.
 
 The scene's content tells the document when an edit is in progress, such as a
-drag or an open edit session. A file that changes on disk during a drag then
-marks the scene changed on disk instead of reloading it under the drag. Hiding a
-node in the editor is a history entry that keeps the history's position, so it
-does not make the scene dirty.
+gesture. A file that changes on disk during a drag then marks the scene changed
+on disk instead of reloading it under the drag. Hiding a node in the editor is a
+history entry that keeps the history's position, so it does not make the scene
+dirty.
 
 What goes from Projects and the World Editor:
 
@@ -225,10 +223,10 @@ These rules are mandatory for every scene edit:
    tabs, with `SceneDocumentMetadata` reading the document's title and state,
    until the Shell's document service replaces both in S1.10; the Shell then
    moves the placement rules without rewriting the scene's behavior.
-6. **Domain events replace the command service's messages.** Node added or
-   removed, component added or removed and selection changed become .NET events
-   of Scenes; the five messages go. The views' own messages (selection requests,
-   scene loaded) stay until the Shell's S1.10.
+6. **Scenes reports through events, not messages.** Scene changes come from
+   `SceneAuthoring.Changed` and selection changes from the selection service's
+   event; the command service's five messages go. The views' own messages
+   (selection requests, scene loaded) stay until the Shell's S1.10.
 7. **The engine sync port speaks Scenes' language.** `ObserveEnvironmentAsync`
    returns a Scenes type; the synchronized event names the scene and its
    document's id; `RegisterDocument` and `CloseDocument` take the document's id,
@@ -244,27 +242,17 @@ These rules are mandatory for every scene edit:
 11. **All ten change sets become atomic scene edit batches** (scene-edits.md
     3.5), including the atmosphere lights reset and the camera move in the
     views.
-12. **Tests move with the code.** The command service, selection, mutator and
-    organizer tests and the scene tests of Projects move to
-    `Oxygen.Editor.Scenes.Tests`, which runs without the WinUI host. The World
-    Editor's tests keep testing the views and build their scenes with Scenes'
-    public API.
-13. **The slice lands as three commits,** each building and passing its tests:
-    1. scenes as documents and scene assets through the relocation service
-       (decisions 1 to 5), in the World Editor, closed by the reviewer's check
-       in the editor. They are one commit because both remove the project's
-       scene list;
-    2. the module and the move: the `WindowId` and the messages go (decisions 6
-       and 7), and so does the organizer's dead code;
-    3. transactions (decision 11).
+12. **Scenes' behavior is tested in `Oxygen.Editor.Scenes.Tests`,** through its
+    public API and without the WinUI host
+    ([scene-edits-tests.md](scene-edits-tests.md)). The World Editor's tests
+    keep the views and the engine projection, over a real `SceneAuthoring`.
 
 ## 5. Gate
 
 - `Oxygen.Editor.Scenes` tests without the WinUI host.
 - The World Editor, Content Browser, ContentPipeline, Projects and Documents
   tests that cover the callers.
-- Your editor build, and your acceptance of the first commit in the running
-  editor.
+- Your editor build, and your acceptance in the running editor.
 
 ## 6. Problem register
 
@@ -393,8 +381,8 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
 
 ### 6.2 Defects and unfinished work in the working tree
 
-- **D1. Material save and cook repeat as if dirty.** Status: open, not
-  investigated.
+- **D1. Material save and cook repeat as if dirty.** Status: closed; checked in
+  the editor.
 - **D2. Integration test hangs.** Status: closed. The automatic cook waits for
   the cook writer to be idle before it reads statuses and queues a run.
   `ClosingProjectCancelsCookAndReopensPriorNativePublication` and
@@ -412,6 +400,6 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
   Unit.UI, Integration.UI and Benchmarks.UI projects build, and their suites
   pass on `SceneAuthoring`. `Oxygen.Editor.Scenes.Tests` holds the unit and
   functional tests of the module.
-- **D5. This document is stale.** Status: open. Decision 13 and section 5
-  describe the old commit order, not the split; `document-kinds.md` and the #69
-  plan need the same revision.
+- **D5. This document is stale.** Status: closed. This document,
+  `document-kinds.md` and the #69 plan describe the code as it is. Was: Decision
+  13 and section 5 described the old commit order, not the split.
