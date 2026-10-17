@@ -35,6 +35,18 @@
       "x-editor-order": 10,
       "x-editor-renderer": "scene-tree"
     },
+    "starting_camera": {
+      "x-editor-label": "Starting Camera",
+      "x-editor-group": "Play",
+      "x-editor-order": 11,
+      "x-editor-renderer": "combo"
+    },
+    "starting_input_contexts": {
+      "x-editor-label": "Starting Input Contexts",
+      "x-editor-group": "Play",
+      "x-editor-order": 12,
+      "x-editor-renderer": "asset-reference-list"
+    },
     "renderables": {
       "x-editor-label": "Renderables",
       "x-editor-group": "Scene",
