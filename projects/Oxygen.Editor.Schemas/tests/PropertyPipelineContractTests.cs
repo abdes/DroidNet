@@ -28,21 +28,13 @@ public sealed class PropertyPipelineContractTests
     [TestMethod]
     public void PropertyBindingRepresentsMixedValuesAsBindingState()
     {
-        var first = Guid.NewGuid();
-        var second = Guid.NewGuid();
-        var targets = new Dictionary<Guid, Target>
-        {
-            [first] = new() { X = 1.0f },
-            [second] = new() { X = 2.0f },
-        };
         var binding = new PropertyBinding<float>(XDescriptor);
 
-        binding.UpdateFromModel([first, second], id => targets[id]);
+        binding.UpdateFromModel([new Target { X = 1.0f }, null, new Target { X = 2.0f }]);
 
         _ = binding.HasValue.Should().BeTrue();
         _ = binding.IsMixed.Should().BeTrue();
         _ = binding.Value.Should().Be(1.0f);
-        _ = binding.Nodes.Should().Equal(first, second);
     }
 
     /// <summary>

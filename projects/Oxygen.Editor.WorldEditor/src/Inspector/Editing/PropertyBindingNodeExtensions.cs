@@ -7,10 +7,7 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Editing;
 
-/// <summary>
-/// Updates Schemas bindings, whose property targets are keyed by <see cref="Guid"/>, from the Inspector's typed node
-/// selection.
-/// </summary>
+/// <summary>Updates Schemas bindings from the Inspector's node selection.</summary>
 internal static class PropertyBindingNodeExtensions
 {
     /// <summary>Refreshes the binding from the selected nodes.</summary>
@@ -23,6 +20,6 @@ internal static class PropertyBindingNodeExtensions
         ArgumentNullException.ThrowIfNull(binding);
         ArgumentNullException.ThrowIfNull(nodes);
         ArgumentNullException.ThrowIfNull(targets);
-        binding.UpdateFromModel([.. nodes.Select(static node => node.Value)], id => targets(NodeId.FromValue(id)));
+        binding.UpdateFromModel(nodes.Select(targets));
     }
 }

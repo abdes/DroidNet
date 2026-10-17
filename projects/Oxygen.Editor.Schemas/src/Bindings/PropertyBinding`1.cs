@@ -14,8 +14,8 @@ namespace Oxygen.Editor.Schemas.Bindings;
 /// <para>
 /// Holds a single observable surface (<see cref="Value"/> and
 /// <see cref="IsMixed"/>) together with the descriptor that drives
-/// validation, the typed property id, and the set of nodes the binding
-/// edits.
+/// validation and the typed property id. The value folds the property of
+/// every target the selection edits.
 /// </para>
 /// <para>
 /// Setting <see cref="Value"/> from the view raises a
@@ -31,7 +31,6 @@ namespace Oxygen.Editor.Schemas.Bindings;
 public class PropertyBinding<T> : INotifyPropertyChanged
 {
     private readonly PropertyDescriptor<T> descriptor;
-    private readonly List<Guid> nodes;
     private T value = default!;
     private bool hasValue;
     private bool isMixed;
@@ -44,7 +43,6 @@ public class PropertyBinding<T> : INotifyPropertyChanged
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         this.descriptor = descriptor;
-        this.nodes = [];
     }
 
     /// <inheritdoc />
@@ -52,8 +50,8 @@ public class PropertyBinding<T> : INotifyPropertyChanged
 
     /// <summary>
     /// Raised when the view writes a new value. The handler is expected
-    /// to validate, build a <see cref="PropertyEdit"/>, and route it
-    /// through the command service.
+    /// to validate, build a <see cref="PropertyEdit"/>, and route it to
+    /// the edit that changes the model.
     /// </summary>
     public event EventHandler<PropertyBindingChangedEventArgs<T>>? ValueRequested;
 
@@ -66,11 +64,6 @@ public class PropertyBinding<T> : INotifyPropertyChanged
     /// Gets the typed property id.
     /// </summary>
     public PropertyId<T> Id => this.descriptor.TypedId;
-
-    /// <summary>
-    /// Gets the node ids the binding edits.
-    /// </summary>
-    public IReadOnlyList<Guid> Nodes => this.nodes;
 
     /// <summary>
     /// Gets a value indicating whether the binding currently has any
@@ -134,22 +127,18 @@ public class PropertyBinding<T> : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Re-binds the contributing nodes and recomputes the value /
-    /// mixed-value state by reading the property off each provided
-    /// model target.
+    /// Recomputes the value / mixed-value state by reading the property off
+    /// the model target of each edited item.
     /// </summary>
-    /// <param name="nodeIds">The node ids.</param>
-    /// <param name="targets">A function from node id to the model target
-    /// (e.g. C# transform component instance).</param>
-    public void UpdateFromModel(IReadOnlyList<Guid> nodeIds, Func<Guid, object?> targets)
+    /// <param name="targets">The model target of each edited item (e.g. a
+    /// transform component instance); <see langword="null"/> targets are
+    /// skipped.</param>
+    public void UpdateFromModel(IEnumerable<object?> targets)
     {
-        ArgumentNullException.ThrowIfNull(nodeIds);
         ArgumentNullException.ThrowIfNull(targets);
 
-        this.nodes.Clear();
-        this.nodes.AddRange(nodeIds);
-
-        if (this.nodes.Count == 0)
+        var present = targets.OfType<object>().ToList();
+        if (present.Count == 0)
         {
             this.HasValue = false;
             this.IsMixed = false;
@@ -158,7 +147,7 @@ public class PropertyBinding<T> : INotifyPropertyChanged
             return;
         }
 
-        var folded = MixedValue<T>.Fold(EnumerateValues(this.nodes, targets, this.descriptor));
+        var folded = MixedValue<T>.Fold(present.Select(this.descriptor.Read));
         this.HasValue = folded.HasValue;
         this.IsMixed = folded.IsMixed;
         if (!Equals(this.value, folded.Value))
@@ -177,20 +166,6 @@ public class PropertyBinding<T> : INotifyPropertyChanged
     protected void OnPropertyChanged(string propertyName)
         => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
-    private static IEnumerable<T> EnumerateValues(
-        IReadOnlyList<Guid> nodeIds,
-        Func<Guid, object?> targets,
-        PropertyDescriptor<T> descriptor)
-    {
-        foreach (var id in nodeIds)
-        {
-            var target = targets(id);
-            if (target is not null)
-            {
-                yield return descriptor.Read(target);
-            }
-        }
-    }
 }
 
 /// <summary>
