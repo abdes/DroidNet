@@ -6,7 +6,6 @@ using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits.Layout;
 

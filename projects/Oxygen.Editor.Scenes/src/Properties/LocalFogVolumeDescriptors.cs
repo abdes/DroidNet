@@ -22,7 +22,8 @@ public sealed class LocalFogVolumeDescriptors
             writer: static (target, value) => ((LocalFogVolumeComponent)target).Enabled = value,
             validator: static _ => ValidationResult.Ok,
             annotation: Annotation("enabled", new EditorAnnotation { Group = "Local Fog Volume", Label = "Enabled", Renderer = "toggle" }),
-            engineCommandKey: "local_fog_volume.enabled") { Engine = SceneEngineFields.For(SceneProperties.LocalFogVolumeKind, "local_fog_volume.enabled") };
+            engineCommandKey: "local_fog_volume.enabled")
+        { Engine = SceneEngineFields.For(SceneProperties.LocalFogVolumeKind, "local_fog_volume.enabled") };
         this.RadialFogExtinctionDescriptor = FloatDescriptor(
             "/radial_fog_extinction",
             "Density",
@@ -78,7 +79,8 @@ public sealed class LocalFogVolumeDescriptors
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.LocalFogVolumeInvalid, "Sort priority must be between -127 and 127."),
             annotation: Annotation("sort_priority", new EditorAnnotation { Group = "Local Fog Volume", Label = "Sort Priority", Renderer = "numberbox", Step = 1 }),
-            engineCommandKey: "local_fog_volume.sort_priority") { Engine = SceneEngineFields.For(SceneProperties.LocalFogVolumeKind, "local_fog_volume.sort_priority") };
+            engineCommandKey: "local_fog_volume.sort_priority")
+        { Engine = SceneEngineFields.For(SceneProperties.LocalFogVolumeKind, "local_fog_volume.sort_priority") };
         this.ById = new Dictionary<PropertyId, PropertyDescriptor>
         {
             [this.EnabledDescriptor.Id] = this.EnabledDescriptor,
@@ -140,7 +142,8 @@ public sealed class LocalFogVolumeDescriptors
             writer: (target, value) => write((LocalFogVolumeComponent)target, value),
             validator: value => Validate(label, minimum, maximum, value),
             annotation: Annotation(pointer.TrimStart('/'), new EditorAnnotation { Group = "Local Fog Volume", Label = label, Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: "local_fog_volume." + pointer.TrimStart('/')) { Engine = SceneEngineFields.For(SceneProperties.LocalFogVolumeKind, "local_fog_volume." + pointer.TrimStart('/')) };
+            engineCommandKey: "local_fog_volume." + pointer.TrimStart('/'))
+        { Engine = SceneEngineFields.For(SceneProperties.LocalFogVolumeKind, "local_fog_volume." + pointer.TrimStart('/')) };
 
     private static PropertyDescriptor<Vector3> VectorDescriptor(
         string pointer,
@@ -164,7 +167,8 @@ public sealed class LocalFogVolumeDescriptors
                 return y.IsValid ? Validate(label, 0f, maximum, value.Z) : y;
             },
             annotation: Annotation(pointer.TrimStart('/'), new EditorAnnotation { Group = "Local Fog Volume", Label = label, Renderer = "color-rgb" }),
-            engineCommandKey: "local_fog_volume." + pointer.TrimStart('/')) { Engine = SceneEngineFields.For(SceneProperties.LocalFogVolumeKind, "local_fog_volume." + pointer.TrimStart('/')) };
+            engineCommandKey: "local_fog_volume." + pointer.TrimStart('/'))
+        { Engine = SceneEngineFields.For(SceneProperties.LocalFogVolumeKind, "local_fog_volume." + pointer.TrimStart('/')) };
 
     private static ValidationResult Validate(string label, float? minimum, float? maximum, float value)
         => !float.IsFinite(value)

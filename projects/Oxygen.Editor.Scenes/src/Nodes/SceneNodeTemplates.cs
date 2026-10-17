@@ -8,7 +8,6 @@ using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 

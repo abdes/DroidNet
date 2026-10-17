@@ -158,7 +158,8 @@ public sealed class PerspectiveCameraDescriptors
                 annotation: SceneEditorSchemaAnnotations.Get(
                     "#/definitions/perspective_camera/aspect_mode",
                     new EditorAnnotation { Group = "Projection", Label = "Aspect Mode", Renderer = "combobox" }),
-                engineCommandKey: "perspective_camera.aspect_mode") { Engine = SceneEngineFields.For(SceneProperties.PerspectiveCameraKind, "perspective_camera.aspect_mode") },
+                engineCommandKey: "perspective_camera.aspect_mode")
+            { Engine = SceneEngineFields.For(SceneProperties.PerspectiveCameraKind, "perspective_camera.aspect_mode") },
             apertureF: FloatDescriptor(
                 "/aperture_f",
                 "Aperture",
@@ -203,7 +204,8 @@ public sealed class PerspectiveCameraDescriptors
             annotation: SceneEditorSchemaAnnotations.Get(
                 ToSceneSchemaPointer(engineCommandKey),
                 new EditorAnnotation { Group = "Projection", Label = label, Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: engineCommandKey) { Engine = SceneEngineFields.For(SceneProperties.PerspectiveCameraKind, engineCommandKey) };
+            engineCommandKey: engineCommandKey)
+        { Engine = SceneEngineFields.For(SceneProperties.PerspectiveCameraKind, engineCommandKey) };
 
     private static string ToSceneSchemaPointer(string engineCommandKey)
         => engineCommandKey switch

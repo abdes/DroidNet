@@ -77,7 +77,8 @@ public sealed class SetScriptSlotsTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var unnamed = new ScriptSlot { Id = Guid.NewGuid(), Script = SampleScene.MoveScript }
-            with { Overrides = ImmutableSortedDictionary.Create<string, ScriptValue>(StringComparer.Ordinal).Add(" ", ScriptValue.FromInt(1)) };
+            with
+        { Overrides = ImmutableSortedDictionary.Create<string, ScriptValue>(StringComparer.Ordinal).Add(" ", ScriptValue.FromInt(1)) };
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(new SetScriptSlots(SampleScene.Script, [unnamed])).ConfigureAwait(false);

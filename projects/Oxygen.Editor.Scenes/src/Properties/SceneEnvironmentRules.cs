@@ -4,8 +4,8 @@
 
 using System.Numerics;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 

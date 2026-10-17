@@ -114,7 +114,8 @@ public sealed class OrthographicCameraDescriptors
                     ? ValidationResult.Ok
                     : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Unknown camera aspect mode."),
                 annotation: Annotation("aspect_mode", new EditorAnnotation { Group = "Projection", Label = "Aspect Mode", Renderer = "combobox" }),
-                engineCommandKey: "orthographic_camera.aspect_mode") { Engine = SceneEngineFields.For(SceneProperties.OrthographicCameraKind, "orthographic_camera.aspect_mode") },
+                engineCommandKey: "orthographic_camera.aspect_mode")
+            { Engine = SceneEngineFields.For(SceneProperties.OrthographicCameraKind, "orthographic_camera.aspect_mode") },
             aspectRatio: FloatDescriptor(
                 "/aspect_ratio",
                 "Fixed Aspect Ratio",
@@ -173,7 +174,8 @@ public sealed class OrthographicCameraDescriptors
             writer: (target, value) => write((OrthographicCamera)target, value),
             validator: validate,
             annotation: Annotation(pointer.TrimStart('/'), new EditorAnnotation { Group = "Projection", Label = label, Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: "orthographic_camera." + pointer.TrimStart('/')) { Engine = SceneEngineFields.For(SceneProperties.OrthographicCameraKind, "orthographic_camera." + pointer.TrimStart('/')) };
+            engineCommandKey: "orthographic_camera." + pointer.TrimStart('/'))
+        { Engine = SceneEngineFields.For(SceneProperties.OrthographicCameraKind, "orthographic_camera." + pointer.TrimStart('/')) };
 
     private static EditorAnnotation Annotation(string property, EditorAnnotation fallback)
         => SceneEditorSchemaAnnotations.Get("#/definitions/orthographic_camera/" + property, fallback);

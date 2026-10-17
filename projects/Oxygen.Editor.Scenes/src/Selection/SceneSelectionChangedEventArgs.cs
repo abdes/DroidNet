@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Documents;
-using Oxygen.Editor.Documents;
 namespace Oxygen.Editor.Scenes.Selection;
 
 /// <summary>

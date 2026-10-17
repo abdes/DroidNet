@@ -144,7 +144,8 @@ public sealed class TransformDescriptors
                 ? ValidationResult.Ok
                 : ValidationResult.Fail("PROPERTY_NONFINITE", "Position must be finite."),
             annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.01 },
-            engineCommandKey: key) { Engine = SceneEngineFields.For(SceneProperties.TransformKind, key) };
+            engineCommandKey: key)
+        { Engine = SceneEngineFields.For(SceneProperties.TransformKind, key) };
 
     private static PropertyDescriptor<float> BuildRotationAxis(string pointer, int axisIndex, string key)
         => new(
@@ -155,7 +156,8 @@ public sealed class TransformDescriptors
                 ? ValidationResult.Ok
                 : ValidationResult.Fail("PROPERTY_NONFINITE", "Rotation must be finite."),
             annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.5 },
-            engineCommandKey: key) { Engine = SceneEngineFields.For(SceneProperties.TransformKind, key) };
+            engineCommandKey: key)
+        { Engine = SceneEngineFields.For(SceneProperties.TransformKind, key) };
 
     private static PropertyDescriptor<float> BuildScaleAxis(
         string pointer,
@@ -172,7 +174,8 @@ public sealed class TransformDescriptors
                     ? ValidationResult.Fail("PROPERTY_DEGENERATE_SCALE", "Scale axis must be non-zero.")
                     : ValidationResult.Ok,
             annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.01 },
-            engineCommandKey: key) { Engine = SceneEngineFields.For(SceneProperties.TransformKind, key) };
+            engineCommandKey: key)
+        { Engine = SceneEngineFields.For(SceneProperties.TransformKind, key) };
 
     private static float ReadRotationAxis(TransformComponent component, int axisIndex)
     {

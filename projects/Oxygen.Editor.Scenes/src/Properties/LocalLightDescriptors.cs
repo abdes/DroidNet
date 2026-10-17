@@ -34,7 +34,8 @@ public sealed class LocalLightDescriptors
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.LocalLightInvalid, "Color must be finite and nonnegative."),
             annotation: SceneEditorSchemaAnnotations.Get("#/definitions/light_common/color_rgb", new EditorAnnotation { Group = "Light", Label = "Color", Renderer = "color-rgb" }),
-            engineCommandKey: "light.color") { Engine = SceneEngineFields.For(kind, "light.color") });
+            engineCommandKey: "light.color")
+        { Engine = SceneEngineFields.For(kind, "light.color") });
         this.AffectsWorldDescriptor = this.Add(Bool(kind, "/affects_world", "#/definitions/light_common/affects_world", "Affects World", static light => light.AffectsWorld, static (light, value) => light.AffectsWorld = value));
         this.CastsShadowsDescriptor = this.Add(Bool(kind, "/casts_shadows", "#/definitions/light_common/casts_shadows", "Cast Shadows", static light => light.CastsShadows, static (light, value) => light.CastsShadows = value));
         this.ExposureCompensationDescriptor = this.Add(Float(kind, "/exposure_compensation", "#/definitions/light_common/exposure_compensation_ev", "Exposure Compensation", static light => light.ExposureCompensation, static (light, value) => light.ExposureCompensation = value, Finite));
@@ -49,7 +50,8 @@ public sealed class LocalLightDescriptors
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.LocalLightInvalid, "Unknown shadow resolution hint."),
             annotation: SceneEditorSchemaAnnotations.Get("#/definitions/light_shadow/resolution_hint", new EditorAnnotation { Group = "Shadows", Label = "Resolution", Renderer = "combo" }),
-            engineCommandKey: "light.shadow.resolution_hint") { Engine = SceneEngineFields.For(kind, "light.shadow.resolution_hint") });
+            engineCommandKey: "light.shadow.resolution_hint")
+        { Engine = SceneEngineFields.For(kind, "light.shadow.resolution_hint") });
         this.LuminousFluxLumensDescriptor = this.Add(Float(kind, "/luminous_flux_lm", $"#/definitions/{definition}/luminous_flux_lm", "Luminous Flux", ReadFlux, WriteFlux, Nonnegative));
         this.RangeDescriptor = this.Add(Float(kind, "/range", $"#/definitions/{definition}/range", "Range", ReadRange, WriteRange, Positive));
         this.SourceRadiusDescriptor = this.Add(Float(kind, "/source_radius", $"#/definitions/{definition}/source_radius", "Source Radius", ReadSourceRadius, WriteSourceRadius, Nonnegative));
@@ -203,7 +205,8 @@ public sealed class LocalLightDescriptors
             writer: (target, value) => write((LightComponent)target, value),
             validator: validate,
             annotation: SceneEditorSchemaAnnotations.Get(schemaPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: "light" + pointer.Replace('/', '.')) { Engine = SceneEngineFields.For(kind, "light" + pointer.Replace('/', '.')) };
+            engineCommandKey: "light" + pointer.Replace('/', '.'))
+        { Engine = SceneEngineFields.For(kind, "light" + pointer.Replace('/', '.')) };
 
     private static PropertyDescriptor<bool> Bool(
         string kind,
@@ -218,7 +221,8 @@ public sealed class LocalLightDescriptors
             writer: (target, value) => write((LightComponent)target, value),
             validator: static _ => ValidationResult.Ok,
             annotation: SceneEditorSchemaAnnotations.Get(schemaPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "toggle" }),
-            engineCommandKey: "light" + pointer.Replace('/', '.')) { Engine = SceneEngineFields.For(kind, "light" + pointer.Replace('/', '.')) };
+            engineCommandKey: "light" + pointer.Replace('/', '.'))
+        { Engine = SceneEngineFields.For(kind, "light" + pointer.Replace('/', '.')) };
 
     private T Add<T>(T descriptor)
         where T : PropertyDescriptor

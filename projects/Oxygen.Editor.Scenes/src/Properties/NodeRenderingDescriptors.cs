@@ -70,5 +70,6 @@ public sealed class NodeRenderingDescriptors
             annotation: SceneEditorSchemaAnnotations.Get(
                 "#/definitions/node_flags" + pointer,
                 new EditorAnnotation { Group = "Rendering", Label = label, Renderer = "toggle" }),
-            engineCommandKey: "node" + pointer.Replace('/', '.')) { Engine = SceneEngineFields.For(SceneProperties.NodeRenderingKind, "node" + pointer.Replace('/', '.')) };
+            engineCommandKey: "node" + pointer.Replace('/', '.'))
+        { Engine = SceneEngineFields.For(SceneProperties.NodeRenderingKind, "node" + pointer.Replace('/', '.')) };
 }

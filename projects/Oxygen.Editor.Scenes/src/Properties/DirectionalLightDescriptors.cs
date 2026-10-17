@@ -314,7 +314,8 @@ public sealed class DirectionalLightDescriptors
             annotation: Annotation(
                 "directional_light.color",
                 new EditorAnnotation { Group = "Light", Label = "Color", Renderer = "color-rgb" }),
-            engineCommandKey: "directional_light.color") { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, "directional_light.color") };
+            engineCommandKey: "directional_light.color")
+        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, "directional_light.color") };
 
     private static PropertyDescriptor<Vector3> BuildDiskScaleDescriptor()
         => new(
@@ -324,7 +325,8 @@ public sealed class DirectionalLightDescriptors
             validator: static value => IsFinite(value) && value.X >= 0 && value.Y >= 0 && value.Z >= 0
                 ? ValidationResult.Ok : ValidationResult.Fail("LIGHT_DISK_SCALE_INVALID", "Disk scale must be finite and nonnegative."),
             annotation: Annotation("directional_light.atmosphere_disk_luminance_scale_rgb", new EditorAnnotation { Group = "Atmosphere", Label = "Disk luminance scale", Renderer = "color-rgb" }),
-            engineCommandKey: "directional_light.atmosphere_disk_luminance_scale_rgb") { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, "directional_light.atmosphere_disk_luminance_scale_rgb") };
+            engineCommandKey: "directional_light.atmosphere_disk_luminance_scale_rgb")
+        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, "directional_light.atmosphere_disk_luminance_scale_rgb") };
 
     private static PropertyDescriptor<float> CascadeDistanceDescriptor(
         int index,
@@ -354,7 +356,8 @@ public sealed class DirectionalLightDescriptors
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, Range(label, minimum, maximum)),
             annotation: Annotation(engineCommandKey, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: engineCommandKey) { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
+            engineCommandKey: engineCommandKey)
+        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
 
     private static string Range(string label, float minimum, float maximum)
         => float.IsInfinity(minimum) && float.IsInfinity(maximum) ? $"{label} must be a finite number."
@@ -370,7 +373,8 @@ public sealed class DirectionalLightDescriptors
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Distribution must be 1 or greater."),
             annotation: Annotation("directional_light.distribution_exponent", new EditorAnnotation { Group = "Light", Label = "Distribution", Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: "directional_light.distribution_exponent") { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, "directional_light.distribution_exponent") };
+            engineCommandKey: "directional_light.distribution_exponent")
+        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, "directional_light.distribution_exponent") };
 
     private static PropertyDescriptor<float> PositiveFloatDescriptor(
         string pointer,
@@ -386,7 +390,8 @@ public sealed class DirectionalLightDescriptors
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light values must be finite positive numbers."),
             annotation: Annotation(engineCommandKey, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: engineCommandKey) { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
+            engineCommandKey: engineCommandKey)
+        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
 
     private static PropertyDescriptor<float> FractionDescriptor(
         string pointer,
@@ -402,7 +407,8 @@ public sealed class DirectionalLightDescriptors
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light fractions must be finite values in [0, 1]."),
             annotation: Annotation(engineCommandKey, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }),
-            engineCommandKey: engineCommandKey) { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
+            engineCommandKey: engineCommandKey)
+        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
 
     private static PropertyDescriptor<int> IntDescriptor(
         string pointer,
@@ -418,7 +424,8 @@ public sealed class DirectionalLightDescriptors
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Cascade count must be between 1 and 4."),
             annotation: Annotation(engineCommandKey, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 1 }),
-            engineCommandKey: engineCommandKey) { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
+            engineCommandKey: engineCommandKey)
+        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
 
     private static PropertyDescriptor<T> EnumDescriptor<T>(
         string pointer,
@@ -435,7 +442,8 @@ public sealed class DirectionalLightDescriptors
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light enum value is not valid."),
             annotation: Annotation(engineCommandKey, new EditorAnnotation { Group = "Light", Label = label, Renderer = "combo" }),
-            engineCommandKey: engineCommandKey) { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
+            engineCommandKey: engineCommandKey)
+        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
 
     private static PropertyDescriptor<bool> BoolDescriptor(
         string pointer,
@@ -449,7 +457,8 @@ public sealed class DirectionalLightDescriptors
             writer: (target, value) => write((DirectionalLightComponent)target, value),
             validator: static _ => ValidationResult.Ok,
             annotation: Annotation(engineCommandKey, new EditorAnnotation { Group = "Light", Label = label, Renderer = "toggle" }),
-            engineCommandKey: engineCommandKey) { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
+            engineCommandKey: engineCommandKey)
+        { Engine = SceneEngineFields.For(SceneProperties.DirectionalLightKind, engineCommandKey) };
 
     private static EditorAnnotation Annotation(string engineCommandKey, EditorAnnotation fallback)
         => SceneEditorSchemaAnnotations.Get(ToSceneSchemaPointer(engineCommandKey), fallback);

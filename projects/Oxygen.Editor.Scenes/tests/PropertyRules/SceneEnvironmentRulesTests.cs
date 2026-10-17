@@ -11,7 +11,6 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.PropertyRules;
 

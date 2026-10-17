@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Scenes.Properties;
