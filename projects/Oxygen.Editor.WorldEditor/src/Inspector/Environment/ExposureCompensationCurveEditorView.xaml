@@ -4,7 +4,6 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DroidNet.Controls"
-    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
     xmlns:local="using:Oxygen.Editor.World.Inspector">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -30,13 +29,15 @@
             <TextBlock Text="Metered EV100" />
             <TextBlock Grid.Column="1" Text="Compensation EV" />
         </Grid>
-        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Keys, Mode=OneWay}">
-            <ItemsRepeater.Layout>
-                <editorcontrols:PropertyItemsLayout Spacing="4" />
-            </ItemsRepeater.Layout>
-            <ItemsRepeater.ItemTemplate>
+        <ItemsControl IsTabStop="False" ItemsSource="{x:Bind ViewModel.Keys, Mode=OneWay}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Spacing="4" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="local:ExposureCompensationKeyViewModel">
-                    <Grid ColumnSpacing="6" DataContext="{x:Bind}">
+                    <Grid ColumnSpacing="6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
@@ -70,8 +71,8 @@
                         </Button>
                     </Grid>
                 </DataTemplate>
-            </ItemsRepeater.ItemTemplate>
-        </ItemsRepeater>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
         <Button
             HorizontalAlignment="Left"
             Command="{x:Bind ViewModel.AddKeyCommand}"

@@ -5,7 +5,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DroidNet.Controls"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
-    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
     xmlns:local="using:Oxygen.Editor.World.Inspector"
     x:Name="Root"
     KeyboardAcceleratorPlacementMode="Hidden"
@@ -205,24 +204,29 @@
                 HorizontalScrollMode="Disabled"
                 VerticalScrollBarVisibility="Auto"
                 Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
-                <ItemsRepeater
+                <ItemsControl
                     x:Name="PropertySections"
                     HorizontalAlignment="Stretch"
+                    IsTabStop="False"
                     ItemsSource="{x:Bind ViewModel.PropertyEditors}"
                     TabFocusNavigation="Local">
-                    <ItemsRepeater.Layout>
-                        <editorcontrols:PropertyItemsLayout Spacing="4" />
-                    </ItemsRepeater.Layout>
-                    <ItemsRepeater.ItemTemplate>
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="4" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="local:IDetailsSection">
                             <!--  Each section fills the inspector's width; sized to its content, a section's width would follow its own layout.  -->
                             <ContentPresenter
                                 HorizontalContentAlignment="Stretch"
                                 Content="{x:Bind Converter={StaticResource VmToViewConverter}}"
-                                Tag="{x:Bind}" />
+                                Loaded="OnPropertySectionLoaded"
+                                Tag="{x:Bind}"
+                                Unloaded="OnPropertySectionUnloaded" />
                         </DataTemplate>
-                    </ItemsRepeater.ItemTemplate>
-                </ItemsRepeater>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </ScrollViewer>
             <TextBlock
                 Grid.Row="4"

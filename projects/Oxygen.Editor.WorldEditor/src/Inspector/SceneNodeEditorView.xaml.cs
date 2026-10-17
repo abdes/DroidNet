@@ -27,8 +27,6 @@ public sealed partial class SceneNodeEditorView : UserControl
     public SceneNodeEditorView()
     {
         this.InitializeComponent();
-        this.PropertySections.ElementPrepared += OnPropertySectionPrepared;
-        this.PropertySections.ElementClearing += OnPropertySectionClearing;
 
         this.ViewModelChanged += (_, _) =>
         {
@@ -44,17 +42,19 @@ public sealed partial class SceneNodeEditorView : UserControl
         this.Unloaded += (_, _) => this.StopObservingModel();
     }
 
-    private static void OnPropertySectionPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
+    // A section's view holds its model while it is in the tree, and lets go of it when it leaves, so a cached model
+    // never keeps a discarded view alive.
+    private void OnPropertySectionLoaded(object sender, RoutedEventArgs args)
     {
-        if (args.Element is ContentPresenter { Content: IViewFor view, Tag: IDetailsSection model })
+        if (sender is ContentPresenter { Content: IViewFor view, Tag: IDetailsSection model })
         {
             view.ViewModel = model;
         }
     }
 
-    private static void OnPropertySectionClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
+    private void OnPropertySectionUnloaded(object sender, RoutedEventArgs args)
     {
-        if (args.Element is ContentPresenter { Content: IViewFor view })
+        if (sender is ContentPresenter { Content: IViewFor view })
         {
             view.ViewModel = null;
         }

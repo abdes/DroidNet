@@ -17,7 +17,7 @@ namespace Oxygen.Editor.Controls;
 [TemplatePart(Name = HeaderPresenterPartName, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = DescriptionPresenterPartName, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = HeaderIconPresenterHolderPartName, Type = typeof(Viewbox))]
-[TemplatePart(Name = ItemsRepeaterPartName, Type = typeof(ItemsRepeater))]
+[TemplatePart(Name = ItemsPartName, Type = typeof(ItemsControl))]
 [TemplatePart(Name = ContentPresenterPartName, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = HeaderPanelPartName, Type = typeof(FrameworkElement))]
 
@@ -36,7 +36,7 @@ public partial class PropertiesExpander : Control
     private const string HeaderPresenterPartName = "PartHeaderPresenter";
     private const string DescriptionPresenterPartName = "PartDescriptionPresenter";
     private const string HeaderIconPresenterHolderPartName = "PartHeaderIconPresenterHolder";
-    private const string ItemsRepeaterPartName = "PartItemsRepeater";
+    private const string ItemsPartName = "PartItems";
     private const string ContentPresenterPartName = "PartContentPresenter";
     private const string HeaderPanelPartName = "HeaderPanel";
 
@@ -58,26 +58,29 @@ public partial class PropertiesExpander : Control
         _ = this.RegisterPropertyChangedCallback(HorizontalContentAlignmentProperty, static (d, _) => ((PropertiesExpander)d).InvalidateMeasure());
     }
 
-    /// <summary>Expands and realizes a property item before bringing it into its scrolling host's view.</summary>
+    /// <summary>Expands the expander and brings a property item into its scrolling host's view.</summary>
     /// <param name="item">An item owned by this expander.</param>
-    /// <returns>Whether the item was found and realized.</returns>
+    /// <returns>Whether the item was found and laid out.</returns>
     public bool BringItemIntoView(object item)
     {
-        var index = this.Items.IndexOf(item);
-        if (index < 0)
+        if (!this.Items.Contains(item))
         {
             return false;
         }
 
         this.IsExpanded = true;
         _ = this.ApplyTemplate();
-        if (this.GetTemplateChild(ItemsRepeaterPartName) is not ItemsRepeater repeater)
+        if (this.GetTemplateChild(ItemsPartName) is not ItemsControl items)
         {
             return false;
         }
 
-        var element = repeater.GetOrCreateElement(index);
-        repeater.UpdateLayout();
+        items.UpdateLayout();
+        if (items.ContainerFromItem(item) is not UIElement element)
+        {
+            return false;
+        }
+
         element.StartBringIntoView();
         return true;
     }

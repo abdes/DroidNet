@@ -72,9 +72,8 @@ public sealed partial class InspectorBindingTests
         await nativeHost.LoadAsync(scroller, 1, this.TestContext.CancellationToken).ConfigureAwait(true);
         var section = view.FindDescendant<PropertiesExpander>()!;
 
-        // The expander's ItemsRepeater virtualizes: an unrealized item is not in the namescope, so
-        // view.FindName returns null for it and BringItemIntoView cannot index it. Resolve the
-        // declared instance from Items and realize it before walking its card.
+        // Resolve the declared instance from the expander's Items and bring it into view before
+        // walking its card.
         var item = section.Items.OfType<Oxygen.Editor.Controls.InspectorColorField>()
             .Single(candidate => string.Equals(
                 candidate.Name,

@@ -138,6 +138,7 @@ internal sealed class ComponentFeedbackTests : DroidNet.Tests.VisualUserInterfac
             Height = 650,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
         var oldNumber = view.FindDescendant<NumberBox>(control => Equals(control.Tag, "FieldOfView"))!;
         host.SelectComponentFilter(typeof(TransformComponent));
         await WaitForRenderAsync().ConfigureAwait(true);

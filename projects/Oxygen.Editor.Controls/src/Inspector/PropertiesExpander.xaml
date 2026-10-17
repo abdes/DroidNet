@@ -129,15 +129,18 @@
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
                                         <ContentPresenter Content="{TemplateBinding ItemsHeader}" />
-                                        <ItemsRepeater
-                                            x:Name="PartItemsRepeater"
+                                        <ItemsControl
+                                            x:Name="PartItems"
                                             Grid.Row="1"
+                                            IsTabStop="False"
                                             ItemsSource="{TemplateBinding Items}"
                                             TabFocusNavigation="Local">
-                                            <ItemsRepeater.Layout>
-                                                <local:PropertyItemsLayout Spacing="{ThemeResource PropertiesExpanderItemsSpacing}" />
-                                            </ItemsRepeater.Layout>
-                                        </ItemsRepeater>
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Spacing="{ThemeResource PropertiesExpanderItemsSpacing}" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
                                         <ContentPresenter Grid.Row="2" Content="{TemplateBinding ItemsFooter}" />
                                     </Grid>
                                 </Expander.Content>

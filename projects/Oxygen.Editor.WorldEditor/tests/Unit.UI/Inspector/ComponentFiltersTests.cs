@@ -184,6 +184,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
             Height = 650,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
         var number = view.FindDescendant<NumberBox>(control => Equals(control.Tag, "FieldOfView"))!;
         RaiseNumberEvent(number, "OnEditSessionStarted", NumberBoxEditInteractionKind.PointerDrag);
         number.NumberValue = 90;

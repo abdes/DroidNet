@@ -494,7 +494,7 @@ internal sealed partial class ResponsiveLayoutTests : VisualUserInterfaceTests
         var host = CreateHost(480, section);
         await LoadTestContentAsync(host).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        var spacing = ((PropertyItemsLayout)section.FindDescendant<ItemsRepeater>()!.Layout).Spacing;
+        var spacing = section.FindDescendant<ItemsControl>()!.FindDescendant<StackPanel>()!.Spacing;
 
         var firstBottom = first.TransformToVisual(section).TransformPoint(default).Y + first.ActualHeight;
         var lastTop = last.TransformToVisual(section).TransformPoint(default).Y;
