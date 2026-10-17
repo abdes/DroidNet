@@ -102,7 +102,8 @@ What makes this stiff:
 ### 3.1 The module
 
 `Oxygen.Editor.Scenes` is a class library with no WinUI. It references World,
-Schemas, Documents, Projects, Managed, TimeMachine and Storage. It holds:
+Schemas, Documents, Projects, ContentPipeline, Managed, TimeMachine and Storage
+(decision 13). It holds:
 
 - **The scene document kind** (`.oscene.json`): decode, capture, capture for a
   copy, finish edits, apply a relocation (S1.5). Its content holds the `Scene`
@@ -246,6 +247,15 @@ These rules are mandatory for every scene edit:
     public API and without the WinUI host
     ([scene-edits-tests.md](scene-edits-tests.md)). The World Editor's tests
     keep the views and the engine projection, over a real `SceneAuthoring`.
+13. **Scenes sits downstream of ContentPipeline.** ContentPipeline does not
+    reference Scenes. Scenes uses its rules, not a port of them: the cook's
+    post-process validation and canonical virtual paths (one rule for authoring
+    and cooking), the relocation redirects contract, and the cooked geometry's
+    material slot inventory.
+14. **A scene document kind belongs to one project.** The workspace creates it
+    with its project; activating another project closes every window first.
+15. **The scene list is the asset catalog's scene files (3.4).** A scene's id is
+    read from its file, as the cook reads it.
 
 ## 5. Gate
 
@@ -301,11 +311,10 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
   The command service takes `IOperationResultPublisher` and publishes failures
   (`PublishSceneFailure`, about 22 call sites), against the rule that domain
   services report through results and events and the Shell decides what to show.
-- **P4. Undecided dependency on ContentPipeline.** Status: open. The commands
-  use `ContentPipeline.Inspection` (material slots),
-  `ContentPipeline.Relocation.IAssetRedirects` and ContentPipeline references.
-  Section 3.1 does not list ContentPipeline: either a port or a deliberate
-  decision that Scenes sits downstream of it.
+- **P4. Undecided dependency on ContentPipeline.** Status: closed. Decision 13.
+  Was: The commands use `ContentPipeline.Inspection` (material slots),
+  `ContentPipeline.Relocation.IAssetRedirects` and ContentPipeline references,
+  and section 3.1 did not list ContentPipeline.
 - **P5. The authoring gate is static global state.** Status: closed.
   `SceneAuthoringGate` is deleted; each document's `SceneAuthoring` serializes
   its own edits. Was: `SceneAuthoringGate` keeps a
@@ -322,7 +331,8 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
   progress. The port has ten members and one API generation: the projector
   follows `SceneAuthoring.Changed`, and the per-operation methods are internal
   to the implementation. Its keys are still mixed (document id, scene id and
-  `Scene`). Was: `ISceneEngineSync` has about 50 members, two API generations
+  `Scene`). The S1.7 LivePreview design settles them, since the implementation
+  moves there. Was: `ISceneEngineSync` has about 50 members, two API generations
   (scene-scoped calls returning `SyncOutcome` beside fire-and-forget node
   calls), mixed keys (document id to register; scene id for pending counts and
   preview sync; `Scene` objects elsewhere) and exposed revisions
@@ -337,47 +347,44 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
   scene id and node id are all `Guid`, so a scene id can be passed where a
   document id is meant; this caused the selection regression. They need distinct
   strong types and a written rule for which key each concern uses.
-- **P9. Decoding reads ambient project state.** Status: open.
-  `SceneDocumentKind.DecodeAsync` deserializes with
-  `IProjectManagerService.CurrentProject`; the project should come from the
-  document file or the kind's construction.
-- **P10. The scene list reads the disk, not the catalog.** Status: open.
-  `SceneFiles.List` enumerates directories and `SceneFiles.FindByIdAsync` reads
-  every scene file, against section 3.4.
-- **P11. Visibility widened by the move.** Status: open. Descriptors,
-  `SceneFogFields`, `SceneSkyFields`, `SceneReferenceRetargeting`,
-  `SceneTransformMath`, `LocalLightDescriptors`, `SceneAuthoringGate` and
-  `Scene.SetEnvironment`, `Scene.SetPlay` and `Scene.SetReferences` were made
-  public so the move would compile. Their ownership must be designed, not
-  inherited.
+- **P9. Decoding reads ambient project state.** Status: closed.
+  `SceneDocumentKind` takes its project when it is created (decision 14). Was:
+  `SceneDocumentKind.DecodeAsync` deserialized with
+  `IProjectManagerService.CurrentProject`.
+- **P10. The scene list reads the disk, not the catalog.** Status: closed.
+  `SceneFiles` lists the scene files the asset catalog holds (decision 15). Was:
+  `SceneFiles.List` enumerated directories.
+- **P11. Visibility widened by the move.** Status: closed.
+  `SceneReferenceRetargeting` and `SceneTransformMath` are internal; the
+  reference queries the engine projection needs are `SceneAssetReferences`. The
+  descriptors and field rules stay public: they are the Inspector's property
+  contract. `Scene.SetEnvironment`, `SetPlay` and `SetReferences` stay public:
+  they are World's model API, used by ContentPipeline and its tests.
+  `SceneAuthoringGate` is deleted (P5). Was: these types and members were made
+  public so the move would compile.
 - **P12. Multi-node actions cannot roll back.** Status: closed. Multi-node
   actions are atomic batches that roll back on refusal (scene-edits.md 3.5);
   Scenes has no `BeginChangeSet` left. Was: Eight `BeginChangeSet` call sites
   remain (decision 11).
-- **P13. Unused package reference.** Status: open. The project references
-  `CommunityToolkit.Mvvm` and uses nothing from it.
+- **P13. Unused package reference.** Status: closed. The project no longer
+  references `CommunityToolkit.Mvvm`.
 
-- **P14. TimeMachine transactions cannot roll back.** Status: open.
-  `HistoryKeeper.AddChange` never routes into an open transaction, and
-  `RollbackTransaction` pops transactions without applying anything. Scene edits
-  no longer use them (scene-edits.md 3.5); the API itself is still broken for
-  any other user.
+- **P14. TimeMachine transactions cannot roll back.** Status: closed. The
+  transactions API is deleted; it had no user, and change sets group changes.
+  Was: `HistoryKeeper.AddChange` never routed into an open transaction, and
+  `RollbackTransaction` popped transactions without applying anything.
 
-- **P15. Schemas keys property targets by Guid.** Status: in progress.
-  `PropertySnapshot`, `PropertyOp` and `IPropertyTarget` are deleted (task 8);
-  `PropertyBinding` still keys its nodes by `Guid`. Was: `PropertySnapshot`,
-  `PropertyOp`, `IPropertyTarget` and `PropertyBinding` key a target that is a
-  node or, for the environment, the scene. Scenes and the Inspector convert at
-  that boundary; the engine port's preview-sync methods take the same
-  `Guid previewTarget` until task 6.
-- **P16. `NodeHandle` is unused.** Status: open.
-  `Oxygen.Managed.Core.NodeHandle` has no reference anywhere.
+- **P15. Schemas keys property targets by Guid.** Status: closed.
+  `PropertySnapshot`, `PropertyOp` and `IPropertyTarget` are deleted, and
+  `PropertyBinding` folds the targets it is given without keying them. Was:
+  these types keyed a target that is a node or, for the environment, the scene.
+- **P16. `NodeHandle` is unused.** Status: closed, not a problem. The interop's
+  node creation callbacks use `Oxygen.Managed.Core.NodeHandle`.
 
-- **P17. Managed.Core diagnostics carry a document id.** Status: open.
-  `AffectedScope.DocumentId` (`Guid?`) puts the editor's document concept into
-  Managed.Core, which the engine side shares. Editor code unboxes `DocumentId`
-  into it. The scope should not know documents, or the editor's diagnostics need
-  their own scope.
+- **P17. Managed.Core diagnostics carry a document id.** Status: closed.
+  `AffectedScope` has no document fields; nothing read them. A failure names its
+  scene, node and asset. Was: `AffectedScope.DocumentId` (`Guid?`), with the
+  document's path, name, lifetime and authoring revision.
 
 ### 6.2 Defects and unfinished work in the working tree
 
