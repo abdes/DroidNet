@@ -49,7 +49,8 @@ public partial class WorkspaceViewModel
             || property is null
             || (FindScriptSlotNode(issue, property) is null && !IsSceneProperty(property))
             || this.projectContextService.ActiveProject is not { } project
-            || await SceneFiles.FindByIdAsync(project, sceneId).ConfigureAwait(true) is not { } scene
+            || this.assetCatalog is not { } catalog
+            || await SceneFiles.FindByIdAsync(catalog, project, sceneId).ConfigureAwait(true) is not { } scene
             || this.documentManager is null
             || issue.AffectedPath is not { } sourcePath || !File.Exists(sourcePath))
         {

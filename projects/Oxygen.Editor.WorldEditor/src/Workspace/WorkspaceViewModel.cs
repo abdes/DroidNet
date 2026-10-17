@@ -58,6 +58,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     private readonly ILogger logger;
     private readonly SemaphoreSlim engineStartupGate = new(initialCount: 1, maxCount: 1);
     private DocumentManager? documentManager;
+    private IAssetCatalog? assetCatalog;
     private PreviewSettingsService? previewSettings;
     private Oxygen.Editor.World.Workspace.EditingViewMaskService? editingViewMask;
     private ProjectContext? previewProject;
@@ -188,10 +189,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     }
 
     /// <summary>Resolves a scene from a last-opened name by file stem, file name, or stable ID.</summary>
+    /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
     /// <param name="project">The project whose scene files are searched.</param>
     /// <param name="lastOpenedScene">The persisted last-opened scene name.</param>
     /// <returns>Where the matching scene is, or <see langword="null"/> when no scene matches.</returns>
-    internal static async Task<ProjectAssetLocation?> ResolveSceneByNameOrIdAsync(ProjectContext project, string? lastOpenedScene)
+    internal static async Task<ProjectAssetLocation?> ResolveSceneByNameOrIdAsync(IAssetCatalog catalog, ProjectContext project, string? lastOpenedScene)
     {
         if (string.IsNullOrWhiteSpace(lastOpenedScene))
         {
@@ -200,19 +202,20 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
         if (Guid.TryParse(lastOpenedScene, out var id))
         {
-            return await SceneFiles.FindByIdAsync(project, SceneId.FromValue(id)).ConfigureAwait(true);
+            return await SceneFiles.FindByIdAsync(catalog, project, SceneId.FromValue(id)).ConfigureAwait(true);
         }
 
         var sceneName = lastOpenedScene.EndsWith(Oxygen.Managed.Assets.AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
             ? lastOpenedScene[..^Oxygen.Managed.Assets.AssetFileTypes.SceneDescriptor.Length]
             : lastOpenedScene;
-        return SceneFiles.FindByName(project, sceneName);
+        return await SceneFiles.FindByNameAsync(catalog, project, sceneName).ConfigureAwait(true);
     }
 
     /// <summary>Resolves the scene a workspace opens first: the one activation asked for, else the project's start scene.</summary>
+    /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
     /// <param name="context">The project.</param>
     /// <returns>The scene's asset URI, or <see langword="null"/> when there is none to open.</returns>
-    internal static async Task<Uri?> ResolveInitialSceneAsync(ProjectContext context)
+    internal static async Task<Uri?> ResolveInitialSceneAsync(IAssetCatalog catalog, ProjectContext context)
     {
         // Fresh activation may carry an explicit scene request (template StarterScene or a workflow open).
         if (context.InitialSceneAssetUri is { } initialSceneAssetUri
@@ -224,7 +227,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         // Otherwise the project's configured start scene, resolved by stable ID.
         // A missing or invalid start scene is not silently replaced by last-opened or first-listed.
         return context.DefaultSceneId is { } defaultSceneId
-            ? (await SceneFiles.FindByIdAsync(context, defaultSceneId).ConfigureAwait(true))?.AssetUri
+            ? (await SceneFiles.FindByIdAsync(catalog, context, defaultSceneId).ConfigureAwait(true))?.AssetUri
             : null;
     }
 
@@ -268,6 +271,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<DocumentHostView>(Reuse.Singleton);
 
         RegisterContentServices(childContainer);
+        this.assetCatalog = childContainer.Resolve<IAssetCatalog>();
 
         // Register scene-engine synchronization service
         childContainer.Register<ISceneEngineSync, SceneEngineSync>(Reuse.Singleton);
@@ -336,6 +340,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
             this.documentManager?.Dispose();
             this.documentManager = null;
+            this.assetCatalog = null;
             this.messenger?.UnregisterAll(this);
             this.engineStartupGate.Dispose();
         }
@@ -536,6 +541,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         if (this.messenger is null
             || this.projectManager.CurrentProject is not { } project
             || this.projectContextService.ActiveProject is not { } context
+            || this.assetCatalog is not { } catalog
             || !context.OpenInitialScene
             || ReferenceEquals(project, this.initialSceneProject))
         {
@@ -545,9 +551,9 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         this.initialSceneProject = project;
 
         // Seed the default scene for projects that predate DefaultSceneId before resolving it.
-        await this.MigrateDefaultSceneAsync(project, context).ConfigureAwait(true);
+        await this.MigrateDefaultSceneAsync(catalog, project, context).ConfigureAwait(true);
 
-        var scene = await ResolveInitialSceneAsync(this.projectContextService.ActiveProject ?? context).ConfigureAwait(true);
+        var scene = await ResolveInitialSceneAsync(catalog, this.projectContextService.ActiveProject ?? context).ConfigureAwait(true);
         if (scene is null)
         {
             return;
@@ -575,7 +581,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     ///     usage no longer influences startup. The default is project metadata persisted in
     ///     <c>Project.oxy</c>; it is not scene undo/dirty state.
     /// </remarks>
-    private async Task MigrateDefaultSceneAsync(IProject project, ProjectContext context)
+    private async Task MigrateDefaultSceneAsync(IAssetCatalog catalog, IProject project, ProjectContext context)
     {
         if (project.ProjectInfo.DefaultSceneId is not null)
         {
@@ -591,7 +597,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             }
 
             var lastOpened = usage.LastOpenedScene;
-            if (await ResolveSceneByNameOrIdAsync(context, lastOpened).ConfigureAwait(true) is not { } migrated
+            if (await ResolveSceneByNameOrIdAsync(catalog, context, lastOpened).ConfigureAwait(true) is not { } migrated
                 || await SceneFiles.ReadIdAsync(migrated.FilePath).ConfigureAwait(true) is not { } migratedId)
             {
                 return;

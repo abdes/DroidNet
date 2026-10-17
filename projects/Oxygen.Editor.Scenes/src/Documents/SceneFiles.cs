@@ -5,26 +5,28 @@
 using System.Text.Json;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Documents;
 
-/// <summary>The scenes of a project: its scene files, in any folder of its authoring mounts.</summary>
+/// <summary>The scenes of a project: the scene files the asset catalog lists, in any folder of its authoring mounts.</summary>
 /// <remarks>A scene's name is its file name; its identity is the id inside the file.</remarks>
 public static class SceneFiles
 {
     /// <summary>Lists the project's scene files.</summary>
+    /// <param name="catalog">The project's asset catalog.</param>
     /// <param name="project">The project.</param>
+    /// <param name="cancellationToken">Cancels the query.</param>
     /// <returns>Where each scene file is, ordered by virtual path.</returns>
-    public static IReadOnlyList<ProjectAssetLocation> List(ProjectContext project)
+    public static async Task<IReadOnlyList<ProjectAssetLocation>> ListAsync(IAssetCatalog catalog, ProjectContext project, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(project);
-        return [.. project.AuthoringMounts
-            .Select(mount => project.FindByVirtualPath("/" + mount.Name))
-            .OfType<ProjectAssetLocation>()
-            .Where(static mount => Directory.Exists(mount.FilePath))
-            .SelectMany(static mount => Directory.EnumerateFiles(mount.FilePath, "*" + AssetFileTypes.SceneDescriptor, SearchOption.AllDirectories))
-            .Select(project.FindByFilePath)
+        var records = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), cancellationToken).ConfigureAwait(true);
+        return [.. records
+            .Where(static record => record.Uri.AbsolutePath.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase))
+            .Select(record => project.FindByAssetUri(record.Uri))
             .OfType<ProjectAssetLocation>()
             .Where(static location => location.MountKind == ProjectMountKind.Authoring)
             .DistinctBy(static location => location.FilePath, StringComparer.OrdinalIgnoreCase)
@@ -32,13 +34,14 @@ public static class SceneFiles
     }
 
     /// <summary>Finds the scene file that holds a scene identity.</summary>
+    /// <param name="catalog">The project's asset catalog.</param>
     /// <param name="project">The project.</param>
     /// <param name="sceneId">The scene's id.</param>
     /// <param name="cancellationToken">Cancels reading the files.</param>
     /// <returns>Where the scene is, or <see langword="null"/> when no scene file holds the id.</returns>
-    public static async Task<ProjectAssetLocation?> FindByIdAsync(ProjectContext project, SceneId sceneId, CancellationToken cancellationToken = default)
+    public static async Task<ProjectAssetLocation?> FindByIdAsync(IAssetCatalog catalog, ProjectContext project, SceneId sceneId, CancellationToken cancellationToken = default)
     {
-        foreach (var location in List(project))
+        foreach (var location in await ListAsync(catalog, project, cancellationToken).ConfigureAwait(true))
         {
             if (await ReadIdAsync(location.FilePath, cancellationToken).ConfigureAwait(true) == sceneId)
             {
@@ -51,11 +54,14 @@ public static class SceneFiles
 
     /// <summary>Finds a scene by name, as the editor remembered the last scene a project opened before scenes could live
     /// in any folder.</summary>
+    /// <param name="catalog">The project's asset catalog.</param>
     /// <param name="project">The project.</param>
     /// <param name="name">The scene's name.</param>
+    /// <param name="cancellationToken">Cancels the query.</param>
     /// <returns>The first scene file with that name, or <see langword="null"/>.</returns>
-    public static ProjectAssetLocation? FindByName(ProjectContext project, string name)
-        => List(project).FirstOrDefault(location => string.Equals(SceneContent.NameOf(location.FilePath), name, StringComparison.OrdinalIgnoreCase));
+    public static async Task<ProjectAssetLocation?> FindByNameAsync(IAssetCatalog catalog, ProjectContext project, string name, CancellationToken cancellationToken = default)
+        => (await ListAsync(catalog, project, cancellationToken).ConfigureAwait(true))
+            .FirstOrDefault(location => string.Equals(SceneContent.NameOf(location.FilePath), name, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Reads the identity a scene file holds.</summary>
     /// <param name="path">The scene file.</param>
