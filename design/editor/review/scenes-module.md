@@ -403,11 +403,11 @@ time. A problem that is postponed becomes a GitHub issue and is linked here.
   at preview capture instead; a change still waiting for the writer is checked
   to leave no run when the project closes. The World Editor integration suite
   passes.
-- **D3. Fixes not checked in the editor.** Status: open. Viewport camera state
-  keyed by scene id; the material tab told when it becomes dirty or is saved;
-  selection keyed by document id (explorer, Inspector,
-  `SceneLoadedMessage.DocumentId`); the last opened scene stored by id; the
-  reload warning about the tree.
+- **D3. Fixes not checked in the editor.** Status: closed; checked in the
+  editor. Viewport camera state keyed by scene id; the material tab told when it
+  becomes dirty or is saved; selection keyed by document id (explorer,
+  Inspector, `SceneLoadedMessage.DocumentId`); the last opened scene stored by
+  id; the reload warning about the tree.
 - **D4. Test projects do not build.** Status: closed. The World Editor's Unit,
   Unit.UI, Integration.UI and Benchmarks.UI projects build, and their suites
   pass on `SceneAuthoring`. `Oxygen.Editor.Scenes.Tests` holds the unit and
