@@ -83,6 +83,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -186,9 +187,8 @@ namespace {
 
   auto ReplaceSceneExtensionWithPhysics(std::string value) -> std::string
   {
-    constexpr auto kSceneSuffix = LooseCookedLayout::kSceneDescriptorExtension;
-    constexpr auto kPhysicsSuffix
-      = LooseCookedLayout::kPhysicsSceneDescriptorExtension;
+    constexpr auto kSceneSuffix = data::kSceneDescriptorExtension;
+    constexpr auto kPhysicsSuffix = data::kPhysicsSceneDescriptorExtension;
 
     if (value.size() >= kSceneSuffix.size() && value.ends_with(kSceneSuffix)) {
       value.resize(value.size() - kSceneSuffix.size());

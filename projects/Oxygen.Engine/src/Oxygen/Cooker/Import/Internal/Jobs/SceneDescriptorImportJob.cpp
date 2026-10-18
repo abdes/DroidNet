@@ -44,6 +44,7 @@
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -175,25 +176,25 @@ namespace {
   {
     const auto ext
       = ToLowerAscii(std::filesystem::path(relpath).extension().string());
-    if (ext == LooseCookedLayout::kGeometryDescriptorExtension) {
+    if (ext == data::kGeometryDescriptorExtension) {
       return data::AssetType::kGeometry;
     }
-    if (ext == LooseCookedLayout::kMaterialDescriptorExtension) {
+    if (ext == data::kMaterialDescriptorExtension) {
       return data::AssetType::kMaterial;
     }
-    if (ext == LooseCookedLayout::kScriptDescriptorExtension) {
+    if (ext == data::kScriptDescriptorExtension) {
       return data::AssetType::kScript;
     }
-    if (ext == LooseCookedLayout::kInputActionDescriptorExtension) {
+    if (ext == data::kInputActionDescriptorExtension) {
       return data::AssetType::kInputAction;
     }
-    if (ext == LooseCookedLayout::kInputMappingContextDescriptorExtension) {
+    if (ext == data::kInputMappingContextDescriptorExtension) {
       return data::AssetType::kInputMappingContext;
     }
-    if (ext == LooseCookedLayout::kPhysicsSceneDescriptorExtension) {
+    if (ext == data::kPhysicsSceneDescriptorExtension) {
       return data::AssetType::kPhysicsScene;
     }
-    if (ext == LooseCookedLayout::kSceneDescriptorExtension) {
+    if (ext == data::kSceneDescriptorExtension) {
       return data::AssetType::kScene;
     }
     return std::nullopt;

@@ -25,6 +25,7 @@
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
+#include <Oxygen/Input/CodeInput.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSnapshot.h>
@@ -264,7 +265,9 @@ end)
     "Jump", oxygen::input::ActionValueType::kBool, key_a);
   const auto jump_b = std::make_shared<oxygen::input::Action>(
     "Jump", oxygen::input::ActionValueType::kBool, key_b);
-  oxygen::input::InputMappingContext gameplay("gameplay");
+  const auto gameplay_owner
+    = oxygen::input::MakeCodeContext("Test/Scripting", "gameplay");
+  auto& gameplay = *gameplay_owner;
   const auto bind
     = [&gameplay](const std::shared_ptr<oxygen::input::Action>& action,
         const platform::InputSlot& slot) -> void {

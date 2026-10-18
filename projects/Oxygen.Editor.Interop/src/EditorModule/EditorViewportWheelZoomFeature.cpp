@@ -50,9 +50,8 @@ namespace oxygen::interop::module {
 
   auto EditorViewportWheelZoomFeature::RegisterBindings(
     oxygen::engine::InputSystem& input_system,
-    const std::shared_ptr<oxygen::input::InputMappingContext>& ctx) noexcept
-    -> void {
-    using oxygen::input::Action;
+    const std::shared_ptr<oxygen::input::InputMappingContext>& ctx,
+    const EditorViewportInputActions& /*inputs*/) noexcept -> void {
     using oxygen::input::ActionTriggerDown;
     using oxygen::input::ActionValueType;
     using oxygen::input::InputActionMapping;
@@ -62,8 +61,8 @@ namespace oxygen::interop::module {
       return;
     }
 
-    zoom_action_ = std::make_shared<Action>(
-      "Editor.Camera.Zoom", ActionValueType::kAxis1D);
+    zoom_action_ = oxygen::input::MakeCodeAction(
+      kEditorViewportInputOwner, "Camera.Zoom", ActionValueType::kAxis1D);
     input_system.AddAction(zoom_action_);
 
     const auto trig = std::make_shared<ActionTriggerDown>();
@@ -92,7 +91,7 @@ namespace oxygen::interop::module {
     auto transform = camera_node.GetTransform();
     const float wheel_ticks =
       viewport::GetAxis1DOrZero(input_snapshot,
-        "Editor.Camera.Zoom");
+        zoom_action_->GetAssetKey());
 
     if (std::abs(wheel_ticks) <= 0.0f) {
       return;

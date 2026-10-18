@@ -68,30 +68,10 @@ namespace oxygen::interop::module {
   } // namespace
 
   auto EditorViewportDollyFeature::RegisterBindings(
-    oxygen::engine::InputSystem& input_system,
-    const std::shared_ptr<oxygen::input::InputMappingContext>& ctx) noexcept
-    -> void {
-    using oxygen::input::Action;
-    using oxygen::input::ActionTriggerDown;
-    using oxygen::input::ActionValueType;
-    using oxygen::input::InputActionMapping;
-    using platform::InputSlots;
-
-    if (rmb_action_) {
-      return;
-    }
-
-    rmb_action_ = std::make_shared<Action>(
-      "Editor.Mouse.RightButton", ActionValueType::kBool);
-    input_system.AddAction(rmb_action_);
-
-    const auto trig = std::make_shared<ActionTriggerDown>();
-    trig->MakeExplicit();
-
-    const auto rmb = std::make_shared<InputActionMapping>(
-      rmb_action_, InputSlots::RightMouseButton);
-    rmb->AddTrigger(trig);
-    ctx->AddMapping(rmb);
+    oxygen::engine::InputSystem& /*input_system*/,
+    const std::shared_ptr<oxygen::input::InputMappingContext>& /*ctx*/,
+    const EditorViewportInputActions& inputs) noexcept -> void {
+    inputs_ = inputs;
   }
 
   auto EditorViewportDollyFeature::Apply(scene::SceneNode camera_node,
@@ -129,9 +109,10 @@ namespace oxygen::interop::module {
     static std::unordered_map<scene::NodeHandle, DollyState> dolly_states;
     auto& state = GetOrInitDollyState(dolly_states, camera_node);
 
-    const bool alt_held = input_snapshot.IsActionOngoing("Editor.Modifier.Alt");
+    const bool alt_held
+      = input_snapshot.IsActionOngoing(inputs_.alt->GetAssetKey());
     const bool rmb_held =
-      input_snapshot.IsActionOngoing("Editor.Mouse.RightButton");
+      input_snapshot.IsActionOngoing(inputs_.right_button->GetAssetKey());
     const bool active = alt_held && rmb_held;
     if (!active) {
       state.was_active = false;
@@ -146,7 +127,7 @@ namespace oxygen::interop::module {
 
     const auto mouse_delta =
       viewport::GetAxis2DOrZero(input_snapshot,
-        "Editor.Mouse.Delta");
+        inputs_.mouse_delta->GetAssetKey());
     if ((std::abs(mouse_delta.x) <= 0.0f) && (std::abs(mouse_delta.y) <= 0.0f)) {
       return;
     }

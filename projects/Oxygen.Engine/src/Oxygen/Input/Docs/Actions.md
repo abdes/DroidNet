@@ -1,8 +1,17 @@
 # Actions
 
-An `Action` is a named logical input (Jump, Fire, Move) with a typed value,
-a level state that persists across frames, and edges that exist for one frame.
+An `Action` is a named logical input (Jump, Fire, Move) with a typed value, a
+level state that persists across frames, and edges that exist for one frame.
 Gameplay reads actions; only the input system writes them.
+
+## Identity
+
+An action is identified by its key, never by its name. An action hydrated from
+an input action asset carries the asset's key; an action created in code carries
+a code key: `MakeCodeAction(owner, name, type)` (`CodeInput.h`) keys it under
+its owner's path below the reserved `.code` mount, with the name as the leaf
+(`AssetKey::FromCodePath`). A nil key is refused. Names are labels: several
+actions may share one, and nothing looks an action up by name.
 
 ## Value and state
 
@@ -36,11 +45,11 @@ After every contribution the action recombines all of them:
 
 Accumulation modes (`ActionAccumulation`):
 
-- `kHighestAbsolute` (default) — per component, keep the value with the
-  largest magnitude. W and Up Arrow both bound to forward give 1, not 2; W + D
-  give (1, 1).
-- `kCumulative` — sum per component. W + S give 0 (opposing keys cancel);
-  W and Up Arrow give 2, which is the documented trade-off.
+- `kHighestAbsolute` (default) — per component, keep the value with the largest
+  magnitude. W and Up Arrow both bound to forward give 1, not 2; W + D give (1,
+  1).
+- `kCumulative` — sum per component. W + S give 0 (opposing keys cancel); W and
+  Up Arrow give 2, which is the documented trade-off.
 
 This matches Unreal Enhanced Input's per-mapping aggregation and its
 highest-absolute default (`EInputActionAccumulationBehavior`).
@@ -57,35 +66,34 @@ delta, independent of how many events the device sent or the frame rate.
 
 ### Only accepted input counts
 
-A binding contributes its value only while its triggers accept the input,
-that is while the binding is triggered or ongoing:
+A binding contributes its value only while its triggers accept the input, that
+is while the binding is triggered or ongoing:
 
-- A relative binding reports the motion its triggers accepted in the
-  current frame. Motion they reject is dropped, not deferred.
-- An absolute binding (a key, a button, a stick) contributes zero while it
-  is neither triggered nor ongoing.
+- A relative binding reports the motion its triggers accepted in the current
+  frame. Motion they reject is dropped, not deferred.
+- An absolute binding (a key, a button, a stick) contributes zero while it is
+  neither triggered nor ongoing.
 
-So gated input never leaks into the value. A camera look bound to `MouseXY`
-with an implicit Chain on a right-button action (see
-[Chain](Triggers/Chain.md#implicit-gate-chord)) reads (0, 0) while the button
-is up, the frame's mouse delta while it is held, and (0, 0) again once it is
+So gated input never leaks into the value. A camera look bound to `MouseXY` with
+an implicit Chain on a right-button action (see
+[Chain](Triggers/Chain.md#implicit-gate-chord)) reads (0, 0) while the button is
+up, the frame's mouse delta while it is held, and (0, 0) again once it is
 released, so gameplay can read `GetValue()` without checking the state. This
-matches Enhanced Input, which resets an action's value when its trigger state
-is None.
-Do not sum `GetFrameTransitions()` values to recover a delta; transitions
+matches Enhanced Input, which resets an action's value when its trigger state is
+None. Do not sum `GetFrameTransitions()` values to recover a delta; transitions
 record state changes, not samples.
 
 ## Activation outcome: Completed or Canceled
 
-An _activation_ starts when the action becomes active (triggered or ongoing)
-and ends when it becomes inactive. It ends with exactly one closing edge:
+An _activation_ starts when the action becomes active (triggered or ongoing) and
+ends when it becomes inactive. It ends with exactly one closing edge:
 
 - **Completed** if it triggered at least once and was not canceled.
 - **Canceled** if it never triggered, or if it was interrupted.
 
 Activations that trigger without holding (Pressed, Released, Tap, and a
-one-frame Pulse) complete at the start of the following frame, so gameplay
-sees Triggered in frame N and Completed in frame N+1.
+one-frame Pulse) complete at the start of the following frame, so gameplay sees
+Triggered in frame N and Completed in frame N+1.
 
 | Scenario                                              | Edges                                |
 | ----------------------------------------------------- | ------------------------------------ |
@@ -95,10 +103,10 @@ sees Triggered in frame N and Completed in frame N+1.
 | Jump (Pressed)                                        | Triggered, then Completed next frame |
 | Sprint held while its context is deactivated          | Canceled                             |
 
-Unreal derives Completed from the trigger state at the moment of release, so
-it reports Canceled for a Pulse released between pulses even after it fired.
-Oxygen decides by outcome: the auto-fire succeeded, so it completes. Unreal's
-invariant — every triggered activation completes — is kept.
+Unreal derives Completed from the trigger state at the moment of release, so it
+reports Canceled for a Pulse released between pulses even after it fired. Oxygen
+decides by outcome: the auto-fire succeeded, so it completes. Unreal's invariant
+— every triggered activation completes — is kept.
 
 ## Fixed-step consumption
 
@@ -113,9 +121,9 @@ if (jump->ConsumeFixedStepTrigger()) {
 }
 ```
 
-One press yields exactly one `true`. Two presses inside one rendered frame
-yield two. Actions that trigger every frame while held (Down, Pulse) latch one
-edge per frame in which they trigger.
+One press yields exactly one `true`. Two presses inside one rendered frame yield
+two. Actions that trigger every frame while held (Down, Pulse) latch one edge
+per frame in which they trigger.
 
 ## Frame lifecycle
 
@@ -127,9 +135,9 @@ flowchart TD
   C --> A
 ```
 
-Edges and transitions are readable on the action from the end of `kInput`
-until the next `kFrameStart`. Readers outside that window (parallel tasks,
-frames in flight) use the `InputSnapshot`.
+Edges and transitions are readable on the action from the end of `kInput` until
+the next `kFrameStart`. Readers outside that window (parallel tasks, frames in
+flight) use the `InputSnapshot`.
 
 ## Usage
 

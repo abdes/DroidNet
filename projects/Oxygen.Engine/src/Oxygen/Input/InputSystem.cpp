@@ -52,7 +52,7 @@ constexpr std::string_view kCVarInputLogEvents = "nput.log_events";
 {
   return std::ranges::find_if(list,
     [&context](const InputSystem::InputMappingContextEntry& entry) -> bool {
-      return context.GetName() == entry.mapping_context->GetName();
+      return context.GetAssetKey() == entry.mapping_context->GetAssetKey();
     });
 }
 } // namespace
@@ -371,22 +371,9 @@ void InputSystem::RemoveAction(const std::shared_ptr<Action>& action)
 
 void InputSystem::ClearAllActions() { actions_.clear(); }
 
-auto InputSystem::GetActionByName(std::string_view name) const
-  -> std::shared_ptr<Action>
-{
-  const auto found = std::ranges::find_if(
-    actions_, [&name](const std::shared_ptr<Action>& entry) -> bool {
-      return entry->GetName() == name;
-    });
-  return found != actions_.cend() ? *found : std::shared_ptr<Action>();
-}
-
 auto InputSystem::GetActionByKey(const data::AssetKey& key) const
   -> std::shared_ptr<Action>
 {
-  if (key.IsNil()) {
-    return {};
-  }
   const auto found = std::ranges::find_if(
     actions_, [&key](const std::shared_ptr<Action>& entry) -> bool {
       return entry->GetAssetKey() == key;
@@ -397,10 +384,7 @@ auto InputSystem::GetActionByKey(const data::AssetKey& key) const
 void InputSystem::AddMappingContext(
   const std::shared_ptr<InputMappingContext>& context, const int32_t priority)
 {
-  // An asset context is identified by its key; a code context by its name.
-  const auto& key = context->GetAssetKey();
-  if (key.IsNil() ? GetMappingContextByName(context->GetName()) != nullptr
-                  : GetMappingContextByKey(key) != nullptr) {
+  if (GetMappingContextByKey(context->GetAssetKey()) != nullptr) {
     DLOG_F(
       1, "Input mapping context with [{}] already exists", context->GetName());
     return;
@@ -440,24 +424,9 @@ void InputSystem::ClearAllMappingContexts()
   mapping_contexts_.clear();
 }
 
-auto InputSystem::GetMappingContextByName(std::string_view name) const
-  -> std::shared_ptr<InputMappingContext>
-{
-  const auto found = std::ranges::find_if(
-    mapping_contexts_, [&name](const InputMappingContextEntry& entry) -> bool {
-      return name == entry.mapping_context->GetName();
-    });
-  return found != std::ranges::cend(mapping_contexts_)
-    ? found->mapping_context
-    : std::shared_ptr<InputMappingContext>();
-}
-
 auto InputSystem::GetMappingContextByKey(const data::AssetKey& key) const
   -> std::shared_ptr<InputMappingContext>
 {
-  if (key.IsNil()) {
-    return {};
-  }
   const auto found = std::ranges::find_if(
     mapping_contexts_, [&key](const InputMappingContextEntry& entry) -> bool {
       return entry.mapping_context->GetAssetKey() == key;

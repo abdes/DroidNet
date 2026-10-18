@@ -105,7 +105,7 @@ NOLINT_TEST_F(LifecycleScenario, HoldToInteractReportsCompleted)
     EXPECT_GE(held.triggered, 1);
     EXPECT_EQ(released.completed, 1);
     EXPECT_EQ(released.canceled, 0);
-    EXPECT_TRUE(snapshot->DidActionComplete("OpenDoor"));
+    EXPECT_TRUE(snapshot->DidActionComplete(open->GetAssetKey()));
   });
 }
 
@@ -227,11 +227,12 @@ NOLINT_TEST_F(LifecycleScenario, PublishedSnapshotDoesNotChangeNextFrame)
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
     co_await Frame();
     const auto frame_n = System().GetCurrentSnapshot();
-    EXPECT_TRUE(frame_n->DidActionTrigger("Jump"));
+    EXPECT_TRUE(frame_n->DidActionTrigger(jump->GetAssetKey()));
     System().OnFrameEnd(Context());
     co_await Frame();
-    EXPECT_TRUE(frame_n->DidActionTrigger("Jump"));
-    EXPECT_FALSE(System().GetCurrentSnapshot()->DidActionTrigger("Jump"));
+    EXPECT_TRUE(frame_n->DidActionTrigger(jump->GetAssetKey()));
+    EXPECT_FALSE(
+      System().GetCurrentSnapshot()->DidActionTrigger(jump->GetAssetKey()));
   });
 }
 
@@ -248,13 +249,14 @@ NOLINT_TEST_F(LifecycleScenario, SnapshotSurvivesActionRemoval)
     co_await Frame();
     const std::shared_ptr<const InputSnapshot> held_by_task
       = System().GetCurrentSnapshot();
+    const auto jump_key = jump->GetAssetKey();
 
     System().RemoveMappingContext(ctx);
     System().RemoveAction(jump);
     ctx.reset();
     jump.reset();
 
-    EXPECT_TRUE(held_by_task->DidActionTrigger("LevelJump"));
+    EXPECT_TRUE(held_by_task->DidActionTrigger(jump_key));
   });
 }
 

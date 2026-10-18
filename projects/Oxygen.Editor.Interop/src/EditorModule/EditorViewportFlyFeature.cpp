@@ -112,8 +112,8 @@ namespace oxygen::interop::module {
 
   auto EditorViewportFlyFeature::RegisterBindings(
     oxygen::engine::InputSystem& input_system,
-    const std::shared_ptr<oxygen::input::InputMappingContext>& ctx) noexcept
-    -> void {
+    const std::shared_ptr<oxygen::input::InputMappingContext>& ctx,
+    const EditorViewportInputActions& inputs) noexcept -> void {
     using oxygen::input::Action;
     using oxygen::input::ActionTriggerDown;
     using oxygen::input::ActionTriggerPulse;
@@ -124,23 +124,27 @@ namespace oxygen::interop::module {
     if (w_action_) {
       return;
     }
+    inputs_ = inputs;
 
-    w_action_ = std::make_shared<Action>("Editor.Fly.W", ActionValueType::kBool);
-    a_action_ = std::make_shared<Action>("Editor.Fly.A", ActionValueType::kBool);
-    s_action_ = std::make_shared<Action>("Editor.Fly.S", ActionValueType::kBool);
-    d_action_ = std::make_shared<Action>("Editor.Fly.D", ActionValueType::kBool);
-    q_action_ = std::make_shared<Action>("Editor.Fly.Q", ActionValueType::kBool);
-    e_action_ = std::make_shared<Action>("Editor.Fly.E", ActionValueType::kBool);
+    const auto make_action = [](const char* name) {
+      return oxygen::input::MakeCodeAction(
+        kEditorViewportInputOwner, name, ActionValueType::kBool);
+    };
+
+    w_action_ = make_action("Fly.W");
+    a_action_ = make_action("Fly.A");
+    s_action_ = make_action("Fly.S");
+    d_action_ = make_action("Fly.D");
+    q_action_ = make_action("Fly.Q");
+    e_action_ = make_action("Fly.E");
     up_arrow_action_
-      = std::make_shared<Action>("Editor.Fly.UpArrow", ActionValueType::kBool);
+      = make_action("Fly.UpArrow");
     down_arrow_action_
-      = std::make_shared<Action>("Editor.Fly.DownArrow", ActionValueType::kBool);
+      = make_action("Fly.DownArrow");
     left_arrow_action_
-      = std::make_shared<Action>("Editor.Fly.LeftArrow", ActionValueType::kBool);
-    right_arrow_action_ = std::make_shared<Action>(
-      "Editor.Fly.RightArrow", ActionValueType::kBool);
-    shift_action_ =
-      std::make_shared<Action>("Editor.Fly.Shift", ActionValueType::kBool);
+      = make_action("Fly.LeftArrow");
+    right_arrow_action_ = make_action("Fly.RightArrow");
+    shift_action_ = make_action("Fly.Shift");
 
     input_system.AddAction(w_action_);
     input_system.AddAction(a_action_);
@@ -212,8 +216,10 @@ namespace oxygen::interop::module {
     // Fly is RMB (without Alt) in every orbit style. Alt+RMB is reserved for
     // dolly. WASD/QE move only while flying, so the bare letters stay editor
     // shortcuts; the arrow keys move the camera without RMB.
-    const bool rmb_held = input_snapshot.IsActionOngoing("Editor.Mouse.RightButton");
-    const bool alt_held = input_snapshot.IsActionOngoing("Editor.Modifier.Alt");
+    const bool rmb_held
+      = input_snapshot.IsActionOngoing(inputs_.right_button->GetAssetKey());
+    const bool alt_held
+      = input_snapshot.IsActionOngoing(inputs_.alt->GetAssetKey());
     const bool look_active = rmb_held && !alt_held;
 
     static std::unordered_map<scene::NodeHandle, FlyState> fly_states;
@@ -231,7 +237,7 @@ namespace oxygen::interop::module {
     if (look_active) {
       const auto mouse_delta =
         viewport::GetAxis2DOrZero(input_snapshot,
-          "Editor.Mouse.Delta");
+          inputs_.mouse_delta->GetAssetKey());
       if ((std::abs(mouse_delta.x) > 0.0f) || (std::abs(mouse_delta.y) > 0.0f)) {
         state.yaw_radians += -mouse_delta.x * params.look_radians_per_pixel;
         state.pitch_radians = ClampPitchRadians(params,
@@ -240,18 +246,19 @@ namespace oxygen::interop::module {
       }
     }
 
-    const auto held = [&](const char* action) {
-      return input_snapshot.IsActionOngoing(action);
-    };
+    const auto held
+      = [&](const std::shared_ptr<oxygen::input::Action>& action) {
+          return input_snapshot.IsActionOngoing(action->GetAssetKey());
+        };
     const bool fly_keys = look_active;
     const float forward_axis
-      = BoolToAxis(fly_keys && held("Editor.Fly.W"), fly_keys && held("Editor.Fly.S"))
-      + BoolToAxis(held("Editor.Fly.UpArrow"), held("Editor.Fly.DownArrow"));
+      = BoolToAxis(fly_keys && held(w_action_), fly_keys && held(s_action_))
+      + BoolToAxis(held(up_arrow_action_), held(down_arrow_action_));
     const float right_axis
-      = BoolToAxis(fly_keys && held("Editor.Fly.D"), fly_keys && held("Editor.Fly.A"))
-      + BoolToAxis(held("Editor.Fly.RightArrow"), held("Editor.Fly.LeftArrow"));
+      = BoolToAxis(fly_keys && held(d_action_), fly_keys && held(a_action_))
+      + BoolToAxis(held(right_arrow_action_), held(left_arrow_action_));
     const float up_axis
-      = BoolToAxis(fly_keys && held("Editor.Fly.E"), fly_keys && held("Editor.Fly.Q"));
+      = BoolToAxis(fly_keys && held(e_action_), fly_keys && held(q_action_));
     const bool moving = (std::abs(forward_axis) > 0.0f)
       || (std::abs(right_axis) > 0.0f) || (std::abs(up_axis) > 0.0f);
 
@@ -280,7 +287,7 @@ namespace oxygen::interop::module {
         ? std::max(1.0f, movement_speed_units_per_second)
         : params.base_speed_units_per_second;
       const float speed = base_speed
-        * (held("Editor.Fly.Shift") ? params.fast_multiplier : 1.0f);
+        * (held(shift_action_) ? params.fast_multiplier : 1.0f);
       const glm::vec3 fly_right = applied_rot * glm::vec3(1.0f, 0.0f, 0.0f);
       const glm::vec3 fly_forward = applied_rot * glm::vec3(0.0f, 0.0f, -1.0f);
       next_position += (fly_forward * forward_axis + fly_right * right_axis

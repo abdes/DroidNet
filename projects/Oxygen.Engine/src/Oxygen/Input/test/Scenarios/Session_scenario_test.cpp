@@ -62,10 +62,10 @@ NOLINT_TEST_F(SessionScenario, SessionEndRestoresInputState)
 
     System().OnSessionEnd(nullptr);
 
-    EXPECT_EQ(System().GetActionByName("Jump"), nullptr);
-    EXPECT_EQ(System().GetMappingContextByName("session"), nullptr);
-    EXPECT_EQ(System().GetActionByName("Move"), move);
-    EXPECT_EQ(System().GetMappingContextByName("menu"), menu);
+    EXPECT_EQ(System().GetActionByKey(jump->GetAssetKey()), nullptr);
+    EXPECT_EQ(System().GetMappingContextByKey(session->GetAssetKey()), nullptr);
+    EXPECT_EQ(System().GetActionByKey(move->GetAssetKey()), move);
+    EXPECT_EQ(System().GetMappingContextByKey(menu->GetAssetKey()), menu);
     EXPECT_EQ(open_menu->GetPendingFixedStepTriggers(), 0U);
 
     SendKeyEvent(Key::kW, ButtonState::kPressed);

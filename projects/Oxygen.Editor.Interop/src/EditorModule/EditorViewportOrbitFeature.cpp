@@ -91,62 +91,10 @@ namespace oxygen::interop::module {
   } // namespace
 
   auto EditorViewportOrbitFeature::RegisterBindings(
-    oxygen::engine::InputSystem& input_system,
-    const std::shared_ptr<oxygen::input::InputMappingContext>& ctx) noexcept
-    -> void {
-    using oxygen::input::Action;
-    using oxygen::input::ActionTriggerDown;
-    using oxygen::input::ActionValueType;
-    using oxygen::input::InputActionMapping;
-    using platform::InputSlots;
-
-    if (mouse_delta_action_) {
-      return;
-    }
-
-    alt_action_ = std::make_shared<Action>(
-      "Editor.Modifier.Alt", ActionValueType::kBool);
-    lmb_action_ = std::make_shared<Action>(
-      "Editor.Mouse.LeftButton", ActionValueType::kBool);
-    mouse_delta_action_ = std::make_shared<Action>(
-      "Editor.Mouse.Delta", ActionValueType::kAxis2D);
-
-    input_system.AddAction(alt_action_);
-    input_system.AddAction(lmb_action_);
-    input_system.AddAction(mouse_delta_action_);
-
-    const auto make_explicit_down = [] {
-      auto trig = std::make_shared<ActionTriggerDown>();
-      trig->MakeExplicit();
-      return trig;
-    };
-
-    const auto make_mouse_move_down = [] {
-      auto trig = std::make_shared<ActionTriggerDown>();
-      trig->SetActuationThreshold(0.0F);
-      trig->MakeExplicit();
-      return trig;
-    };
-
-    const auto alt_left = std::make_shared<InputActionMapping>(
-      alt_action_, InputSlots::LeftAlt);
-    alt_left->AddTrigger(make_explicit_down());
-    ctx->AddMapping(alt_left);
-
-    const auto alt_right = std::make_shared<InputActionMapping>(
-      alt_action_, InputSlots::RightAlt);
-    alt_right->AddTrigger(make_explicit_down());
-    ctx->AddMapping(alt_right);
-
-    const auto lmb = std::make_shared<InputActionMapping>(
-      lmb_action_, InputSlots::LeftMouseButton);
-    lmb->AddTrigger(make_explicit_down());
-    ctx->AddMapping(lmb);
-
-    const auto mouse_xy = std::make_shared<InputActionMapping>(
-      mouse_delta_action_, InputSlots::MouseXY);
-    mouse_xy->AddTrigger(make_mouse_move_down());
-    ctx->AddMapping(mouse_xy);
+    oxygen::engine::InputSystem& /*input_system*/,
+    const std::shared_ptr<oxygen::input::InputMappingContext>& /*ctx*/,
+    const EditorViewportInputActions& inputs) noexcept -> void {
+    inputs_ = inputs;
   }
 
   auto EditorViewportOrbitFeature::Apply(scene::SceneNode camera_node,
@@ -177,9 +125,10 @@ namespace oxygen::interop::module {
     static std::unordered_map<scene::NodeHandle, OrbitState> orbit_states;
     auto& state = GetOrInitOrbitState(orbit_states, camera_node);
 
-    const bool alt_held = input_snapshot.IsActionOngoing("Editor.Modifier.Alt");
-    const bool lmb_held =
-      input_snapshot.IsActionOngoing("Editor.Mouse.LeftButton");
+    const bool alt_held
+      = input_snapshot.IsActionOngoing(inputs_.alt->GetAssetKey());
+    const bool lmb_held
+      = input_snapshot.IsActionOngoing(inputs_.left_button->GetAssetKey());
     const bool active = alt_held && lmb_held;
     if (!active) {
       state.was_active = false;
@@ -221,7 +170,7 @@ namespace oxygen::interop::module {
 
     const auto mouse_delta =
       viewport::GetAxis2DOrZero(input_snapshot,
-        "Editor.Mouse.Delta");
+        inputs_.mouse_delta->GetAssetKey());
 
     if ((std::abs(mouse_delta.x) > 0.0f) || (std::abs(mouse_delta.y) > 0.0f)) {
       if (trackball) {

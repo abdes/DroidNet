@@ -1,26 +1,26 @@
 # InputSnapshot
 
-A consolidated, read-only view of input for a single frame. Built and FROZEN
-at the end of the kInput phase so it is immediately available to subsequent
-phases (FixedSim, Gameplay, etc.) within the same frame and to the final
-FrameContext snapshot at kSnapshot.
+A consolidated, read-only view of input for a single frame. Built and FROZEN at
+the end of the kInput phase so it is immediately available to subsequent phases
+(FixedSim, Gameplay, etc.) within the same frame and to the final FrameContext
+snapshot at kSnapshot.
 
 This snapshot exposes two complementary views:
 
 - Level: Final state at the end of the frame (what is currently true).
 - Edge: Transitions that occurred during the frame window (what happened).
 
-It does not store raw input events (those are part of the platform layer and
-not needed for action queries here). Timing data (frame start time) is
-provided by FrameContext and should be queried from there when needed.
+It does not store raw input events (those are part of the platform layer and not
+needed for action queries here). Timing data (frame start time) is provided by
+FrameContext and should be queried from there when needed.
 
 ## Frame window and lifecycle
 
 - Each frame, actions call BeginFrameTracking() before input processing. During
   kInput, input events and mapping contexts update actions; transitions (edges)
   are recorded as they occur.
-- At the END of kInput, the InputSnapshot is built as a **value copy** of
-  every action: name, state flags, value, value-updated flag and the frame's
+- At the END of kInput, the InputSnapshot is built as a **value copy** of every
+  action: key, state flags, value, value-updated flag and the frame's
   transitions. It holds no pointer to an action, so it is immutable: a reader
   that keeps it into the next frame still sees this frame, and it stays valid
   after the action is removed (level unload) or destroyed.
@@ -39,8 +39,8 @@ provided by FrameContext and should be queried from there when needed.
   - Use for sustained/hold behaviors (aiming, sprint hold, UI focus).
 
 - Edge (per-frame transitions)
-  - Answers: “Did it trigger this frame?”, “Did it complete/cancel?”,
-    “Did it start or release?”, “Was the value updated this frame?”.
+  - Answers: “Did it trigger this frame?”, “Did it complete/cancel?”, “Did it
+    start or release?”, “Was the value updated this frame?”.
   - Non-sticky: edges exist only for the current frame window.
   - Use for event-like behaviors (single-shot fire, open menu, confirm).
 
@@ -48,33 +48,33 @@ provided by FrameContext and should be queried from there when needed.
 
 Level queries (final snapshot):
 
-- GetActionStateFlags(name) → ActionState
+- GetActionStateFlags(key) → ActionState
   - Aggregated bitfield of the final state. Mirrors Action’s snapshot flags.
-- IsActionTriggered(name) → bool
-- IsActionOngoing(name) → bool
-- IsActionCompleted(name) → bool
-- IsActionCanceled(name) → bool
-- IsActionIdle(name) → bool
-- GetActionValue(name) → ActionValue
+- IsActionTriggered(key) → bool
+- IsActionOngoing(key) → bool
+- IsActionCompleted(key) → bool
+- IsActionCanceled(key) → bool
+- IsActionIdle(key) → bool
+- GetActionValue(key) → ActionValue
 
 Edge queries (per-frame transitions):
 
-- DidActionStart(name) → bool
-  - Start = either None→Triggered this frame, or an Ongoing edge occurred and
-    a Triggered transition happened later within the same frame.
-- DidActionTrigger(name) → bool
+- DidActionStart(key) → bool
+  - Start = either None→Triggered this frame, or an Ongoing edge occurred and a
+    Triggered transition happened later within the same frame.
+- DidActionTrigger(key) → bool
   - Any transition this frame whose to_state contains kTriggered.
-- DidActionComplete(name) → bool
+- DidActionComplete(key) → bool
   - Matches Ongoing→Completed or Triggered→Completed in this frame.
-- DidActionCancel(name) → bool
+- DidActionCancel(key) → bool
   - Matches Ongoing→Canceled or Triggered→Canceled in this frame.
-- DidActionRelease(name) → bool
+- DidActionRelease(key) → bool
   - Any transition Ongoing→not Ongoing in this frame (release edge).
-- DidActionValueUpdate(name) → bool
+- DidActionValueUpdate(key) → bool
   - True if the action’s value was updated at least once during the frame.
-- DidActionTransition(name, from, to) → bool
+- DidActionTransition(key, from, to) → bool
   - Precise predicate for a specific state transition.
-- GetActionTransitions(name) → `span<const FrameTransition>`
+- GetActionTransitions(key) → `span<const FrameTransition>`
   - Full list of transitions for the action during the frame; includes the
     states and the value at each transition.
 
@@ -90,7 +90,7 @@ Use DidActionTrigger() to react exactly once per press within the frame that
 caused it.
 
 ```cpp
-if (snapshot.DidActionTrigger("fire")) {
+if (snapshot.DidActionTrigger(fire_key)) {
   FireWeaponOnce();
 }
 ```
@@ -100,7 +100,7 @@ if (snapshot.DidActionTrigger("fire")) {
 Use IsActionOngoing() to gate continuous behavior while held.
 
 ```cpp
-if (snapshot.IsActionOngoing("aim")) {
+if (snapshot.IsActionOngoing(aim_key)) {
   camera.EnterAimMode();
 } else {
   camera.ExitAimMode();
@@ -109,14 +109,14 @@ if (snapshot.IsActionOngoing("aim")) {
 
 ### Start/Release edges (begin/end of a hold)
 
-Use DidActionStart() for the first frame the hold begins, and
-DidActionRelease() for the first frame it ends.
+Use DidActionStart() for the first frame the hold begins, and DidActionRelease()
+for the first frame it ends.
 
 ```cpp
-if (snapshot.DidActionStart("sprint")) {
+if (snapshot.DidActionStart(sprint_key)) {
   fx.PlaySprintStart();
 }
-if (snapshot.DidActionRelease("sprint")) {
+if (snapshot.DidActionRelease(sprint_key)) {
   fx.PlaySprintEnd();
 }
 ```
@@ -127,19 +127,19 @@ Use DidActionValueUpdate() to process updates only when the value changed this
 frame; read the current value via GetActionValue().
 
 ```cpp
-if (snapshot.DidActionValueUpdate("move")) {
-  const auto v = snapshot.GetActionValue("move");
+if (snapshot.DidActionValueUpdate(move_key)) {
+  const auto v = snapshot.GetActionValue(move_key);
   movement.ApplyInput(v);
 }
 ```
 
 ### Complex timing: combos/animations
 
-Use GetActionTransitions() to read the exact sequence of edges with their
-values to drive animations or combo logic.
+Use GetActionTransitions() to read the exact sequence of edges with their values
+to drive animations or combo logic.
 
 ```cpp
-for (const auto& t : snapshot.GetActionTransitions("attack")) {
+for (const auto& t : snapshot.GetActionTransitions(attack_key)) {
   anim.ProcessEdge(t.from_state, t.to_state, t.value_at_transition);
 }
 ```
@@ -147,11 +147,11 @@ for (const auto& t : snapshot.GetActionTransitions("attack")) {
 ### Relative axes (look, wheel zoom)
 
 GetActionValue() of a mouse or wheel action is the whole-frame delta its
-triggers accepted; a look gated by a chord is zero while the chord is not
-held. Do not sum transition values.
+triggers accepted; a look gated by a chord is zero while the chord is not held.
+Do not sum transition values.
 
 ```cpp
-const auto look = snapshot.GetActionValue("look").GetAs<oxygen::Axis2D>();
+const auto look = snapshot.GetActionValue(look_key).GetAs<oxygen::Axis2D>();
 camera.AddYawPitch(look.x, look.y);
 ```
 
@@ -161,7 +161,8 @@ camera.AddYawPitch(look.x, look.y);
   behavior.
 - Start/Release are convenience edges derived from Ongoing transitions and are
   non-sticky.
-- For exact control and timing, prefer DidActionTransition()/GetActionTransitions().
+- For exact control and timing, prefer
+  DidActionTransition()/GetActionTransitions().
 - Avoid polling IsActionTriggered for “click once” behavior; use
   DidActionTrigger instead to eliminate bounce/double-trigger issues.
 

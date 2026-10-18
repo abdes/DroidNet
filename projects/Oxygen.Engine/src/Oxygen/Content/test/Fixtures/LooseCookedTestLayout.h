@@ -9,41 +9,39 @@
 #include <string>
 #include <string_view>
 
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
+
 namespace oxygen::content::testing {
 
 //! Test-only loose cooked layout helper for Content runtime fixtures.
 struct LooseCookedLayout {
-  static constexpr std::string_view kMaterialDescriptorExtension = ".omat";
-  static constexpr std::string_view kGeometryDescriptorExtension = ".ogeo";
-  static constexpr std::string_view kSceneDescriptorExtension = ".oscene";
-  static constexpr std::string_view kPhysicsSceneDescriptorExtension
-    = ".opscene";
 
   [[nodiscard]] static auto MaterialDescriptorFileName(
     std::string_view material_name) -> std::string
   {
     return std::string(material_name)
-      + std::string(kMaterialDescriptorExtension);
+      + std::string(oxygen::data::kMaterialDescriptorExtension);
   }
 
   [[nodiscard]] static auto GeometryDescriptorFileName(
     std::string_view geometry_name) -> std::string
   {
     return std::string(geometry_name)
-      + std::string(kGeometryDescriptorExtension);
+      + std::string(oxygen::data::kGeometryDescriptorExtension);
   }
 
   [[nodiscard]] static auto SceneDescriptorFileName(std::string_view scene_name)
     -> std::string
   {
-    return std::string(scene_name) + std::string(kSceneDescriptorExtension);
+    return std::string(scene_name)
+      + std::string(oxygen::data::kSceneDescriptorExtension);
   }
 
   [[nodiscard]] static auto PhysicsSceneDescriptorFileName(
     std::string_view scene_name) -> std::string
   {
     return std::string(scene_name)
-      + std::string(kPhysicsSceneDescriptorExtension);
+      + std::string(oxygen::data::kPhysicsSceneDescriptorExtension);
   }
 
   [[nodiscard]] auto MaterialVirtualPath(std::string_view material_name) const

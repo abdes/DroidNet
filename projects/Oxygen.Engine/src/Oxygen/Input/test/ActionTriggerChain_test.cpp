@@ -14,7 +14,11 @@
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/test/ActionTestAccess.h>
+#include <Oxygen/Input/test/InputTestOwner.h>
 #include <Oxygen/Testing/GTest.h>
+
+using oxygen::input::MakeCodeAction;
+using oxygen::input::testing::kTestInputOwner;
 
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerChain;
@@ -27,8 +31,8 @@ namespace {
 
 NOLINT_TEST(ActionTriggerChain, TriggersWhenLinkedActionTriggers)
 {
-  auto linked
-    = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
+  auto linked = MakeCodeAction(
+    kTestInputOwner, "A", oxygen::input::ActionValueType::kBool);
   ActionTriggerChain chain;
   chain.SetLinkedAction(linked);
 
@@ -69,8 +73,8 @@ NOLINT_TEST(ActionTriggerChain, DoesNotTriggerWhenUnlinkedOrIdle)
   EXPECT_FALSE(chain_unlinked.IsTriggered());
 
   // Linked but idle
-  auto linked
-    = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
+  auto linked = MakeCodeAction(
+    kTestInputOwner, "B", oxygen::input::ActionValueType::kBool);
   ActionTriggerChain chain_linked;
   chain_linked.SetLinkedAction(linked);
   ActionTestAccess::BeginFrame(*linked);
@@ -96,8 +100,8 @@ NOLINT_TEST(ActionTriggerChain, DoesNotTriggerWhenUnlinkedOrIdle)
 
 NOLINT_TEST(ActionTriggerChain, ExpiresArmAfterMaxDelay)
 {
-  auto linked
-    = std::make_shared<Action>("C", oxygen::input::ActionValueType::kBool);
+  auto linked = MakeCodeAction(
+    kTestInputOwner, "C", oxygen::input::ActionValueType::kBool);
   ActionTriggerChain chain;
   chain.SetLinkedAction(linked);
   constexpr float kWindowSeconds = 0.1F; // 100 ms window
@@ -124,8 +128,8 @@ NOLINT_TEST(ActionTriggerChain, ExpiresArmAfterMaxDelay)
 
 NOLINT_TEST(ActionTriggerChain, RequiresPrerequisiteHeldOnPress)
 {
-  auto linked
-    = std::make_shared<Action>("D", oxygen::input::ActionValueType::kBool);
+  auto linked = MakeCodeAction(
+    kTestInputOwner, "D", oxygen::input::ActionValueType::kBool);
   ActionTriggerChain chain;
   chain.SetLinkedAction(linked);
   chain.RequirePrerequisiteHeld(true);

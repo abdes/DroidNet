@@ -1,9 +1,9 @@
 # Combo Trigger
 
-The Combo trigger detects ordered input patterns. Each step in the combo must
-be completed in order (and optionally within per-step time windows) before a
-single Triggered event is emitted for the entire sequence. Typical use: fighting
-moves, gesture recognition, or complex actions.
+The Combo trigger detects ordered input patterns. Each step in the combo must be
+completed in order (and optionally within per-step time windows) before a single
+Triggered event is emitted for the entire sequence. Typical use: fighting moves,
+gesture recognition, or complex actions.
 
 ## Behavior summary
 
@@ -46,10 +46,10 @@ Implications:
 - The combo can span many frames: windows are accumulated via delta-time across
   updates until the next qualifying transition happens.
 - Each transition counts once. The combo keeps a cursor per step action (frame
-  serial and number of transitions seen), so re-evaluating the combo in the
-  same frame — the input system evaluates after every event, including
-  unrelated mouse motion — never counts the same transition twice. One tap of
-  D with mouse movement in the same frame is not a double tap.
+  serial and number of transitions seen), so re-evaluating the combo in the same
+  frame — the input system evaluates after every event, including unrelated
+  mouse motion — never counts the same transition twice. One tap of D with mouse
+  movement in the same frame is not a double tap.
 
 ## Timeline example (three steps)
 
@@ -107,12 +107,14 @@ sequenceDiagram
 ## Configuration (C++)
 
 ```cpp
-using oxygen::input::Action;
 using oxygen::input::ActionTriggerCombo;
+using oxygen::input::ActionValueType;
+using oxygen::input::MakeCodeAction;
 
 // Define actions externally and wire them to gameplay inputs
-auto punch = std::make_shared<Action>("Punch", oxygen::input::ActionValueType::kBool);
-auto kick  = std::make_shared<Action>("Kick",  oxygen::input::ActionValueType::kBool);
+constexpr std::string_view kInputOwner = "Game";
+auto punch = MakeCodeAction(kInputOwner, "Punch", ActionValueType::kBool);
+auto kick = MakeCodeAction(kInputOwner, "Kick", ActionValueType::kBool);
 
 ActionTriggerCombo combo;
 combo.AddComboStep(punch, oxygen::input::ActionState::kTriggered, 0.30F);
@@ -125,9 +127,9 @@ combo.AddComboStep(kick,  oxygen::input::ActionState::kTriggered, 0.30F);
 
 ## Contract
 
-- Inputs: The combo inspects per-frame state transitions of referenced
-  `Action`s each update (event-driven). It does not use the `action_value`
-  parameter directly.
+- Inputs: The combo inspects per-frame state transitions of referenced `Action`s
+  each update (event-driven). It does not use the `action_value` parameter
+  directly.
 - Emits: Triggered once when the final step completes in order; otherwise
   remains Ongoing or resets to Idle on errors/timeouts.
 - States:
@@ -154,5 +156,5 @@ Recommended unit scenarios (covered in ActionTriggers tests):
 
 ## VS Code rendering
 
-Mermaid diagrams render in VS Code’s Markdown Preview. If not enabled,
-install an extension such as "Markdown Preview Mermaid Support".
+Mermaid diagrams render in VS Code’s Markdown Preview. If not enabled, install
+an extension such as "Markdown Preview Mermaid Support".

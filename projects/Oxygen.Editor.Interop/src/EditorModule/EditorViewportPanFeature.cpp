@@ -40,30 +40,10 @@ namespace oxygen::interop::module {
   } // namespace
 
   auto EditorViewportPanFeature::RegisterBindings(
-    oxygen::engine::InputSystem& input_system,
-    const std::shared_ptr<oxygen::input::InputMappingContext>& ctx) noexcept
-    -> void {
-    using oxygen::input::Action;
-    using oxygen::input::ActionTriggerDown;
-    using oxygen::input::ActionValueType;
-    using oxygen::input::InputActionMapping;
-    using platform::InputSlots;
-
-    if (mmb_action_) {
-      return;
-    }
-
-    mmb_action_ = std::make_shared<Action>(
-      "Editor.Mouse.MiddleButton", ActionValueType::kBool);
-    input_system.AddAction(mmb_action_);
-
-    const auto trig = std::make_shared<ActionTriggerDown>();
-    trig->MakeExplicit();
-
-    const auto mmb = std::make_shared<InputActionMapping>(
-      mmb_action_, InputSlots::MiddleMouseButton);
-    mmb->AddTrigger(trig);
-    ctx->AddMapping(mmb);
+    oxygen::engine::InputSystem& /*input_system*/,
+    const std::shared_ptr<oxygen::input::InputMappingContext>& /*ctx*/,
+    const EditorViewportInputActions& inputs) noexcept -> void {
+    inputs_ = inputs;
   }
 
   auto EditorViewportPanFeature::Apply(scene::SceneNode camera_node,
@@ -84,7 +64,7 @@ namespace oxygen::interop::module {
 
     // A middle drag pans, with or without Alt.
     const bool active
-      = input_snapshot.IsActionOngoing("Editor.Mouse.MiddleButton");
+      = input_snapshot.IsActionOngoing(inputs_.middle_button->GetAssetKey());
     if (!active) {
       state.was_active = false;
       return;
@@ -98,7 +78,7 @@ namespace oxygen::interop::module {
 
     const auto mouse_delta =
       viewport::GetAxis2DOrZero(input_snapshot,
-        "Editor.Mouse.Delta");
+        inputs_.mouse_delta->GetAssetKey());
     if ((std::abs(mouse_delta.x) <= 0.0f) && (std::abs(mouse_delta.y) <= 0.0f)) {
       return;
     }

@@ -11,6 +11,7 @@
 
 #include <Oxygen/Content/Layout.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
 
 namespace oxygen::content::import {
@@ -49,102 +50,85 @@ namespace oxygen::content::import {
 */
 //! Layout description for loose cooked output.
 struct LooseCookedLayout final : Layout {
-  //! File extensions for on-disk descriptor files.
-  static constexpr std::string_view kMaterialDescriptorExtension = ".omat";
-  static constexpr std::string_view kGeometryDescriptorExtension = ".ogeo";
-  static constexpr std::string_view kSceneDescriptorExtension = ".oscene";
-  //! Physics scene sidecar descriptor extension.
-  static constexpr std::string_view kPhysicsSceneDescriptorExtension
-    = ".opscene";
-  //! Physics material descriptor extension.
-  static constexpr std::string_view kPhysicsMaterialDescriptorExtension
-    = ".opmat";
-  //! Collision shape descriptor extension.
-  static constexpr std::string_view kCollisionShapeDescriptorExtension
-    = ".ocshape";
-  static constexpr std::string_view kScriptDescriptorExtension = ".oscript";
-  static constexpr std::string_view kInputActionDescriptorExtension = ".oiact";
-  static constexpr std::string_view kInputMappingContextDescriptorExtension
-    = ".oimap";
-  static constexpr std::string_view kTextureDescriptorExtension = ".otex";
-  static constexpr std::string_view kBufferDescriptorExtension = ".obuf";
-  static constexpr std::string_view kPhysicsResourceDescriptorExtension
-    = ".opres";
-
   [[nodiscard]] static auto MaterialDescriptorFileName(
     std::string_view material_name) -> std::string
   {
     return std::string(material_name)
-      + std::string(kMaterialDescriptorExtension);
+      + std::string(data::kMaterialDescriptorExtension);
   }
 
   [[nodiscard]] static auto GeometryDescriptorFileName(
     std::string_view geometry_name) -> std::string
   {
     return std::string(geometry_name)
-      + std::string(kGeometryDescriptorExtension);
+      + std::string(data::kGeometryDescriptorExtension);
   }
 
   [[nodiscard]] static auto SceneDescriptorFileName(std::string_view scene_name)
     -> std::string
   {
-    return std::string(scene_name) + std::string(kSceneDescriptorExtension);
+    return std::string(scene_name)
+      + std::string(data::kSceneDescriptorExtension);
   }
 
   [[nodiscard]] static auto PhysicsSceneDescriptorFileName(
     std::string_view scene_name) -> std::string
   {
     return std::string(scene_name)
-      + std::string(kPhysicsSceneDescriptorExtension);
+      + std::string(data::kPhysicsSceneDescriptorExtension);
   }
 
   [[nodiscard]] static auto ScriptDescriptorFileName(std::string_view name)
     -> std::string
   {
-    return std::string(name) + std::string(kScriptDescriptorExtension);
+    return std::string(name) + std::string(data::kScriptDescriptorExtension);
   }
 
   [[nodiscard]] static auto InputActionDescriptorFileName(std::string_view name)
     -> std::string
   {
-    return std::string(name) + std::string(kInputActionDescriptorExtension);
+    return std::string(name)
+      + std::string(data::kInputActionDescriptorExtension);
   }
 
   [[nodiscard]] static auto InputMappingContextDescriptorFileName(
     std::string_view name) -> std::string
   {
     return std::string(name)
-      + std::string(kInputMappingContextDescriptorExtension);
+      + std::string(data::kInputMappingContextDescriptorExtension);
   }
 
   [[nodiscard]] static auto TextureDescriptorFileName(std::string_view name)
     -> std::string
   {
-    return std::string(name) + std::string(kTextureDescriptorExtension);
+    return std::string(name) + std::string(data::kTextureDescriptorExtension);
   }
 
   [[nodiscard]] static auto BufferDescriptorFileName(std::string_view name)
     -> std::string
   {
-    return std::string(name) + std::string(kBufferDescriptorExtension);
+    return std::string(name) + std::string(data::kBufferDescriptorExtension);
   }
 
   [[nodiscard]] static auto PhysicsMaterialDescriptorFileName(
     std::string_view name) -> std::string
   {
-    return std::string(name) + std::string(kPhysicsMaterialDescriptorExtension);
+    return std::string(name)
+      + std::string(data::kPhysicsMaterialDescriptorExtension);
   }
 
   [[nodiscard]] static auto CollisionShapeDescriptorFileName(
     std::string_view name) -> std::string
   {
-    return std::string(name) + std::string(kCollisionShapeDescriptorExtension);
+    return std::string(name)
+      + std::string(data::kCollisionShapeDescriptorExtension);
   }
 
   [[nodiscard]] static auto PhysicsResourceDescriptorFileName(
     std::string_view name) -> std::string
   {
-    return std::string(name) + std::string(kPhysicsResourceDescriptorExtension);
+    return std::string(name)
+      + std::string(data::kPhysicsResourceDescriptorExtension);
   }
 
   [[nodiscard]] auto MaterialVirtualLeaf(std::string_view material_name) const

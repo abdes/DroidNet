@@ -62,7 +62,12 @@ namespace oxygen::interop::module {
       float dt_seconds) noexcept -> void;
 
   private:
+    //! Creates, adds and maps the inputs several features read.
+    auto RegisterSharedInputs(oxygen::engine::InputSystem& input_system)
+      -> void;
+
     std::shared_ptr<oxygen::input::InputMappingContext> ctx_;
+    EditorViewportInputActions inputs_;
     std::vector<std::unique_ptr<IEditorViewportNavigationFeature>> features_;
 
     // A cached pointer to the wheel-zoom feature instance owned by `features_`.

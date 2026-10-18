@@ -59,6 +59,14 @@ auto AssetKey::FromVirtualPath(const std::string_view virtual_path) -> AssetKey
   return FromBytes(key_bytes);
 }
 
+auto AssetKey::FromCodePath(const std::string_view code_path) -> AssetKey
+{
+  auto virtual_path = std::string { kCodeMount };
+  virtual_path.push_back('/');
+  virtual_path.append(code_path);
+  return FromVirtualPath(virtual_path);
+}
+
 auto AssetKey::FromString(const std::string_view text) -> Result<AssetKey>
 {
   constexpr auto kInvalidNibble = uint8_t { 0xFFU };

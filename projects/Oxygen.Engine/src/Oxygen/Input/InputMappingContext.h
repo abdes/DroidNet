@@ -43,10 +43,15 @@ namespace input {
     //! Physical sources claimed during one evaluation pass.
     using ClaimedSources = std::vector<const platform::InputSlot*>;
 
-    OXGN_NPUT_API explicit InputMappingContext(std::string name);
+    //! A context identified by `asset_key`; the name is a label that other
+    //! contexts may share.
+    /*!
+     A context hydrated from an input mapping context asset carries the
+     asset's key; a context created in code is made by `MakeCodeContext`
+     (CodeInput.h), which gives it a code key.
 
-    //! A context hydrated from an input mapping context asset. The asset key
-    //! is its identity; the name is a label that other contexts may share.
+     @throw std::invalid_argument when `asset_key` is nil.
+    */
     OXGN_NPUT_API InputMappingContext(
       std::string name, data::AssetKey asset_key);
 
@@ -54,8 +59,7 @@ namespace input {
 
     [[nodiscard]] auto GetName() const -> const std::string& { return name_; }
 
-    //! Key of the asset this context was hydrated from; nil for a context
-    //! created in code.
+    //! The context's identity; never nil.
     [[nodiscard]] auto GetAssetKey() const noexcept -> const data::AssetKey&
     {
       return asset_key_;

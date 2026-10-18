@@ -12,6 +12,7 @@
 #include <source_location>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -43,6 +44,7 @@
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
+#include <Oxygen/Input/CodeInput.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
@@ -54,6 +56,10 @@
 #include <Oxygen/Vortex/CompositionView.h>
 
 namespace {
+
+//! The owner of the inputs created here in code (see
+//! oxygen::input::MakeCodeAction).
+constexpr std::string_view kInputOwner = "Examples/InputSystem";
 
 constexpr std::uint32_t kWindowWidth = 2400;
 constexpr std::uint32_t kWindowHeight = 1400;
@@ -343,9 +349,11 @@ auto MainModule::InitInputBindings() noexcept -> bool
     return false;
   }
 
-  shift_action_ = std::make_shared<Action>("shift", ActionValueType::kBool);
+  shift_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "shift", ActionValueType::kBool);
   Host().input_system->AddAction(shift_action_);
-  modifier_keys_ctx_ = std::make_shared<InputMappingContext>("modifier keys");
+  modifier_keys_ctx_
+    = oxygen::input::MakeCodeContext(kInputOwner, "modifier keys");
   {
     const auto trigger = std::make_shared<oxygen::input::ActionTriggerDown>();
     trigger->MakeExplicit();
@@ -356,19 +364,21 @@ auto MainModule::InitInputBindings() noexcept -> bool
   }
   Host().input_system->AddMappingContext(modifier_keys_ctx_, 1000);
 
-  jump_action_ = std::make_shared<Action>("jump", ActionValueType::kBool);
+  jump_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "jump", ActionValueType::kBool);
   Host().input_system->AddAction(jump_action_);
 
-  jump_higher_action_
-    = std::make_shared<Action>("jump higher", ActionValueType::kBool);
+  jump_higher_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "jump higher", ActionValueType::kBool);
   jump_higher_action_->SetConsumesInput(true);
   Host().input_system->AddAction(jump_higher_action_);
 
-  swim_up_action_ = std::make_shared<Action>("swim up", ActionValueType::kBool);
+  swim_up_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "swim up", ActionValueType::kBool);
   Host().input_system->AddAction(swim_up_action_);
 
   ground_movement_ctx_
-    = std::make_shared<InputMappingContext>("ground movement");
+    = oxygen::input::MakeCodeContext(kInputOwner, "ground movement");
   {
     {
       const auto trigger = std::make_shared<ActionTriggerTap>();
@@ -397,7 +407,7 @@ auto MainModule::InitInputBindings() noexcept -> bool
     Host().input_system->AddMappingContext(ground_movement_ctx_, 0);
   }
 
-  swimming_ctx_ = std::make_shared<InputMappingContext>("swimming");
+  swimming_ctx_ = oxygen::input::MakeCodeContext(kInputOwner, "swimming");
   {
     auto trig_down = std::make_shared<ActionTriggerDown>();
     trig_down->MakeExplicit();

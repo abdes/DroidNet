@@ -297,6 +297,9 @@
     <ClInclude Include="EditorModule\EditorViewportCameraControlMode.h">
       <Filter>EditorModule\Viewport</Filter>
     </ClInclude>
+    <ClInclude Include="EditorModule\EditorViewportInputActions.h">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClInclude>
     <ClInclude Include="EditorModule\EditorViewportNavigationFeature.h">
       <Filter>EditorModule\Viewport</Filter>
     </ClInclude>

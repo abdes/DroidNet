@@ -17,10 +17,14 @@
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/test/ActionTestAccess.h>
 #include <Oxygen/Input/test/InputSystemTest.h>
+#include <Oxygen/Input/test/InputTestOwner.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Testing/GTest.h>
+
+using oxygen::input::MakeCodeAction;
+using oxygen::input::testing::kTestInputOwner;
 
 using namespace std::chrono_literals;
 
@@ -86,8 +90,8 @@ protected:
 NOLINT_TEST_F(InputActionMappingTest, KeyPressed_TriggersOnce)
 {
   // Arrange
-  auto action
-    = std::make_shared<Action>("Jump", oxygen::input::ActionValueType::kBool);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Jump", oxygen::input::ActionValueType::kBool);
   InputActionMapping mapping(action, InputSlots::Space);
   auto trig = std::make_shared<ActionTriggerPressed>();
   trig->MakeExplicit();
@@ -115,8 +119,8 @@ NOLINT_TEST_F(InputActionMappingTest, KeyPressed_TriggersOnce)
 NOLINT_TEST_F(InputActionMappingTest, KeyDown_OngoingWhileHeld)
 {
   // Arrange
-  auto action
-    = std::make_shared<Action>("Fire", oxygen::input::ActionValueType::kBool);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Fire", oxygen::input::ActionValueType::kBool);
   InputActionMapping mapping(action, InputSlots::LeftMouseButton);
   auto trig = std::make_shared<ActionTriggerDown>();
   trig->MakeExplicit();
@@ -149,8 +153,8 @@ NOLINT_TEST_F(InputActionMappingTest, KeyDown_OngoingWhileHeld)
 NOLINT_TEST_F(InputActionMappingTest, MouseMotion_UsesMappedAxis)
 {
   // Arrange X
-  auto ax = std::make_shared<Action>(
-    "LookX", oxygen::input::ActionValueType::kAxis1D);
+  auto ax = MakeCodeAction(
+    kTestInputOwner, "LookX", oxygen::input::ActionValueType::kAxis1D);
   InputActionMapping map_x(ax, InputSlots::MouseX);
   auto trig = std::make_shared<ActionTriggerDown>();
   trig->MakeExplicit();
@@ -164,8 +168,8 @@ NOLINT_TEST_F(InputActionMappingTest, MouseMotion_UsesMappedAxis)
   EXPECT_EQ(ax->GetValue().GetAs<Axis1D>().x, kLargeDelta);
 
   // Arrange Y
-  auto ay = std::make_shared<Action>(
-    "LookY", oxygen::input::ActionValueType::kAxis1D);
+  auto ay = MakeCodeAction(
+    kTestInputOwner, "LookY", oxygen::input::ActionValueType::kAxis1D);
   InputActionMapping map_y(ay, InputSlots::MouseY);
   map_y.AddTrigger(std::make_shared<ActionTriggerDown>());
 
@@ -175,8 +179,8 @@ NOLINT_TEST_F(InputActionMappingTest, MouseMotion_UsesMappedAxis)
   EXPECT_EQ(ay->GetValue().GetAs<Axis1D>().x, -kDelta);
 
   // Arrange XY
-  auto axy = std::make_shared<Action>(
-    "LookXY", oxygen::input::ActionValueType::kAxis2D);
+  auto axy = MakeCodeAction(
+    kTestInputOwner, "LookXY", oxygen::input::ActionValueType::kAxis2D);
   InputActionMapping map_xy(axy, InputSlots::MouseXY);
   map_xy.AddTrigger(std::make_shared<ActionTriggerDown>());
 
@@ -190,8 +194,8 @@ NOLINT_TEST_F(InputActionMappingTest, MouseMotion_UsesMappedAxis)
 NOLINT_TEST_F(InputActionMappingTest, MouseWheel_RespectsSlot)
 {
   // X
-  auto ax = std::make_shared<Action>(
-    "WheelX", oxygen::input::ActionValueType::kAxis1D);
+  auto ax = MakeCodeAction(
+    kTestInputOwner, "WheelX", oxygen::input::ActionValueType::kAxis1D);
   InputActionMapping map_x(ax, InputSlots::MouseWheelX);
   map_x.AddTrigger(std::make_shared<ActionTriggerDown>());
   map_x.HandleInput(MakeMouseWheel(-1.0F, 0.0F));
@@ -199,8 +203,8 @@ NOLINT_TEST_F(InputActionMappingTest, MouseWheel_RespectsSlot)
   EXPECT_EQ(ax->GetValue().GetAs<Axis1D>().x, -1.0F);
 
   // Y (positive up)
-  auto ay = std::make_shared<Action>(
-    "WheelY", oxygen::input::ActionValueType::kAxis1D);
+  auto ay = MakeCodeAction(
+    kTestInputOwner, "WheelY", oxygen::input::ActionValueType::kAxis1D);
   InputActionMapping map_y(ay, InputSlots::MouseWheelY);
   map_y.AddTrigger(std::make_shared<ActionTriggerDown>());
   map_y.HandleInput(MakeMouseWheel(0.0F, 2.0F));
@@ -208,8 +212,8 @@ NOLINT_TEST_F(InputActionMappingTest, MouseWheel_RespectsSlot)
   EXPECT_EQ(ay->GetValue().GetAs<Axis1D>().x, 2.0F);
 
   // XY
-  auto axy = std::make_shared<Action>(
-    "WheelXY", oxygen::input::ActionValueType::kAxis2D);
+  auto axy = MakeCodeAction(
+    kTestInputOwner, "WheelXY", oxygen::input::ActionValueType::kAxis2D);
   InputActionMapping map_xy(axy, InputSlots::MouseWheelXY);
   map_xy.AddTrigger(std::make_shared<ActionTriggerDown>());
   map_xy.HandleInput(MakeMouseWheel(kDelta, -4.0F));
@@ -221,8 +225,8 @@ NOLINT_TEST_F(InputActionMappingTest, MouseWheel_RespectsSlot)
 //! Blocker trigger prevents any explicit trigger from causing action
 NOLINT_TEST_F(InputActionMappingTest, Blocker_PreventsTrigger)
 {
-  auto action
-    = std::make_shared<Action>("Shoot", oxygen::input::ActionValueType::kBool);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Shoot", oxygen::input::ActionValueType::kBool);
   InputActionMapping mapping(action, InputSlots::Space);
   auto explicitTrig = std::make_shared<ActionTriggerDown>();
   explicitTrig->MakeExplicit();
@@ -243,8 +247,8 @@ NOLINT_TEST_F(InputActionMappingTest, Blocker_PreventsTrigger)
 //! CancelInput should mark action canceled in current evaluation
 NOLINT_TEST_F(InputActionMappingTest, CancelInput_SetsCanceled)
 {
-  auto action = std::make_shared<Action>(
-    "Interact", oxygen::input::ActionValueType::kBool);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Interact", oxygen::input::ActionValueType::kBool);
   InputActionMapping mapping(action, InputSlots::Space);
   auto trig = std::make_shared<ActionTriggerDown>();
   trig->MakeExplicit();
@@ -266,8 +270,8 @@ NOLINT_TEST_F(InputActionMappingTest, CancelInput_SetsCanceled)
 NOLINT_TEST_F(InputActionMappingTest, ImplicitOnly_AllMustTrigger_Mapping)
 {
   // Arrange
-  auto action
-    = std::make_shared<Action>("Gate", oxygen::input::ActionValueType::kBool);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Gate", oxygen::input::ActionValueType::kBool);
   InputActionMapping mapping(action, InputSlots::Space);
 
   auto down = std::make_shared<ActionTriggerDown>();
@@ -296,8 +300,8 @@ NOLINT_TEST_F(InputActionMappingTest, ImplicitOnly_AllMustTrigger_Mapping)
 NOLINT_TEST_F(InputActionMappingTest, ImplicitWithBlocker_Blocked)
 {
   // Arrange
-  auto action
-    = std::make_shared<Action>("Safe", oxygen::input::ActionValueType::kBool);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Safe", oxygen::input::ActionValueType::kBool);
   InputActionMapping mapping(action, InputSlots::Space);
 
   auto down = std::make_shared<ActionTriggerDown>();
@@ -321,8 +325,8 @@ NOLINT_TEST_F(InputActionMappingTest, ImplicitWithBlocker_Blocked)
 NOLINT_TEST_F(InputActionMappingTest, MouseMotion_ValueClearsNextUpdate)
 {
   // Arrange
-  auto axy
-    = std::make_shared<Action>("Look", oxygen::input::ActionValueType::kAxis2D);
+  auto axy = MakeCodeAction(
+    kTestInputOwner, "Look", oxygen::input::ActionValueType::kAxis2D);
   InputActionMapping map_xy(axy, InputSlots::MouseXY);
   auto trig = std::make_shared<ActionTriggerDown>();
   trig->MakeExplicit();
@@ -346,8 +350,8 @@ NOLINT_TEST_F(InputActionMappingTest, MouseMotion_ValueClearsNextUpdate)
 NOLINT_TEST_F(InputActionMappingTest, Pressed_NoRepeatWithoutEvent)
 {
   // Arrange
-  auto action
-    = std::make_shared<Action>("Click", oxygen::input::ActionValueType::kBool);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Click", oxygen::input::ActionValueType::kBool);
   InputActionMapping mapping(action, InputSlots::Space);
   auto trig = std::make_shared<ActionTriggerPressed>();
   trig->MakeExplicit();
@@ -369,8 +373,8 @@ NOLINT_TEST_F(InputActionMappingTest, Pressed_NoRepeatWithoutEvent)
 NOLINT_TEST_F(InputActionMappingTest, WheelDirectional_SpecificSlots)
 {
   // Left (dx < 0)
-  auto aleft
-    = std::make_shared<Action>("Left", oxygen::input::ActionValueType::kAxis1D);
+  auto aleft = MakeCodeAction(
+    kTestInputOwner, "Left", oxygen::input::ActionValueType::kAxis1D);
   InputActionMapping mleft(aleft, InputSlots::MouseWheelLeft);
   mleft.AddTrigger(std::make_shared<ActionTriggerDown>());
   mleft.HandleInput(MakeMouseWheel(-2.0F, 0.0F));
@@ -378,8 +382,8 @@ NOLINT_TEST_F(InputActionMappingTest, WheelDirectional_SpecificSlots)
   EXPECT_LT(aleft->GetValue().GetAs<Axis1D>().x, 0.0F);
 
   // Up (dy > 0)
-  auto aup
-    = std::make_shared<Action>("Up", oxygen::input::ActionValueType::kAxis1D);
+  auto aup = MakeCodeAction(
+    kTestInputOwner, "Up", oxygen::input::ActionValueType::kAxis1D);
   InputActionMapping mup(aup, InputSlots::MouseWheelUp);
   mup.AddTrigger(std::make_shared<ActionTriggerDown>());
   mup.HandleInput(MakeMouseWheel(0.0F, kDelta));
@@ -391,8 +395,8 @@ NOLINT_TEST_F(InputActionMappingTest, WheelDirectional_SpecificSlots)
 NOLINT_TEST_F(InputActionMappingTest, ConsumesInput_True_ConsumesOnTrigger)
 {
   // Arrange
-  auto action
-    = std::make_shared<Action>("Use", oxygen::input::ActionValueType::kBool);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Use", oxygen::input::ActionValueType::kBool);
   action->SetConsumesInput(true);
   InputActionMapping mapping(action, InputSlots::Space);
   auto trig = std::make_shared<ActionTriggerPressed>();
@@ -418,8 +422,8 @@ NOLINT_TEST_F(InputActionMappingTest, ConsumesInput_True_ConsumesOnTrigger)
 NOLINT_TEST_F(InputActionMappingTest, NoTriggers_NoEffect)
 {
   // Arrange
-  auto action
-    = std::make_shared<Action>("Noop", oxygen::input::ActionValueType::kBool);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Noop", oxygen::input::ActionValueType::kBool);
   InputActionMapping mapping(action, InputSlots::Space);
 
   // Act: press -> update
@@ -437,8 +441,8 @@ NOLINT_TEST_F(
   InputActionMappingTest, ExplicitAndImplicit_RequiresExplicitEachUpdate)
 {
   // Arrange: explicit Pressed + implicit Hold; press once then wait long
-  auto action
-    = std::make_shared<Action>("Gated", oxygen::input::ActionValueType::kBool);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Gated", oxygen::input::ActionValueType::kBool);
   InputActionMapping mapping(action, InputSlots::Space);
 
   auto pressed = std::make_shared<ActionTriggerPressed>();
@@ -468,8 +472,8 @@ NOLINT_TEST_F(
 //! components.
 NOLINT_TEST_F(InputActionMappingTest, ScaleAndBias_ApplyPerComponent)
 {
-  auto action
-    = std::make_shared<Action>("Move", oxygen::input::ActionValueType::kAxis2D);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Move", oxygen::input::ActionValueType::kAxis2D);
   InputActionMapping mapping(action, InputSlots::Space);
   mapping.AddTrigger(std::make_shared<ActionTriggerDown>());
   mapping.SetScale({ .x = 0.0F, .y = -1.0F });
@@ -488,8 +492,8 @@ NOLINT_TEST_F(InputActionMappingTest, ScaleAndBias_ApplyPerComponent)
 //! Bias is not applied to relative sources: a delta has no rest offset.
 NOLINT_TEST_F(InputActionMappingTest, Bias_IgnoredForRelativeSources)
 {
-  auto action
-    = std::make_shared<Action>("Yaw", oxygen::input::ActionValueType::kAxis1D);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Yaw", oxygen::input::ActionValueType::kAxis1D);
   InputActionMapping mapping(action, InputSlots::MouseX);
   mapping.AddTrigger(std::make_shared<ActionTriggerDown>());
   mapping.SetScale({ .x = 2.0F, .y = 2.0F });
@@ -504,8 +508,8 @@ NOLINT_TEST_F(InputActionMappingTest, Bias_IgnoredForRelativeSources)
 //! Mouse axes and wheel slots are relative; keys and buttons are not.
 NOLINT_TEST_F(InputActionMappingTest, IsRelative_ClassifiesSlots)
 {
-  auto action
-    = std::make_shared<Action>("Any", oxygen::input::ActionValueType::kAxis2D);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Any", oxygen::input::ActionValueType::kAxis2D);
   EXPECT_TRUE(InputActionMapping(action, InputSlots::MouseXY).IsRelative());
   EXPECT_TRUE(InputActionMapping(action, InputSlots::MouseWheelY).IsRelative());
   EXPECT_TRUE(
@@ -518,8 +522,8 @@ NOLINT_TEST_F(InputActionMappingTest, IsRelative_ClassifiesSlots)
 //! Several motion events between updates of the same frame accumulate.
 NOLINT_TEST_F(InputActionMappingTest, RelativeSource_AccumulatesWithinFrame)
 {
-  auto action
-    = std::make_shared<Action>("Look", oxygen::input::ActionValueType::kAxis2D);
+  auto action = MakeCodeAction(
+    kTestInputOwner, "Look", oxygen::input::ActionValueType::kAxis2D);
   InputActionMapping mapping(action, InputSlots::MouseXY);
   auto trigger = std::make_shared<ActionTriggerDown>();
   trigger->SetActuationThreshold(0.0F);
@@ -544,8 +548,8 @@ NOLINT_TEST_F(InputActionMappingTest, RelativeSource_AccumulatesWithinFrame)
 //! Deactivate cancels an active binding and leaves an idle one silent.
 NOLINT_TEST_F(InputActionMappingTest, Deactivate_CancelsOnlyActiveBinding)
 {
-  auto held
-    = std::make_shared<Action>("Sprint", oxygen::input::ActionValueType::kBool);
+  auto held = MakeCodeAction(
+    kTestInputOwner, "Sprint", oxygen::input::ActionValueType::kBool);
   InputActionMapping held_mapping(held, InputSlots::Space);
   auto down = std::make_shared<ActionTriggerDown>();
   down->MakeExplicit();
@@ -559,8 +563,8 @@ NOLINT_TEST_F(InputActionMappingTest, Deactivate_CancelsOnlyActiveBinding)
   EXPECT_FALSE(held->IsOngoing());
   EXPECT_TRUE(held->WasCanceledThisFrame());
 
-  auto idle
-    = std::make_shared<Action>("Jump", oxygen::input::ActionValueType::kBool);
+  auto idle = MakeCodeAction(
+    kTestInputOwner, "Jump", oxygen::input::ActionValueType::kBool);
   InputActionMapping idle_mapping(idle, InputSlots::Space);
   idle_mapping.AddTrigger(std::make_shared<ActionTriggerPressed>());
   idle_mapping.Deactivate();

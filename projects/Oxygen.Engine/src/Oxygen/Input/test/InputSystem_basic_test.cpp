@@ -18,11 +18,16 @@
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/test/InputSystemTest.h>
+#include <Oxygen/Input/test/InputTestOwner.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Testing/GTest.h>
+
+using oxygen::input::MakeCodeAction;
+using oxygen::input::MakeCodeContext;
+using oxygen::input::testing::kTestInputOwner;
 
 using namespace std::chrono_literals;
 
@@ -60,10 +65,10 @@ NOLINT_TEST_F(InputSystemTest, ProcessesPressedForJump)
 {
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto jump = std::make_shared<Action>("Jump", ActionValueType::kBool);
+    auto jump = MakeCodeAction(kTestInputOwner, "Jump", ActionValueType::kBool);
     System().AddAction(jump);
 
-    auto ctx = std::make_shared<InputMappingContext>("ctx");
+    auto ctx = MakeCodeContext(kTestInputOwner, "ctx");
     auto mapping
       = std::make_shared<InputActionMapping>(jump, InputSlots::Space);
     auto trig = std::make_shared<ActionTriggerPressed>();
@@ -93,14 +98,15 @@ NOLINT_TEST_F(InputSystemTest, ConsumptionPreventsSecondMapping)
 {
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto primary = std::make_shared<Action>("Primary", ActionValueType::kBool);
+    auto primary
+      = MakeCodeAction(kTestInputOwner, "Primary", ActionValueType::kBool);
     primary->SetConsumesInput(true);
     auto secondary
-      = std::make_shared<Action>("Secondary", ActionValueType::kBool);
+      = MakeCodeAction(kTestInputOwner, "Secondary", ActionValueType::kBool);
     System().AddAction(primary);
     System().AddAction(secondary);
 
-    auto ctx = std::make_shared<InputMappingContext>("ctx");
+    auto ctx = MakeCodeContext(kTestInputOwner, "ctx");
     // Primary first
     {
       auto m = std::make_shared<InputActionMapping>(primary, InputSlots::Space);
@@ -142,10 +148,10 @@ NOLINT_TEST_F(InputSystemTest, TapTriggersOnSameFramePressRelease)
 {
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto tap = std::make_shared<Action>("Tap", ActionValueType::kBool);
+    auto tap = MakeCodeAction(kTestInputOwner, "Tap", ActionValueType::kBool);
     System().AddAction(tap);
 
-    auto ctx = std::make_shared<InputMappingContext>("ctx");
+    auto ctx = MakeCodeContext(kTestInputOwner, "ctx");
     auto mapping = std::make_shared<InputActionMapping>(tap, InputSlots::Space);
     auto trig = std::make_shared<ActionTriggerTap>();
     trig->SetTapTimeThreshold(0.25F);
@@ -176,9 +182,9 @@ NOLINT_TEST_F(InputSystemTest, ContextActivationToggle)
 {
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto act = std::make_shared<Action>("A", ActionValueType::kBool);
+    auto act = MakeCodeAction(kTestInputOwner, "A", ActionValueType::kBool);
     System().AddAction(act);
-    auto ctx = std::make_shared<InputMappingContext>("ctx");
+    auto ctx = MakeCodeContext(kTestInputOwner, "ctx");
     auto mapping = std::make_shared<InputActionMapping>(act, InputSlots::Space);
     auto trig = std::make_shared<ActionTriggerPressed>();
     trig->MakeExplicit();
@@ -261,14 +267,17 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseMotionToAxisMappings)
 {
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto look_x = std::make_shared<Action>("LookX", ActionValueType::kAxis1D);
-    auto look_y = std::make_shared<Action>("LookY", ActionValueType::kAxis1D);
-    auto look_xy = std::make_shared<Action>("Look", ActionValueType::kAxis2D);
+    auto look_x
+      = MakeCodeAction(kTestInputOwner, "LookX", ActionValueType::kAxis1D);
+    auto look_y
+      = MakeCodeAction(kTestInputOwner, "LookY", ActionValueType::kAxis1D);
+    auto look_xy
+      = MakeCodeAction(kTestInputOwner, "Look", ActionValueType::kAxis2D);
     System().AddAction(look_x);
     System().AddAction(look_y);
     System().AddAction(look_xy);
 
-    auto ctx = std::make_shared<InputMappingContext>("mouse");
+    auto ctx = MakeCodeContext(kTestInputOwner, "mouse");
     {
       auto m = std::make_shared<InputActionMapping>(look_x, InputSlots::MouseX);
       auto t = std::make_shared<ActionTriggerDown>();
@@ -328,14 +337,17 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheelToAxisMappings)
 {
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto wheel_x = std::make_shared<Action>("WheelX", ActionValueType::kAxis1D);
-    auto wheel_y = std::make_shared<Action>("WheelY", ActionValueType::kAxis1D);
-    auto wheel_xy = std::make_shared<Action>("Wheel", ActionValueType::kAxis2D);
+    auto wheel_x
+      = MakeCodeAction(kTestInputOwner, "WheelX", ActionValueType::kAxis1D);
+    auto wheel_y
+      = MakeCodeAction(kTestInputOwner, "WheelY", ActionValueType::kAxis1D);
+    auto wheel_xy
+      = MakeCodeAction(kTestInputOwner, "Wheel", ActionValueType::kAxis2D);
     System().AddAction(wheel_x);
     System().AddAction(wheel_y);
     System().AddAction(wheel_xy);
 
-    auto ctx = std::make_shared<InputMappingContext>("wheel");
+    auto ctx = MakeCodeContext(kTestInputOwner, "wheel");
     auto mk_down = []() -> std::shared_ptr<ActionTriggerDown> {
       auto t = std::make_shared<ActionTriggerDown>();
       t->MakeExplicit();
@@ -396,16 +408,20 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheelDirectionalSlots)
 {
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto up = std::make_shared<Action>("WheelUp", ActionValueType::kBool);
-    auto down = std::make_shared<Action>("WheelDown", ActionValueType::kBool);
-    auto left = std::make_shared<Action>("WheelLeft", ActionValueType::kBool);
-    auto right = std::make_shared<Action>("WheelRight", ActionValueType::kBool);
+    auto up
+      = MakeCodeAction(kTestInputOwner, "WheelUp", ActionValueType::kBool);
+    auto down
+      = MakeCodeAction(kTestInputOwner, "WheelDown", ActionValueType::kBool);
+    auto left
+      = MakeCodeAction(kTestInputOwner, "WheelLeft", ActionValueType::kBool);
+    auto right
+      = MakeCodeAction(kTestInputOwner, "WheelRight", ActionValueType::kBool);
     System().AddAction(up);
     System().AddAction(down);
     System().AddAction(left);
     System().AddAction(right);
 
-    auto ctx = std::make_shared<InputMappingContext>("wheel-dir");
+    auto ctx = MakeCodeContext(kTestInputOwner, "wheel-dir");
     auto mk_down = []() -> std::shared_ptr<ActionTriggerDown> {
       auto t = std::make_shared<ActionTriggerDown>();
       t->MakeExplicit();
@@ -502,8 +518,10 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheel_MixedDirectionalAcrossContexts)
 {
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange: two contexts, one mapping Right, the other mapping Down
-    auto right = std::make_shared<Action>("WheelRight", ActionValueType::kBool);
-    auto down = std::make_shared<Action>("WheelDown", ActionValueType::kBool);
+    auto right
+      = MakeCodeAction(kTestInputOwner, "WheelRight", ActionValueType::kBool);
+    auto down
+      = MakeCodeAction(kTestInputOwner, "WheelDown", ActionValueType::kBool);
     System().AddAction(right);
     System().AddAction(down);
 
@@ -513,7 +531,7 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheel_MixedDirectionalAcrossContexts)
       return t;
     };
 
-    auto ctx_right = std::make_shared<InputMappingContext>("wheel-right");
+    auto ctx_right = MakeCodeContext(kTestInputOwner, "wheel-right");
     {
       auto m = std::make_shared<InputActionMapping>(
         right, InputSlots::MouseWheelRight);
@@ -521,7 +539,7 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheel_MixedDirectionalAcrossContexts)
       ctx_right->AddMapping(m);
     }
 
-    auto ctx_down = std::make_shared<InputMappingContext>("wheel-down");
+    auto ctx_down = MakeCodeContext(kTestInputOwner, "wheel-down");
     {
       auto m = std::make_shared<InputActionMapping>(
         down, InputSlots::MouseWheelDown);
@@ -554,13 +572,15 @@ NOLINT_TEST_F(InputSystemTest, CrossContextConsumptionFlushesLowerPriority)
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange: Two contexts, higher priority consumes on Space, lower has a
     // Pressed on Space
-    auto consume = std::make_shared<Action>("Consume", ActionValueType::kBool);
+    auto consume
+      = MakeCodeAction(kTestInputOwner, "Consume", ActionValueType::kBool);
     consume->SetConsumesInput(true);
-    auto lower = std::make_shared<Action>("Lower", ActionValueType::kBool);
+    auto lower
+      = MakeCodeAction(kTestInputOwner, "Lower", ActionValueType::kBool);
     System().AddAction(consume);
     System().AddAction(lower);
 
-    auto high = std::make_shared<InputMappingContext>("high");
+    auto high = MakeCodeContext(kTestInputOwner, "high");
     {
       auto m = std::make_shared<InputActionMapping>(consume, InputSlots::Space);
       auto t = std::make_shared<ActionTriggerPressed>();
@@ -568,7 +588,7 @@ NOLINT_TEST_F(InputSystemTest, CrossContextConsumptionFlushesLowerPriority)
       m->AddTrigger(t);
       high->AddMapping(m);
     }
-    auto low = std::make_shared<InputMappingContext>("low");
+    auto low = MakeCodeContext(kTestInputOwner, "low");
     {
       auto m = std::make_shared<InputActionMapping>(lower, InputSlots::Space);
       auto t = std::make_shared<ActionTriggerPressed>();
@@ -609,13 +629,15 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
   using Tag = oxygen::engine::internal::EngineTagFactory;
 
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
-    auto shift = std::make_shared<Action>("Shift", ActionValueType::kBool);
-    auto super = std::make_shared<Action>("Super", ActionValueType::kBool);
+    auto shift
+      = MakeCodeAction(kTestInputOwner, "Shift", ActionValueType::kBool);
+    auto super
+      = MakeCodeAction(kTestInputOwner, "Super", ActionValueType::kBool);
     System().AddAction(shift);
     System().AddAction(super);
 
     // Context A: Shift Down explicit
-    auto ctxA = std::make_shared<InputMappingContext>("A");
+    auto ctxA = MakeCodeContext(kTestInputOwner, "A");
     {
       auto m
         = std::make_shared<InputActionMapping>(shift, InputSlots::LeftShift);
@@ -626,7 +648,7 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
     }
     // Context B: Super with Tap explicit + Chain(shift) implicit, and give it
     // higher priority
-    auto ctxB = std::make_shared<InputMappingContext>("B");
+    auto ctxB = MakeCodeContext(kTestInputOwner, "B");
     {
       auto m = std::make_shared<InputActionMapping>(super, InputSlots::Space);
       auto tap = std::make_shared<ActionTriggerTap>();

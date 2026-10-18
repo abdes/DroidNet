@@ -28,8 +28,8 @@ namespace oxygen::interop::module {
     EditorViewportOrbitFeature() = default;
 
     auto RegisterBindings(oxygen::engine::InputSystem& input_system,
-      const std::shared_ptr<oxygen::input::InputMappingContext>& ctx) noexcept
-      -> void override;
+      const std::shared_ptr<oxygen::input::InputMappingContext>& ctx,
+      const EditorViewportInputActions& inputs) noexcept -> void override;
 
     auto Apply(oxygen::scene::SceneNode camera_node,
       const oxygen::input::InputSnapshot& input_snapshot,
@@ -40,9 +40,7 @@ namespace oxygen::interop::module {
       float dt_seconds) noexcept -> void override;
 
   private:
-    std::shared_ptr<oxygen::input::Action> alt_action_;
-    std::shared_ptr<oxygen::input::Action> lmb_action_;
-    std::shared_ptr<oxygen::input::Action> mouse_delta_action_;
+    EditorViewportInputActions inputs_;
   };
 
 } // namespace oxygen::interop::module

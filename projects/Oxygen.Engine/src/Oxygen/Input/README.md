@@ -2,13 +2,13 @@
 
 Frame-based, query-driven input for the Oxygen Engine. The Input module turns
 platform input events into named, typed **Actions** through **mapping
-contexts**, **mappings** and composable **triggers**. Gameplay code asks
-precise questions — "did Jump trigger this frame?", "is Sprint ongoing?",
-"how far did the mouse move this frame?" — instead of registering callbacks.
+contexts**, **mappings** and composable **triggers**. Gameplay code asks precise
+questions — "did Jump trigger this frame?", "is Sprint ongoing?", "how far did
+the mouse move this frame?" — instead of registering callbacks.
 
 The module builds on every platform that builds the reusable engine modules
-(Windows, Linux). It depends on `oxygen::platform-input` (the input
-vocabulary: `InputSlot`, `InputEvent`), not on the SDL platform backend.
+(Windows, Linux). It depends on `oxygen::platform-input` (the input vocabulary:
+`InputSlot`, `InputEvent`), not on the SDL platform backend.
 
 ## Concepts
 
@@ -24,17 +24,21 @@ vocabulary: `InputSlot`, `InputEvent`), not on the SDL platform backend.
 ## Quick start
 
 ```cpp
-using oxygen::input::Action;
 using oxygen::input::ActionTriggerPressed;
 using oxygen::input::ActionValueType;
 using oxygen::input::InputActionMapping;
-using oxygen::input::InputMappingContext;
+using oxygen::input::MakeCodeAction;
+using oxygen::input::MakeCodeContext;
 using oxygen::platform::InputSlots;
 
-auto jump = std::make_shared<Action>("Jump", ActionValueType::kBool);
+// An action or context created in code is keyed under its owner's path; the
+// name is its label and the leaf of its key (see CodeInput.h).
+constexpr std::string_view kInputOwner = "Game";
+
+auto jump = MakeCodeAction(kInputOwner, "Jump", ActionValueType::kBool);
 input_system->AddAction(jump);
 
-auto gameplay = std::make_shared<InputMappingContext>("gameplay");
+auto gameplay = MakeCodeContext(kInputOwner, "gameplay");
 {
   auto mapping = std::make_shared<InputActionMapping>(jump, InputSlots::Space);
   auto pressed = std::make_shared<ActionTriggerPressed>();
@@ -50,13 +54,13 @@ if (jump->WasTriggeredThisFrame()) {
   player.Jump();
 }
 // Or, from a parallel task or a later frame still holding it:
-if (snapshot->DidActionTrigger("Jump")) { /* ... */ }
+if (snapshot->DidActionTrigger(jump->GetAssetKey())) { /* ... */ }
 ```
 
 WASD movement on one 2D action, using scale to map keys onto axes:
 
 ```cpp
-auto move = std::make_shared<Action>("Move", ActionValueType::kAxis2D);
+auto move = MakeCodeAction(kInputOwner, "Move", ActionValueType::kAxis2D);
 move->SetAccumulation(oxygen::input::ActionAccumulation::kCumulative);
 auto bind = [&](const oxygen::platform::InputSlot& key, oxygen::Axis2D scale) {
   auto mapping = std::make_shared<InputActionMapping>(move, key);
@@ -101,9 +105,9 @@ sequenceDiagram
   Engine->>IS: kFrameEnd
 ```
 
-- **Per-event evaluation.** Each event is evaluated as it is drained, so a
-  press and release within one frame are both seen, and consumption applies to
-  the event that caused it.
+- **Per-event evaluation.** Each event is evaluated as it is drained, so a press
+  and release within one frame are both seen, and consumption applies to the
+  event that caused it.
 - **Trigger clock.** Hold, Tap, Pulse, Chain and Combo windows advance with
   `ModuleTimingData::physical_delta_time` (real elapsed time), falling back to
   game time when the engine provides none. Hold-to-confirm works in a paused
@@ -112,9 +116,9 @@ sequenceDiagram
   frame that their triggers accept: `GetValue()` is the whole-frame delta, at
   any frame rate. Rejected input never reaches the value: a look gated by a
   right-button chord reads zero while the button is up.
-- **Context deactivation.** `DeactivateMappingContext` stops routing at once
-  and cancels the context's active bindings at the start of the next `kInput`,
-  so the Canceled edge is visible to gameplay. `RemoveMappingContext` cancels
+- **Context deactivation.** `DeactivateMappingContext` stops routing at once and
+  cancels the context's active bindings at the start of the next `kInput`, so
+  the Canceled edge is visible to gameplay. `RemoveMappingContext` cancels
   immediately. Turning input off (`nput.enabled 0`) cancels held actions and
   drops events until it is turned back on.
 - **Fixed step.** A fixed-step simulation calls
@@ -126,9 +130,9 @@ sequenceDiagram
 
 ## Combining bindings
 
-Several bindings may drive one action (W and Up Arrow; LMB and Ctrl; a stick
-and keys). Each binding contributes its own evaluation, and the action
-combines them:
+Several bindings may drive one action (W and Up Arrow; LMB and Ctrl; a stick and
+keys). Each binding contributes its own evaluation, and the action combines
+them:
 
 - **Ongoing** while any binding is ongoing. Releasing one of several held keys
   does not stop the action.
@@ -136,16 +140,16 @@ combines them:
 - **Canceled** only when a binding canceled and no other binding keeps the
   action active.
 - **Value** per component, by the action's `ActionAccumulation`:
-  `kHighestAbsolute` (default; two keys for the same direction do not stack)
-  or `kCumulative` (sum; opposite directions cancel out).
+  `kHighestAbsolute` (default; two keys for the same direction do not stack) or
+  `kCumulative` (sum; opposite directions cancel out).
 
 ## Activation outcome
 
 An activation ends with exactly one of two edges:
 
 - **Completed** — the activation triggered at least once and ended without a
-  cancel: a hold that fired and was released, auto-fire released between
-  pulses, a press or tap (completed in the following frame).
+  cancel: a hold that fired and was released, auto-fire released between pulses,
+  a press or tap (completed in the following frame).
 - **Canceled** — the activation ended without triggering (a hold released
   early), or it was interrupted (context deactivated, input consumed by a
   higher-priority binding, input disabled).
@@ -158,8 +162,8 @@ completes) but decides by outcome, not by trigger state at release; see
 
 Contexts are evaluated from highest to lowest priority; mappings inside a
 context in insertion order. When an action that consumes input triggers on a
-fresh event, the **physical sources** its binding reads are claimed for the
-rest of that evaluation:
+fresh event, the **physical sources** its binding reads are claimed for the rest
+of that evaluation:
 
 | Consuming binding        | Claims                         |
 | ------------------------ | ------------------------------ |
@@ -180,8 +184,8 @@ interact does not stop walking on W.
 
 Delivered:
 
-- Keyboard and mouse slots (buttons, motion, wheel, `AnyKey`); per-binding
-  scale and bias; per-action accumulation.
+- Keyboard and mouse slots (buttons, motion, wheel, `AnyKey`); per-binding scale
+  and bias; per-action accumulation.
 - Nine trigger types with explicit/implicit/blocker composition, including
   cross-action Chain and Combo.
 - Context layering with priority, physical-source consumption and visible
@@ -194,16 +198,16 @@ Delivered:
 
 Not yet provided (known gaps against current engines):
 
-- **Gamepads and other devices.** No gamepad slots, dead zones or
-  response curves; values come from keyboard and mouse only.
+- **Gamepads and other devices.** No gamepad slots, dead zones or response
+  curves; values come from keyboard and mouse only.
 - **Per-player input.** One input stream; no local multiplayer or device
   assignment.
 - **Runtime rebinding.** Mappings are authored or built in code; there is no
   rebinding service or persistence of player bindings.
-- **Modifier stack.** Scale and bias cover key-to-axis and sensitivity; there
-  is no general modifier chain (negate, swizzle, dead zone, smoothing).
-- **Chord and modifier keys** are expressed with Chain triggers, not a
-  dedicated chord trigger.
+- **Modifier stack.** Scale and bias cover key-to-axis and sensitivity; there is
+  no general modifier chain (negate, swizzle, dead zone, smoothing).
+- **Chord and modifier keys** are expressed with Chain triggers, not a dedicated
+  chord trigger.
 - **Text input** is outside this module (platform text events).
 
 ## Tests
@@ -211,5 +215,5 @@ Not yet provided (known gaps against current engines):
 - `Oxygen.Input.InputSystem.Tests` — unit tests per class and trigger.
 - `Oxygen.Input.Scenarios.Tests` — functional suite (`Test/Scenarios/`):
   gameplay scenarios driven through the real `InputSystem` frame by frame
-  (bindings, mouse axes, contexts, consumption, activation lifecycle,
-  timing). Each test states what the player or gameplay programmer expects.
+  (bindings, mouse axes, contexts, consumption, activation lifecycle, timing).
+  Each test states what the player or gameplay programmer expects.

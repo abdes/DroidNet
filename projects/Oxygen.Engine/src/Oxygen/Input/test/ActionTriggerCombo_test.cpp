@@ -15,7 +15,11 @@
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/test/ActionTestAccess.h>
+#include <Oxygen/Input/test/InputTestOwner.h>
 #include <Oxygen/Testing/GTest.h>
+
+using oxygen::input::MakeCodeAction;
+using oxygen::input::testing::kTestInputOwner;
 
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerCombo;
@@ -28,8 +32,10 @@ namespace {
 
 NOLINT_TEST(ActionTriggerCombo, TriggersWhenStepsCompleteInOrder)
 {
-  auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
-  auto B = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
+  auto A = MakeCodeAction(
+    kTestInputOwner, "A", oxygen::input::ActionValueType::kBool);
+  auto B = MakeCodeAction(
+    kTestInputOwner, "B", oxygen::input::ActionValueType::kBool);
 
   ActionTriggerCombo combo;
   combo.AddComboStep(A, oxygen::input::ActionState::kTriggered, 0.5F);
@@ -68,10 +74,12 @@ NOLINT_TEST(ActionTriggerCombo, TriggersWhenStepsCompleteInOrder)
 
 NOLINT_TEST(ActionTriggerCombo, BreakerResetsProgress)
 {
-  auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
-  auto B = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
-  auto X = std::make_shared<Action>(
-    "X", oxygen::input::ActionValueType::kBool); // breaker
+  auto A = MakeCodeAction(
+    kTestInputOwner, "A", oxygen::input::ActionValueType::kBool);
+  auto B = MakeCodeAction(
+    kTestInputOwner, "B", oxygen::input::ActionValueType::kBool);
+  auto X = MakeCodeAction(
+    kTestInputOwner, "X", oxygen::input::ActionValueType::kBool); // breaker
 
   ActionTriggerCombo combo;
   combo.AddComboStep(A, oxygen::input::ActionState::kTriggered, 0.5F);
@@ -123,8 +131,10 @@ NOLINT_TEST(ActionTriggerCombo, BreakerResetsProgress)
 
 NOLINT_TEST(ActionTriggerCombo, OutOfOrderStepResets)
 {
-  auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
-  auto B = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
+  auto A = MakeCodeAction(
+    kTestInputOwner, "A", oxygen::input::ActionValueType::kBool);
+  auto B = MakeCodeAction(
+    kTestInputOwner, "B", oxygen::input::ActionValueType::kBool);
   ActionTriggerCombo combo;
   combo.AddComboStep(A, oxygen::input::ActionState::kTriggered, 0.5F);
   combo.AddComboStep(B, oxygen::input::ActionState::kTriggered, 0.5F);
@@ -157,8 +167,10 @@ namespace {
 NOLINT_TEST(ActionTriggerCombo, StepTimeoutResets)
 {
   // Arrange
-  auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
-  auto B = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
+  auto A = MakeCodeAction(
+    kTestInputOwner, "A", oxygen::input::ActionValueType::kBool);
+  auto B = MakeCodeAction(
+    kTestInputOwner, "B", oxygen::input::ActionValueType::kBool);
   ActionTriggerCombo combo;
   constexpr float kStepWindowSeconds = 0.20F;
   combo.AddComboStep(
@@ -208,8 +220,10 @@ NOLINT_TEST(ActionTriggerCombo, StepTimeoutResets)
 NOLINT_TEST(ActionTriggerCombo, BoundaryExactDelaySucceeds)
 {
   // Arrange
-  auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
-  auto B = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
+  auto A = MakeCodeAction(
+    kTestInputOwner, "A", oxygen::input::ActionValueType::kBool);
+  auto B = MakeCodeAction(
+    kTestInputOwner, "B", oxygen::input::ActionValueType::kBool);
   ActionTriggerCombo combo;
   constexpr float kStepWindowSeconds = 0.10F;
   combo.AddComboStep(
@@ -254,8 +268,10 @@ NOLINT_TEST(ActionTriggerCombo, BoundaryExactDelaySucceeds)
 NOLINT_TEST(ActionTriggerCombo, FirstStepHasNoTimeout)
 {
   // Arrange
-  auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
-  auto B = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
+  auto A = MakeCodeAction(
+    kTestInputOwner, "A", oxygen::input::ActionValueType::kBool);
+  auto B = MakeCodeAction(
+    kTestInputOwner, "B", oxygen::input::ActionValueType::kBool);
   ActionTriggerCombo combo;
   constexpr float kStepWindowSeconds = 0.05F;
   combo.AddComboStep(
@@ -299,8 +315,10 @@ NOLINT_TEST(ActionTriggerCombo, FirstStepHasNoTimeout)
 NOLINT_TEST(ActionTriggerCombo, ResetsAfterCompletion)
 {
   // Arrange
-  auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
-  auto B = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
+  auto A = MakeCodeAction(
+    kTestInputOwner, "A", oxygen::input::ActionValueType::kBool);
+  auto B = MakeCodeAction(
+    kTestInputOwner, "B", oxygen::input::ActionValueType::kBool);
   ActionTriggerCombo combo;
   combo.AddComboStep(A, oxygen::input::ActionState::kTriggered, 0.50F);
   combo.AddComboStep(B, oxygen::input::ActionState::kTriggered, 0.50F);

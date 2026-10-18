@@ -38,6 +38,15 @@ NOLINT_TEST_F(AssetKeyBasicTest, CanonicalVirtualPathDeterministic)
   EXPECT_EQ(std::hash<AssetKey> {}(key0), std::hash<AssetKey> {}(key1));
 }
 
+//! A code path is a path below the reserved code mount.
+NOLINT_TEST(AssetKeyCodePathTest, CodePathIsAPathBelowTheCodeMount)
+{
+  EXPECT_EQ(AssetKey::FromCodePath("Editor/Viewport/Modifier.Alt.oiact"),
+    AssetKey::FromVirtualPath("/.code/Editor/Viewport/Modifier.Alt.oiact"));
+  EXPECT_NE(AssetKey::FromCodePath("Game/Jump.oiact"),
+    AssetKey::FromVirtualPath("/Game/Jump.oiact"));
+}
+
 //! Tests different canonical paths map to different keys.
 class AssetKeyOrderingTest : public testing::Test { };
 

@@ -29,6 +29,7 @@
 #include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
@@ -61,7 +62,8 @@ auto ValidateRoot(
   inspection.LoadFromRoot(cooked_root);
   for (const auto& file : inspection.Files()) {
     if (file.kind == FileKind::kAuxiliary
-      && std::filesystem::path(file.relpath).extension() == ".otex") {
+      && std::filesystem::path(file.relpath).extension()
+        == data::kTextureDescriptorExtension) {
       static_cast<void>(inspection.ReadTextureDescriptor(file.relpath));
     }
   }

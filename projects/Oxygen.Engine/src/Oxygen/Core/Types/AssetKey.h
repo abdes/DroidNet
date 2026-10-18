@@ -59,6 +59,20 @@ public:
   OXGN_CORE_NDAPI static auto FromVirtualPath(std::string_view virtual_path)
     -> AssetKey;
 
+  //! The mount reserved for objects created in code rather than cooked.
+  static constexpr std::string_view kCodeMount = "/.code";
+
+  //! The key of an object created in code, such as an input action.
+  /*!
+   `code_path` is the object's path below the reserved `/.code` mount, such as
+   `Editor/Viewport/Modifier.Alt.oiact`: its first segment names the owner,
+   and its leaf carries the extension of the asset type the object stands in
+   for. Cooked content never uses this mount, so a code key cannot collide
+   with an asset's key.
+  */
+  OXGN_CORE_NDAPI static auto FromCodePath(std::string_view code_path)
+    -> AssetKey;
+
   [[nodiscard]] constexpr auto data() const noexcept -> const value_type*
   {
     return bytes_.data();

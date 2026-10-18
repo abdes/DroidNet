@@ -38,6 +38,7 @@
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
+#include <Oxygen/Input/CodeInput.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
@@ -577,10 +578,11 @@ NOLINT_TEST_F(SceneInstantiationTest, StartingInputContextsStart)
   // the gameplay context, so only its higher priority evaluates it first, and
   // only an active context triggers.
   platform::InputSlots::Initialize();
+  constexpr auto kInputOwner = std::string_view { "Test/SceneInstantiation" };
   const auto walk
-    = std::make_shared<input::Action>("Walk", input::ActionValueType::kBool);
-  const auto select
-    = std::make_shared<input::Action>("Select", input::ActionValueType::kBool);
+    = input::MakeCodeAction(kInputOwner, "Walk", input::ActionValueType::kBool);
+  const auto select = input::MakeCodeAction(
+    kInputOwner, "Select", input::ActionValueType::kBool);
   walk->SetConsumesInput(true);
   select->SetConsumesInput(true);
   Input().AddAction(walk);

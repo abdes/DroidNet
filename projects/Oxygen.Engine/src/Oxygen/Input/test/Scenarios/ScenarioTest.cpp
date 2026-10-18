@@ -17,9 +17,14 @@
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
+#include <Oxygen/Input/test/InputTestOwner.h>
 #include <Oxygen/Input/test/Scenarios/ScenarioTest.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Input.h>
+
+using oxygen::input::MakeCodeAction;
+using oxygen::input::MakeCodeContext;
+using oxygen::input::testing::kTestInputOwner;
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {
@@ -43,7 +48,7 @@ auto ScenarioTest::Frame(const FrameTime dt) -> co::Co<>
 auto ScenarioTest::MakeAction(const std::string& name, ActionValueType type)
   -> std::shared_ptr<Action>
 {
-  auto action = std::make_shared<Action>(name, type);
+  auto action = MakeCodeAction(kTestInputOwner, name, type);
   System().AddAction(action);
   return action;
 }
@@ -51,7 +56,7 @@ auto ScenarioTest::MakeAction(const std::string& name, ActionValueType type)
 auto ScenarioTest::MakeContext(const std::string& name, const int32_t priority)
   -> std::shared_ptr<InputMappingContext>
 {
-  auto context = std::make_shared<InputMappingContext>(name);
+  auto context = MakeCodeContext(kTestInputOwner, name);
   System().AddMappingContext(context, priority);
   System().ActivateMappingContext(context);
   return context;

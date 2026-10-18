@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -43,13 +44,6 @@ auto HasFlag(const ActionState states, const ActionState flag) noexcept
 
 } // namespace
 
-Action::Action(std::string name, const ActionValueType value_type)
-  : name_(std::move(name))
-  , value_type_(value_type)
-  , value_(ZeroValue())
-{
-}
-
 Action::Action(std::string name, const ActionValueType value_type,
   const data::AssetKey asset_key)
   : name_(std::move(name))
@@ -57,6 +51,9 @@ Action::Action(std::string name, const ActionValueType value_type,
   , value_type_(value_type)
   , value_(ZeroValue())
 {
+  if (asset_key_.IsNil()) {
+    throw std::invalid_argument("input action '" + name_ + "' has a nil key");
+  }
 }
 
 auto Action::State::ToActionState() const -> ActionState

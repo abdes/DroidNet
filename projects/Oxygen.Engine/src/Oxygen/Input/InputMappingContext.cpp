@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -108,16 +109,15 @@ auto IsClaimed(const InputSlot& slot, const InputSlot* event_slot,
 
 } // namespace
 
-InputMappingContext::InputMappingContext(std::string name)
-  : name_(std::move(name))
-{
-}
-
 InputMappingContext::InputMappingContext(
   std::string name, const data::AssetKey asset_key)
   : name_(std::move(name))
   , asset_key_(asset_key)
 {
+  if (asset_key_.IsNil()) {
+    throw std::invalid_argument(
+      "input mapping context '" + name_ + "' has a nil key");
+  }
 }
 
 void InputMappingContext::AddMapping(

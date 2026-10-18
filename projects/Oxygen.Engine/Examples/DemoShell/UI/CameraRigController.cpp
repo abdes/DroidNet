@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <memory>
+#include <string_view>
 
 #include "DemoShell/UI/CameraControlPanel.h"
 #include "DemoShell/UI/CameraRigController.h"
@@ -22,11 +23,20 @@
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
+#include <Oxygen/Input/CodeInput.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Scene/SceneNode.h>
+
+namespace {
+
+//! The owner of the inputs created here in code (see
+//! oxygen::input::MakeCodeAction).
+constexpr std::string_view kInputOwner = "Examples/DemoShell/CameraRig";
+
+} // namespace
 
 namespace oxygen::examples::ui {
 
@@ -76,27 +86,30 @@ auto CameraRigController::Initialize(
 
   LOG_F(INFO, "CameraRigController: Creating camera input actions");
 
-  zoom_in_action_ = std::make_shared<Action>("zoom in", ActionValueType::kBool);
-  zoom_out_action_
-    = std::make_shared<Action>("zoom out", ActionValueType::kBool);
-  rmb_action_ = std::make_shared<Action>("rmb", ActionValueType::kBool);
-  orbit_action_
-    = std::make_shared<Action>("camera orbit", ActionValueType::kAxis2D);
-  move_fwd_action_
-    = std::make_shared<Action>("move fwd", ActionValueType::kBool);
-  move_bwd_action_
-    = std::make_shared<Action>("move bwd", ActionValueType::kBool);
-  move_left_action_
-    = std::make_shared<Action>("move left", ActionValueType::kBool);
-  move_right_action_
-    = std::make_shared<Action>("move right", ActionValueType::kBool);
-  move_up_action_ = std::make_shared<Action>("move up", ActionValueType::kBool);
-  move_down_action_
-    = std::make_shared<Action>("move down", ActionValueType::kBool);
-  fly_plane_lock_action_
-    = std::make_shared<Action>("fly plane lock", ActionValueType::kBool);
-  fly_boost_action_
-    = std::make_shared<Action>("fly boost", ActionValueType::kBool);
+  zoom_in_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "zoom in", ActionValueType::kBool);
+  zoom_out_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "zoom out", ActionValueType::kBool);
+  rmb_action_
+    = oxygen::input::MakeCodeAction(kInputOwner, "rmb", ActionValueType::kBool);
+  orbit_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "camera orbit", ActionValueType::kAxis2D);
+  move_fwd_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "move fwd", ActionValueType::kBool);
+  move_bwd_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "move bwd", ActionValueType::kBool);
+  move_left_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "move left", ActionValueType::kBool);
+  move_right_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "move right", ActionValueType::kBool);
+  move_up_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "move up", ActionValueType::kBool);
+  move_down_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "move down", ActionValueType::kBool);
+  fly_plane_lock_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "fly plane lock", ActionValueType::kBool);
+  fly_boost_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "fly boost", ActionValueType::kBool);
 
   input_system_->AddAction(zoom_in_action_);
   input_system_->AddAction(zoom_out_action_);
@@ -111,7 +124,8 @@ auto CameraRigController::Initialize(
   input_system_->AddAction(fly_plane_lock_action_);
   input_system_->AddAction(fly_boost_action_);
 
-  orbit_controls_ctx_ = std::make_shared<InputMappingContext>("camera orbit");
+  orbit_controls_ctx_
+    = oxygen::input::MakeCodeContext(kInputOwner, "camera orbit");
   {
     {
       const auto trigger = std::make_shared<ActionTriggerTap>();
@@ -161,7 +175,7 @@ auto CameraRigController::Initialize(
     }
   }
 
-  fly_controls_ctx_ = std::make_shared<InputMappingContext>("camera fly");
+  fly_controls_ctx_ = oxygen::input::MakeCodeContext(kInputOwner, "camera fly");
   {
     {
       const auto trig_down = std::make_shared<ActionTriggerDown>();
@@ -212,7 +226,7 @@ auto CameraRigController::Initialize(
   // Modifier keys context at higher priority (evaluated first), following
   // the InputSystem demo pattern for shift detection.
   fly_modifier_keys_ctx_
-    = std::make_shared<InputMappingContext>("camera fly modifiers");
+    = oxygen::input::MakeCodeContext(kInputOwner, "camera fly modifiers");
   {
     const auto trigger = std::make_shared<ActionTriggerDown>();
     trigger->MakeExplicit();

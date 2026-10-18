@@ -15,6 +15,7 @@
 #include <source_location>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -49,6 +50,7 @@
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
+#include <Oxygen/Input/CodeInput.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
@@ -68,6 +70,10 @@
 #include <Oxygen/Vortex/CompositionView.h>
 
 namespace {
+
+//! The owner of the inputs created here in code (see
+//! oxygen::input::MakeCodeAction).
+constexpr std::string_view kInputOwner = "Examples/Physics";
 
 constexpr std::uint32_t kWindowWidth = 2400;
 constexpr std::uint32_t kWindowHeight = 1400;
@@ -450,12 +456,14 @@ auto MainModule::InitInputBindings() noexcept -> bool
     return false;
   }
 
-  launch_action_ = std::make_shared<Action>("launch", ActionValueType::kBool);
-  reset_action_ = std::make_shared<Action>("reset", ActionValueType::kBool);
-  nudge_left_action_
-    = std::make_shared<Action>("nudge left", ActionValueType::kBool);
-  nudge_right_action_
-    = std::make_shared<Action>("nudge right", ActionValueType::kBool);
+  launch_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "launch", ActionValueType::kBool);
+  reset_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "reset", ActionValueType::kBool);
+  nudge_left_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "nudge left", ActionValueType::kBool);
+  nudge_right_action_ = oxygen::input::MakeCodeAction(
+    kInputOwner, "nudge right", ActionValueType::kBool);
 
   Host().input_system->AddAction(launch_action_);
   Host().input_system->AddAction(reset_action_);
@@ -463,7 +471,7 @@ auto MainModule::InitInputBindings() noexcept -> bool
   Host().input_system->AddAction(nudge_right_action_);
 
   gameplay_input_ctx_
-    = std::make_shared<InputMappingContext>("physics gameplay");
+    = oxygen::input::MakeCodeContext(kInputOwner, "physics gameplay");
 
   {
     auto pressed = std::make_shared<ActionTriggerPressed>();

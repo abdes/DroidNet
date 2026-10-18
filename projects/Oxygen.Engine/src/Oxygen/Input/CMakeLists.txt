@@ -59,6 +59,7 @@ set(
   "ActionState.h"
   "ActionTriggers.h"
   "ActionValue.h"
+  "CodeInput.h"
   "InputSnapshot.h"
   "InputActionMapping.h"
   "InputMappingContext.h"
@@ -68,6 +69,7 @@ set(
   OXYGEN_INPUT_PRIVATE_SOURCES
   "Action.cpp"
   "ActionTriggers.cpp"
+  "CodeInput.cpp"
   "InputSnapshot.cpp"
   "InputActionMapping.cpp"
   "InputMappingContext.cpp"

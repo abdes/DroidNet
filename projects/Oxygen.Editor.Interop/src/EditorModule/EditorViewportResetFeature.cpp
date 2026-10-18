@@ -31,9 +31,8 @@ namespace oxygen::interop::module {
 
   auto EditorViewportResetFeature::RegisterBindings(
     oxygen::engine::InputSystem& input_system,
-    const std::shared_ptr<oxygen::input::InputMappingContext>& ctx) noexcept
-    -> void {
-    using oxygen::input::Action;
+    const std::shared_ptr<oxygen::input::InputMappingContext>& ctx,
+    const EditorViewportInputActions& /*inputs*/) noexcept -> void {
     using oxygen::input::ActionTriggerDown;
     using oxygen::input::ActionValueType;
     using oxygen::input::InputActionMapping;
@@ -43,8 +42,8 @@ namespace oxygen::interop::module {
       return;
     }
 
-    reset_action_ = std::make_shared<Action>(
-      "Editor.Camera.Reset", ActionValueType::kBool);
+    reset_action_ = oxygen::input::MakeCodeAction(
+      kEditorViewportInputOwner, "Camera.Reset", ActionValueType::kBool);
     input_system.AddAction(reset_action_);
 
     const auto trig = std::make_shared<ActionTriggerDown>();
@@ -67,7 +66,7 @@ namespace oxygen::interop::module {
       return;
     }
 
-    if (!input_snapshot.DidActionTrigger("Editor.Camera.Reset")) {
+    if (!input_snapshot.DidActionTrigger(reset_action_->GetAssetKey())) {
       return;
     }
 

@@ -5,12 +5,20 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <stdexcept>
+#include <string>
 
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionState.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/test/ActionTestAccess.h>
+#include <Oxygen/Input/test/InputTestOwner.h>
 #include <Oxygen/Testing/GTest.h>
+
+using oxygen::input::MakeCodeAction;
+using oxygen::input::testing::kTestInputOwner;
 
 using oxygen::input::Action;
 using oxygen::input::ActionState;
@@ -85,10 +93,33 @@ NOLINT_TEST(ActionStateConversion, RoundTrip)
 
 //== Action class tests ===---------------------------------------------------//
 
+//! An action without a key could not be queried: construction refuses it.
+NOLINT_TEST(Action, NilKeyIsRefused)
+{
+  EXPECT_THROW((Action { "test", oxygen::input::ActionValueType::kBool, {} }),
+    std::invalid_argument);
+}
+
+//! An action created in code is keyed under its owner by its name, with the
+//! input action extension, and labelled with that name.
+NOLINT_TEST(Action, CodeActionIsKeyedByOwnerAndName)
+{
+  const auto action = MakeCodeAction(
+    kTestInputOwner, "Jump", oxygen::input::ActionValueType::kBool);
+
+  EXPECT_EQ(action->GetName(), "Jump");
+  EXPECT_EQ(action->GetAssetKey(),
+    oxygen::data::AssetKey::FromCodePath(std::string { kTestInputOwner }
+      + "/Jump"
+      + std::string { oxygen::data::kInputActionDescriptorExtension }));
+}
+
 NOLINT_TEST(Action, BasicGettersAndValue)
 {
   // Arrange
-  Action a { "test", oxygen::input::ActionValueType::kBool };
+  const auto a_owner = MakeCodeAction(
+    kTestInputOwner, "test", oxygen::input::ActionValueType::kBool);
+  auto& a = *a_owner;
 
   // Initially idle
   EXPECT_TRUE(a.IsIdle());
@@ -108,7 +139,9 @@ NOLINT_TEST(Action, BasicGettersAndValue)
 //! Transitions are only recorded within a frame window
 NOLINT_TEST(Action, FrameTransitionsWithinFrame)
 {
-  Action a { "frame", oxygen::input::ActionValueType::kBool };
+  const auto a_owner = MakeCodeAction(
+    kTestInputOwner, "frame", oxygen::input::ActionValueType::kBool);
+  auto& a = *a_owner;
 
   ActionTestAccess::BeginFrame(a);
 
@@ -136,7 +169,9 @@ NOLINT_TEST(Action, FrameTransitionsWithinFrame)
 //! BeginFrameTracking clears previous frame transitions and snapshots state
 NOLINT_TEST(Action, BeginFrameClearsTransitions)
 {
-  Action a { "start_state_test", oxygen::input::ActionValueType::kBool };
+  const auto a_owner = MakeCodeAction(
+    kTestInputOwner, "start_state_test", oxygen::input::ActionValueType::kBool);
+  auto& a = *a_owner;
 
   // Pre-frame: set some state
   ActionTestAccess::UpdateState(
@@ -164,7 +199,9 @@ NOLINT_TEST(Action, BeginFrameClearsTransitions)
 
 NOLINT_TEST(Action, NoTransitionOnSameState)
 {
-  Action a { "no_change", oxygen::input::ActionValueType::kBool };
+  const auto a_owner = MakeCodeAction(
+    kTestInputOwner, "no_change", oxygen::input::ActionValueType::kBool);
+  auto& a = *a_owner;
   ActionTestAccess::BeginFrame(a);
   Action::State idle {};
   ActionTestAccess::UpdateState(a, idle, ActionValue { false });
@@ -174,7 +211,9 @@ NOLINT_TEST(Action, NoTransitionOnSameState)
 
 NOLINT_TEST(Action, DuplicateStateIgnored)
 {
-  Action a { "dup", oxygen::input::ActionValueType::kBool };
+  const auto a_owner = MakeCodeAction(
+    kTestInputOwner, "dup", oxygen::input::ActionValueType::kBool);
+  auto& a = *a_owner;
   ActionTestAccess::BeginFrame(a);
   Action::State trig { .triggered = true };
   ActionTestAccess::UpdateState(a, trig, ActionValue { true });
@@ -188,7 +227,9 @@ NOLINT_TEST(Action, DuplicateStateIgnored)
 //! Verify convenience edge queries against transitions
 NOLINT_TEST(Action, ConvenienceEdgeQueries)
 {
-  Action a { "edges", oxygen::input::ActionValueType::kBool };
+  const auto a_owner = MakeCodeAction(
+    kTestInputOwner, "edges", oxygen::input::ActionValueType::kBool);
+  auto& a = *a_owner;
   // Simulate press and hold within a frame
   ActionTestAccess::BeginFrame(a);
   ActionTestAccess::UpdateState(a,
@@ -215,7 +256,9 @@ namespace {
 //! Edge clearing at frame start and value update tracking
 NOLINT_TEST(Action, EdgeClearingAndValueUpdates)
 {
-  Action a { "value_updates", oxygen::input::ActionValueType::kBool };
+  const auto a_owner = MakeCodeAction(
+    kTestInputOwner, "value_updates", oxygen::input::ActionValueType::kBool);
+  auto& a = *a_owner;
 
   // Frame 1: press and update value
   ActionTestAccess::BeginFrame(a);

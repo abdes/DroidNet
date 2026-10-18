@@ -96,17 +96,21 @@ public:
     ActionValue value_at_transition;
   };
 
-  OXGN_NPUT_API Action(std::string name, ActionValueType value_type);
+  //! An action identified by `asset_key`; the name is a label that other
+  //! actions may share.
+  /*!
+   An action hydrated from an input action asset carries the asset's key; an
+   action created in code is made by `MakeCodeAction` (CodeInput.h), which
+   gives it a code key.
 
-  //! An action hydrated from an input action asset. The asset key is its
-  //! identity; the name is a label that other actions may share.
+   @throw std::invalid_argument when `asset_key` is nil.
+  */
   OXGN_NPUT_API Action(
     std::string name, ActionValueType value_type, data::AssetKey asset_key);
 
   [[nodiscard]] auto GetName() const -> const std::string& { return name_; }
 
-  //! Key of the asset this action was hydrated from; nil for an action
-  //! created in code.
+  //! The action's identity; never nil.
   [[nodiscard]] auto GetAssetKey() const noexcept -> const data::AssetKey&
   {
     return asset_key_;

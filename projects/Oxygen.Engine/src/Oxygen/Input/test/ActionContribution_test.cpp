@@ -8,7 +8,11 @@
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/test/ActionTestAccess.h>
+#include <Oxygen/Input/test/InputTestOwner.h>
 #include <Oxygen/Testing/GTest.h>
+
+using oxygen::input::MakeCodeAction;
+using oxygen::input::testing::kTestInputOwner;
 
 using oxygen::Axis1D;
 using oxygen::Axis2D;
@@ -31,7 +35,9 @@ constexpr Action::State kCanceled { .canceled = true };
 //! Several bindings: the action stays ongoing while any of them is.
 NOLINT_TEST(ActionContribution, OngoingWhileAnyBindingIsOngoing)
 {
-  Action action { "move", ActionValueType::kBool };
+  const auto action_owner
+    = MakeCodeAction(kTestInputOwner, "move", ActionValueType::kBool);
+  auto& action = *action_owner;
   ActionTestAccess::BeginFrame(action);
   ActionTestAccess::Contribute(action, &kBindingA, kHeld, ActionValue { true });
   ActionTestAccess::Contribute(action, &kBindingB, kHeld, ActionValue { true });
@@ -49,7 +55,9 @@ NOLINT_TEST(ActionContribution, OngoingWhileAnyBindingIsOngoing)
 //! Triggered from an earlier frame does not carry over to this frame.
 NOLINT_TEST(ActionContribution, TriggeredIsPerFrame)
 {
-  Action action { "fire", ActionValueType::kBool };
+  const auto action_owner
+    = MakeCodeAction(kTestInputOwner, "fire", ActionValueType::kBool);
+  auto& action = *action_owner;
   ActionTestAccess::BeginFrame(action);
   ActionTestAccess::Contribute(action, &kBindingA, kHeld, ActionValue { true });
   ActionTestAccess::EndFrame(action);
@@ -64,7 +72,9 @@ NOLINT_TEST(ActionContribution, TriggeredIsPerFrame)
 //! A cancel from one binding does not cancel an action another binding holds.
 NOLINT_TEST(ActionContribution, CancelIgnoredWhileAnotherBindingIsActive)
 {
-  Action action { "fire", ActionValueType::kBool };
+  const auto action_owner
+    = MakeCodeAction(kTestInputOwner, "fire", ActionValueType::kBool);
+  auto& action = *action_owner;
   ActionTestAccess::BeginFrame(action);
   ActionTestAccess::Contribute(action, &kBindingA, kHeld, ActionValue { true });
   ActionTestAccess::Contribute(
@@ -76,7 +86,9 @@ NOLINT_TEST(ActionContribution, CancelIgnoredWhileAnotherBindingIsActive)
 //! Highest-absolute keeps, per component, the value furthest from zero.
 NOLINT_TEST(ActionContribution, HighestAbsolutePerComponent)
 {
-  Action action { "move", ActionValueType::kAxis2D };
+  const auto action_owner
+    = MakeCodeAction(kTestInputOwner, "move", ActionValueType::kAxis2D);
+  auto& action = *action_owner;
   ASSERT_EQ(action.GetAccumulation(), ActionAccumulation::kHighestAbsolute);
   ActionTestAccess::BeginFrame(action);
   ActionTestAccess::Contribute(
@@ -93,7 +105,9 @@ NOLINT_TEST(ActionContribution, HighestAbsolutePerComponent)
 //! Cumulative sums the components, so opposing bindings cancel out.
 NOLINT_TEST(ActionContribution, CumulativeSumsComponents)
 {
-  Action action { "throttle", ActionValueType::kAxis1D };
+  const auto action_owner
+    = MakeCodeAction(kTestInputOwner, "throttle", ActionValueType::kAxis1D);
+  auto& action = *action_owner;
   action.SetAccumulation(ActionAccumulation::kCumulative);
   ActionTestAccess::BeginFrame(action);
   ActionTestAccess::Contribute(
@@ -107,7 +121,9 @@ NOLINT_TEST(ActionContribution, CumulativeSumsComponents)
 //! Removing the last contribution ends the activation.
 NOLINT_TEST(ActionContribution, RemovingLastContributionCompletes)
 {
-  Action action { "move", ActionValueType::kBool };
+  const auto action_owner
+    = MakeCodeAction(kTestInputOwner, "move", ActionValueType::kBool);
+  auto& action = *action_owner;
   ActionTestAccess::BeginFrame(action);
   ActionTestAccess::Contribute(action, &kBindingA, kHeld, ActionValue { true });
   ActionTestAccess::EndFrame(action);
@@ -122,7 +138,9 @@ NOLINT_TEST(ActionContribution, RemovingLastContributionCompletes)
 //! A trigger without a held phase completes at the start of the next frame.
 NOLINT_TEST(ActionContribution, InstantTriggerCompletesNextFrame)
 {
-  Action action { "jump", ActionValueType::kBool };
+  const auto action_owner
+    = MakeCodeAction(kTestInputOwner, "jump", ActionValueType::kBool);
+  auto& action = *action_owner;
   ActionTestAccess::BeginFrame(action);
   ActionTestAccess::Contribute(action, &kBindingA,
     Action::State { .triggered = true }, ActionValue { true });
@@ -141,7 +159,9 @@ NOLINT_TEST(ActionContribution, InstantTriggerCompletesNextFrame)
 //! Each rising Triggered edge is latched once for fixed-step consumers.
 NOLINT_TEST(ActionContribution, FixedStepLatchCountsRisingEdges)
 {
-  Action action { "jump", ActionValueType::kBool };
+  const auto action_owner
+    = MakeCodeAction(kTestInputOwner, "jump", ActionValueType::kBool);
+  auto& action = *action_owner;
   constexpr Action::State kTap { .triggered = true };
   ActionTestAccess::BeginFrame(action);
   ActionTestAccess::Contribute(action, &kBindingA, kTap, ActionValue { true });

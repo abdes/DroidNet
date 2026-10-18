@@ -8,11 +8,15 @@
 
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionValue.h>
+#include <Oxygen/Input/test/InputTestOwner.h>
+
+using oxygen::input::MakeCodeAction;
+using oxygen::input::testing::kTestInputOwner;
 
 using oxygen::input::Action;
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
-  const auto action
-    = std::make_shared<Action>("a", oxygen::input::ActionValueType::kBool);
+  const auto action = MakeCodeAction(
+    kTestInputOwner, "a", oxygen::input::ActionValueType::kBool);
 }

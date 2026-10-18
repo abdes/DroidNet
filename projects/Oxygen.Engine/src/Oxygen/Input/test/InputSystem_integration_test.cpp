@@ -24,10 +24,15 @@
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/test/InputSystemTest.h>
+#include <Oxygen/Input/test/InputTestOwner.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
+
+using oxygen::input::MakeCodeAction;
+using oxygen::input::MakeCodeContext;
+using oxygen::input::testing::kTestInputOwner;
 
 using oxygen::observer_ptr;
 using oxygen::input::Action;
@@ -76,13 +81,15 @@ NOLINT_TEST_F(
 {
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange ---------------------------------------------------------------
-    auto attack = std::make_shared<Action>("Attack", ActionValueType::kBool);
-    auto charged
-      = std::make_shared<Action>("ChargedAttack", ActionValueType::kBool);
-    auto jump = std::make_shared<Action>("Jump", ActionValueType::kBool);
-    auto move = std::make_shared<Action>("Move", ActionValueType::kBool);
-    auto roll = std::make_shared<Action>("Roll", ActionValueType::kBool);
-    auto dodge = std::make_shared<Action>("DodgeRoll", ActionValueType::kBool);
+    auto attack
+      = MakeCodeAction(kTestInputOwner, "Attack", ActionValueType::kBool);
+    auto charged = MakeCodeAction(
+      kTestInputOwner, "ChargedAttack", ActionValueType::kBool);
+    auto jump = MakeCodeAction(kTestInputOwner, "Jump", ActionValueType::kBool);
+    auto move = MakeCodeAction(kTestInputOwner, "Move", ActionValueType::kBool);
+    auto roll = MakeCodeAction(kTestInputOwner, "Roll", ActionValueType::kBool);
+    auto dodge
+      = MakeCodeAction(kTestInputOwner, "DodgeRoll", ActionValueType::kBool);
 
     // Consumption rules so mutually-exclusive actions suppress others
     attack->SetConsumesInput(true);
@@ -97,7 +104,7 @@ NOLINT_TEST_F(
     System().AddAction(roll);
     System().AddAction(dodge);
 
-    auto ctx = std::make_shared<InputMappingContext>("combat");
+    auto ctx = MakeCodeContext(kTestInputOwner, "combat");
 
     // Jump: Space Pressed
     {
@@ -341,10 +348,11 @@ NOLINT_TEST_F(
 {
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
-    auto shift = std::make_shared<Action>("Shift", ActionValueType::kBool);
-    auto jump = std::make_shared<Action>("Jump", ActionValueType::kBool);
+    auto shift
+      = MakeCodeAction(kTestInputOwner, "Shift", ActionValueType::kBool);
+    auto jump = MakeCodeAction(kTestInputOwner, "Jump", ActionValueType::kBool);
     auto jump_higher
-      = std::make_shared<Action>("JumpHigher", ActionValueType::kBool);
+      = MakeCodeAction(kTestInputOwner, "JumpHigher", ActionValueType::kBool);
 
     // JumpHigher consumes input
     jump_higher->SetConsumesInput(true);
@@ -354,7 +362,7 @@ NOLINT_TEST_F(
     System().AddAction(jump_higher);
 
     // High-priority modifier context (Shift)
-    auto mod_ctx = std::make_shared<InputMappingContext>("mods");
+    auto mod_ctx = MakeCodeContext(kTestInputOwner, "mods");
     {
       auto map_shift
         = std::make_shared<InputActionMapping>(shift, InputSlots::LeftShift);
@@ -367,7 +375,7 @@ NOLINT_TEST_F(
     System().ActivateMappingContext(mod_ctx);
 
     // Ground movement context with JumpHigher (chain + consume), then Jump
-    auto ground_ctx = std::make_shared<InputMappingContext>("ground");
+    auto ground_ctx = MakeCodeContext(kTestInputOwner, "ground");
     {
       // JumpHigher (Tap + chain to Shift)
       auto m_higher
@@ -420,9 +428,9 @@ NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange: High-priority context with 'High' mapping; low-priority context
     // with two mappings whose order relative to a consumer will be validated.
-    auto high = std::make_shared<Action>("High", ActionValueType::kBool);
-    auto lowA = std::make_shared<Action>("LowA", ActionValueType::kBool);
-    auto lowB = std::make_shared<Action>("LowB", ActionValueType::kBool);
+    auto high = MakeCodeAction(kTestInputOwner, "High", ActionValueType::kBool);
+    auto lowA = MakeCodeAction(kTestInputOwner, "LowA", ActionValueType::kBool);
+    auto lowB = MakeCodeAction(kTestInputOwner, "LowB", ActionValueType::kBool);
 
     // B will be the consumer in our scenarios
     lowB->SetConsumesInput(true);
@@ -432,7 +440,7 @@ NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
     System().AddAction(lowB);
 
     // High context (priority 100)
-    auto ctx_high = std::make_shared<InputMappingContext>("high_ctx");
+    auto ctx_high = MakeCodeContext(kTestInputOwner, "high_ctx");
     {
       auto m = std::make_shared<InputActionMapping>(high, InputSlots::Space);
       auto t = std::make_shared<ActionTriggerPressed>();
@@ -442,7 +450,7 @@ NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
     }
 
     // Case 1: Low context with non-consuming A then consuming B (B after A)
-    auto ctx_low1 = std::make_shared<InputMappingContext>("low_ctx1");
+    auto ctx_low1 = MakeCodeContext(kTestInputOwner, "low_ctx1");
     {
       auto mA = std::make_shared<InputActionMapping>(lowA, InputSlots::Space);
       auto ta = std::make_shared<ActionTriggerTap>();
@@ -483,7 +491,7 @@ NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
     EXPECT_TRUE(lowB->WasTriggeredThisFrame());
 
     // Case 2: Low context with consuming B first, then non-consuming A
-    auto ctx_low2 = std::make_shared<InputMappingContext>("low_ctx2");
+    auto ctx_low2 = MakeCodeContext(kTestInputOwner, "low_ctx2");
     {
       auto mB_first
         = std::make_shared<InputActionMapping>(lowB, InputSlots::Space);
@@ -535,17 +543,18 @@ NOLINT_TEST_F(
 {
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange (same wiring as CrossContext_ConsumerCancelsEarlierContext)
-    auto shift = std::make_shared<Action>("Shift", ActionValueType::kBool);
-    auto jump = std::make_shared<Action>("Jump", ActionValueType::kBool);
+    auto shift
+      = MakeCodeAction(kTestInputOwner, "Shift", ActionValueType::kBool);
+    auto jump = MakeCodeAction(kTestInputOwner, "Jump", ActionValueType::kBool);
     auto jump_higher
-      = std::make_shared<Action>("JumpHigher", ActionValueType::kBool);
+      = MakeCodeAction(kTestInputOwner, "JumpHigher", ActionValueType::kBool);
     jump_higher->SetConsumesInput(true);
 
     System().AddAction(shift);
     System().AddAction(jump);
     System().AddAction(jump_higher);
 
-    auto mod_ctx = std::make_shared<InputMappingContext>("mods");
+    auto mod_ctx = MakeCodeContext(kTestInputOwner, "mods");
     {
       auto map_shift
         = std::make_shared<InputActionMapping>(shift, InputSlots::LeftShift);
@@ -557,7 +566,7 @@ NOLINT_TEST_F(
     System().AddMappingContext(mod_ctx, kModifierPriority);
     System().ActivateMappingContext(mod_ctx);
 
-    auto ground_ctx = std::make_shared<InputMappingContext>("ground");
+    auto ground_ctx = MakeCodeContext(kTestInputOwner, "ground");
     {
       auto m_higher
         = std::make_shared<InputActionMapping>(jump_higher, InputSlots::Space);

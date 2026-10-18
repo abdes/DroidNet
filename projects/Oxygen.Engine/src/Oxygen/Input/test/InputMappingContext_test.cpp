@@ -8,19 +8,28 @@
 
 #include <chrono>
 #include <memory>
+#include <stdexcept>
+#include <string>
 
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/test/InputSystemTest.h>
+#include <Oxygen/Input/test/InputTestOwner.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Testing/GTest.h>
+
+using oxygen::input::MakeCodeAction;
+using oxygen::input::MakeCodeContext;
+using oxygen::input::testing::kTestInputOwner;
 
 using namespace std::chrono_literals;
 
@@ -72,18 +81,19 @@ protected:
 NOLINT_TEST_F(InputMappingContextTest, SimilarSlots_RoutesMouseXYToXorY)
 {
   // Arrange
-  InputMappingContext ctx("ctx");
+  const auto ctx_owner = MakeCodeContext(kTestInputOwner, "ctx");
+  auto& ctx = *ctx_owner;
 
-  auto act_x = std::make_shared<Action>(
-    "LookX", oxygen::input::ActionValueType::kAxis1D);
+  auto act_x = MakeCodeAction(
+    kTestInputOwner, "LookX", oxygen::input::ActionValueType::kAxis1D);
   auto map_x = std::make_shared<InputActionMapping>(act_x, InputSlots::MouseX);
   auto down = std::make_shared<ActionTriggerDown>();
   down->MakeExplicit();
   map_x->AddTrigger(down);
   ctx.AddMapping(map_x);
 
-  auto act_y = std::make_shared<Action>(
-    "LookY", oxygen::input::ActionValueType::kAxis1D);
+  auto act_y = MakeCodeAction(
+    kTestInputOwner, "LookY", oxygen::input::ActionValueType::kAxis1D);
   auto map_y = std::make_shared<InputActionMapping>(act_y, InputSlots::MouseY);
   map_y->AddTrigger(std::make_shared<ActionTriggerDown>());
   ctx.AddMapping(map_y);
@@ -104,14 +114,37 @@ NOLINT_TEST_F(InputMappingContextTest, SimilarSlots_RoutesMouseXYToXorY)
   EXPECT_EQ(act_y->GetValue().GetAs<Axis1D>().x, -3.0F);
 }
 
+//! A context without a key could not be found: construction refuses it.
+NOLINT_TEST_F(InputMappingContextTest, NilKeyIsRefused)
+{
+  EXPECT_THROW((InputMappingContext { "ctx", {} }), std::invalid_argument);
+}
+
+//! A context created in code is keyed under its owner by its name, with the
+//! mapping context extension: an action of the same name has another key.
+NOLINT_TEST_F(InputMappingContextTest, CodeContextIsKeyedByOwnerAndName)
+{
+  const auto context = MakeCodeContext(kTestInputOwner, "Play");
+  const auto action = MakeCodeAction(
+    kTestInputOwner, "Play", oxygen::input::ActionValueType::kBool);
+
+  EXPECT_EQ(context->GetName(), "Play");
+  EXPECT_EQ(context->GetAssetKey(),
+    oxygen::data::AssetKey::FromCodePath(std::string { kTestInputOwner }
+      + "/Play"
+      + std::string { oxygen::data::kInputMappingContextDescriptorExtension }));
+  EXPECT_NE(context->GetAssetKey(), action->GetAssetKey());
+}
+
 //! MouseWheelXY routes to directional and individual axes based on dx/dy signs
 NOLINT_TEST_F(InputMappingContextTest, SimilarSlots_RoutesMouseWheelVariants)
 {
   // Arrange
-  InputMappingContext ctx("ctx2");
+  const auto ctx_owner = MakeCodeContext(kTestInputOwner, "ctx2");
+  auto& ctx = *ctx_owner;
   auto mk = [](const char* name) -> std::shared_ptr<Action> {
-    return std::make_shared<Action>(
-      name, oxygen::input::ActionValueType::kAxis1D);
+    return MakeCodeAction(
+      kTestInputOwner, name, oxygen::input::ActionValueType::kAxis1D);
   };
 
   auto ax = mk("WheelX");
@@ -157,10 +190,11 @@ NOLINT_TEST_F(InputMappingContextTest, SimilarSlots_RoutesMouseWheelVariants)
 NOLINT_TEST_F(InputMappingContextTest, Update_ConsumptionCancelsLaterMappings)
 {
   // Arrange
-  InputMappingContext ctx("ctx3");
+  const auto ctx_owner = MakeCodeContext(kTestInputOwner, "ctx3");
+  auto& ctx = *ctx_owner;
 
-  auto a1
-    = std::make_shared<Action>("High", oxygen::input::ActionValueType::kBool);
+  auto a1 = MakeCodeAction(
+    kTestInputOwner, "High", oxygen::input::ActionValueType::kBool);
   a1->SetConsumesInput(true);
   auto m1 = std::make_shared<InputActionMapping>(a1, InputSlots::Space);
   auto t1 = std::make_shared<ActionTriggerPressed>();
@@ -168,8 +202,8 @@ NOLINT_TEST_F(InputMappingContextTest, Update_ConsumptionCancelsLaterMappings)
   m1->AddTrigger(t1);
   ctx.AddMapping(m1);
 
-  auto a2
-    = std::make_shared<Action>("Low", oxygen::input::ActionValueType::kBool);
+  auto a2 = MakeCodeAction(
+    kTestInputOwner, "Low", oxygen::input::ActionValueType::kBool);
   auto m2 = std::make_shared<InputActionMapping>(a2, InputSlots::Space);
   auto t2 = std::make_shared<ActionTriggerPressed>();
   t2->MakeExplicit();
@@ -199,10 +233,11 @@ NOLINT_TEST_F(
   InputMappingContextTest, Update_ConsumerCancelsOnlyLaterMappings_NotEarlier)
 {
   // Arrange: earlier mapping does not consume, later mapping does
-  InputMappingContext ctx("ctx5");
+  const auto ctx_owner = MakeCodeContext(kTestInputOwner, "ctx5");
+  auto& ctx = *ctx_owner;
 
-  auto early
-    = std::make_shared<Action>("Early", oxygen::input::ActionValueType::kBool);
+  auto early = MakeCodeAction(
+    kTestInputOwner, "Early", oxygen::input::ActionValueType::kBool);
   auto m_early = std::make_shared<InputActionMapping>(early, InputSlots::Space);
   auto t_early = std::make_shared<ActionTriggerTap>();
   t_early->SetTapTimeThreshold(0.25F);
@@ -210,8 +245,8 @@ NOLINT_TEST_F(
   m_early->AddTrigger(t_early);
   ctx.AddMapping(m_early);
 
-  auto later
-    = std::make_shared<Action>("Later", oxygen::input::ActionValueType::kBool);
+  auto later = MakeCodeAction(
+    kTestInputOwner, "Later", oxygen::input::ActionValueType::kBool);
   later->SetConsumesInput(true);
   auto m_later = std::make_shared<InputActionMapping>(later, InputSlots::Space);
   auto t_later = std::make_shared<ActionTriggerTap>();
@@ -254,10 +289,11 @@ NOLINT_TEST_F(InputMappingContextTest,
   Update_ConsumerCancelsLater_NotEarlier_SubsequentTapConsumedAgain)
 {
   // Arrange
-  InputMappingContext ctx("ctx6");
+  const auto ctx_owner = MakeCodeContext(kTestInputOwner, "ctx6");
+  auto& ctx = *ctx_owner;
 
-  auto early
-    = std::make_shared<Action>("Early", oxygen::input::ActionValueType::kBool);
+  auto early = MakeCodeAction(
+    kTestInputOwner, "Early", oxygen::input::ActionValueType::kBool);
   auto m_early = std::make_shared<InputActionMapping>(early, InputSlots::Space);
   auto t_early = std::make_shared<ActionTriggerTap>();
   t_early->SetTapTimeThreshold(0.25F);
@@ -265,8 +301,8 @@ NOLINT_TEST_F(InputMappingContextTest,
   m_early->AddTrigger(t_early);
   ctx.AddMapping(m_early);
 
-  auto later
-    = std::make_shared<Action>("Later", oxygen::input::ActionValueType::kBool);
+  auto later = MakeCodeAction(
+    kTestInputOwner, "Later", oxygen::input::ActionValueType::kBool);
   later->SetConsumesInput(true);
   auto m_later = std::make_shared<InputActionMapping>(later, InputSlots::Space);
   auto t_later = std::make_shared<ActionTriggerTap>();
@@ -322,9 +358,11 @@ NOLINT_TEST_F(InputMappingContextTest,
   TDD_ConsumerCancelsLater_NotEarlier_SubsequentTapConsumedAgain)
 {
   // Arrange: earlier mapping (A) and later consuming mapping (B)
-  InputMappingContext ctx("tdd_ctx");
+  const auto ctx_owner = MakeCodeContext(kTestInputOwner, "tdd_ctx");
+  auto& ctx = *ctx_owner;
 
-  auto a = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
+  auto a = MakeCodeAction(
+    kTestInputOwner, "A", oxygen::input::ActionValueType::kBool);
   auto map_a = std::make_shared<InputActionMapping>(a, InputSlots::Space);
   auto tap_a = std::make_shared<ActionTriggerTap>();
   tap_a->SetTapTimeThreshold(0.25F);
@@ -332,7 +370,8 @@ NOLINT_TEST_F(InputMappingContextTest,
   map_a->AddTrigger(tap_a);
   ctx.AddMapping(map_a);
 
-  auto b = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
+  auto b = MakeCodeAction(
+    kTestInputOwner, "B", oxygen::input::ActionValueType::kBool);
   b->SetConsumesInput(true);
   auto map_b = std::make_shared<InputActionMapping>(b, InputSlots::Space);
   auto tap_b = std::make_shared<ActionTriggerTap>();
@@ -384,9 +423,11 @@ NOLINT_TEST_F(InputMappingContextTest,
 NOLINT_TEST_F(InputMappingContextTest, Update_NoConsumptionProcessesAll)
 {
   // Arrange
-  InputMappingContext ctx("ctx4");
+  const auto ctx_owner = MakeCodeContext(kTestInputOwner, "ctx4");
+  auto& ctx = *ctx_owner;
   auto mk = [] -> std::shared_ptr<Action> {
-    return std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
+    return MakeCodeAction(
+      kTestInputOwner, "A", oxygen::input::ActionValueType::kBool);
   };
 
   auto a1 = mk();
@@ -420,9 +461,10 @@ NOLINT_TEST_F(InputMappingContextTest, Update_NoConsumptionProcessesAll)
 NOLINT_TEST_F(InputMappingContextTest, ImplicitOnly_AllMustTrigger)
 {
   // Arrange: one implicit Down (immediate) and one implicit Hold (delayed)
-  InputMappingContext ctx("ctx_implicit");
-  auto act = std::make_shared<Action>(
-    "ImplicitAll", oxygen::input::ActionValueType::kBool);
+  const auto ctx_owner = MakeCodeContext(kTestInputOwner, "ctx_implicit");
+  auto& ctx = *ctx_owner;
+  auto act = MakeCodeAction(
+    kTestInputOwner, "ImplicitAll", oxygen::input::ActionValueType::kBool);
   auto map = std::make_shared<InputActionMapping>(act, InputSlots::Space);
 
   auto down = std::make_shared<ActionTriggerDown>();
@@ -457,9 +499,10 @@ NOLINT_TEST_F(InputMappingContextTest, ImplicitOnly_AllMustTrigger)
 NOLINT_TEST_F(InputMappingContextTest, ImplicitOnly_NotAll_NoTrigger)
 {
   // Arrange: two implicit triggers, only one becomes true within dt
-  InputMappingContext ctx("ctx_implicit2");
-  auto act = std::make_shared<Action>(
-    "ImplicitNo", oxygen::input::ActionValueType::kBool);
+  const auto ctx_owner = MakeCodeContext(kTestInputOwner, "ctx_implicit2");
+  auto& ctx = *ctx_owner;
+  auto act = MakeCodeAction(
+    kTestInputOwner, "ImplicitNo", oxygen::input::ActionValueType::kBool);
   auto map = std::make_shared<InputActionMapping>(act, InputSlots::Space);
 
   auto down = std::make_shared<ActionTriggerDown>();
@@ -491,9 +534,10 @@ NOLINT_TEST_F(
 {
   // Arrange: Context A provides Shift Down; Context B requires chain to A +
   // Space press
-  InputMappingContext ctxA("ctxA");
-  auto act_shift
-    = std::make_shared<Action>("ShiftA", oxygen::input::ActionValueType::kBool);
+  const auto ctxA_owner = MakeCodeContext(kTestInputOwner, "ctxA");
+  auto& ctxA = *ctxA_owner;
+  auto act_shift = MakeCodeAction(
+    kTestInputOwner, "ShiftA", oxygen::input::ActionValueType::kBool);
   auto map_shift
     = std::make_shared<InputActionMapping>(act_shift, InputSlots::LeftShift);
   auto trig_shift = std::make_shared<ActionTriggerDown>();
@@ -501,9 +545,11 @@ NOLINT_TEST_F(
   map_shift->AddTrigger(trig_shift);
   ctxA.AddMapping(map_shift);
 
-  InputMappingContext ctxB("ctxB");
-  auto act_combo
-    = std::make_shared<Action>("Combo", oxygen::input::ActionValueType::kBool);
+  const auto ctxB_owner = MakeCodeContext(kTestInputOwner, "ctxB");
+
+  auto& ctxB = *ctxB_owner;
+  auto act_combo = MakeCodeAction(
+    kTestInputOwner, "Combo", oxygen::input::ActionValueType::kBool);
   auto map_combo
     = std::make_shared<InputActionMapping>(act_combo, InputSlots::Space);
   auto trig_press = std::make_shared<ActionTriggerPressed>();
@@ -554,10 +600,11 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(InputMappingContextTest, Routing_NonSimilarSlots_NoDispatch)
 {
   // Arrange
-  InputMappingContext ctx("ctx_non_similar");
+  const auto ctx_owner = MakeCodeContext(kTestInputOwner, "ctx_non_similar");
+  auto& ctx = *ctx_owner;
 
-  auto act = std::make_shared<Action>(
-    "MouseX", oxygen::input::ActionValueType::kAxis1D);
+  auto act = MakeCodeAction(
+    kTestInputOwner, "MouseX", oxygen::input::ActionValueType::kAxis1D);
   auto map = std::make_shared<InputActionMapping>(act, InputSlots::MouseX);
   auto trig = std::make_shared<ActionTriggerDown>();
   trig->MakeExplicit();
@@ -578,18 +625,19 @@ NOLINT_TEST_F(InputMappingContextTest, Routing_NonSimilarSlots_NoDispatch)
 NOLINT_TEST_F(InputMappingContextTest, SimilarSlots_MouseXY_BothAxes)
 {
   // Arrange
-  InputMappingContext ctx("ctx_xy_both");
+  const auto ctx_owner = MakeCodeContext(kTestInputOwner, "ctx_xy_both");
+  auto& ctx = *ctx_owner;
 
-  auto act_x = std::make_shared<Action>(
-    "LookX", oxygen::input::ActionValueType::kAxis1D);
+  auto act_x = MakeCodeAction(
+    kTestInputOwner, "LookX", oxygen::input::ActionValueType::kAxis1D);
   auto map_x = std::make_shared<InputActionMapping>(act_x, InputSlots::MouseX);
   auto trig_x = std::make_shared<ActionTriggerDown>();
   trig_x->MakeExplicit();
   map_x->AddTrigger(trig_x);
   ctx.AddMapping(map_x);
 
-  auto act_y = std::make_shared<Action>(
-    "LookY", oxygen::input::ActionValueType::kAxis1D);
+  auto act_y = MakeCodeAction(
+    kTestInputOwner, "LookY", oxygen::input::ActionValueType::kAxis1D);
   auto map_y = std::make_shared<InputActionMapping>(act_y, InputSlots::MouseY);
   auto trig_y = std::make_shared<ActionTriggerDown>();
   trig_y->MakeExplicit();
@@ -613,14 +661,16 @@ NOLINT_TEST_F(InputMappingContextTest, SimilarSlots_MouseXY_BothAxes)
 NOLINT_TEST_F(InputMappingContextTest, Consumption_OnlyOnTrigger)
 {
   // Arrange
-  InputMappingContext ctx("ctx_consume_on_trigger");
+  const auto ctx_owner
+    = MakeCodeContext(kTestInputOwner, "ctx_consume_on_trigger");
+  auto& ctx = *ctx_owner;
 
   // Mapping 1: consumes input but requires a chain that is not armed -> won't
   // trigger
-  auto act_gate
-    = std::make_shared<Action>("Gate", oxygen::input::ActionValueType::kBool);
-  auto act_consume = std::make_shared<Action>(
-    "Consumer", oxygen::input::ActionValueType::kBool);
+  auto act_gate = MakeCodeAction(
+    kTestInputOwner, "Gate", oxygen::input::ActionValueType::kBool);
+  auto act_consume = MakeCodeAction(
+    kTestInputOwner, "Consumer", oxygen::input::ActionValueType::kBool);
   act_consume->SetConsumesInput(true);
   auto m1
     = std::make_shared<InputActionMapping>(act_consume, InputSlots::Space);
@@ -634,8 +684,8 @@ NOLINT_TEST_F(InputMappingContextTest, Consumption_OnlyOnTrigger)
   ctx.AddMapping(m1);
 
   // Mapping 2: plain pressed on Space, does not consume
-  auto act_plain
-    = std::make_shared<Action>("Plain", oxygen::input::ActionValueType::kBool);
+  auto act_plain = MakeCodeAction(
+    kTestInputOwner, "Plain", oxygen::input::ActionValueType::kBool);
   auto m2 = std::make_shared<InputActionMapping>(act_plain, InputSlots::Space);
   auto pressed2 = std::make_shared<ActionTriggerPressed>();
   pressed2->MakeExplicit();

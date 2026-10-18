@@ -29,8 +29,8 @@ namespace oxygen::interop::module {
     EditorViewportFlyFeature() = default;
 
     auto RegisterBindings(oxygen::engine::InputSystem& input_system,
-      const std::shared_ptr<oxygen::input::InputMappingContext>& ctx) noexcept
-      -> void override;
+      const std::shared_ptr<oxygen::input::InputMappingContext>& ctx,
+      const EditorViewportInputActions& inputs) noexcept -> void override;
 
     auto Apply(oxygen::scene::SceneNode camera_node,
       const oxygen::input::InputSnapshot& input_snapshot,
@@ -41,6 +41,7 @@ namespace oxygen::interop::module {
       float dt_seconds) noexcept -> void override;
 
   private:
+    EditorViewportInputActions inputs_;
     std::shared_ptr<oxygen::input::Action> w_action_;
     std::shared_ptr<oxygen::input::Action> a_action_;
     std::shared_ptr<oxygen::input::Action> s_action_;

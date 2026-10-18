@@ -7,32 +7,31 @@
 #pragma once
 #pragma managed(push, off)
 
-#include <string_view>
-
 #include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Input/InputSnapshot.h>
 
 namespace oxygen::interop::module::viewport {
 
   [[nodiscard]] inline auto HasAction(const input::InputSnapshot& snapshot,
-    std::string_view name) noexcept -> bool {
-    return snapshot.GetActionStateFlags(name) != input::ActionState::kNone;
+    const data::AssetKey& action) noexcept -> bool {
+    return snapshot.GetActionStateFlags(action) != input::ActionState::kNone;
   }
 
   [[nodiscard]] inline auto GetAxis2DOrZero(const input::InputSnapshot& snapshot,
-    std::string_view name) noexcept -> Axis2D {
-    if (!HasAction(snapshot, name)) {
+    const data::AssetKey& action) noexcept -> Axis2D {
+    if (!HasAction(snapshot, action)) {
       return Axis2D{ .x = 0.0f, .y = 0.0f };
     }
-    return snapshot.GetActionValue(name).GetAs<Axis2D>();
+    return snapshot.GetActionValue(action).GetAs<Axis2D>();
   }
 
   [[nodiscard]] inline auto GetAxis1DOrZero(const input::InputSnapshot& snapshot,
-    std::string_view name) noexcept -> float {
-    if (!HasAction(snapshot, name)) {
+    const data::AssetKey& action) noexcept -> float {
+    if (!HasAction(snapshot, action)) {
       return 0.0f;
     }
-    return snapshot.GetActionValue(name).GetAs<Axis1D>().x;
+    return snapshot.GetActionValue(action).GetAs<Axis1D>().x;
   }
 
 } // namespace oxygen::interop::module::viewport

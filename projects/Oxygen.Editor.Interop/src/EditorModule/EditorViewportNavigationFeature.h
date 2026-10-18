@@ -12,6 +12,7 @@
 #include <memory>
 
 #include <EditorModule/EditorViewportCameraControlMode.h>
+#include <EditorModule/EditorViewportInputActions.h>
 
 namespace oxygen::input {
   class InputMappingContext;
@@ -45,10 +46,11 @@ namespace oxygen::interop::module {
 
     virtual ~IEditorViewportNavigationFeature() = default;
 
-    //! Registers input bindings and mappings for this feature.
+    //! Registers the feature's own actions and mappings; `inputs` are the
+    //! shared inputs, already added and mapped.
     virtual auto RegisterBindings(oxygen::engine::InputSystem& input_system,
-      const std::shared_ptr<oxygen::input::InputMappingContext>& ctx) noexcept
-      -> void = 0;
+      const std::shared_ptr<oxygen::input::InputMappingContext>& ctx,
+      const EditorViewportInputActions& inputs) noexcept -> void = 0;
 
     //! Applies this feature to the given camera node for the current frame.
     virtual auto Apply(oxygen::scene::SceneNode camera_node,

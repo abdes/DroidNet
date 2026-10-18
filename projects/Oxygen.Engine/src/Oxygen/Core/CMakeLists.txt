@@ -83,6 +83,7 @@ set(
   "Meta/Physics/Backend.h"
   "Meta/Scripting/ScriptCompileMode.h"
   "Types/AssetKey.h"
+  "Types/DescriptorExtensions.h"
   "Types/Atmosphere.h"
   "Types/Bool32.h"
   "Types/ByteUnits.h"
