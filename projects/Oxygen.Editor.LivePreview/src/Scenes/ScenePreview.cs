@@ -1086,7 +1086,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                     perspective.NearPlane,
                     perspective.FarPlane,
                     perspective.AspectMode));
-                ApplyCameraExposure(world, node, EngineComponentId.PerspectiveCamera, perspective, (ushort)PerspectiveCameraField.ApertureF, (ushort)PerspectiveCameraField.ShutterRate, (ushort)PerspectiveCameraField.Iso);
+                ApplyCameraExposure(world, node, RuntimeComponentId.PerspectiveCamera, perspective, (ushort)PerspectiveCameraField.ApertureF, (ushort)PerspectiveCameraField.ShutterRate, (ushort)PerspectiveCameraField.Iso);
                 break;
 
             case OrthographicCamera orthographic:
@@ -1097,7 +1097,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                     orthographic.NearPlane,
                     orthographic.FarPlane,
                     orthographic.AspectMode));
-                ApplyCameraExposure(world, node, EngineComponentId.OrthographicCamera, orthographic, (ushort)OrthographicCameraField.ApertureF, (ushort)OrthographicCameraField.ShutterRate, (ushort)OrthographicCameraField.Iso);
+                ApplyCameraExposure(world, node, RuntimeComponentId.OrthographicCamera, orthographic, (ushort)OrthographicCameraField.ApertureF, (ushort)OrthographicCameraField.ShutterRate, (ushort)OrthographicCameraField.Iso);
                 break;
 
             default:

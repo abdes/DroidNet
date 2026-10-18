@@ -70,7 +70,7 @@ internal sealed class FakeWorld : IRuntimeWorldCommands
     /// <param name="node">The node.</param>
     /// <param name="component">The engine component.</param>
     /// <returns>The values.</returns>
-    public IEnumerable<RuntimePropertyValue> PropertiesOf(NodeId node, Oxygen.Interop.EngineComponentId component)
+    public IEnumerable<RuntimePropertyValue> PropertiesOf(NodeId node, RuntimeComponentId component)
         => this.Commands.OfType<RuntimeSetProperties>()
             .Where(command => command.NodeId == node)
             .SelectMany(static command => command.Entries)

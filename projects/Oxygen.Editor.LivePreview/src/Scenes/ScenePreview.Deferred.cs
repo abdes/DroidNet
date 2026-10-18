@@ -7,7 +7,6 @@ using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Interop;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -285,37 +284,37 @@ internal sealed partial class ScenePreview
 
                 break;
             case RuntimeSetLocalTransform value:
-                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.Transform, revision);
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, RuntimeComponentId.Transform, revision);
                 break;
             case RuntimeAttachPerspectiveCamera value:
-                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.PerspectiveCamera, revision);
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, RuntimeComponentId.PerspectiveCamera, revision);
                 break;
             case RuntimeAttachOrthographicCamera value:
-                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.OrthographicCamera, revision);
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, RuntimeComponentId.OrthographicCamera, revision);
                 break;
             case RuntimeDetachCamera value:
-                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.PerspectiveCamera, revision);
-                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.OrthographicCamera, revision);
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, RuntimeComponentId.PerspectiveCamera, revision);
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, RuntimeComponentId.OrthographicCamera, revision);
                 break;
             case RuntimeAttachDirectionalLight value:
-                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.DirectionalLight, revision);
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, RuntimeComponentId.DirectionalLight, revision);
                 break;
             case RuntimeAttachPointLight value:
-                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.PointLight, revision);
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, RuntimeComponentId.PointLight, revision);
                 break;
             case RuntimeAttachSpotLight value:
-                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.SpotLight, revision);
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, RuntimeComponentId.SpotLight, revision);
                 break;
             case RuntimeDetachLight value:
-                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.DirectionalLight, revision);
-                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.PointLight, revision);
-                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.SpotLight, revision);
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, RuntimeComponentId.DirectionalLight, revision);
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, RuntimeComponentId.PointLight, revision);
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, RuntimeComponentId.SpotLight, revision);
                 break;
             case RuntimeAttachLocalFogVolume value:
-                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.LocalFogVolume, revision);
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, RuntimeComponentId.LocalFogVolume, revision);
                 break;
             case RuntimeDetachLocalFogVolume value:
-                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.LocalFogVolume, revision);
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, RuntimeComponentId.LocalFogVolume, revision);
                 break;
         }
     }

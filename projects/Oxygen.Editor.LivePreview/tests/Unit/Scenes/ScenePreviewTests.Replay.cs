@@ -59,7 +59,7 @@ public sealed partial class ScenePreviewTests
         creationCompletion.SetResult(FakeWorld.Accept(request));
         _ = (await syncing.ConfigureAwait(false)).Should().BeTrue();
 
-        _ = fixture.World.PropertiesOf(node.Id, EngineComponentId.Transform).Should().BeEmpty("the queued edit belonged to a node deleted before readiness");
+        _ = fixture.World.PropertiesOf(node.Id, RuntimeComponentId.Transform).Should().BeEmpty("the queued edit belonged to a node deleted before readiness");
         _ = fixture.World.Commands.OfType<RuntimeRemoveSceneNodes>().Should().ContainSingle().Which.Nodes.Should().Equal(node.Id);
         _ = fixture.Preview.PendingFieldCount(document.Id).Should().Be(0);
     }
@@ -85,7 +85,7 @@ public sealed partial class ScenePreviewTests
         await adding.ConfigureAwait(false);
 
         _ = fixture.World.Commands.OfType<RuntimeCreateNode>().Count(command => command.NodeId == added.Id).Should().Be(1);
-        _ = fixture.World.PropertiesOf(added.Id, EngineComponentId.Transform).Should().Equal(PositionX(9));
+        _ = fixture.World.PropertiesOf(added.Id, RuntimeComponentId.Transform).Should().Equal(PositionX(9));
         _ = added.IsActive.Should().BeTrue();
         _ = fixture.Preview.PendingFieldCount(document.Id).Should().Be(0);
     }
@@ -102,7 +102,7 @@ public sealed partial class ScenePreviewTests
         var request = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         camera.FieldOfView = 70;
         _ = fixture.Preview.AdvanceRevision(scene);
-        _ = await fixture.Preview.UpdatePropertiesAsync(scene, node, [new(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.FieldOfViewYRadians, 70 * MathF.PI / 180)], fixture.Preview.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await fixture.Preview.UpdatePropertiesAsync(scene, node, [new(RuntimeComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.FieldOfViewYRadians, 70 * MathF.PI / 180)], fixture.Preview.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = node.Components.Remove(camera);
         _ = fixture.Preview.AdvanceRevision(scene);
         _ = await fixture.Preview.DetachCameraAsync(scene, node.Id, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -111,10 +111,10 @@ public sealed partial class ScenePreviewTests
         _ = (await syncing.ConfigureAwait(false)).Should().BeTrue();
 
         // The initial projection keeps the frozen physical-camera recipe; the queued field of view is discarded.
-        _ = fixture.World.PropertiesOf(node.Id, EngineComponentId.PerspectiveCamera).Should().Equal(
-            new RuntimePropertyValue(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ApertureF, camera.ApertureF),
-            new RuntimePropertyValue(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ShutterRate, camera.ShutterRate),
-            new RuntimePropertyValue(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.Iso, camera.Iso));
+        _ = fixture.World.PropertiesOf(node.Id, RuntimeComponentId.PerspectiveCamera).Should().Equal(
+            new RuntimePropertyValue(RuntimeComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ApertureF, camera.ApertureF),
+            new RuntimePropertyValue(RuntimeComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ShutterRate, camera.ShutterRate),
+            new RuntimePropertyValue(RuntimeComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.Iso, camera.Iso));
         _ = fixture.World.Commands.OfType<RuntimeDetachCamera>().Should().ContainSingle();
         _ = fixture.Preview.PendingFieldCount(document.Id).Should().Be(0);
     }
@@ -254,7 +254,7 @@ public sealed partial class ScenePreviewTests
 
         var initial = fixture.World.Commands.OfType<RuntimeSetLocalTransform>().Should().ContainSingle().Which;
         _ = initial.Position.X.Should().Be(1);
-        _ = fixture.World.PropertiesOf(node.Id, EngineComponentId.Transform).Should().Equal(PositionX(9));
+        _ = fixture.World.PropertiesOf(node.Id, RuntimeComponentId.Transform).Should().Equal(PositionX(9));
         _ = fixture.Preview.PendingFieldCount(document.Id).Should().Be(0);
         _ = node.IsActive.Should().BeTrue();
     }
@@ -269,7 +269,7 @@ public sealed partial class ScenePreviewTests
         var request = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         SetPosition(fixture.Preview, node, 9);
         _ = await fixture.Preview.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(9)], fixture.Preview.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
-        fixture.RejectedPropertyComponent = EngineComponentId.Transform;
+        fixture.RejectedPropertyComponent = RuntimeComponentId.Transform;
 
         creationCompletion.SetResult(FakeWorld.Accept(request));
         _ = (await sync.ConfigureAwait(false)).Should().BeFalse();
@@ -301,7 +301,7 @@ public sealed partial class ScenePreviewTests
         var stale = await fixture.Preview.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(1)], older, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = stale.Status.Should().Be(SyncStatus.Cancelled);
-        _ = fixture.World.PropertiesOf(node.Id, EngineComponentId.Transform).Should().Equal(PositionX(2));
+        _ = fixture.World.PropertiesOf(node.Id, RuntimeComponentId.Transform).Should().Equal(PositionX(2));
         _ = fixture.Preview.PendingFieldCount(document.Id).Should().Be(0);
     }
 
@@ -337,7 +337,7 @@ public sealed partial class ScenePreviewTests
 
         _ = (await fixture.Preview.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
 
-        _ = fixture.World.PropertiesOf(node.Id, EngineComponentId.Transform).Should().BeEmpty();
+        _ = fixture.World.PropertiesOf(node.Id, RuntimeComponentId.Transform).Should().BeEmpty();
         _ = fixture.Preview.PendingFieldCount(document.Id).Should().Be(0);
         _ = fixture.World.Commands.OfType<RuntimeCreateNode>().Should().BeEmpty();
     }

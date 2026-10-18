@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Runtime.InteropServices;
-using Oxygen.Interop;
+using Oxygen.Editor.Runtime.Engine;
 
 namespace Oxygen.Editor.LivePreview.Scenes;
 
@@ -22,6 +22,6 @@ namespace Oxygen.Editor.LivePreview.Scenes;
 /// <param name="Value">The scalar value.</param>
 [StructLayout(LayoutKind.Auto)]
 internal readonly record struct EnginePropertyValueEntry(
-    EngineComponentId Component,
+    RuntimeComponentId Component,
     ushort FieldId,
     float Value);

@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Interop;
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Scenes;
@@ -163,7 +163,7 @@ internal sealed class PendingPropertySyncQueue
     /// <param name="nodeId">The published node.</param>
     /// <param name="component">The complete component, or null for the node.</param>
     /// <param name="revision">The accepted publication revision.</param>
-    public void SupersedeTarget(SceneId sceneId, NodeId nodeId, EngineComponentId? component, SceneSyncRevision revision)
+    public void SupersedeTarget(SceneId sceneId, NodeId nodeId, RuntimeComponentId? component, SceneSyncRevision revision)
     {
         lock (this.gate)
         {
@@ -201,7 +201,7 @@ internal sealed class PendingPropertySyncQueue
         => scene.Latest.TryGetValue(new(nodeId, entry.Component, entry.FieldId), out var latest) && latest == revision
             && !IsTargetCovered(scene, revision, nodeId, entry.Component);
 
-    private static bool IsTargetCovered(SceneQueue scene, SceneSyncRevision revision, NodeId nodeId, EngineComponentId component)
+    private static bool IsTargetCovered(SceneQueue scene, SceneSyncRevision revision, NodeId nodeId, RuntimeComponentId component)
         => (scene.TargetBoundaries.TryGetValue((nodeId, null), out var node) && revision.IsAtOrBefore(node))
             || (scene.TargetBoundaries.TryGetValue((nodeId, component), out var target) && revision.IsAtOrBefore(target));
 
@@ -222,7 +222,7 @@ internal sealed class PendingPropertySyncQueue
     }
 
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Auto)]
-    private readonly record struct FieldKey(NodeId NodeId, EngineComponentId Component, ushort FieldId);
+    private readonly record struct FieldKey(NodeId NodeId, RuntimeComponentId Component, ushort FieldId);
 
     private sealed class SceneQueue(Guid lifetime)
     {
@@ -234,6 +234,6 @@ internal sealed class PendingPropertySyncQueue
 
         public Dictionary<FieldKey, SceneSyncRevision> Latest { get; } = [];
 
-        public Dictionary<(NodeId NodeId, EngineComponentId? Component), SceneSyncRevision> TargetBoundaries { get; } = [];
+        public Dictionary<(NodeId NodeId, RuntimeComponentId? Component), SceneSyncRevision> TargetBoundaries { get; } = [];
     }
 }

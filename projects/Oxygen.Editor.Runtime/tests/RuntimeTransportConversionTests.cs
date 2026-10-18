@@ -29,6 +29,16 @@ public sealed class RuntimeTransportConversionTests
     }
 
     [TestMethod]
+    public void EveryComponentId_HasTheNameAndValueOfTheNativeOne()
+    {
+        var managed = Enum.GetValues<RuntimeComponentId>().ToDictionary(static id => id.ToString(), static id => (ushort)id);
+
+        var native = Enum.GetValues<EngineComponentId>().ToDictionary(static id => id.ToString(), static id => (ushort)id);
+
+        _ = managed.Should().Equal(native);
+    }
+
+    [TestMethod]
     public void MouseButtons_MapByMeaningIncludingExtendedButtons()
     {
         foreach (var button in Enum.GetValues<RuntimeMouseButton>())
@@ -71,7 +81,7 @@ public sealed class RuntimeTransportConversionTests
     [TestMethod]
     public void PropertyConversion_PreservesComponentFieldAndScalarValues()
     {
-        ImmutableArray<RuntimePropertyValue> values = [new(EngineComponentId.Transform, 23, -4.5f), new((EngineComponentId)ushort.MaxValue, 67, float.MaxValue)];
+        ImmutableArray<RuntimePropertyValue> values = [new(RuntimeComponentId.Transform, 23, -4.5f), new((RuntimeComponentId)ushort.MaxValue, 67, float.MaxValue)];
         var native = RuntimeTransportConversion.ToNative(values);
 
         _ = native.Should().HaveCount(2);

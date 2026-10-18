@@ -4,6 +4,7 @@
 
 using System.Numerics;
 using AwesomeAssertions;
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
@@ -157,7 +158,7 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
                     && MathF.Abs(actual.Value - field.Value) <= 0.001f)),
             cancellationToken).ConfigureAwait(true);
         _ = state.Exists.Should().BeTrue();
-        _ = state.Properties.Where(property => property.ComponentId == Oxygen.Interop.EngineComponentId.Transform).Should().HaveCount(9);
+        _ = state.Properties.Where(property => property.ComponentId == RuntimeComponentId.Transform).Should().HaveCount(9);
         foreach (var field in expected)
         {
             var actual = state.Properties.Single(property => (ushort)property.ComponentId == field.Key.component && property.FieldId == field.Key.field);

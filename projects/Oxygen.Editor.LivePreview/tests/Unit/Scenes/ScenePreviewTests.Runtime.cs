@@ -9,7 +9,6 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Interop;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Tests.Scenes;
@@ -104,7 +103,7 @@ public sealed partial class ScenePreviewTests
         _ = Flags(child.Id).Should().Equal(1f, shown.CastsShadows ? 1f : 0f, shown.ReceivesShadows ? 1f : 0f);
 
         IEnumerable<float> Flags(NodeId nodeId)
-            => fixture.World.PropertiesOf(nodeId, EngineComponentId.Node).OrderBy(static entry => entry.FieldId).Select(static entry => entry.Value);
+            => fixture.World.PropertiesOf(nodeId, RuntimeComponentId.Node).OrderBy(static entry => entry.FieldId).Select(static entry => entry.Value);
     }
 
     [TestMethod]

@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.LivePreview.Scenes;
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -58,7 +59,7 @@ public sealed class SceneWireTests
     {
         _ = SceneWire.TryGet(SceneProperties.PerspectiveCamera.FieldOfViewDegreesDescriptor.Id, out var mapping).Should().BeTrue();
 
-        _ = mapping.Component.Should().Be(EngineComponentId.PerspectiveCamera);
+        _ = mapping.Component.Should().Be(RuntimeComponentId.PerspectiveCamera);
         _ = mapping.Fields.Should().Equal((ushort)PerspectiveCameraField.FieldOfViewYRadians);
         _ = mapping.EncodeValue(90f).Should().ContainSingle().Which.Should().BeApproximately(MathF.PI / 2, 0.00001f);
     }
@@ -71,13 +72,13 @@ public sealed class SceneWireTests
         node.Components.Add(new PerspectiveCamera { Name = "Camera" });
         node.Components.Add(new SpotLightComponent { Name = "Spot" });
 
-        _ = SceneWire.HasComponent(node, EngineComponentId.Transform).Should().BeTrue();
-        _ = SceneWire.HasComponent(node, EngineComponentId.Node).Should().BeTrue();
-        _ = SceneWire.HasComponent(node, EngineComponentId.PerspectiveCamera).Should().BeTrue();
-        _ = SceneWire.HasComponent(node, EngineComponentId.SpotLight).Should().BeTrue();
-        _ = SceneWire.HasComponent(node, EngineComponentId.OrthographicCamera).Should().BeFalse();
-        _ = SceneWire.HasComponent(node, EngineComponentId.DirectionalLight).Should().BeFalse();
-        _ = SceneWire.HasComponent(node, EngineComponentId.PointLight).Should().BeFalse();
-        _ = SceneWire.HasComponent(node, EngineComponentId.LocalFogVolume).Should().BeFalse();
+        _ = SceneWire.HasComponent(node, RuntimeComponentId.Transform).Should().BeTrue();
+        _ = SceneWire.HasComponent(node, RuntimeComponentId.Node).Should().BeTrue();
+        _ = SceneWire.HasComponent(node, RuntimeComponentId.PerspectiveCamera).Should().BeTrue();
+        _ = SceneWire.HasComponent(node, RuntimeComponentId.SpotLight).Should().BeTrue();
+        _ = SceneWire.HasComponent(node, RuntimeComponentId.OrthographicCamera).Should().BeFalse();
+        _ = SceneWire.HasComponent(node, RuntimeComponentId.DirectionalLight).Should().BeFalse();
+        _ = SceneWire.HasComponent(node, RuntimeComponentId.PointLight).Should().BeFalse();
+        _ = SceneWire.HasComponent(node, RuntimeComponentId.LocalFogVolume).Should().BeFalse();
     }
 }

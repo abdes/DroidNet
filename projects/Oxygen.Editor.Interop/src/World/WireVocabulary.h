@@ -20,8 +20,10 @@
 //! The editor module's property wire vocabulary, published to managed code.
 /*!
  Every member is defined from the native constant the matching
- `IComponentPropertyApplier` dispatches on, so managed code holds no copy of
- the numbering and a native renumbering flows through at compile time.
+ `IComponentPropertyApplier` dispatches on, so a native renumbering flows
+ through at compile time. The one managed copy, Runtime's `RuntimeComponentId`,
+ lets Runtime's public commands load without Interop; a Runtime test keeps its
+ names and values identical to `EngineComponentId`.
 */
 namespace Oxygen::Interop {
 

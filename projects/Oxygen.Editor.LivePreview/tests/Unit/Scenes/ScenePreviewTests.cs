@@ -255,8 +255,8 @@ public sealed partial class ScenePreviewTests
     }
 
     private static EnginePropertyValueEntry CreateTransformEntry(float value)
-        => new(EngineComponentId.Transform, (ushort)TransformField.PositionX, value);
+        => new(RuntimeComponentId.Transform, (ushort)TransformField.PositionX, value);
 
     private static RuntimePropertyValue PositionX(float value)
-        => new(EngineComponentId.Transform, (ushort)TransformField.PositionX, value);
+        => new(RuntimeComponentId.Transform, (ushort)TransformField.PositionX, value);
 }

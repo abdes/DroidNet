@@ -13,7 +13,6 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Interop;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LivePreview.Tests.Scenes;
@@ -60,7 +59,7 @@ internal sealed partial class PreviewFixture : IDisposable
     }
 
     /// <summary>Gets or sets the component whose property commands the engine rejects.</summary>
-    public EngineComponentId? RejectedPropertyComponent { get; set; }
+    public RuntimeComponentId? RejectedPropertyComponent { get; set; }
 
     /// <summary>Gets or sets the background color whose environment command the engine rejects.</summary>
     public Vector3? RejectedBackground { get; set; }

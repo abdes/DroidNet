@@ -35,31 +35,31 @@ internal sealed partial class ScenePreview
     private static string GetPropertyOperationKind(IReadOnlyList<EnginePropertyValueEntry> entries)
         => GetFirstComponent(entries) switch
         {
-            EngineComponentId.PerspectiveCamera => SceneOperationKinds.EditPerspectiveCamera,
-            EngineComponentId.OrthographicCamera => SceneOperationKinds.EditOrthographicCamera,
-            EngineComponentId.DirectionalLight => SceneOperationKinds.EditDirectionalLight,
-            EngineComponentId.PointLight => SceneOperationKinds.EditPointLight,
-            EngineComponentId.SpotLight => SceneOperationKinds.EditSpotLight,
-            EngineComponentId.LocalFogVolume => SceneOperationKinds.EditLocalFogVolume,
-            EngineComponentId.Node => SceneOperationKinds.EditNodeRendering,
+            RuntimeComponentId.PerspectiveCamera => SceneOperationKinds.EditPerspectiveCamera,
+            RuntimeComponentId.OrthographicCamera => SceneOperationKinds.EditOrthographicCamera,
+            RuntimeComponentId.DirectionalLight => SceneOperationKinds.EditDirectionalLight,
+            RuntimeComponentId.PointLight => SceneOperationKinds.EditPointLight,
+            RuntimeComponentId.SpotLight => SceneOperationKinds.EditSpotLight,
+            RuntimeComponentId.LocalFogVolume => SceneOperationKinds.EditLocalFogVolume,
+            RuntimeComponentId.Node => SceneOperationKinds.EditNodeRendering,
             _ => SceneOperationKinds.EditTransform,
         };
 
     private static string GetPropertyComponentType(IReadOnlyList<EnginePropertyValueEntry> entries)
         => GetFirstComponent(entries) switch
         {
-            EngineComponentId.PerspectiveCamera => nameof(PerspectiveCamera),
-            EngineComponentId.OrthographicCamera => nameof(OrthographicCamera),
-            EngineComponentId.DirectionalLight => nameof(DirectionalLightComponent),
-            EngineComponentId.PointLight => nameof(PointLightComponent),
-            EngineComponentId.SpotLight => nameof(SpotLightComponent),
-            EngineComponentId.LocalFogVolume => nameof(LocalFogVolumeComponent),
-            EngineComponentId.Node => nameof(SceneNode),
+            RuntimeComponentId.PerspectiveCamera => nameof(PerspectiveCamera),
+            RuntimeComponentId.OrthographicCamera => nameof(OrthographicCamera),
+            RuntimeComponentId.DirectionalLight => nameof(DirectionalLightComponent),
+            RuntimeComponentId.PointLight => nameof(PointLightComponent),
+            RuntimeComponentId.SpotLight => nameof(SpotLightComponent),
+            RuntimeComponentId.LocalFogVolume => nameof(LocalFogVolumeComponent),
+            RuntimeComponentId.Node => nameof(SceneNode),
             _ => nameof(TransformComponent),
         };
 
-    private static EngineComponentId GetFirstComponent(IReadOnlyList<EnginePropertyValueEntry> entries)
-        => entries.Count == 0 ? EngineComponentId.Transform : entries[0].Component;
+    private static RuntimeComponentId GetFirstComponent(IReadOnlyList<EnginePropertyValueEntry> entries)
+        => entries.Count == 0 ? RuntimeComponentId.Transform : entries[0].Component;
 
     private static string GetPropertyRejectedCode(string operationKind)
         => operationKind switch
@@ -219,7 +219,7 @@ internal sealed partial class ScenePreview
     private static void ApplyCameraExposure(
         WorldDispatch world,
         SceneNode node,
-        EngineComponentId component,
+        RuntimeComponentId component,
         CameraComponent camera,
         ushort apertureField,
         ushort shutterField,
@@ -238,9 +238,9 @@ internal sealed partial class ScenePreview
     {
         ImmutableArray<RuntimePropertyValue> flags =
         [
-            new(EngineComponentId.Node, (ushort)NodeField.Visible, node.IsVisible ? 1f : 0f),
-            new(EngineComponentId.Node, (ushort)NodeField.CastsShadows, node.CastsShadows ? 1f : 0f),
-            new(EngineComponentId.Node, (ushort)NodeField.ReceivesShadows, node.ReceivesShadows ? 1f : 0f),
+            new(RuntimeComponentId.Node, (ushort)NodeField.Visible, node.IsVisible ? 1f : 0f),
+            new(RuntimeComponentId.Node, (ushort)NodeField.CastsShadows, node.CastsShadows ? 1f : 0f),
+            new(RuntimeComponentId.Node, (ushort)NodeField.ReceivesShadows, node.ReceivesShadows ? 1f : 0f),
         ];
         world.Execute(new RuntimeSetProperties(node.Id, flags));
     }

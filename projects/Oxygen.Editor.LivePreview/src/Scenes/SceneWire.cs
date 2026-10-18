@@ -6,6 +6,7 @@ using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Numerics;
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
@@ -37,19 +38,19 @@ internal static class SceneWire
     /// <param name="node">The node.</param>
     /// <param name="component">The engine component.</param>
     /// <returns><see langword="true"/> when the node has the component.</returns>
-    public static bool HasComponent(SceneNode node, EngineComponentId component)
+    public static bool HasComponent(SceneNode node, RuntimeComponentId component)
     {
         ArgumentNullException.ThrowIfNull(node);
         return component switch
         {
-            EngineComponentId.Transform => node.Components.Any(static value => value is TransformComponent),
-            EngineComponentId.PerspectiveCamera => node.Components.Any(static value => value is PerspectiveCamera),
-            EngineComponentId.OrthographicCamera => node.Components.Any(static value => value is OrthographicCamera),
-            EngineComponentId.DirectionalLight => node.Components.Any(static value => value is DirectionalLightComponent),
-            EngineComponentId.PointLight => node.Components.Any(static value => value is PointLightComponent),
-            EngineComponentId.SpotLight => node.Components.Any(static value => value is SpotLightComponent),
-            EngineComponentId.LocalFogVolume => node.Components.Any(static value => value is LocalFogVolumeComponent),
-            EngineComponentId.Node => true,
+            RuntimeComponentId.Transform => node.Components.Any(static value => value is TransformComponent),
+            RuntimeComponentId.PerspectiveCamera => node.Components.Any(static value => value is PerspectiveCamera),
+            RuntimeComponentId.OrthographicCamera => node.Components.Any(static value => value is OrthographicCamera),
+            RuntimeComponentId.DirectionalLight => node.Components.Any(static value => value is DirectionalLightComponent),
+            RuntimeComponentId.PointLight => node.Components.Any(static value => value is PointLightComponent),
+            RuntimeComponentId.SpotLight => node.Components.Any(static value => value is SpotLightComponent),
+            RuntimeComponentId.LocalFogVolume => node.Components.Any(static value => value is LocalFogVolumeComponent),
+            RuntimeComponentId.Node => true,
             _ => false,
         };
     }
@@ -57,23 +58,23 @@ internal static class SceneWire
     private static FrozenDictionary<PropertyId, Mapping> Build()
     {
         var map = new Dictionary<PropertyId, Mapping>();
-        void Add(string kind, string pointer, EngineComponentId component, params ushort[] fields)
+        void Add(string kind, string pointer, RuntimeComponentId component, params ushort[] fields)
             => map.Add(new PropertyId(kind, pointer), new Mapping(component, [.. fields]));
 
         AddTransform(Add);
         AddCameras(Add, map);
         AddDirectionalLight(Add);
-        AddLocalLight(Add, SceneProperties.PointLightKind, EngineComponentId.PointLight);
-        AddLocalLight(Add, SceneProperties.SpotLightKind, EngineComponentId.SpotLight);
+        AddLocalLight(Add, SceneProperties.PointLightKind, RuntimeComponentId.PointLight);
+        AddLocalLight(Add, SceneProperties.SpotLightKind, RuntimeComponentId.SpotLight);
         AddLocalFogVolume(Add);
         AddNodeRendering(Add);
         return map.ToFrozenDictionary();
     }
 
-    private static void AddTransform(Action<string, string, EngineComponentId, ushort[]> add)
+    private static void AddTransform(Action<string, string, RuntimeComponentId, ushort[]> add)
     {
         const string kind = SceneProperties.TransformKind;
-        const EngineComponentId component = EngineComponentId.Transform;
+        const RuntimeComponentId component = RuntimeComponentId.Transform;
         add(kind, "/local_position/0", component, [(ushort)TransformField.PositionX]);
         add(kind, "/local_position/1", component, [(ushort)TransformField.PositionY]);
         add(kind, "/local_position/2", component, [(ushort)TransformField.PositionZ]);
@@ -85,10 +86,10 @@ internal static class SceneWire
         add(kind, "/local_scale/2", component, [(ushort)TransformField.ScaleZ]);
     }
 
-    private static void AddCameras(Action<string, string, EngineComponentId, ushort[]> add, Dictionary<PropertyId, Mapping> map)
+    private static void AddCameras(Action<string, string, RuntimeComponentId, ushort[]> add, Dictionary<PropertyId, Mapping> map)
     {
         const string perspective = SceneProperties.PerspectiveCameraKind;
-        var component = EngineComponentId.PerspectiveCamera;
+        var component = RuntimeComponentId.PerspectiveCamera;
 
         // The inspector edits the vertical field of view in degrees; the engine takes radians.
         map.Add(
@@ -103,7 +104,7 @@ internal static class SceneWire
         add(perspective, "/aspect_mode", component, [(ushort)PerspectiveCameraField.AspectMode]);
 
         const string orthographic = SceneProperties.OrthographicCameraKind;
-        component = EngineComponentId.OrthographicCamera;
+        component = RuntimeComponentId.OrthographicCamera;
         add(orthographic, "/orthographic_size", component, [(ushort)OrthographicCameraField.OrthographicSize]);
         add(orthographic, "/aspect_ratio", component, [(ushort)OrthographicCameraField.AspectRatio]);
         add(orthographic, "/near_plane", component, [(ushort)OrthographicCameraField.NearPlane]);
@@ -114,10 +115,10 @@ internal static class SceneWire
         add(orthographic, "/aspect_mode", component, [(ushort)OrthographicCameraField.AspectMode]);
     }
 
-    private static void AddDirectionalLight(Action<string, string, EngineComponentId, ushort[]> add)
+    private static void AddDirectionalLight(Action<string, string, RuntimeComponentId, ushort[]> add)
     {
         const string kind = SceneProperties.DirectionalLightKind;
-        const EngineComponentId component = EngineComponentId.DirectionalLight;
+        const RuntimeComponentId component = RuntimeComponentId.DirectionalLight;
         add(kind, "/color", component, [(ushort)DirectionalLightField.ColorR, (ushort)DirectionalLightField.ColorG, (ushort)DirectionalLightField.ColorB]);
         add(kind, "/intensity_lux", component, [(ushort)DirectionalLightField.IntensityLux]);
         add(kind, "/atmosphere_light_slot", component, [(ushort)DirectionalLightField.AtmosphereLightSlot]);
@@ -144,7 +145,7 @@ internal static class SceneWire
     }
 
     // Point and spot lights share their fields; the component kind chooses the engine component.
-    private static void AddLocalLight(Action<string, string, EngineComponentId, ushort[]> add, string kind, EngineComponentId component)
+    private static void AddLocalLight(Action<string, string, RuntimeComponentId, ushort[]> add, string kind, RuntimeComponentId component)
     {
         add(kind, "/color", component, [(ushort)LocalLightField.ColorR, (ushort)LocalLightField.ColorG, (ushort)LocalLightField.ColorB]);
         add(kind, "/affects_world", component, [(ushort)LocalLightField.AffectsWorld]);
@@ -157,17 +158,17 @@ internal static class SceneWire
         add(kind, "/luminous_flux_lm", component, [(ushort)LocalLightField.LuminousFluxLumens]);
         add(kind, "/range", component, [(ushort)LocalLightField.Range]);
         add(kind, "/source_radius", component, [(ushort)LocalLightField.SourceRadius]);
-        if (component == EngineComponentId.SpotLight)
+        if (component == RuntimeComponentId.SpotLight)
         {
             add(kind, "/inner_cone_angle_radians", component, [(ushort)LocalLightField.InnerConeAngleRadians]);
             add(kind, "/outer_cone_angle_radians", component, [(ushort)LocalLightField.OuterConeAngleRadians]);
         }
     }
 
-    private static void AddLocalFogVolume(Action<string, string, EngineComponentId, ushort[]> add)
+    private static void AddLocalFogVolume(Action<string, string, RuntimeComponentId, ushort[]> add)
     {
         const string kind = SceneProperties.LocalFogVolumeKind;
-        const EngineComponentId component = EngineComponentId.LocalFogVolume;
+        const RuntimeComponentId component = RuntimeComponentId.LocalFogVolume;
         add(kind, "/enabled", component, [(ushort)LocalFogVolumeField.Enabled]);
         add(kind, "/radial_fog_extinction", component, [(ushort)LocalFogVolumeField.RadialFogExtinction]);
         add(kind, "/height_fog_extinction", component, [(ushort)LocalFogVolumeField.HeightFogExtinction]);
@@ -179,10 +180,10 @@ internal static class SceneWire
         add(kind, "/sort_priority", component, [(ushort)LocalFogVolumeField.SortPriority]);
     }
 
-    private static void AddNodeRendering(Action<string, string, EngineComponentId, ushort[]> add)
+    private static void AddNodeRendering(Action<string, string, RuntimeComponentId, ushort[]> add)
     {
         const string kind = SceneProperties.NodeRenderingKind;
-        const EngineComponentId component = EngineComponentId.Node;
+        const RuntimeComponentId component = RuntimeComponentId.Node;
         add(kind, "/visible", component, [(ushort)NodeField.Visible]);
         add(kind, "/casts_shadows", component, [(ushort)NodeField.CastsShadows]);
         add(kind, "/receives_shadows", component, [(ushort)NodeField.ReceivesShadows]);
@@ -196,7 +197,7 @@ internal static class SceneWire
     /// </remarks>
     /// <param name="Component">The engine component.</param>
     /// <param name="Fields">The engine fields, one per encoded value.</param>
-    internal sealed record Mapping(EngineComponentId Component, ImmutableArray<ushort> Fields)
+    internal sealed record Mapping(RuntimeComponentId Component, ImmutableArray<ushort> Fields)
     {
         /// <summary>Gets the encoding of a value into one float per field, or <see langword="null"/> for the default.</summary>
         public Func<object?, ImmutableArray<float>>? Encode { get; init; }
