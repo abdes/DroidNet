@@ -171,7 +171,7 @@ public sealed class InsertNodesTests
             Components =
             [
                 new TransformData { Id = ComponentId.New(), Name = "Transform" },
-                new GeometryComponentData { Id = ComponentId.New(), Name = "Geometry", GeometryUri = SampleScene.CubeGeometry.ToString() },
+                new GeometryComponentData { Id = ComponentId.New(), Name = "Geometry", GeometryUri = SampleScene.CubeGeometry },
             ],
         };
 

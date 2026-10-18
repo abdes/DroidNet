@@ -4,7 +4,6 @@
 
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Scenes.Properties;
@@ -38,8 +37,8 @@ public sealed class GeometryDescriptors
         => new(
             geometryUri: new PropertyDescriptor<Uri?>(
                 id: new PropertyId<Uri?>(SceneProperties.GeometryKind, "/geometry_uri"),
-                reader: static target => ((GeometryComponent)target).Geometry?.Uri,
-                writer: static (target, value) => ((GeometryComponent)target).Geometry = value is null ? null : new AssetReference<GeometryAsset>(value),
+                reader: static target => ((GeometryComponent)target).Geometry,
+                writer: static (target, value) => ((GeometryComponent)target).Geometry = value ?? throw new ArgumentNullException(nameof(value)),
                 validator: static value => value is null
                     ? ValidationResult.Fail(SceneDiagnosticCodes.GeometryReferenceRequired, "A geometry component must reference a geometry asset.")
                     : ValidationResult.Ok,

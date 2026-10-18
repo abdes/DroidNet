@@ -177,7 +177,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                         MaterialSlotAssignmentIntent.RetainedAssignment));
                 }
 
-                if (overrides && node.Components.OfType<GeometryComponent>().FirstOrDefault() is { Geometry.Uri: not null } geometry)
+                if (overrides && node.Components.OfType<GeometryComponent>().FirstOrDefault() is { } geometry)
                 {
                     ApplyMaterialOverrides(world, node, geometry);
                 }

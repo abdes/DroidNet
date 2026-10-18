@@ -46,7 +46,7 @@ public sealed class SceneNodeTemplatesTests
 
         _ = node.Name.Should().Be(kind.ToString());
         var geometry = node.Components.OfType<GeometryComponentData>().Should().ContainSingle().Which;
-        _ = new Uri(geometry.GeometryUri).AbsolutePath.Should().EndWith($"/BasicShapes/{kind}");
+        _ = geometry.GeometryUri.AbsolutePath.Should().EndWith($"/BasicShapes/{kind}");
         AssertNewIds(fixture, node);
     }
 

@@ -9,7 +9,6 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
@@ -53,7 +52,7 @@ public sealed class NestedDescriptorCookTests
         workspace.Scene.RootNodes[^1].Components.OfType<GeometryComponent>().Single().OverrideSlots.Add(new MaterialsSlot
         {
             Target = new(geometryUri, inventory!.Slots.Single().SlotId, inventory.LayoutRevision),
-            Material = new AssetReference<MaterialAsset>(new Uri("asset:///" + second)),
+            Material = new Uri("asset:///" + second),
         });
         await workspace.WriteSceneAsync(scene).ConfigureAwait(false);
         var result = await service.CookCurrentSceneAsync(new("asset:///" + scene), this.TestContext.CancellationToken).ConfigureAwait(false);

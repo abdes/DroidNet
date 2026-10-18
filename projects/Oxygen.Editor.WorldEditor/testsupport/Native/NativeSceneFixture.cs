@@ -323,7 +323,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     public async Task<MaterialSlotTarget> ReadSingleMaterialSlotAsync(NodeId nodeId, CancellationToken cancellationToken)
     {
         var node = this.Source.RootNodes.Select(root => SceneTraversal.FindNodeById(root, nodeId)).OfType<SceneNode>().Single();
-        var uri = node.Components.OfType<GeometryComponent>().Single().Geometry!.Uri;
+        var uri = node.Components.OfType<GeometryComponent>().Single().Geometry;
         var inventory = await ((IGeometryMaterialSlotProvider)this.materialPipeline.Pipeline).ReadAsync(this.projectContexts.ActiveProject!, uri, cancellationToken).ConfigureAwait(true);
         _ = inventory.Should().NotBeNull("the native fixture geometry must have a current slot inventory");
         var slot = inventory!.Slots.Should().ContainSingle().Which;

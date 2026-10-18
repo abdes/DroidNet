@@ -106,10 +106,11 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
 
         using (this.SuppressNotifications())
         {
+            // Build every node before replacing any, so data the model rejects leaves the scene as it was.
+            var nodes = data.RootNodes.Select(nodeData => SceneNode.CreateAndHydrate(this, nodeData)).ToList();
             this.RootNodes.Clear();
-            foreach (var nodeData in data.RootNodes)
+            foreach (var node in nodes)
             {
-                var node = SceneNode.CreateAndHydrate(this, nodeData);
                 this.RootNodes.Add(node);
             }
 

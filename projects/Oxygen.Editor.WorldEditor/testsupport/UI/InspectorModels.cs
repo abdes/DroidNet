@@ -17,7 +17,6 @@ using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Managed.Assets.Model;
 using static DroidNet.Tests.UiTestHosting;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;

@@ -5,7 +5,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Model;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Inspection;
 
@@ -40,44 +39,31 @@ public sealed class BuiltinCatalogProjectionTests
         _ = records.Should().NotContain(record => record.Generated!.AuthoringCategory == GeneratedAssetCategory.Internal);
     }
 
-    /// <summary>Managed projections retain every native LOD and submesh declaration.</summary>
-    /// <returns>The asynchronous metadata projection test.</returns>
+    /// <summary>The native catalog's submeshes are named and use the catalog's default material.</summary>
+    /// <returns>The asynchronous submesh declaration test.</returns>
     [TestMethod]
-    public async Task ProjectionUsesEveryNativeLodAndSubmeshDeclaration()
+    public async Task ValidateSubmeshes_NativeCatalog_Passes()
     {
         var native = await this.ReadCatalogAsync().ConfigureAwait(false);
-        var projected = native.CreateAssets().OfType<GeometryAsset>().ToDictionary(static asset => asset.Uri);
-        foreach (var definition in native.AuthoringGeometries)
-        {
-            var geometry = projected[definition.AssetUri];
-            _ = geometry.Uri.Should().Be(definition.AssetUri);
-            var lods = definition.Contribution.Descriptor.GetProperty("lods").EnumerateArray().ToArray();
-            _ = geometry.Lods.Should().HaveCount(lods.Length);
-            for (var index = 0; index < lods.Length; ++index)
-            {
-                _ = geometry.Lods[index].LodIndex.Should().Be(index);
-                _ = geometry.Lods[index].SubMeshes.Select(static mesh => mesh.Name).Should()
-                    .Equal(lods[index].GetProperty("submeshes").EnumerateArray().Select(static mesh => mesh.GetProperty("name").GetString()));
-                _ = geometry.Lods[index].SubMeshes.Should().OnlyContain(static mesh => mesh.MaterialIndex == 0);
-            }
-        }
+
+        var act = native.ValidateSubmeshes;
+
+        _ = act.Should().NotThrow();
     }
 
-    /// <summary>Changes in native LOD and submesh metadata flow through without managed defaults.</summary>
-    /// <returns>The asynchronous metadata-shape regression.</returns>
+    /// <summary>A submesh whose material is outside the catalog is rejected.</summary>
+    /// <returns>The asynchronous submesh declaration regression.</returns>
     [TestMethod]
-    public async Task ProjectionFollowsNativeLodAndSubmeshChanges()
+    public async Task ValidateSubmeshes_MaterialOutsideTheCatalog_Throws()
     {
         var document = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "BuiltinGeometryCatalog.json"), this.TestContext.CancellationToken).ConfigureAwait(false))!;
         var geometry = document["geometries"]!.AsArray()[0]!;
-        var lods = geometry["descriptor"]!["lods"]!.AsArray();
-        var second = lods[0]!.DeepClone();
-        second["submeshes"]!.AsArray()[0]!["name"] = "Native second LOD";
-        lods.Add(second);
+        geometry["descriptor"]!["lods"]!.AsArray()[0]!["submeshes"]!.AsArray()[0]!["material_ref"] = "/Content/Materials/Elsewhere.omat";
         var catalog = BuiltinGeometryCatalog.Parse(document.ToJsonString());
-        var projected = catalog.CreateAssets().OfType<GeometryAsset>().Single(asset => asset.Uri == catalog.Geometries[0].AssetUri);
-        _ = projected.Lods.Should().HaveCount(2);
-        _ = projected.Lods[1].SubMeshes.Should().ContainSingle().Which.Name.Should().Be("Native second LOD");
+
+        var act = catalog.ValidateSubmeshes;
+
+        _ = act.Should().Throw<InvalidDataException>();
     }
 
     /// <summary>The native category is required and unknown values never become authoring choices.</summary>

@@ -7,7 +7,6 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Managed.Assets.Model;
 
 namespace Oxygen.Editor.Scenes.Edits.Assets;
 
@@ -29,17 +28,17 @@ internal static class SceneReferenceRetargeting
         var changed = false;
         foreach (var geometry in node.Components.OfType<GeometryComponent>())
         {
-            if (geometry.Geometry?.Uri is { } geometryUri && map(geometryUri) is { } mapped)
+            if (map(geometry.Geometry) is { } mapped)
             {
-                geometry.Geometry = new AssetReference<GeometryAsset>(mapped);
+                geometry.Geometry = mapped;
                 changed = true;
             }
 
             foreach (var slot in geometry.OverrideSlots.Concat(geometry.TargetedOverrides.SelectMany(static target => target.OverrideSlots)).OfType<MaterialsSlot>())
             {
-                if (map(slot.Material.Uri) is { } material)
+                if (map(slot.Material) is { } material)
                 {
-                    slot.Material = new AssetReference<MaterialAsset>(material);
+                    slot.Material = material;
                     changed = true;
                 }
 

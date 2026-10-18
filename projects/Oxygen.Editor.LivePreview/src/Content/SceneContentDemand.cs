@@ -73,8 +73,7 @@ internal sealed partial class SceneContentDemand : IDisposable
     }
 
     private static bool IsDemandable(Uri uri)
-        => !string.Equals(AssetUriHelper.GetMountPoint(uri), "Engine", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(uri.AbsolutePath, "/__uninitialized__", StringComparison.Ordinal);
+        => !string.Equals(AssetUriHelper.GetMountPoint(uri), "Engine", StringComparison.OrdinalIgnoreCase);
 
     private static HashSet<Uri> ReferencesOf(Scene scene)
         => [.. scene.AllNodes.SelectMany(SceneAssetReferences.Runtime).Where(IsDemandable)];

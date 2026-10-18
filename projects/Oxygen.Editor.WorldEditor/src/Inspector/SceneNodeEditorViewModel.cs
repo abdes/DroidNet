@@ -771,7 +771,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
     private void OnComponentAddRequested(Messages.ComponentAddRequestedMessage message)
     {
-        if (message is null || message.Node is null || message.Component is null)
+        if (message is null || message.Node is null || message.Kind is null)
         {
             return;
         }
@@ -796,7 +796,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             return;
         }
 
-        _ = await authoring.ExecuteAsync(SceneComponents.Add(authoring, message.Node.Id, SceneComponents.KindOf(message.Component))).ConfigureAwait(true);
+        _ = await authoring.ExecuteAsync(SceneComponents.Add(authoring, message.Node.Id, message.Kind)).ConfigureAwait(true);
     }
 
     private async Task RemoveComponentRequestedAsync(Messages.ComponentRemoveRequestedMessage message)

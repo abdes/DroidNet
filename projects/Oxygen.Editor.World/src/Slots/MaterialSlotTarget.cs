@@ -2,10 +2,17 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Slots;
 
 /// <summary>Identifies an existing native slot and the inventory observed by its editor.</summary>
 /// <param name="GeometryUri">The geometry whose native inventory owns the slot.</param>
 /// <param name="SlotId">The opaque native slot identity.</param>
 /// <param name="LayoutRevision">The native inventory revision observed for this assignment.</param>
-public sealed record MaterialSlotTarget(Uri GeometryUri, Guid SlotId, string LayoutRevision);
+/// <exception cref="ArgumentException"><paramref name="GeometryUri"/> does not name an asset.</exception>
+public sealed record MaterialSlotTarget(Uri GeometryUri, Guid SlotId, string LayoutRevision)
+{
+    /// <summary>Gets the geometry whose native inventory owns the slot.</summary>
+    public Uri GeometryUri { get; init => field = AssetUris.EnsureAssetUri(value); } = AssetUris.EnsureAssetUri(GeometryUri);
+}

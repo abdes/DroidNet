@@ -27,9 +27,9 @@ public sealed partial class BuiltinCatalogDiscovery
             throw new InvalidDataException("The built-in catalog must contain engine-generated identities in the Content output mount.");
         }
 
-        // Exercise the same projections used by discovery and resolution before retaining metadata.
+        // Exercise the projection discovery uses, and the native declarations it relies on, before retaining metadata.
         _ = catalog.CreateCatalogRecords();
-        _ = catalog.CreateAssets();
+        catalog.ValidateSubmeshes();
     }
 
     private async Task<BuiltinGeometryCatalog?> ReadCacheAsync(CancellationToken cancellationToken)

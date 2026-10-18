@@ -18,10 +18,9 @@ public static class SceneAssetReferences
     public static IEnumerable<Uri> Runtime(SceneNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
-        return node.Components.OfType<GeometryComponent>().SelectMany(static geometry => new[] { geometry.Geometry?.Uri }
+        return node.Components.OfType<GeometryComponent>().SelectMany(static geometry => new[] { geometry.Geometry }
             .Concat(geometry.OverrideSlots.Concat(geometry.TargetedOverrides.SelectMany(static target => target.OverrideSlots))
-                .OfType<MaterialsSlot>().Select(static slot => (Uri?)slot.Material.Uri)))
-            .OfType<Uri>();
+                .OfType<MaterialsSlot>().Select(static slot => slot.Material)));
     }
 
     /// <summary>Gets the asset references a node's script slots hold.</summary>

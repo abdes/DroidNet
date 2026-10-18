@@ -2,19 +2,17 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World.Components;
+using Oxygen.Editor.Scenes.Nodes;
 
 namespace Oxygen.Editor.World.Messages;
 
 /// <summary>
-/// Message sent to request that a <see cref="GameComponent"/> be added to a
-/// <see cref="SceneNode"/>. Handlers of this message should perform the actual add
-/// operation and respond (for example by publishing a corresponding confirmation
-/// message) as required by the host editor.
+/// Message sent to request that a component be added to a <see cref="SceneNode"/>. Handlers of this message should
+/// perform the actual add operation, which creates the component.
 /// </summary>
 /// <param name="node">The target <see cref="SceneNode"/> for the add request. This parameter is not expected to be <see langword="null"/>.</param>
-/// <param name="component">The <see cref="GameComponent"/> instance to add. This parameter is not expected to be <see langword="null"/>.</param>
-internal sealed class ComponentAddRequestedMessage(SceneNode node, GameComponent component)
+/// <param name="kind">The kind of component to add, one of the <see cref="SceneComponents"/> constants.</param>
+internal sealed class ComponentAddRequestedMessage(SceneNode node, string kind)
 {
     /// <summary>
     /// Gets the scene node that is the target of the add request.
@@ -22,7 +20,7 @@ internal sealed class ComponentAddRequestedMessage(SceneNode node, GameComponent
     public SceneNode Node { get; } = node;
 
     /// <summary>
-    /// Gets the component instance that is requested to be added to the node.
+    /// Gets the kind of component to add, one of the <see cref="SceneComponents"/> constants.
     /// </summary>
-    public GameComponent Component { get; } = component;
+    public string Kind { get; } = kind;
 }

@@ -178,12 +178,12 @@ public sealed partial class SceneContentDemandTests
             if (withGeometry)
             {
                 var target = new MaterialSlotTarget(Geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
-                var geometry = new GeometryComponent { Name = "Geometry", Geometry = new(Geometry) };
-                geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = new(Material) });
+                var geometry = new GeometryComponent { Name = "Geometry", Geometry = Geometry };
+                geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = Material });
                 if (withTargetedOverride)
                 {
                     var lod = new GeometryOverrideTarget { LodIndex = 0, SubmeshIndex = 0 };
-                    lod.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = new(Targeted) });
+                    lod.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = Targeted });
                     geometry.TargetedOverrides.Add(lod);
                 }
 
@@ -200,7 +200,7 @@ public sealed partial class SceneContentDemandTests
             var built = this.Documents.NewScene();
             var node = new SceneNode(built) { Name = "Cube" };
             built.RootNodes.Add(node);
-            node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = new(new Uri("asset:///Engine/Generated/BasicShapes/Cube")) });
+            node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = new Uri("asset:///Engine/Generated/BasicShapes/Cube") });
             var document = await this.Documents.OpenAsync(built).ConfigureAwait(false);
             await Task.Yield();
             return (document, built);

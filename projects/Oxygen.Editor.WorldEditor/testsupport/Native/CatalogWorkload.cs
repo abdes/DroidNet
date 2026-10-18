@@ -12,7 +12,6 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Managed.Assets.Model;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
@@ -75,11 +74,11 @@ internal static class CatalogWorkload
             var geometry = new GeometryComponent
             {
                 Name = "Geometry",
-                Geometry = new AssetReference<GeometryAsset>(geometryUri),
+                Geometry = geometryUri,
             };
             var inventory = inventories[geometryUri];
             var target = new MaterialSlotTarget(geometryUri, inventory.Slots.Should().ContainSingle().Which.SlotId, inventory.LayoutRevision);
-            geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = new AssetReference<MaterialAsset>(new Uri("asset:///" + WorkloadMaterialPath(index % 2 == 0 ? 0 : index))) });
+            geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = new Uri("asset:///" + WorkloadMaterialPath(index % 2 == 0 ? 0 : index)) });
             _ = node.AddComponent(geometry);
             var position = new Vector3(index % 10, index / 10, 0);
             position *= 2;

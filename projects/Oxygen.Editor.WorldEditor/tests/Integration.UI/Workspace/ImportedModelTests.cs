@@ -155,7 +155,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         _ = ReadMaterialUri(node).Should().Be(material.IdentityUri);
         var assigned = await WaitForNodeAsync(fixture, node.Id, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.8f, 0.2f, 0.1f, 1)) < 0.001f, cancellationToken).ConfigureAwait(true);
         _ = assigned.MaterialKeys.Should().ContainSingle().Which.Should().Be(ImportedNativeKey(material));
-        _ = node.Components.OfType<GeometryComponent>().Single().Geometry!.Uri.Should().Be(geometry.IdentityUri);
+        _ = node.Components.OfType<GeometryComponent>().Single().Geometry.Should().Be(geometry.IdentityUri);
         await fixture.Document.History.UndoAsync(cancellationToken).ConfigureAwait(true);
         _ = node.Components.OfType<GeometryComponent>().Single().OverrideSlots.Should().BeEmpty();
         await fixture.Document.History.UndoAsync(cancellationToken).ConfigureAwait(true);
@@ -168,7 +168,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         await fixture.SaveAndReopenAsync(cancellationToken).ConfigureAwait(true);
         var reopened = await WaitForNodeAsync(fixture, node.Id, value => string.Equals(value.GeometryKey, selected.GeometryKey, StringComparison.Ordinal), cancellationToken).ConfigureAwait(true);
         _ = reopened.MaterialKeys.Should().Equal(assigned.MaterialKeys);
-        _ = fixture.Source.RootNodes[0].Components.OfType<GeometryComponent>().Single().Geometry!.Uri.Should().Be(geometry.IdentityUri);
+        _ = fixture.Source.RootNodes[0].Components.OfType<GeometryComponent>().Single().Geometry.Should().Be(geometry.IdentityUri);
         _ = ReadMaterialUri(fixture.Source.RootNodes[0]).Should().Be(material.IdentityUri);
     }
 

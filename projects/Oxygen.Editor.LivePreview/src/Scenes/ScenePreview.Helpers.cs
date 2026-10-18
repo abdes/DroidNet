@@ -247,16 +247,8 @@ internal sealed partial class ScenePreview
 
     private static void ApplyGeometry(WorldDispatch world, SceneNode node, GeometryComponent geometry)
     {
-        if (geometry.Geometry?.Uri != null)
-        {
-            var enginePath = GeometryPathMapper.ToEnginePath(geometry.Geometry.Uri);
-            world.Execute(new RuntimeSetGeometry(node.Id, enginePath));
-            ApplyMaterialOverrides(world, node, geometry);
-        }
-        else
-        {
-            world.Execute(new RuntimeDetachGeometry(node.Id));
-        }
+        world.Execute(new RuntimeSetGeometry(node.Id, GeometryPathMapper.ToEnginePath(geometry.Geometry)));
+        ApplyMaterialOverrides(world, node, geometry);
     }
 
     private static void ApplyMaterialOverrides(WorldDispatch world, SceneNode node, GeometryComponent geometry)
@@ -268,7 +260,7 @@ internal sealed partial class ScenePreview
                 GeometryPathMapper.ToEnginePath(slot.Target.GeometryUri),
                 slot.Target.SlotId,
                 slot.Target.LayoutRevision,
-                MaterialOverridePathMapper.ToEnginePath(slot.Material.Uri),
+                MaterialOverridePathMapper.ToEnginePath(slot.Material),
                 MaterialSlotAssignmentIntent.RetainedAssignment));
         }
     }

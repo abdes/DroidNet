@@ -35,7 +35,7 @@ public sealed class SceneRelocationTests
 
         await document.FollowRelocationAsync(Relocation(document, SampleScene.CubeGeometry, MovedCube), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = GeometryOf(document, SampleScene.Mesh).Geometry!.Uri.Should().Be(MovedCube);
+        _ = GeometryOf(document, SampleScene.Mesh).Geometry.Should().Be(MovedCube);
         SceneAssert.Changes(changes.Only(), new SceneChange.GeometryChanged(SampleScene.Mesh));
         _ = document.History.UndoStack.Should().BeEmpty("a relocation's undo is global, not the scene's");
         _ = document.IsDirty.Should().BeFalse();
@@ -72,7 +72,7 @@ public sealed class SceneRelocationTests
         replaced.ApplyRelocation(Relocation(document, SampleScene.CubeGeometry, MovedCube));
 
         _ = replaced.Scene.AllNodes.Single(node => node.Id == SampleScene.Mesh).Components.OfType<GeometryComponent>().Single()
-            .Geometry!.Uri.Should().Be(SampleScene.CubeGeometry);
+            .Geometry.Should().Be(SampleScene.CubeGeometry);
         _ = changes.Count.Should().Be(0);
     }
 

@@ -7,7 +7,6 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Assets;
@@ -21,8 +20,8 @@ public sealed record SetGeometry : ISceneEdit
 {
     /// <summary>Initializes a new instance of the <see cref="SetGeometry"/> class.</summary>
     /// <param name="nodes">The nodes whose geometry components change.</param>
-    /// <param name="geometry">The geometry asset; <see langword="null"/> is refused.</param>
-    public SetGeometry(IReadOnlyCollection<NodeId> nodes, Uri? geometry)
+    /// <param name="geometry">The geometry asset.</param>
+    public SetGeometry(IReadOnlyCollection<NodeId> nodes, Uri geometry)
     {
         ArgumentNullException.ThrowIfNull(nodes);
         this.Geometries = nodes.Distinct().ToDictionary(static id => id, _ => geometry);
@@ -31,24 +30,20 @@ public sealed record SetGeometry : ISceneEdit
     /// <summary>Initializes a new instance of the <see cref="SetGeometry"/> class, with one geometry per node.</summary>
     /// <param name="geometries">The geometry asset of each node.</param>
     [JsonConstructor]
-    public SetGeometry(IReadOnlyDictionary<NodeId, Uri?> geometries)
+    public SetGeometry(IReadOnlyDictionary<NodeId, Uri> geometries)
     {
         ArgumentNullException.ThrowIfNull(geometries);
         this.Geometries = geometries.ToDictionary();
     }
 
     /// <summary>Gets the geometry asset of each node.</summary>
-    public IReadOnlyDictionary<NodeId, Uri?> Geometries { get; }
+    public IReadOnlyDictionary<NodeId, Uri> Geometries { get; }
 
     /// <inheritdoc/>
     public string Label => "Edit Geometry";
 
     /// <inheritdoc/>
     public IReadOnlyCollection<NodeId> Targets => [.. this.Geometries.Keys];
-
-    /// <summary>Gets a value indicating whether the edit is a revert, which may restore a component that had no geometry yet.</summary>
-    /// <remarks>An edit people make must name a geometry.</remarks>
-    public bool Restores { get; init; }
 
     /// <inheritdoc/>
     SceneEditValidation ISceneEdit.Validate(SceneEditScope scope)
@@ -66,14 +61,13 @@ public sealed record SetGeometry : ISceneEdit
                 return SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.ComponentMissing, "The node has no geometry component.", id));
             }
 
+            // A deserialized edit can still carry null.
             if (geometry is null)
             {
-                if (!this.Restores)
-                {
-                    return SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.GeometryRequired, "A geometry component must reference a geometry asset. Remove the component to detach geometry.", id));
-                }
+                return SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.GeometryRequired, "A geometry component must reference a geometry asset. Remove the component to detach geometry.", id));
             }
-            else if (AssetReferenceRules.Check([scope.Resolve(geometry)], AssetFileTypes.Geometry) is { } error)
+
+            if (AssetReferenceRules.Check([scope.Resolve(geometry)], AssetFileTypes.Geometry) is { } error)
             {
                 return SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, error, id));
             }
@@ -86,18 +80,18 @@ public sealed record SetGeometry : ISceneEdit
     SceneEditApplication ISceneEdit.Apply(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var before = new Dictionary<NodeId, Uri?>();
+        var before = new Dictionary<NodeId, Uri>();
         foreach (var (id, captured) in this.Geometries)
         {
             var component = GeometryOf(scope, id)!;
             var geometry = scope.Resolve(captured);
-            if (component.Geometry?.Uri == geometry)
+            if (component.Geometry == geometry)
             {
                 continue;
             }
 
-            before[id] = component.Geometry?.Uri;
-            component.Geometry = geometry is null ? null : new AssetReference<GeometryAsset>(geometry);
+            before[id] = component.Geometry;
+            component.Geometry = geometry;
         }
 
         if (before.Count == 0)
@@ -109,8 +103,9 @@ public sealed record SetGeometry : ISceneEdit
         {
             scope.WarnIfDeleted([scope.Resolve(this.Geometries[id])], id);
         }
+
         return new SceneEditApplication.Applied(
-            new SetGeometry(before) { Restores = true },
+            new SetGeometry(before),
             [.. before.Keys.Select(static id => new SceneChange.GeometryChanged(id))]);
     }
 

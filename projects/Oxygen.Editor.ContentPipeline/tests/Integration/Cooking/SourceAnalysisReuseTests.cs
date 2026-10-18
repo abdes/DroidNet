@@ -7,7 +7,6 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
@@ -34,7 +33,7 @@ public sealed class SourceAnalysisReuseTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
         });
         second.RootNodes.Add(node);
         var source = File.Create(Path.Combine(workspace.Root, "Content", "Scenes", "Second.oscene.json"));

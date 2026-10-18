@@ -1,15 +1,16 @@
-
 # Geometry Component Property Editor (Design)
 
 ## Goal
 
-Implement a **property editor entry** for the **Geometry** component in the World Editor Inspector.
+Implement a **property editor entry** for the **Geometry** component in the
+World Editor Inspector.
 
 The editor exposes a single editable property:
 
 - **Asset**: a geometry asset reference.
 
-The UX must match existing inspector patterns (e.g., Transform editor) and integrate with:
+The UX must match existing inspector patterns (e.g., Transform editor) and
+integrate with:
 
 - Multi-selection (mixed value handling)
 - Undo/redo
@@ -23,13 +24,17 @@ This document is implementation guidance only (no code).
 
 ### Location
 
-- The editor appears in the Inspector’s property editor list for a selected SceneNode **only if** the node has a Geometry component.
-- Rendered by the existing Inspector editors list (the bottom-pane `ItemsRepeater`) using the same patterns as Transform (e.g., `PropertiesExpander` + `PropertyCard`).
+- The editor appears in the Inspector’s property editor list for a selected
+  SceneNode **only if** the node has a Geometry component.
+- Rendered by the existing Inspector editors list (the bottom-pane
+  `ItemsRepeater`) using the same patterns as Transform (e.g.,
+  `PropertiesExpander` + `PropertyCard`).
 
 ### Editor Header
 
 - **Header**: `Geometry`
-- **Description**: brief sentence describing that the component defines renderable geometry by referencing a mesh/geometry asset.
+- **Description**: brief sentence describing that the component defines
+  renderable geometry by referencing a mesh/geometry asset.
 
 ### Property: Asset
 
@@ -51,31 +56,37 @@ Single property row/card labeled `Asset`.
 **When multiple nodes are selected**:
 
 - If all selected nodes have the same geometry asset: show that asset as normal.
-- If geometry assets differ across selection: show an indeterminate/mixed display:
+- If geometry assets differ across selection: show an indeterminate/mixed
+  display:
   - Thumbnail: indeterminate placeholder.
   - Button label: `Mixed`.
 
 ### Asset Picker Flyout
 
-When the SplitButton is clicked, open a flyout containing an `ItemsView` that lists all pickable geometry assets.
+When the SplitButton is clicked, open a flyout containing an `ItemsView` that
+lists all pickable geometry assets.
 
 **Grouping**
 
 - Assets are presented in **two groups**, in this order:
 
- 1. `Engine`
- 2. `Content`
+1.  `Engine`
+2.  `Content`
 
 **Flat list inside each group**
 
 - No nested folders UI.
 - Each item layout (left → right):
-  - **Thumbnail**: square preview at the left. Use an image preview when available, otherwise a themed placeholder. Selected items show the same highlight/border treatment used elsewhere in the UI.
+  - **Thumbnail**: square preview at the left. Use an image preview when
+    available, otherwise a themed placeholder. Selected items show the same
+    highlight/border treatment used elsewhere in the UI.
   - **Text column**: two stacked lines to the right of the thumbnail:
     - **Primary (single-line)**: Asset name (prominent). Example: `SM_Cube`.
-    - **Secondary (single-line, muted)**: asset type descriptor. Example: `Static Mesh`.
+    - **Secondary (single-line, muted)**: asset type descriptor. Example:
+      `Static Mesh`.
 
-- The full path `/Engine/...` or `/Content/...` is available as a tooltip (not shown inline).
+- The full path `/Engine/...` or `/Content/...` is available as a tooltip (not
+  shown inline).
 
 Examples:
 
@@ -86,14 +97,16 @@ Examples:
 **Selection behavior**
 
 - Single selection.
-- Selecting an item immediately applies it to the Geometry component on the current selection.
+- Selecting an item immediately applies it to the Geometry component on the
+  current selection.
 - Flyout closes on selection.
 
 **Visual constraints**
 
 - Use existing design system resources and theme primitives.
 - Do not introduce new custom colors, fonts, or shadows.
-- If a “thumbnail” cannot be a real preview image yet, use existing icon/placeholder approaches rather than inventing new styling.
+- If a “thumbnail” cannot be a real preview image yet, use existing
+  icon/placeholder approaches rather than inventing new styling.
 
 ---
 
@@ -101,7 +114,8 @@ Examples:
 
 ### Asset Reference Value
 
-The Geometry component stores the asset as an `AssetReference<GeometryAsset>` with a URI (`asset:///{MountPoint}/{Path}`).
+The Geometry component stores the asset as its URI
+(`asset:///{MountPoint}/{Path}`), which is always set.
 
 The editor treats **Asset** as the editable value:
 
@@ -121,7 +135,8 @@ Each list entry needs:
 - `Uri: Uri`
 - `Group: Engine | Content`
 - `DisplayPath: string` (string shown in UI: `/Engine/...` or `/Content/...`)
-- `ThumbnailModel: object?` (whatever the existing Thumbnail control binds to; can be a glyph/icon model until real previews exist)
+- `ThumbnailModel: object?` (whatever the existing Thumbnail control binds to;
+  can be a glyph/icon model until real previews exist)
 
 ### Grouped Source
 
@@ -150,28 +165,34 @@ Mapping to display path:
 
 - `asset:///Engine/Generated/...` → `/Engine/...`
 
-Rationale: the UX requirement says group is named `Engine`; internally the mount point is `Engine` and the path starts with `Generated`.
+Rationale: the UX requirement says group is named `Engine`; internally the mount
+point is `Engine` and the path starts with `Generated`.
 
 ### Content Group (Project)
 
-The formal `Content` asset resolver is currently stubbed, so the picker must rely on existing project indexing.
+The formal `Content` asset resolver is currently stubbed, so the picker must
+rely on existing project indexing.
 
 Preferred current source:
 
-- Content browser indexing service (`AssetsIndexingService`) which produces `GameAsset` entries.
+- Content browser indexing service (`AssetsIndexingService`) which produces
+  `GameAsset` entries.
 
 Filtering:
 
-- Include only geometry/mesh assets recognized by the system (currently `AssetType.Mesh` based on file extension like `.MESH`).
+- Include only geometry/mesh assets recognized by the system (currently
+  `AssetType.Mesh` based on file extension like `.MESH`).
 
 URI mapping:
 
 - Convert a `GameAsset` into an asset URI under `Content`.
-- The exact mapping must be consistent with how the rest of the editor expects `asset:///Content/...` URIs to be formatted.
+- The exact mapping must be consistent with how the rest of the editor expects
+  `asset:///Content/...` URIs to be formatted.
 
 Display path:
 
-- Content asset at relative path `Models/Hero.mesh` (example) displays as `/Content/Models/Hero` (extension handling depends on URI convention).
+- Content asset at relative path `Models/Hero.mesh` (example) displays as
+  `/Content/Models/Hero` (extension handling depends on URI convention).
 
 Open question (must be decided during implementation):
 
@@ -254,33 +275,42 @@ Call this after applying the new geometry and after undo/redo restores.
 
 ## Engine Sync Expectations / Constraints
 
-Current engine sync derives mesh type by parsing the last segment of the geometry URI path.
+Current engine sync derives mesh type by parsing the last segment of the
+geometry URI path.
 
 Implications:
 
-- URIs selected by the picker must end with a segment matching an engine-recognized primitive/mesh type.
+- URIs selected by the picker must end with a segment matching an
+  engine-recognized primitive/mesh type.
 - For Engine group primitives, this aligns with `Cube`, `Sphere`, etc.
-- For Content assets, if the engine expects a different identifier than the file name, additional mapping may be required.
+- For Content assets, if the engine expects a different identifier than the file
+  name, additional mapping may be required.
 
 Open question:
 
-- How Content meshes are represented in the engine today (primitive-only vs. import pipeline). If only primitives are supported, Content group may be informational until runtime support exists.
+- How Content meshes are represented in the engine today (primitive-only vs.
+  import pipeline). If only primitives are supported, Content group may be
+  informational until runtime support exists.
 
 ---
 
 ## Thumbnail Strategy
 
-The requirement mandates thumbnails, but real geometry previews may not be available yet.
+The requirement mandates thumbnails, but real geometry previews may not be
+available yet.
 
 Phased approach:
 
-1. **MVP**: Use existing thumbnail control with a template that renders a glyph/icon placeholder per item.
+1. **MVP**: Use existing thumbnail control with a template that renders a
+   glyph/icon placeholder per item.
 
 - Must remain within theme resources.
 
-1. **Future**: Replace thumbnail content with actual preview rendering once asset previews exist.
+1. **Future**: Replace thumbnail content with actual preview rendering once
+   asset previews exist.
 
-The design should keep the thumbnail binding abstract (`ThumbnailModel`) so implementation can swap rendering later.
+The design should keep the thumbnail binding abstract (`ThumbnailModel`) so
+implementation can swap rendering later.
 
 ---
 
@@ -290,15 +320,19 @@ The workspace uses a child container and a viewmodel-to-view converter.
 
 Requirements for integration:
 
-- Register the new Geometry editor ViewModel and View in the workspace child container.
-- Add Geometry component type to the inspector’s property editor factory map so it appears when applicable.
+- Register the new Geometry editor ViewModel and View in the workspace child
+  container.
+- Add Geometry component type to the inspector’s property editor factory map so
+  it appears when applicable.
 
 ---
 
 ## Error Handling & Edge Cases
 
-- If a selected node has a Geometry component but its `Geometry.Uri` is null: treat as `None`.
-- If the picker cannot enumerate Content assets (no project loaded, indexing unavailable):
+- If a selected node has a Geometry component but its `Geometry.Uri` is null:
+  treat as `None`.
+- If the picker cannot enumerate Content assets (no project loaded, indexing
+  unavailable):
   - Still show Engine group.
   - Content group can be empty.
 - If an asset URI is malformed or unsupported:
@@ -317,8 +351,10 @@ Requirements for integration:
 
 ## Implementation Checklist (Non-Code)
 
-- UI: PropertiesExpander section `Geometry` with a single `PropertyCard` `Asset`.
-- ViewModel: multi-selection mixed value support, selected asset binding, command to apply a picked item.
+- UI: PropertiesExpander section `Geometry` with a single `PropertyCard`
+  `Asset`.
+- ViewModel: multi-selection mixed value support, selected asset binding,
+  command to apply a picked item.
 - Asset list: build grouped items source with Engine + Content.
 - Messaging: emit geometry-applied message with old/new snapshots.
 - Host: handle message to record UndoRedo ops and call engine sync.
@@ -328,20 +364,22 @@ Requirements for integration:
 
 ## Open Questions
 
-1. Content URI convention: should `.mesh` extension be kept or stripped?
-=> Kept
+1. Content URI convention: should `.mesh` extension be kept or stripped? => Kept
 
-2. Runtime support: can the engine attach Content meshes today, or is it currently primitives-only?
-=> Only Engine basic shapes can be attached
+2. Runtime support: can the engine attach Content meshes today, or is it
+   currently primitives-only? => Only Engine basic shapes can be attached
 
-3. Thumbnail fidelity: is there an existing asset thumbnail provider for meshes, or should we standardize a glyph placeholder until previews exist?
-=> Placeholder for now.
+3. Thumbnail fidelity: is there an existing asset thumbnail provider for meshes,
+   or should we standardize a glyph placeholder until previews exist? =>
+   Placeholder for now.
 
 ## Tasks
 
 ### 1) Create the Geometry property editor view (UI shell)
 
-- Add a new **property editor view** `GeometryView` (rendered by the existing Inspector editors list) using the existing `PropertiesExpander` + single `PropertyCard` pattern.
+- Add a new **property editor view** `GeometryView` (rendered by the existing
+  Inspector editors list) using the existing `PropertiesExpander` + single
+  `PropertyCard` pattern.
 - PropertyCard label: `Asset`.
 - Content: left thumbnail + `SplitButton` that opens a flyout.
 
@@ -392,11 +430,14 @@ Requirements for integration:
 
 ### 5) Populate Content group (discoverable, not attachable yet)
 
-- Use `AssetsIndexingService` output to enumerate project `AssetType.Mesh` entries.
-- Create URIs in the `asset:///Content/...` form and **keep the `.mesh` extension**.
+- Use `AssetsIndexingService` output to enumerate project `AssetType.Mesh`
+  entries.
+- Create URIs in the `asset:///Content/...` form and **keep the `.mesh`
+  extension**.
 - Include them under the `Content` group, but mark items:
   - `IsEnabled = false`
-  - Optional tooltip/reason text: `Not supported yet` (minimal, no extra UI beyond a tooltip).
+  - Optional tooltip/reason text: `Not supported yet` (minimal, no extra UI
+    beyond a tooltip).
 
   - **Status:** Completed (items added, marked disabled)
 
@@ -408,7 +449,8 @@ Requirements for integration:
   - Right text column:
     - Line 1: name
     - Line 2 (muted): `Static Mesh`
-- Full path `/Engine/...` or `/Content/...` is available as tooltip (not inline).
+- Full path `/Engine/...` or `/Content/...` is available as tooltip (not
+  inline).
 
 - **Status:** Completed
 
@@ -438,9 +480,12 @@ Requirements for integration:
 
 ### 9) Hook into the inspector host (SceneNodeEditorViewModel)
 
-- Update [Oxygen.Editor.World/src/Inspector/SceneNodeEditorViewModel.cs](Oxygen.Editor.World/src/Inspector/SceneNodeEditorViewModel.cs):
-  - Add `GeometryComponent` to `AllPropertyEditorFactories` so the section appears.
-  - Register for `SceneNodeGeometryAppliedMessage` in the constructor (mirroring Transform).
+- Update
+  [Oxygen.Editor.World/src/Inspector/SceneNodeEditorViewModel.cs](Oxygen.Editor.World/src/Inspector/SceneNodeEditorViewModel.cs):
+  - Add `GeometryComponent` to `AllPropertyEditorFactories` so the section
+    appears.
+  - Register for `SceneNodeGeometryAppliedMessage` in the constructor (mirroring
+    Transform).
   - Implement an `OnGeometryApplied(...)` handler.
 
   - **Status:** Completed
@@ -452,7 +497,8 @@ Requirements for integration:
   - Add per-node undo operation records storing old/new URIs.
 
 - Implement undo/redo handlers (pattern-match Transform implementation):
-  - Restore old URI → call `sceneEngineSync.AttachGeometryAsync(node, geometryComponent)`.
+  - Restore old URI → call
+    `sceneEngineSync.AttachGeometryAsync(node, geometryComponent)`.
   - Reapply new URI → call `sceneEngineSync.AttachGeometryAsync(...)`.
 
   - **Status:** Completed

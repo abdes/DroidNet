@@ -11,7 +11,6 @@ using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -41,7 +40,7 @@ public sealed class BuiltinCookTests
         var geometry = new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
         };
         geometry.OverrideSlots.Add(await CreateBuiltinMaterialSlotAsync(
             workspace, geometry, materialUri, this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -80,7 +79,7 @@ public sealed class BuiltinCookTests
         foreach (var definition in catalog.AuthoringGeometries)
         {
             var node = new SceneNode(workspace.Scene) { Name = definition.Name };
-            _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = new AssetReference<GeometryAsset>(definition.AssetUri) });
+            _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = definition.AssetUri });
             workspace.Scene.RootNodes.Add(node);
         }
 

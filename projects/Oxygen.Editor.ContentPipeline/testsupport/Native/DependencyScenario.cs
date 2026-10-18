@@ -5,7 +5,6 @@
 using System.Text.Json.Nodes;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Managed.Assets.Model;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
@@ -14,7 +13,7 @@ internal static class DependencyScenario
     internal static void AddGeometryNode(CookWorkspace workspace, Uri uri, string name)
     {
         var node = new SceneNode(workspace.Scene) { Name = name };
-        _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = new AssetReference<GeometryAsset>(uri) });
+        _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = uri });
         workspace.Scene.RootNodes.Add(node);
     }
 

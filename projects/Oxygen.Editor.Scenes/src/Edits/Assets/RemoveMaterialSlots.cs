@@ -59,7 +59,7 @@ public sealed record RemoveMaterialSlots : ISceneEdit
             var slots = geometry.OverrideSlots
                 .Select((slot, index) => (Slot: slot as MaterialsSlot, Index: index))
                 .Where(pair => pair.Slot is { } slot && targets.Any(target => SetMaterialSlot.SameSlot(slot.Target, target)))
-                .Select(static pair => new RestoredMaterialSlot(new MaterialSlotAssignment(pair.Slot!.Target, pair.Slot.Material.Uri), pair.Index))
+                .Select(static pair => new RestoredMaterialSlot(new MaterialSlotAssignment(pair.Slot!.Target, pair.Slot.Material), pair.Index))
                 .ToList();
             foreach (var slot in Enumerable.Reverse(slots))
             {

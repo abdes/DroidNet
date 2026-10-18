@@ -161,19 +161,19 @@ internal static class SceneTestSupport
         var geometry = new GeometryComponent
         {
             Name = "Hero Mesh",
-            Geometry = new("asset:///Content/Meshes/Hero.geometry"),
+            Geometry = new Uri("asset:///Content/Meshes/Hero.geometry"),
         };
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
             Target = new MaterialSlotTarget(new Uri("asset:///Content/Meshes/Hero.geometry"), Guid.Parse("20000000-0000-0000-0000-000000000001"), "rev-1"),
-            Material = new(new Uri("asset:///Content/Materials/HeroSkin.omat.json")),
+            Material = new Uri("asset:///Content/Materials/HeroSkin.omat.json"),
         });
 
         var targetedOverride = new GeometryOverrideTarget { LodIndex = 0, SubmeshIndex = 1 };
         targetedOverride.OverrideSlots.Add(new MaterialsSlot
         {
             Target = new MaterialSlotTarget(new Uri("asset:///Content/Meshes/Hero.geometry"), Guid.Parse("20000000-0000-0000-0000-000000000002"), "rev-1"),
-            Material = new(new Uri("asset:///Content/Materials/HeroArmor.omat.json")),
+            Material = new Uri("asset:///Content/Materials/HeroArmor.omat.json"),
         });
         geometry.TargetedOverrides.Add(targetedOverride);
         return geometry;

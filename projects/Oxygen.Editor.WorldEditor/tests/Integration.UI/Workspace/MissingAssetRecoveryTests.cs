@@ -54,7 +54,7 @@ public sealed partial class MissingAssetRecoveryTests : DroidNet.Tests.VisualUse
         fixture.Results.Clear();
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
         await AssertMissingGeometryFailureAsync(fixture, node.Id, timeout.Token).ConfigureAwait(true);
-        _ = fixture.Source.RootNodes.Single().Components.OfType<GeometryComponent>().Single().Geometry!.Uri.Should().Be(missing);
+        _ = fixture.Source.RootNodes.Single().Components.OfType<GeometryComponent>().Single().Geometry.Should().Be(missing);
         _ = (await fixture.ReadNodeAsync(node.Id, timeout.Token).ConfigureAwait(true)).GeometryKey.Should().BeEmpty();
     });
 

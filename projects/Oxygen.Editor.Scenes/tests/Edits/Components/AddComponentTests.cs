@@ -22,7 +22,7 @@ public sealed class AddComponentTests
     public static IEnumerable<TestDataRow<DuplicateCase>> SecondOfAFamily =>
     [
         Row("TransformOnB", SampleScene.B, new TransformData { Name = "Transform" }),
-        Row("GeometryOnMesh", SampleScene.Mesh, new GeometryComponentData { Name = "Geometry", GeometryUri = SampleScene.SphereGeometry.ToString() }),
+        Row("GeometryOnMesh", SampleScene.Mesh, new GeometryComponentData { Name = "Geometry", GeometryUri = SampleScene.SphereGeometry }),
         Row("OrthographicCameraOnCam", SampleScene.Cam, new OrthographicCameraData { Name = "Camera", AspectMode = CameraAspectMode.Auto }),
         Row("SpotLightOnLamp", SampleScene.Lamp, new SpotLightData { Name = "Light" }),
         Row("DirectionalLightOnSun", SampleScene.Sun, new DirectionalLightData { Name = "Light" }),

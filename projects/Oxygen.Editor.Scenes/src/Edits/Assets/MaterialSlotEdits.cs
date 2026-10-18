@@ -83,10 +83,10 @@ public static class MaterialSlotEdits
         var geometries = nodes.Distinct()
             .Select(id => (Id: id, Geometry: scene.AllNodes.FirstOrDefault(node => node.Id == id)?.Components.OfType<GeometryComponent>().FirstOrDefault()))
             .Where(static pair => pair.Geometry is not null)
-            .Select(static pair => (pair.Id, Uri: pair.Geometry!.Geometry?.Uri, Slots: pair.Geometry.OverrideSlots.OfType<MaterialsSlot>().Select(static slot => slot.Target).ToList()))
+            .Select(static pair => (pair.Id, Uri: pair.Geometry!.Geometry, Slots: pair.Geometry.OverrideSlots.OfType<MaterialsSlot>().Select(static slot => slot.Target).ToList()))
             .ToList();
         var read = new Dictionary<Uri, GeometryMaterialSlotMetadata>();
-        foreach (var uri in geometries.Select(static pair => pair.Uri).OfType<Uri>().Distinct())
+        foreach (var uri in geometries.Select(static pair => pair.Uri).Distinct())
         {
             try
             {
@@ -103,7 +103,7 @@ public static class MaterialSlotEdits
 
         var unresolved = geometries
             .Select(pair => (pair.Id, Slots: pair.Slots.Where(target => target.GeometryUri != pair.Uri
-                || (read.GetValueOrDefault(pair.Uri!) is { } inventory && inventory.Slots.All(slot => slot.SlotId != target.SlotId))).ToArray()))
+                || (read.GetValueOrDefault(pair.Uri) is { } inventory && inventory.Slots.All(slot => slot.SlotId != target.SlotId))).ToArray()))
             .Where(static pair => pair.Slots.Length > 0)
             .ToDictionary(static pair => pair.Id, static pair => (IReadOnlyList<MaterialSlotTarget>)pair.Slots);
         return new MaterialSlotEdit(unresolved.Count == 0 ? null : new RemoveMaterialSlots(unresolved), Error: null);

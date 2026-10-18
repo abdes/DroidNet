@@ -26,8 +26,7 @@ and change the model; World knows none of them.
 
 ```mermaid
 flowchart BT
-    core["Oxygen.Managed.Core<br/>identities, observable base"]
-    assets["Oxygen.Managed.Assets<br/>asset references"]
+    core["Oxygen.Managed.Core<br/>identities, asset URIs, observable base"]
     world["<b>Oxygen.Editor.World</b><br/>scene model"]
     scenes["Oxygen.Editor.Scenes<br/>documents, edits, layout"]
     cook["Oxygen.Editor.ContentPipeline<br/>cooking"]
@@ -35,7 +34,6 @@ flowchart BT
     ui["Oxygen.Editor.WorldEditor<br/>Explorer, inspector, viewport"]
 
     core --> world
-    assets --> world
     world --> scenes
     world --> cook
     world --> preview
@@ -212,7 +210,7 @@ and knows its `Node`. The transform reports `IsLocked`, so it cannot be removed.
 | Component                                                                | Holds                                                                                                      |
 | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
 | `TransformComponent`                                                     | Local position, rotation and scale                                                                         |
-| `GeometryComponent`                                                      | The geometry asset reference, component-level slots and slots targeted at one LOD or submesh               |
+| `GeometryComponent`                                                      | The geometry asset (always set), component-level slots and slots targeted at one LOD or submesh            |
 | `PerspectiveCamera`, `OrthographicCamera`                                | Clip planes and exposure (aperture, shutter rate, ISO), plus field of view or orthographic size            |
 | `DirectionalLightComponent`, `PointLightComponent`, `SpotLightComponent` | Color, intensity, shadows and exposure compensation; a directional light can drive one atmosphere light    |
 | `LocalFogVolumeComponent`                                                | Fog extinction, falloff, albedo, emission and sort priority                                                |
@@ -220,6 +218,20 @@ and knows its `Node`. The transform reports `IsLocked`, so it cannot be removed.
 
 `LightValidation` checks light values and the scene-wide light rules: at most
 one light per node and one directional light per atmosphere light.
+
+#### Links to assets
+
+A scene links to an asset by its URI, an absolute `asset:` URI such as
+`asset:///Content/Geometry/Crate.ogeo`. `GeometryComponent.Geometry`,
+`MaterialsSlot.Material` and `MaterialSlotTarget.GeometryUri` are required and
+check the form when set (`AssetUris.EnsureAssetUri`), so neither code nor a file
+can put a missing link, a file path or a web address in a scene. A link to an
+asset that does not exist is still a valid link: Live Preview and the cook
+report the missing asset.
+
+The scene holds no facts about the linked asset. Code that needs them asks the
+module that owns the asset's family, by the URI: the asset feed for its kind,
+files and availability, and the content pipeline for a mesh's material slots.
 
 ### Override slots
 
@@ -403,11 +415,15 @@ the cook and the tests use it.
 
 ### What hydration rejects
 
-| Problem                                          | Result                                                                           |
-| ------------------------------------------------ | -------------------------------------------------------------------------------- |
-| A node without exactly one transform             | `JsonException`                                                                  |
-| Lights that fail `LightValidation`               | `ArgumentException` when hydrating, `InvalidOperationException` when dehydrating |
-| Component identities empty or repeated in a node | Not rejected: they are replaced with new identities                              |
+| Problem                                                                     | Result                                                                           |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| A node without exactly one transform                                        | `JsonException`                                                                  |
+| Lights that fail `LightValidation`                                          | `ArgumentException` when hydrating, `InvalidOperationException` when dehydrating |
+| A geometry or material link that is missing or not an absolute `asset:` URI | `JsonException`                                                                  |
+| Component identities empty or repeated in a node                            | Not rejected: they are replaced with new identities                              |
+
+`Scene.Hydrate` builds every node before replacing any, so data it rejects
+leaves the scene as it was.
 
 ## Changing a scene
 
@@ -450,8 +466,8 @@ in their own module.
 
 ## Dependencies
 
-- `Oxygen.Managed.Core`: the identity types and `ScopedObservableObject`.
-- `Oxygen.Managed.Assets`: asset references and asset URIs.
+- `Oxygen.Managed.Core`: the identity types, `AssetUris` and
+  `ScopedObservableObject`. World references no other project.
 
 ## Tests
 

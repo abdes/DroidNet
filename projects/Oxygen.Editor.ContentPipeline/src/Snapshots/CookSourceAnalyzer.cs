@@ -184,8 +184,8 @@ internal sealed partial class CookSourceAnalyzer(
             // inside the file until it is saved again.
             scene.Name = Path.GetFileName(input.SourceAbsolutePath)[..^AssetFileTypes.SceneDescriptor.Length];
             var hasBuiltins = scene.AllNodes.SelectMany(static node => node.Components.OfType<GeometryComponent>())
-                .Any(static geometry => geometry.Geometry?.Uri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase) == true
-                    || geometry.OverrideSlots.OfType<Oxygen.Editor.World.Slots.MaterialsSlot>().Any(static slot => slot.Material.Uri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase)));
+                .Any(static geometry => geometry.Geometry.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase)
+                    || geometry.OverrideSlots.OfType<Oxygen.Editor.World.Slots.MaterialsSlot>().Any(static slot => slot.Material.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase)));
             if (hasBuiltins && this.catalog is null)
             {
                 this.catalog = await ((IBuiltinGeometryCatalogProvider)native).GetBuiltinGeometryCatalogAsync(this.root, AssetUris.ContentMountPoint, cancellationToken, artifacts).ConfigureAwait(false);

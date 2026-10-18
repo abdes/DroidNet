@@ -9,7 +9,6 @@ using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Nodes;
@@ -30,7 +29,7 @@ public static class SceneNodeTemplates
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri($"BasicShapes/{name}")),
+            Geometry = AssetUris.BuildGeneratedUri($"BasicShapes/{name}"),
         });
         return Finish(node, placement);
     }

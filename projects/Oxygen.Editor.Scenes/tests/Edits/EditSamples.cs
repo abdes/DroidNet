@@ -268,7 +268,7 @@ public static class EditSamples
                 {
                     Id = AddedGeometry,
                     Name = "Geometry",
-                    GeometryUri = SampleScene.SphereGeometry.ToString(),
+                    GeometryUri = SampleScene.SphereGeometry,
                     OverrideSlots = slots,
                 };
                 return new TamperedEdit(
@@ -278,7 +278,7 @@ public static class EditSamples
                         GeometryUri = SampleScene.SphereGeometry,
                         SlotId = SampleScene.CubeSlot,
                         LayoutRevision = SampleScene.CubeLayoutRevision,
-                        MaterialUri = SampleScene.RedMaterial.ToString(),
+                        MaterialUri = SampleScene.RedMaterial,
                     }));
             },
         };
@@ -511,7 +511,7 @@ public static class EditSamples
             Components =
             [
                 new TransformData { Id = SceneBuilder.TransformId(InsertedNode), Name = "Transform" },
-                new GeometryComponentData { Id = InsertedGeometry, Name = "Geometry", GeometryUri = SampleScene.SphereGeometry.ToString() },
+                new GeometryComponentData { Id = InsertedGeometry, Name = "Geometry", GeometryUri = SampleScene.SphereGeometry },
             ],
         };
 

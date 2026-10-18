@@ -6,7 +6,6 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Assets;
@@ -70,11 +69,11 @@ public sealed record RestoreMaterialSlots : ISceneEdit
             var geometry = GeometryOf(scope, id)!;
             foreach (var slot in slots)
             {
-                var target = slot.Assignment.Target with { GeometryUri = scope.Resolve(slot.Assignment.Target.GeometryUri)! };
+                var target = slot.Assignment.Target with { GeometryUri = scope.Resolve(slot.Assignment.Target.GeometryUri) };
 
                 // A removed override always named a material.
                 var material = scope.Resolve(slot.Assignment.Material) ?? throw new InvalidOperationException("A restored material override names no material.");
-                geometry.OverrideSlots.Insert(slot.Index, new MaterialsSlot { Target = target, Material = new AssetReference<MaterialAsset>(material) });
+                geometry.OverrideSlots.Insert(slot.Index, new MaterialsSlot { Target = target, Material = material });
             }
         }
 

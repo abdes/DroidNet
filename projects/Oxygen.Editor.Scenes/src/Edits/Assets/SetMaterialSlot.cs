@@ -8,7 +8,6 @@ using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Assets;
@@ -69,7 +68,7 @@ public sealed record SetMaterialSlot : ISceneEdit
             }
 
             var geometries = scope.FindNode(id)?.Components.OfType<GeometryComponent>().ToList() ?? [];
-            if (geometries.Count != 1 || geometries[0].Geometry?.Uri != assignment.Target.GeometryUri)
+            if (geometries.Count != 1 || geometries[0].Geometry != assignment.Target.GeometryUri)
             {
                 return SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.MaterialSlotStale, "The node no longer uses the geometry that owns this slot.", id));
             }
@@ -94,7 +93,7 @@ public sealed record SetMaterialSlot : ISceneEdit
             var assignment = Resolve(scope, captured);
             var geometry = scope.FindNode(id)!.Components.OfType<GeometryComponent>().Single();
             var existing = geometry.OverrideSlots.OfType<MaterialsSlot>().SingleOrDefault(slot => SameSlot(slot.Target, assignment.Target));
-            var old = new MaterialSlotAssignment(existing?.Target ?? assignment.Target, existing?.Material.Uri);
+            var old = new MaterialSlotAssignment(existing?.Target ?? assignment.Target, existing?.Material);
             if (old == assignment || (old.Material is null && assignment.Material is null))
             {
                 continue;
@@ -124,7 +123,7 @@ public sealed record SetMaterialSlot : ISceneEdit
         => left.GeometryUri == right.GeometryUri && left.SlotId == right.SlotId;
 
     private static MaterialSlotAssignment Resolve(SceneEditScope scope, MaterialSlotAssignment assignment)
-        => new(assignment.Target with { GeometryUri = scope.Resolve(assignment.Target.GeometryUri)! }, scope.Resolve(assignment.Material));
+        => new(assignment.Target with { GeometryUri = scope.Resolve(assignment.Target.GeometryUri) }, scope.Resolve(assignment.Material));
 
     private static void Assign(GeometryComponent geometry, MaterialsSlot? existing, MaterialSlotAssignment assignment)
     {
@@ -134,12 +133,12 @@ public sealed record SetMaterialSlot : ISceneEdit
         }
         else if (existing is null)
         {
-            geometry.OverrideSlots.Add(new MaterialsSlot { Target = assignment.Target, Material = new AssetReference<MaterialAsset>(assignment.Material) });
+            geometry.OverrideSlots.Add(new MaterialsSlot { Target = assignment.Target, Material = assignment.Material });
         }
         else
         {
             existing.Target = assignment.Target;
-            existing.Material = new AssetReference<MaterialAsset>(assignment.Material);
+            existing.Material = assignment.Material;
         }
     }
 
@@ -148,7 +147,7 @@ public sealed record SetMaterialSlot : ISceneEdit
         var valid = target.SlotId != Guid.Empty
             && target.LayoutRevision is { Length: 64 }
             && target.LayoutRevision.All(Uri.IsHexDigit)
-            && AssetReferenceRules.IsAssetUri(target.GeometryUri)
+            && AssetUris.IsAssetUri(target.GeometryUri)
             && target.GeometryUri.Query.Length == 0
             && target.GeometryUri.Fragment.Length == 0;
         return valid ? null : SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, "Select an existing material slot of a geometry asset.");

@@ -20,7 +20,7 @@ internal sealed class GeometryFixture : IDisposable
         this.Geometry = new()
         {
             Name = "Geometry",
-            Geometry = new(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
         };
         _ = this.Authoring.Node.AddComponent(this.Geometry);
         var geometry = CreateStatusAsset(0) with

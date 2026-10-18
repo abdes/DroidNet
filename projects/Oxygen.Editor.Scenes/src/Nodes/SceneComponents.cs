@@ -7,7 +7,6 @@ using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Nodes;
@@ -66,7 +65,7 @@ public static class SceneComponents
             Geometry => new GeometryComponent
             {
                 Name = "Geometry",
-                Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+                Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
             },
             PerspectiveCamera => new PerspectiveCamera { Name = "Perspective Camera" },
             OrthographicCamera => new OrthographicCamera { Name = "Orthographic Camera" },

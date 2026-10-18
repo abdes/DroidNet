@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Scenes.Edits.Components;
+using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -174,30 +175,18 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     /// </summary>
     public IMenuSource AddComponentMenu => field ??= this.BuildAddComponentMenu();
 
-    private static GameComponent? CreateComponentFromId(string typeId)
+    // Scenes creates the component, with its defaults, from its kind.
+    private static string? KindFromId(string typeId)
         => typeId switch
         {
-            "Geometry" => new GeometryComponent { Name = "Geometry" },
-            "PerspectiveCamera" => new PerspectiveCamera { Name = "Perspective Camera" },
-            "OrthographicCamera" => new OrthographicCamera { Name = "Orthographic Camera" },
-            "DirectionalLight" => new DirectionalLightComponent
-            {
-                Name = "Directional Light",
-            },
-            "PointLight" => new PointLightComponent
-            {
-                Name = "Point Light",
-                LuminousFluxLumens = 1_600f,
-                Range = 10f,
-            },
-            "SpotLight" => new SpotLightComponent
-            {
-                Name = "Spot Light",
-                LuminousFluxLumens = 1_600f,
-                Range = 15f,
-            },
-            "LocalFogVolume" => new LocalFogVolumeComponent { Name = "Local Fog Volume" },
-            "Scripting" => new ScriptingComponent { Name = ScriptingComponent.DefaultName },
+            "Geometry" => SceneComponents.Geometry,
+            "PerspectiveCamera" => SceneComponents.PerspectiveCamera,
+            "OrthographicCamera" => SceneComponents.OrthographicCamera,
+            "DirectionalLight" => SceneComponents.DirectionalLight,
+            "PointLight" => SceneComponents.PointLight,
+            "SpotLight" => SceneComponents.SpotLight,
+            "LocalFogVolume" => SceneComponents.LocalFogVolume,
+            "Scripting" => SceneComponents.Scripting,
             _ => null,
         };
 
@@ -305,15 +294,14 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             return;
         }
 
-        var comp = CreateComponentFromId(typeId);
-        if (comp is null)
+        if (KindFromId(typeId) is not { } kind)
         {
             this.LogAddComponentFactoryFailed(typeId);
             return;
         }
 
         // Request the editor (single mutator) to perform the add; decoupled via messenger.
-        WeakReferenceMessenger.Default.Send(new Messages.ComponentAddRequestedMessage(this.Node, comp));
+        WeakReferenceMessenger.Default.Send(new Messages.ComponentAddRequestedMessage(this.Node, kind));
     }
 
     private void SyncFromNode()

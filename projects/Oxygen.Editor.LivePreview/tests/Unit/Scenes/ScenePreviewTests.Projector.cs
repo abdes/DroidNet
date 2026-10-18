@@ -87,8 +87,8 @@ public sealed partial class ScenePreviewTests
         var cube = new SceneNode(built) { Name = "Cube" };
         built.RootNodes.Add(cube);
         var target = new MaterialSlotTarget(new Uri("asset:///Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
-        var geometry = new GeometryComponent { Name = "Geometry", Geometry = new(target.GeometryUri) };
-        geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = new(new Uri("asset:///Content/Materials/Red.omat.json")) });
+        var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.GeometryUri };
+        geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = new Uri("asset:///Content/Materials/Red.omat.json") });
         cube.Components.Add(geometry);
         var document = await fixture.OpenAsync(built).ConfigureAwait(false);
         _ = await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -107,7 +107,7 @@ public sealed partial class ScenePreviewTests
         var built = fixture.Documents.NewScene();
         var node = new SceneNode(built) { Name = "Crate" };
         built.RootNodes.Add(node);
-        node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = new(new Uri("asset:///Engine/Generated/BasicShapes/Cube")) });
+        node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = new Uri("asset:///Engine/Generated/BasicShapes/Cube") });
         var document = await fixture.OpenAsync(built).ConfigureAwait(false);
         _ = await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false);
         fixture.Requests.Clear();

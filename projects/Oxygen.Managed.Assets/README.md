@@ -24,9 +24,9 @@ referencing or displaying assets.
 
 ## Authoring
 
-`Authoring/Materials` owns material source models and JSON serialization.
-`Model` contains the editor-facing asset models. Native source inspection,
-import, texture cooking and packaging are coordinated by
+`Authoring/Materials` owns material source models and JSON serialization. Scenes
+link to assets by URI only; this library has no asset object model. Native
+source inspection, import, texture cooking and packaging are coordinated by
 [Oxygen.Editor.ContentPipeline](../Oxygen.Editor.ContentPipeline/README.md)
 through the shared native tools.
 

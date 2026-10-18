@@ -55,4 +55,31 @@ public static class AssetUris
     /// <param name="assetPath">The path of the asset relative to the generated root (e.g., "BasicShapes/Cube").</param>
     /// <returns>The full asset URI.</returns>
     public static Uri BuildGeneratedUri(string assetPath) => BuildEngineUri($"{GeneratedPath}/{assetPath}");
+
+    /// <summary>
+    /// Gets a value indicating whether a URI names an asset: an absolute URI with the <see cref="Scheme"/> scheme and a
+    /// path below the root.
+    /// </summary>
+    /// <param name="uri">The URI to check.</param>
+    /// <returns><see langword="true"/> when <paramref name="uri"/> names an asset; otherwise <see langword="false"/>.</returns>
+    public static bool IsAssetUri([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] Uri? uri)
+        => uri is { IsAbsoluteUri: true }
+            && string.Equals(uri.Scheme, Scheme, StringComparison.OrdinalIgnoreCase)
+            && uri.AbsolutePath.Trim('/').Length > 0;
+
+    /// <summary>
+    /// Returns a URI that names an asset, or throws.
+    /// </summary>
+    /// <param name="uri">The URI to check.</param>
+    /// <param name="paramName">The name of the parameter that holds <paramref name="uri"/>.</param>
+    /// <returns><paramref name="uri"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="uri"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="uri"/> does not name an asset (see <see cref="IsAssetUri"/>).</exception>
+    public static Uri EnsureAssetUri(Uri uri, [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(uri))] string? paramName = null)
+    {
+        ArgumentNullException.ThrowIfNull(uri, paramName);
+        return IsAssetUri(uri)
+            ? uri
+            : throw new ArgumentException($"'{uri}' is not an absolute '{Scheme}' URI naming an asset.", paramName);
+    }
 }

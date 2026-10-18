@@ -18,7 +18,7 @@ internal static class AssetReferenceRules
     {
         foreach (var uri in references)
         {
-            if (uri is null || !uri.IsAbsoluteUri || !string.Equals(uri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase))
+            if (!AssetUris.IsAssetUri(uri))
             {
                 return $"Scene references must use absolute '{AssetUris.Scheme}' asset URIs.";
             }
@@ -41,12 +41,6 @@ internal static class AssetReferenceRules
 
         return null;
     }
-
-    /// <summary>Checks that a reference is an absolute asset URI, whatever the asset's type.</summary>
-    /// <param name="reference">The reference.</param>
-    /// <returns>Whether it is an absolute asset URI.</returns>
-    public static bool IsAssetUri(Uri? reference)
-        => reference is { IsAbsoluteUri: true } && string.Equals(reference.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsGenerated(Uri reference)
         => Uri.UnescapeDataString(reference.AbsolutePath).StartsWith($"/{AssetUris.EngineMountPoint}/{AssetUris.GeneratedPath}/", StringComparison.OrdinalIgnoreCase);

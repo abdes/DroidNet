@@ -53,7 +53,8 @@ public sealed class SceneEditScope
     /// <summary>Resolves a reference captured before an asset moved to the asset's current identity.</summary>
     /// <param name="reference">The captured reference.</param>
     /// <returns>The current reference; the input when the asset did not move or nothing tracks moves.</returns>
-    public Uri? Resolve(Uri? reference) => reference is null || this.Redirects is null ? reference : this.Redirects.Resolve(reference);
+    [return: System.Diagnostics.CodeAnalysis.NotNullIfNotNull(nameof(reference))]
+    public Uri? Resolve(Uri? reference) =>reference is null || this.Redirects is null ? reference : this.Redirects.Resolve(reference);
 
     /// <summary>Resolves a captured reference, in the form the retargeting helpers take.</summary>
     /// <param name="reference">The captured reference.</param>

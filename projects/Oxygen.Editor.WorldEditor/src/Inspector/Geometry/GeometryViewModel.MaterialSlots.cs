@@ -92,7 +92,7 @@ public sealed partial class GeometryViewModel
         var request = new CancellationTokenSource();
         this.slotRefresh = request;
         var nodes = this.selectedItems?.ToList() ?? [];
-        var geometryUri = nodes.FirstOrDefault()?.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry?.Uri;
+        var geometryUri = nodes.FirstOrDefault()?.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry;
         var project = this.projectContexts.ActiveProject;
         this.IsMaterialSlotLoading = true;
         try
@@ -110,7 +110,7 @@ public sealed partial class GeometryViewModel
                 return;
             }
 
-            if (nodes.Any(node => node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry?.Uri != geometryUri))
+            if (nodes.Any(node => node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry != geometryUri))
             {
                 this.SetMaterialSlotsUnavailable("Select instances of the same geometry to edit material slots together.");
                 return;
@@ -119,7 +119,7 @@ public sealed partial class GeometryViewModel
             var inventory = await this.materialSlots.ReadAsync(project, geometryUri, request.Token).ConfigureAwait(true);
             if (request.IsCancellationRequested || !this.IsCurrentSelection(nodes)
                 || !ReferenceEquals(project, this.projectContexts.ActiveProject)
-                || nodes.Exists(node => node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry?.Uri != geometryUri))
+                || nodes.Exists(node => node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry != geometryUri))
             {
                 return;
             }
@@ -205,7 +205,7 @@ public sealed partial class GeometryViewModel
         }
 
         var materials = (this.selectedItems ?? []).Select(node => node.Components.OfType<GeometryComponent>().FirstOrDefault()
-            ?.OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault(slot => slot.Target.GeometryUri == selected.Target.GeometryUri && slot.Target.SlotId == selected.Target.SlotId)?.Material.Uri)
+            ?.OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault(slot => slot.Target.GeometryUri == selected.Target.GeometryUri && slot.Target.SlotId == selected.Target.SlotId)?.Material)
             .Distinct().ToArray();
         this.IsMaterialMixed = materials.Length > 1;
         this.SelectedMaterialUriString = this.IsMaterialMixed ? null : materials.FirstOrDefault()?.ToString();

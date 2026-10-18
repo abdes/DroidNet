@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -26,26 +25,25 @@ public sealed partial class BuiltinGeometryCatalog
         return records.AsReadOnly();
     }
 
-    /// <summary>Creates asset metadata from the engine's LOD, submesh and material declarations.</summary>
-    /// <returns>Metadata for each native identity, without generating geometry or cooking content.</returns>
-    public IReadOnlyList<Asset> CreateAssets()
+    /// <summary>Checks the engine's LOD and submesh declarations of every authoring geometry.</summary>
+    /// <exception cref="InvalidDataException">A submesh has no name, or uses a material outside the catalog.</exception>
+    public void ValidateSubmeshes()
     {
-        var assets = this.AuthoringGeometries.Select(definition => (Asset)new GeometryAsset
+        var submeshes = this.AuthoringGeometries
+            .SelectMany(static definition => definition.Contribution.Descriptor.GetProperty("lods").EnumerateArray())
+            .SelectMany(static lod => lod.GetProperty("submeshes").EnumerateArray());
+        foreach (var submesh in submeshes)
         {
-            Uri = definition.AssetUri,
-            Lods = definition.Contribution.Descriptor.GetProperty("lods").EnumerateArray().Select((lod, index) => new MeshLod
+            if (submesh.GetProperty("name").GetString() is null)
             {
-                LodIndex = index,
-                SubMeshes = lod.GetProperty("submeshes").EnumerateArray().Select(submesh => new SubMesh
-                {
-                    Name = submesh.GetProperty("name").GetString() ?? throw new InvalidDataException("A native submesh has no name."),
-                    MaterialIndex = string.Equals(submesh.GetProperty("material_ref").GetString(), this.DefaultMaterial.VirtualPath, StringComparison.Ordinal)
-                        ? 0 : throw new InvalidDataException("A native generated submesh references a material outside its catalog."),
-                }).ToArray(),
-            }).ToArray(),
-        }).ToList();
-        assets.Add(new MaterialAsset { Uri = AssetUris.BuildGeneratedUri("Materials/Default") });
-        return assets.AsReadOnly();
+                throw new InvalidDataException("A native submesh has no name.");
+            }
+
+            if (!string.Equals(submesh.GetProperty("material_ref").GetString(), this.DefaultMaterial.VirtualPath, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("A native generated submesh references a material outside its catalog.");
+            }
+        }
     }
 
     private static GeneratedAssetMetadata CreateMetadata(string canonicalName, BuiltinDescriptorContribution contribution, GeneratedAssetCategory authoringCategory)

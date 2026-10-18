@@ -9,7 +9,6 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -42,7 +41,7 @@ internal static class IncrementalCookScenario
     {
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         var node = new SceneNode(workspace.Scene) { Name = "Cube" };
-        var geometry = new GeometryComponent { Name = "Geometry", Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")) };
+        var geometry = new GeometryComponent { Name = "Geometry", Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube") };
         geometry.OverrideSlots.Add(await CreateBuiltinMaterialSlotAsync(
             workspace, geometry, new("asset:///Content/Materials/Blue.omat.json")).ConfigureAwait(false));
         _ = node.AddComponent(geometry);
@@ -55,14 +54,13 @@ internal static class IncrementalCookScenario
     {
         var catalog = await new BuiltinCatalogFixture().GetBuiltinGeometryCatalogAsync(
             workspace.Root, "Content", cancellationToken).ConfigureAwait(false);
-        var geometryUri = geometry.Geometry?.Uri
-            ?? throw new InvalidOperationException("The native fixture requires a geometry reference.");
+        var geometryUri = geometry.Geometry;
         var inventory = (catalog.Find(geometryUri)
             ?? throw new InvalidOperationException("The native fixture has no matching builtin geometry.")).MaterialSlots;
         return new MaterialsSlot
         {
             Target = new(geometryUri, inventory.Slots.Single().SlotId, inventory.LayoutRevision),
-            Material = new AssetReference<MaterialAsset>(materialUri),
+            Material = materialUri,
         };
     }
 }

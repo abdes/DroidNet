@@ -29,7 +29,7 @@ public sealed class SetGeometryTests
         var result = await fixture.Authoring.ExecuteAsync(new SetGeometry([SampleScene.Mesh], SampleScene.SphereGeometry)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = GeometryOf(fixture, SampleScene.Mesh).Geometry!.Uri.Should().Be(SampleScene.SphereGeometry);
+        _ = GeometryOf(fixture, SampleScene.Mesh).Geometry.Should().Be(SampleScene.SphereGeometry);
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.GeometryChanged(SampleScene.Mesh));
     }
 
@@ -39,9 +39,23 @@ public sealed class SetGeometryTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetGeometry([SampleScene.Mesh], geometry: null)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetGeometry([SampleScene.Mesh], geometry: null!)).ConfigureAwait(false);
 
         SceneAssert.Invalid(result, SceneEditCodes.GeometryRequired, SampleScene.Mesh);
+        SceneAssert.Unchanged(fixture, before);
+    }
+
+    [TestMethod]
+    [DataRow("asset:///Content/Materials/Red.omat.json")]
+    [DataRow("https://example.com/Content/Geometry/Crate.ogeo")]
+    public async Task NotAGeometryAsset_IsInvalid(string geometry)
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var before = fixture.Snapshot();
+
+        var result = await fixture.Authoring.ExecuteAsync(new SetGeometry([SampleScene.Mesh], new Uri(geometry))).ConfigureAwait(false);
+
+        SceneAssert.Invalid(result, SceneEditCodes.AssetReferenceInvalid, SampleScene.Mesh);
         SceneAssert.Unchanged(fixture, before);
     }
 
@@ -87,5 +101,5 @@ public sealed class SetGeometryTests
 
     // Each override as its target and material, so two reads compare by value.
     private static List<string> OverridesOf(AuthoringFixture fixture, NodeId node)
-        => [.. GeometryOf(fixture, node).OverrideSlots.OfType<MaterialsSlot>().Select(static slot => $"{slot.Target} -> {slot.Material.Uri}")];
+        => [.. GeometryOf(fixture, node).OverrideSlots.OfType<MaterialsSlot>().Select(static slot => $"{slot.Target} -> {slot.Material}")];
 }

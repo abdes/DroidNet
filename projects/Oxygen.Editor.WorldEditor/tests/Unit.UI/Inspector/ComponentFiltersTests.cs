@@ -19,6 +19,7 @@ using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
@@ -152,7 +153,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         using var fixture = new SceneAuthoringFixture();
         using var model = fixture.CreateInspectorHost("Camera");
         model.SelectComponentFilter(typeof(PerspectiveCamera));
-        _ = fixture.Node.AddComponent(new GeometryComponent { Name = "Geometry" });
+        _ = fixture.Node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube") });
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.SelectedComponentType.Should().Be<PerspectiveCamera>();
         _ = (await fixture.Authoring.ExecuteAsync(new RemoveComponent(fixture.Node.Id, fixture.Camera.Id)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
@@ -247,7 +248,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         {
             Name = "Other node",
         };
-        _ = node.AddComponent(new GeometryComponent { Name = "Geometry" });
+        _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube") });
         scene.RootNodes.Add(node);
         using var metadata = SceneTabs.Open(scene);
         scene = metadata.Scene;

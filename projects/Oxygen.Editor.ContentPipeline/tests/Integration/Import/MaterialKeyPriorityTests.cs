@@ -10,7 +10,6 @@ using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -70,7 +69,7 @@ public sealed class MaterialKeyPriorityTests
     {
         var second = new Scene { Name = "Project material" };
         var node = new SceneNode(second) { Name = "Project cube" };
-        var geometry = new GeometryComponent { Name = "Geometry", Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")) };
+        var geometry = new GeometryComponent { Name = "Geometry", Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube") };
         geometry.OverrideSlots.Add(await CreateBuiltinMaterialSlotAsync(
             consumer, geometry, new("asset:///Art/Materials/Shared.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false));
         _ = node.AddComponent(geometry);

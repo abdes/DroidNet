@@ -183,7 +183,7 @@ public static class SampleScene
         {
             Id = MeshGeometry,
             Name = "Geometry",
-            GeometryUri = CubeGeometry.ToString(),
+            GeometryUri = CubeGeometry,
             OverrideSlots =
             [
                 new MaterialsSlotData
@@ -191,7 +191,7 @@ public static class SampleScene
                     GeometryUri = CubeGeometry,
                     SlotId = CubeSlot,
                     LayoutRevision = CubeLayoutRevision,
-                    MaterialUri = RedMaterial.ToString(),
+                    MaterialUri = RedMaterial,
                 },
             ],
         };

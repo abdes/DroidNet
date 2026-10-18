@@ -34,7 +34,7 @@ public sealed class SetMaterialSlotTests
         var result = await fixture.Authoring.ExecuteAsync(new SetMaterialSlot([SampleScene.Mesh], CubeTarget, BlueMaterial)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = OverrideOf(fixture, SampleScene.Mesh, SampleScene.CubeSlot)!.Material.Uri.Should().Be(BlueMaterial);
+        _ = OverrideOf(fixture, SampleScene.Mesh, SampleScene.CubeSlot)!.Material.Should().Be(BlueMaterial);
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.MaterialSlotsChanged(SampleScene.Mesh));
     }
 
@@ -87,7 +87,7 @@ public sealed class SetMaterialSlotTests
         _ = await fixture.Authoring.RedoAsync().ConfigureAwait(false);
 
         var assigned = OverrideOf(fixture, SampleScene.Mesh, SampleScene.CubeSlot)!;
-        _ = assigned.Material.Uri.Should().Be(BlueMaterial);
+        _ = assigned.Material.Should().Be(BlueMaterial);
         _ = assigned.Target.LayoutRevision.Should().Be(newerRevision.LayoutRevision);
     }
 
@@ -111,7 +111,7 @@ public sealed class SetMaterialSlotTests
     {
         var sphere = NodeId.New();
         var data = SampleScene.Builder()
-            .Node(sphere, "Sphere", components: [new GeometryComponentData { Id = ComponentId.New(), Name = "Geometry", GeometryUri = SampleScene.SphereGeometry.ToString() }])
+            .Node(sphere, "Sphere", components: [new GeometryComponentData { Id = ComponentId.New(), Name = "Geometry", GeometryUri = SampleScene.SphereGeometry }])
             .Build();
         using var fixture = await AuthoringFixture.CreateAsync(data).ConfigureAwait(false);
         var before = fixture.Snapshot();

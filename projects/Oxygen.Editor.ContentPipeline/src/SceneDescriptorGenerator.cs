@@ -103,12 +103,11 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
 
         var generatedGeometryUris = scene.AllNodes
             .SelectMany(static node => node.Components.OfType<GeometryComponent>())
-            .Select(static geometry => geometry.Geometry?.Uri)
-            .Where(static uri => uri is not null && ProceduralGeometryDescriptorService.IsGeneratedBasicShape(uri))
-            .Cast<Uri>()
+            .Select(static geometry => geometry.Geometry)
+            .Where(ProceduralGeometryDescriptorService.IsGeneratedBasicShape)
             .Concat(scene.AllNodes.SelectMany(static node => node.Components.OfType<GeometryComponent>())
                 .SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>())
-                .Select(static slot => slot.Material.Uri)
+                .Select(static slot => slot.Material)
                 .Where(IsDefaultMaterial)
                 .Select(static _ => AssetUris.BuildGeneratedUri("Materials/Default")))
             .Distinct()
@@ -360,22 +359,10 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
 
         void AddRenderable(SceneNode node, int nodeIndex, GeometryComponent geometry)
         {
-            if (geometry.Geometry is null)
-            {
-                diagnostics.Add(CreateDiagnostic(
-                    operationId,
-                    DiagnosticSeverity.Error,
-                    ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                    $"Scene node `{node.Name}` has a geometry component without a geometry asset.",
-                    descriptorPath,
-                    descriptorVirtualPath));
-                return;
-            }
-
             string? geometryRef;
             try
             {
-                geometryRef = ResolveGeometryRef(geometry.Geometry.Uri, generatedGeometryInputs);
+                geometryRef = ResolveGeometryRef(geometry.Geometry, generatedGeometryInputs);
             }
             catch (ArgumentException ex)
             {
@@ -383,7 +370,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                     operationId,
                     DiagnosticSeverity.Error,
                     ContentPipelineDiagnosticCodes.GeometryDescriptorGenerationFailed,
-                    $"Scene node `{node.Name}` references geometry `{geometry.Geometry.Uri}` that cannot be normalized: {ex.Message}",
+                    $"Scene node `{node.Name}` references geometry `{geometry.Geometry}` that cannot be normalized: {ex.Message}",
                     descriptorPath,
                     descriptorVirtualPath));
                 return;
@@ -395,7 +382,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                     operationId,
                     DiagnosticSeverity.Error,
                     ContentPipelineDiagnosticCodes.GeometryDescriptorGenerationFailed,
-                    $"Scene node `{node.Name}` references unsupported geometry `{geometry.Geometry.Uri}`.",
+                    $"Scene node `{node.Name}` references unsupported geometry `{geometry.Geometry}`.",
                     descriptorPath,
                     descriptorVirtualPath));
                 return;
@@ -405,7 +392,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             var assignedSlots = new HashSet<Guid>();
             foreach (var slot in geometry.OverrideSlots.OfType<MaterialsSlot>())
             {
-                if (slot.Target.GeometryUri != geometry.Geometry.Uri || slot.Target.SlotId == Guid.Empty
+                if (slot.Target.GeometryUri != geometry.Geometry || slot.Target.SlotId == Guid.Empty
                     || !assignedSlots.Add(slot.Target.SlotId))
                 {
                     diagnostics.Add(CreateDiagnostic(
@@ -421,7 +408,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                 string? materialRef;
                 try
                 {
-                    materialRef = ResolveMaterialRef(slot.Material.Uri, generatedGeometryInputs);
+                    materialRef = ResolveMaterialRef(slot.Material, generatedGeometryInputs);
                 }
                 catch (ArgumentException exception)
                 {
@@ -429,7 +416,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                         operationId,
                         DiagnosticSeverity.Error,
                         ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                        $"Scene node '{node.Name}' references invalid material '{slot.Material.Uri}': {exception.Message}",
+                        $"Scene node '{node.Name}' references invalid material '{slot.Material}': {exception.Message}",
                         descriptorPath,
                         descriptorVirtualPath));
                     return;
@@ -441,7 +428,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                         operationId,
                         DiagnosticSeverity.Error,
                         ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                        $"Scene node '{node.Name}' has an empty material assignment. Clear removes the slot override.",
+                        $"Scene node '{node.Name}' references material '{slot.Material}', which has no cooked input.",
                         descriptorPath,
                         descriptorVirtualPath));
                     return;
@@ -472,9 +459,8 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             ? generatedGeometryInputs.FirstOrDefault(input => input.AssetUri == geometryUri)?.OutputVirtualPath
             : ContentPipelinePaths.ToNativeDescriptorPath(geometryUri, AssetFileTypes.Geometry);
 
-    private static string? ResolveMaterialRef(Uri? materialUri, IReadOnlyList<ContentCookInput> generatedInputs)
-        => materialUri is null || IsEmptyAssetUri(materialUri)
-            ? null : IsDefaultMaterial(materialUri)
+    private static string? ResolveMaterialRef(Uri materialUri, IReadOnlyList<ContentCookInput> generatedInputs)
+        => IsDefaultMaterial(materialUri)
             ? generatedInputs.FirstOrDefault(static input => IsDefaultMaterial(input.AssetUri))?.OutputVirtualPath
             : ContentPipelinePaths.ToNativeDescriptorPath(materialUri, AssetFileTypes.Material);
 
@@ -551,9 +537,6 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             uri.AbsoluteUri,
             AssetUris.BuildGeneratedUri("Materials/Default").AbsoluteUri,
             StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsEmptyAssetUri(Uri uri)
-        => string.Equals(uri.ToString(), $"{AssetUris.Scheme}:///__uninitialized__", StringComparison.OrdinalIgnoreCase);
 
     private static NativeLightCommon ToCommon(LightComponent light)
         => new(

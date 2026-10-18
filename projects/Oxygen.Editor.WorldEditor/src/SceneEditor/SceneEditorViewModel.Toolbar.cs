@@ -48,16 +48,13 @@ public partial class SceneEditorViewModel
     /// </summary>
     public IMenuSource QuickAddMenu => this.quickAddMenu ??= this.BuildQuickAddMenu();
 
-    private static bool IsAuthoredAsset(Uri? uri)
-        => uri is not null && !uri.AbsolutePath.EndsWith("/__uninitialized__", StringComparison.Ordinal);
-
     /// <summary>The geometry and material assets a node uses, in a stable order.</summary>
     private static IEnumerable<Uri> GetAssetUris(SceneNode node)
     {
         var geometry = node.Components.OfType<GeometryComponent>().FirstOrDefault();
-        if (geometry?.Geometry?.Uri is { } geometryUri)
+        if (geometry is not null)
         {
-            yield return geometryUri;
+            yield return geometry.Geometry;
         }
 
         var slots = node.OverrideSlots
@@ -65,7 +62,7 @@ public partial class SceneEditorViewModel
             .Concat(geometry?.TargetedOverrides.SelectMany(target => target.OverrideSlots) ?? []);
         foreach (var materials in slots.OfType<MaterialsSlot>())
         {
-            yield return materials.Material.Uri;
+            yield return materials.Material;
         }
     }
 
@@ -172,7 +169,7 @@ public partial class SceneEditorViewModel
     }
 
     private IReadOnlyList<Uri> GetSelectedAssetUris()
-        => [.. this.selectedNodes.SelectMany(GetAssetUris).Where(IsAuthoredAsset).Distinct()];
+        => [.. this.selectedNodes.SelectMany(GetAssetUris).Distinct()];
 
     private bool CanBrowseToAsset() => this.GetSelectedAssetUris().Count > 0;
 

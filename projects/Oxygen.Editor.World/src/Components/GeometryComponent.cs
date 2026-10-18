@@ -3,10 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Components;
@@ -27,19 +25,15 @@ namespace Oxygen.Editor.World.Components;
 /// </remarks>
 public partial class GeometryComponent : GameComponent
 {
-    private AssetReference<GeometryAsset>? geometry = new($"{AssetUris.Scheme}:///__uninitialized__");
-
     static GeometryComponent()
     {
         // Register factory for creating GeometryComponent from GeometryComponentData during hydration from serialized data.
         Register<GeometryComponentData>(d =>
         {
-            // TODO: we will do schema validation later
-            Debug.Assert(!string.IsNullOrWhiteSpace(d.GeometryUri), "DTO should not be null");
             var g = new GeometryComponent
             {
                 Name = d.Name,
-                Geometry = new AssetReference<GeometryAsset>(d.GeometryUri),
+                Geometry = AssetUriData.Read(d.GeometryUri, nameof(d.GeometryUri)),
             };
             g.Hydrate(d);
             return g;
@@ -47,16 +41,19 @@ public partial class GeometryComponent : GameComponent
     }
 
     /// <summary>
-    /// Gets or sets the geometry asset reference.
+    /// Gets or sets the geometry asset to render.
     /// </summary>
     /// <value>
-    /// An asset reference to the geometry to render. The reference can be unresolved (URI only)
-    /// or resolved (with Asset instance loaded).
+    /// An absolute <c>asset:</c> URI. A geometry component always has a geometry: removing the component is how a node
+    /// loses its geometry. Facts about the geometry, such as its material slots, come from the services that own
+    /// geometry assets, by this URI.
     /// </value>
-    public AssetReference<GeometryAsset>? Geometry
+    /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The value does not name an asset.</exception>
+    public required Uri Geometry
     {
-        get => this.geometry;
-        set => this.SetProperty(ref this.geometry, value);
+        get;
+        set => _ = this.SetProperty(ref field, AssetUris.EnsureAssetUri(value));
     }
 
     /// <summary>
@@ -86,6 +83,8 @@ public partial class GeometryComponent : GameComponent
 
         using (this.SuppressNotifications())
         {
+            this.Geometry = AssetUriData.Read(gd.GeometryUri, nameof(gd.GeometryUri));
+
             // component-level override slots
             this.OverrideSlots.Clear();
             if (gd.OverrideSlots is not null)
@@ -122,20 +121,11 @@ public partial class GeometryComponent : GameComponent
     /// <inheritdoc/>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0305:Simplify collection initialization", Justification = "I find .ToList() is clearer with LINQ")]
     public override ComponentData Dehydrate()
-    {
-        if (this.Geometry is null)
-        {
-            // During dehydration, Geometry must be set to a valid reference.
-            // A geometry component without geometry should not be left for serialization by its owning SceneNode.
-            Debug.Fail("Cannot dehydrate GeometryComponent with null Geometry reference.");
-            throw new InvalidOperationException("Cannot dehydrate GeometryComponent with null Geometry reference.");
-        }
-
-        return new GeometryComponentData
+        => new GeometryComponentData
         {
             Id = this.Id,
             Name = this.Name,
-            GeometryUri = this.Geometry.Uri.ToString(),
+            GeometryUri = this.Geometry,
             OverrideSlots = this.OverrideSlots.Select(s => s.Dehydrate()).ToList(),
             TargetedOverrides = this.TargetedOverrides.Select(t => new TargetedOverrideData
             {
@@ -144,5 +134,4 @@ public partial class GeometryComponent : GameComponent
                 OverrideSlots = t.OverrideSlots.Select(s => s.Dehydrate()).ToList(),
             }).ToList(),
         };
-    }
 }

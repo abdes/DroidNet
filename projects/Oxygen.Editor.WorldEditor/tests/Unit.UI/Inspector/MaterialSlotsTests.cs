@@ -23,14 +23,14 @@ internal sealed class MaterialSlotsTests : DroidNet.Tests.VisualUserInterfaceTes
     public Task MaterialPickerEditsSelectedNativeSlotAndClearRemovesIt() => EnqueueAsync(async () =>
     {
         using var fixture = new GeometryFixture();
-        var uri = fixture.Geometry.Geometry!.Uri;
+        var uri = fixture.Geometry.Geometry;
         var first = SceneAuthoringFixture.TargetFor(uri);
         var second = first with
         {
             SlotId = Guid.Parse("10000000-0000-0000-0000-000000000002"),
         };
         _ = fixture.Authoring.Slots.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), uri, It.IsAny<CancellationToken>())).ReturnsAsync(new GeometryMaterialSlotMetadata(uri, Guid.Parse("20000000-0000-0000-0000-000000000001"), first.LayoutRevision, [new(first.SlotId, "Surface", [new(0, 0, Guid.Empty)]), new(second.SlotId, "Surface", [new(0, 1, Guid.Empty), new(1, 2, Guid.Empty)])]));
-        fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Target = first, Material = new(new Uri("asset:///Content/Materials/Body.omat.json")) });
+        fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Target = first, Material = new Uri("asset:///Content/Materials/Body.omat.json") });
         using var host = fixture.Authoring.CreateInspectorHost("Geometry", assetProvider: fixture.Assets.Object);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
@@ -39,8 +39,8 @@ internal sealed class MaterialSlotsTests : DroidNet.Tests.VisualUserInterfaceTes
         model.SelectedMaterialSlot = model.MaterialSlots.Single(slot => slot.Target.SlotId == second.SlotId);
         await model.RefreshMaterialPickerAsync().ConfigureAwait(true);
         await model.ApplyMaterialAsync(new("Trim", fixture.MaterialUri, "Material", fixture.MaterialUri.AbsolutePath, AssetPickerGroup.Content, IsEnabled: true, ThumbnailModel: string.Empty)).ConfigureAwait(true);
-        _ = fixture.Geometry.OverrideSlots.OfType<MaterialsSlot>().Single(slot => slot.Target.SlotId == second.SlotId).Material.Uri.Should().Be(fixture.MaterialUri);
-        _ = fixture.Geometry.OverrideSlots.OfType<MaterialsSlot>().Single(slot => slot.Target.SlotId == first.SlotId).Material.Uri.Should().Be(new Uri("asset:///Content/Materials/Body.omat.json"));
+        _ = fixture.Geometry.OverrideSlots.OfType<MaterialsSlot>().Single(slot => slot.Target.SlotId == second.SlotId).Material.Should().Be(fixture.MaterialUri);
+        _ = fixture.Geometry.OverrideSlots.OfType<MaterialsSlot>().Single(slot => slot.Target.SlotId == first.SlotId).Material.Should().Be(new Uri("asset:///Content/Materials/Body.omat.json"));
         await model.RefreshMaterialPickerAsync().ConfigureAwait(true);
         await model.ApplyMaterialAsync(new("Clear override", Uri: null, "Geometry default", "Geometry default", AssetPickerGroup.Engine, IsEnabled: true, ThumbnailModel: string.Empty)).ConfigureAwait(true);
         _ = fixture.Geometry.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle().Which.Target.SlotId.Should().Be(first.SlotId);

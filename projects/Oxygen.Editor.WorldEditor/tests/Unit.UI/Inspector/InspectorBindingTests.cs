@@ -16,6 +16,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Environment;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorModels;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
@@ -113,7 +114,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     public Task NodeRenderingXamlRealizesItsFlagToggles() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Rendering", fixture),
         static model => new NodeRenderingView { ViewModel = (NodeRenderingViewModel)model },
-        prepareFixture: static fixture => fixture.Node.Components.Add(new GeometryComponent { Name = "Geometry" }),
+        prepareFixture: static fixture => fixture.Node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube") }),
         assertRealizedAsync: static view =>
         {
             _ = view.FindDescendants().OfType<ToggleSwitch>().Should().HaveCount(3);

@@ -258,7 +258,7 @@ public sealed class SceneEditBatchTests
             Components =
             [
                 new TransformData { Id = ComponentId.New(), Name = "Transform" },
-                new GeometryComponentData { Id = ComponentId.New(), Name = "Geometry", GeometryUri = SampleScene.SphereGeometry.ToString() },
+                new GeometryComponentData { Id = ComponentId.New(), Name = "Geometry", GeometryUri = SampleScene.SphereGeometry },
             ],
         };
         var batch = new SceneEditBatch("Create", [new InsertNodes([new NodeInsert(node, new NodePosition(Parent: null, Index: 0), LayoutPosition.AtRoot(0))])]);

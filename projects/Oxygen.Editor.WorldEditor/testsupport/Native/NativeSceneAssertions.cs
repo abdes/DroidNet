@@ -34,7 +34,7 @@ internal static class NativeSceneAssertions
     {
         var geometry = fixture.Source.RootNodes.Single(node => node.Id == nodeId).Components.OfType<GeometryComponent>().Single();
         _ = geometry.Geometry.Should().NotBeNull();
-        _ = geometry.Geometry!.Uri.Should().Be(AssetUris.BuildGeneratedUri($"BasicShapes/{shape}"));
+        _ = geometry.Geometry.Should().Be(AssetUris.BuildGeneratedUri($"BasicShapes/{shape}"));
         var native = await WaitForNodeAsync(fixture, nodeId, state => string.Equals(state.GeometryName, shape, StringComparison.OrdinalIgnoreCase), cancellationToken).ConfigureAwait(true);
         _ = native.GeometryKey.Should().NotBeNullOrEmpty();
         _ = native.VertexCount.Should().BePositive();
@@ -85,7 +85,7 @@ internal static class NativeSceneAssertions
         }
     }
 
-    internal static Uri? ReadMaterialUri(SceneNode node) => node.Components.OfType<GeometryComponent>().Single().OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault()?.Material.Uri;
+    internal static Uri? ReadMaterialUri(SceneNode node) => node.Components.OfType<GeometryComponent>().Single().OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault()?.Material;
 
     internal static async Task AssertMaterialAsync(NativeSceneFixture fixture, NodeId nodeId, string expected, CancellationToken cancellationToken)
     {

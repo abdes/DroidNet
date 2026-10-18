@@ -14,7 +14,6 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -41,12 +40,12 @@ public sealed partial class SceneDescriptorGeneratorTests
         var geometry = new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(geometryUri),
+            Geometry = geometryUri,
         };
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
             Target = new(geometryUri, Guid.NewGuid(), new string('a', 64)),
-            Material = new AssetReference<MaterialAsset>(AssetUris.BuildGeneratedUri("Materials/" + materialName)),
+            Material = AssetUris.BuildGeneratedUri("Materials/" + materialName),
         });
         _ = node.AddComponent(geometry);
         scene.RootNodes.Add(node);
@@ -155,15 +154,15 @@ public sealed partial class SceneDescriptorGeneratorTests
         var geometry = new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
         };
         var catalogProvider = new BuiltinCatalogFixture();
         var catalog = await catalogProvider.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var slots = catalog.Find(geometry.Geometry.Uri)!.MaterialSlots;
+        var slots = catalog.Find(geometry.Geometry)!.MaterialSlots;
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
-            Target = new(geometry.Geometry.Uri, slots.Slots[0].SlotId, slots.LayoutRevision),
-            Material = new AssetReference<MaterialAsset>(new Uri("asset:///Content/Materials/Red.omat.json")),
+            Target = new(geometry.Geometry, slots.Slots[0].SlotId, slots.LayoutRevision),
+            Material = new Uri("asset:///Content/Materials/Red.omat.json"),
         });
         _ = node.AddComponent(geometry);
         _ = node.AddComponent(new PerspectiveCamera { Name = "Camera" });
@@ -318,7 +317,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
         });
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Light", CastsShadows = false });
         scene.RootNodes.Add(node);
@@ -346,7 +345,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
         });
         scene.RootNodes.Add(node);
         scene.SetEnvironment(new SceneEnvironmentData
@@ -439,7 +438,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
         });
         scene.RootNodes.Add(node);
         scene.SetEnvironment(new SceneEnvironmentData
@@ -485,7 +484,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
         });
         scene.RootNodes.Add(node);
         scene.SetEnvironment(new SceneEnvironmentData
@@ -517,7 +516,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(new Uri("asset:///Content/Geometry/Foo.ogeo.json")),
+            Geometry = new Uri("asset:///Content/Geometry/Foo.ogeo.json"),
         });
         scene.RootNodes.Add(node);
 
@@ -836,12 +835,12 @@ public sealed partial class SceneDescriptorGeneratorTests
         var geometry = new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(geometryUri),
+            Geometry = geometryUri,
         };
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
             Target = new(geometryUri, Guid.NewGuid(), new string('a', 64)),
-            Material = new AssetReference<MaterialAsset>(new Uri("asset:///Content/Materials/Surface.omat.json")),
+            Material = new Uri("asset:///Content/Materials/Surface.omat.json"),
         });
         _ = node.AddComponent(geometry);
         scene.RootNodes.Add(node);

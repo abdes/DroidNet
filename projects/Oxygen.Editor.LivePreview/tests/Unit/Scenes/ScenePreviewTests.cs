@@ -204,7 +204,7 @@ public sealed partial class ScenePreviewTests
     public void MaterialOverridePathMapper_ClearsOnlyAnExplicitNull()
     {
         _ = MaterialOverridePathMapper.ToEnginePath(materialUri: null).Should().BeNull();
-        Action invalid = () => MaterialOverridePathMapper.ToEnginePath(new Uri("asset:///__uninitialized__"));
+        Action invalid = () => MaterialOverridePathMapper.ToEnginePath(new Uri("https://example.com/Content/Materials/Red.omat.json"));
         _ = invalid.Should().Throw<ArgumentException>();
     }
 

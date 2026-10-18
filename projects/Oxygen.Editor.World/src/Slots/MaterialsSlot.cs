@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Slots;
@@ -17,17 +16,14 @@ namespace Oxygen.Editor.World.Slots;
 /// </remarks>
 public partial class MaterialsSlot : OverrideSlot
 {
-    private AssetReference<MaterialAsset> material = new($"{AssetUris.Scheme}:///__uninitialized__");
-    private MaterialSlotTarget target = new(new Uri($"{AssetUris.Scheme}:///__uninitialized__"), Guid.Empty, string.Empty);
-
     static MaterialsSlot()
     {
         Register<MaterialsSlotData>(d =>
         {
             var s = new MaterialsSlot()
             {
-                Material = new AssetReference<MaterialAsset>(d.MaterialUri),
-                Target = new(d.GeometryUri, d.SlotId, d.LayoutRevision),
+                Material = AssetUriData.Read(d.MaterialUri, nameof(d.MaterialUri)),
+                Target = ReadTarget(d),
             };
             s.Hydrate(d);
             return s;
@@ -35,26 +31,26 @@ public partial class MaterialsSlot : OverrideSlot
     }
 
     /// <summary>
-    /// Gets or sets the material reference for the target.
+    /// Gets or sets the material asset used instead of the mesh's own material on the target slot.
     /// </summary>
-    /// <value>
-    /// An asset reference to the material to apply. The reference can be unresolved (URI only)
-    /// or resolved (with Asset instance loaded).
-    /// </value>
-    public AssetReference<MaterialAsset> Material
+    /// <value>An absolute <c>asset:</c> URI.</value>
+    /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The value does not name an asset.</exception>
+    public required Uri Material
     {
-        get => this.material;
-        set => this.SetProperty(ref this.material, value);
+        get;
+        set => _ = this.SetProperty(ref field, AssetUris.EnsureAssetUri(value));
     }
 
     /// <summary>Gets or sets the native slot target retained with this assignment.</summary>
-    public MaterialSlotTarget Target
+    /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
+    public required MaterialSlotTarget Target
     {
-        get => this.target;
+        get;
         set
         {
             ArgumentNullException.ThrowIfNull(value);
-            _ = this.SetProperty(ref this.target, value);
+            _ = this.SetProperty(ref field, value);
         }
     }
 
@@ -69,8 +65,8 @@ public partial class MaterialsSlot : OverrideSlot
         }
 
         using var notifications = this.SuppressNotifications();
-        this.Target = new(md.GeometryUri, md.SlotId, md.LayoutRevision);
-        this.Material = new AssetReference<MaterialAsset>(md.MaterialUri);
+        this.Target = ReadTarget(md);
+        this.Material = AssetUriData.Read(md.MaterialUri, nameof(md.MaterialUri));
     }
 
     /// <inheritdoc/>
@@ -80,6 +76,9 @@ public partial class MaterialsSlot : OverrideSlot
             GeometryUri = this.Target.GeometryUri,
             SlotId = this.Target.SlotId,
             LayoutRevision = this.Target.LayoutRevision,
-            MaterialUri = this.Material.Uri.ToString(),
+            MaterialUri = this.Material,
         };
+
+    private static MaterialSlotTarget ReadTarget(MaterialsSlotData data)
+        => new(AssetUriData.Read(data.GeometryUri, nameof(data.GeometryUri)), data.SlotId, data.LayoutRevision);
 }
