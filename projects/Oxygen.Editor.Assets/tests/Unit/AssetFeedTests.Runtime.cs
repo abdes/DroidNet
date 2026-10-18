@@ -7,6 +7,7 @@ using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Editor.Assets.TestSupport;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
@@ -21,7 +22,7 @@ public sealed partial class AssetFeedTests
     {
         using var workspace = new AssetWorkspace();
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
-        var uri = new Uri("asset:///Content/Materials/Red.omat.json");
+        var identity = AssetPath.Parse("/Content/Materials/Red.omat");
         var context = workspace.ActivateProject();
         var projectId = context.ActiveProject!.ProjectId;
         var preview = new ControlledRuntimeStatus(new(AssetRuntimeContentState.Unmounted, [], []));
@@ -29,9 +30,9 @@ public sealed partial class AssetFeedTests
         var reader = new DelegateStatusReader((_, _, _) =>
         {
             reads++;
-            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [new(uri, new("asset:///Content/Materials/Red.omat"), Oxygen.Editor.ContentPipeline.ContentCookAssetKind.Material, "Content", "/Content/Materials/Red.omat") { DescriptorRelativePath = "Materials/Red.omat" }], [], []) { OutputRoots = System.Collections.Immutable.ImmutableDictionary<string, string>.Empty.Add("Content", workspace.SourcePath(".cooked/Content")) }]);
+            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [new(identity, identity, Oxygen.Editor.ContentPipeline.ContentCookAssetKind.Material, "Content", "/Content/Materials/Red.omat") { DescriptorRelativePath = "Materials/Red.omat" }], [], []) { OutputRoots = System.Collections.Immutable.ImmutableDictionary<string, FileSystemPath>.Empty.Add("Content", FileSystemPath.From(workspace.SourcePath(".cooked/Content"))) }]);
         });
-        using var provider = new AssetFeed(new TestProjectAssetCatalog([new AssetRecord(uri)]), context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), preview, NoRelocations(), NoAuthoring());
+        using var provider = new AssetFeed(new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]), context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), preview, NoRelocations(), NoAuthoring());
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
@@ -40,18 +41,18 @@ public sealed partial class AssetFeedTests
         _ = rows.Single().PrimaryBadge.Should().Be("Cooked");
         _ = preview.RequestedProjects.Should().Contain(projectId);
         var baselineReads = reads;
-        var mounted = new AssetRuntimeStatus(AssetRuntimeContentState.Mounted, [workspace.SourcePath(".cooked/Content")], []);
+        var mounted = new AssetRuntimeStatus(AssetRuntimeContentState.Mounted, [FileSystemPath.From(workspace.SourcePath(".cooked/Content"))], []);
         preview.Publish(mounted);
         _ = rows.Single().PrimaryBadge.Should().Be("Ready");
         foreach (var (success, text) in new (bool?, string)[] { (null, "Updating preview"), (false, "Preview issue"), (true, "Ready") })
         {
-            preview.Publish(mounted with { Requests = [new("/Content/Materials/Red.omat", success, success == false ? "Material rejected" : null)] });
+            preview.Publish(mounted with { Requests = [new(AssetPath.Parse("/Content/Materials/Red.omat"), success, success == false ? "Material rejected" : null)] });
             _ = rows.Single().PrimaryBadge.Should().Be(text);
             _ = AssetStatusText.ForEntry(choices.Single()).Should().Be(text);
             _ = rows.Single().CookStatus!.HasAvailableOutput.Should().BeTrue();
         }
 
-        preview.Publish(mounted with { Requests = [new("/Content/Materials/Other.omat", Succeeded: false, "Other asset")] });
+        preview.Publish(mounted with { Requests = [new(AssetPath.Parse("/Content/Materials/Other.omat"), Succeeded: false, "Other asset")] });
         _ = rows.Single().PrimaryBadge.Should().Be("Ready");
         preview.Publish(new(AssetRuntimeContentState.Unavailable, [], [], "Native SDK mismatch"));
         _ = rows.Single().PrimaryBadge.Should().Be("Cooked");

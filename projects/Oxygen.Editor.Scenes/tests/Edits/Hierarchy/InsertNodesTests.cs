@@ -179,7 +179,7 @@ public sealed class InsertNodesTests
 
         SceneAssert.Applied(result);
         var geometry = fixture.Node(node.Id).Dehydrate().Components.OfType<GeometryComponentData>().Single();
-        _ = geometry.GeometryUri.Should().Be(SampleScene.SphereGeometry.ToString());
+        _ = geometry.GeometryUri.Should().Be(SampleScene.SphereGeometry);
     }
 
     // The scene index and the layout index are two positions of the same insert: each is checked with the other valid.

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
@@ -24,7 +25,7 @@ internal sealed partial class RetentionWorkspace : IDisposable
             ProjectId = Guid.NewGuid(),
             Name = "Retention",
             Category = Category.Games,
-            ProjectRoot = this.ProjectRoot,
+            ProjectRoot = FileSystemPath.From(this.ProjectRoot),
             AuthoringMounts = [new("Content", "Content")],
             LocalFolderMounts = [],
         });
@@ -47,7 +48,7 @@ internal sealed partial class RetentionWorkspace : IDisposable
         var path = Path.Combine(this.root, "Original", relative);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, text);
-        return new(AssetUri: null, path, relative, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))));
+        return new(AssetUri: null, FileSystemPath.From(path), relative, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))));
     }
 
     public Task<ImportSourceRetentionResult> RetainAsync(string name, IReadOnlyList<CookSnapshotInput> inputs, CancellationToken cancellationToken)

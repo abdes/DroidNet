@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 
@@ -24,7 +25,7 @@ public sealed class CookOrchestrationTests
     {
         using var workspace = new CookWorkspace();
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var sceneUri = new Uri("asset:///Content/Scenes/Main.oscene.json");
+        var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
         var generator = new CapturingSceneDescriptorGenerator(diagnostics: []);
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: new CookInspectionResult(workspace.Root, Succeeded: true, SourceIdentity: Guid.NewGuid(), Assets: [new CookedAssetEntry("/Content/Scenes/Main.oscene", ContentCookAssetKind.Scene)], Files: [], Diagnostics: []))
         {
@@ -38,7 +39,7 @@ public sealed class CookOrchestrationTests
         _ = result.Status.Should().Be(OperationStatus.Succeeded);
         _ = result.CookedAssets.Should().ContainSingle(asset =>
             asset.SourceAssetUri == sceneUri
-            && asset.CookedAssetUri == new Uri("asset:///Content/Scenes/Main.oscene")
+            && asset.CookedAssetUri == AssetPath.Parse("/Content/Scenes/Main.oscene")
             && asset.Kind == ContentCookAssetKind.Scene);
         _ = generator.Scope.Should().NotBeNull();
         _ = generator.Scope!.Inputs.Should().ContainSingle(input =>
@@ -77,7 +78,7 @@ public sealed class CookOrchestrationTests
         var service = CreateService(workspace, generator, api);
 
         var result = await service.CookCurrentSceneAsync(
-                new Uri("asset:///Content/Scenes/Main.oscene.json"),
+                AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
                 CancellationToken.None)
             .ConfigureAwait(false);
 
@@ -94,7 +95,7 @@ public sealed class CookOrchestrationTests
     {
         using var workspace = new CookWorkspace();
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        var materialUri = new Uri("asset:///Content/Materials/Red.omat.json");
+        var materialUri = AssetPath.Parse("/Content/Materials/Red.omat.json");
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: new CookInspectionResult(workspace.Root, Succeeded: true, SourceIdentity: Guid.NewGuid(), Assets: [new CookedAssetEntry("/Content/Materials/Red.omat", ContentCookAssetKind.Material)], Files: [], Diagnostics: []))
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
@@ -107,7 +108,7 @@ public sealed class CookOrchestrationTests
         _ = result.Status.Should().Be(OperationStatus.Succeeded);
         _ = result.CookedAssets.Should().ContainSingle(asset =>
             asset.SourceAssetUri == materialUri
-            && asset.CookedAssetUri == new Uri("asset:///Content/Materials/Red.omat"));
+            && asset.CookedAssetUri == AssetPath.Parse("/Content/Materials/Red.omat"));
         _ = api.ImportedManifest.Should().NotBeNull();
         _ = api.ImportedManifest!.Jobs.Should().ContainSingle(job =>
             job.Type == "material-descriptor" && job.Source == "Content/Materials/Red.omat.json");
@@ -131,7 +132,7 @@ public sealed class CookOrchestrationTests
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
-        var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Missing.omat.json"), CancellationToken.None)
+        var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Materials/Missing.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
 
         _ = result.Status.Should().Be(OperationStatus.Failed);
@@ -154,7 +155,7 @@ public sealed class CookOrchestrationTests
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
-        var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Red.omat.json"), CancellationToken.None)
+        var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Materials/Red.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
 
         _ = result.Status.Should().Be(OperationStatus.Failed);
@@ -176,7 +177,7 @@ public sealed class CookOrchestrationTests
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
-        var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Red.omat.json"), CancellationToken.None)
+        var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Materials/Red.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
 
         _ = result.Status.Should().Be(OperationStatus.Failed);
@@ -200,7 +201,7 @@ public sealed class CookOrchestrationTests
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
-        var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Red.omat.json"), CancellationToken.None)
+        var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Materials/Red.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
 
         _ = result.Status.Should().Be(OperationStatus.Failed);
@@ -235,7 +236,7 @@ public sealed class CookOrchestrationTests
             workspace.Files,
             workspace.Publication);
 
-        var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Red.omat.json"), CancellationToken.None)
+        var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Materials/Red.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
 
         _ = result.Status.Should().Be(OperationStatus.Failed);
@@ -268,7 +269,7 @@ public sealed class CookOrchestrationTests
         var service = CreateService(workspace, generator, api);
 
         var result = await service.CookCurrentSceneAsync(
-                new Uri("asset:///Content/Scenes/Main.oscene.json"),
+                AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
                 CancellationToken.None)
             .ConfigureAwait(false);
 
@@ -292,7 +293,7 @@ public sealed class CookOrchestrationTests
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
-        _ = await service.CookFolderAsync(new Uri("asset:///Content/Materials"), CancellationToken.None)
+        _ = await service.CookFolderAsync(AssetPath.Parse("/Content/Materials"), CancellationToken.None)
             .ConfigureAwait(false);
         _ = api.ImportedManifest.Should().NotBeNull();
         _ = api.ImportedManifest!.Jobs.Select(static job => job.Source).Should().Equal(
@@ -314,11 +315,11 @@ public sealed class CookOrchestrationTests
         };
         var service = CreateService(workspace, generator, api);
 
-        _ = await service.CookFolderAsync(new Uri("asset:///Content/Scenes"), CancellationToken.None)
+        _ = await service.CookFolderAsync(AssetPath.Parse("/Content/Scenes"), CancellationToken.None)
             .ConfigureAwait(false);
         _ = generator.Scope.Should().NotBeNull();
         _ = generator.Scope!.Inputs.Should().ContainSingle(input =>
-            input.AssetUri == new Uri("asset:///Content/Scenes/Main.oscene.json"));
+            input.AssetUri == AssetPath.Parse("/Content/Scenes/Main.oscene.json"));
         _ = api.ImportedManifest.Should().NotBeNull();
         _ = api.ImportedManifest!.Jobs.Should().ContainSingle(job => job.Type == "scene-descriptor");
     }
@@ -358,7 +359,7 @@ public sealed class CookOrchestrationTests
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
-        var report = await service.InspectCookedOutputAsync(new Uri("asset:///Cooked/Content"), CancellationToken.None)
+        var report = await service.InspectCookedOutputAsync(AssetPath.Parse("/Cooked/Content"), CancellationToken.None)
             .ConfigureAwait(false);
 
         _ = report.Roots.Should().ContainSingle().Which.Inspection.CookedRoot.Should().Be(workspace.CookedRoot("Content"));
@@ -389,7 +390,7 @@ public sealed class CookOrchestrationTests
 
     private sealed class InvalidManifestBuilder : IContentImportManifestBuilder
     {
-        public ContentImportJob BuildModelJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string name, ContentImportLayout layout, ContentPipeline.Import.NativeMaterialSlotProvenance provenance) => new ContentImportManifestBuilder().BuildModelJob(input, dependsOn, name, layout, provenance);
+        public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, ContentImportLayout layout, ContentPipeline.Import.NativeMaterialSlotProvenance provenance) => new ContentImportManifestBuilder().BuildModelJob(sourceRelativePath, dependsOn, name, layout, provenance);
 
         public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, ContentPipeline.Import.NativeSceneImportSettings? modelSettings = null) => new ContentImportManifestBuilder().BuildJob(input, dependsOn, modelSettings);
 

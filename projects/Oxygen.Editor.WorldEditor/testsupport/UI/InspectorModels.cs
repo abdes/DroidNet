@@ -18,6 +18,7 @@ using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
+using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
@@ -88,7 +89,7 @@ internal static class InspectorModels
         var validation = new MaterialValidation();
         var kind = new MaterialDocumentKind(validation);
         var files = new MemoryFiles(Encoding.UTF8.GetBytes(AssetTemplates.Material("UI")));
-        var opening = new OpenDocuments([kind], files).OpenAsync(new DocumentFile("C:/UI/Content/Materials/UI.omat.json", new Uri("asset:///Content/Materials/UI.omat.json")));
+        var opening = new OpenDocuments([kind], files).OpenAsync(new DocumentFile(FileSystemPath.From("C:/UI/Content/Materials/UI.omat.json"), AssetPath.Parse("/Content/Materials/UI.omat")));
         if (!opening.IsCompletedSuccessfully || opening.Result.Document is not { } document)
         {
             throw new InvalidOperationException("An in-memory material opens at once.");

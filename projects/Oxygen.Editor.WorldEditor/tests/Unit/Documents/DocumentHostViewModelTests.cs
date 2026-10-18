@@ -54,7 +54,7 @@ public sealed partial class DocumentHostViewModelTests
         scene.History.AddChange("Scene edit", static () => { });
         material.History.AddChange("Material edit", static () => { });
 
-        var saved = await fixture.Host.SaveDocumentsAsync([material.File.AssetUri, new Uri("asset:///Content/Materials/Closed.omat.json")]).ConfigureAwait(false);
+        var saved = await fixture.Host.SaveDocumentsAsync([material.File.Asset, AssetPath.Parse("/Content/Materials/Closed.omat")]).ConfigureAwait(false);
 
         _ = saved.Should().BeTrue();
         _ = material.IsDirty.Should().BeFalse();

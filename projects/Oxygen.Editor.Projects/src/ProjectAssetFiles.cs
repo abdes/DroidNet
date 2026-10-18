@@ -41,6 +41,16 @@ public static class ProjectAssetFiles
             .FirstOrDefault(static location => location is not null && File.Exists(location.File.FullPath));
     }
 
+    /// <summary>
+    /// Locates the source file of an asset: its existing source, or else where its most specific source would be, so a
+    /// caller reading it reports the missing file rather than an unknown asset.
+    /// </summary>
+    /// <param name="project">The project.</param>
+    /// <param name="identity">The asset's identity.</param>
+    /// <returns>The source's location, or <see langword="null"/> when the asset is not under one of the mounts.</returns>
+    public static ProjectAssetLocation? LocateSource(this ProjectContext project, AssetPath identity)
+        => project.FindSource(identity) ?? project.Find(AssetFileTypes.SourcesOf(identity)[0]);
+
     /// <summary>Finds the virtual path of a file or folder.</summary>
     /// <param name="project">The project.</param>
     /// <param name="file">The file or folder.</param>

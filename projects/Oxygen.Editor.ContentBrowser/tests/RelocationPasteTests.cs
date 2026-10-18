@@ -9,6 +9,7 @@ using Moq;
 using Oxygen.Editor.ContentBrowser.Relocation;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -22,15 +23,15 @@ public sealed class RelocationPasteTests
     public async Task PasteOfCopiedItemsCopiesThem()
     {
         var service = new Mock<IAssetRelocationService>();
-        _ = service.Setup(value => value.CopyAsync(It.IsAny<IReadOnlyList<string>>(), "/Content/Props", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(["/Content/Props/Materials"]);
+        _ = service.Setup(value => value.CopyAsync(It.IsAny<IReadOnlyList<AssetPath>>(), AssetPath.Parse("/Content/Props"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([AssetPath.Parse("/Content/Props/Materials")]);
         using var histories = new HistoryService();
         using var workflow = CreateWorkflow(service.Object, histories);
 
-        var outcome = await workflow.PasteAsync(["/Content/Materials"], move: false, "/Content/Props").ConfigureAwait(false);
+        var outcome = await workflow.PasteAsync([AssetPath.Parse("/Content/Materials")], move: false, AssetPath.Parse("/Content/Props")).ConfigureAwait(false);
 
         _ = outcome!.Succeeded.Should().BeTrue();
-        service.Verify(value => value.CopyAsync(It.Is<IReadOnlyList<string>>(items => items.SequenceEqual(new[] { "/Content/Materials" })), "/Content/Props", It.IsAny<CancellationToken>()));
+        service.Verify(value => value.CopyAsync(It.Is<IReadOnlyList<AssetPath>>(items => items.SequenceEqual(new[] { AssetPath.Parse("/Content/Materials") })), AssetPath.Parse("/Content/Props"), It.IsAny<CancellationToken>()));
     }
 
     /// <summary>Pasting cut items moves those not already in the folder, and does nothing when all are.</summary>
@@ -46,11 +47,11 @@ public sealed class RelocationPasteTests
         using var histories = new HistoryService();
         using var workflow = CreateWorkflow(service.Object, histories);
 
-        _ = await workflow.PasteAsync(["/Content/Materials", "/Content/Props/Box.ogeo.json"], move: true, "/Content/Props").ConfigureAwait(false);
-        var none = await workflow.PasteAsync(["/Content/Props/Box.ogeo.json"], move: true, "/Content/Props").ConfigureAwait(false);
+        _ = await workflow.PasteAsync([AssetPath.Parse("/Content/Materials"), AssetPath.Parse("/Content/Props/Box.ogeo.json")], move: true, AssetPath.Parse("/Content/Props")).ConfigureAwait(false);
+        var none = await workflow.PasteAsync([AssetPath.Parse("/Content/Props/Box.ogeo.json")], move: true, AssetPath.Parse("/Content/Props")).ConfigureAwait(false);
 
         service.Verify(value => value.RelocateAsync(
-            It.Is<AssetRelocationRequest>(request => request.Moves.Single().SourcePath == "/Content/Materials" && request.Moves.Single().TargetPath == "/Content/Props/Materials"),
+            It.Is<AssetRelocationRequest>(request => request.Moves.Single().Source == AssetPath.Parse("/Content/Materials") && request.Moves.Single().Target == AssetPath.Parse("/Content/Props/Materials")),
             "Move",
             It.IsAny<HistoryKeeper>(),
             It.IsAny<CancellationToken>()));

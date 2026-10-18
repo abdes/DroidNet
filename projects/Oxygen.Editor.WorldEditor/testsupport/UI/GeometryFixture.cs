@@ -20,35 +20,35 @@ internal sealed class GeometryFixture : IDisposable
         this.Geometry = new()
         {
             Name = "Geometry",
-            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
+            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
         };
         _ = this.Authoring.Node.AddComponent(this.Geometry);
         var geometry = CreateStatusAsset(0) with
         {
-            IdentityUri = this.GeometryUri,
+            Identity = this.GeometryAsset,
             DisplayName = "Custom",
             Kind = AssetKind.Geometry,
             DerivedState = null,
-            CookStatus = new(this.GeometryUri, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
+            CookStatus = new(this.GeometryAsset, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
         };
         var material = CreateStatusAsset(1) with
         {
-            IdentityUri = this.MaterialUri,
-            CookStatus = new(this.MaterialUri, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
+            Identity = this.MaterialAsset,
+            CookStatus = new(this.MaterialAsset, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
         };
         _ = this.Assets.SetupGet(value => value.Items).Returns(Observable.Return<IReadOnlyList<AssetEntry>>([geometry, material]));
         _ = this.Assets.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        _ = this.Assets.Setup(value => value.ResolveAsync(this.GeometryUri, It.IsAny<CancellationToken>())).ReturnsAsync(geometry);
-        _ = this.Assets.Setup(value => value.ResolveAsync(this.MaterialUri, It.IsAny<CancellationToken>())).ReturnsAsync(material);
+        _ = this.Assets.Setup(value => value.ResolveAsync(this.GeometryAsset, It.IsAny<CancellationToken>())).ReturnsAsync(geometry);
+        _ = this.Assets.Setup(value => value.ResolveAsync(this.MaterialAsset, It.IsAny<CancellationToken>())).ReturnsAsync(material);
     }
 
     public SceneAuthoringFixture Authoring { get; } = new();
 
     public Mock<IAssetFeed> Assets { get; } = new();
 
-    public Uri GeometryUri { get; } = new("asset:///Content/Geometry/Custom.ogeo.json");
+    public AssetPath GeometryAsset { get; } = AssetPath.Parse("/Content/Geometry/Custom.ogeo");
 
-    public Uri MaterialUri { get; } = new("asset:///Content/Materials/Custom.omat.json");
+    public AssetPath MaterialAsset { get; } = AssetPath.Parse("/Content/Materials/Custom.omat");
 
     public GeometryComponent Geometry { get; }
 

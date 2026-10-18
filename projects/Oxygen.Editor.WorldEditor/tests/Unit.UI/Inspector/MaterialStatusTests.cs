@@ -13,6 +13,7 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.MaterialEditor;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorModels;
 
@@ -30,7 +31,7 @@ internal sealed class MaterialStatusTests : DroidNet.Tests.VisualUserInterfaceTe
     {
         var item = CreateStatusAsset(0) with
         {
-            IdentityUri = new("asset:///Content/Materials/UI.omat.json"),
+            Identity = AssetPath.Parse("/Content/Materials/UI.omat"),
         };
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
         using var model = CreateMaterialEditor(StatusProvider(updates));

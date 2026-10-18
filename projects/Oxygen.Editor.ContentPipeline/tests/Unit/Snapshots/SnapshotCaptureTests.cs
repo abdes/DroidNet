@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.SnapshotScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Snapshots;
@@ -72,12 +73,12 @@ public sealed class SnapshotCaptureTests
 
         var unnormalized = input with
         {
-            SourcePath = Path.Combine(workspace.Root, "Content", "..", "Content", "material.omat.json"),
+            SourcePath = FileSystemPath.From(Path.Combine(workspace.Root, "Content", "..", "Content", "material.omat.json")),
         };
         var result = await workspace.CaptureAsync([unnormalized]).ConfigureAwait(false);
         _ = result.Snapshot.Should().NotBeNull();
         var snapshot = result.Snapshot!;
-        await File.WriteAllTextAsync(input.SourcePath, "later saved material", CancellationToken.None).ConfigureAwait(false);
+        await File.WriteAllTextAsync(input.SourcePath.FullPath, "later saved material", CancellationToken.None).ConfigureAwait(false);
 
         _ = (await File.ReadAllTextAsync(Path.Combine(snapshot.InputRoot, input.RelativePath), CancellationToken.None).ConfigureAwait(false)).Should().Be("saved material");
         _ = snapshot.Documents.Should().ContainSingle();
@@ -98,7 +99,7 @@ public sealed class SnapshotCaptureTests
             discoveries++;
             if (discoveries == 1)
             {
-                await File.WriteAllTextAsync(input.SourcePath, "after", token).ConfigureAwait(false);
+                await File.WriteAllTextAsync(input.SourcePath.FullPath, "after", token).ConfigureAwait(false);
                 return [input];
             }
 
@@ -143,7 +144,7 @@ public sealed class SnapshotCaptureTests
         using var registration = workspace.Documents.Register(
             input.SourcePath,
             _ => Task.FromResult<CookDocumentReadLease?>(new(State(input), () => released = true)));
-        File.Delete(input.SourcePath);
+        File.Delete(input.SourcePath.FullPath);
 
         var capture = () => workspace.CaptureAsync([input]);
         _ = await capture.Should().ThrowAsync<FileNotFoundException>().ConfigureAwait(false);
@@ -204,20 +205,6 @@ public sealed class SnapshotCaptureTests
             "compatible-build",
             CancellationToken.None);
         _ = await capture.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
-
-        _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".build"), "*", SearchOption.AllDirectories).Should().BeEmpty();
-    }
-
-    /// <summary>Rejects relative asset identity before moving any captured input into its final directory.</summary>
-    /// <returns>The asynchronous test operation.</returns>
-    [TestMethod]
-    public async Task RelativeAssetIdentityCannotLeaveAnUnownedSnapshot()
-    {
-        using var workspace = new CaptureWorkspace();
-        var input = workspace.WriteInput("Content/source.bin", "saved source") with { AssetUri = new Uri("source.bin", UriKind.Relative) };
-
-        var capture = () => workspace.CaptureAsync([input]);
-        _ = await capture.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
 
         _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".build"), "*", SearchOption.AllDirectories).Should().BeEmpty();
     }

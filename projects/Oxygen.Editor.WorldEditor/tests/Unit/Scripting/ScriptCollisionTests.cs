@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.World.Scripting;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 
@@ -40,10 +41,10 @@ public sealed partial class ScriptCollisionTests : IDisposable
     public void FindCollisionsIsEmptyForAUniqueName()
         => _ = ScriptAnalysisService.FindCollisions(this.Write("jump.lua")).Should().BeEmpty();
 
-    private string Write(string name)
+    private FileSystemPath Write(string name)
     {
         var path = Path.Combine(this.folder, name);
         File.WriteAllText(path, "return {}");
-        return path;
+        return FileSystemPath.From(path);
     }
 }

@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 
@@ -36,8 +37,8 @@ public sealed class ScriptCookTests
         return Script
         """;
 
-    private static readonly Uri SceneUri = new("asset:///Content/Scenes/Main.oscene.json");
-    private static readonly Uri MoveScript = new("asset:///Content/Player/move.oscript");
+    private static readonly AssetPath SceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
+    private static readonly AssetPath MoveScript = AssetPath.Parse("/Content/Player/move.oscript");
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -110,14 +111,14 @@ public sealed class ScriptCookTests
         }
 
         var root = await library.ExportRootAsync("Content", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Script library", root)] };
+        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Script library", FileSystemPath.From(root))] };
         consumer.Activate(context);
         consumer.WriteText("Content/Local/own.lua", Move);
         IScriptDeclarationProvider service = CreateNativeService(consumer, out var consumerCompatibility);
         using var lifetime = consumerCompatibility;
 
         var declarations = await service.ReadAsync(context, MoveScript, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var own = await service.ReadAsync(context, new Uri("asset:///Content/Local/own.oscript"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var own = await service.ReadAsync(context, AssetPath.Parse("/Content/Local/own.oscript"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = declarations.Should().NotBeNull();
         _ = declarations!.Parameters.Should().Equal(

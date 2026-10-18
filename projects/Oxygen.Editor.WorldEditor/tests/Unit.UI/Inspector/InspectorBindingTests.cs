@@ -114,7 +114,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     public Task NodeRenderingXamlRealizesItsFlagToggles() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Rendering", fixture),
         static model => new NodeRenderingView { ViewModel = (NodeRenderingViewModel)model },
-        prepareFixture: static fixture => fixture.Node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube") }),
+        prepareFixture: static fixture => fixture.Node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = AssetPath.Generated.Combine("BasicShapes/Cube") }),
         assertRealizedAsync: static view =>
         {
             _ = view.FindDescendants().OfType<ToggleSwitch>().Should().HaveCount(3);

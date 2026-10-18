@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 
@@ -15,8 +16,8 @@ namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 public sealed partial class FakeMaterialSlotProvider : IGeometryMaterialSlotProvider, IDisposable
 {
     private readonly Lock gate = new();
-    private readonly Dictionary<Uri, GeometryMaterialSlotMetadata> inventories = [];
-    private readonly Dictionary<Uri, Exception> failures = [];
+    private readonly Dictionary<AssetPath, GeometryMaterialSlotMetadata> inventories = [];
+    private readonly Dictionary<AssetPath, Exception> failures = [];
     private MaterialSlotReadGate? held;
 
     /// <summary>
@@ -27,7 +28,7 @@ public sealed partial class FakeMaterialSlotProvider : IGeometryMaterialSlotProv
         ProjectId = Guid.Empty,
         Name = "Test",
         Category = Category.Games,
-        ProjectRoot = Path.GetTempPath(),
+        ProjectRoot = FileSystemPath.From(Path.GetTempPath()),
         AuthoringMounts = [],
         LocalFolderMounts = [],
     };
@@ -38,7 +39,7 @@ public sealed partial class FakeMaterialSlotProvider : IGeometryMaterialSlotProv
     /// <param name="geometry">The geometry.</param>
     /// <param name="layoutRevision">The inventory's layout revision.</param>
     /// <param name="slots">The slot ids.</param>
-    public void Publish(Uri geometry, string layoutRevision, params IEnumerable<Guid> slots)
+    public void Publish(AssetPath geometry, string layoutRevision, params IEnumerable<Guid> slots)
     {
         var metadata = new GeometryMaterialSlotMetadata(
             geometry,
@@ -56,7 +57,7 @@ public sealed partial class FakeMaterialSlotProvider : IGeometryMaterialSlotProv
     /// Removes the inventory of a geometry, so it reads as not cooked.
     /// </summary>
     /// <param name="geometry">The geometry.</param>
-    public void Remove(Uri geometry)
+    public void Remove(AssetPath geometry)
     {
         lock (this.gate)
         {
@@ -70,7 +71,7 @@ public sealed partial class FakeMaterialSlotProvider : IGeometryMaterialSlotProv
     /// </summary>
     /// <param name="geometry">The geometry.</param>
     /// <param name="error">The error, such as an <see cref="IOException"/>.</param>
-    public void Fail(Uri geometry, Exception error)
+    public void Fail(AssetPath geometry, Exception error)
     {
         lock (this.gate)
         {
@@ -102,7 +103,7 @@ public sealed partial class FakeMaterialSlotProvider : IGeometryMaterialSlotProv
     public void Dispose() => this.held?.Dispose();
 
     /// <inheritdoc/>
-    public async Task<GeometryMaterialSlotMetadata?> ReadAsync(ProjectContext project, Uri geometryUri, CancellationToken cancellationToken = default)
+    public async Task<GeometryMaterialSlotMetadata?> ReadAsync(ProjectContext project, AssetPath geometryUri, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(geometryUri);
         MaterialSlotReadGate? wait;

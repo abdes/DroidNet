@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
@@ -57,7 +58,7 @@ public sealed class InputFileCookingTests : IDisposable
     [TestMethod]
     public void ResolveInputFileKeepsItsIdentityAndFolder()
     {
-        var input = CookInputResolver.Resolve(this.CreateProject(), new Uri("asset:///Content/Gameplay/Player.input.json"), ContentCookInputRole.Primary);
+        var input = CookInputResolver.Resolve(this.CreateProject(), AssetPath.Parse("/Content/Gameplay/Player.input.json"), ContentCookInputRole.Primary);
 
         _ = input.Kind.Should().Be(ContentCookAssetKind.Input);
         _ = input.SourceRelativePath.Should().Be("Content/Gameplay/Player.input.json");
@@ -67,7 +68,7 @@ public sealed class InputFileCookingTests : IDisposable
     [TestMethod]
     public void BuildJobPlacesInputOutputsInTheSourceFolder()
     {
-        var input = CookInputResolver.Resolve(this.CreateProject(), new Uri("asset:///Content/Gameplay/Player.input.json"), ContentCookInputRole.Primary);
+        var input = CookInputResolver.Resolve(this.CreateProject(), AssetPath.Parse("/Content/Gameplay/Player.input.json"), ContentCookInputRole.Primary);
 
         var job = new ContentImportManifestBuilder().BuildJob(input, []);
 
@@ -85,7 +86,7 @@ public sealed class InputFileCookingTests : IDisposable
         var bad = this.WriteInput(project, "Vehicle.input.json", UsesForeignActions);
         var builder = new ContentImportManifestBuilder();
         var manifest = new ContentImportManifest(1, Path.Combine(this.root, ".cooked"), new ContentImportLayout("/Content"), [builder.BuildJob(good, []), builder.BuildJob(bad, [])]);
-        var scope = new ContentCookScope(project, new ProjectCookScope(project.ProjectId, this.root, Path.Combine(this.root, ".cooked")), [good, bad], CookTargetKind.Folder);
+        var scope = new ContentCookScope(project, new ProjectCookScope(project.ProjectId, FileSystemPath.From(this.root), Path.Combine(this.root, ".cooked")), [good, bad], CookTargetKind.Folder);
 
         var (kept, diagnostics) = ContentPipelineService.RejectInputFilesWithForeignActions(Guid.NewGuid(), scope, manifest);
 
@@ -93,13 +94,13 @@ public sealed class InputFileCookingTests : IDisposable
         var diagnostic = diagnostics.Should().ContainSingle().Subject;
         _ = diagnostic.Code.Should().Be(ScriptDiagnosticCodes.InputReferenceUnsupported);
         _ = diagnostic.Message.Should().Contain("'Boost'").And.Contain("'Brake'");
-        _ = diagnostic.AffectedPath.Should().Be(bad.SourceAbsolutePath);
+        _ = diagnostic.AffectedPath.Should().Be(bad.SourceAbsolutePath.FullPath);
     }
 
     private ContentCookInput WriteInput(ProjectContext project, string name, string text)
     {
         File.WriteAllText(Path.Combine(this.root, "Content", "Gameplay", name), text);
-        return CookInputResolver.Resolve(project, new Uri("asset:///Content/Gameplay/" + name), ContentCookInputRole.Primary);
+        return CookInputResolver.Resolve(project, AssetPath.Parse("/Content/Gameplay/" + name), ContentCookInputRole.Primary);
     }
 
     private ProjectContext CreateProject()

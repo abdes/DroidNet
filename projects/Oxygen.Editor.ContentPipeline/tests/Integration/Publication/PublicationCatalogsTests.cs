@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 
@@ -27,7 +28,7 @@ public sealed class PublicationCatalogsTests
         try
         {
             WriteLibrary(library.FullName, 1);
-            consumer.Activate(consumer.ProjectContext with { LocalFolderMounts = [new("Library", library.FullName)] });
+            consumer.Activate(consumer.ProjectContext with { LocalFolderMounts = [new("Library", FileSystemPath.From(library.FullName))] });
             var project = consumer.ContextService.ActiveProject!;
             using var published = await consumer.Publication.AcquireForMountAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false);
             var recorded = published.Roots.Single(static root => root.Name == "Library");

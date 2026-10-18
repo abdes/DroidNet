@@ -122,7 +122,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             this.Candidate = new ProjectInfo(info.Id, info.Name, info.Category, info.Location)
             {
                 AuthoringMounts = [.. info.AuthoringMounts],
-                LocalFolderMounts = [new("Library", this.Library)],
+                LocalFolderMounts = [new("Library", FileSystemPath.From(this.Library))],
                 CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Library"), new(CookedContentSourceKind.ProjectOutput)],
                 DefaultSceneId = info.DefaultSceneId,
             };
@@ -166,7 +166,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         public async Task InitializeAsync()
         {
             var context = this.Projects.ActiveProject!;
-            var info = new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot)
+            var info = new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot.FullPath)
             {
                 AuthoringMounts = [.. context.AuthoringMounts],
                 DefaultSceneId = context.DefaultSceneId,
@@ -174,11 +174,11 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             _ = (await this.manager.SaveProjectInfoAsync(info).ConfigureAwait(true)).Should().BeTrue();
             var index = await CookedIndexSnapshot.ReadAsync(this.ProjectOutput, CancellationToken.None).ConfigureAwait(true);
             var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, context.ProjectId, Guid.NewGuid(), DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(context), [new(CookPublicationRootOwner.Project, "Content", this.sourceKey, index.Fingerprint, LibraryPath: null)], [], CookInputs: null);
-            var path = CookPublicationPaths.Document(context.ProjectRoot, document.OperationId);
+            var path = CookPublicationPaths.Document(context.ProjectRoot.FullPath, document.OperationId);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var version = await this.Store.WriteAsync(path, JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), FileVersion.Missing).ConfigureAwait(true);
             var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
-            _ = await this.Store.WriteAsync(CookPublicationPaths.Head(context.ProjectRoot), JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), FileVersion.Missing).ConfigureAwait(true);
+            _ = await this.Store.WriteAsync(CookPublicationPaths.Head(context.ProjectRoot.FullPath), JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), FileVersion.Missing).ConfigureAwait(true);
             _ = (await this.Session.StartAsync(context).ConfigureAwait(true)).Should().BeTrue();
 
             // The project context replays the current context on subscription; only later activations count.

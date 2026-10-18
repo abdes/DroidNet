@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
@@ -23,7 +24,7 @@ public sealed partial class AssetIdentityReducerTests
         var timestamp = File.GetLastWriteTimeUtc(path);
         var project = CreateProjectContext(workspace);
         var reducer = new AssetIdentityReducer();
-        var records = new[] { new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")) };
+        var records = new[] { new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json")) };
         var scope = CreateCookScope(workspace, project);
         _ = reducer.Reduce(records, project, scope).Single().PrimaryState.Should().Be(AssetState.Descriptor);
         File.WriteAllText(path, "invalid");
@@ -39,19 +40,18 @@ public sealed partial class AssetIdentityReducerTests
     public void GeneratedRecordsRetainTheirEngineIdentityBeforeCooking()
     {
         using var workspace = new TempWorkspace();
-        var record = new AssetRecord(new Uri("asset:///Engine/Generated/BasicShapes/IcoSphere"))
+        var record = new AssetRecord(AssetPath.Parse("/Engine/Generated/BasicShapes/IcoSphere"))
         {
-            Generated = new("IcoSphere", "oxygen.geometry-descriptor.v1", "/Content/Geometry/Engine_Generated_BasicShapes_IcoSphere.ogeo", GeneratedAssetCategory.Standard),
+            Generated = new("IcoSphere", "oxygen.geometry-descriptor.v1", AssetPath.Parse("/Content/Geometry/Engine_Generated_BasicShapes_IcoSphere.ogeo"), GeneratedAssetCategory.Standard),
         };
         var rows = Reduce(workspace, [record]);
         _ = rows.Should().ContainSingle();
         var row = rows[0];
         _ = row.PrimaryState.Should().Be(AssetState.Generated);
         _ = row.Kind.Should().Be(AssetKind.Geometry);
-        _ = row.IdentityUri.Should().Be(record.Uri);
+        _ = row.Identity.Should().Be(record.Identity);
         _ = row.AliasDescription.Should().BeEmpty();
         _ = row.IsSelectable.Should().BeTrue();
-        _ = row.CookedUri.Should().BeNull();
         _ = row.CookedPath.Should().BeNull();
         _ = row.SourcePath.Should().BeNull();
         _ = row.DiagnosticCodes.Should().BeEmpty();
@@ -73,14 +73,14 @@ public sealed partial class AssetIdentityReducerTests
         var rows = Reduce(
             workspace,
             [
-                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
-                IndexedOutput(new Uri("asset:///Content/Materials/Red.omat"), cookedPath),
+                new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json")),
+                IndexedOutput(AssetPath.Parse("/Content/Materials/Red.omat"), cookedPath),
             ]);
 
         _ = rows.Should().ContainSingle();
         _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
         _ = rows[0].DerivedState.Should().Be(AssetState.Stale);
-        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
+        _ = rows[0].Identity.Should().Be(AssetPath.Parse("/Content/Materials/Red.omat"));
     }
 
     [TestMethod]
@@ -93,12 +93,12 @@ public sealed partial class AssetIdentityReducerTests
         var rows = Reduce(
             workspace,
             [
-                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
-                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json.import.json")),
+                new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json")),
+                new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json.import.json")),
             ]);
 
         _ = rows.Should().ContainSingle();
-        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
+        _ = rows[0].Identity.Should().Be(AssetPath.Parse("/Content/Materials/Red.omat"));
         _ = rows[0].Kind.Should().Be(AssetKind.Material);
     }
 
@@ -110,7 +110,7 @@ public sealed partial class AssetIdentityReducerTests
         Directory.CreateDirectory(Path.GetDirectoryName(sidecarPath)!);
         File.WriteAllText(sidecarPath, "{}");
 
-        var rows = Reduce(workspace, [new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json.import.json"))]);
+        var rows = Reduce(workspace, [new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json.import.json"))]);
 
         _ = rows.Should().BeEmpty();
     }
@@ -127,13 +127,13 @@ public sealed partial class AssetIdentityReducerTests
         var rows = Reduce(
             workspace,
             [
-                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
-                IndexedOutput(new Uri("asset:///Content/Materials/Red.omat"), cookedPath),
-                new AssetRecord(new Uri("asset:///Cooked/Content/Materials/Red.omat")),
+                new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json")),
+                IndexedOutput(AssetPath.Parse("/Content/Materials/Red.omat"), cookedPath),
+                new AssetRecord(AssetPath.Parse("/Cooked/Content/Materials/Red.omat")),
             ]);
 
         _ = rows.Should().ContainSingle();
-        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
+        _ = rows[0].Identity.Should().Be(AssetPath.Parse("/Content/Materials/Red.omat"));
         _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
         _ = rows[0].DerivedState.Should().Be(AssetState.Stale);
         _ = rows[0].DiagnosticCodes.Should().NotContain(AssetIdentityDiagnosticCodes.CookedMissing);
@@ -154,8 +154,8 @@ public sealed partial class AssetIdentityReducerTests
         var rows = Reduce(
             workspace,
             [
-                new AssetRecord(new Uri("asset:///Content/Materials/Gold.omat.json")),
-                IndexedOutput(new Uri("asset:///Content/Materials/Gold.omat"), cookedPath),
+                new AssetRecord(AssetPath.Parse("/Content/Materials/Gold.omat.json")),
+                IndexedOutput(AssetPath.Parse("/Content/Materials/Gold.omat"), cookedPath),
             ]);
 
         _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
@@ -175,14 +175,14 @@ public sealed partial class AssetIdentityReducerTests
         var project = CreateProjectContext(workspace);
         var rows = new AssetIdentityReducer().Reduce(
             [
-                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
-                IndexedOutput(new Uri("asset:///Content/Materials/Red.omat"), cookedPath),
+                new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json")),
+                IndexedOutput(AssetPath.Parse("/Content/Materials/Red.omat"), cookedPath),
             ],
             project,
             new ProjectCookScope(project.ProjectId, project.ProjectRoot, workspace.SourcePath("custom-cooked")));
 
         _ = rows.Should().ContainSingle();
-        _ = rows[0].CookedPath.Should().Be(cookedPath);
+        _ = rows[0].CookedPath.Should().Be(FileSystemPath.From(cookedPath));
         _ = rows[0].DerivedState.Should().Be(AssetState.Stale);
     }
 
@@ -201,8 +201,8 @@ public sealed partial class AssetIdentityReducerTests
         var project = CreateProjectContext(workspace);
         var rows = new AssetIdentityReducer().Reduce(
             [
-                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
-                IndexedOutput(new Uri("asset:///Content/Materials/Red.omat"), cookedPath),
+                new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json")),
+                IndexedOutput(AssetPath.Parse("/Content/Materials/Red.omat"), cookedPath),
             ],
             project,
             CreateCookScope(workspace, project));
@@ -220,43 +220,43 @@ public sealed partial class AssetIdentityReducerTests
         Directory.CreateDirectory(Path.GetDirectoryName(descriptorPath)!);
         File.WriteAllText(descriptorPath, "{ invalid json");
 
-        var rows = Reduce(workspace, [new AssetRecord(new Uri("asset:///Content/Materials/Broken.omat.json"))]);
+        var rows = Reduce(workspace, [new AssetRecord(AssetPath.Parse("/Content/Materials/Broken.omat.json"))]);
 
         _ = rows[0].PrimaryState.Should().Be(AssetState.Broken);
         _ = rows[0].DiagnosticCodes.Should().Contain(AssetIdentityDiagnosticCodes.DescriptorBroken);
     }
 
     [TestMethod]
-    public void Missing_ShouldPreserveAuthoredUriAndDiagnostic()
+    public void Missing_ShouldPreserveAuthoredIdentityAndDiagnostic()
     {
-        var uri = new Uri("asset:///Content/Materials/Missing.omat.json");
-        var row = AssetEntry.Missing(uri);
+        var identity = AssetPath.Parse("/Content/Materials/Missing.omat");
+        var row = AssetEntry.Missing(identity);
 
-        _ = row.IdentityUri.Should().Be(uri);
+        _ = row.Identity.Should().Be(identity);
         _ = row.PrimaryState.Should().Be(AssetState.Missing);
         _ = row.DiagnosticCodes.Should().Contain(AssetIdentityDiagnosticCodes.ResolveMissing);
     }
 
     /// <summary>Missing native-reference assets retain their expected picker category.</summary>
-    /// <param name="uri">The authored or cooked identity.</param>
+    /// <param name="identity">The authored or cooked identity.</param>
     /// <param name="kind">The expected typed-picker category.</param>
     [TestMethod]
-    [DataRow("asset:///Content/Scripts/Orbit.oscript.json", AssetKind.Script)]
-    [DataRow("asset:///Content/Input/Jump.oiact", AssetKind.InputAction)]
-    [DataRow("asset:///Content/Input/Gameplay.oimap.json", AssetKind.InputMappingContext)]
-    [DataRow("asset:///Content/Physics/Main.opscene", AssetKind.PhysicsScene)]
-    public void Missing_InfersTypedSceneReferenceKind(string uri, AssetKind kind)
+    [DataRow("/Content/Scripts/Orbit.oscript", AssetKind.Script)]
+    [DataRow("/Content/Input/Jump.oiact", AssetKind.InputAction)]
+    [DataRow("/Content/Input/Gameplay.oimap", AssetKind.InputMappingContext)]
+    [DataRow("/Content/Physics/Main.opscene", AssetKind.PhysicsScene)]
+    public void Missing_InfersTypedSceneReferenceKind(string identity, AssetKind kind)
     {
-        var row = AssetEntry.Missing(new Uri(uri));
+        var row = AssetEntry.Missing(AssetPath.Parse(identity));
 
         _ = row.Kind.Should().Be(kind);
     }
 
-    private static AssetRecord IndexedOutput(Uri uri, string path)
+    private static AssetRecord IndexedOutput(AssetPath identity, string path)
     {
-        var descriptor = uri.AbsolutePath["/Content/".Length..];
-        var root = path[..^(descriptor.Length + 1)];
-        return new(uri) { Cooked = new(root, descriptor, Guid.NewGuid(), new(1, 2), 1, 6, new string('0', 64)) { VirtualPath = uri.AbsolutePath } };
+        var descriptor = identity.VirtualPath["/Content/".Length..];
+        var root = FileSystemPath.From(path[..^(descriptor.Length + 1)]);
+        return new(identity) { Cooked = new(root, descriptor, Guid.NewGuid(), new(1, 2), 1, 6, new string('0', 64)) { VirtualPath = identity } };
     }
 
     private static IReadOnlyList<AssetEntry> Reduce(TempWorkspace workspace, IReadOnlyList<AssetRecord> records)
@@ -307,20 +307,20 @@ public sealed partial class AssetIdentityReducerTests
     {
         public TempWorkspace()
         {
-            this.Root = Path.Combine(Path.GetTempPath(), "oxygen-asset-identity-tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(this.Root);
+            this.Root = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "oxygen-asset-identity-tests", Guid.NewGuid().ToString("N")));
+            Directory.CreateDirectory(this.Root.FullPath);
         }
 
-        public string Root { get; }
+        public FileSystemPath Root { get; }
 
         public string SourcePath(string relative)
-            => Path.Combine(this.Root, relative.Replace('/', Path.DirectorySeparatorChar));
+            => Path.Combine(this.Root.FullPath, relative.Replace('/', Path.DirectorySeparatorChar));
 
         public void Dispose()
         {
-            if (Directory.Exists(this.Root))
+            if (Directory.Exists(this.Root.FullPath))
             {
-                Directory.Delete(this.Root, recursive: true);
+                Directory.Delete(this.Root.FullPath, recursive: true);
             }
         }
     }

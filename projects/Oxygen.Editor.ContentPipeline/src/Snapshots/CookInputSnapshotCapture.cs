@@ -187,8 +187,7 @@ public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry docum
         foreach (var input in inputs)
         {
             var relative = input.RelativePath.Replace('\\', '/');
-            if (input.AssetUri is null
-                || Path.IsPathRooted(relative)
+            if (Path.IsPathRooted(relative)
                 || (!input.IsRootDirectoryProbe && relative.Split('/').Any(static part => part is ".." or "." or ""
                     || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
                     || part.EndsWith('.') || part.EndsWith(' ')))

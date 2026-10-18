@@ -14,6 +14,7 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using Oxygen.Testing;
 using Testably.Abstractions;
 
@@ -36,7 +37,7 @@ public sealed class NativeImportTests
         var sourcePath = workspace.SourcePath("Content/SourceMedia/DCC/model.gltf");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures/static_scalar_triangle.gltf"), sourcePath);
-        var source = new Uri("asset:///Content/SourceMedia/DCC/model.gltf");
+        var source = AssetPath.Parse("/Content/SourceMedia/DCC/model.gltf");
         var projects = workspace.ActivateProject();
         var documents = new CookDocumentRegistry();
         using var runs = new ContentCookCoordinator(projects, NullLogger<ContentCookCoordinator>.Instance);
@@ -55,24 +56,24 @@ public sealed class NativeImportTests
         provider.Assets(AssetRule.For(AssetKind.Material)).Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => choices = value), this.TestContext.CancellationToken);
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = rows.Single(row => row.IdentityUri == source).PrimaryBadge.Should().Be("Not imported");
+        _ = rows.Single(row => row.Identity == source).PrimaryBadge.Should().Be("Not imported");
         _ = choices.Should().BeEmpty();
-        var result = await pipeline.ImportSourceAsync(new(projects.ActiveProject!, sourcePath, "Crate", new("asset:///Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await pipeline.ImportSourceAsync(new(projects.ActiveProject!, sourcePath, "Crate", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = rows.Single(row => row.IdentityUri == source).CookStatus!.Freshness.Should().Be(AssetCookFreshness.Current);
+        _ = rows.Single(row => row.Identity == source).CookStatus!.Freshness.Should().Be(AssetCookFreshness.Current);
         foreach (var output in result.CookedAssets)
         {
-            var row = rows.Should().ContainSingle(row => row.IdentityUri == output.CookedAssetUri).Subject;
-            _ = row.ImportSourceUri.Should().Be(source);
+            var row = rows.Should().ContainSingle(row => row.Identity == output.CookedAssetUri).Subject;
+            _ = row.ImportSource.Should().Be(source);
             _ = row.CookedMetadata.Should().NotBeNull("the production index, not a guessed file path, must supply the output representation");
             _ = row.Kind.ToString().Should().Be(output.Kind.ToString());
             _ = row.CookStatus!.Freshness.Should().Be(AssetCookFreshness.Current);
             _ = row.CanCook.Should().BeTrue();
         }
 
-        _ = choices.Select(static choice => choice.IdentityUri).Should().BeEquivalentTo(result.CookedAssets.Where(static output => output.Kind == ContentCookAssetKind.Material).Select(static output => output.CookedAssetUri));
-        _ = rows.Count(row => row.IdentityUri == source).Should().Be(1);
+        _ = choices.Select(static choice => choice.Identity).Should().BeEquivalentTo(result.CookedAssets.Where(static output => output.Kind == ContentCookAssetKind.Material).Select(static output => output.CookedAssetUri));
+        _ = rows.Count(row => row.Identity == source).Should().Be(1);
     }
 
     private static IBuiltinCatalogDiscovery CreateEmptyImportBuiltins()

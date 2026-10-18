@@ -11,7 +11,9 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
@@ -36,13 +38,13 @@ public sealed partial class AssetInformationTests : DroidNet.Tests.VisualUserInt
         var asset = CreateQueryAsset("Blue metal with a deliberately long and distinguishable name", AssetKind.Material, AssetCookFreshness.NeedsCooking);
         asset = asset with
         {
-            SourcePath = "C:/Projects/Example/Content/Materials/BlueMetal.omat.json",
-            DisplayPath = Uri.UnescapeDataString(asset.DisplayPath),
+            SourcePath = FileSystemPath.From("C:/Projects/Example/Content/Materials/BlueMetal.omat.json"),
+            DescriptorPath = FileSystemPath.From("C:/Projects/Example/Content/Materials/BlueMetal.omat.json"),
         };
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([asset]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
-        var state = new ContentBrowserState(projects);
+        var state = new ContentBrowserState();
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
         using var details = new AssetDetailsViewModel(state, Mock.Of<IAssetShell>());
@@ -74,22 +76,23 @@ public sealed partial class AssetInformationTests : DroidNet.Tests.VisualUserInt
         _ = details.IsSingle.Should().BeTrue();
         _ = details.Title.Should().Be(asset.DisplayName);
         _ = details.Description.Should().Contain("No cooked content yet");
-        _ = PaneText(pane).Should().Contain(asset.SourcePath);
+        _ = PaneText(pane).Should().Contain(asset.SourcePath!.FullPath);
 
+        var cookedIdentity = AssetPath.Parse("/Content/Materials/BlueMetal.omat");
         var cooked = asset with
         {
-            CookedUri = new("asset:///Content/Materials/BlueMetal.omat"),
             CookStatus = asset.CookStatus! with
             {
                 Freshness = AssetCookFreshness.Current,
                 HasPublishedOutput = true,
                 OutputAvailability = CookedOutputAvailability.Present,
+                Outputs = [new ContentCookedAsset(asset.Identity, cookedIdentity, ContentCookAssetKind.Material, "Content", cookedIdentity.VirtualPath)],
             },
         };
         updates.OnNext([cooked]);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = details.Description.Should().Contain("No cooking is needed");
-        _ = PaneText(pane).Should().Contain(cooked.CookedUri.AbsolutePath);
+        _ = PaneText(pane).Should().Contain(cookedIdentity.VirtualPath);
         _ = selector.SelectedItem.Should().BeSameAs(selected);
         _ = view.ActualSize.Should().Be(originalSize);
         provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);

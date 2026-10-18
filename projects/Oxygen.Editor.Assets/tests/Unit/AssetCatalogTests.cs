@@ -13,6 +13,7 @@ using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
@@ -152,7 +153,7 @@ public sealed class AssetCatalogTests
     public async Task DamagedPublicationRetainsAuthoringAndCanRecoverAfterRepair()
     {
         using var fixture = new Fixture();
-        var cooked = Directory.CreateDirectory(Path.Combine(fixture.Project.ProjectRoot, ".cooked"));
+        var cooked = Directory.CreateDirectory(Path.Combine(fixture.Project.ProjectRoot.FullPath, ".cooked"));
         var head = Path.Combine(cooked.FullName, "head.json");
         await File.WriteAllTextAsync(head, "{broken", this.TestContext.CancellationToken).ConfigureAwait(false);
         fixture.RootRelease.SetResult();
@@ -183,7 +184,7 @@ public sealed class AssetCatalogTests
     public async Task ReinstalledCatalogsReportOnlyDifferences()
     {
         using var fixture = new Fixture();
-        var cooked = Directory.CreateDirectory(Path.Combine(fixture.Project.ProjectRoot, ".cooked"));
+        var cooked = Directory.CreateDirectory(Path.Combine(fixture.Project.ProjectRoot.FullPath, ".cooked"));
         var head = Path.Combine(cooked.FullName, "head.json");
         await File.WriteAllTextAsync(head, "{broken", this.TestContext.CancellationToken).ConfigureAwait(false);
         fixture.RootRelease.SetResult();
@@ -193,7 +194,7 @@ public sealed class AssetCatalogTests
         using var subscription = catalog.Changes.Subscribe(notifications.Enqueue);
         await catalog.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = notifications.Select(static change => change.Kind).Should().AllBeEquivalentTo(AssetChangeKind.Listed, "opening a project changes no file");
-        _ = notifications.Should().Contain(new AssetChange(AssetChangeKind.Listed, new Uri("asset:///Content/Shape.ogeo")));
+        _ = notifications.Should().Contain(new AssetChange(AssetChangeKind.Listed, AssetPath.Parse("/Content/Shape.ogeo")));
         notifications.Clear();
 
         File.Delete(head);
@@ -289,11 +290,11 @@ public sealed class AssetCatalogTests
 
     private static void AssertComplete(IReadOnlyList<AssetRecord> records)
     {
-        _ = records.Should().Contain(record => record.Uri == new Uri("asset:///project/Root.txt"));
-        _ = records.Should().Contain(record => record.Uri == new Uri("asset:///Content/Shape.ogeo"));
+        _ = records.Should().Contain(record => record.Identity == AssetPath.Parse("/project/Root.txt"));
+        _ = records.Should().Contain(record => record.Identity == AssetPath.Parse("/Content/Shape.ogeo"));
 
         // Each file belongs to one catalog: the project folder's catalog leaves out the Content mount.
-        _ = records.Should().NotContain(record => record.Uri == new Uri("asset:///project/Content/Shape.ogeo"));
+        _ = records.Should().NotContain(record => record.Identity == AssetPath.Parse("/project/Content/Shape.ogeo"));
     }
 
     private sealed class Fixture : IDisposable
@@ -313,7 +314,7 @@ public sealed class AssetCatalogTests
                 ProjectId = Guid.NewGuid(),
                 Name = "Catalog",
                 Category = Category.Games,
-                ProjectRoot = root,
+                ProjectRoot = FileSystemPath.From(root),
                 AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [],
             };

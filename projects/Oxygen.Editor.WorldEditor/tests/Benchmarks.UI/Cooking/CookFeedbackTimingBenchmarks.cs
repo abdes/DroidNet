@@ -13,6 +13,7 @@ using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.World.Cooking;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.CatalogWorkload;
 
 namespace Oxygen.Editor.WorldEditor.Benchmarks.UI.Tests.Cooking;
@@ -35,8 +36,8 @@ public sealed partial class CookFeedbackTimingBenchmarks : DroidNet.Tests.Visual
         using var services = new CatalogWorkloadServices(fixture);
         var builtins = (await services.Builtins.GetAsync(timeout.Token).ConfigureAwait(true)).Catalog!;
         await SeedCatalogWorkloadAsync(fixture, services.Projects.ActiveProject!, services.Pipeline, builtins, timeout.Token).ConfigureAwait(true);
-        var material = new Uri("asset:///" + WorkloadMaterialPath(0));
-        var source = Path.Combine(fixture.ProjectRoot, WorkloadMaterialPath(0));
+        var material = WorkloadMaterialAsset(0);
+        var source = fixture.ProjectRoot.Combine(WorkloadMaterialPath(0)).FullPath;
         using var model = fixture.CreateTimingCookingPanel(services);
         var view = new CookingPanelView
         {
@@ -51,7 +52,7 @@ public sealed partial class CookFeedbackTimingBenchmarks : DroidNet.Tests.Visual
         try
         {
             await WaitForRenderAsync().ConfigureAwait(true);
-            var scene = new Uri("asset:///Content/Scenes/" + Uri.EscapeDataString(fixture.Source.Name) + ".oscene.json");
+            var scene = AssetPath.Create("Content", $"Scenes/{fixture.Source.Name}.oscene");
             foreach (var scope in new[] { CookTargetKind.Asset, CookTargetKind.Folder, CookTargetKind.CurrentScene, CookTargetKind.Project })
             {
                 var changed = JsonNode.Parse(await File.ReadAllTextAsync(source, timeout.Token).ConfigureAwait(true))!;
@@ -74,10 +75,10 @@ public sealed partial class CookFeedbackTimingBenchmarks : DroidNet.Tests.Visual
         }
     });
 
-    private static Task<ContentCookResult> SubmitTimedCook(ContentPipelineService pipeline, CookTargetKind scope, Uri material, Uri scene, CancellationToken cancellationToken) => scope switch
+    private static Task<ContentCookResult> SubmitTimedCook(ContentPipelineService pipeline, CookTargetKind scope, AssetPath material, AssetPath scene, CancellationToken cancellationToken) => scope switch
     {
         CookTargetKind.Asset => pipeline.CookAssetAsync(material, cancellationToken),
-        CookTargetKind.Folder => pipeline.CookFolderAsync(new("asset:///Content/Materials"), cancellationToken),
+        CookTargetKind.Folder => pipeline.CookFolderAsync(AssetPath.Parse("/Content/Materials"), cancellationToken),
         CookTargetKind.CurrentScene => pipeline.CookCurrentSceneAsync(scene, cancellationToken),
         CookTargetKind.Project => pipeline.CookProjectAsync(cancellationToken),
         _ => throw new ArgumentOutOfRangeException(nameof(scope)),

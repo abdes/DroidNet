@@ -19,6 +19,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorModels;
@@ -162,7 +163,7 @@ internal sealed partial class ResponsiveLayoutTests
     [DataRow(360d, 2d)]
     public Task MaterialHeaderKeepsStatusBesideTheTitleAndActionsInside(double width, double rasterizationScale) => EnqueueAsync(async () =>
     {
-        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([CreateStatusAsset(0) with { IdentityUri = new("asset:///Content/Materials/UI.omat.json") }]);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([CreateStatusAsset(0) with { Identity = AssetPath.Parse("/Content/Materials/UI.omat") }]);
         using var model = CreateMaterialEditor(MaterialStatusTests.StatusProvider(updates));
         var view = new MaterialEditorView { ViewModel = model, Width = width, Height = 600 };
         using var scaledHost = new ScaledXamlHost();

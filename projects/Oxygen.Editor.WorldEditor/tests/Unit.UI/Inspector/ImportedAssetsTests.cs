@@ -21,6 +21,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.World.Inspector.Geometry;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserControls;
@@ -46,7 +47,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([source]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
-        var state = new ContentBrowserState(projects);
+        var state = new ContentBrowserState();
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
         using var details = new AssetDetailsViewModel(state, Mock.Of<IAssetShell>());
@@ -104,9 +105,9 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         var outputs = CreateImportedOutputRows(source);
         updates.OnNext([source, .. outputs]);
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = content.Items.Should().ContainSingle().Which.Item.Uri.Should().Be(outputs.Single(static item => item.Kind == AssetKind.Geometry).IdentityUri);
-        var material = outputs.Single(static item => item.Kind == AssetKind.Material).IdentityUri;
-        _ = content.Items.Should().NotContain(row => row.Item.Uri == material || row.Item.Uri == source.IdentityUri);
+        _ = content.Items.Should().ContainSingle().Which.Item.Asset.Should().Be(outputs.Single(static item => item.Kind == AssetKind.Geometry).Identity);
+        var material = outputs.Single(static item => item.Kind == AssetKind.Material).Identity;
+        _ = content.Items.Should().NotContain(row => row.Item.Asset == material || row.Item.Asset == source.Identity);
     });
 
     /// <summary>The existing Cook menu offers source navigation and reimport for a selected imported output.</summary>
@@ -119,22 +120,22 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([source, output]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
-        var state = new ContentBrowserState(projects);
+        var state = new ContentBrowserState();
         var messenger = new StrongReferenceMessenger();
-        Uri? revealed = null;
-        Uri? inspected = null;
+        AssetPath? revealed = null;
+        AssetPath? inspected = null;
         messenger.Register<ShowAssetRequestMessage>(this, (_, request) =>
         {
-            revealed = request.AssetUris.Single();
+            revealed = request.Assets.Single();
             request.Reply(Task.FromResult(true));
         });
         messenger.Register<OpenCookedInspectionRequestMessage>(this, (_, request) =>
         {
-            inspected = request.AssetUri;
+            inspected = request.Asset;
             request.Reply(Task.FromResult(true));
         });
         var pipeline = new Mock<IContentPipelineService>();
-        _ = pipeline.Setup(value => value.ReimportSourceAsync(source.IdentityUri, projects.ActiveProject!, It.IsAny<CancellationToken>())).ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
+        _ = pipeline.Setup(value => value.ReimportSourceAsync(source.Identity, projects.ActiveProject!, It.IsAny<CancellationToken>())).ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
         using var layout = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
         var layoutView = new TilesLayoutView
         {
@@ -152,11 +153,11 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         layout.SelectedAsset = output;
         await WaitForRenderAsync().ConfigureAwait(true);
         await InvokeImportMenuActionAsync(view, "Show import source", () => browser.ShowImportSourceCommand.ExecutionTask).ConfigureAwait(true);
-        _ = revealed.Should().Be(source.IdentityUri);
+        _ = revealed.Should().Be(source.Identity);
         await InvokeImportMenuActionAsync(view, "Reimport", () => browser.ReimportSelectedSourceCommand.ExecutionTask).ConfigureAwait(true);
-        pipeline.Verify(value => value.ReimportSourceAsync(source.IdentityUri, projects.ActiveProject!, It.IsAny<CancellationToken>()), Times.Once);
+        pipeline.Verify(value => value.ReimportSourceAsync(source.Identity, projects.ActiveProject!, It.IsAny<CancellationToken>()), Times.Once);
         await browser.InspectCookedOutputCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-        _ = inspected.Should().Be(output.IdentityUri);
+        _ = inspected.Should().Be(output.Identity);
     });
 
     private static async Task InvokeImportMenuActionAsync(AssetsView view, string text, Func<Task?> execution)
@@ -173,11 +174,11 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
 
     private static AssetEntry CreateImportedSourceRow(bool configured)
     {
-        var uri = new Uri("asset:///Content/SourceMedia/DCC/Crate/model.gltf");
-        return new(uri, "model.gltf", AssetKind.ForeignSource, AssetState.Source, DerivedState: null, AssetRuntimeAvailability.NotApplicable, uri.AbsolutePath, "C:/Project/Content/SourceMedia/DCC/Crate/model.gltf", DescriptorPath: null, CookedUri: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true)
+        var asset = AssetPath.Parse("/Content/SourceMedia/DCC/Crate/model.gltf");
+        return new(asset, "model.gltf", AssetKind.ForeignSource, AssetState.Source, DerivedState: null, AssetRuntimeAvailability.NotApplicable, asset.VirtualPath, FileSystemPath.From("C:/Project/Content/SourceMedia/DCC/Crate/model.gltf"), DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true)
         {
-            ImportSourceUri = configured ? uri : null,
-            CookStatus = configured ? new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [new(uri, new("asset:///Content/Models/Crate/Geometry/Main.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Models/Crate/Geometry/Main.ogeo"), new(uri, new("asset:///Content/Models/Crate/Materials/Paint.omat"), ContentCookAssetKind.Material, "Content", "/Content/Models/Crate/Materials/Paint.omat"), new(uri, new("asset:///Content/Models/Crate/Scenes/Crate.oscene"), ContentCookAssetKind.Scene, "Content", "/Content/Models/Crate/Scenes/Crate.oscene"),], [], []) : null,
+            ImportSource = configured ? asset : null,
+            CookStatus = configured ? new(asset, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [new(asset, AssetPath.Parse("/Content/Models/Crate/Geometry/Main.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Models/Crate/Geometry/Main.ogeo"), new(asset, AssetPath.Parse("/Content/Models/Crate/Materials/Paint.omat"), ContentCookAssetKind.Material, "Content", "/Content/Models/Crate/Materials/Paint.omat"), new(asset, AssetPath.Parse("/Content/Models/Crate/Scenes/Crate.oscene"), ContentCookAssetKind.Scene, "Content", "/Content/Models/Crate/Scenes/Crate.oscene"),], [], []) : null,
         };
     }
 
@@ -202,13 +203,12 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
                 output.VirtualPath,
                 SourcePath: null,
                 DescriptorPath: null,
-                output.CookedAssetUri,
                 CookedPath: null,
                 AssetGuid: null,
                 [],
                 IsSelectable: true)
                 {
-                    ImportSourceUri = source.IdentityUri,
+                    ImportSource = source.Identity,
                     CookStatus = source.CookStatus with { AssetUri = output.CookedAssetUri },
                 };
         })];

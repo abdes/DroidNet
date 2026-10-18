@@ -35,7 +35,7 @@ public sealed class BuiltinAssetCatalogTests
         snapshot = new(native, IsLastKnown: true, "Preview unavailable");
         discovery.Raise(value => value.Changed += null, EventArgs.Empty);
         var cached = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = cached.Should().Equal(initial, (current, previous) => current.Uri == previous.Uri);
+        _ = cached.Should().Equal(initial, (current, previous) => current.Identity == previous.Identity);
         _ = cached.Should().OnlyContain(record => record.Generated!.IsLastKnown);
         _ = changes.Should().HaveCount(11).And.OnlyContain(change => change.Kind == AssetChangeKind.Updated);
         _ = cached.Single(record => string.Equals(record.Name, "IcoSphere", StringComparison.Ordinal)).Generated!.CanonicalName.Should().Be("IcoSphere");

@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -15,51 +16,50 @@ public sealed class AssetsLayoutViewModelTests
     public void RenamedCookedMountUsesItsSavedAlias()
     {
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
-            "/Content/Materials/Red.omat.json",
-            "/Content/Materials/Red.omat.json",
-            ["/Published/Content/Materials"],
+            "/Content/Materials/Red.omat",
+            AssetPath.Parse("/Content/Materials/Red.omat"),
+            [AssetPath.Parse("/Published/Content/Materials")],
             hasActiveProject: true,
-            cookedAbsolutePath: "/Content/Materials/Red.omat",
             hasCookedProjection: true,
-            cookedFolders: ["/Published"]).Should().BeTrue();
+            cookedFolders: [AssetPath.Parse("/Published")]).Should().BeTrue();
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
-            "/Content/Materials/Red.omat.json",
-            "/Content/Materials/Red.omat.json",
-            ["/Published/Content/Materials"],
+            "/Content/Materials/Red.omat",
+            AssetPath.Parse("/Content/Materials/Red.omat"),
+            [AssetPath.Parse("/Published/Content/Materials")],
             hasActiveProject: true,
-            cookedAbsolutePath: "/Content/Materials/Red.omat",
             hasCookedProjection: false,
-            cookedFolders: ["/Published"]).Should().BeFalse();
+            cookedFolders: [AssetPath.Parse("/Published")]).Should().BeFalse();
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
-            "/Cooked/Red.omat.json",
-            "/Cooked/Red.omat.json",
-            ["/Cooked"],
+            "/Cooked/Red.omat",
+            AssetPath.Parse("/Cooked/Red.omat"),
+            [AssetPath.Parse("/Cooked")],
             hasActiveProject: true,
-            cookedFolders: ["/Published"]).Should().BeTrue();
+            cookedFolders: [AssetPath.Parse("/Published")]).Should().BeTrue();
     }
 
     [TestMethod]
-    public void NormalizeSelectedFolders_WhenRootAndConcreteFolderAreSelected_ShouldDropRoot()
+    public void IsInSelectedFolders_WhenNoFolderIsSelected_ShouldMatchTheWholeProject()
     {
-        var folders = AssetsLayoutViewModel.NormalizeSelectedFolders(["/", "/Content/Materials"]);
-
-        _ = folders.Should().ContainSingle();
-        _ = folders[0].Should().Be("/Content/Materials");
+        _ = AssetsLayoutViewModel.IsInSelectedFolders(
+            "/Content/Scenes/Default.oscene",
+            AssetPath.Parse("/Content/Scenes/Default.oscene"),
+            [],
+            hasActiveProject: true).Should().BeTrue();
     }
 
     [TestMethod]
     public void IsInSelectedFolders_WhenConcreteFolderIsSelected_ShouldOnlyMatchThatFolder()
     {
-        var folders = AssetsLayoutViewModel.NormalizeSelectedFolders(["/", "/Content/Materials"]);
+        AssetPath[] folders = [AssetPath.Parse("/Content/Materials")];
 
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
-            "/Content/Materials/Red.omat.json",
-            "/Content/Materials/Red.omat.json",
+            "/Content/Materials/Red.omat",
+            AssetPath.Parse("/Content/Materials/Red.omat"),
             folders,
             hasActiveProject: true).Should().BeTrue();
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
-            "/Content/Scenes/Default.oscene.json",
-            "/Content/Scenes/Default.oscene.json",
+            "/Content/Scenes/Default.oscene",
+            AssetPath.Parse("/Content/Scenes/Default.oscene"),
             folders,
             hasActiveProject: true).Should().BeFalse();
     }
@@ -67,46 +67,42 @@ public sealed class AssetsLayoutViewModelTests
     [TestMethod]
     public void IsInSelectedFolders_WhenCookedRootIsSelected_ShouldMatchCookedProjectionOnly()
     {
-        var folders = AssetsLayoutViewModel.NormalizeSelectedFolders(["/Cooked"]);
+        AssetPath[] folders = [AssetPath.Parse("/Cooked")];
 
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
-            "/Content/Materials/Red.omat.json",
-            "/Content/Materials/Red.omat.json",
+            "/Content/Materials/Red.omat",
+            AssetPath.Parse("/Content/Materials/Red.omat"),
             folders,
             hasActiveProject: true,
-            cookedAbsolutePath: "/Content/Materials/Red.omat",
             hasCookedProjection: true,
-            cookedFolders: ["/Cooked"]).Should().BeTrue();
+            cookedFolders: [AssetPath.Parse("/Cooked")]).Should().BeTrue();
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
-            "/Content/Materials/Uncooked.omat.json",
-            "/Content/Materials/Uncooked.omat.json",
+            "/Content/Materials/Uncooked.omat",
+            AssetPath.Parse("/Content/Materials/Uncooked.omat"),
             folders,
             hasActiveProject: true,
-            cookedAbsolutePath: "/Content/Materials/Uncooked.omat",
             hasCookedProjection: false,
-            cookedFolders: ["/Cooked"]).Should().BeFalse();
+            cookedFolders: [AssetPath.Parse("/Cooked")]).Should().BeFalse();
     }
 
     [TestMethod]
     public void IsInSelectedFolders_WhenCookedSubfolderIsSelected_ShouldMatchRuntimeCookedPath()
     {
-        var folders = AssetsLayoutViewModel.NormalizeSelectedFolders(["/Cooked/Content/Materials"]);
+        AssetPath[] folders = [AssetPath.Parse("/Cooked/Content/Materials")];
 
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
-            "/Content/Materials/Red.omat.json",
-            "/Content/Materials/Red.omat.json",
+            "/Content/Materials/Red.omat",
+            AssetPath.Parse("/Content/Materials/Red.omat"),
             folders,
             hasActiveProject: true,
-            cookedAbsolutePath: "/Content/Materials/Red.omat",
             hasCookedProjection: true,
-            cookedFolders: ["/Cooked"]).Should().BeTrue();
+            cookedFolders: [AssetPath.Parse("/Cooked")]).Should().BeTrue();
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
-            "/Content/Scenes/Main.oscene.json",
-            "/Content/Scenes/Main.oscene.json",
+            "/Content/Scenes/Main.oscene",
+            AssetPath.Parse("/Content/Scenes/Main.oscene"),
             folders,
             hasActiveProject: true,
-            cookedAbsolutePath: "/Content/Scenes/Main.oscene",
             hasCookedProjection: true,
-            cookedFolders: ["/Cooked"]).Should().BeFalse();
+            cookedFolders: [AssetPath.Parse("/Cooked")]).Should().BeFalse();
     }
 }

@@ -20,9 +20,9 @@ namespace Oxygen.Editor.Scenes.Tests.Documents;
 [TestClass]
 public sealed class SceneRelocationTests
 {
-    private static readonly Uri MovedCube = new("asset:/Content/Shapes/Cube.ogeo");
-    private static readonly Uri Sky = new("asset:/Content/Sky.ocube");
-    private static readonly Uri MovedSky = new("asset:/Content/Skies/Sky.ocube");
+    private static readonly AssetPath MovedCube = AssetPath.Parse("/Content/Shapes/Cube.ogeo");
+    private static readonly AssetPath Sky = AssetPath.Parse("/Content/Sky.ocube");
+    private static readonly AssetPath MovedSky = AssetPath.Parse("/Content/Skies/Sky.ocube");
 
     public TestContext TestContext { get; set; }
 
@@ -77,8 +77,8 @@ public sealed class SceneRelocationTests
     }
 
     // The relocation moved one asset and left the scene file where it was.
-    private static DocumentRelocation Relocation(Document document, Uri from, Uri to)
-        => new(document.File, document.Version, reference => string.Equals(reference, from.ToString(), StringComparison.Ordinal) ? to.ToString() : null);
+    private static DocumentRelocation Relocation(Document document, AssetPath from, AssetPath to)
+        => new(document.File, document.Version, reference => string.Equals(reference, from.ToUriString(), StringComparison.Ordinal) ? to.ToUriString() : null);
 
     private static GeometryComponent GeometryOf(Document document, NodeId node)
         => SceneContent.Of(document).Scene.AllNodes.Single(candidate => candidate.Id == node).Components.OfType<GeometryComponent>().Single();

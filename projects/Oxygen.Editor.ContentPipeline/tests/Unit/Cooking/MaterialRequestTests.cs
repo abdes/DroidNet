@@ -8,6 +8,7 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
 
@@ -27,9 +28,9 @@ public sealed class MaterialRequestTests
 
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
-                new Uri("asset:///Content/Materials/Wood.omat.json"),
-                ProjectRoot: string.Empty,
-                MountName: "Content",
+                AssetPath.Parse("/Content/Materials/Wood.omat.json"),
+                ProjectRoot: projects.ActiveProject!.ProjectRoot,
+                MountName: string.Empty,
                 SourceRelativePath: "Content/Materials/Wood.omat.json"),
             CancellationToken.None).ConfigureAwait(false);
 
@@ -49,13 +50,13 @@ public sealed class MaterialRequestTests
     {
         var projects = CreateProjectContext();
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
-        var request = new MaterialCookRequest(new("asset:///Content/Materials/Wood.omat.json"), projects.ActiveProject!.ProjectRoot, "Content", "Content/Materials/Wood.omat.json");
+        var request = new MaterialCookRequest(AssetPath.Parse("/Content/Materials/Wood.omat.json"), projects.ActiveProject!.ProjectRoot, "Content", "Content/Materials/Wood.omat.json");
         request = mismatch switch
         {
-            "project" => request with { ProjectRoot = projects.ActiveProject!.ProjectRoot + "-other" },
+            "project" => request with { ProjectRoot = FileSystemPath.From(projects.ActiveProject!.ProjectRoot.FullPath + "-other") },
             "mount" => request with { MountName = "Other" },
             "source" => request with { SourceRelativePath = "Content/Materials/Other.omat.json" },
-            _ => request with { MaterialSourceUri = new("asset:///Content/Geometry/Cube.ogeo.json") },
+            _ => request with { MaterialSourceUri = AssetPath.Parse("/Content/Geometry/Cube.ogeo.json") },
         };
 
         var service = new MaterialCookService(pipeline.Object, projects, NullLogger<MaterialCookService>.Instance);
@@ -81,8 +82,8 @@ public sealed class MaterialRequestTests
     public async Task ReadMaterialStateUsesSharedCookFacts(AssetCookFreshness freshness, bool published, bool verified, bool dirty, MaterialCookState expected)
     {
         var projects = CreateProjectContext();
-        var uri = new Uri("asset:///Content/Material.omat.json");
-        var source = Path.Combine(projects.ActiveProject!.ProjectRoot, "Content", "Material.omat.json");
+        var uri = AssetPath.Parse("/Content/Material.omat.json");
+        var source = projects.ActiveProject!.ProjectRoot.Combine("Content/Material.omat.json");
         var state = new AssetCookStatus(
             uri,
             freshness,
@@ -92,7 +93,7 @@ public sealed class MaterialRequestTests
             dirty ? [new CookDocumentState(source, "Material", IsDirty: true, new string('A', 64))] : [],
             []);
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
-        _ = pipeline.Setup(service => service.ReadAsync(projects.ActiveProject!, It.Is<IReadOnlyList<Uri>>(uris => uris.Count == 1 && uris[0] == uri), It.IsAny<CancellationToken>()))
+        _ = pipeline.Setup(service => service.ReadAsync(projects.ActiveProject!, It.Is<IReadOnlyList<AssetPath>>(uris => uris.Count == 1 && uris[0] == uri), It.IsAny<CancellationToken>()))
             .ReturnsAsync([state]);
         var service = new MaterialCookService(pipeline.Object, projects, NullLogger<MaterialCookService>.Instance);
         var result = await service.GetMaterialCookStateAsync(uri, CancellationToken.None).ConfigureAwait(false);
@@ -106,7 +107,7 @@ public sealed class MaterialRequestTests
         projects.Activate(new ProjectContext
         {
             ProjectId = Guid.NewGuid(),
-            ProjectRoot = Path.Combine(Path.GetTempPath(), "MaterialRequest", Guid.NewGuid().ToString("N")),
+            ProjectRoot = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "MaterialRequest", Guid.NewGuid().ToString("N"))),
             Name = "Materials",
             Category = Category.Games,
             AuthoringMounts = [new("Content", "Content")],

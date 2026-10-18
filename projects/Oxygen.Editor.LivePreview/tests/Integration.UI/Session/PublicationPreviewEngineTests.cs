@@ -11,6 +11,7 @@ using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.LivePreview.Tests.TestSupport.Native;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LivePreview.Integration.UI.Tests.Session;
@@ -57,7 +58,7 @@ public sealed partial class PublicationPreviewEngineTests : DroidNet.Tests.Visua
     {
         var material = project.WriteMaterial("Shared", Red);
         Guid runId;
-        string? published;
+        FileSystemPath? published;
         var session = project.CreateSession(engine);
         await using (session.ConfigureAwait(true))
         {

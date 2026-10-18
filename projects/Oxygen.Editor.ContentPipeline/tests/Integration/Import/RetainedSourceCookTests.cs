@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -71,7 +72,7 @@ public sealed class RetainedSourceCookTests
         _ = result.IsPublished.Should().BeTrue();
         _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == first);
         _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == second);
-        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == new Uri("asset:///Content/Materials/Authored.omat.json"));
+        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Materials/Authored.omat.json"));
     }
 
     /// <summary>Changing source bytes updates native output and persists discovery so the next cook is a no-op.</summary>

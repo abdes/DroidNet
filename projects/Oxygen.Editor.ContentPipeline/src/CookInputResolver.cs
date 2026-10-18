@@ -56,8 +56,7 @@ internal static class CookInputResolver
         }
 
         // A missing source is still the descriptor the asset would cook from, so the cook reports it missing.
-        var location = FindAuthoringFile(project.FindSource(identity))
-            ?? FindAuthoringFile(project.Find(AssetFileTypes.SourcesOf(identity)[0]));
+        var location = FindAuthoringFile(project.LocateSource(identity));
         var type = location is null ? null : AssetFileTypes.Find(location.Path.Name);
         var kind = type?.Category switch
         {

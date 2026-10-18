@@ -146,7 +146,7 @@ public sealed partial class MaterialEditorViewModelTests
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = editor.DisplayName.Should().Be("Oak");
-        _ = editor.MaterialUriText.Should().Be(materials.FileOf("Oak").AssetUri.ToString());
+        _ = editor.MaterialUriText.Should().Be(materials.FileOf("Oak").Asset.ToUriString());
         _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences["base_color"].Should().Be("/Content/Textures/Oak.otex");
         _ = editor.IsDirty.Should().BeFalse();
     }

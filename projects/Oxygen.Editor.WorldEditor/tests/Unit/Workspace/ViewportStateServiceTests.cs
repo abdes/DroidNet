@@ -164,7 +164,7 @@ public sealed class ViewportStateServiceTests
         public ProjectContext Project { get; } = ProjectAt("First");
 
         public SettingContext Context => SettingContext.Project(
-            Path.TrimEndingDirectorySeparator(Path.GetFullPath(this.Project.ProjectRoot)).ToUpperInvariant());
+            Path.TrimEndingDirectorySeparator(this.Project.ProjectRoot.FullPath).ToUpperInvariant());
 
         public EditorSettingsManager Store => new(this.database);
 

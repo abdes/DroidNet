@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 
@@ -20,7 +21,7 @@ public sealed class PublicationTransactionTests
         using var project = new PublicationProject(hadPrevious: true);
         await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         using var old = project.Baseline.Retain();
-        var oldContent = old.FindProjectRoot("Content")!;
+        var oldContent = old.FindProjectRoot("Content")!.FullPath;
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
         await using var preview = new Preview(project.Root);
         using var accepted = await transaction.PublishAsync(preview, project.Baseline, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -29,7 +30,7 @@ public sealed class PublicationTransactionTests
         _ = preview.Resumed.Should().BeTrue();
         _ = preview.MountedRoots.Should().HaveCount(3);
         _ = File.ReadAllText(Path.Combine(oldContent, "value.txt")).Should().Be("old:Content");
-        using var gate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         using var selected = await CookPublicationReadLease.OpenUnderGateAsync(project.Context, project.Files, gate, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = selected.PublicationId.Should().Be(accepted.PublicationId);
     }
@@ -82,7 +83,7 @@ public sealed class PublicationTransactionTests
         _ = await publish.Should().ThrowAsync<AggregateException>().ConfigureAwait(false);
         project.AssertOld();
         _ = preview.Resumed.Should().BeFalse();
-        using var gate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         var recovery = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, gate, this.TestContext.CancellationToken).ConfigureAwait(false);
         await recovery.RecoverAsync(gate).ConfigureAwait(false);
         _ = recovery.Phase.Should().Be(CookPublicationPhase.RolledBack);
@@ -176,7 +177,7 @@ public sealed class PublicationTransactionTests
             }
 
             var publication = mounts.Publication;
-            if (!string.Equals(publication.ProjectRoot, projectRoot, StringComparison.OrdinalIgnoreCase))
+            if (publication.ProjectRoot != FileSystemPath.From(projectRoot))
             {
                 mounts.Dispose();
                 throw new InvalidOperationException("Unexpected preview project.");

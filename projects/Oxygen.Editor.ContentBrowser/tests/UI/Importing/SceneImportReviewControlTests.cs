@@ -13,6 +13,7 @@ using Microsoft.UI.Xaml.Markup;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Importing;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.UI.Tests.Importing;
 
@@ -50,7 +51,7 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
             ProjectId = Guid.NewGuid(),
             Name = "Import",
             Category = Category.Games,
-            ProjectRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
+            ProjectRoot = FileSystemPath.From(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
             AuthoringMounts = [new("Content", "Content")],
             LocalFolderMounts = [],
         };
@@ -77,9 +78,9 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
         }
         finally
         {
-            if (Directory.Exists(project.ProjectRoot))
+            if (Directory.Exists(project.ProjectRoot.FullPath))
             {
-                Directory.Delete(project.ProjectRoot, recursive: true);
+                Directory.Delete(project.ProjectRoot.FullPath, recursive: true);
             }
         }
     });
@@ -121,7 +122,7 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
     private async Task CreateRetainedSourceAsync(ProjectContext project)
     {
         const string relative = "Content/SourceMedia/DCC/Crate";
-        var root = Path.Combine(project.ProjectRoot, relative);
+        var root = Path.Combine(project.ProjectRoot.FullPath, relative);
         _ = Directory.CreateDirectory(root);
         var bytes = System.Text.Encoding.UTF8.GetBytes("original source");
         await File.WriteAllBytesAsync(Path.Combine(root, "model.gltf"), bytes, this.TestContext.CancellationToken).ConfigureAwait(false);

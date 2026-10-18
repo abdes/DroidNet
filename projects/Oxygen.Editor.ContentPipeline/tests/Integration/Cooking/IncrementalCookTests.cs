@@ -2,12 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Buffers.Binary;
-using System.Security.Cryptography;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
@@ -34,7 +32,7 @@ public sealed class IncrementalCookTests
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var revealed = false;
         workspace.CookCoordinator.RunChanged += (_, args) => revealed |= args.Reveal;
-        var sceneUri = new Uri("asset:///Content/Scenes/Main.oscene.json");
+        var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
 
         var result = await pipeline.CookSavedAssetAsync(sceneUri, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -58,7 +56,7 @@ public sealed class IncrementalCookTests
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
-        var sceneUri = new Uri("asset:///Content/Scenes/Main.oscene.json");
+        var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
         var hold = WriterHold.Take(workspace.CookCoordinator, this.TestContext.CancellationToken);
         var saved = pipeline.CookSavedAssetAsync(sceneUri, workspace.ProjectContext, this.TestContext.CancellationToken);
         _ = saved.IsCompleted.Should().BeFalse();
@@ -82,63 +80,47 @@ public sealed class IncrementalCookTests
     {
         using var workspace = new CookWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
-        var libraryRoot = Path.Combine(workspace.Root, "script-library");
-        var scriptPath = Path.Combine(libraryRoot, "Content", "Scripts", "Orbit.oscript");
-        Directory.CreateDirectory(Path.GetDirectoryName(scriptPath)!);
+        using var library = new CookWorkspace();
+        library.WriteText("Content/Scripts/Orbit.lua", """
+            local Script = oxygen.script {}
 
-        // Minimal ScriptAssetDesc with the current header version, no resource bindings
-        // and no parameter declarations.
-        var scriptBytes = new byte[251];
-        scriptBytes[0] = 4;
-        "Orbit"u8.CopyTo(scriptBytes.AsSpan(1, 64));
-        scriptBytes[65] = 3;
-        SHA256.HashData(scriptBytes.AsSpan(0, 67)).CopyTo(scriptBytes, 67);
-        BinaryPrimitives.WriteUInt32LittleEndian(scriptBytes.AsSpan(103, sizeof(uint)), uint.MaxValue);
-        BinaryPrimitives.WriteUInt32LittleEndian(scriptBytes.AsSpan(107, sizeof(uint)), uint.MaxValue);
-        await File.WriteAllBytesAsync(scriptPath, scriptBytes, this.TestContext.CancellationToken).ConfigureAwait(false);
-        using (var indexStream = File.Create(Path.Combine(libraryRoot, "container.index.bin")))
+            return Script
+            """);
+
+        // A script cooks with the scene that references it.
+        library.Scene.SetReferences(new SceneReferencesData { Scripts = [AssetPath.Parse("/Content/Scripts/Orbit.oscript")] });
+        await library.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
+        using (var libraryCompatibility = EditorNativeCompatibilityService.ForCooking())
         {
-            Oxygen.Testing.LooseCookedIndexFixture.Write(indexStream, new Document(
-                ContentVersion: 1,
-                Flags: IndexFeatures.HasVirtualPaths,
-                SourceGuid: Guid.CreateVersion7(),
-                Assets:
-                [
-                    new AssetEntry(
-                        new AssetKey(1, 2),
-                        "Content/Scripts/Orbit.oscript",
-                        "/Content/Scripts/Orbit.oscript",
-                        AssetType: 4,
-                        DescriptorSize: (ulong)scriptBytes.Length,
-                        DescriptorSha256: SHA256.HashData(scriptBytes)),
-                ],
-                Files: []));
+            var producer = CreateIncrementalService(library, CreateRecordingApi(libraryCompatibility), libraryCompatibility);
+            AssertCookSucceeded(await producer.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken).ConfigureAwait(false));
         }
 
+        var libraryRoot = await library.ExportRootAsync("Content", this.TestContext.CancellationToken).ConfigureAwait(false);
         var context = workspace.ProjectContext with
         {
-            LocalFolderMounts = [new("Scripts", libraryRoot)],
+            LocalFolderMounts = [new("Scripts", FileSystemPath.From(libraryRoot))],
             CookedContentOrder = [new(Oxygen.Editor.Projects.CookedContentSourceKind.ProjectOutput), new(Oxygen.Editor.Projects.CookedContentSourceKind.LocalFolder, "Scripts")],
         };
         workspace.Activate(context);
         workspace.Scene.SetReferences(new SceneReferencesData
         {
-            Scripts = [new("asset:///Content/Scripts/Orbit.oscript")],
+            Scripts = [AssetPath.Parse("/Content/Scripts/Orbit.oscript")],
         });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
 
         var result = await pipeline.CookCurrentSceneAsync(
-            new Uri("asset:///Content/Scenes/Main.oscene.json"),
+            AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertCookSucceeded(result);
         _ = result.InputSnapshot!.CookedDependencies.Should().ContainSingle(dependency =>
-            dependency.AssetUri == new Uri("asset:///Content/Scripts/Orbit.oscript")
+            dependency.AssetUri == AssetPath.Parse("/Content/Scripts/Orbit.oscript")
             && string.Equals(dependency.SourceName, "Scripts", StringComparison.Ordinal));
         _ = result.CookedAssets.Should().Contain(asset =>
-            asset.SourceAssetUri == new Uri("asset:///Content/Scenes/Main.oscene.json"));
+            asset.SourceAssetUri == AssetPath.Parse("/Content/Scenes/Main.oscene.json"));
     }
 
     /// <summary>An unchanged project reuses all products and preserves output bytes and timestamps across service recreation.</summary>
@@ -193,7 +175,7 @@ public sealed class IncrementalCookTests
         var changed = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertCookSucceeded(changed);
-        _ = changed.CookedAssets.Should().ContainSingle(asset => asset.SourceAssetUri == new Uri("asset:///Content/Materials/Blue.omat.json"));
+        _ = changed.CookedAssets.Should().ContainSingle(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Materials/Blue.omat.json"));
         _ = api.Imported.Should().ContainSingle();
         _ = api.Imported[0].Manifest.Jobs.Should().ContainSingle(job => job.Type == "material-descriptor");
         _ = api.CatalogRequests.Should().Be(beforeCatalog);
@@ -284,7 +266,7 @@ public sealed class IncrementalCookTests
         _ = reused.IsUpToDate.Should().BeTrue();
         _ = reused.Status.Should().Be(OperationStatus.SucceededWithWarnings);
         _ = reused.Diagnostics.Should().Contain(diagnostic => diagnostic.Code == "TEST.SCENE_WARNING" && diagnostic.OperationId == reused.OperationId);
-        var material = await pipeline.CookAssetAsync(new Uri("asset:///Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var material = await pipeline.CookAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = material.IsUpToDate.Should().BeTrue();
         _ = material.Diagnostics.Should().NotContain(static diagnostic => diagnostic.Code == "TEST.SCENE_WARNING");
     }

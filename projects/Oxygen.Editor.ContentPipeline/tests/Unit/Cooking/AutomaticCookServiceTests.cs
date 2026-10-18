@@ -12,6 +12,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
@@ -20,8 +21,8 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed class AutomaticCookServiceTests
 {
-    private static readonly Uri Main = new("asset:///Content/Scenes/Main.oscene.json");
-    private static readonly Uri Wood = new("asset:///Content/Materials/Wood.omat.json");
+    private static readonly AssetPath Main = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
+    private static readonly AssetPath Wood = AssetPath.Parse("/Content/Materials/Wood.omat.json");
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -134,10 +135,10 @@ public sealed class AutomaticCookServiceTests
         using var fixture = new Fixture();
         using var service = fixture.CreateService();
 
-        fixture.Change(AssetChangeKind.Updated, new Uri("asset:///Content/Scenes/Main.oscene"));
-        fixture.Change(AssetChangeKind.Added, new Uri("asset:///project/Content/Scenes/Main.oscene.json"));
-        fixture.Change(AssetChangeKind.Added, new Uri("asset:///Cooked/Scenes/Main.oscene.json"));
-        fixture.Change(AssetChangeKind.Updated, new Uri("asset:///Content/Notes.txt"));
+        fixture.Change(AssetChangeKind.Updated, AssetPath.Parse("/Content/Scenes/Main.oscene"));
+        fixture.Change(AssetChangeKind.Added, AssetPath.Parse("/project/Content/Scenes/Main.oscene.json"));
+        fixture.Change(AssetChangeKind.Added, AssetPath.Parse("/Cooked/Scenes/Main.oscene.json"));
+        fixture.Change(AssetChangeKind.Updated, AssetPath.Parse("/Content/Notes.txt"));
         fixture.Change(AssetChangeKind.Listed, Main);
         fixture.Change(AssetChangeKind.Added, Wood);
         fixture.Time.Advance(AutomaticCookService.QuietWindow);
@@ -158,7 +159,7 @@ public sealed class AutomaticCookServiceTests
         fixture.Time.Advance(AutomaticCookService.QuietWindow);
         var previous = await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false);
 
-        var renamed = new Uri("asset:///Content/Scenes/Demo.oscene.json");
+        var renamed = AssetPath.Parse("/Content/Scenes/Demo.oscene.json");
         fixture.Gone.Add(Main);
         fixture.Change(AssetChangeKind.Relocated, renamed, Main);
         _ = previous.Token.IsCancellationRequested.Should().BeTrue();
@@ -184,7 +185,7 @@ public sealed class AutomaticCookServiceTests
         fixture.Change(AssetChangeKind.Updated, Main);
         fixture.Time.Advance(AutomaticCookService.QuietWindow);
 
-        fixture.Manager.Verify(value => value.SaveProjectSettingsAsync(fixture.Projects.ActiveProject!.ProjectRoot, new ProjectSettings { CookOnChange = false }, It.IsAny<CancellationToken>()), Times.Once);
+        fixture.Manager.Verify(value => value.SaveProjectSettingsAsync(fixture.Projects.ActiveProject!.ProjectRoot.FullPath, new ProjectSettings { CookOnChange = false }, It.IsAny<CancellationToken>()), Times.Once);
         _ = service.CookOnChange.Should().BeFalse();
         _ = fixture.Projects.Settings.CookOnChange.Should().BeFalse();
         _ = notified.Should().Contain(nameof(IAutomaticCookService.CookOnChange));
@@ -335,7 +336,7 @@ public sealed class AutomaticCookServiceTests
             this.Projects.Activate(new ProjectContext
             {
                 ProjectId = Guid.NewGuid(),
-                ProjectRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
+                ProjectRoot = FileSystemPath.From(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
                 Name = "Cook on change",
                 Category = Category.Games,
                 AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
@@ -344,8 +345,8 @@ public sealed class AutomaticCookServiceTests
             _ = this.Runs.SetupGet(value => value.Runs).Returns(() => this.InProgress);
             _ = this.Runs.Setup(value => value.WhenWriterIdleAsync(It.IsAny<CancellationToken>()))
                 .Returns<CancellationToken>(token => this.writer.Task.WaitAsync(token));
-            _ = this.Statuses.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<IReadOnlyList<Uri>>(), It.IsAny<CancellationToken>()))
-                .Returns<ProjectContext, IReadOnlyList<Uri>, CancellationToken>((_, assets, _) => this.StatusFailure is { } failure
+            _ = this.Statuses.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<IReadOnlyList<AssetPath>>(), It.IsAny<CancellationToken>()))
+                .Returns<ProjectContext, IReadOnlyList<AssetPath>, CancellationToken>((_, assets, _) => this.StatusFailure is { } failure
                     ? Task.FromException<IReadOnlyList<AssetCookStatus>>(failure)
                     : Task.FromResult<IReadOnlyList<AssetCookStatus>>([.. assets.Select(asset => new AssetCookStatus(
                         asset,
@@ -355,8 +356,8 @@ public sealed class AutomaticCookServiceTests
                         [],
                         [],
                         ImmutableArray<DiagnosticRecord>.Empty))]));
-            _ = this.pipeline.Setup(value => value.CookSavedAssetAsync(It.IsAny<Uri>(), It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()))
-                .Returns<Uri, ProjectContext, CancellationToken>(async (uri, project, token) =>
+            _ = this.pipeline.Setup(value => value.CookSavedAssetAsync(It.IsAny<AssetPath>(), It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()))
+                .Returns<AssetPath, ProjectContext, CancellationToken>(async (uri, project, token) =>
                 {
                     _ = this.Calls.Writer.TryWrite(new(uri, token));
                     if (this.Result is { } result)
@@ -379,11 +380,11 @@ public sealed class AutomaticCookServiceTests
 
         public Mock<IAssetCookStatusReader> Statuses { get; } = new();
 
-        public HashSet<Uri> Fresh { get; } = [];
+        public HashSet<AssetPath> Fresh { get; } = [];
 
-        public HashSet<Uri> Gone { get; } = [];
+        public HashSet<AssetPath> Gone { get; } = [];
 
-        public HashSet<Uri> NeverCooked { get; } = [];
+        public HashSet<AssetPath> NeverCooked { get; } = [];
 
         public Exception? StatusFailure { get; set; }
 
@@ -414,10 +415,10 @@ public sealed class AutomaticCookServiceTests
                 NullLogger<AutomaticCookService>.Instance,
                 this.Time);
 
-        public void Change(AssetChangeKind kind, Uri uri, Uri? previous = null) => this.changes.OnNext(new(kind, uri, previous));
+        public void Change(AssetChangeKind kind, AssetPath uri, AssetPath? previous = null) => this.changes.OnNext(new(kind, uri, previous));
 
-        public string SourcePath(Uri uri)
-            => Path.GetFullPath(Path.Combine(this.Projects.ActiveProject!.ProjectRoot, Uri.UnescapeDataString(uri.AbsolutePath).TrimStart('/')));
+        public FileSystemPath SourcePath(AssetPath asset)
+            => this.Projects.ActiveProject!.ProjectRoot.Combine(asset.VirtualPath.TrimStart('/'));
 
         public async Task<CookCall> NextCallAsync(TestContext context)
             => await this.Calls.Reader.ReadAsync(context.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(5), context.CancellationToken).ConfigureAwait(false);
@@ -435,7 +436,7 @@ public sealed class AutomaticCookServiceTests
     /// <summary>One cook the service asked the pipeline for.</summary>
     /// <param name="AssetUri">The source it cooks.</param>
     /// <param name="Token">The cook's cancellation.</param>
-    private sealed record CookCall(Uri AssetUri, CancellationToken Token);
+    private sealed record CookCall(AssetPath AssetUri, CancellationToken Token);
 
     /// <summary>A clock the test advances; timers fire on the advancing thread.</summary>
     private sealed class ManualTime : TimeProvider

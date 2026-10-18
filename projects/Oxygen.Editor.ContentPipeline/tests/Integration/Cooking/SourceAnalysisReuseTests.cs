@@ -33,7 +33,7 @@ public sealed class SourceAnalysisReuseTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
+            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
         });
         second.RootNodes.Add(node);
         var source = File.Create(Path.Combine(workspace.Root, "Content", "Scenes", "Second.oscene.json"));
@@ -116,7 +116,7 @@ public sealed class SourceAnalysisReuseTests
             new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)),
             new FixedCookScopeProvider(workspace.Root),
             new CookDocumentRegistry());
-        var input = CookInputResolver.Resolve(workspace.ProjectContext, new Uri("asset:///Content/Scenes/Main.oscene.json"), ContentCookInputRole.Primary);
+        var input = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Scenes/Main.oscene.json"), ContentCookInputRole.Primary);
         var snapshot = new CookInputSnapshot(operation, Path.Combine(workspace.Root, ".build", "captured"), artifacts.Fingerprint, "captured-scene-test", [], []);
 
         var prepared = await analyzer.PrepareCapturedScenesAsync([input], snapshot, [], this.TestContext.CancellationToken).ConfigureAwait(false);

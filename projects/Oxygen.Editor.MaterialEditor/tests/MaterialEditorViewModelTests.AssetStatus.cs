@@ -8,6 +8,7 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
 
@@ -21,7 +22,7 @@ public sealed partial class MaterialEditorViewModelTests
     {
         using var materials = new MaterialDocuments();
         var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var item = CreateStatusItem(document.File.AssetUri);
+        var item = CreateStatusItem(document.File.Asset);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
         var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
@@ -77,12 +78,12 @@ public sealed partial class MaterialEditorViewModelTests
         editor.Dispose();
         await detached.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = updates.HasObservers.Should().BeFalse();
-        updates.OnNext([CreateStatusItem(document.File.AssetUri)]);
+        updates.OnNext([CreateStatusItem(document.File.Asset)]);
         _ = editor.AssetStatus.Should().BeNull();
     }
 
-    private static AssetEntry CreateStatusItem(Uri uri) => new(
-        uri, "Test", AssetKind.Material, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Unknown, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, CookedUri: null, CookedPath: null, AssetGuid: null, DiagnosticCodes: [], IsSelectable: true)
+    private static AssetEntry CreateStatusItem(AssetPath uri) => new(
+        uri, "Test", AssetKind.Material, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Unknown, uri.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: null, AssetGuid: null, DiagnosticCodes: [], IsSelectable: true)
     {
         CookStatus = new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []),
     };

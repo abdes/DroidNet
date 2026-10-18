@@ -10,6 +10,7 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
 
 namespace Oxygen.Editor.ContentBrowser.UI.Tests.Assets;
@@ -31,8 +32,8 @@ public sealed partial class BuiltinCatalogTests : DroidNet.Tests.VisualUserInter
         _ = provider.SetupGet(value => value.Items).Returns(Observable.Return<IReadOnlyList<AssetEntry>>([]));
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var projects = new ProjectContextService();
-        var state = new ContentBrowserState(projects);
-        state.SetSelectedFolders(["/Content/Materials"]);
+        var state = new ContentBrowserState();
+        state.SetSelectedFolders([AssetPath.Parse("/Content/Materials")]);
         using var model = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), discovery);
         var view = new ListLayoutView
         {
@@ -44,7 +45,7 @@ public sealed partial class BuiltinCatalogTests : DroidNet.Tests.VisualUserInter
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var notice = view.FindDescendant<InfoBar>()!;
         _ = notice.IsOpen.Should().BeFalse();
-        state.SetSelectedFolders(["/Engine"]);
+        state.SetSelectedFolders([AssetPath.Parse("/Engine")]);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = notice.IsOpen.Should().BeTrue();
         _ = notice.Message.Should().Contain("No last-known catalog");

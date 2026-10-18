@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
 
@@ -37,7 +38,8 @@ public sealed class TextureCookTests
         workspace.WriteText("Content/Textures/Meter.otex.json", MeterDescriptor);
         byte[] image = [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 8, 255, 255, 255, 255];
         await File.WriteAllBytesAsync(Path.Combine(workspace.Root, "Content/Textures/Meter.tga"), image, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var texture = new Uri("asset:///Content/Textures/Meter.otex.json");
+        var texture = AssetPath.Parse("/Content/Textures/Meter.otex");
+        var textureSource = AssetPath.Parse("/Content/Textures/Meter.otex.json");
         workspace.Scene.SetEnvironment(new SceneEnvironmentData
         {
             PostProcess = new PostProcessEnvironmentData { AutoExposureMeteringMask = texture },
@@ -49,7 +51,7 @@ public sealed class TextureCookTests
         var service = CreateIncrementalService(workspace, api, compatibility);
         var first = await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(first);
-        var output = first.CookedAssets.Should().ContainSingle(asset => asset.SourceAssetUri == texture).Subject;
+        var output = first.CookedAssets.Should().ContainSingle(asset => asset.SourceAssetUri == textureSource).Subject;
         _ = output.Kind.Should().Be(ContentCookAssetKind.Texture);
         _ = output.VirtualPath.Should().Be("/Content/Textures/Meter.otex");
         _ = output.DescriptorRelativePath.Should().Be("Textures/Meter.otex");
@@ -72,7 +74,7 @@ public sealed class TextureCookTests
         await File.WriteAllBytesAsync(path, damaged, this.TestContext.CancellationToken).ConfigureAwait(false);
         var repaired = await service.CookAssetAsync(texture, this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(repaired);
-        _ = repaired.CookedAssets.Should().ContainSingle(asset => asset.SourceAssetUri == texture);
+        _ = repaired.CookedAssets.Should().ContainSingle(asset => asset.SourceAssetUri == textureSource);
         _ = (await File.ReadAllBytesAsync(Path.Combine(workspace.CookedRoot("Content"), output.DescriptorRelativePath!), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(original);
         _ = (await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
     }

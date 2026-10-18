@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
@@ -39,17 +40,17 @@ public sealed class ImportWorkflowTests
             using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", new("asset:///Content")), this.TestContext.CancellationToken).ConfigureAwait(false);
+            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", AssetPath.Parse("/Content")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
             _ = workspace.CookCoordinator.Runs.Should().ContainSingle();
             _ = result.CookedAssets.Select(static asset => asset.VirtualPath).Should().BeEquivalentTo(TypedImportOutputPaths);
 
             foreach (var folder in new[] { "Materials", "Geometry", "Scenes" })
             {
-                _ = (await service.CookFolderAsync(new Uri("asset:///Content/" + folder + "/Model"), this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
+                _ = (await service.CookFolderAsync(AssetPath.Parse("/Content/" + folder + "/Model"), this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
             }
 
-            _ = result.RetainedSourceUri.Should().Be(new Uri("asset:///Content/SourceMedia/DCC/Model/Model.gltf"));
+            _ = result.RetainedSourceUri.Should().Be(AssetPath.Parse("/Content/SourceMedia/DCC/Model/Model.gltf"));
             var run = workspace.CookCoordinator.Runs[0];
             _ = run.Request.Import.Should().BeNull();
             _ = run.Request.IsReimport.Should().BeTrue();
@@ -81,9 +82,9 @@ public sealed class ImportWorkflowTests
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-        var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Model", new("asset:///Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
-        _ = result.RetainedSourceUri.Should().Be(new Uri("asset:///Content/SourceMedia/DCC/model.fbx"));
+        _ = result.RetainedSourceUri.Should().Be(AssetPath.Parse("/Content/SourceMedia/DCC/model.fbx"));
         _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, "Content/SourceMedia"), "*.fbx", SearchOption.AllDirectories).Should().ContainSingle();
     }
 
@@ -103,7 +104,7 @@ public sealed class ImportWorkflowTests
             var runner = new FailImportBatchRunner();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Model", new("asset:///Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
+            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.Status.Should().Be(OperationStatus.Failed);
             _ = result.RetainedSourceUri.Should().NotBeNull();
             var retry = workspace.CookCoordinator.Runs.Single().Request;
@@ -141,7 +142,7 @@ public sealed class ImportWorkflowTests
             var runner = new FailImportBatchRunner();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Triangle", new("asset:///Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
+            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Triangle", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.Status.Should().Be(OperationStatus.Failed);
             _ = result.RetainedSourceUri.Should().NotBeNull();
             var retained = Path.Combine(workspace.Root, "Content", "SourceMedia", "DCC", "Triangle");
@@ -175,7 +176,7 @@ public sealed class ImportWorkflowTests
     public async Task ImportRejectsChangedReviewedProject()
     {
         using var workspace = new CookWorkspace();
-        var request = new SceneImportRequest(workspace.ProjectContext, Path.Combine(workspace.Root, "model.gltf"), "Model", new("asset:///Content/Models"));
+        var request = new SceneImportRequest(workspace.ProjectContext, Path.Combine(workspace.Root, "model.gltf"), "Model", AssetPath.Parse("/Content/Models"));
         workspace.Activate(workspace.ProjectContext with { Name = "Changed" });
         var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace))
         {
@@ -216,7 +217,7 @@ public sealed class ImportWorkflowTests
                 compatibility,
                 files,
                 workspace.Publication);
-            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", new("asset:///Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
+            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.Status.Should().Be(OperationStatus.Failed);
             _ = result.RetainedSourceUri.Should().NotBeNull();
             var retry = workspace.CookCoordinator.Runs.Single().Request.Import;
@@ -247,9 +248,9 @@ public sealed class ImportWorkflowTests
             var source = Path.Combine(external.FullName, "model.gltf");
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), source);
             var settingsPath = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf.import.json");
-            var state = new CookDocumentState(settingsPath, "Model import settings", IsDirty: true, string.Empty);
+            var state = new CookDocumentState(FileSystemPath.From(settingsPath), "Model import settings", IsDirty: true, string.Empty);
             var dirty = true;
-            using var registration = workspace.Documents.Register(settingsPath, _ => Task.FromResult<CookDocumentReadLease?>(dirty ? new(state, static () => { }) : null));
+            using var registration = workspace.Documents.Register(FileSystemPath.From(settingsPath), _ => Task.FromResult<CookDocumentReadLease?>(dirty ? new(state, static () => { }) : null));
             var blocked = new TaskCompletionSource<Guid>(TaskCreationOptions.RunContinuationsAsynchronously);
             workspace.CookCoordinator.RunChanged += (sender, args) =>
             {
@@ -261,7 +262,7 @@ public sealed class ImportWorkflowTests
             using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-            var pending = service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", new("asset:///Content/Models")), this.TestContext.CancellationToken);
+            var pending = service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken);
             var operationId = await blocked.Task.WaitAsync(TimeSpan.FromSeconds(15), this.TestContext.CancellationToken).ConfigureAwait(false);
             File.Delete(source);
             dirty = false;

@@ -101,35 +101,34 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         await this.AdoptContentAsync(CancellationToken.None).ConfigureAwait(true);
     }
 
-    public async Task<(Uri uri, string key)> CookTestMaterialAsync(string name, CancellationToken cancellationToken, System.Numerics.Vector4? baseColor = null, string? projectRoot = null)
+    public async Task<(AssetPath asset, string key)> CookTestMaterialAsync(string name, CancellationToken cancellationToken, System.Numerics.Vector4? baseColor = null, FileSystemPath? projectRoot = null)
     {
         var root = projectRoot ?? this.ProjectRoot;
-        var relative = $"Content/Materials/{name}.omat.json";
-        var path = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var path = root.Combine("Content").Combine("Materials").Combine($"{name}.omat.json");
+        _ = Directory.CreateDirectory(path.Parent!.FullPath);
         var color = baseColor ?? System.Numerics.Vector4.One;
         var factor = System.Text.Json.JsonSerializer.Serialize(new[] { color.X, color.Y, color.Z, color.W });
         var source = $$"""
                 { "name": "{{name}}",
                   "parameters": { "base_color": {{factor}}, "metalness": 0, "roughness": 0.5 } }
                 """;
-        await File.WriteAllTextAsync(path, source, cancellationToken).ConfigureAwait(true);
+        await File.WriteAllTextAsync(path.FullPath, source, cancellationToken).ConfigureAwait(true);
         var native = this.MaterialPipelineFor(root);
-        var uri = new Uri($"asset:///{relative}");
-        var result = await native.Pipeline.CookAssetAsync(uri, cancellationToken).ConfigureAwait(true);
+        var asset = AssetPath.Parse($"/Content/Materials/{name}.omat");
+        var result = await native.Pipeline.CookAssetAsync(asset, cancellationToken).ConfigureAwait(true);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         var cookedRoot = await this.GetCookedRootAsync(root, cancellationToken).ConfigureAwait(true);
-        using var indexStream = File.OpenRead(Path.Combine(cookedRoot, "container.index.bin"));
-        var asset = LooseCookedIndex.Read(indexStream).Assets.Single(value => value.VirtualPath == $"/Content/Materials/{name}.omat");
+        using var indexStream = File.OpenRead(cookedRoot.Combine("container.index.bin").FullPath);
+        var cooked = LooseCookedIndex.Read(indexStream).Assets.Single(value => value.VirtualPath == asset.VirtualPath);
         if (projectRoot is null)
         {
-            var row = new Oxygen.Editor.Assets.AssetEntry(uri, name, Oxygen.Editor.Assets.AssetKind.Material, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Mounted, Oxygen.Managed.Assets.Catalog.AssetUriHelper.GetVirtualPath(uri), SourcePath: null, path, CookedUri: null, Path.Combine(cookedRoot, "Materials", $"{name}.omat"), AssetGuid: null, [], IsSelectable: true);
+            var row = new Oxygen.Editor.Assets.AssetEntry(asset, name, Oxygen.Editor.Assets.AssetKind.Material, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Mounted, asset.VirtualPath, SourcePath: null, path, cookedRoot.Combine("Materials").Combine($"{name}.omat"), AssetGuid: null, [], IsSelectable: true);
             this.feedAssets.OnNext([.. this.feedAssets.Value, row]);
         }
 
         var keyBytes = new byte[16];
-        asset.AssetKey.WriteBytes(keyBytes);
-        return (uri, new Guid(keyBytes, bigEndian: true).ToString());
+        cooked.AssetKey.WriteBytes(keyBytes);
+        return (asset, new Guid(keyBytes, bigEndian: true).ToString());
     }
 
     /// <summary>Changes the project's content mounts through the project's preview session, as the workspace does.</summary>
@@ -138,7 +137,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     /// <returns>The task that completes once the change is saved, mounted and active.</returns>
     public async Task ApplyContentPriorityAsync(ProjectContext project, CancellationToken cancellationToken)
     {
-        var desired = new ProjectInfo(project.ProjectId, project.Name, project.Category, project.ProjectRoot, project.Thumbnail)
+        var desired = new ProjectInfo(project.ProjectId, project.Name, project.Category, project.ProjectRoot.FullPath, project.Thumbnail)
         {
             AuthoringMounts = [.. project.AuthoringMounts],
             LocalFolderMounts = [.. project.LocalFolderMounts],
@@ -149,7 +148,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
             var catalog = new Mock<IAssetPublicationTarget>();
             _ = catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             this.contentSession = this.CreatePreviewSession(this.materialPipeline.Publication, this.materialCookCoordinator, this.projectContexts, catalog.Object);
-            _ = (await this.contentSession.StartAsync(this.projectContexts.ActiveProject!, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
+            _ = (await this.contentSession.StartAsync(this.projectContexts.ActiveProject!, cancellationToken).ConfigureAwait(true)).Should().BeTrue("{0}", this.contentSession.Failure);
         }
 
         _ = (await this.contentSession.ChangeMountsAsync(this.projectContexts.ActiveProject!, desired, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
@@ -218,7 +217,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     private readonly ContentCookCoordinator materialCookCoordinator;
     private readonly Oxygen.Testing.NativeContentPipelineFixture materialPipeline;
     private readonly Mock<IGeometryMaterialSlotProvider> materialSlotProvider = new();
-    private readonly Dictionary<string, (ContentCookCoordinator Coordinator, Oxygen.Testing.NativeContentPipelineFixture Pipeline)> foreignMaterialPipelines = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<FileSystemPath, (ContentCookCoordinator Coordinator, Oxygen.Testing.NativeContentPipelineFixture Pipeline)> foreignMaterialPipelines = [];
     private readonly TestDocumentArea area = new();
     private readonly MaterialValidation materialValidation = new();
     private readonly MaterialDocumentKind materialKind;
@@ -274,8 +273,8 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         this.materialCookCoordinator = new(this.projectContexts, NullLogger<ContentCookCoordinator>.Instance);
         this.materialPipeline = new(this.projectContexts, this.materialCookCoordinator, new CookDocumentRegistry());
         this.activeMaterialSlotProvider = this.materialPipeline.Pipeline;
-        _ = this.materialSlotProvider.Setup(provider => provider.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<Uri>(), It.IsAny<CancellationToken>()))
-            .Returns((ProjectContext context, Uri uri, CancellationToken token) => this.activeMaterialSlotProvider.ReadAsync(context, uri, token));
+        _ = this.materialSlotProvider.Setup(provider => provider.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<AssetPath>(), It.IsAny<CancellationToken>()))
+            .Returns((ProjectContext context, AssetPath asset, CancellationToken token) => this.activeMaterialSlotProvider.ReadAsync(context, asset, token));
         var mode = automatic ? ExposureMode.Auto : ExposureMode.Manual;
         this.Source = Scene.CreateAndHydrate(new SceneData { Id = SceneId.New(), Name = "Environment", Environment = new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = mode } }, });
         seed?.Invoke(this.Source);
@@ -317,7 +316,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
 
     public ConcurrentQueue<OperationResult> Results { get; } = new();
 
-    public string ProjectRoot => this.directory.FullName;
+    public FileSystemPath ProjectRoot => FileSystemPath.From(this.directory.FullName);
 
     public ProjectContextService Projects => this.projectContexts;
 
@@ -331,9 +330,9 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         return new(uri, slot.SlotId, inventory.LayoutRevision);
     }
 
-    private Oxygen.Testing.NativeContentPipelineFixture MaterialPipelineFor(string root)
+    private Oxygen.Testing.NativeContentPipelineFixture MaterialPipelineFor(FileSystemPath root)
     {
-        if (string.Equals(root, this.ProjectRoot, StringComparison.OrdinalIgnoreCase))
+        if (root == this.ProjectRoot)
         {
             return this.materialPipeline;
         }
@@ -341,11 +340,11 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         if (!this.foreignMaterialPipelines.TryGetValue(root, out var value))
         {
             var contexts = new ProjectContextService();
-            var info = new ProjectInfo("Foreign material fixture", Category.Games, root)
+            var info = new ProjectInfo("Foreign material fixture", Category.Games, root.FullPath)
             {
                 AuthoringMounts = [new("Content", "Content")],
             };
-            File.WriteAllText(Path.Combine(root, "Project.oxy"), ProjectInfo.ToJson(info));
+            File.WriteAllText(root.Combine("Project.oxy").FullPath, ProjectInfo.ToJson(info));
             contexts.Activate(ProjectContext.FromProjectInfo(info));
             var coordinator = new ContentCookCoordinator(contexts, NullLogger<ContentCookCoordinator>.Instance);
             value = (coordinator, new(contexts, coordinator, new CookDocumentRegistry()));
@@ -355,9 +354,9 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         return value.Pipeline;
     }
 
-    public async Task<string> GetCookedRootAsync(string projectRoot, CancellationToken token)
+    public async Task<FileSystemPath> GetCookedRootAsync(FileSystemPath projectRoot, CancellationToken token)
     {
-        var info = await this.manager.LoadProjectInfoAsync(projectRoot).ConfigureAwait(true) ?? throw new InvalidOperationException("The native fixture project has not been saved.");
+        var info = await this.manager.LoadProjectInfoAsync(projectRoot.FullPath).ConfigureAwait(true) ?? throw new InvalidOperationException("The native fixture project has not been saved.");
         using var publication = await this.MaterialPipelineFor(projectRoot).Publication.AcquireReadAsync(ProjectContext.FromProjectInfo(info), token).ConfigureAwait(true);
         return publication.FindProjectRoot("Content") ?? throw new InvalidOperationException("The fixture has not cooked its Content mount.");
     }
@@ -519,17 +518,16 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         await this.SynchronizeAsync(stale, cancellationToken).ConfigureAwait(true);
     }
 
-    private static void WriteSceneFile(string path, SceneFileData data)
+    private static void WriteSceneFile(FileSystemPath path, SceneFileData data)
     {
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllBytes(path, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneFileJsonContext.Default.SceneFileData));
+        _ = Directory.CreateDirectory(path.Parent!.FullPath);
+        File.WriteAllBytes(path.FullPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneFileJsonContext.Default.SceneFileData));
     }
 
     // Saves a scene built in memory as a scene file of the project, named after the scene.
     private DocumentFile WriteScene(Scene scene, IList<ExplorerEntryData>? layout = null)
     {
-        var relative = $"Content/Scenes/{scene.Name}.oscene.json";
-        var file = new DocumentFile(Path.Combine(this.ProjectRoot, relative.Replace('/', Path.DirectorySeparatorChar)), new Uri("asset:///" + Uri.EscapeDataString(relative).Replace("%2F", "/", StringComparison.Ordinal)));
+        var file = new DocumentFile(this.ProjectRoot.Combine("Content").Combine("Scenes").Combine($"{scene.Name}.oscene.json"), AssetPath.Create("Content", $"Scenes/{scene.Name}.oscene"));
         WriteSceneFile(file.Path, new SceneFileData(scene.Dehydrate(), layout));
         return file;
     }
@@ -620,7 +618,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     public async Task<PreviewSession> StartWorkspacePreviewAsync(CatalogWorkloadServices services, IAssetPublicationTarget catalog)
     {
         var session = this.CreatePreviewSession(services.Publication, services.Runs, services.Projects, catalog);
-        _ = (await session.StartAsync(services.Projects.ActiveProject!).ConfigureAwait(true)).Should().BeTrue();
+        _ = (await session.StartAsync(services.Projects.ActiveProject!).ConfigureAwait(true)).Should().BeTrue("{0}", session.Failure);
         return session;
     }
 

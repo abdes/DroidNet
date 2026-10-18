@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 
@@ -33,7 +34,7 @@ public sealed class ImportedSourceInspectionTests
         var cooked = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cooked.IsPublished.Should().BeTrue();
         var expected = cooked.CookedAssets.Select(static asset => asset.VirtualPath).ToArray();
-        foreach (var scope in new[] { source, new Uri("asset:///Content/SourceMedia/DCC") })
+        foreach (var scope in new[] { source, AssetPath.Parse("/Content/SourceMedia/DCC") })
         {
             var report = await service.InspectCookedOutputAsync(scope, this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = report.Roots.SelectMany(static root => root.Inspection.Assets).Select(static asset => asset.VirtualPath).Should().BeEquivalentTo(expected);

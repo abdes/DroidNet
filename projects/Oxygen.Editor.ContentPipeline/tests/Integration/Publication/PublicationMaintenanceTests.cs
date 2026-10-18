@@ -9,6 +9,7 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 using static Oxygen.Editor.ContentPipeline.TestSupport.GenerationScenario;
 
@@ -28,7 +29,7 @@ public sealed class PublicationMaintenanceTests
         var service = MaintenanceService(files);
         CookPublicationReadLease old;
         string currentPath;
-        using (var gate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false))
+        using (var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false))
         {
             _ = await WritePublicationFixtureAsync(context, files, FileVersion.Missing, this.TestContext.CancellationToken).ConfigureAwait(false);
             old = await CookPublicationReadLease.OpenUnderGateAsync(context, files, gate, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -36,7 +37,7 @@ public sealed class PublicationMaintenanceTests
         }
 
         using var lifetime = old;
-        var oldPath = old.FindProjectRoot("Content")!;
+        var oldPath = old.FindProjectRoot("Content")!.FullPath;
         var oldDocument = CookPublicationPaths.Document(project.Root, old.PublicationId!.Value);
         _ = (await service.MaintainAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
         _ = Directory.Exists(oldPath).Should().BeTrue();
@@ -58,7 +59,7 @@ public sealed class PublicationMaintenanceTests
         var files = new NativeAtomicFileStore(new RealFileSystem());
         var service = MaintenanceService(files);
         string oldPath;
-        using (var gate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false))
+        using (var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false))
         {
             oldPath = await WritePublicationFixtureAsync(context, files, FileVersion.Missing, this.TestContext.CancellationToken).ConfigureAwait(false);
             using var old = await CookPublicationReadLease.OpenUnderGateAsync(context, files, gate, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -87,7 +88,7 @@ public sealed class PublicationMaintenanceTests
         var files = new NativeAtomicFileStore(new RealFileSystem());
         var service = MaintenanceService(files);
         var operation = new ContentCookOperation(Guid.NewGuid(), context, 1);
-        using var owner = CookOutputLease.AcquireOperation(project.Root, operation.OperationId);
+        using var owner = CookOutputLease.AcquireOperation(FileSystemPath.From(project.Root), operation.OperationId);
         using var baseline = await service.AcquireReadAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false);
         var transaction = await CookPublicationTransaction.ReserveAsync(operation, baseline, [], files,
             new ProjectManagerService(new NativeStorageProvider(new RealFileSystem())), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -95,7 +96,7 @@ public sealed class PublicationMaintenanceTests
         var directory = Path.Combine(project.Root, ".build", "cook", operation.OperationId.ToString("N"));
         var input = Path.Combine(directory, "replacement-input.gltf");
         File.WriteAllText(input, "retry bytes");
-        using var retry = CookOutputLease.TryAcquireRetryInput(project.Root, operation.OperationId);
+        using var retry = CookOutputLease.TryAcquireRetryInput(FileSystemPath.From(project.Root), operation.OperationId);
         _ = retry.Should().NotBeNull();
         owner.Dispose();
         _ = (await service.MaintainAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
@@ -113,7 +114,7 @@ public sealed class PublicationMaintenanceTests
         var files = new NativeAtomicFileStore(new RealFileSystem());
         var service = MaintenanceService(files);
         var id = Guid.NewGuid();
-        using var operation = CookOutputLease.AcquireOperation(project.Root, id);
+        using var operation = CookOutputLease.AcquireOperation(FileSystemPath.From(project.Root), id);
         var directory = Path.Combine(project.Root, ".build", "cook", id.ToString("N"));
         var inputs = Directory.CreateDirectory(Path.Combine(directory, "inputs"));
         var captured = Path.Combine(inputs.FullName, "source.gltf");

@@ -37,15 +37,15 @@ namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 /// </remarks>
 public static class SampleScene
 {
-    public static Uri CubeGeometry { get; } = new("asset:/Content/Cube.ogeo");
+    public static AssetPath CubeGeometry { get; } = AssetPath.Parse("/Content/Cube.ogeo");
 
-    public static Uri SphereGeometry { get; } = new("asset:/Content/Sphere.ogeo");
+    public static AssetPath SphereGeometry { get; } = AssetPath.Parse("/Content/Sphere.ogeo");
 
-    public static Uri RedMaterial { get; } = new("asset:/Content/Red.omat");
+    public static AssetPath RedMaterial { get; } = AssetPath.Parse("/Content/Red.omat");
 
-    public static Uri MoveScript { get; } = new("asset:/Content/Move.oscript");
+    public static AssetPath MoveScript { get; } = AssetPath.Parse("/Content/Move.oscript");
 
-    public static Uri PlayInput { get; } = new("asset:/Content/Play.oimap");
+    public static AssetPath PlayInput { get; } = AssetPath.Parse("/Content/Play.oimap");
 
     /// <summary>Gets the layout revision of the cube's slot inventory: 64 hex digits, as a cooked inventory has.</summary>
     public static string CubeLayoutRevision { get; } = new('c', 64);

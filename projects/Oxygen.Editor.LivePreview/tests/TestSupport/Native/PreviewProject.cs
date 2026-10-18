@@ -15,6 +15,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
 
@@ -67,20 +68,20 @@ internal sealed partial class PreviewProject : IDisposable
     /// <param name="name">The material's name.</param>
     /// <param name="baseColor">Its base color.</param>
     /// <returns>The material's asset URI.</returns>
-    public Uri WriteMaterial(string name, Vector4 baseColor)
+    public AssetPath WriteMaterial(string name, Vector4 baseColor)
     {
         var relative = $"Content/Materials/{name}.omat.json";
         var path = Path.Combine(this.directory.FullName, relative.Replace('/', Path.DirectorySeparatorChar));
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var factor = JsonSerializer.Serialize(new[] { baseColor.X, baseColor.Y, baseColor.Z, baseColor.W });
         File.WriteAllText(path, $$"""{ "name": "{{name}}", "parameters": { "base_color": {{factor}}, "metalness": 0, "roughness": 0.5 } }""");
-        return new Uri($"asset:///{relative}");
+        return AssetPath.Parse($"/Content/Materials/{name}.omat");
     }
 
     /// <summary>Reads where the selected publication keeps the project's cooked Content.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The cooked root, which a new publication replaces.</returns>
-    public async Task<string?> ReadPublishedContentRootAsync(CancellationToken cancellationToken)
+    public async Task<FileSystemPath?> ReadPublishedContentRootAsync(CancellationToken cancellationToken)
     {
         using var publication = await this.Publication.AcquireReadAsync(this.Context, cancellationToken).ConfigureAwait(true);
         return publication.FindProjectRoot("Content");

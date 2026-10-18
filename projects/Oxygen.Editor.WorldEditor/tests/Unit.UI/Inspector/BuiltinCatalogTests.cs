@@ -41,7 +41,7 @@ internal sealed class BuiltinCatalogTests : DroidNet.Tests.VisualUserInterfaceTe
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         var engine = model.Groups.Single(group => string.Equals(group.Key, "Engine", StringComparison.Ordinal));
-        _ = engine.Items.Should().Equal(live.Catalog!.AuthoringGeometries, (item, definition) => item.Item.Uri == definition.AssetUri);
+        _ = engine.Items.Should().Equal(live.Catalog!.AuthoringGeometries, (item, definition) => item.Item.Asset == definition.AssetUri);
         _ = engine.Items.Should().HaveCount(10).And.OnlyContain(item => item.Item.IsEnabled);
         _ = engine.Items.Single(item => string.Equals(item.Item.Name, "SubdividedCube", StringComparison.Ordinal)).Item.DisplayType.Should().Contain("Advanced");
         _ = engine.Items.Should().NotContain(item => string.Equals(item.Item.Name, "ArrowGizmo", StringComparison.Ordinal));

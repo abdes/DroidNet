@@ -39,7 +39,7 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
         _ = provider.SetupGet(value => value.Items).Returns(updates);
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var projects = new ProjectContextService();
-        var state = new ContentBrowserState(projects);
+        var state = new ContentBrowserState();
         var hosting = CreateStatusHosting();
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, hosting, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture()) : new ListLayoutViewModel(provider.Object, projects, state, hosting, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
         FrameworkElement view = tiles ? new TilesLayoutView

@@ -18,14 +18,14 @@ public sealed class AssetIdentityTests
     {
         var origin = CreateOrigin();
         var copy = CreateCopy(origin);
-        var authored = copy with { IdentityUri = new("asset:///Content/Materials/Default.omat.json"), SourcePath = "Default.omat.json", DescriptorPath = "Default.omat.json", Generated = null, BuiltinOriginUri = null, PrimaryState = AssetState.Descriptor };
-        var unproven = copy with { IdentityUri = new("asset:///Content/Materials/AnotherDefault.omat"), Generated = null, BuiltinOriginUri = null, PrimaryState = AssetState.Cooked };
+        var authored = copy with { Identity = AssetPath.Parse("/Content/Materials/Default.omat"), SourcePath = FileSystemPath.From(@"C:\Project\Content\Materials\Default.omat.json"), DescriptorPath = FileSystemPath.From(@"C:\Project\Content\Materials\Default.omat.json"), Generated = null, BuiltinOrigin = null, PrimaryState = AssetState.Descriptor };
+        var unproven = copy with { Identity = AssetPath.Parse("/Content/Materials/AnotherDefault.omat"), Generated = null, BuiltinOrigin = null, PrimaryState = AssetState.Cooked };
         var rows = AssetIdentity.GroupBuiltins([copy, authored, origin, unproven]);
         _ = rows.Should().HaveCount(3);
         var builtin = rows.Single(static item => item.IsBuiltin);
-        _ = builtin.IdentityUri.Should().Be(origin.IdentityUri);
-        _ = builtin.CookedCompanions.Should().ContainSingle().Which.IdentityUri.Should().Be(copy.IdentityUri);
-        _ = AssetIdentity.Represents(builtin, copy.IdentityUri).Should().BeTrue();
+        _ = builtin.Identity.Should().Be(origin.Identity);
+        _ = builtin.CookedCompanions.Should().ContainSingle().Which.Identity.Should().Be(copy.Identity);
+        _ = AssetIdentity.Represents(builtin, copy.Identity).Should().BeTrue();
         _ = rows.Should().Contain(authored).And.Contain(unproven);
     }
 
@@ -53,14 +53,14 @@ public sealed class AssetIdentityTests
     [TestMethod]
     public void CanonicalGeneratorsKeepDistinctChoices()
     {
-        var ico = CreateOrigin() with { IdentityUri = AssetUris.BuildGeneratedUri("BasicShapes/IcoSphere"), Kind = AssetKind.Geometry, DisplayName = "IcoSphere", Generated = new("IcoSphere", "geometry", "/Content/IcoSphere.ogeo", GeneratedAssetCategory.Standard) };
-        var sphere = ico with { IdentityUri = AssetUris.BuildGeneratedUri("BasicShapes/Sphere"), DisplayName = "Sphere", Generated = new("Sphere", "geometry", "/Content/Sphere.ogeo", GeneratedAssetCategory.Standard) };
+        var ico = CreateOrigin() with { Identity = AssetPath.Generated.Combine("BasicShapes/IcoSphere"), Kind = AssetKind.Geometry, DisplayName = "IcoSphere", Generated = new("IcoSphere", "geometry", AssetPath.Parse("/Content/IcoSphere.ogeo"), GeneratedAssetCategory.Standard) };
+        var sphere = ico with { Identity = AssetPath.Generated.Combine("BasicShapes/Sphere"), DisplayName = "Sphere", Generated = new("Sphere", "geometry", AssetPath.Parse("/Content/Sphere.ogeo"), GeneratedAssetCategory.Standard) };
         _ = AssetIdentity.GroupBuiltins([ico, sphere]).Should().Equal(ico, sphere);
     }
 
     private static AssetEntry CreateOrigin()
         => new(
-            AssetUris.BuildGeneratedUri("Materials/Default"),
+            AssetPath.Generated.Combine("Materials/Default"),
             "Default",
             AssetKind.Material,
             AssetState.Generated,
@@ -69,22 +69,20 @@ public sealed class AssetIdentityTests
             "/Engine/Generated/Materials/Default",
             SourcePath: null,
             DescriptorPath: null,
-            CookedUri: null,
             CookedPath: null,
             AssetGuid: null,
             [],
             IsSelectable: true)
         {
-            Generated = new GeneratedAssetMetadata("Default", "oxygen.material-descriptor.v1", "/Content/Materials/OxygenEditor_Default.omat", GeneratedAssetCategory.Standard),
+            Generated = new GeneratedAssetMetadata("Default", "oxygen.material-descriptor.v1", AssetPath.Parse("/Content/Materials/OxygenEditor_Default.omat"), GeneratedAssetCategory.Standard),
         };
 
     private static AssetEntry CreateCopy(AssetEntry origin)
         => origin with
         {
-            IdentityUri = new("asset:///Content/Materials/OxygenEditor_Default.omat"),
-            BuiltinOriginUri = origin.IdentityUri,
+            Identity = AssetPath.Parse("/Content/Materials/OxygenEditor_Default.omat"),
+            BuiltinOrigin = origin.Identity,
             DisplayPath = "/Content/Materials/OxygenEditor_Default.omat",
-            CookedUri = new("asset:///Content/Materials/OxygenEditor_Default.omat"),
-            CookedPath = "C:/Vortex/.cooked/Content/Materials/OxygenEditor_Default.omat",
+            CookedPath = FileSystemPath.From("C:/Vortex/.cooked/Content/Materials/OxygenEditor_Default.omat"),
         };
 }

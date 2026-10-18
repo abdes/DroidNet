@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Editor.Assets.TestSupport;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
@@ -24,20 +25,20 @@ public sealed partial class AssetFeedTests
     public async Task DocumentChangesUpdateBrowserAndPickerWithoutRescanning()
     {
         using var workspace = new AssetWorkspace();
-        var path = workspace.SourcePath("Content/Materials/Red.omat.json");
-        WriteMaterial(path);
-        var uri = new Uri("asset:///Content/Materials/Red.omat.json");
-        var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]);
+        var path = FileSystemPath.From(workspace.SourcePath("Content/Materials/Red.omat.json"));
+        WriteMaterial(path.FullPath);
+        var identity = AssetPath.Parse("/Content/Materials/Red.omat");
+        var catalog = new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
         var documents = new CookDocumentRegistry();
         using var owner = documents.Register(path, _ => throw new InvalidOperationException("Presentation must not acquire the source."));
         var initial = new CookDocumentState(path, "Red", IsDirty: false, new string('A', 64));
         owner.UpdateState(initial);
         var reads = 0;
-        var sourceHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false)));
+        var sourceHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false)));
         var reader = new DelegateStatusReader((_, _, _) =>
         {
             _ = Interlocked.Increment(ref reads);
-            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []) { SourcePaths = [path], SavedSourceHash = sourceHash }]);
+            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []) { SourcePaths = [path], SavedSourceHash = sourceHash }]);
         });
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, documents, EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
@@ -48,21 +49,21 @@ public sealed partial class AssetFeedTests
             this.TestContext.CancellationToken);
         provider.Assets(AssetRule.For(AssetKind.Material)).Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => choices = value), this.TestContext.CancellationToken);
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var preview = MaterialPreviewColor.TryRead(choices.Single(choice => choice.IdentityUri == uri));
+        var preview = MaterialPreviewColor.TryRead(choices.Single(choice => choice.Identity == identity));
         _ = preview.Should().NotBeNull();
-        var lockedSource = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+        var lockedSource = new FileStream(path.FullPath, FileMode.Open, FileAccess.Read, FileShare.None);
         await using var lockedSourceLifetime = lockedSource.ConfigureAwait(false);
         owner.UpdateState(initial with { IsDirty = true });
         _ = rows.Single().PrimaryBadge.Should().Be("Unsaved changes");
-        _ = AssetStatusText.ForEntry(choices.Single(choice => choice.IdentityUri == uri)).Should().Be(rows.Single().PrimaryBadge);
+        _ = AssetStatusText.ForEntry(choices.Single(choice => choice.Identity == identity)).Should().Be(rows.Single().PrimaryBadge);
         _ = rows.Single().CookStatus!.HasAvailableOutput.Should().BeTrue();
         owner.UpdateState(initial);
         _ = rows.Single().PrimaryBadge.Should().Be("Cooked");
         owner.UpdateState(initial with { IsDirty = true });
         owner.Dispose();
         _ = rows.Single().PrimaryBadge.Should().Be("Cooked");
-        _ = AssetStatusText.ForEntry(choices.Single(choice => choice.IdentityUri == uri)).Should().Be("Cooked");
-        _ = MaterialPreviewColor.TryRead(choices.Single(choice => choice.IdentityUri == uri)).Should().Be(preview);
+        _ = AssetStatusText.ForEntry(choices.Single(choice => choice.Identity == identity)).Should().Be("Cooked");
+        _ = MaterialPreviewColor.TryRead(choices.Single(choice => choice.Identity == identity)).Should().Be(preview);
         _ = reads.Should().Be(1);
     }
 
@@ -78,8 +79,8 @@ public sealed partial class AssetFeedTests
     public async Task CookProgressUpdatesItsScopeWithoutRepeatedFreshnessChecks(CookTargetKind kind, int affected)
     {
         using var workspace = new AssetWorkspace();
-        var red = new Uri("asset:///Content/Materials/Red.omat.json");
-        var blue = new Uri("asset:///Content/Other/Blue.omat.json");
+        var red = AssetPath.Parse("/Content/Materials/Red.omat.json");
+        var blue = AssetPath.Parse("/Content/Other/Blue.omat.json");
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
         WriteMaterial(workspace.SourcePath("Content/Other/Blue.omat.json"));
         var catalog = new TestProjectAssetCatalog([new AssetRecord(red), new AssetRecord(blue)]);
@@ -111,7 +112,7 @@ public sealed partial class AssetFeedTests
             ProjectId = context.ActiveProject!.ProjectId,
             ProjectRoot = workspace.Root,
             DisplayName = "Cook",
-            Request = new(kind, kind is CookTargetKind.Asset or CookTargetKind.CurrentScene ? red : kind == CookTargetKind.Folder ? new Uri("asset:///Content/Materials") : null),
+            Request = new(kind, kind is CookTargetKind.Asset or CookTargetKind.CurrentScene ? AssetPath.Parse("/Content/Materials/Red.omat") : kind == CookTargetKind.Folder ? AssetPath.Parse("/Content/Materials") : null),
         };
         runs = [run];
         cookService.Raise(service => service.RunChanged += null, new CookRunChangedEventArgs(run));
@@ -133,9 +134,9 @@ public sealed partial class AssetFeedTests
     public async Task SavedBytesInvalidateCurrentBeforeTheRefreshFinishes()
     {
         using var workspace = new AssetWorkspace();
-        var path = workspace.SourcePath("Content/Materials/Red.omat.json");
-        WriteMaterial(path);
-        var uri = new Uri("asset:///Content/Materials/Red.omat.json");
+        var path = FileSystemPath.From(workspace.SourcePath("Content/Materials/Red.omat.json"));
+        WriteMaterial(path.FullPath);
+        var identity = AssetPath.Parse("/Content/Materials/Red.omat");
         var documents = new CookDocumentRegistry();
         using var owner = documents.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(null));
         var original = new CookDocumentState(path, "Red", IsDirty: false, "old");
@@ -153,9 +154,9 @@ public sealed partial class AssetFeedTests
                 await release.Task.WaitAsync(token).ConfigureAwait(false);
             }
 
-            return [new(uri, changed ? AssetCookFreshness.OutOfDate : AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []) { SourcePaths = [path], SavedSourceHash = changed ? "new" : "old" }];
+            return [new(identity, changed ? AssetCookFreshness.OutOfDate : AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []) { SourcePaths = [path], SavedSourceHash = changed ? "new" : "old" }];
         });
-        var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]);
+        var catalog = new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, documents, EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
         IReadOnlyList<AssetEntry> rows = [];
@@ -186,7 +187,7 @@ public sealed partial class AssetFeedTests
     {
         using var workspace = new AssetWorkspace();
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
-        var uri = new Uri("asset:///Content/Materials/Red.omat.json");
+        var identity = AssetPath.Parse("/Content/Materials/Red.omat");
         var context = workspace.ActivateProject();
         var run = new CookRunSnapshot
         {
@@ -194,7 +195,7 @@ public sealed partial class AssetFeedTests
             ProjectId = context.ActiveProject!.ProjectId,
             ProjectRoot = workspace.Root,
             DisplayName = "Red",
-            Request = new(CookTargetKind.Asset, uri, IsAutomatic: true),
+            Request = new(CookTargetKind.Asset, identity, IsAutomatic: true),
             State = CookRunState.Cooking,
         };
         var cooks = new Mock<ICookRunService>();
@@ -204,10 +205,10 @@ public sealed partial class AssetFeedTests
         var reader = new DelegateStatusReader((_, _, _) =>
         {
             var complete = Interlocked.Increment(ref reads) > 1;
-            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, complete ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])]);
+            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, complete ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])]);
         });
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(new TestProjectAssetCatalog([new AssetRecord(uri)]), context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), cooks.Object, unavailableRuntime, NoRelocations(), NoAuthoring());
+        using var provider = new AssetFeed(new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]), context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), cooks.Object, unavailableRuntime, NoRelocations(), NoAuthoring());
         provider.Items.Subscribe(
             new Observer<IReadOnlyList<AssetEntry>>(items =>
         {

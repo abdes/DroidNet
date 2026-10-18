@@ -124,7 +124,7 @@ public sealed partial class ProblemsViewModelTests : IDisposable
         => new(severity, "S0503", "key 'fnd_one' not found", MovePath, line, 3, "rendered", "explanation");
 
     private static ScriptAnalysisSnapshot Snapshot(string path, params ScriptProblem[] problems)
-        => new(path, new Uri("asset:///Content/x.oscript"), [.. problems.Select(problem => problem with { SourcePath = path })], [], ParametersOutOfDate: false);
+        => new(FileSystemPath.From(path), AssetPath.Parse("/Content/x.oscript"), [.. problems.Select(problem => problem with { SourcePath = path })], [], ParametersOutOfDate: false);
 
     private ProblemsViewModel CreateModel()
     {
@@ -137,7 +137,7 @@ public sealed partial class ProblemsViewModelTests : IDisposable
             ProjectId = Guid.Empty,
             Name = "Test",
             Category = Oxygen.Editor.Projects.Category.Games,
-            ProjectRoot = @"C:\Project",
+            ProjectRoot = FileSystemPath.From(@"C:\Project"),
             AuthoringMounts = [],
             LocalFolderMounts = [],
         });

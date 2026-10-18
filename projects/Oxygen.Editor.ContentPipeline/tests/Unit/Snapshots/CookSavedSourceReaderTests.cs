@@ -6,6 +6,7 @@ using System.Runtime.ExceptionServices;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Snapshots;
 
@@ -22,11 +23,11 @@ public sealed class CookSavedSourceReaderTests
     {
         var registry = new CookDocumentRegistry();
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "Main.oscene.json");
-        var state = new CookDocumentState(path, "Main", IsDirty: false, "hash");
+        var state = new CookDocumentState(FileSystemPath.From(path), "Main", IsDirty: false, "hash");
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var released = false;
-        using var registration = registry.Register(path, async token =>
+        using var registration = registry.Register(FileSystemPath.From(path), async token =>
         {
             entered.SetResult();
             await release.Task.WaitAsync(token).ConfigureAwait(false);
@@ -35,7 +36,7 @@ public sealed class CookSavedSourceReaderTests
         registration.UpdateState(state);
         var read = CookSavedSourceReader.ReadAsync(registry, path, this.TestContext.CancellationToken);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        state = state with { SourcePath = Path.Combine(Path.GetDirectoryName(path)!, "Demo.oscene.json") };
+        state = state with { SourcePath = FileSystemPath.From(Path.Combine(Path.GetDirectoryName(path)!, "Demo.oscene.json")) };
         registration.RelocateSource(state);
         release.SetResult();
 

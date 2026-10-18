@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 
@@ -29,8 +30,8 @@ public sealed class MaterialCookTests
         var service = CreateService(workspace);
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
-                new Uri("asset:///Content/Materials/Wood.omat.json"),
-                workspace.Root,
+                AssetPath.Parse("/Content/Materials/Wood.omat.json"),
+                FileSystemPath.From(workspace.Root),
                 "Content",
                 "Content/Materials/Wood.omat.json"),
             CancellationToken.None).ConfigureAwait(false);
@@ -41,7 +42,7 @@ public sealed class MaterialCookTests
         _ = result.Cook.InputsAreCurrent.Should().BeTrue();
         _ = workspace.CookCoordinator.Runs.Should().ContainSingle();
         _ = result.OperationId.Should().Be(workspace.CookCoordinator.Runs.Single().OperationId);
-        _ = result.CookedMaterialUri.Should().Be(new Uri("asset:///Content/Materials/Wood.omat"));
+        _ = result.CookedMaterialUri.Should().Be(AssetPath.Parse("/Content/Materials/Wood.omat"));
         _ = File.Exists(Path.Combine(workspace.CookedRoot, "Materials", "Wood.omat")).Should().BeTrue();
 
         var indexPath = Path.Combine(workspace.CookedRoot, "container.index.bin");
@@ -66,8 +67,8 @@ public sealed class MaterialCookTests
 
         var service = CreateService(workspace);
         var request = new MaterialCookRequest(
-            new Uri("asset:///Content/Materials/Wood.omat.json"),
-            workspace.Root,
+            AssetPath.Parse("/Content/Materials/Wood.omat.json"),
+            FileSystemPath.From(workspace.Root),
             "Content",
             "Content/Materials/Wood.omat.json");
 
@@ -106,14 +107,14 @@ public sealed class MaterialCookTests
         var service = CreateService(workspace);
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
-                new Uri("asset:///Content/Materials/Gold.omat.json"),
-                workspace.Root,
+                AssetPath.Parse("/Content/Materials/Gold.omat.json"),
+                FileSystemPath.From(workspace.Root),
                 "Content",
                 "Authoring/Materials/Gold.omat.json"),
             CancellationToken.None).ConfigureAwait(false);
 
         _ = result.State.Should().Be(MaterialCookState.Cooked);
-        _ = result.CookedMaterialUri.Should().Be(new Uri("asset:///Content/Materials/Gold.omat"));
+        _ = result.CookedMaterialUri.Should().Be(AssetPath.Parse("/Content/Materials/Gold.omat"));
         _ = File.Exists(Path.Combine(workspace.CookedRoot, "Materials", "Gold.omat")).Should().BeTrue();
         _ = workspace.CookedRoot.Should().Contain(Path.Combine(".cooked", "generations"));
     }
@@ -138,8 +139,8 @@ public sealed class MaterialCookTests
             .WithTextureReference("base_color", "/Content/Textures/Surface.otex")).ConfigureAwait(false);
         var service = CreateService(workspace);
         var request = new MaterialCookRequest(
-            new Uri("asset:///Content/Materials/Textured.omat.json"),
-            workspace.Root,
+            AssetPath.Parse("/Content/Materials/Textured.omat.json"),
+            FileSystemPath.From(workspace.Root),
             "Content",
             "Content/Materials/Textured.omat.json");
 
@@ -154,7 +155,7 @@ public sealed class MaterialCookTests
         _ = second.State.Should().Be(MaterialCookState.Cooked);
         _ = secondTextureInput.DiscoveryHash.Should().NotBe(firstTextureInput.DiscoveryHash);
         _ = second.Cook.CookedAssets.Should().Contain(asset => asset.Kind == ContentCookAssetKind.Texture
-            && asset.SourceAssetUri == new Uri("asset:///Content/Textures/Surface.otex.json"));
+            && asset.SourceAssetUri == AssetPath.Parse("/Content/Textures/Surface.otex.json"));
         _ = second.Cook.CookedAssets.Concat(second.Cook.ReusedAssets).Should().Contain(asset => asset.Kind == ContentCookAssetKind.Material
             && asset.SourceAssetUri == request.MaterialSourceUri);
     }
@@ -172,8 +173,8 @@ public sealed class MaterialCookTests
 
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
-                new Uri("asset:///Content/Materials/Broken.omat.json"),
-                workspace.Root,
+                AssetPath.Parse("/Content/Materials/Broken.omat.json"),
+                FileSystemPath.From(workspace.Root),
                 "Content",
                 "Content/Materials/Broken.omat.json"),
             this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -201,8 +202,8 @@ public sealed class MaterialCookTests
 
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
-                new Uri("asset:///Content/Materials/Invalid.omat.json"),
-                workspace.Root,
+                AssetPath.Parse("/Content/Materials/Invalid.omat.json"),
+                FileSystemPath.From(workspace.Root),
                 "Content",
                 "Content/Materials/Invalid.omat.json"),
             this.TestContext.CancellationToken).ConfigureAwait(false);

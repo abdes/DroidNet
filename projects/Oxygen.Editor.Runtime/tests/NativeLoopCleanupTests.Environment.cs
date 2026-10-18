@@ -162,7 +162,7 @@ public sealed partial class NativeLoopCleanupTests
         {
             ManualExposureEv = 8f,
             AutoExposureMeteringMask = new(
-                new Uri("asset:///Content/Textures/Missing.otex.json"),
+                AssetPath.Parse("/Content/Textures/Missing.otex"),
                 Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
                 "Textures/Missing.otex"),
         };

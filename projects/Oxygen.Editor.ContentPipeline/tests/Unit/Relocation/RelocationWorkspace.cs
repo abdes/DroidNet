@@ -13,6 +13,7 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Relocation;
@@ -31,7 +32,7 @@ internal sealed class RelocationWorkspace : IDisposable
             ProjectId = Guid.NewGuid(),
             Name = "Relocation tests",
             Category = Category.Games,
-            ProjectRoot = this.Root,
+            ProjectRoot = FileSystemPath.From(this.Root),
             AuthoringMounts = [new ProjectMountPoint("Content", "Content"), new ProjectMountPoint("Cooked", ".cooked")],
             LocalFolderMounts = [],
         });
@@ -60,10 +61,12 @@ internal sealed class RelocationWorkspace : IDisposable
     public AssetRelocationService CreateService(AssetRedirects? redirects) => new(this.Coordinator, this.context, this.Documents, this.Files, this.Catalog, redirects: redirects);
 
     /// <summary>Reports a catalog change, as the file watcher does after an edit outside a relocation.</summary>
-    /// <param name="uri">The changed asset.</param>
-    public void ChangeInCatalog(Uri uri) => this.catalogChanges.OnNext(new(AssetChangeKind.Updated, uri));
+    /// <param name="identity">The changed asset's catalog identity, which is its source file's virtual path.</param>
+    public void ChangeInCatalog(AssetPath identity) => this.catalogChanges.OnNext(new(AssetChangeKind.Updated, identity));
 
     public string PathOf(string relative) => Path.GetFullPath(Path.Combine(this.Root, relative));
+
+    public FileSystemPath FileOf(string relative) => FileSystemPath.From(this.PathOf(relative));
 
     public string Write(string relative, string content)
     {

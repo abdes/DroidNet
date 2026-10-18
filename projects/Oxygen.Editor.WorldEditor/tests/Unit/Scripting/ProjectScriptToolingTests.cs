@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Scripting;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
@@ -126,7 +127,7 @@ public sealed partial class ProjectScriptToolingTests : IDisposable
             ProjectId = Guid.Empty,
             Name = "Test",
             Category = Category.Games,
-            ProjectRoot = this.ProjectRoot,
+            ProjectRoot = FileSystemPath.From(this.ProjectRoot),
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
         };

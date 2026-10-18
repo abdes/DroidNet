@@ -32,11 +32,11 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
     [DataRow(true)]
     public Task ExplicitBrowserRevealWaitsForViewAndPreservesNewerFocus(bool tiles) => EnqueueAsync(async () =>
     {
-        var items = Enumerable.Range(0, 1000).Select(index => CreateNavigationAsset(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"/Content/Materials/M{index}.omat.json"), AssetKind.Material)).ToArray();
+        var items = Enumerable.Range(0, 1000).Select(index => CreateNavigationAsset(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"/Content/Materials/M{index}.omat"), AssetKind.Material)).ToArray();
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>(items);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
-        var state = new ContentBrowserState(projects);
+        var state = new ContentBrowserState();
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
         // Navigation completes after the first snapshot; with no view loaded yet there is no frame to wait for.
@@ -83,12 +83,12 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
     [TestMethod]
     public Task BrowserSelectionFollowsListTileSwitchAndPublication() => EnqueueAsync(async () =>
     {
-        var blue = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
-        var red = CreateNavigationAsset("/Content/Materials/Red.omat.json", AssetKind.Material);
+        var blue = CreateNavigationAsset("/Content/Materials/Blue.omat", AssetKind.Material);
+        var red = CreateNavigationAsset("/Content/Materials/Red.omat", AssetKind.Material);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([blue, red]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
-        var state = new ContentBrowserState(projects);
+        var state = new ContentBrowserState();
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         using var list = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
         using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
@@ -101,7 +101,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         await WaitForRenderAsync().ConfigureAwait(true);
         var listSelector = listView.FindDescendant<ListViewBase>()!;
         listSelector.SelectedIndex = 0;
-        _ = list.SelectedAsset!.IdentityUri.Should().Be(blue.IdentityUri);
+        _ = list.SelectedAsset!.Identity.Should().Be(blue.Identity);
         await tiles.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var tileView = new TilesLayoutView
         {
@@ -110,14 +110,14 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         await LoadTestContentAsync(tileView).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         var tileSelector = tileView.FindDescendant<ListViewBase>()!;
-        _ = tileSelector.SelectedItem.Should().BeOfType<AssetBrowserRow>().Which.Item.IdentityUri.Should().Be(blue.IdentityUri);
+        _ = tileSelector.SelectedItem.Should().BeOfType<AssetBrowserRow>().Which.Item.Identity.Should().Be(blue.Identity);
         listSelector.SelectedItem = null;
         tileSelector.SelectedIndex = 1;
-        _ = tiles.SelectedAsset!.IdentityUri.Should().Be(red.IdentityUri);
+        _ = tiles.SelectedAsset!.Identity.Should().Be(red.Identity);
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         await LoadTestContentAsync(listView).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = listSelector.SelectedItem.Should().BeOfType<AssetBrowserRow>().Which.Item.IdentityUri.Should().Be(red.IdentityUri);
+        _ = listSelector.SelectedItem.Should().BeOfType<AssetBrowserRow>().Which.Item.Identity.Should().Be(red.Identity);
         var selectedRow = listSelector.SelectedItem;
         var selectedContainer = (Control)listSelector.ContainerFromItem(selectedRow);
         _ = selectedContainer.Focus(FocusState.Keyboard).Should().BeTrue();
@@ -125,7 +125,6 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         var published = red with
         {
             RuntimeAvailability = AssetRuntimeAvailability.Mounted,
-            CookedUri = new("asset:///Content/Materials/Red.omat"),
         };
         updates.OnNext([published, blue]);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -140,13 +139,13 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
     [TestMethod]
     public Task MultiSelectionSurvivesSortAndViewSwitch() => EnqueueAsync(async () =>
     {
-        var blue = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
-        var cube = CreateNavigationAsset("/Content/Geometry/Cube.ogeo.json", AssetKind.Geometry);
-        var red = CreateNavigationAsset("/Content/Materials/Red.omat.json", AssetKind.Material);
+        var blue = CreateNavigationAsset("/Content/Materials/Blue.omat", AssetKind.Material);
+        var cube = CreateNavigationAsset("/Content/Geometry/Cube.ogeo", AssetKind.Geometry);
+        var red = CreateNavigationAsset("/Content/Materials/Red.omat", AssetKind.Material);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([blue, cube, red]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
-        var state = new ContentBrowserState(projects);
+        var state = new ContentBrowserState();
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
         using var table = new DetailsLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
@@ -186,12 +185,12 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
     [TestMethod]
     public Task HiddenBrowserSelectionDoesNotReturnAfterViewSwitch() => EnqueueAsync(async () =>
     {
-        var blue = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
-        var cube = CreateNavigationAsset("/Content/Geometry/Cube.ogeo.json", AssetKind.Geometry);
+        var blue = CreateNavigationAsset("/Content/Materials/Blue.omat", AssetKind.Material);
+        var cube = CreateNavigationAsset("/Content/Geometry/Cube.ogeo", AssetKind.Geometry);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([blue, cube]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
-        var state = new ContentBrowserState(projects);
+        var state = new ContentBrowserState();
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         using var list = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
         using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);

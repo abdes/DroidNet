@@ -35,12 +35,13 @@ public sealed class BuiltinCookTests
     {
         using var workspace = new CookWorkspace();
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
-        var materialUri = new Uri("asset:///Content/Materials/Blue.omat.json");
+        var materialUri = AssetPath.Parse("/Content/Materials/Blue.omat");
+        var materialSource = AssetPath.Parse("/Content/Materials/Blue.omat.json");
         var node = new SceneNode(workspace.Scene) { Name = "Assigned material" };
         var geometry = new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
+            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
         };
         geometry.OverrideSlots.Add(await CreateBuiltinMaterialSlotAsync(
             workspace, geometry, materialUri, this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -58,8 +59,8 @@ public sealed class BuiltinCookTests
         var result = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Status.Should().BeOneOf([OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings], string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.TechnicalMessage ?? diagnostic.Message)));
-        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == materialUri);
-        _ = workspace.CookCoordinator.Runs.Single().Assets.Values.Should().Contain(asset => asset.AssetUri == materialUri && asset.State == CookAssetState.Updated);
+        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == materialSource);
+        _ = workspace.CookCoordinator.Runs.Single().Assets.Values.Should().Contain(asset => asset.AssetUri == materialSource && asset.State == CookAssetState.Updated);
     }
 
     /// <summary>Both scene and project cooking accept every supported engine shape and preserve authored identities.</summary>
@@ -91,7 +92,7 @@ public sealed class BuiltinCookTests
         var pipeline = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var result = projectCook
             ? await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)
-            : await pipeline.CookCurrentSceneAsync(new Uri("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+            : await pipeline.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Status.Should().BeOneOf(OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings);
         _ = result.Validation.Should().NotBeNull();
@@ -106,7 +107,7 @@ public sealed class BuiltinCookTests
         _ = Directory.GetFiles(Path.Combine(workspace.Root, ".pipeline", "Catalogs")).Should().BeEmpty();
         var repeated = projectCook
             ? await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)
-            : await pipeline.CookCurrentSceneAsync(new Uri("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+            : await pipeline.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = repeated.IsUpToDate.Should().BeTrue();
         foreach (var definition in catalog.AuthoringGeometries)
         {
@@ -118,7 +119,7 @@ public sealed class BuiltinCookTests
 
     private async Task VerifyBuiltinPublicationOriginsAsync(ContentPipelineService pipeline, CookWorkspace workspace, BuiltinGeometryCatalog catalog)
     {
-        var identities = catalog.CreateCatalogRecords().Select(static record => record.Uri).ToArray();
+        var identities = catalog.CreateCatalogRecords().Select(static record => record.Identity).ToArray();
         var runCount = workspace.CookCoordinator.Runs.Count;
         var statuses = await pipeline.ReadAsync(workspace.ProjectContext, identities, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = statuses.Should().HaveCount(11).And.OnlyContain(status => status.HasAvailableOutput && status.HasPublishedOutput);
@@ -151,7 +152,7 @@ public sealed class BuiltinCookTests
         var shape = catalog.Geometries[0];
         var path = workspace.CookedPath(shape.Contribution.VirtualPath);
         await File.WriteAllTextAsync(path, "unrelated replacement", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var changed = await pipeline.ReadAsync(workspace.ProjectContext, [shape.AssetUri, new Uri("asset://" + shape.Contribution.VirtualPath)], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var changed = await pipeline.ReadAsync(workspace.ProjectContext, [shape.AssetUri, AssetPath.Parse(shape.Contribution.VirtualPath)], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = changed.Should().HaveCount(2).And.OnlyContain(
             static status => status.HasPublishedOutput && status.HasAvailableOutput && status.SourcePaths.IsEmpty,
             "availability preserves publication ownership without certifying payload integrity");
@@ -159,9 +160,9 @@ public sealed class BuiltinCookTests
         _ = integrity.Roots.Should().Contain(root => root.Validation != null && !root.Validation.Succeeded);
 
         workspace.WriteMaterial("Content/Materials/OxygenEditor_Default.omat.json", "Authored replacement");
-        Uri authoredDefault = new("asset:///Content/Materials/OxygenEditor_Default.omat.json");
-        var authored = await pipeline.ReadAsync(workspace.ProjectContext, [authoredDefault, new Uri("asset:///Content/Materials/OxygenEditor_Default.omat")], this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = authored.Should().HaveCount(2).And.OnlyContain(status => status.SourcePaths.Contains(Path.Combine(workspace.Root, "Content", "Materials", "OxygenEditor_Default.omat.json")));
+        AssetPath authoredDefault = AssetPath.Parse("/Content/Materials/OxygenEditor_Default.omat.json");
+        var authored = await pipeline.ReadAsync(workspace.ProjectContext, [authoredDefault, AssetPath.Parse("/Content/Materials/OxygenEditor_Default.omat")], this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = authored.Should().HaveCount(2).And.OnlyContain(status => status.SourcePaths.Contains(FileSystemPath.From(Path.Combine(workspace.Root, "Content", "Materials", "OxygenEditor_Default.omat.json"))));
         _ = authored.Select(static status => status.AssetUri).Should().Contain(authoredDefault);
     }
 }

@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using AwesomeAssertions;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
@@ -84,18 +85,18 @@ public sealed class ContentPipelineContractTests
     }
 
     [TestMethod]
-    public void ToNativeDescriptorPath_ShouldStripEditorJsonSuffix()
+    public void ToNativeDescriptorPath_ShouldReturnTheIdentityPath()
     {
         _ = ContentPipelinePaths.ToNativeDescriptorPath(
-                new Uri("asset:///Content/Materials/Red.omat.json"),
+                AssetPath.Parse("/Content/Materials/Red.omat"),
                 ".omat")
             .Should().Be("/Content/Materials/Red.omat");
         _ = ContentPipelinePaths.ToNativeDescriptorPath(
-                new Uri("asset:///Content/Geometry/Cube.ogeo.json"),
+                AssetPath.Parse("/Content/Geometry/Cube.ogeo"),
                 ".ogeo")
             .Should().Be("/Content/Geometry/Cube.ogeo");
         _ = ContentPipelinePaths.ToNativeDescriptorPath(
-                new Uri("asset:///Content/Scenes/Main.oscene.json"),
+                AssetPath.Parse("/Content/Scenes/Main.oscene"),
                 ".oscene")
             .Should().Be("/Content/Scenes/Main.oscene");
     }
@@ -104,8 +105,18 @@ public sealed class ContentPipelineContractTests
     public void ToNativeDescriptorPath_WhenExtensionDoesNotMatch_ShouldReject()
     {
         var act = () => ContentPipelinePaths.ToNativeDescriptorPath(
-            new Uri("asset:///Content/Materials/Red.omat.json"),
+            AssetPath.Parse("/Content/Materials/Red.omat.json"),
             ".ogeo");
+
+        _ = act.Should().Throw<ArgumentException>();
+    }
+
+    [TestMethod]
+    public void ToNativeDescriptorPath_WhenGivenTheAuthoringSuffix_ShouldReject()
+    {
+        var act = () => ContentPipelinePaths.ToNativeDescriptorPath(
+            AssetPath.Parse("/Content/Materials/Red.omat.json"),
+            ".omat");
 
         _ = act.Should().Throw<ArgumentException>();
     }
@@ -114,18 +125,12 @@ public sealed class ContentPipelineContractTests
     public void ToCookedScenePath_ShouldKeepTheSceneName()
     {
         var longName = new string('A', 80);
-        _ = ContentPipelinePaths.ToCookedScenePath(new Uri("asset:///Content/Scenes/Main%20Scene%2001.oscene.json"))
+        _ = ContentPipelinePaths.ToCookedScenePath(AssetPath.Parse("/Content/Scenes/Main Scene 01.oscene"))
             .Should().Be("/Content/Scenes/Main Scene 01.oscene");
-        _ = ContentPipelinePaths.ToCookedScenePath(new Uri("asset:///Content/Scenes/-starter.v2%20(1).oscene.json"))
+        _ = ContentPipelinePaths.ToCookedScenePath(AssetPath.Parse("/Content/Scenes/-starter.v2 (1).oscene"))
             .Should().Be("/Content/Scenes/-starter.v2 (1).oscene");
-        _ = ContentPipelinePaths.ToCookedScenePath(new Uri($"asset:///Content/Scenes/{longName}.oscene.json"))
+        _ = ContentPipelinePaths.ToCookedScenePath(AssetPath.Parse($"/Content/Scenes/{longName}.oscene"))
             .Should().Be($"/Content/Scenes/{longName}.oscene");
-    }
-
-    [TestMethod]
-    public void MountLayout_ShouldPreserveLogicalVirtualRoot()
-    {
-        _ = ContentPipelinePaths.GetVirtualMountRoot("Content").Should().Be("/Content");
     }
 
     [TestMethod]

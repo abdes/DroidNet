@@ -41,10 +41,10 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
     public Task ReusedLayoutDropsOldFolderRowsAndActionTargets(bool tiles) => EnqueueAsync(async () =>
     {
         var projects = new ProjectContextService();
-        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = "C:/Navigation", AuthoringMounts = [], LocalFolderMounts = [], });
-        var state = new ContentBrowserState(projects);
-        var geometry = CreateNavigationAsset("/Content/Geometry/Cube.ogeo.json", AssetKind.Geometry);
-        var material = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
+        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = FileSystemPath.From("C:/Navigation"), AuthoringMounts = [], LocalFolderMounts = [], });
+        var state = new ContentBrowserState();
+        var geometry = CreateNavigationAsset("/Content/Geometry/Cube.ogeo", AssetKind.Geometry);
+        var material = CreateNavigationAsset("/Content/Materials/Blue.omat", AssetKind.Material);
         using var items = new BehaviorSubject<IReadOnlyList<AssetEntry>>([geometry, material]);
         var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(items);
@@ -67,9 +67,9 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         await WaitForRenderAsync().ConfigureAwait(true);
         var selector = view.FindDescendant<ListViewBase>()!;
         selector.SelectedIndex = 0;
-        _ = layout.SelectedAsset!.IdentityUri.Should().Be(geometry.IdentityUri);
+        _ = layout.SelectedAsset!.Identity.Should().Be(geometry.Identity);
         RouteStateMapping.ApplyNavigationScope(state, "/(left:project//right:assets/list)?selected=%2FContent%2FMaterials");
-        _ = layout.Assets.Should().ContainSingle().Which.Item.IdentityUri.Should().Be(material.IdentityUri);
+        _ = layout.Assets.Should().ContainSingle().Which.Item.Identity.Should().Be(material.Identity);
         _ = layout.SelectedAsset.Should().BeNull();
         _ = selector.SelectedItem.Should().BeNull();
         layout.SelectedAsset = geometry;
@@ -88,7 +88,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         _ = invoked.Should().BeFalse();
         items.OnNext([material, geometry]);
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = layout.Assets.Should().ContainSingle().Which.Item.IdentityUri.Should().Be(material.IdentityUri);
+        _ = layout.Assets.Should().ContainSingle().Which.Item.Identity.Should().Be(material.Identity);
     });
 
     /// <summary>A delayed folder lookup cannot replace a newer folder selection when it completes.</summary>
@@ -109,20 +109,20 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         _ = storage.Setup(value => value.GetFolderFromPathAsync(root.Location, It.IsAny<CancellationToken>())).ReturnsAsync(root);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(content.Location, It.IsAny<CancellationToken>())).ReturnsAsync(content);
         var projects = new ProjectContextService();
-        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = root.Location, AuthoringMounts = [new("Content", "Content") { IsExpanded = false }], LocalFolderMounts = [], });
-        var state = new ContentBrowserState(projects);
+        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = FileSystemPath.From(root.Location), AuthoringMounts = [new("Content", "Content") { IsExpanded = false }], LocalFolderMounts = [], });
+        var state = new ContentBrowserState();
         using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var selected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         model.PropertyChanged += OnSelectionChanged;
         try
         {
             await model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!).ConfigureAwait(true);
-            state.SetSelectedFolders(["/Content/Slow/Leaf"]);
+            state.SetSelectedFolders([AssetPath.Parse("/Content/Slow/Leaf")]);
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true);
-            state.SetSelectedFolders(["/Content/Fast"]);
+            state.SetSelectedFolders([AssetPath.Parse("/Content/Fast")]);
             release.SetResult();
             await selected.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true);
-            _ = state.SelectedFolders.Should().Equal("/Content/Fast");
+            _ = state.SelectedFolders.Should().Equal(AssetPath.Parse("/Content/Fast"));
             var tree = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Single();
             var mount = (await tree.Children.ConfigureAwait(true)).OfType<AuthoringMountPointTreeItemAdapter>().Single();
             var folders = (await mount.Children.ConfigureAwait(true)).OfType<FolderTreeItemAdapter>().ToArray();
@@ -163,18 +163,18 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         _ = storage.Setup(value => value.GetFolderFromPathAsync(root.Location, It.IsAny<CancellationToken>())).ReturnsAsync(root);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(content.Location, It.IsAny<CancellationToken>())).ReturnsAsync(content);
         var projects = new ProjectContextService();
-        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = root.Location, AuthoringMounts = [new("Content", "Content") { IsExpanded = false }], LocalFolderMounts = [], });
-        var state = new ContentBrowserState(projects);
+        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Navigation", Category = Category.Games, ProjectRoot = FileSystemPath.From(root.Location), AuthoringMounts = [new("Content", "Content") { IsExpanded = false }], LocalFolderMounts = [], });
+        var state = new ContentBrowserState();
         using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var shown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         model.PropertyChanged += OnSelectionChanged;
         try
         {
             await model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!).ConfigureAwait(true);
-            state.SetSelectedFolders(["/Content/Props/Deleted folder"]);
+            state.SetSelectedFolders([AssetPath.Parse("/Content/Props/Deleted folder")]);
             await shown.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true);
 
-            _ = state.SelectedFolders.Should().Equal("/Content/Props");
+            _ = state.SelectedFolders.Should().Equal(AssetPath.Parse("/Content/Props"));
         }
         finally
         {
@@ -202,7 +202,8 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         var root = CreateNavigationFolder("Navigation", directory.Path, []);
         var content = CreateNavigationFolder("Content", directory.Path + "/Content", []);
         var cooked = CreateNavigationFolder("Cooked", directory.Path + "/.cooked", []);
-        var library = CreateNavigationFolder("Library", "D:/Library", []);
+        var libraryRoot = FileSystemPath.From("D:/Library");
+        var library = CreateNavigationFolder("Library", libraryRoot.FullPath, []);
         var storage = new Mock<IStorageProvider>();
         _ = storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>())).Returns((string parent, string child) => parent.TrimEnd('/') + "/" + child);
         foreach (var folder in new[]
@@ -224,9 +225,9 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
             ProjectId = Guid.NewGuid(),
             Name = "Navigation",
             Category = Category.Games,
-            ProjectRoot = root.Location,
+            ProjectRoot = FileSystemPath.From(root.Location),
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
-            LocalFolderMounts = [new("Library", "D:/Library")],
+            LocalFolderMounts = [new("Library", libraryRoot)],
             DefaultSceneId = SceneId.New(),
         };
         projects.Activate(project);
@@ -242,21 +243,21 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
 
             message.Reply(Task.FromResult(succeeds));
         });
-        var state = new ContentBrowserState(projects);
+        var state = new ContentBrowserState();
         using var model = new ProjectLayoutViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), messenger, CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         await model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!).ConfigureAwait(true);
         var tree = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Single();
         var renamed = tree.VirtualFolderMounts.Single(mount => string.Equals(mount.MountPointName, "Library", StringComparison.Ordinal));
-        state.SetSelectedFolders(["/Library"]);
+        state.SetSelectedFolders([AssetPath.Parse("/Library")]);
         renamed.Label = "LibraryRenamed";
         await model.PendingMountChange.ConfigureAwait(true);
         _ = saved.Should().NotBeNull();
         _ = saved!.AuthoringMounts.Should().Contain(mount => mount.Name == "Content" && mount.RelativePath == "Content");
         _ = saved.DefaultSceneId.Should().Be(project.DefaultSceneId);
         _ = saved.AuthoringMounts.Should().Contain(mount => mount.Name == "Cooked" && mount.RelativePath == ".cooked");
-        _ = saved.LocalFolderMounts.Should().Contain(mount => mount.Name == "LibraryRenamed" && mount.AbsolutePath == "D:/Library");
+        _ = saved.LocalFolderMounts.Should().Contain(mount => mount.Name == "LibraryRenamed" && mount.Root == libraryRoot);
         _ = model.HasUnsavedChanges.Should().BeFalse();
-        _ = state.SelectedFolders.Should().Equal(succeeds ? "/LibraryRenamed" : "/Library");
+        _ = state.SelectedFolders.Should().Equal(AssetPath.Parse(succeeds ? "/LibraryRenamed" : "/Library"));
         var restored = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Single();
         _ = restored.VirtualFolderMounts.Should().Contain(mount => mount.MountPointName == (succeeds ? "LibraryRenamed" : "Library"));
         if (!succeeds)
@@ -299,18 +300,18 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
             ProjectId = Guid.NewGuid(),
             Name = "First",
             Category = Category.Games,
-            ProjectRoot = firstDirectory.Path,
+            ProjectRoot = FileSystemPath.From(firstDirectory.Path),
             AuthoringMounts = [new("Cooked", ".cooked")],
             LocalFolderMounts = [],
         };
         projects.Activate(first);
         using var changes = new System.Reactive.Subjects.Subject<Oxygen.Managed.Assets.Catalog.AssetChange>();
-        using var model = new ProjectLayoutViewModel(projects, storage.Object, new ContentBrowserState(projects), Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(changes), CreateNavigationFolders(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        using var model = new ProjectLayoutViewModel(projects, storage.Object, new ContentBrowserState(), Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), new StrongReferenceMessenger(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(changes), CreateNavigationFolders(), CreateStatusHosting(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var load = model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!);
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true);
-            changes.OnNext(new(Oxygen.Managed.Assets.Catalog.AssetChangeKind.Added, new("asset:///Cooked/Published.omat")));
+            changes.OnNext(new(Oxygen.Managed.Assets.Catalog.AssetChangeKind.Added, AssetPath.Parse("/Cooked/Published.omat")));
             if (close)
             {
                 projects.Close();
@@ -318,8 +319,8 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
             }
             else
             {
-                projects.Activate(first with { ProjectId = Guid.NewGuid(), Name = "Next", ProjectRoot = nextDirectory.Path });
-                changes.OnNext(new(Oxygen.Managed.Assets.Catalog.AssetChangeKind.Added, new("asset:///Cooked/Published.omat")));
+                projects.Activate(first with { ProjectId = Guid.NewGuid(), Name = "Next", ProjectRoot = FileSystemPath.From(nextDirectory.Path) });
+                changes.OnNext(new(Oxygen.Managed.Assets.Catalog.AssetChangeKind.Added, AssetPath.Parse("/Cooked/Published.omat")));
             }
         }
         finally
@@ -342,7 +343,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-Navigation-");
 
-        public string Path => this.directory.FullName.Replace('\\', '/');
+        public string Path => this.directory.FullName;
 
         public void Dispose() => this.directory.Delete(recursive: true);
     }

@@ -48,9 +48,11 @@ public abstract class DocumentTestBase : IDisposable
 
     protected static string PathOf(string name) => Path.Combine(Folder, name + NoteKind.Suffix);
 
+    protected static FileSystemPath LocationOf(string name) => FileSystemPath.From(PathOf(name));
+
     protected static AssetPath UriOf(string name) => AssetPath.Parse($"/Content/{name}{NoteKind.Suffix}");
 
-    protected static DocumentFile FileOf(string name) => new(PathOf(name), UriOf(name));
+    protected static DocumentFile FileOf(string name) => new(LocationOf(name), UriOf(name));
 
     protected void WriteNote(string name, string text, params AssetPath[] references)
         => this.FileSystem.File.WriteAllBytes(PathOf(name), NoteKind.Encode(UriOf(name), text, references));

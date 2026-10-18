@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
@@ -39,7 +40,7 @@ public sealed class TransitiveLibraryTests
         library.WriteMaterial(material, "Shared");
         consumer.WriteMaterial(material, "Project shared");
         WriteAuthoredGeometry(library, withBuffer: false);
-        var geometry = new Uri("asset:///Content/Geometry/AuthoredCube.ogeo.json");
+        var geometry = AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo");
         var descriptor = JsonNode.Parse(library.ReadText("Content/Geometry/AuthoredCube.ogeo.json"))!;
         descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/" + material[..^5];
         library.WriteText("Content/Geometry/AuthoredCube.ogeo.json", descriptor.ToJsonString());
@@ -51,15 +52,15 @@ public sealed class TransitiveLibraryTests
         var context = consumer.ProjectContext with
         {
             LocalFolderMounts = materialLibraryMounted
-                ? [new("Materials", await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false)), new("Meshes", library.CookedRoot("Content"))]
-                : [new("Meshes", library.CookedRoot("Content"))],
+                ? [new("Materials", FileSystemPath.From(await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false))), new("Meshes", FileSystemPath.From(library.CookedRoot("Content")))]
+                : [new("Meshes", FileSystemPath.From(library.CookedRoot("Content")))],
             CookedContentOrder = projectWins ? [] : [new(Oxygen.Editor.Projects.CookedContentSourceKind.ProjectOutput), new(Oxygen.Editor.Projects.CookedContentSourceKind.LocalFolder, "Materials"), new(Oxygen.Editor.Projects.CookedContentSourceKind.LocalFolder, "Meshes")],
         };
         consumer.Activate(context);
-        AddGeometryNode(consumer, new("asset:///Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
+        AddGeometryNode(consumer, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-        var scene = new Uri("asset:///Content/Scenes/Main.oscene.json");
+        var scene = AssetPath.Parse("/Content/Scenes/Main.oscene");
         if (prewarm)
         {
             await this.VerifyBackgroundKeyLookupAsync(service, consumer, scene, runner).ConfigureAwait(false);
@@ -67,21 +68,21 @@ public sealed class TransitiveLibraryTests
 
         var cooked = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cooked.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, cooked.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
-        var materialUri = new Uri("asset:///" + material[..^5]);
+        var materialUri = AssetPath.Parse("/" + material[..^5]);
         if (projectWins)
         {
-            _ = cooked.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == new Uri("asset:///" + material));
+            _ = cooked.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/" + material));
             _ = cooked.InputSnapshot!.CookedDependencies.Should().NotContain(input => input.AssetUri == materialUri);
         }
         else
         {
             _ = cooked.InputSnapshot!.CookedDependencies.Should().Contain(input => input.AssetUri == materialUri && input.SourceName == "Materials");
-            _ = cooked.CookedAssets.Should().NotContain(asset => asset.SourceAssetUri == new Uri("asset:///" + material));
+            _ = cooked.CookedAssets.Should().NotContain(asset => asset.SourceAssetUri == AssetPath.Parse("/" + material));
         }
 
         _ = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.Current);
         WriteMaterialRoughness(library, material, 0.93);
-        _ = (await producer.CookAssetAsync(new("asset:///" + material), this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
+        _ = (await producer.CookAssetAsync(AssetPath.Parse("/" + material[..^5]), this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         _ = await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
         var status = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
         _ = status.Freshness.Should().Be(projectWins ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate);
@@ -102,7 +103,7 @@ public sealed class TransitiveLibraryTests
         const string material = "Art/Materials/Shared.omat.json";
         library.WriteMaterial(material, "Shared");
         WriteAuthoredGeometry(library, withBuffer: false);
-        var geometry = new Uri("asset:///Content/Geometry/AuthoredCube.ogeo.json");
+        var geometry = AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo");
         var descriptor = JsonNode.Parse(library.ReadText("Content/Geometry/AuthoredCube.ogeo.json"))!;
         descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/" + material[..^5];
         library.WriteText("Content/Geometry/AuthoredCube.ogeo.json", descriptor.ToJsonString());
@@ -114,20 +115,20 @@ public sealed class TransitiveLibraryTests
         _ = exported.IsPublished.Should().BeTrue();
         var context = consumer.ProjectContext with
         {
-            LocalFolderMounts = [new("Materials", await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false)), new("Meshes", library.CookedRoot("Content"))],
+            LocalFolderMounts = [new("Materials", FileSystemPath.From(await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false))), new("Meshes", FileSystemPath.From(library.CookedRoot("Content")))],
         };
         consumer.Activate(context);
-        AddGeometryNode(consumer, new("asset:///Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
+        AddGeometryNode(consumer, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-        var scene = new Uri("asset:///Content/Scenes/Main.oscene.json");
+        var scene = AssetPath.Parse("/Content/Scenes/Main.oscene");
         var cooked = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cooked.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, cooked.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
 
         var source = JsonNode.Parse(library.ReadText(material))!;
         source["parameters"]!["roughness"] = 0.9;
         library.WriteText(material, source.ToJsonString());
-        _ = (await producer.CookAssetAsync(new("asset:///" + material), this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
+        _ = (await producer.CookAssetAsync(AssetPath.Parse("/" + material[..^5]), this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         _ = await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
         var workers = runner.Count;
         var status = await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -144,7 +145,7 @@ public sealed class TransitiveLibraryTests
         _ = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.Current);
     }
 
-    private async Task VerifyBackgroundKeyLookupAsync(ContentPipelineService service, CookWorkspace consumer, Uri scene, CountingSourceRunner runner)
+    private async Task VerifyBackgroundKeyLookupAsync(ContentPipelineService service, CookWorkspace consumer, AssetPath scene, CountingSourceRunner runner)
     {
         var project = consumer.ContextService.ActiveProject!;
         var workers = runner.Count;

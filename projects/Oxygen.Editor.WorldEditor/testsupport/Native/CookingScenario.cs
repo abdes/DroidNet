@@ -6,16 +6,17 @@ using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.World.Cooking;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.ModelImportScenario;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
 internal sealed class CookingScenario : DroidNet.Tests.VisualUserInterfaceTests
 {
-    internal static async Task WaitForBlockedMaterialAsync(CookingPanelViewModel panel, string sourcePath, CancellationToken cancellationToken)
+    internal static async Task WaitForBlockedMaterialAsync(CookingPanelViewModel panel, FileSystemPath sourcePath, CancellationToken cancellationToken)
     {
         while (panel.SelectedRun?.Snapshot is not { State: CookRunState.NeedsSave } run
-            || !run.UnsavedDocuments.Any(document => string.Equals(document.SourcePath, sourcePath, StringComparison.OrdinalIgnoreCase)))
+            || !run.UnsavedDocuments.Any(document => document.SourcePath == sourcePath))
         {
             await Task.Delay(20, cancellationToken).ConfigureAwait(true);
         }

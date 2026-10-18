@@ -81,7 +81,7 @@ public sealed class PreviewSettingsTests
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
         var store = new EditorSettingsManager(fixture.Database);
-        var context = SettingContext.Project(Path.TrimEndingDirectorySeparator(Path.GetFullPath(fixture.Project.ProjectRoot)).ToUpperInvariant());
+        var context = SettingContext.Project(Path.TrimEndingDirectorySeparator(fixture.Project.ProjectRoot.FullPath).ToUpperInvariant());
         await store.SaveSettingAsync(
             new SettingKey<EarlierPreferences>("WorldEditor", "Preview"),
             new EarlierPreferences(fixture.Project.ProjectId, 60, 1),
@@ -253,7 +253,7 @@ public sealed class PreviewSettingsTests
             fixture.Project.ProjectId,
             fixture.Project.Name,
             fixture.Project.Category,
-            fixture.Project.ProjectRoot.ToUpperInvariant() + Path.DirectorySeparatorChar,
+            fixture.Project.ProjectRoot.FullPath.ToUpperInvariant() + Path.DirectorySeparatorChar,
             fixture.Project.Thumbnail)
         {
             AuthoringMounts = [.. fixture.Project.AuthoringMounts],

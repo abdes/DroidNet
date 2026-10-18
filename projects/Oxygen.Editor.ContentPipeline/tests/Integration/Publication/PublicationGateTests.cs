@@ -7,6 +7,7 @@ using System.Runtime.ExceptionServices;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 
@@ -22,7 +23,7 @@ public sealed class PublicationGateTests
         using var project = new ProjectDirectory();
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         cancellation.CancelAfter(TimeSpan.FromSeconds(5));
-        using var held = await CookOutputLease.AcquireWriteAsync(project.Root, cancellation.Token).ConfigureAwait(false);
+        using var held = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), cancellation.Token).ConfigureAwait(false);
         var exceptions = new ConcurrentQueue<Exception>();
         void Observe(object? sender, FirstChanceExceptionEventArgs args)
         {
@@ -35,7 +36,7 @@ public sealed class PublicationGateTests
         AppDomain.CurrentDomain.FirstChanceException += Observe;
         try
         {
-            var pending = CookOutputLease.AcquireWriteAsync(project.Root, cancellation.Token);
+            var pending = CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), cancellation.Token);
             await Task.Delay(120, cancellation.Token).ConfigureAwait(false);
             _ = pending.IsCompleted.Should().BeFalse();
             held.Dispose();

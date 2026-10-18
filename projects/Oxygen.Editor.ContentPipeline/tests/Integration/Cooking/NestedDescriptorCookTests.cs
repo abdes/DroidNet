@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
@@ -44,7 +45,7 @@ public sealed class NestedDescriptorCookTests
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-        var geometryUri = new Uri("asset:///" + geometry);
+        var geometryUri = AssetPath.Parse("/" + geometry[..^5]);
         _ = (await service.CookAssetAsync(geometryUri, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var inventory = await service.ReadAsync(workspace.ProjectContext, geometryUri, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = inventory.Should().NotBeNull();
@@ -52,13 +53,13 @@ public sealed class NestedDescriptorCookTests
         workspace.Scene.RootNodes[^1].Components.OfType<GeometryComponent>().Single().OverrideSlots.Add(new MaterialsSlot
         {
             Target = new(geometryUri, inventory!.Slots.Single().SlotId, inventory.LayoutRevision),
-            Material = new Uri("asset:///" + second),
+            Material = AssetPath.Parse("/" + second[..^5]),
         });
         await workspace.WriteSceneAsync(scene).ConfigureAwait(false);
-        var result = await service.CookCurrentSceneAsync(new("asset:///" + scene), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookCurrentSceneAsync(AssetPath.Parse("/" + scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         var inputs = new[] { first, second, geometry, scene };
-        _ = result.CookedAssets.Concat(result.ReusedAssets).Select(static asset => asset.CookedAssetUri).Should().BeEquivalentTo(inputs.Select(static path => new Uri("asset:///" + path[..^5])));
+        _ = result.CookedAssets.Concat(result.ReusedAssets).Select(static asset => asset.CookedAssetUri).Should().BeEquivalentTo(inputs.Select(static path => AssetPath.Parse("/" + path[..^5])));
         foreach (var path in inputs)
         {
             _ = File.Exists(workspace.CookedPath(path[..^5])).Should().BeTrue(path);
@@ -69,8 +70,8 @@ public sealed class NestedDescriptorCookTests
         _ = inspected.Assets.Where(static asset => asset.Kind == ContentCookAssetKind.Material).Select(static asset => asset.AssetKey)
             .Should().HaveCount(2).And.OnlyHaveUniqueItems().And.NotContainNulls();
 
-        _ = (await service.CookCurrentSceneAsync(new("asset:///" + scene), this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
-        _ = (await service.ReadAsync(workspace.ProjectContext, inputs.Select(static path => new Uri("asset:///" + path)).ToArray(), this.TestContext.CancellationToken).ConfigureAwait(false))
+        _ = (await service.CookCurrentSceneAsync(AssetPath.Parse("/" + scene), this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
+        _ = (await service.ReadAsync(workspace.ProjectContext, inputs.Select(static path => AssetPath.Parse("/" + path)).ToArray(), this.TestContext.CancellationToken).ConfigureAwait(false))
             .Should().OnlyContain(static status => status.Freshness == AssetCookFreshness.Current);
     }
 }

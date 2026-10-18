@@ -32,8 +32,8 @@ internal sealed partial class CatalogWorkloadServices : IDisposable
         this.Mounts = new();
         this.Pipeline = new ContentPipelineService(this.Projects, this.Runs, this.Scopes, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, this.Documents, this.compatibility, files, this.Publication);
         var paths = new Mock<IPathFinder>();
-        _ = paths.SetupGet(value => value.LocalAppState).Returns(Path.Combine(fixture.ProjectRoot, ".state"));
-        _ = paths.SetupGet(value => value.Temp).Returns(Path.Combine(fixture.ProjectRoot, ".temp"));
+        _ = paths.SetupGet(value => value.LocalAppState).Returns(fixture.ProjectRoot.Combine(".state").FullPath);
+        _ = paths.SetupGet(value => value.Temp).Returns(fixture.ProjectRoot.Combine(".temp").FullPath);
         this.Builtins = new BuiltinCatalogDiscovery(api, files, paths.Object, NullLogger<BuiltinCatalogDiscovery>.Instance, this.compatibility);
     }
 

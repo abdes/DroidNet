@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.ContentPipeline.Status;
-using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -71,14 +70,15 @@ public sealed record AssetEntry(
     /// <summary>Gets the native availability explanation, independently of source and publication status.</summary>
     public string? RuntimeReason { get; init; }
 
-    /// <summary>
-    /// Gets a value indicating whether the asset is a cooked asset the engine loads: everything that cooks is known by
-    /// its cooked descriptor, so a source such as a model is not one.
-    /// </summary>
-    public bool IsCookedAsset => AssetFileTypes.Find(this.Identity.Name) is { Category: AssetFileCategory.Cooked or AssetFileCategory.CookedResource };
-
     /// <summary>Gets a value indicating whether this is engine-provided content rather than authored source.</summary>
     public bool IsBuiltin => this.Generated is not null || this.PrimaryState == AssetState.Generated;
+
+    /// <summary>
+    /// Gets a value indicating whether the asset exists only as cooked content: it has no authored source or descriptor
+    /// and is not an engine recipe, such as a library asset or a project's copy of a built-in.
+    /// </summary>
+    public bool IsCookedOnly => this.SourcePath is null && this.DescriptorPath is null && !this.Identity.IsGenerated
+        && this.PrimaryState is not AssetState.Missing;
 
     /// <summary>Gets a value indicating whether this selection owns an authored cook input.</summary>
     public bool CanCook => !this.IsBuiltin && (this.DescriptorPath is not null || this.ImportSource is not null) && this.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture;

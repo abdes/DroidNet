@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
 
@@ -32,11 +33,11 @@ public sealed class CookedOutputInspectionTests
         var cookCount = workspace.CookCoordinator.Runs.Count;
         var imports = api.Imported.Count;
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Changed after publication");
-        var report = await pipeline.InspectCookedOutputAsync(new("asset:///Content/Scenes"), this.TestContext.CancellationToken, validate: true, workspace.ProjectContext).ConfigureAwait(false);
+        var report = await pipeline.InspectCookedOutputAsync(AssetPath.Parse("/Content/Scenes"), this.TestContext.CancellationToken, validate: true, workspace.ProjectContext).ConfigureAwait(false);
         var root = report.Roots.Should().ContainSingle().Subject;
         _ = root.Inspection.Assets.Should().ContainSingle().Which.Kind.Should().Be(ContentCookAssetKind.Scene);
         _ = root.Validation!.Succeeded.Should().BeTrue();
-        var scene = root.Provenance.Single(origin => origin.SourceAssetUri == new Uri("asset:///Content/Scenes/Main.oscene.json"));
+        var scene = root.Provenance.Single(origin => origin.SourceAssetUri == AssetPath.Parse("/Content/Scenes/Main.oscene.json"));
         _ = scene.Dependencies.Should().NotBeEmpty();
         _ = root.Inspection.Files.Should().NotBeEmpty();
         _ = api.Imported.Should().HaveCount(imports);
@@ -64,7 +65,7 @@ public sealed class CookedOutputInspectionTests
         bytes[^1] ^= 1;
         await File.WriteAllBytesAsync(path, bytes, this.TestContext.CancellationToken).ConfigureAwait(false);
         var changed = await pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken, validate: true).ConfigureAwait(false);
-        _ = changed.Roots.Single().Provenance.Should().NotContain(origin => origin.CookedAssetUri.AbsolutePath == entry.VirtualPath);
+        _ = changed.Roots.Single().Provenance.Should().NotContain(origin => origin.CookedAssetUri.VirtualPath == entry.VirtualPath);
         _ = changed.Roots.Single().Validation!.Succeeded.Should().BeFalse();
         _ = changed.Roots.Single().Validation!.Diagnostics.Should().Contain(issue => issue.AffectedPath == path);
     }

@@ -111,7 +111,7 @@ public sealed class ContentMountsViewModelTests
             model.AddMountCommand.Execute(parameter: null);
             _ = model.HasError.Should().BeFalse(model.ErrorMessage);
 
-            var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot);
+            var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
             ProjectLayoutViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
 
             _ = candidate.AuthoringMounts.Select(static mount => (mount.Name, mount.RelativePath)).Should().Equal(
@@ -131,8 +131,8 @@ public sealed class ContentMountsViewModelTests
         ProjectId = Guid.NewGuid(),
         Name = "Mounts",
         Category = Category.Games,
-        ProjectRoot = "C:/Projects/Mounts",
+        ProjectRoot = FileSystemPath.From("C:/Projects/Mounts"),
         AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
-        LocalFolderMounts = [new("Studio library", "D:/Studio/EnvironmentLibrary")],
+        LocalFolderMounts = [new("Studio library", FileSystemPath.From("D:/Studio/EnvironmentLibrary"))],
     };
 }

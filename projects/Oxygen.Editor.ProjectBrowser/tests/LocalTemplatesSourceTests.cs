@@ -200,13 +200,13 @@ public class LocalTemplatesSourceTests
               ],
               "LocalFolderMounts": [],
               "StarterScene": {
-                "AssetUri": "asset:///Content/Scenes/Main.oscene.json",
+                "AssetUri": "asset:///Content/Scenes/Main.oscene",
                 "RelativePath": "Content/Scenes/Main.oscene.json",
                 "OpenOnCreate": true
               },
               "StarterContent": [
                 {
-                  "AssetUri": "asset:///Content/Materials/Default.omat.json",
+                  "AssetUri": "asset:///Content/Materials/Default.omat",
                   "RelativePath": "Content/Materials/Default.omat.json",
                   "Kind": "Material"
                 }

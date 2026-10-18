@@ -22,7 +22,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 [TestClass]
 public sealed class ScriptCookingTests : IDisposable
 {
-    private static readonly Uri MoveScript = new("asset:///Content/Player/move.oscript");
+    private static readonly AssetPath MoveScript = AssetPath.Parse("/Content/Player/move.oscript");
     private readonly string root = Path.Combine(Path.GetTempPath(), "oxygen-script-cooking-tests", Guid.NewGuid().ToString("N"));
     private readonly Project project;
 
@@ -82,7 +82,7 @@ public sealed class ScriptCookingTests : IDisposable
         var slot = new ScriptSlot { Script = MoveScript, ExecutionOrder = 2 }
             .WithOverride("speed", ScriptValue.FromFloat(2.5f))
             .WithOverride("follow", ScriptValue.FromNode(target.Id))
-            .WithOverride("jump", ScriptValue.FromAsset(new Uri("asset:///Content/Input/Jump.oiact")))
+            .WithOverride("jump", ScriptValue.FromAsset(AssetPath.Parse("/Content/Input/Jump.oiact")))
             .WithOverride("offset", ScriptValue.FromVector(new System.Numerics.Vector2(1, 2)));
         var empty = new ScriptSlot();
         _ = player.AddComponent(new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [slot, empty] });
@@ -98,7 +98,7 @@ public sealed class ScriptCookingTests : IDisposable
             ("follow", "node"), ("jump", "asset"), ("offset", "vec2"), ("speed", "float"));
         _ = binding.Params.Single(static param => param.Key == "follow").Value.Should().Be(0u);
         _ = binding.Params.Single(static param => param.Key == "jump").Value.Should().Be("/Content/Input/Jump.oiact");
-        _ = result.ScriptReferences.Should().BeEquivalentTo([MoveScript, new Uri("asset:///Content/Input/Jump.oiact")]);
+        _ = result.ScriptReferences.Should().BeEquivalentTo([MoveScript, AssetPath.Parse("/Content/Input/Jump.oiact")]);
         var warning = result.Diagnostics.Should().ContainSingle().Subject;
         _ = warning.Severity.Should().Be(DiagnosticSeverity.Warning);
         _ = warning.Code.Should().Be(ScriptDiagnosticCodes.SlotWithoutScript);
@@ -111,7 +111,7 @@ public sealed class ScriptCookingTests : IDisposable
     {
         var scene = this.CreateScene(out _, out var player);
         var lost = new ScriptSlot { Script = MoveScript }.WithOverride("follow", ScriptValue.FromNode(NodeId.New()));
-        var gone = new ScriptSlot { Script = new Uri("asset:///Content/Player/gone.oscript") };
+        var gone = new ScriptSlot { Script = AssetPath.Parse("/Content/Player/gone.oscript") };
         _ = player.AddComponent(new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [lost, gone] });
 
         var result = await this.GenerateAsync(scene).ConfigureAwait(false);
@@ -132,7 +132,7 @@ public sealed class ScriptCookingTests : IDisposable
         var scope = this.CreateScope() with { Inputs = [.. this.CreateScope().Inputs, script] };
         var binding = new ScriptSidecarBinding(1, Guid.NewGuid().ToString("D"), "/Content/Player/move.oscript", 0, [new ScriptSidecarParam("speed", "float", 2.5f)]);
         var descriptor = new SceneDescriptorGenerationResult(
-            new Uri("asset:///Content/Scenes/Main.oscene.json"),
+            AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
             Path.Combine(this.root, ".pipeline", "Scenes", "Main.oscene.json"),
             "/Content/Scenes/Main.oscene",
             Dependencies: [],
@@ -164,7 +164,7 @@ public sealed class ScriptCookingTests : IDisposable
     {
         var site = new ScriptBindingSite(NodeId.New(), "Player", Guid.NewGuid(), SlotNumber: 1, ["follow", "speed"]);
         var descriptor = new SceneDescriptorGenerationResult(
-            new Uri("asset:///Content/Scenes/Main.oscene.json"),
+            AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
             Path.Combine(this.root, ".pipeline", "Scenes", "Main.oscene.json"),
             "/Content/Scenes/Main.oscene",
             Dependencies: [],
@@ -215,14 +215,14 @@ public sealed class ScriptCookingTests : IDisposable
         var key = Guid.CreateVersion7();
         return new ContentCookScope(
             context,
-            new ProjectCookScope(context.ProjectId, this.root, Path.Combine(this.root, ".cooked")),
+            new ProjectCookScope(context.ProjectId, FileSystemPath.From(this.root), Path.Combine(this.root, ".cooked")),
             [
                 new ContentCookInput(
-                    new Uri("asset:///Content/Scenes/Main.oscene.json"),
+                    AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
                     ContentCookAssetKind.Scene,
                     "Content",
                     "Content/Scenes/Main.oscene.json",
-                    Path.Combine(this.root, "Content", "Scenes", "Main.oscene.json"),
+                    FileSystemPath.From(Path.Combine(this.root, "Content", "Scenes", "Main.oscene.json")),
                     "/Content/Scenes/Main.oscene",
                     ContentCookInputRole.Primary),
             ],

@@ -60,7 +60,7 @@ public sealed class AssetRuntimeStatusSourceTests
         await using var lifetime = engine.ConfigureAwait(false);
         using var source = new AssetRuntimeStatusSource(engine);
 
-        _ = source.GetStatus(ProjectId).Roots.Should().Equal("C:/Project/.cooked/Content");
+        _ = source.GetStatus(ProjectId).Roots.Should().Equal(FileSystemPath.From("C:/Project/.cooked/Content"));
     }
 
     [TestMethod]
@@ -78,7 +78,7 @@ public sealed class AssetRuntimeStatusSourceTests
         ];
         using var source = new AssetRuntimeStatusSource(engine);
 
-        _ = source.GetStatus(ProjectId).Requests.Should().Equal(new AssetRuntimeRequest("/Content/Materials/Red.omat", Succeeded: false, "Material rejected"));
+        _ = source.GetStatus(ProjectId).Requests.Should().Equal(new AssetRuntimeRequest(AssetPath.Parse("/Content/Materials/Red.omat"), Succeeded: false, "Material rejected"));
         _ = source.GetStatus(projectId: null).Requests.Should().BeEmpty();
     }
 

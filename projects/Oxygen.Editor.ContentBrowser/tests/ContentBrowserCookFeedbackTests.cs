@@ -28,7 +28,7 @@ public sealed partial class ContentBrowserCookFeedbackTests
         using var browser = new AssetsViewModel(
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new DroidNet.Mvvm.Converters.ViewModelToView(Mock.Of<DroidNet.Mvvm.IViewLocator>()),
-            new ContentBrowserState(projects),
+            new ContentBrowserState(),
             projects,
             pipeline.Object,
             Mock.Of<Oxygen.Editor.Assets.IAssetFeed>(),

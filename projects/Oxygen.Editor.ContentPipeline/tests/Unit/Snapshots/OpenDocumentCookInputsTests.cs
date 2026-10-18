@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Documents;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Snapshots;
@@ -78,13 +79,13 @@ public sealed class OpenDocumentCookInputsTests : IDisposable
     {
         var document = await this.OpenAsync("Intro").ConfigureAwait(false);
         var moved = Path.Combine(this.root, "Opening.note");
-        File.Move(document.File.Path, moved);
+        File.Move(document.File.Path.FullPath, moved);
 
         await document.FollowRelocationAsync(
-            new DocumentRelocation(new DocumentFile(moved, new Uri("asset:///Content/Opening.note")), document.Version, static _ => null),
+            new DocumentRelocation(new DocumentFile(FileSystemPath.From(moved), AssetPath.Parse("/Content/Opening.note")), document.Version, static _ => null),
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = this.registry.GetState().Documents.Should().ContainSingle().Which.SourcePath.Should().Be(moved);
+        _ = this.registry.GetState().Documents.Should().ContainSingle().Which.SourcePath.Should().Be(FileSystemPath.From(moved));
     }
 
     /// <summary>A read lease is taken on the thread that opened the document, and holds off its reload until released.</summary>
@@ -141,7 +142,7 @@ public sealed class OpenDocumentCookInputsTests : IDisposable
     {
         var path = Path.Combine(this.root, name + ".note");
         await File.WriteAllTextAsync(path, "text", this.TestContext.CancellationToken).ConfigureAwait(true);
-        var opened = await this.documents.OpenAsync(new DocumentFile(path, new Uri($"asset:///Content/{name}.note")), this.TestContext.CancellationToken).ConfigureAwait(true);
+        var opened = await this.documents.OpenAsync(new DocumentFile(FileSystemPath.From(path), AssetPath.Parse($"/Content/{name}.note")), this.TestContext.CancellationToken).ConfigureAwait(true);
         return opened.Document ?? throw new InvalidOperationException(opened.Problem);
     }
 

@@ -13,6 +13,7 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserControls;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
@@ -37,20 +38,19 @@ public sealed partial class BuiltinOriginsTests : DroidNet.Tests.VisualUserInter
     {
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         var origin = builtins.Snapshot.Catalog!.CreateCatalogRecords().Single(record => string.Equals(record.Name, geometry ? "Cube" : "Default", StringComparison.Ordinal));
-        var uri = new Uri("asset://" + origin.Generated!.CookedVirtualPath);
+        var identity = origin.Generated!.CookedVirtualPath;
         var item = CreateStatusAsset(0) with
         {
-            IdentityUri = uri,
-            DisplayPath = uri.AbsolutePath,
+            Identity = identity,
+            DisplayPath = identity.VirtualPath,
             DisplayName = origin.Name,
             Kind = geometry ? AssetKind.Geometry : AssetKind.Material,
             PrimaryState = AssetState.Generated,
             DerivedState = null,
             Generated = origin.Generated,
-            BuiltinOriginUri = origin.Uri,
+            BuiltinOrigin = origin.Identity,
             DescriptorPath = null,
             SourcePath = null,
-            CookedUri = uri,
             CookStatus = null,
         };
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
@@ -58,9 +58,9 @@ public sealed partial class BuiltinOriginsTests : DroidNet.Tests.VisualUserInter
         _ = provider.SetupGet(value => value.Items).Returns(updates);
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var projects = new ProjectContextService();
-        projects.Activate(new ProjectContext { ProjectId = Guid.NewGuid(), ProjectRoot = Path.GetTempPath(), Name = "Built-ins", Category = Category.Games, AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")], LocalFolderMounts = [] });
-        var state = new ContentBrowserState(projects);
-        state.SetSelectedFolders(["/Cooked/Content/" + (geometry ? "Geometry" : "Materials")]);
+        projects.Activate(new ProjectContext { ProjectId = Guid.NewGuid(), ProjectRoot = FileSystemPath.From(Path.GetTempPath()), Name = "Built-ins", Category = Category.Games, AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")], LocalFolderMounts = [] });
+        var state = new ContentBrowserState();
+        state.SetSelectedFolders([AssetPath.Parse("/Cooked/Content/" + (geometry ? "Geometry" : "Materials"))]);
         using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
         FrameworkElement layoutView = tiles ? new TilesLayoutView
         {
@@ -98,11 +98,11 @@ public sealed partial class BuiltinOriginsTests : DroidNet.Tests.VisualUserInter
                 _ = layoutView.FindDescendant<FontIcon>(icon => string.Equals(icon.Glyph, "\uF158", StringComparison.Ordinal)).Should().NotBeNull();
             }
 
-            var authoredUri = new Uri("asset:///Content/Materials/Authored.omat.json");
+            var authoredIdentity = AssetPath.Parse("/Content/Materials/Authored.omat");
             var authored = CreateStatusAsset(0) with
             {
-                IdentityUri = authoredUri,
-                DisplayPath = authoredUri.AbsolutePath,
+                Identity = authoredIdentity,
+                DisplayPath = authoredIdentity.VirtualPath,
             };
             updates.OnNext([item, authored]);
             await WaitForRenderAsync().ConfigureAwait(true);
@@ -125,7 +125,7 @@ public sealed partial class BuiltinOriginsTests : DroidNet.Tests.VisualUserInter
         _ = ToolTipService.GetToolTip(assetAction).Should().Be(browser.CookSelectedToolTip);
         _ = browser.CookSelectedAssetCommand.CanExecute(parameter: null).Should().BeFalse();
         _ = browser.CookSelectedFolderCommand.CanExecute(parameter: null).Should().BeFalse();
-        state.SetSelectedFolders(["/Content/Materials"]);
+        state.SetSelectedFolders([AssetPath.Parse("/Content/Materials")]);
         layout.SelectedAsset = authored;
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = assetAction.IsEnabled.Should().BeTrue();

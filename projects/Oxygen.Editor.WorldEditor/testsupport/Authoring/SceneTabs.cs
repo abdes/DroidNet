@@ -14,6 +14,7 @@ using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
@@ -24,7 +25,7 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 /// </remarks>
 internal static class SceneTabs
 {
-    private const string Root = @"C:\SceneTabs";
+    private static readonly FileSystemPath Root = FileSystemPath.From(@"C:\SceneTabs");
 
     /// <summary>Gets the project whose Content mount holds the scene files.</summary>
     public static ProjectContext Project { get; } = new()
@@ -49,8 +50,8 @@ internal static class SceneTabs
         var kind = new SceneDocumentKind(Project, interaction, redirects);
         var files = new MemoryFileStore();
         var name = string.IsNullOrEmpty(scene.Name) ? "Scene" : scene.Name;
-        var file = new DocumentFile(Path.Combine(Root, "Content", name + ".oscene.json"), new Uri($"asset:///Content/{name}.oscene.json"));
-        files.Put(file.Path, scene, layout);
+        var file = new DocumentFile(Root.Combine("Content").Combine(name + ".oscene.json"), AssetPath.Parse($"/Content/{name}.oscene"));
+        files.Put(file.Path.FullPath, scene, layout);
         return new SceneTab(kind, files, file);
     }
 

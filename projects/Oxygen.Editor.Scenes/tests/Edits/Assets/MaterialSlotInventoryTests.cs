@@ -7,6 +7,7 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits.Assets;
 
@@ -17,7 +18,7 @@ namespace Oxygen.Editor.Scenes.Tests.Edits.Assets;
 [TestClass]
 public sealed class MaterialSlotInventoryTests
 {
-    private static readonly Uri BlueMaterial = new("asset:/Content/Blue.omat");
+    private static readonly AssetPath BlueMaterial = AssetPath.Parse("/Content/Blue.omat");
 
     public TestContext TestContext { get; set; }
 

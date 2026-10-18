@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
@@ -35,13 +36,13 @@ public sealed class CookedLibraryResolutionTests
         _ = imported.IsPublished.Should().BeTrue();
         var geometry = imported.CookedAssets.First(static output => output.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
         var root = await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Art library", root)] };
+        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Art library", FileSystemPath.From(root))] };
         consumer.Activate(context);
         AddGeometryNode(consumer, geometry, "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-        var scene = new Uri("asset:///Content/Scenes/Main.oscene.json");
-        var indexed = imported.Inspection!.Assets.Single(asset => asset.VirtualPath == geometry.AbsolutePath);
+        var scene = AssetPath.Parse("/Content/Scenes/Main.oscene");
+        var indexed = imported.Inspection!.Assets.Single(asset => asset.VirtualPath == geometry.VirtualPath);
         var descriptorPath = Path.Combine(root, indexed.DescriptorRelativePath!);
         var original = await File.ReadAllBytesAsync(descriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false);
         var damaged = original.ToArray();
@@ -55,7 +56,7 @@ public sealed class CookedLibraryResolutionTests
         await File.WriteAllBytesAsync(descriptorPath, original, this.TestContext.CancellationToken).ConfigureAwait(false);
         var result = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
-        _ = result.CookedAssets.Should().ContainSingle().Which.SourceAssetUri.Should().Be(scene);
+        _ = result.CookedAssets.Should().ContainSingle().Which.SourceAssetUri.Should().Be(scene.WithAuthoringSuffix());
         _ = (await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
         _ = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.Current);
 
@@ -87,7 +88,7 @@ public sealed class CookedLibraryResolutionTests
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        Uri? geometry = null;
+        AssetPath? geometry = null;
         foreach (var library in new[] { older, newer })
         {
             var source = await WriteCrossMountModelAsync(library, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -96,11 +97,11 @@ public sealed class CookedLibraryResolutionTests
             geometry = result.CookedAssets.First(static output => output.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
         }
 
-        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Older", older.CookedRoot("Art")), new("Newer", newer.CookedRoot("Art"))] };
+        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Older", FileSystemPath.From(older.CookedRoot("Art"))), new("Newer", FileSystemPath.From(newer.CookedRoot("Art")))] };
         consumer.Activate(context);
         AddGeometryNode(consumer, geometry!, "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var scene = new Uri("asset:///Content/Scenes/Main.oscene.json");
+        var scene = AssetPath.Parse("/Content/Scenes/Main.oscene");
         var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var first = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
@@ -115,16 +116,16 @@ public sealed class CookedLibraryResolutionTests
         _ = second.InputSnapshot!.CookedDependencies.Select(static dependency => dependency.SourceName).Distinct(StringComparer.Ordinal).Should().ContainSingle().Which.Should().Be("Older");
     }
 
-    private async Task AssertLibraryFailuresPreserveOutputAsync(CookWorkspace consumer, Oxygen.Editor.Projects.ProjectContext context, string libraryProject, string root, ContentPipelineService service, Uri scene)
+    private async Task AssertLibraryFailuresPreserveOutputAsync(CookWorkspace consumer, Oxygen.Editor.Projects.ProjectContext context, string libraryProject, string root, ContentPipelineService service, AssetPath scene)
     {
         var index = Path.Combine(consumer.CookedRoot("Content"), "container.index.bin");
         var before = await File.ReadAllBytesAsync(index, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var unavailable = context with { LocalFolderMounts = [new("Art library", Path.Combine(libraryProject, "Offline"))] };
+        var unavailable = context with { LocalFolderMounts = [new("Art library", FileSystemPath.From(Path.Combine(libraryProject, "Offline")))] };
         consumer.Activate(unavailable);
         _ = (await service.ReadAsync(unavailable, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.InvalidSource);
         var missing = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = missing.IsPublished.Should().BeFalse();
-        _ = missing.Diagnostics.Should().Contain(issue => issue.Code == "asset_cook.library_reference_missing" && issue.AffectedVirtualPath == scene.AbsolutePath);
+        _ = missing.Diagnostics.Should().Contain(issue => issue.Code == "asset_cook.library_reference_missing" && issue.AffectedVirtualPath == scene.WithAuthoringSuffix().VirtualPath);
         _ = (await File.ReadAllBytesAsync(index, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(before);
 
         consumer.Activate(context);

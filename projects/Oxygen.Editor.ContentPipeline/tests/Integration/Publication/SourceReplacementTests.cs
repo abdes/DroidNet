@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.PublicationScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
@@ -29,7 +30,7 @@ public sealed class SourceReplacementTests
         AssertSource(project.Root, "new");
         project.AssertNew();
         await File.WriteAllTextAsync(Path.Combine(project.Root, SourceBundle, "model.glb"), "later edit", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var writer = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         var loaded = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var selection = await CookPublicationReadLease.OpenUnderGateAsync(project.Context, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = selection.PublicationId.Should().Be(project.Operation.OperationId);
@@ -81,8 +82,8 @@ public sealed class SourceReplacementTests
             project.AssertOld();
             if (persisted)
             {
-                using var writer = await CookOutputLease.AcquireWriteAsync(replica.FullName, this.TestContext.CancellationToken).ConfigureAwait(false);
-                var recovery = await CookPublicationTransaction.LoadAsync(project.Context with { ProjectRoot = replica.FullName }, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
+                using var writer = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(replica.FullName), this.TestContext.CancellationToken).ConfigureAwait(false);
+                var recovery = await CookPublicationTransaction.LoadAsync(project.Context with { ProjectRoot = FileSystemPath.From(replica.FullName) }, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
                 await recovery.RecoverAsync(writer).ConfigureAwait(false);
                 AssertSource(replica.FullName, "old");
                 AssertRecoveredRoot(replica.FullName, "Content", hadPrevious: true);
@@ -171,7 +172,7 @@ public sealed class SourceReplacementTests
         var journal = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false))!;
         journal["sourceReplacement"]!["bundleName"] = "../Other";
         await File.WriteAllTextAsync(path, journal.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var writer = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         Func<Task> load = async () => _ = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await load.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
         AssertSource(project.Root, "old");

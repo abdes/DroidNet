@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookCoordinatorScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
@@ -74,11 +75,11 @@ public sealed class SharedCookTests
         var context = CreateContextService();
         using var coordinator = CreateCoordinator(context);
         var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
-        var folder = Queue(new(CookTargetKind.Folder, new Uri("asset:///Content/Materials")), 1);
-        var asset = Queue(new(CookTargetKind.Asset, new Uri("asset:///Content/Materials/Wood.omat.json")), 2);
-        var automatic = Queue(new(CookTargetKind.Asset, new Uri("asset:///Content/Materials/Stone.omat.json"), IsAutomatic: true), 3);
-        var outside = Queue(new(CookTargetKind.Asset, new Uri("asset:///Content/MaterialsOld/Wood.omat.json")), 4);
-        var reimport = Queue(new(CookTargetKind.Asset, new Uri("asset:///Content/Materials/Crate.glb")) { IsReimport = true }, 5);
+        var folder = Queue(new(CookTargetKind.Folder, AssetPath.Parse("/Content/Materials")), 1);
+        var asset = Queue(new(CookTargetKind.Asset, AssetPath.Parse("/Content/Materials/Wood.omat.json")), 2);
+        var automatic = Queue(new(CookTargetKind.Asset, AssetPath.Parse("/Content/Materials/Stone.omat.json"), IsAutomatic: true), 3);
+        var outside = Queue(new(CookTargetKind.Asset, AssetPath.Parse("/Content/MaterialsOld/Wood.omat.json")), 4);
+        var reimport = Queue(new(CookTargetKind.Asset, AssetPath.Parse("/Content/Materials/Crate.glb")) { IsReimport = true }, 5);
 
         _ = coordinator.Runs.Should().HaveCount(3);
         await hold.ReleaseAsync().ConfigureAwait(false);
@@ -230,5 +231,5 @@ public sealed class SharedCookTests
     }
 
     private static CookRunRequest SharedAssetRequest()
-        => new(CookTargetKind.Asset, new Uri("asset:///Content/Shared.omat.json"), IsAutomatic: true) { CoalescePending = true };
+        => new(CookTargetKind.Asset, AssetPath.Parse("/Content/Shared.omat.json"), IsAutomatic: true) { CoalescePending = true };
 }

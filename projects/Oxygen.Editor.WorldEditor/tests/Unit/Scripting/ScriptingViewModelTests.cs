@@ -14,6 +14,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Scripting;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 
@@ -25,7 +26,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 public sealed partial class ScriptingViewModelTests : IDisposable
 {
     private const string MovePath = @"C:\Project\Content\Player\move.lua";
-    private static readonly Uri MoveScript = new("asset:///Content/Player/move.oscript");
+    private static readonly AssetPath MoveScript = AssetPath.Parse("/Content/Player/move.oscript");
 
     private static readonly ScriptParameter Speed = new("move_speed", ScriptParameterKind.Float, 1f, 0, Min: 0, Max: 10, Step: 0.5, "m/s", "How fast", [], IsColor: false);
     private static readonly ScriptParameter Tint = new("tint", ScriptParameterKind.Vec3, Vector3.One, 0, Min: null, Max: null, Step: null, string.Empty, string.Empty, [], IsColor: true);
@@ -139,7 +140,7 @@ public sealed partial class ScriptingViewModelTests : IDisposable
         _ = model.Slots[0].CanRemoveAllStale.Should().BeFalse("one value is removed with its own button");
 
         this.current.Clear();
-        this.current.Add(new ScriptAnalysisSnapshot(MovePath, MoveScript, [Problem()], [Speed], ParametersOutOfDate: true));
+        this.current.Add(new ScriptAnalysisSnapshot(FileSystemPath.From(MovePath), MoveScript, [Problem()], [Speed], ParametersOutOfDate: true));
         this.changes.OnNext(this.current[0]);
 
         _ = model.Slots[0].ParametersOutOfDate.Should().BeTrue();
@@ -186,7 +187,7 @@ public sealed partial class ScriptingViewModelTests : IDisposable
     [TestMethod]
     public void ALibraryScriptShowsItsCookedParametersAndHasNoSourceToEdit()
     {
-        var library = new Uri("asset:///.cooked/Scripts/rotate.oscript");
+        var library = AssetPath.Parse("/Engine/Scripts/rotate.oscript");
         this.scripting.Slots = [new ScriptSlot { Script = library }.WithOverride("speed", ScriptValue.FromFloat(2f))];
         var declarations = new Mock<IScriptDeclarationProvider>();
         _ = declarations.Setup(provider => provider.ReadAsync(It.IsAny<ProjectContext>(), library, It.IsAny<CancellationToken>()))
@@ -208,7 +209,7 @@ public sealed partial class ScriptingViewModelTests : IDisposable
         => new(ScriptProblemSeverity.Error, "S0101", "unexpected symbol", MovePath, 3, 1, "rendered", "explanation");
 
     private void Analyze(params ScriptParameter[] parameters)
-        => this.current.Add(new ScriptAnalysisSnapshot(MovePath, MoveScript, [], parameters, ParametersOutOfDate: false));
+        => this.current.Add(new ScriptAnalysisSnapshot(FileSystemPath.From(MovePath), MoveScript, [], parameters, ParametersOutOfDate: false));
 
     private ScriptingViewModel CreateModel(Action? onEdit = null, IScriptDeclarationProvider? declarations = null)
     {
@@ -230,7 +231,7 @@ public sealed partial class ScriptingViewModelTests : IDisposable
             ProjectId = Guid.NewGuid(),
             Name = "Project",
             Category = Category.Games,
-            ProjectRoot = @"C:\Project",
+            ProjectRoot = FileSystemPath.From(@"C:\Project"),
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
         });

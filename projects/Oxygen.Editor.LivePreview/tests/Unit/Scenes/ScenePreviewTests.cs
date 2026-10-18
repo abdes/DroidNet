@@ -197,16 +197,12 @@ public sealed partial class ScenePreviewTests
     }
 
     [TestMethod]
-    public void MaterialOverridePathMapper_MapsDescriptorUriToCookedEnginePath()
-        => _ = MaterialOverridePathMapper.ToEnginePath(new Uri("asset:///Content/Materials/Red.omat.json")).Should().Be("/Content/Materials/Red.omat");
+    public void MaterialOverridePathMapper_MapsIdentityToEnginePath()
+        => _ = MaterialOverridePathMapper.ToEnginePath(AssetPath.Parse("/Content/Materials/Red.omat")).Should().Be("/Content/Materials/Red.omat");
 
     [TestMethod]
     public void MaterialOverridePathMapper_ClearsOnlyAnExplicitNull()
-    {
-        _ = MaterialOverridePathMapper.ToEnginePath(materialUri: null).Should().BeNull();
-        Action invalid = () => MaterialOverridePathMapper.ToEnginePath(new Uri("https://example.com/Content/Materials/Red.omat.json"));
-        _ = invalid.Should().Throw<ArgumentException>();
-    }
+        => _ = MaterialOverridePathMapper.ToEnginePath(material: null).Should().BeNull();
 
     [TestMethod]
     public async Task Coalescer_ThrottlesPreviewAndAllowsOneTerminalSync()

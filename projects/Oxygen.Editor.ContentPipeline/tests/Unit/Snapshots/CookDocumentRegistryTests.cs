@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Snapshots;
 
@@ -19,8 +20,8 @@ public sealed class CookDocumentRegistryTests
     public async Task ReadSetOrdersMultipleOwnersAndReleasesExactlyOnce()
     {
         var registry = new CookDocumentRegistry();
-        var firstPath = Path.Combine(Path.GetTempPath(), "a.omat.json");
-        var secondPath = Path.Combine(Path.GetTempPath(), "b.omat.json");
+        var firstPath = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "a.omat.json"));
+        var secondPath = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "b.omat.json"));
         List<string> calls = [];
         using var second = registry.Register(secondPath, _ => Acquire("second", secondPath));
         using var first = registry.Register(firstPath, _ => Acquire("first", firstPath));
@@ -34,7 +35,7 @@ public sealed class CookDocumentRegistryTests
         reads.Dispose();
         _ = calls.Should().Equal("read first", "read alias", "read second", "release second", "release alias", "release first");
 
-        Task<CookDocumentReadLease?> Acquire(string name, string path)
+        Task<CookDocumentReadLease?> Acquire(string name, FileSystemPath path)
         {
             calls.Add("read " + name);
             return Task.FromResult<CookDocumentReadLease?>(new(State(path), () => calls.Add("release " + name)));
@@ -47,8 +48,8 @@ public sealed class CookDocumentRegistryTests
     public async Task CancelledAcquisitionReleasesEarlierReads()
     {
         var registry = new CookDocumentRegistry();
-        var firstPath = Path.Combine(Path.GetTempPath(), "a.omat.json");
-        var secondPath = Path.Combine(Path.GetTempPath(), "b.omat.json");
+        var firstPath = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "a.omat.json"));
+        var secondPath = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "b.omat.json"));
         using var cancellation = new CancellationTokenSource();
         var released = false;
         using var first = registry.Register(
@@ -73,7 +74,7 @@ public sealed class CookDocumentRegistryTests
     public async Task ClosedRegistrationDoesNotAcquireAgain()
     {
         var registry = new CookDocumentRegistry();
-        var path = Path.Combine(Path.GetTempPath(), "material.omat.json");
+        var path = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "material.omat.json"));
         var acquired = false;
         using var closed = registry.Register(path, _ =>
         {
@@ -94,7 +95,7 @@ public sealed class CookDocumentRegistryTests
     public void StateSnapshotsRetainIndependentOwnersWithoutReadingSource()
     {
         var registry = new CookDocumentRegistry();
-        var path = Path.Combine(Path.GetTempPath(), "shared.omat.json");
+        var path = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "shared.omat.json"));
         var changes = new List<CookDocumentStateChangedEventArgs>();
         registry.StateChanged += (_, change) => changes.Add(change);
         using var first = registry.Register(path, _ => throw new InvalidOperationException("State reads must not acquire the source."));
@@ -119,7 +120,7 @@ public sealed class CookDocumentRegistryTests
     public void StateUpdatesDistinguishSavedBytesAndRejectAnotherSource()
     {
         var registry = new CookDocumentRegistry();
-        var path = Path.Combine(Path.GetTempPath(), "material.omat.json");
+        var path = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "material.omat.json"));
         using var owner = registry.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(null));
         CookDocumentStateChangedEventArgs? latest = null;
         registry.StateChanged += (_, change) => latest = change;
@@ -130,7 +131,7 @@ public sealed class CookDocumentRegistryTests
         owner.UpdateState(initial with { SavedContentHash = "new saved bytes" });
         _ = latest!.SavedSourceChanged.Should().BeTrue();
         var version = registry.GetState().Version;
-        Action invalidSource = () => owner.UpdateState(initial with { SourcePath = path + ".other" });
+        Action invalidSource = () => owner.UpdateState(initial with { SourcePath = FileSystemPath.From(path.FullPath + ".other") });
         _ = invalidSource.Should().Throw<ArgumentException>();
         _ = registry.GetState().Version.Should().Be(version);
     }
@@ -143,7 +144,7 @@ public sealed class CookDocumentRegistryTests
         var observed = 0;
         registry.StateChanged += (_, _) => throw new InvalidOperationException("Broken presentation observer.");
         registry.StateChanged += (_, _) => observed++;
-        var path = Path.Combine(Path.GetTempPath(), "material.omat.json");
+        var path = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "material.omat.json"));
         using var owner = registry.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(null));
         owner.UpdateState(State(path));
         owner.Dispose();
@@ -157,8 +158,8 @@ public sealed class CookDocumentRegistryTests
     public async Task RelocateSourceChangesLookupAndStateWithoutReplacingDocumentOwner()
     {
         var registry = new CookDocumentRegistry();
-        var path = Path.Combine(Path.GetTempPath(), "Main.oscene.json");
-        var renamedPath = Path.Combine(Path.GetTempPath(), "Demo.oscene.json");
+        var path = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "Main.oscene.json"));
+        var renamedPath = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "Demo.oscene.json"));
         var state = State(path);
         using var registration = registry.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(new(state, () => { })));
         registration.UpdateState(state);
@@ -184,7 +185,7 @@ public sealed class CookDocumentRegistryTests
     public async Task RelocateSourceCancelsReadThatWasWaitingForOldPath()
     {
         var registry = new CookDocumentRegistry();
-        var path = Path.Combine(Path.GetTempPath(), "Main.oscene.json");
+        var path = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "Main.oscene.json"));
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var state = State(path);
@@ -198,7 +199,7 @@ public sealed class CookDocumentRegistryTests
         registration.UpdateState(state);
         var read = registry.AcquireAsync([path], this.TestContext.CancellationToken);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        state = state with { SourcePath = path + ".renamed" };
+        state = state with { SourcePath = FileSystemPath.From(path.FullPath + ".renamed") };
         registration.RelocateSource(state);
         release.SetResult();
 
@@ -207,5 +208,5 @@ public sealed class CookDocumentRegistryTests
         _ = released.Should().BeTrue();
     }
 
-    private static CookDocumentState State(string path) => new(path, "Material", IsDirty: false, "saved hash");
+    private static CookDocumentState State(FileSystemPath path) => new(path, "Material", IsDirty: false, "saved hash");
 }

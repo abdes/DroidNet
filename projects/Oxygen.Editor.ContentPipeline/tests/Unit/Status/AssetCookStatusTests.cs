@@ -15,6 +15,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Status;
@@ -68,8 +69,8 @@ public sealed class AssetCookStatusTests
         using var project = new StatusProject();
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var hash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(project.SourcePath, this.TestContext.CancellationToken).ConfigureAwait(false)));
-        var dirty = new CookDocumentState(project.SourcePath, "Material", IsDirty: true, hash);
-        using var registration = project.Documents.Register(project.SourcePath, token => Task.FromResult<CookDocumentReadLease?>(new(dirty, static () => { })));
+        var dirty = new CookDocumentState(project.SourceFile, "Material", IsDirty: true, hash);
+        using var registration = project.Documents.Register(project.SourceFile, token => Task.FromResult<CookDocumentReadLease?>(new(dirty, static () => { })));
         registration.UpdateState(dirty);
         var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = status.Freshness.Should().Be(AssetCookFreshness.Current);
@@ -111,7 +112,7 @@ public sealed class AssetCookStatusTests
     public async Task UnresolvableAssetIsInvalidWithoutFailingTheOthers()
     {
         using var project = new StatusProject();
-        var outside = new Uri("asset:///Outside/Material.omat.json");
+        var outside = AssetPath.Parse("/Outside/Material.omat.json");
 
         var statuses = await project.CreateReader().ReadAsync(project.Project, [StatusProject.SourceUri, outside], this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -134,7 +135,7 @@ public sealed class AssetCookStatusTests
     {
         using var project = new StatusProject();
         var path = inProject ? "/Content/New folder (2)/Wet Rubber.omat.json" : "/Outside/New folder (2)/Wet Rubber.omat.json";
-        var uri = new Uri("asset://" + path);
+        var uri = AssetPath.Parse(path);
 
         var statuses = await project.CreateReader().ReadAsync(project.Project, [uri], this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -148,7 +149,7 @@ public sealed class AssetCookStatusTests
     {
         using var project = new StatusProject();
         var native = new Mock<INativeCompatibilityService>(MockBehavior.Strict);
-        Uri[] identities = [Oxygen.Managed.Core.AssetUris.BuildGeneratedUri("BasicShapes/Cube"), Oxygen.Managed.Core.AssetUris.BuildGeneratedUri("Materials/Default")];
+        AssetPath[] identities = [AssetPath.Generated.Combine("BasicShapes/Cube"), AssetPath.Generated.Combine("Materials/Default")];
         var statuses = await project.CreateReader(native.Object).ReadAsync(project.Project, identities, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = statuses.Should().HaveCount(2).And.OnlyContain(status => !status.HasPublishedOutput && status.SourcePaths.IsEmpty && status.Diagnostics.IsEmpty);
         native.VerifyNoOtherCalls();
@@ -166,7 +167,7 @@ public sealed class AssetCookStatusTests
         var catalog = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "BuiltinGeometryCatalog.json"), this.TestContext.CancellationToken).ConfigureAwait(false))!;
         var geometry = catalog["geometries"]![0]!["descriptor"]!;
         geometry["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/Content/Material.omat";
-        var uri = new Uri("asset:///Content/Geometry.ogeo.json");
+        var uri = AssetPath.Parse("/Content/Geometry.ogeo.json");
         await File.WriteAllTextAsync(Path.Combine(project.Root, "Content", "Geometry.ogeo.json"), geometry.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);
         await project.PublishAsync(this.TestContext.CancellationToken, uri, [StatusProject.SourceUri]).ConfigureAwait(false);
         var reader = project.CreateReader();
@@ -249,8 +250,8 @@ public sealed class AssetCookStatusTests
     {
         using var project = new StatusProject();
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var dirty = new CookDocumentState(project.SourcePath, "Material", IsDirty: true, new string('A', 64));
-        using var owner = project.Documents.Register(project.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(dirty, static () => { })));
+        var dirty = new CookDocumentState(project.SourceFile, "Material", IsDirty: true, new string('A', 64));
+        using var owner = project.Documents.Register(project.SourceFile, _ => Task.FromResult<CookDocumentReadLease?>(new(dirty, static () => { })));
         owner.UpdateState(dirty);
         File.Delete(project.SourcePath);
         var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -261,7 +262,7 @@ public sealed class AssetCookStatusTests
 
     private sealed partial class StatusProject : IDisposable
     {
-        public static readonly Uri SourceUri = new("asset:///Content/Material.omat.json");
+        public static readonly AssetPath SourceUri = AssetPath.Parse("/Content/Material.omat.json");
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("oxygen-status-");
         private readonly NativeAtomicFileStore files = new(new Testably.Abstractions.RealFileSystem());
         private readonly Testing.TemporaryNativeArtifacts native;
@@ -275,7 +276,7 @@ public sealed class AssetCookStatusTests
             this.Project = new ProjectContext
             {
                 ProjectId = Guid.NewGuid(),
-                ProjectRoot = this.Root,
+                ProjectRoot = FileSystemPath.From(this.Root),
                 Name = "Status",
                 Category = Category.Games,
                 AuthoringMounts = [new("Content", "Content")],
@@ -302,6 +303,8 @@ public sealed class AssetCookStatusTests
 
         public string SourcePath => Path.Combine(this.Root, "Content", "Material.omat.json");
 
+        public FileSystemPath SourceFile => FileSystemPath.From(this.SourcePath);
+
         public string OutputPath => Path.Combine(this.selectedRoot ?? throw new InvalidOperationException("Publish the fixture first."), "Material.omat");
 
         public ProjectContext Project { get; }
@@ -326,7 +329,7 @@ public sealed class AssetCookStatusTests
         public async Task<AssetCookStatus> ReadAsync(CancellationToken cancellationToken)
             => (await this.CreateReader().ReadAsync(this.Project, [SourceUri], cancellationToken).ConfigureAwait(false)).Single();
 
-        public async Task PublishAsync(CancellationToken cancellationToken, Uri? primary = null, IReadOnlyList<Uri>? dependencies = null)
+        public async Task PublishAsync(CancellationToken cancellationToken, AssetPath? primary = null, IReadOnlyList<AssetPath>? dependencies = null)
         {
             var operation = new ContentCookOperation(Guid.NewGuid(), this.Project, 1);
             var input = CookInputResolver.Resolve(this.Project, primary ?? SourceUri, ContentCookInputRole.Primary);
@@ -339,13 +342,17 @@ public sealed class AssetCookStatusTests
             _ = verified.Succeeded.Should().BeTrue();
             var plan = CookIncrementalPlanner.CreatePlan(producer.Fingerprint, graph.Files, graph, new(this.Project.ProjectId, [], []), ImmutableDictionary<string, ContentPipeline.Inspection.CookedInventoryReport>.Empty);
             using var baseline = await this.publication.AcquireReadAsync(this.Project, cancellationToken).ConfigureAwait(false);
-            using var ownership = CookOutputLease.AcquireOperation(this.Root, operation.OperationId);
+            using var ownership = CookOutputLease.AcquireOperation(this.Project.ProjectRoot, operation.OperationId);
             var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content"], this.files, this.manager, cancellationToken).ConfigureAwait(false);
             await using var stagingLifetime = staging.ConfigureAwait(false);
             var candidate = staging.Roots.Single();
             var root = candidate.Path;
             await File.WriteAllTextAsync(Path.Combine(root, "container.index.bin"), "index", cancellationToken).ConfigureAwait(false);
-            var outputs = graph.Assets.Select(asset => new ContentCookedAsset(asset.AssetUri, new Uri("asset://" + asset.OutputVirtualPath), asset.Kind, "Content", asset.OutputVirtualPath ?? throw new InvalidOperationException("Expected a cooked path."))).ToArray();
+            var outputs = graph.Assets.Select(asset =>
+            {
+                var cooked = asset.OutputVirtualPath ?? throw new InvalidOperationException("Expected a cooked path.");
+                return new ContentCookedAsset(asset.AssetUri, AssetPath.Parse(cooked), asset.Kind, "Content", cooked);
+            }).ToArray();
             var indexed = new List<CookedAssetEntry>();
             foreach (var output in outputs)
             {
@@ -373,7 +380,7 @@ public sealed class AssetCookStatusTests
             await staging.Transaction.PrepareAsync(operation, document, sourceReplacement: null, [], projectChange: null, cancellationToken).ConfigureAwait(false);
             staging.RetainForPublication();
             using var accepted = await staging.Transaction.PublishAsync(preview: null, baseline, static () => { }, cancellationToken).ConfigureAwait(false);
-            this.selectedRoot = accepted.FindProjectRoot("Content");
+            this.selectedRoot = accepted.FindProjectRoot("Content")?.FullPath;
         }
 
         public Task<NativeCompatibilityResult> VerifyNativeAsync(Guid operation, CancellationToken token) => this.native.VerifyAsync(operation, token);
@@ -403,7 +410,7 @@ public sealed class AssetCookStatusTests
                         }),
                 ]);
 
-        private sealed class StatusSourceFacts(ProjectContext project, ContentCookInput primary, IReadOnlyList<Uri> dependencies) : ICookSourceFactsProvider
+        private sealed class StatusSourceFacts(ProjectContext project, ContentCookInput primary, IReadOnlyList<AssetPath> dependencies) : ICookSourceFactsProvider
         {
             public Task<CookSourceFrontier> ReadAsync(IReadOnlyList<ContentCookInput> inputs, CancellationToken cancellationToken)
             {
@@ -430,7 +437,7 @@ public sealed class AssetCookStatusTests
                         "/",
                         Required: true))]
                     : [];
-                var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source.SourceAbsolutePath)));
+                var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source.SourceAbsolutePath.FullPath)));
                 return new(
                     source,
                     [new(output, KindName(source.Kind), "/", Required: true)],

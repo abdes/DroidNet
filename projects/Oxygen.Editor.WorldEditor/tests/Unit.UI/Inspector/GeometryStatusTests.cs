@@ -12,6 +12,7 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.World.Inspector.Geometry;
+using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
@@ -29,18 +30,17 @@ internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTe
     {
         var asset = CreateStatusAsset(0) with
         {
-            IdentityUri = new("asset:///Content/Geometry/Custom.ogeo.json"),
+            Identity = AssetPath.Parse("/Content/Geometry/Custom.ogeo"),
             DisplayName = "Custom",
             Kind = AssetKind.Geometry,
-            CookedUri = new("asset:///Content/Geometry/Custom.ogeo"),
         };
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         var engine = builtins.Snapshot.Catalog!.CreateCatalogRecords()[0];
         var copy = asset with
         {
-            IdentityUri = new("asset://" + engine.Generated!.CookedVirtualPath),
+            Identity = engine.Generated!.CookedVirtualPath,
             Generated = engine.Generated,
-            BuiltinOriginUri = engine.Uri,
+            BuiltinOrigin = engine.Identity,
             PrimaryState = AssetState.Generated,
         };
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([asset, copy]);
@@ -60,7 +60,7 @@ internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTe
         await WaitForRenderAsync().ConfigureAwait(true);
         var content = model.Groups.Single(group => string.Equals(group.Key, "Content", StringComparison.Ordinal));
         var row = content.Items.Should().ContainSingle().Subject;
-        _ = row.Item.Uri.Should().Be(asset.IdentityUri);
+        _ = row.Item.Asset.Should().Be(asset.Identity);
         var owner = (SplitButton)view.FindName("AssetSplitButton");
         var flyout = (Flyout)owner.Flyout;
         flyout.AreOpenCloseAnimationsEnabled = false;
@@ -74,7 +74,7 @@ internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTe
             _ = content.Items.Should().ContainSingle().Which.Should().BeSameAs(row);
             _ = button.DataContext.Should().BeSameAs(row);
             _ = button.FindDescendant<TextBlock>(label => string.Equals(label.Text, "Geometry · Queued", StringComparison.Ordinal)).Should().NotBeNull();
-            _ = model.Groups.Single(group => string.Equals(group.Key, "Engine", StringComparison.Ordinal)).Items.Select(choice => choice.Item.Uri).Should().BeEquivalentTo(builtins.Snapshot.Catalog!.AuthoringGeometries.Select(definition => definition.AssetUri));
+            _ = model.Groups.Single(group => string.Equals(group.Key, "Engine", StringComparison.Ordinal)).Items.Select(choice => choice.Item.Asset).Should().BeEquivalentTo(builtins.Snapshot.Catalog!.AuthoringGeometries.Select(definition => definition.AssetUri));
         }
         finally
         {

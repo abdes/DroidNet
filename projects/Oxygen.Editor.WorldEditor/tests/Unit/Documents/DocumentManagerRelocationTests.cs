@@ -37,7 +37,7 @@ public sealed class DocumentManagerRelocationTests
         using var manager = CreateManager(files, area, relocation.Object);
         _ = (await area.ShowAsync(material).ConfigureAwait(false)).Should().BeTrue();
         var source = material.File.Path;
-        var target = Path.Combine(Path.GetDirectoryName(source)!, "Blue.omat.json");
+        var target = source.Parent!.Combine("Blue.omat.json");
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         tabs.DocumentClosed += (_, _) => _ = closed.TrySetResult();
 
@@ -68,7 +68,7 @@ public sealed class DocumentManagerRelocationTests
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         tabs.DocumentClosed += (_, _) => _ = closed.TrySetResult();
 
-        relocation.Raise(value => value.FilesChanged += null, new AssetFilesChangedEventArgs([], [], [Path.GetDirectoryName(document.File.Path)!], foldersChanged: true));
+        relocation.Raise(value => value.FilesChanged += null, new AssetFilesChangedEventArgs([], [], [document.File.Path.Parent!], foldersChanged: true));
         await closed.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = area.Documents.Should().BeEmpty();

@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -23,9 +24,9 @@ public sealed class ContentBrowserPresentationTests
     public void SortOrdersByFieldAndHeaderClicksReverse()
     {
         var presentation = new AssetBrowserPresentation();
-        var bolt = CreateAsset("/Content/Geometry/Bolt.ogeo.json", AssetKind.Geometry, AssetCookFreshness.Current);
-        var clay = CreateAsset("/Content/Materials/Clay.omat.json", AssetKind.Material, AssetCookFreshness.OutOfDate);
-        var arch = CreateAsset("/Content/Scenes/Arch.oscene.json", AssetKind.Scene, AssetCookFreshness.NeedsCooking);
+        var bolt = CreateAsset("/Content/Geometry/Bolt.ogeo", AssetKind.Geometry, AssetCookFreshness.Current);
+        var clay = CreateAsset("/Content/Materials/Clay.omat", AssetKind.Material, AssetCookFreshness.OutOfDate);
+        var arch = CreateAsset("/Content/Scenes/Arch.oscene", AssetKind.Scene, AssetCookFreshness.NeedsCooking);
         AssetEntry[] items = [bolt, clay, arch];
 
         _ = presentation.Sort(items).Should().Equal(arch, bolt, clay);
@@ -59,9 +60,9 @@ public sealed class ContentBrowserPresentationTests
             File.WriteAllText(large, new string('x', 4096));
             File.SetLastWriteTimeUtc(small, new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc));
             File.SetLastWriteTimeUtc(large, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-            var smallAsset = CreateAsset("/Content/Materials/Small.omat.json", AssetKind.Material, AssetCookFreshness.Current) with { DescriptorPath = small };
-            var largeAsset = CreateAsset("/Content/Materials/Large.omat.json", AssetKind.Material, AssetCookFreshness.Current) with { DescriptorPath = large };
-            var missing = CreateAsset("/Content/Materials/Missing.omat.json", AssetKind.Material, AssetCookFreshness.Current);
+            var smallAsset = CreateAsset("/Content/Materials/Small.omat", AssetKind.Material, AssetCookFreshness.Current) with { DescriptorPath = FileSystemPath.From(small) };
+            var largeAsset = CreateAsset("/Content/Materials/Large.omat", AssetKind.Material, AssetCookFreshness.Current) with { DescriptorPath = FileSystemPath.From(large) };
+            var missing = CreateAsset("/Content/Materials/Missing.omat", AssetKind.Material, AssetCookFreshness.Current);
             var presentation = new AssetBrowserPresentation { SortField = AssetSortField.Size };
 
             _ = presentation.Sort([missing, largeAsset, smallAsset]).Should().Equal(smallAsset, largeAsset, missing);
@@ -113,25 +114,25 @@ public sealed class ContentBrowserPresentationTests
             ProjectId = Guid.NewGuid(),
             Name = "Sources",
             Category = Category.Games,
-            ProjectRoot = "C:/Sources",
+            ProjectRoot = FileSystemPath.From("C:/Sources"),
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
             LocalFolderMounts = [],
         };
-        _ = ContentBrowserViewModel.DescribeSource(project, "/Content/Materials").Should().Be("Authoring source");
-        _ = ContentBrowserViewModel.DescribeSource(project, "Content/Scenes").Should().Be("Authoring source");
-        _ = ContentBrowserViewModel.DescribeSource(project, "/Cooked/Content").Should().Be("Read-only source");
-        _ = ContentBrowserViewModel.DescribeSource(project, "/Studio library").Should().Be("Read-only source");
-        _ = ContentBrowserViewModel.DescribeSource(project, ".").Should().Be("All project sources");
+        _ = ContentBrowserViewModel.DescribeSource(project, AssetPath.Parse("/Content/Materials")).Should().Be("Authoring source");
+        _ = ContentBrowserViewModel.DescribeSource(project, AssetPath.Parse("/Content/Scenes")).Should().Be("Authoring source");
+        _ = ContentBrowserViewModel.DescribeSource(project, AssetPath.Parse("/Cooked/Content")).Should().Be("Read-only source");
+        _ = ContentBrowserViewModel.DescribeSource(project, AssetPath.Parse("/Studio")).Should().Be("Read-only source");
+        _ = ContentBrowserViewModel.DescribeSource(project, folder: null).Should().Be("All project sources");
     }
 
     /// <summary>Copy path places one logical path per selected asset, unescaped.</summary>
     [TestMethod]
     public void CopyPathTextListsLogicalPaths()
     {
-        var first = CreateAsset("/Content/Scenes/Evening study.oscene.json", AssetKind.Scene, AssetCookFreshness.Current);
-        var second = CreateAsset("/Content/Materials/Clay.omat.json", AssetKind.Material, AssetCookFreshness.Current);
+        var first = CreateAsset("/Content/Scenes/Evening study.oscene", AssetKind.Scene, AssetCookFreshness.Current);
+        var second = CreateAsset("/Content/Materials/Clay.omat", AssetKind.Material, AssetCookFreshness.Current);
         _ = AssetsViewModel.GetCopyPathText([first, second]).Should().Be(
-            "/Content/Scenes/Evening study.oscene.json" + Environment.NewLine + "/Content/Materials/Clay.omat.json");
+            "/Content/Scenes/Evening study.oscene" + Environment.NewLine + "/Content/Materials/Clay.omat");
         _ = AssetsViewModel.GetCopyPathText([]).Should().BeEmpty();
     }
 
@@ -139,14 +140,14 @@ public sealed class ContentBrowserPresentationTests
     [TestMethod]
     public void DetailsFactsDescribeOneAssetAndSummarizeMany()
     {
-        var clay = CreateAsset("/Content/Materials/Clay.omat.json", AssetKind.Material, AssetCookFreshness.Current) with { AssetGuid = "1234" };
+        var clay = CreateAsset("/Content/Materials/Clay.omat", AssetKind.Material, AssetCookFreshness.Current) with { AssetGuid = "1234" };
         var facts = AssetDetailsViewModel.BuildFacts(clay, default);
         _ = facts.Select(static fact => fact.Label).Should().StartWith(["Type", "Logical path", "Identity"]);
-        _ = facts[1].Value.Replace("\u200B", string.Empty, StringComparison.Ordinal).Should().Be("/Content/Materials/Clay.omat.json");
+        _ = facts[1].Value.Replace("\u200B", string.Empty, StringComparison.Ordinal).Should().Be("/Content/Materials/Clay.omat");
         _ = facts[1].Value.Should().Contain("/\u200B");
 
-        var bolt = CreateAsset("/Content/Geometry/Bolt.ogeo.json", AssetKind.Geometry, AssetCookFreshness.OutOfDate);
-        var stone = CreateAsset("/Content/Materials/Stone.omat.json", AssetKind.Material, AssetCookFreshness.Current);
+        var bolt = CreateAsset("/Content/Geometry/Bolt.ogeo", AssetKind.Geometry, AssetCookFreshness.OutOfDate);
+        var stone = CreateAsset("/Content/Materials/Stone.omat", AssetKind.Material, AssetCookFreshness.Current);
         var summary = AssetDetailsViewModel.BuildSummaryFacts([clay, bolt, stone]);
         _ = summary.Single(static fact => string.Equals(fact.Label, "Types", StringComparison.Ordinal)).Value.Should().Be("Material: 2" + Environment.NewLine + "Geometry: 1");
         _ = summary.Single(static fact => string.Equals(fact.Label, "Statuses", StringComparison.Ordinal)).Value.Should().Contain("Out of date: 1");
@@ -156,25 +157,25 @@ public sealed class ContentBrowserPresentationTests
     [TestMethod]
     public void DetailsPaneFollowsSelectionAndCopiesPaths()
     {
-        var state = new ContentBrowserState(new ProjectContextService());
+        var state = new ContentBrowserState();
         var shell = new RecordingShell();
         using var details = new AssetDetailsViewModel(state, shell);
         _ = details.IsEmpty.Should().BeTrue();
         _ = details.CopyPathCommand.CanExecute(parameter: null).Should().BeFalse();
 
-        var clay = CreateAsset("/Content/Materials/Clay.omat.json", AssetKind.Material, AssetCookFreshness.Current);
+        var clay = CreateAsset("/Content/Materials/Clay.omat", AssetKind.Material, AssetCookFreshness.Current);
         state.PublishSelection([clay]);
         _ = details.IsSingle.Should().BeTrue();
-        _ = details.Title.Should().Be("Clay.omat.json");
+        _ = details.Title.Should().Be("Clay.omat");
         _ = details.LocateCommand.CanExecute(parameter: null).Should().BeFalse("the test asset has no file on disk");
 
-        var bolt = CreateAsset("/Content/Geometry/Bolt.ogeo.json", AssetKind.Geometry, AssetCookFreshness.Current);
+        var bolt = CreateAsset("/Content/Geometry/Bolt.ogeo", AssetKind.Geometry, AssetCookFreshness.Current);
         state.PublishSelection([clay, bolt]);
         _ = details.IsMultiple.Should().BeTrue();
         _ = details.Title.Should().Be("2 assets selected");
-        _ = details.SelectedItems.Select(static item => item.Label).Should().Equal("Clay.omat.json", "Bolt.ogeo.json");
+        _ = details.SelectedItems.Select(static item => item.Label).Should().Equal("Clay.omat", "Bolt.ogeo");
         details.CopyPathCommand.Execute(parameter: null);
-        _ = shell.Copied.Should().Be("/Content/Materials/Clay.omat.json" + Environment.NewLine + "/Content/Geometry/Bolt.ogeo.json");
+        _ = shell.Copied.Should().Be("/Content/Materials/Clay.omat" + Environment.NewLine + "/Content/Geometry/Bolt.ogeo");
     }
 
     /// <summary>New folders take the first free name, like File Explorer.</summary>
@@ -223,10 +224,10 @@ public sealed class ContentBrowserPresentationTests
 
     private static AssetEntry CreateAsset(string path, AssetKind kind, AssetCookFreshness freshness)
     {
-        var uri = new Uri("asset://" + path);
+        var identity = AssetPath.Parse(path);
         var current = freshness == AssetCookFreshness.Current;
         return new(
-            uri,
+            identity,
             Path.GetFileName(path),
             kind,
             AssetState.Descriptor,
@@ -235,13 +236,12 @@ public sealed class ContentBrowserPresentationTests
             path,
             SourcePath: null,
             DescriptorPath: null,
-            CookedUri: null,
             CookedPath: null,
             AssetGuid: null,
             [],
             IsSelectable: true)
         {
-            CookStatus = new(uri, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []),
+            CookStatus = new(identity, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []),
         };
     }
 

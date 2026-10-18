@@ -16,6 +16,7 @@ using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
@@ -35,17 +36,17 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             var fixture = scenario.SceneAuthoringFixture;
             _ = (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
             var oldName = fixture.Source.Name;
-            var oldUri = new Uri($"asset:///Content/Scenes/{Uri.EscapeDataString(oldName)}.oscene.json");
+            var oldUri = AssetPath.Create("Content", $"Scenes/{oldName}.oscene");
             _ = (await scenario.Services.Pipeline.CookCurrentSceneAsync(oldUri, token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
             using (var relocation = new AssetRelocationService(scenario.Services.Runs, scenario.Services.Projects, scenario.Services.Documents, new NativeAtomicFileStore(new RealFileSystem()), scenario.Catalog))
             using (fixture.FollowRelocations(relocation))
             {
-                var move = new AssetRelocationMove("/Content/Scenes/" + oldName + ".oscene.json", "/Content/Scenes/Small Scene.oscene.json");
+                var move = new AssetRelocationMove(AssetPath.Create("Content", $"Scenes/{oldName}.oscene.json"), AssetPath.Parse("/Content/Scenes/Small Scene.oscene.json"));
                 _ = await relocation.RelocateAsync(new AssetRelocationRequest { Moves = [move] }, "Rename", new HistoryKeeper(fixture), token).ConfigureAwait(true);
             }
 
             _ = fixture.Source.Name.Should().Be("Small Scene");
-            var result = await scenario.Services.Pipeline.CookAssetAsync(new("asset:///Content/Scenes/Small%20Scene.oscene.json"), token).ConfigureAwait(true);
+            var result = await scenario.Services.Pipeline.CookAssetAsync(AssetPath.Parse("/Content/Scenes/Small Scene.oscene"), token).ConfigureAwait(true);
             _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
             _ = result.IsMounted.Should().BeTrue();
             _ = fixture.Runtime.ContentStatus.State.Should().Be(RuntimeContentState.Mounted);
@@ -148,9 +149,9 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
 
     private static Task<ContentCookResult> CookPublicationScopeAsync(PublicationScenario scenario, CookTargetKind scope, CancellationToken cancellationToken) => scope switch
     {
-        CookTargetKind.Asset => scenario.Services.Pipeline.CookAssetAsync(scenario.Material.File.AssetUri, cancellationToken),
-        CookTargetKind.Folder => scenario.Services.Pipeline.CookFolderAsync(new("asset:///Content/Materials"), cancellationToken),
-        CookTargetKind.CurrentScene => scenario.Services.Pipeline.CookCurrentSceneAsync(new("asset:///Content/Scenes/" + Uri.EscapeDataString(scenario.SceneAuthoringFixture.Source.Name) + ".oscene.json"), cancellationToken),
+        CookTargetKind.Asset => scenario.Services.Pipeline.CookAssetAsync(scenario.Material.File.Asset, cancellationToken),
+        CookTargetKind.Folder => scenario.Services.Pipeline.CookFolderAsync(AssetPath.Parse("/Content/Materials"), cancellationToken),
+        CookTargetKind.CurrentScene => scenario.Services.Pipeline.CookCurrentSceneAsync(AssetPath.Create("Content", $"Scenes/{scenario.SceneAuthoringFixture.Source.Name}.oscene"), cancellationToken),
         _ => scenario.Services.Pipeline.CookProjectAsync(cancellationToken),
     };
 
@@ -213,10 +214,10 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
     private static async Task CheckPublicationSourceConflictAsync(PublicationScenario scenario, CancellationToken cancellationToken)
     {
         var material = scenario.Material;
-        var original = await File.ReadAllBytesAsync(material.File.Path, cancellationToken).ConfigureAwait(true);
+        var original = await File.ReadAllBytesAsync(material.File.Path.FullPath, cancellationToken).ConfigureAwait(true);
         var content = scenario.SceneAuthoringFixture.Runtime.ContentStatus;
-        await File.WriteAllTextAsync(material.File.Path, "{}", cancellationToken).ConfigureAwait(true);
-        var failed = await scenario.Services.Pipeline.CookAssetAsync(material.File.AssetUri, cancellationToken).ConfigureAwait(true);
+        await File.WriteAllTextAsync(material.File.Path.FullPath, "{}", cancellationToken).ConfigureAwait(true);
+        var failed = await scenario.Services.Pipeline.CookAssetAsync(material.File.Asset, cancellationToken).ConfigureAwait(true);
         _ = failed.Status.Should().Be(OperationStatus.Failed);
         _ = failed.IsPublished.Should().BeFalse();
         _ = failed.Diagnostics.Should().Contain(issue => issue.Severity == DiagnosticSeverity.Error);
@@ -227,9 +228,9 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             _ = retained.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(new Vector4(1, 0, 0, 1));
         }
 
-        await File.WriteAllBytesAsync(material.File.Path, original, cancellationToken).ConfigureAwait(true);
+        await File.WriteAllBytesAsync(material.File.Path.FullPath, original, cancellationToken).ConfigureAwait(true);
         await SetPublicationMaterialColorAsync(scenario.Materials, material, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
-        var recovered = await scenario.Services.Pipeline.CookAssetAsync(material.File.AssetUri, cancellationToken).ConfigureAwait(true);
+        var recovered = await scenario.Services.Pipeline.CookAssetAsync(material.File.Asset, cancellationToken).ConfigureAwait(true);
         _ = recovered.IsPublished.Should().BeTrue();
         _ = recovered.IsMounted.Should().BeTrue();
         foreach (var node in scenario.SceneAuthoringFixture.Source.RootNodes)

@@ -16,7 +16,7 @@ internal static class NativeSceneData
         {
             Name = shape,
         };
-        _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = AssetUris.BuildGeneratedUri($"BasicShapes/{shape}") });
+        _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = AssetPath.Generated.Combine($"BasicShapes/{shape}") });
         scene.RootNodes.Add(node);
     }
 

@@ -11,6 +11,7 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.World.SceneEditor;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
@@ -36,8 +37,8 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         timeout.CancelAfter(TimeSpan.FromSeconds(150));
         _ = (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
         using var services = new CatalogWorkloadServices(fixture);
-        var sceneUri = new Uri("asset:///Content/Scenes/" + Uri.EscapeDataString(fixture.Source.Name) + ".oscene.json");
-        _ = (await services.Pipeline.CookCurrentSceneAsync(sceneUri, timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
+        var sceneAsset = AssetPath.Create("Content", $"Scenes/{fixture.Source.Name}.oscene");
+        _ = (await services.Pipeline.CookCurrentSceneAsync(sceneAsset, timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         var (material, _) = await fixture.CookTestMaterialAsync("Transition", timeout.Token).ConfigureAwait(true);
         await fixture.RefreshCookedRootsAsync().ConfigureAwait(true);
@@ -92,7 +93,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         await ObserveRenderedFramesAsync(fixture, cancellationToken).ConfigureAwait(true);
     }
 
-    private static async Task RunMaterialTransitionsAsync(NativeSceneFixture fixture, DocumentHostViewModel host, DocumentManager manager, EditorDocumentService documents, Uri material, WindowId windowId, int cycles, CancellationToken cancellationToken)
+    private static async Task RunMaterialTransitionsAsync(NativeSceneFixture fixture, DocumentHostViewModel host, DocumentManager manager, EditorDocumentService documents, AssetPath material, WindowId windowId, int cycles, CancellationToken cancellationToken)
     {
         var mainId = fixture.Document.Id;
         for (var cycle = 0; cycle < cycles; ++cycle)

@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Testing;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -60,7 +61,7 @@ public sealed class CookedOutputInspectionTests
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-            var writer = CookOutputLease.AcquireWriteAsync(workspace.Root, this.TestContext.CancellationToken);
+            var writer = CookOutputLease.AcquireWriteAsync(workspace.ProjectContext.ProjectRoot, this.TestContext.CancellationToken);
             using var publication = await writer.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
             release.SetResult();
             _ = (await inspection.ConfigureAwait(false)).Roots.Single().Validation!.Succeeded.Should().BeTrue();
@@ -110,7 +111,7 @@ public sealed class CookedOutputInspectionTests
         using var workspace = new CookWorkspace();
         var root = Path.Combine(workspace.Root, "ExternalLibrary");
         Directory.CreateDirectory(root);
-        var project = workspace.ProjectContext with { LocalFolderMounts = [new("Library", root)] };
+        var project = workspace.ProjectContext with { LocalFolderMounts = [new("Library", FileSystemPath.From(root))] };
         workspace.Activate(project);
         var api = new Mock<IEngineContentPipelineApi>();
         CookedAssetEntry[] entries =
@@ -130,7 +131,7 @@ public sealed class CookedOutputInspectionTests
         _ = api.Setup(value => value.ReadInventoryAsync(root, It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => NativeInventoryFixture.Read(root));
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
-        var report = await pipeline.InspectCookedOutputAsync(new("asset:///Library/Geometry"), this.TestContext.CancellationToken, expectedProject: project).ConfigureAwait(false);
+        var report = await pipeline.InspectCookedOutputAsync(AssetPath.Parse("/Library/Geometry"), this.TestContext.CancellationToken, expectedProject: project).ConfigureAwait(false);
         var inspected = report.Roots.Should().ContainSingle().Subject;
         _ = inspected.Inspection.CookedRoot.Should().Be(root);
         _ = inspected.Inspection.Assets.Should().ContainSingle().Which.Kind.Should().Be(ContentCookAssetKind.Geometry);

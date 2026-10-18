@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
@@ -24,7 +25,7 @@ internal sealed class ModelImportScenario : DroidNet.Tests.VisualUserInterfaceTe
     internal static async Task<ContentCookResult> ImportTypedModelAsync(NativeSceneFixture fixture, CatalogWorkloadServices services, string format, CancellationToken cancellationToken)
     {
         var path = await WriteTypedModelSourceAsync(fixture, format, cancellationToken).ConfigureAwait(true);
-        var result = await services.Pipeline.ImportSourceAsync(new(services.Projects.ActiveProject!, path, "Triangle", new("asset:///Content/Models")), cancellationToken).ConfigureAwait(true);
+        var result = await services.Pipeline.ImportSourceAsync(new(services.Projects.ActiveProject!, path, "Triangle", AssetPath.Parse("/Content/Models")), cancellationToken).ConfigureAwait(true);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
         _ = result.CookedAssets.Should().Contain(asset => asset.Kind == ContentCookAssetKind.Scene);
         return result;
@@ -32,7 +33,7 @@ internal sealed class ModelImportScenario : DroidNet.Tests.VisualUserInterfaceTe
 
     internal static async Task<string> WriteTypedModelSourceAsync(NativeSceneFixture fixture, string format, CancellationToken cancellationToken)
     {
-        var path = Path.Combine(fixture.ProjectRoot, "Incoming", "Triangle." + format);
+        var path = fixture.ProjectRoot.Combine("Incoming").Combine("Triangle." + format).FullPath;
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var source = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures/static_textured_triangle." + format), cancellationToken).ConfigureAwait(true);
         if (string.Equals(format, "fbx", StringComparison.Ordinal))
@@ -52,15 +53,15 @@ internal sealed class ModelImportScenario : DroidNet.Tests.VisualUserInterfaceTe
         using var producerServices = new CatalogWorkloadServices(producer);
         var imported = await ImportTypedModelAsync(producer, producerServices, format, cancellationToken).ConfigureAwait(true);
         var source = await producer.GetCookedRootAsync(producer.ProjectRoot, cancellationToken).ConfigureAwait(true);
-        var library = Path.Combine(consumer.ProjectRoot, "Library");
-        foreach (var path in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
+        var library = consumer.ProjectRoot.Combine("Library");
+        foreach (var path in Directory.GetFiles(source.FullPath, "*", SearchOption.AllDirectories))
         {
             if (string.Equals(Path.GetFileName(path), ".generation.lock", StringComparison.Ordinal))
             {
                 continue;
             }
 
-            var target = Path.Combine(library, Path.GetRelativePath(source, path));
+            var target = Path.Combine(library.FullPath, Path.GetRelativePath(source.FullPath, path));
             _ = Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(path, target);
         }
@@ -70,8 +71,8 @@ internal sealed class ModelImportScenario : DroidNet.Tests.VisualUserInterfaceTe
             LocalFolderMounts = [new("Library", library)],
         };
         var manager = new Oxygen.Editor.Projects.ProjectManagerService(services.Storage);
-        var saved = await manager.LoadProjectInfoAsync(consumer.ProjectRoot).ConfigureAwait(true) ?? throw new InvalidDataException("The consumer project must be saved.");
-        var updated = new Oxygen.Editor.Projects.ProjectInfo(next.ProjectId, next.Name, next.Category, next.ProjectRoot, next.Thumbnail)
+        var saved = await manager.LoadProjectInfoAsync(consumer.ProjectRoot.FullPath).ConfigureAwait(true) ?? throw new InvalidDataException("The consumer project must be saved.");
+        var updated = new Oxygen.Editor.Projects.ProjectInfo(next.ProjectId, next.Name, next.Category, next.ProjectRoot.FullPath, next.Thumbnail)
         {
             AuthoringMounts = [.. next.AuthoringMounts],
             LocalFolderMounts = [.. next.LocalFolderMounts],

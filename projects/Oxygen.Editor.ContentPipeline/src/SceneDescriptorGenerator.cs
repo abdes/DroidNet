@@ -47,7 +47,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
 
         var sceneInput = FindSceneInput(scope);
         var descriptorPath = GetDerivedSceneDescriptorPath(scope, sceneInput);
-        var descriptorVirtualPath = ContentPipelinePaths.ToCookedScenePath(sceneInput.AssetUri);
+        var descriptorVirtualPath = ContentPipelinePaths.ToCookedScenePath(AssetFileTypes.ToIdentity(sceneInput.AssetUri));
         var diagnostics = new List<DiagnosticRecord>();
         var operationId = Guid.NewGuid();
         var aerialStart = scene.Environment.SkyAtmosphere.AerialPerspectiveStartDepthMeters;
@@ -598,7 +598,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
     // cubemap is referenced only while an enabled system's source uses it, so a
     // stale reference behind another source or a disabled system does not block
     // the cook.
-    private static IEnumerable<(AssetPath AssetPath, string Label)> EnvironmentTextures(SceneEnvironmentData environment)
+    private static IEnumerable<(AssetPath Texture, string Label)> EnvironmentTextures(SceneEnvironmentData environment)
     {
         if (environment.PostProcess.AutoExposureMeteringMask is { } mask)
         {

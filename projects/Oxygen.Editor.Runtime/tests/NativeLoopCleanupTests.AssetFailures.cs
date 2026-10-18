@@ -104,7 +104,7 @@ public sealed partial class NativeLoopCleanupTests
             target,
             new RuntimeSetMaterialOverride(
                 nodeId,
-                inventory.GeometryUri.AbsoluteUri,
+                inventory.GeometryUri.VirtualPath,
                 slot.SlotId,
                 inventory.LayoutRevision,
                 "asset:///Engine/Generated/Materials/Default",
@@ -125,7 +125,7 @@ public sealed partial class NativeLoopCleanupTests
                 NullLogger<ImportToolContentPipelineApi>.Instance,
                 compatibility);
             var catalog = await api.GetBuiltinGeometryCatalogAsync(root.FullName, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
-            return catalog.Find(new Uri("asset:///Engine/Generated/BasicShapes/Cube"))!.MaterialSlots;
+            return catalog.Find(AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"))!.MaterialSlots;
         }
         finally
         {

@@ -8,6 +8,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LivePreview.Tests.Scenes;
@@ -54,7 +55,7 @@ public sealed partial class ScenePreviewTests
         var current = true;
         fixture.World.IsCurrentFailure = _ => current;
         var built = fixture.Documents.NewScene("Masked scene");
-        var mask = new Uri($"asset:///{mount}/Textures/Meter.otex.json");
+        var mask = AssetPath.Create(mount, "Textures/Meter.otex");
         built.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { AutoExposureMeteringMask = mask } });
         var document = await fixture.OpenAsync(built).ConfigureAwait(false);
         var scene = PreviewFixture.SceneOf(document);
@@ -74,7 +75,7 @@ public sealed partial class ScenePreviewTests
         _ = result.AffectedScope.SceneId.Should().Be(scene.Id);
         _ = result.AffectedScope.NodeId.Should().BeNull();
         _ = result.AffectedScope.ComponentType.Should().Be(nameof(PostProcessEnvironmentData));
-        _ = result.Diagnostics.Should().ContainSingle().Which.AffectedPath.Should().Be(mask.AbsoluteUri);
+        _ = result.Diagnostics.Should().ContainSingle().Which.AffectedPath.Should().Be(mask.ToUriString());
     }
 
     // A cube whose one material slot names a material that does not exist, so the engine reports the material's load.
@@ -82,9 +83,9 @@ public sealed partial class ScenePreviewTests
     {
         var node = new SceneNode(scene) { Name = "Cube with a missing material" };
         scene.RootNodes.Add(node);
-        var target = new MaterialSlotTarget(new Uri("asset:///Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
-        var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.GeometryUri };
-        geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = new Uri("asset:///Content/Materials/Missing.omat.json") });
+        var target = new MaterialSlotTarget(AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+        var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.Geometry };
+        geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = AssetPath.Parse("/Content/Materials/Missing.omat") });
         node.Components.Add(geometry);
         return node;
     }

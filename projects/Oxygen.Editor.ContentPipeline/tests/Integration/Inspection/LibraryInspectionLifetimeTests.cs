@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
@@ -34,7 +35,7 @@ public sealed class LibraryInspectionLifetimeTests
         var runner = new ContextLeaseRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-        var source = new Uri("asset:///Content/Materials/Shared.omat.json");
+        var source = AssetPath.Parse("/Content/Materials/Shared.omat.json");
         AssertCookSucceeded(await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false));
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Action openForWrite = () =>
@@ -54,9 +55,9 @@ public sealed class LibraryInspectionLifetimeTests
                     .WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken);
                 var failure = await work.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
                 _ = openForWrite.Should().Throw<IOException>();
-                using (var writer = await CookOutputLease.AcquireWriteAsync(workspace.Root, this.TestContext.CancellationToken).ConfigureAwait(false))
+                using (var writer = await CookOutputLease.AcquireWriteAsync(workspace.ProjectContext.ProjectRoot, this.TestContext.CancellationToken).ConfigureAwait(false))
                 {
-                    _ = writer.ProjectRoot.Should().Be(workspace.Root);
+                    _ = writer.ProjectRoot.Should().Be(workspace.ProjectContext.ProjectRoot);
                 }
 
                 drain.SetResult();
@@ -84,9 +85,9 @@ public sealed class LibraryInspectionLifetimeTests
         var runner = new ContextLeaseRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var producer = CreateService(library, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-        _ = (await producer.CookAssetAsync(new("asset:///Content/Materials/Shared.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
+        _ = (await producer.CookAssetAsync(AssetPath.Parse("/Content/Materials/Shared.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var root = library.CookedRoot("Content");
-        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Library", root)] };
+        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Library", FileSystemPath.From(root))] };
         consumer.Activate(context);
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Action openForWrite = () => { using var file = new FileStream(Path.Combine(root, "container.index.bin"), FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete); };

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects.Tests;
 
@@ -14,7 +15,7 @@ public sealed class CookedContentOrderingTests
     [TestMethod]
     public void DefaultOrderPlacesNewLibrariesImmediatelyBelowProjectOutput()
     {
-        LocalFolderMount[] folders = [new("Older", @"C:\Older"), new("Newer", @"C:\Newer")];
+        LocalFolderMount[] folders = [new("Older", FileSystemPath.From(@"C:\Older")), new("Newer", FileSystemPath.From(@"C:\Newer"))];
         _ = CookedContentOrdering.Resolve(folders, []).Should().Equal(new CookedContentSource[]
         {
             new(CookedContentSourceKind.LocalFolder, "Older"), new(CookedContentSourceKind.LocalFolder, "Newer"), new(CookedContentSourceKind.ProjectOutput),
@@ -27,13 +28,14 @@ public sealed class CookedContentOrderingTests
     {
         var info = new ProjectInfo("Priority", Category.Games)
         {
-            LocalFolderMounts = [new("Base", @"C:\Base"), new("Override", @"C:\Override"), new("New", @"C:\New")],
+            LocalFolderMounts = [new("Base", FileSystemPath.From(@"C:\Base")), new("Override", FileSystemPath.From(@"C:\Override")), new("New", FileSystemPath.From(@"C:\New"))],
             CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Base"), new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.LocalFolder, "Override")],
         };
         info.CookedContentOrder = CookedContentOrdering.Resolve(info.LocalFolderMounts, info.CookedContentOrder).ToList();
         var json = ProjectInfo.ToJson(info);
         _ = json.Should().Contain("\"Kind\": \"ProjectOutput\"");
         var restored = ProjectInfo.FromJson(json);
+        restored.Location = @"C:\Priority";
         _ = restored.CookedContentOrder.Should().Equal(info.CookedContentOrder);
         _ = ProjectContext.FromProjectInfo(restored).CookedContentOrder.Should().Equal(new CookedContentSource[]
         {

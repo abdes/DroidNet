@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using DroidNet.Storage;
 using Oxygen.Editor.Documents;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Shell.Unit.Tests.Documents;
 
@@ -26,7 +27,7 @@ internal sealed class Notes : IDisposable
     {
         var path = Path.Combine(Path.GetTempPath(), "notes", name + ".note");
         _ = await this.Files.WriteAsync(path, Encoding.UTF8.GetBytes(name), FileVersion.Missing, cancellationToken).ConfigureAwait(false);
-        var opened = await this.Documents.OpenAsync(new DocumentFile(path, new Uri($"asset:///Content/{name}.note")), cancellationToken).ConfigureAwait(false);
+        var opened = await this.Documents.OpenAsync(new DocumentFile(FileSystemPath.From(path), AssetPath.Parse($"/Content/{name}.note")), cancellationToken).ConfigureAwait(false);
         return opened.Document ?? throw new InvalidOperationException(opened.Problem);
     }
 

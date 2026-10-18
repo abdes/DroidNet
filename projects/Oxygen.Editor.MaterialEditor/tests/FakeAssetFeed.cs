@@ -4,6 +4,7 @@
 
 using System.Reactive.Subjects;
 using Oxygen.Editor.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
 
@@ -28,6 +29,6 @@ internal sealed class FakeAssetFeed : IAssetFeed
     public Task RefreshAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
     /// <inheritdoc/>
-    public Task<AssetEntry?> ResolveAsync(Uri uri, CancellationToken cancellationToken = default)
-        => Task.FromResult(this.latest.FirstOrDefault(entry => entry.IdentityUri == uri));
+    public Task<AssetEntry?> ResolveAsync(AssetPath identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(this.latest.FirstOrDefault(entry => entry.Identity == identity));
 }

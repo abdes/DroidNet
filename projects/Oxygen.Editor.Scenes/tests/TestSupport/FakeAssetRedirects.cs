@@ -3,23 +3,24 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 
 /// <summary>
-/// The project's asset moves and deletions. Both <see cref="Resolve(Uri)"/> overloads and <see cref="WasDeleted"/>
+/// The project's asset moves and deletions. Both <see cref="Resolve(AssetPath)"/> overloads and <see cref="WasDeleted"/>
 /// read the same state, which a test may change between two edits.
 /// </summary>
 public sealed class FakeAssetRedirects : IAssetRedirects
 {
     private readonly Lock gate = new();
-    private readonly Dictionary<Uri, Uri> moves = [];
-    private readonly HashSet<Uri> deleted = [];
+    private readonly Dictionary<AssetPath, AssetPath> moves = [];
+    private readonly HashSet<AssetPath> deleted = [];
 
     /// <summary>Records that an asset moved. A later move of the new location is followed too.</summary>
     /// <param name="from">The old location.</param>
     /// <param name="to">The new location.</param>
-    public void Move(Uri from, Uri to)
+    public void Move(AssetPath from, AssetPath to)
     {
         lock (this.gate)
         {
@@ -30,7 +31,7 @@ public sealed class FakeAssetRedirects : IAssetRedirects
 
     /// <summary>Records that an asset was deleted.</summary>
     /// <param name="asset">The asset.</param>
-    public void Delete(Uri asset)
+    public void Delete(AssetPath asset)
     {
         lock (this.gate)
         {
@@ -39,7 +40,7 @@ public sealed class FakeAssetRedirects : IAssetRedirects
     }
 
     /// <inheritdoc/>
-    public Uri Resolve(Uri reference)
+    public AssetPath Resolve(AssetPath reference)
     {
         ArgumentNullException.ThrowIfNull(reference);
         lock (this.gate)
@@ -56,12 +57,21 @@ public sealed class FakeAssetRedirects : IAssetRedirects
 
     /// <inheritdoc/>
     public string Resolve(string reference)
-        => Uri.TryCreate(reference, UriKind.Absolute, out var uri) && this.Resolve(uri) is var resolved && resolved != uri
-            ? resolved.ToString()
-            : reference;
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        var isUri = reference.StartsWith("asset:", StringComparison.Ordinal);
+        AssetPath? parsed;
+        if (!(isUri ? AssetPath.TryParseUri(reference, out parsed) : AssetPath.TryParse(reference, out parsed)))
+        {
+            return reference;
+        }
+
+        var resolved = this.Resolve(parsed);
+        return resolved == parsed ? reference : isUri ? resolved.ToUriString() : resolved.VirtualPath;
+    }
 
     /// <inheritdoc/>
-    public bool WasDeleted(Uri reference)
+    public bool WasDeleted(AssetPath reference)
     {
         lock (this.gate)
         {

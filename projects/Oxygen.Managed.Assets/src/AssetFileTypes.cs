@@ -209,7 +209,11 @@ public static class AssetFileTypes
                 .Select(type => identity.WithName(stem + type.Suffix)));
         }
 
-        sources.Add(identity.WithAuthoringSuffix());
+        if (Find(identity.WithAuthoringSuffix().Name) is not null)
+        {
+            sources.Add(identity.WithAuthoringSuffix());
+        }
+
         sources.Add(identity);
         return [.. sources.Distinct().Where(source => ToIdentity(source) == identity)];
     }

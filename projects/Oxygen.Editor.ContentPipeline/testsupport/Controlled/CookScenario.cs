@@ -6,13 +6,14 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.RetainedModelScenario;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal static class CookScenario
 {
-    internal static async Task<Uri> WriteCrossMountModelAsync(CookWorkspace workspace, CancellationToken cancellationToken)
+    internal static async Task<AssetPath> WriteCrossMountModelAsync(CookWorkspace workspace, CancellationToken cancellationToken)
     {
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", cancellationToken).ConfigureAwait(false);
         var path = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf.import.json");

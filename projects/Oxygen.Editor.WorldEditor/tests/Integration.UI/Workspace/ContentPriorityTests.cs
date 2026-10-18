@@ -29,7 +29,7 @@ public sealed partial class ContentPriorityTests : DroidNet.Tests.VisualUserInte
         var red = new Vector4(1, 0, 0, 1);
         var blue = new Vector4(0, 0, 1, 1);
         var (uri, key) = await fixture.CookTestMaterialAsync("Shared", timeout.Token, red).ConfigureAwait(true);
-        var libraryProject = Path.Combine(fixture.ProjectRoot, "LibraryProject");
+        var libraryProject = fixture.ProjectRoot.Combine("LibraryProject");
         var (_, libraryKey) = await fixture.CookTestMaterialAsync("Shared", timeout.Token, blue, libraryProject).ConfigureAwait(true);
         _ = libraryKey.Should().Be(key, "stable asset keys preserve the same logical identity while source precedence selects its content");
         var project = fixture.Projects.ActiveProject! with

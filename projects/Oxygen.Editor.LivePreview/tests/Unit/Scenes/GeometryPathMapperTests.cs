@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.LivePreview.Scenes;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Tests.Scenes;
 
@@ -11,13 +12,11 @@ namespace Oxygen.Editor.LivePreview.Tests.Scenes;
 [TestClass]
 public sealed class GeometryPathMapperTests
 {
-    /// <summary>Source descriptors address cooked geometry while built-ins and existing runtime identities remain exact.</summary>
-    /// <param name="source">The stored reference.</param>
-    /// <param name="expected">The native reference.</param>
+    /// <summary>Geometry identities, including built-ins, address the engine by their virtual path.</summary>
+    /// <param name="path">The geometry identity and its native reference.</param>
     [TestMethod]
-    [DataRow("asset:///Content/Geometry/Example.ogeo.json", "asset:///Content/Geometry/Example.ogeo")]
-    [DataRow("asset:///Content/Geometry/Example.ogeo", "asset:///Content/Geometry/Example.ogeo")]
-    [DataRow("asset:///Engine/Generated/BasicShapes/Cube", "asset:///Engine/Generated/BasicShapes/Cube")]
-    public void GeometryReferencesPreserveAuthoringAndUseRuntimePaths(string source, string expected)
-        => GeometryPathMapper.ToEnginePath(new Uri(source)).Should().Be(expected);
+    [DataRow("/Content/Geometry/Example.ogeo")]
+    [DataRow("/Engine/Generated/BasicShapes/Cube")]
+    public void GeometryReferencesPreserveAuthoringAndUseRuntimePaths(string path)
+        => GeometryPathMapper.ToEnginePath(AssetPath.Parse(path)).Should().Be(path);
 }

@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Testably.Abstractions;
 using DroidNet.Storage;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects.Tests;
 
@@ -27,7 +28,7 @@ public partial class ProjectManagerServiceTests
         var candidate = new ProjectInfo(original.Id, original.Name, original.Category, original.Location)
         {
             AuthoringMounts = [.. original.AuthoringMounts],
-            LocalFolderMounts = [new("Library", @"C:\Library")],
+            LocalFolderMounts = [new("Library", FileSystemPath.From(@"C:\Library"))],
         };
         store.Fail = true;
         Func<Task> save = () => service.SaveProjectInfoAsync(candidate, original, this.CancellationToken);

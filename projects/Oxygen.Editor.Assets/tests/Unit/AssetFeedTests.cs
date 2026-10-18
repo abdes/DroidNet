@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Assets.TestSupport;
 
@@ -22,7 +23,7 @@ public sealed partial class AssetFeedTests
         using var workspace = new AssetWorkspace();
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
         var catalog = new TestProjectAssetCatalog(
-            [new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json"))]);
+            [new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
         var projectContext = workspace.ActivateProject();
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, projectContext, new WorkspaceCookScopeProvider(workspace), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
@@ -32,7 +33,7 @@ public sealed partial class AssetFeedTests
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = rows.Should().ContainSingle();
-        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
+        _ = rows[0].Identity.Should().Be(AssetPath.Parse("/Content/Materials/Red.omat"));
         _ = rows[0].Kind.Should().Be(AssetKind.Material);
         _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
     }
@@ -43,7 +44,7 @@ public sealed partial class AssetFeedTests
         using var workspace = new AssetWorkspace();
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
         var catalog = new TestProjectAssetCatalog([]);
-        catalog.SetRecordsOnRefresh([new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json"))]);
+        catalog.SetRecordsOnRefresh([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
         var projectContext = workspace.ActivateProject();
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, projectContext, new WorkspaceCookScopeProvider(workspace), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
@@ -55,7 +56,7 @@ public sealed partial class AssetFeedTests
 
         _ = catalog.RefreshCount.Should().Be(1);
         _ = rows.Should().ContainSingle();
-        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
+        _ = rows[0].Identity.Should().Be(AssetPath.Parse("/Content/Materials/Red.omat"));
     }
 
     [TestMethod]
@@ -66,7 +67,7 @@ public sealed partial class AssetFeedTests
         Directory.CreateDirectory(Path.GetDirectoryName(cookedPath)!);
         await File.WriteAllBytesAsync(cookedPath, [1], this.TestContext.CancellationToken).ConfigureAwait(false);
         var catalog = new TestProjectAssetCatalog(
-            [IndexedOutput(new Uri("asset:///Content/Materials/Red.omat"), cookedPath)]);
+            [IndexedOutput(AssetPath.Parse("/Content/Materials/Red.omat"), cookedPath)]);
         var projectContext = workspace.ActivateProject();
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, projectContext, new WorkspaceCookScopeProvider(workspace), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
@@ -76,9 +77,9 @@ public sealed partial class AssetFeedTests
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = rows.Should().ContainSingle();
-        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat"));
+        _ = rows[0].Identity.Should().Be(AssetPath.Parse("/Content/Materials/Red.omat"));
         _ = rows[0].PrimaryState.Should().Be(AssetState.Cooked);
-        _ = rows[0].CookedPath.Should().Be(cookedPath);
+        _ = rows[0].CookedPath.Should().Be(FileSystemPath.From(cookedPath));
     }
 
     [TestMethod]
@@ -89,12 +90,12 @@ public sealed partial class AssetFeedTests
         var projectContext = workspace.ActivateProject();
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, projectContext, new WorkspaceCookScopeProvider(workspace), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
-        var uri = new Uri("asset:///Content/Materials/Missing.omat.json");
+        var identity = AssetPath.Parse("/Content/Materials/Missing.omat");
 
-        var row = await provider.ResolveAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var row = await provider.ResolveAsync(identity, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = row.Should().NotBeNull();
-        _ = row!.IdentityUri.Should().Be(uri);
+        _ = row!.Identity.Should().Be(identity);
         _ = row!.PrimaryState.Should().Be(AssetState.Missing);
         _ = row!.DiagnosticCodes.Should().Contain(AssetIdentityDiagnosticCodes.ResolveMissing);
     }
@@ -110,14 +111,14 @@ public sealed partial class AssetFeedTests
         var projectContext = workspace.ActivateProject();
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, projectContext, new WorkspaceCookScopeProvider(workspace), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
-        var uri = new Uri("asset:///Content/Materials/Lagged.omat.json");
+        var identity = AssetPath.Parse("/Content/Materials/Lagged.omat");
 
-        var row = await provider.ResolveAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var row = await provider.ResolveAsync(identity, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = row.Should().NotBeNull();
-        _ = row!.IdentityUri.Should().Be(uri);
+        _ = row!.Identity.Should().Be(identity);
         _ = row!.PrimaryState.Should().Be(AssetState.Broken);
-        _ = row!.DescriptorPath.Should().Be(descriptorPath);
+        _ = row!.DescriptorPath.Should().Be(FileSystemPath.From(descriptorPath));
         _ = row!.DiagnosticCodes.Should().Contain(AssetIdentityDiagnosticCodes.DescriptorBroken);
     }
 
@@ -128,7 +129,7 @@ public sealed partial class AssetFeedTests
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
         WriteMaterial(workspace.SourcePath("Content/Materials/Blue.omat.json"));
         var catalog = new TestProjectAssetCatalog(
-            [new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json"))]);
+            [new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
         var projectContext = workspace.ActivateProject();
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, projectContext, new WorkspaceCookScopeProvider(workspace), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
@@ -139,10 +140,10 @@ public sealed partial class AssetFeedTests
 
         catalog.SetRecords(
             [
-                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
-                new AssetRecord(new Uri("asset:///Content/Materials/Blue.omat.json")),
+                new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json")),
+                new AssetRecord(AssetPath.Parse("/Content/Materials/Blue.omat.json")),
             ]);
-        catalog.Publish(new AssetChange(AssetChangeKind.Added, new Uri("asset:///Content/Materials/Blue.omat.json")));
+        catalog.Publish(new AssetChange(AssetChangeKind.Added, AssetPath.Parse("/Content/Materials/Blue.omat.json")));
 
         for (var i = 0; i < 20 && rows.Count < 2; i++)
         {
@@ -150,7 +151,7 @@ public sealed partial class AssetFeedTests
         }
 
         _ = rows.Should().HaveCount(2);
-        _ = rows.Should().Contain(row => row!.IdentityUri == new Uri("asset:///Content/Materials/Blue.omat.json"));
+        _ = rows.Should().Contain(row => row!.Identity == AssetPath.Parse("/Content/Materials/Blue.omat"));
     }
 
     [TestMethod]
@@ -160,8 +161,8 @@ public sealed partial class AssetFeedTests
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
         var catalog = new TestProjectAssetCatalog(
             [
-                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
-                new AssetRecord(new Uri("asset:///Content/Images/Preview.png")),
+                new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json")),
+                new AssetRecord(AssetPath.Parse("/Content/Images/Preview.png")),
             ]);
         var projectContext = workspace.ActivateProject();
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
@@ -176,11 +177,11 @@ public sealed partial class AssetFeedTests
         _ = rows.Should().Contain(row => row.Kind == AssetKind.Image);
     }
 
-    private static AssetRecord IndexedOutput(Uri uri, string path, byte type = 1)
+    private static AssetRecord IndexedOutput(AssetPath identity, string path, byte type = 1)
     {
-        var descriptor = uri.AbsolutePath["/Content/".Length..];
-        var root = path[..^(descriptor.Length + 1)];
-        return new(uri) { Cooked = new(root, descriptor, Guid.NewGuid(), new(1, 2), type, 6, new string('0', 64)) { VirtualPath = uri.AbsolutePath } };
+        var descriptor = identity.VirtualPath["/Content/".Length..];
+        var root = FileSystemPath.From(path[..^(descriptor.Length + 1)]);
+        return new(identity) { Cooked = new(root, descriptor, Guid.NewGuid(), new(1, 2), type, 6, new string('0', 64)) { VirtualPath = identity } };
     }
 
     private static void WriteMaterial(string path)
@@ -275,10 +276,10 @@ public sealed partial class AssetFeedTests
     {
         public event EventHandler? Changed { add { } remove { } }
 
-        public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, Oxygen.Editor.ContentPipeline.Publication.ICookPublicationReadLease publication, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, Oxygen.Editor.ContentPipeline.Publication.ICookPublicationReadLease publication, IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken = default)
             => this.ReadAsync(project, assetUris, cancellationToken);
 
-        public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<AssetCookStatus>>([]);
     }
 }

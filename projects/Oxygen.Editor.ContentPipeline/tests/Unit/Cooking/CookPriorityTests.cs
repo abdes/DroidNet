@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookCoordinatorScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
@@ -36,7 +37,7 @@ public sealed class CookPriorityTests
 
         Task<int> Queue(string name, bool automatic, bool demand = false)
             => coordinator.RunCookAsync(
-                new(CookTargetKind.Asset, new Uri("asset:///Content/" + name + ".omat.json"), automatic) { IsDemand = demand },
+                new(CookTargetKind.Asset, AssetPath.Parse("/Content/" + name + ".omat.json"), automatic) { IsDemand = demand },
                 (_, _) =>
                 {
                     order.Add(name);
@@ -54,7 +55,7 @@ public sealed class CookPriorityTests
         using var coordinator = CreateCoordinator(context);
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var automatic = coordinator.RunCookAsync(
-            new(CookTargetKind.Asset, new Uri("asset:///Content/Saved.omat.json"), IsAutomatic: true) { CoalescePending = true },
+            new(CookTargetKind.Asset, AssetPath.Parse("/Content/Saved.omat.json"), IsAutomatic: true) { CoalescePending = true },
             async (_, token) =>
             {
                 started.SetResult();
@@ -65,7 +66,7 @@ public sealed class CookPriorityTests
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var requested = coordinator.RunCookAsync(
-            new(CookTargetKind.Asset, new Uri("asset:///Content/Other.omat.json")) { CoalescePending = true },
+            new(CookTargetKind.Asset, AssetPath.Parse("/Content/Other.omat.json")) { CoalescePending = true },
             (_, _) => Task.FromResult(2),
             this.TestContext.CancellationToken);
 
@@ -85,7 +86,7 @@ public sealed class CookPriorityTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var started = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
         var preview = coordinator.RunCookAsync(
-            new(CookTargetKind.Asset, new Uri("asset:///Content/Preview.omat.json"), IsAutomatic: true) { IsDemand = true },
+            new(CookTargetKind.Asset, AssetPath.Parse("/Content/Preview.omat.json"), IsAutomatic: true) { IsDemand = true },
             async (_, token) =>
             {
                 started.SetResult(token);
@@ -95,8 +96,8 @@ public sealed class CookPriorityTests
             this.TestContext.CancellationToken);
         var token = await started.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var saved = coordinator.RunCookAsync(new(CookTargetKind.Asset, new Uri("asset:///Content/Saved.omat.json"), IsAutomatic: true), (_, _) => Task.FromResult(2), this.TestContext.CancellationToken);
-        var requested = coordinator.RunCookAsync(new(CookTargetKind.Asset, new Uri("asset:///Content/Other.omat.json")), (_, _) => Task.FromResult(3), this.TestContext.CancellationToken);
+        var saved = coordinator.RunCookAsync(new(CookTargetKind.Asset, AssetPath.Parse("/Content/Saved.omat.json"), IsAutomatic: true), (_, _) => Task.FromResult(2), this.TestContext.CancellationToken);
+        var requested = coordinator.RunCookAsync(new(CookTargetKind.Asset, AssetPath.Parse("/Content/Other.omat.json")), (_, _) => Task.FromResult(3), this.TestContext.CancellationToken);
 
         _ = token.IsCancellationRequested.Should().BeFalse();
         release.SetResult();
@@ -135,12 +136,12 @@ public sealed class CookPriorityTests
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var active = coordinator.RunAsync((_, _) => release.Task, this.TestContext.CancellationToken);
         var save = coordinator.RunCookAsync(
-            new(CookTargetKind.Asset, new Uri("asset:///Content/Saved.omat.json"), IsAutomatic: true),
+            new(CookTargetKind.Asset, AssetPath.Parse("/Content/Saved.omat.json"), IsAutomatic: true),
             (_, _) => Task.FromResult(1),
             this.TestContext.CancellationToken);
         var entered = false;
         var demand = coordinator.RunCookAsync(
-            new(CookTargetKind.Asset, new Uri("asset:///Content/Preview.omat.json"), IsAutomatic: true) { IsDemand = true },
+            new(CookTargetKind.Asset, AssetPath.Parse("/Content/Preview.omat.json"), IsAutomatic: true) { IsDemand = true },
             (_, _) =>
             {
                 entered = true;
@@ -164,7 +165,7 @@ public sealed class CookPriorityTests
         var context = CreateContextService();
         using var coordinator = CreateCoordinator(context);
         var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
-        var request = new CookRunRequest(CookTargetKind.Asset, new Uri("asset:///Content/Preview.omat.json"), IsAutomatic: true) { IsDemand = true };
+        var request = new CookRunRequest(CookTargetKind.Asset, AssetPath.Parse("/Content/Preview.omat.json"), IsAutomatic: true) { IsDemand = true };
         var old = coordinator.RunCookAsync(request, (_, _) => Task.FromResult(1), this.TestContext.CancellationToken);
         context.Activate(CreateContext());
         Func<Task> completion = async () => await old.ConfigureAwait(false);

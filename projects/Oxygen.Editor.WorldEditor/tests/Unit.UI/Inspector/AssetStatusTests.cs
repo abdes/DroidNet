@@ -51,7 +51,7 @@ internal sealed class AssetStatusTests : DroidNet.Tests.VisualUserInterfaceTests
         {
             await WaitForRenderAsync().ConfigureAwait(true);
             var content = (FrameworkElement)flyout.Content;
-            var button = content.FindDescendant<Button>(candidate => candidate.DataContext is MaterialPickerRow row && row.Item.Uri == asset.IdentityUri)!;
+            var button = content.FindDescendant<Button>(candidate => candidate.DataContext is MaterialPickerRow row && row.Item.Asset == asset.Identity)!;
             _ = button.Should().NotBeNull();
             var before = button.DataContext;
             updates.OnNext([material with { CookActivity = new(Guid.NewGuid(), CookRunState.Queued) }]);

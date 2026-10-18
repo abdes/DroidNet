@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 
@@ -23,7 +24,7 @@ public sealed class GeometryMetadataTests
     [TestMethod]
     public void GeometryMetadataPreservesOpaqueSlotsAndNilDefaults()
     {
-        var uri = new Uri("asset:///Content/Geometry/Test.ogeo");
+        var uri = AssetPath.Parse("/Content/Geometry/Test.ogeo");
         var result = CookedGeometryReport.Parse(SlotReport()).SingleOrDefault(uri)!;
         _ = result.GeometryUri.Should().Be(uri);
         _ = result.NativeGeometryKey.Should().Be(Guid.Parse("10203040-5060-7080-90a0-b0c0d0e0f001"));
@@ -54,7 +55,7 @@ public sealed class GeometryMetadataTests
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
         _ = api.As<IBuiltinGeometryCatalogProvider>().Setup(value => value.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", It.IsAny<CancellationToken>(), It.IsAny<NativeArtifactLease>())).ReturnsAsync(catalog);
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
-        var uri = new Uri("asset:///Engine/Generated/BasicShapes/Cube");
+        var uri = AssetPath.Parse("/Engine/Generated/BasicShapes/Cube");
         var result = await pipeline.ReadAsync(workspace.ProjectContext, uri, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Should().Be(catalog.Find(uri)!.MaterialSlots);
         _ = workspace.CookCoordinator.Runs.Should().BeEmpty();
@@ -71,7 +72,7 @@ public sealed class GeometryMetadataTests
         workspace.Activate(original with { ProjectId = Guid.NewGuid() });
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
-        var result = await pipeline.ReadAsync(original, new Uri("asset:///Engine/Generated/BasicShapes/Cube"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await pipeline.ReadAsync(original, AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Should().BeNull();
         api.VerifyNoOtherCalls();
     }
@@ -93,7 +94,7 @@ public sealed class GeometryMetadataTests
                 throw new InvalidOperationException("Canceled query unexpectedly resumed.");
             });
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
-        var pending = pipeline.ReadAsync(original, new Uri("asset:///Engine/Generated/BasicShapes/Cube"), this.TestContext.CancellationToken);
+        var pending = pipeline.ReadAsync(original, AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"), this.TestContext.CancellationToken);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         workspace.Activate(original with { ProjectId = Guid.NewGuid() });
         Func<Task> completion = async () => _ = await pending.ConfigureAwait(false);

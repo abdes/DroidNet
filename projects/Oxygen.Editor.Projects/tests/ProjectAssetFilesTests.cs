@@ -12,16 +12,14 @@ namespace Oxygen.Editor.Projects.Tests;
 [TestCategory("Unit")]
 public sealed class ProjectAssetFilesTests
 {
-    private const string ProjectRoot = @"C:\Games\Demo";
-
     private static readonly ProjectContext Project = new()
     {
         ProjectId = Guid.NewGuid(),
         Name = "Demo",
         Category = Category.Games,
-        ProjectRoot = ProjectRoot,
+        ProjectRoot = FileSystemPath.From(@"C:\Games\Demo"),
         AuthoringMounts = [new ProjectMountPoint("Content", "Content"), new ProjectMountPoint("Levels", @"Content\Levels")],
-        LocalFolderMounts = [new LocalFolderMount("Shared", @"D:\Library")],
+        LocalFolderMounts = [new LocalFolderMount("Shared", FileSystemPath.From(@"D:\Library"))],
     };
 
     [TestMethod]
@@ -30,7 +28,7 @@ public sealed class ProjectAssetFilesTests
         var location = Project.Find(AssetPath.Parse("/Content/Materials/Wood.omat.json"));
 
         _ = location.Should().NotBeNull();
-        _ = location!.FilePath.Should().Be(@"C:\Games\Demo\Content\Materials\Wood.omat.json");
+        _ = location!.File.Should().Be(FileSystemPath.From(@"C:\Games\Demo\Content\Materials\Wood.omat.json"));
         _ = location.MountRoot.Should().Be(FileSystemPath.From(@"C:\Games\Demo\Content"));
         _ = location.Path.Should().Be(AssetPath.Parse("/Content/Materials/Wood.omat.json"));
         _ = location.MountKind.Should().Be(ProjectMountKind.Authoring);
@@ -42,7 +40,7 @@ public sealed class ProjectAssetFilesTests
     {
         var location = Project.Find(AssetPath.Parse("/Shared/Wood.omat.json"));
 
-        _ = location!.FilePath.Should().Be(@"D:\Library\Wood.omat.json");
+        _ = location!.File.Should().Be(FileSystemPath.From(@"D:\Library\Wood.omat.json"));
         _ = location.MountKind.Should().Be(ProjectMountKind.LocalFolder);
     }
 
@@ -51,7 +49,7 @@ public sealed class ProjectAssetFilesTests
     {
         var location = Project.Find(AssetPath.Content);
 
-        _ = location!.FilePath.Should().Be(@"C:\Games\Demo\Content");
+        _ = location!.File.Should().Be(FileSystemPath.From(@"C:\Games\Demo\Content"));
         _ = location.IsMountRoot.Should().BeTrue();
     }
 
@@ -62,7 +60,7 @@ public sealed class ProjectAssetFilesTests
     [TestMethod]
     public void FindByFilePath_GivesTheVirtualPath()
     {
-        var location = Project.FindByFilePath(@"C:\Games\Demo\Content\New folder (2)\Wood mat.omat.json");
+        var location = Project.FindByFilePath(FileSystemPath.From(@"C:\Games\Demo\Content\New folder (2)\Wood mat.omat.json"));
 
         _ = location!.Path.Should().Be(AssetPath.Parse("/Content/New folder (2)/Wood mat.omat.json"));
         _ = location.Path.ToUriString().Should().Be("asset:///Content/New%20folder%20%282%29/Wood%20mat.omat.json");
@@ -71,7 +69,7 @@ public sealed class ProjectAssetFilesTests
     [TestMethod]
     public void FindByFilePath_InNestedMounts_ChoosesTheInnermost()
     {
-        var location = Project.FindByFilePath(@"C:\Games\Demo\Content\Levels\Intro.oscene.json");
+        var location = Project.FindByFilePath(FileSystemPath.From(@"C:\Games\Demo\Content\Levels\Intro.oscene.json"));
 
         _ = location!.Path.Should().Be(AssetPath.Parse("/Levels/Intro.oscene.json"));
     }
@@ -79,7 +77,7 @@ public sealed class ProjectAssetFilesTests
     [TestMethod]
     public void FindByFilePath_ForTheMountsFolder_IsTheMountRoot()
     {
-        var location = Project.FindByFilePath(@"C:\Games\Demo\Content\");
+        var location = Project.FindByFilePath(FileSystemPath.From(@"C:\Games\Demo\Content\"));
 
         _ = location!.IsMountRoot.Should().BeTrue();
         _ = location.Path.Should().Be(AssetPath.Content);
@@ -91,16 +89,16 @@ public sealed class ProjectAssetFilesTests
     [DataRow(@"E:\Elsewhere\Wood.omat.json", DisplayName = "Another drive")]
     [DataRow(@"C:\Games\Demo\Content\CON.omat.json", DisplayName = "A name the rules refuse")]
     public void FindByFilePath_OutsideTheMounts_IsNull(string path)
-        => _ = Project.FindByFilePath(path).Should().BeNull();
+        => _ = Project.FindByFilePath(FileSystemPath.From(path)).Should().BeNull();
 
     [TestMethod]
     public void FindByFilePath_RoundTripsThroughTheVirtualPath()
     {
-        const string path = @"C:\Games\Demo\Content\Materials\Wood.omat.json";
+        var path = FileSystemPath.From(@"C:\Games\Demo\Content\Materials\Wood.omat.json");
 
         var location = Project.Find(Project.FindByFilePath(path)!.Path);
 
-        _ = location!.FilePath.Should().Be(path);
+        _ = location!.File.Should().Be(path);
     }
 
     [TestMethod]
@@ -109,7 +107,7 @@ public sealed class ProjectAssetFilesTests
         var root = Directory.CreateTempSubdirectory("ProjectAssetFiles").FullName;
         try
         {
-            var project = Project with { ProjectRoot = root };
+            var project = Project with { ProjectRoot = FileSystemPath.From(root) };
             _ = Directory.CreateDirectory(Path.Combine(root, "Content", "Scripts"));
             File.WriteAllText(Path.Combine(root, "Content", "Scripts", "Orbit.luau"), string.Empty);
             _ = Directory.CreateDirectory(Path.Combine(root, "Content", "Materials"));

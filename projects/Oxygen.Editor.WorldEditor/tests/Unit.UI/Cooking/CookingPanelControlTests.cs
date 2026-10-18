@@ -20,6 +20,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Cooking;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Cooking;
@@ -169,8 +170,8 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     {
         var actions = new Mock<ICookingWorkspaceActions>();
         _ = actions.Setup(value => value.ShowImportedAssetsAsync(It.IsAny<CookRunSnapshot>())).ReturnsAsync(value: true);
-        var source = new Uri("asset:///Content/SourceMedia/DCC/Model/model.gltf");
-        var output = new Uri("asset:///Content/Models/Model/Geometry/Mesh.ogeo");
+        var source = AssetPath.Parse("/Content/SourceMedia/DCC/Model/model.gltf");
+        var output = AssetPath.Parse("/Content/Models/Model/Geometry/Mesh.ogeo");
         using var model = CreateModel(actions.Object, configure: snapshot => snapshot with
         {
             DisplayName = "Model",
@@ -178,7 +179,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
             Messages = [new(1, DateTimeOffset.UtcNow, DiagnosticSeverity.Info, "Import complete.")],
             State = CookRunState.Succeeded,
             Request = new(CookTargetKind.Asset, source) { IsReimport = true },
-            Assets = System.Collections.Immutable.ImmutableDictionary<Uri, CookRunAsset>.Empty
+            Assets = System.Collections.Immutable.ImmutableDictionary<AssetPath, CookRunAsset>.Empty
                 .Add(source, new(source, ContentCookAssetKind.ForeignSource, CookAssetState.Updated))
                 .Add(output, new(output, ContentCookAssetKind.Geometry, CookAssetState.Updated)),
         });
@@ -236,7 +237,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     [TestMethod]
     public Task UnsavedRecoveryKeepsItsActionInlineAndNamesNavigable() => EnqueueAsync(async () =>
     {
-        var document = new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState("C:\\Project\\Content\\NewScene2.oscene.json", "NewScene2", IsDirty: true, SavedContentHash: string.Empty);
+        var document = new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(FileSystemPath.From("C:\\Project\\Content\\NewScene2.oscene.json"), "NewScene2", IsDirty: true, SavedContentHash: string.Empty);
         var actions = new Mock<ICookingWorkspaceActions>();
         _ = actions.Setup(value => value.OpenDocumentAsync(document.SourcePath)).ReturnsAsync(value: true);
         using var model = CreateModel(actions.Object, document);
@@ -285,7 +286,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         {
             OperationId = Guid.NewGuid(),
             DisplayName = "SavedScene",
-            Request = new(CookTargetKind.Asset, new Uri("asset:///Content/Scenes/SavedScene.oscene.json"), IsAutomatic: true),
+            Request = new(CookTargetKind.Asset, AssetPath.Parse("/Content/Scenes/SavedScene.oscene"), IsAutomatic: true),
             State = CookRunState.Queued,
             CompletedAt = null,
             Diagnostics = [],
@@ -376,7 +377,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         var assets = snapshot.Assets;
         for (var index = 0; index < 40; index++)
         {
-            var uri = new Uri(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"asset:///Content/Materials/Material{index}.omat.json"));
+            var uri = AssetPath.Parse(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"/Content/Materials/Material{index}.omat"));
             assets = assets.Add(uri, new(uri, ContentCookAssetKind.Material, CookAssetState.Skipped));
         }
 
@@ -417,7 +418,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         selected.PropertyChanged += (_, _) => ++updates;
         for (var index = 0; index < 1000; index++)
         {
-            var uri = new Uri("asset:///Content/Materials/M" + index.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".omat.json");
+            var uri = AssetPath.Parse("/Content/Materials/M" + index.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".omat");
             snapshot = snapshot with
             {
                 Revision = snapshot.Revision + 1,
@@ -531,7 +532,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
             ProjectId = projectId,
             Name = "Vortex",
             Category = Category.Games,
-            ProjectRoot = Path.GetTempPath(),
+            ProjectRoot = FileSystemPath.From(Path.GetTempPath()),
             AuthoringMounts = [],
             LocalFolderMounts = [],
         });
@@ -551,14 +552,14 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         {
             OperationId = operationId,
             ProjectId = projectId,
-            ProjectRoot = Path.GetTempPath(),
+            ProjectRoot = FileSystemPath.From(Path.GetTempPath()),
             DisplayName = "Vortex",
             Request = new(CookTargetKind.Project, ScopeUri: null),
             State = CookRunState.Failed,
             CompletedAt = DateTimeOffset.UtcNow,
             Diagnostics = [Issue("Main", "Aerial Start must be 0 m or greater."), Issue("OtherScene", "A referenced geometry could not be loaded.")],
         };
-        var mainUri = new Uri("asset:///Content/Scenes/Main.oscene.json");
+        var mainUri = AssetPath.Parse("/Content/Scenes/Main.oscene");
         run = run with
         {
             Assets = run.Assets.Add(mainUri, new(mainUri, ContentCookAssetKind.Scene, CookAssetState.Failed)),

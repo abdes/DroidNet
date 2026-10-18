@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -40,7 +41,7 @@ public sealed class CookPublicationWorkflowTests
         await using var previewLifetime = preview.ConfigureAwait(false);
         using var registration = publication.RegisterPreview(workspace.ProjectContext, () => Task.FromResult<ICookPublicationPreview?>(preview));
 
-        var failed = await pipeline.CookAssetAsync(new Uri("asset:///Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var failed = await pipeline.CookAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = failed.Status.Should().Be(OperationStatus.Failed);
         _ = failed.IsPublished.Should().BeFalse();
@@ -56,7 +57,7 @@ public sealed class CookPublicationWorkflowTests
         _ = preview.Mounts.Should().Be(2);
         _ = api.Imported.Should().OnlyContain(execution => execution.Manifest.Output.Contains(Path.Combine(".cooked", "generations"), StringComparison.Ordinal));
         registration.Dispose();
-        AssertCookSucceeded(await pipeline.CookAssetAsync(new Uri("asset:///Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false));
+        AssertCookSucceeded(await pipeline.CookAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false));
     }
 
     /// <summary>Recovery skips live operation ownership and restores the same journal after its owner releases it.</summary>
@@ -67,7 +68,7 @@ public sealed class CookPublicationWorkflowTests
         using var workspace = new CookWorkspace();
         var publication = workspace.Publication;
         var operation = new ContentCookOperation(Guid.NewGuid(), workspace.ProjectContext, 1);
-        using var owner = CookOutputLease.AcquireOperation(workspace.Root, operation.OperationId);
+        using var owner = CookOutputLease.AcquireOperation(workspace.ProjectContext.ProjectRoot, operation.OperationId);
         using var baseline = await publication.AcquireReadAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
         var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content"], workspace.Files, workspace.Manager, this.TestContext.CancellationToken).ConfigureAwait(false);
         await using var stagingLifetime = staging.ConfigureAwait(false);
@@ -98,12 +99,12 @@ public sealed class CookPublicationWorkflowTests
         var pipeline = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility, publication);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         using var mounted = await publication.AcquireForMountAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var path = mounted.FindProjectRoot("Content")!;
+        var path = mounted.FindProjectRoot("Content")!.FullPath;
         using var blocked = CookedGeneration.TryClaim(path);
         _ = blocked.Should().BeNull();
-        using (var gate = await CookOutputLease.AcquireWriteAsync(workspace.Root, this.TestContext.CancellationToken).ConfigureAwait(false))
+        using (var gate = await CookOutputLease.AcquireWriteAsync(workspace.ProjectContext.ProjectRoot, this.TestContext.CancellationToken).ConfigureAwait(false))
         {
-            _ = gate.ProjectRoot.Should().Be(workspace.Root);
+            _ = gate.ProjectRoot.Should().Be(workspace.ProjectContext.ProjectRoot);
         }
 
         mounted.Dispose();
@@ -125,7 +126,7 @@ public sealed class CookPublicationWorkflowTests
         var pipeline = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility, publication);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         using var previous = await publication.AcquireReadAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var previousPath = previous.FindProjectRoot("Content")!;
+        var previousPath = previous.FindProjectRoot("Content")!.FullPath;
         File.Delete(Path.Combine(previousPath, CookedGeneration.MarkerFileName));
         var repaired = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(repaired);

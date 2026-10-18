@@ -217,8 +217,8 @@ public sealed class EditContractTests
 
         SceneAssert.Applied(redone);
         _ = fixture.Snapshot().Document.Should()
-            .Contain(Path.GetFileName(moved.ToString()))
-            .And.NotContain(Path.GetFileName(asset.ToString()));
+            .Contain(moved.Name)
+            .And.NotContain(asset.Name);
     }
 
     [TestMethod]
@@ -236,7 +236,7 @@ public sealed class EditContractTests
 
         // The reference is kept and shows as missing until the user picks another asset (3.11).
         SceneAssert.Warned(redone, SceneEditCodes.AssetReferenceDeleted, sample.AssetNode);
-        _ = fixture.Snapshot().Document.Should().Contain(Path.GetFileName(asset.ToString()));
+        _ = fixture.Snapshot().Document.Should().Contain(asset.Name);
     }
 
     [TestMethod]

@@ -5,6 +5,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.SnapshotScenario;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
@@ -21,7 +22,7 @@ internal sealed partial class CaptureWorkspace : IDisposable
             ProjectId = Guid.NewGuid(),
             Name = "Capture tests",
             Category = Category.Games,
-            ProjectRoot = this.Root,
+            ProjectRoot = FileSystemPath.From(this.Root),
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
         });
@@ -42,7 +43,7 @@ internal sealed partial class CaptureWorkspace : IDisposable
         var source = Path.GetFullPath(Path.Combine(this.Root, relativePath));
         Directory.CreateDirectory(Path.GetDirectoryName(source)!);
         File.WriteAllText(source, content);
-        return new(new Uri("asset:///" + relativePath), source, relativePath, Hash(content));
+        return new(AssetPath.Parse("/" + relativePath), FileSystemPath.From(source), relativePath, Hash(content));
     }
 
     public Task<CookSnapshotCaptureResult> CaptureAsync(IReadOnlyList<CookSnapshotInput> inputs, string build = "compatible-build")

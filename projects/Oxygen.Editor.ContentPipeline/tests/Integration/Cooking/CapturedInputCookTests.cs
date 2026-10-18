@@ -8,6 +8,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
@@ -102,7 +103,7 @@ public sealed class CapturedInputCookTests
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
 
-        var result = await service.CookAssetAsync(new("asset:///" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookAssetAsync(AssetPath.Parse("/" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Status.Should().Be(OperationStatus.Succeeded);
         _ = result.InputsAreCurrent.Should().BeFalse();
@@ -146,7 +147,7 @@ public sealed class CapturedInputCookTests
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
 
-        var result = await service.CookAssetAsync(new("asset:///" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookAssetAsync(AssetPath.Parse("/" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Status.Should().Be(OperationStatus.Succeeded, string.Join("; ", result.Diagnostics.Select(static issue => issue.Message)));
         _ = result.InputsAreCurrent.Should().BeFalse();
         _ = workspace.ReadText(source).Should().Be(authored);
@@ -173,7 +174,7 @@ public sealed class CapturedInputCookTests
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
 
-        var result = await service.CookAssetAsync(new("asset:///" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookAssetAsync(AssetPath.Parse("/" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Status.Should().Be(OperationStatus.Succeeded);
         _ = result.InputSnapshot!.Documents.Should().ContainSingle();
@@ -204,7 +205,7 @@ public sealed class CapturedInputCookTests
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var service = new MaterialCookService(pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance);
 
-        var result = await service.CookMaterialAsync(new(new("asset:///" + source), workspace.Root, "Content", source), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookMaterialAsync(new(AssetPath.Parse("/" + source), workspace.ProjectContext.ProjectRoot, "Content", source), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.State.Should().Be(MaterialCookState.Stale);
         _ = result.Cook!.InputSnapshot.Should().NotBeNull();
@@ -225,7 +226,7 @@ public sealed class CapturedInputCookTests
         var api = CreateSuccessfulApi(workspace, NativeSourceFactsFixture.AnalyzeAsync);
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var origin = workspace.ProjectContext with { ProjectId = Guid.NewGuid() };
-        var result = await service.CookAssetAsync(new("asset:///Content/Materials/Red.omat.json"), this.TestContext.CancellationToken, origin).ConfigureAwait(false);
+        var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Materials/Red.omat.json"), this.TestContext.CancellationToken, origin).ConfigureAwait(false);
         _ = result.Status.Should().Be(OperationStatus.Failed);
         _ = result.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Message.Contains("originating project", StringComparison.Ordinal));
         _ = api.ImportedManifest.Should().BeNull();
@@ -247,7 +248,7 @@ public sealed class CapturedInputCookTests
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var service = new MaterialCookService(pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance);
 
-        var result = await service.CookMaterialAsync(new(new("asset:///" + source), workspace.Root, "Content", source), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookMaterialAsync(new(AssetPath.Parse("/" + source), workspace.ProjectContext.ProjectRoot, "Content", source), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.State.Should().Be(MaterialCookState.Failed);
         _ = result.OperationId.Should().Be(workspace.CookCoordinator.Runs.Single().OperationId);
@@ -273,7 +274,7 @@ public sealed class CapturedInputCookTests
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
 
-        var result = await service.CookFolderAsync(new("asset:///Content/Materials"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookFolderAsync(AssetPath.Parse("/Content/Materials"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.InputSnapshot!.Inputs.Count(static input => input.AssetUri is not null).Should().Be(1);
         _ = result.InputsAreCurrent.Should().BeFalse();
     }
@@ -292,7 +293,7 @@ public sealed class CapturedInputCookTests
             SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
-        Func<Task> cook = () => service.CookAssetAsync(new("asset:///Content/Materials/Red.omat.json"), this.TestContext.CancellationToken);
+        Func<Task> cook = () => service.CookAssetAsync(AssetPath.Parse("/Content/Materials/Red.omat.json"), this.TestContext.CancellationToken);
         var failure = await cook.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
         Action replaceProducer = () => File.WriteAllText(Path.Combine(workspace.Root, "producer.bin"), "replacement");
         _ = replaceProducer.Should().Throw<IOException>();

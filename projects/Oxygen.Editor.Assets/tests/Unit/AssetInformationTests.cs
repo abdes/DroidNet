@@ -24,9 +24,9 @@ public sealed class AssetInformationTests
         var initial = asset.Information;
         _ = initial.Title.Should().Be("Blue (Material)");
         _ = initial.Location.Should().Be(asset.DisplayPath);
-        _ = initial.Facts.Should().ContainSingle().Which.Value.Should().Be(asset.SourcePath);
+        _ = initial.Facts.Should().ContainSingle().Which.Value.Should().Be(asset.SourcePath!.FullPath);
         _ = initial.Description.Should().Contain("No cooked content yet");
-        var output = new Uri("asset:///Content/Materials/Blue.omat");
+        var output = AssetPath.Parse("/Content/Materials/Blue.omat");
         var status = asset.CookStatus! with
         {
             Freshness = AssetCookFreshness.OutOfDate,
@@ -34,12 +34,12 @@ public sealed class AssetInformationTests
             OutputAvailability = CookedOutputAvailability.Present,
             Outputs =
             [
-                new(asset.IdentityUri, output, ContentCookAssetKind.Material, "Content", output.AbsolutePath),
-                new(new("asset:///Content/Other.omat.json"), new("asset:///Content/Other.omat"), ContentCookAssetKind.Material, "Content", "/Content/Other.omat"),
+                new(asset.Identity, output, ContentCookAssetKind.Material, "Content", output.VirtualPath),
+                new(AssetPath.Parse("/Content/Other.omat"), AssetPath.Parse("/Content/Other.omat"), ContentCookAssetKind.Material, "Content", "/Content/Other.omat"),
             ],
         };
-        var published = (asset with { CookStatus = status, CookedUri = output }).Information;
-        _ = published.Facts.Should().ContainSingle(fact => fact.Label == "Cooked output").Which.Value.Should().Be(output.AbsolutePath);
+        var published = (asset with { CookStatus = status }).Information;
+        _ = published.Facts.Should().ContainSingle(fact => fact.Label == "Cooked output").Which.Value.Should().Be(output.VirtualPath);
         _ = published.Description.Should().Contain("Saved inputs have changed").And.Contain("Previously cooked content remains available");
     }
 
@@ -49,18 +49,18 @@ public sealed class AssetInformationTests
     {
         var builtin = CreateAsset() with
         {
-            IdentityUri = AssetUris.BuildGeneratedUri("Materials/Default"),
+            Identity = AssetPath.Generated.Combine("Materials/Default"),
             DisplayName = "Default",
             PrimaryState = AssetState.Generated,
-            Generated = new("Default", "material", "/Content/Materials/OxygenEditor_Default.omat", GeneratedAssetCategory.Standard),
+            Generated = new("Default", "material", AssetPath.Parse("/Content/Materials/OxygenEditor_Default.omat"), GeneratedAssetCategory.Standard),
             SourcePath = null,
             DescriptorPath = null,
             CookStatus = null,
         };
         _ = builtin.Information.Facts.Should().ContainSingle().Which.Should().Be(new AssetInformationFact("Origin", "Oxygen built-in"));
-        var copy = builtin with { IdentityUri = new("asset:///Content/Materials/OxygenEditor_Default.omat"), CookedUri = new("asset:///Content/Materials/OxygenEditor_Default.omat"), BuiltinOriginUri = builtin.IdentityUri };
+        var copy = builtin with { Identity = AssetPath.Parse("/Content/Materials/OxygenEditor_Default.omat"), BuiltinOrigin = builtin.Identity };
         var grouped = AssetIdentity.GroupBuiltins([builtin, copy]).Single();
-        _ = grouped.Information.Facts.Should().ContainSingle(fact => fact.Label == "Project copy").Which.Value.Should().Be(copy.IdentityUri.AbsolutePath);
+        _ = grouped.Information.Facts.Should().ContainSingle(fact => fact.Label == "Project copy").Which.Value.Should().Be(copy.Identity.VirtualPath);
         _ = grouped.Information.Description.Should().Contain("No separate cooking is needed");
     }
 
@@ -74,7 +74,7 @@ public sealed class AssetInformationTests
             SourcePath = null,
             DescriptorPath = null,
             CookStatus = null,
-            CookedUri = new("asset:///Library/Blue.omat"),
+            Identity = AssetPath.Parse("/Library/Blue.omat"),
             RuntimeAvailability = AssetRuntimeAvailability.Failed,
             RuntimeReason = "The cooked material could not be loaded.",
         };
@@ -90,7 +90,7 @@ public sealed class AssetInformationTests
         var outputs = Enumerable.Range(0, 8).Select(index =>
         {
             var path = string.Create(CultureInfo.InvariantCulture, $"/Content/Blue{index}.omat");
-            return new ContentCookedAsset(asset.IdentityUri, new("asset://" + path), ContentCookAssetKind.Material, "Content", path);
+            return new ContentCookedAsset(asset.Identity, AssetPath.Parse(path), ContentCookAssetKind.Material, "Content", path);
         }).ToImmutableArray();
         var information = (asset with { CookStatus = asset.CookStatus! with { HasPublishedOutput = true, Outputs = outputs } }).Information;
         var outputText = information.Facts.Single(fact => string.Equals(fact.Label, "Cooked output", StringComparison.Ordinal)).Value;
@@ -100,24 +100,23 @@ public sealed class AssetInformationTests
 
     private static AssetEntry CreateAsset()
     {
-        var uri = new Uri("asset:///Content/Materials/Blue.omat.json");
+        var identity = AssetPath.Parse("/Content/Materials/Blue.omat");
         return new(
-            uri,
+            identity,
             "Blue",
             AssetKind.Material,
             AssetState.Descriptor,
             DerivedState: null,
             AssetRuntimeAvailability.Unknown,
-            uri.AbsolutePath,
-            "C:/Project/Content/Materials/Blue.omat.json",
-            "C:/Project/Content/Materials/Blue.omat.json",
-            CookedUri: null,
+            "/Content/Materials/Blue.omat.json",
+            FileSystemPath.From("C:/Project/Content/Materials/Blue.omat.json"),
+            FileSystemPath.From("C:/Project/Content/Materials/Blue.omat.json"),
             CookedPath: null,
             AssetGuid: null,
             [],
             IsSelectable: true)
         {
-            CookStatus = new(uri, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
+            CookStatus = new(identity, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
         };
     }
 }

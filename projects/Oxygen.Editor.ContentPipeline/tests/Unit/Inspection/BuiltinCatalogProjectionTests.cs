@@ -5,6 +5,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Inspection;
 
@@ -24,11 +25,11 @@ public sealed class BuiltinCatalogProjectionTests
         _ = records.Should().HaveCount(native.AuthoringGeometries.Count() + 1);
         foreach (var definition in native.AuthoringGeometries)
         {
-            var record = records.Single(item => item.Uri == definition.AssetUri);
+            var record = records.Single(item => item.Identity == definition.AssetUri);
             _ = record.Generated.Should().NotBeNull();
             _ = record.Generated!.CanonicalName.Should().Be(definition.CanonicalName);
             _ = record.Generated.AuthoringCategory.Should().Be(definition.AuthoringCategory);
-            _ = record.Generated.CookedVirtualPath.Should().Be(definition.Contribution.VirtualPath);
+            _ = record.Generated.CookedVirtualPath.Should().Be(AssetPath.Parse(definition.Contribution.VirtualPath));
             _ = record.Generated.DescriptorSchema.Should().Be(definition.Contribution.Descriptor.GetProperty("$schema").GetString());
         }
 

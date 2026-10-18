@@ -28,6 +28,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
 using static DroidNet.Tests.UiTestHosting;
@@ -57,15 +58,15 @@ internal sealed partial class BrowserRevealFixture : IDisposable
         {
             var (folder, suffix, kind) = (index % 3) switch
             {
-                0 => ("Materials", ".omat.json", AssetKind.Material),
-                1 => ("Geometry", ".ogeo.json", AssetKind.Geometry),
-                _ => ("Scenes", ".oscene.json", AssetKind.Scene),
+                0 => ("Materials", ".omat", AssetKind.Material),
+                1 => ("Geometry", ".ogeo", AssetKind.Geometry),
+                _ => ("Scenes", ".oscene", AssetKind.Scene),
             };
             return CreateNavigationAsset(string.Create(CultureInfo.InvariantCulture, $"/Content/{folder}/Item{index:D4}{suffix}"), kind);
         }).ToArray();
         this.items.OnNext(rows);
-        _ = this.HistoryPipeline.Setup(value => value.CookAssetAsync(It.IsAny<Uri>(), It.IsAny<CancellationToken>(), It.IsAny<ProjectContext?>())).ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
-        _ = this.HistoryPipeline.Setup(value => value.CookFolderAsync(It.IsAny<Uri>(), It.IsAny<CancellationToken>())).ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Folder, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
+        _ = this.HistoryPipeline.Setup(value => value.CookAssetAsync(It.IsAny<AssetPath>(), It.IsAny<CancellationToken>(), It.IsAny<ProjectContext?>())).ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
+        _ = this.HistoryPipeline.Setup(value => value.CookFolderAsync(It.IsAny<AssetPath>(), It.IsAny<CancellationToken>())).ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Folder, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
         this.container.Unregister<IContentPipelineService>();
         this.container.RegisterInstance(this.HistoryPipeline.Object);
         return rows;
@@ -87,7 +88,6 @@ internal sealed partial class BrowserRevealFixture : IDisposable
             {
                 SourcePath = null,
                 DescriptorPath = null,
-                CookedUri = new("asset:///Content/Materials/Red.omat"),
                 PrimaryState = AssetState.Cooked,
             };
             await this.SetCookedOutputsAsync([cooked], token).ConfigureAwait(true);
@@ -114,11 +114,11 @@ internal sealed partial class BrowserRevealFixture : IDisposable
     {
         _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, "Content", "Materials"));
         _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, ".cooked", "Content", "Materials"));
-        this.Material = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
+        this.Material = CreateNavigationAsset("/Content/Materials/Blue.omat", AssetKind.Material);
         this.items = new([this.Material]);
         var provider = CreateQueryProvider(this.items);
         this.Provider = provider;
-        _ = provider.Setup(value => value.ResolveAsync(this.Material.IdentityUri, It.IsAny<CancellationToken>())).ReturnsAsync(this.Material);
+        _ = provider.Setup(value => value.ResolveAsync(this.Material.Identity, It.IsAny<CancellationToken>())).ReturnsAsync(this.Material);
         var info = new ProjectInfo("Browser", Category.Games, this.directory.FullName)
         {
             AuthoringMounts = [new("Content", "Content")],
@@ -150,7 +150,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
         this.container.RegisterInstance<IBuiltinCatalogDiscovery>(new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
         this.container.RegisterInstance(this.Dialogs.Object);
         this.container.RegisterInstance(Mock.Of<IAssetCatalog>(catalog => catalog.Changes == System.Reactive.Linq.Observable.Never<AssetChange>()));
-        this.container.RegisterInstance(Mock.Of<IAssetFolderSource>(folders => folders.FolderChanges == System.Reactive.Linq.Observable.Never<Uri>()));
+        this.container.RegisterInstance(Mock.Of<IAssetFolderSource>(folders => folders.FolderChanges == System.Reactive.Linq.Observable.Never<AssetPath>()));
         this.container.RegisterInstance(Mock.Of<IAutomaticCookService>());
         this.container.RegisterInstance(Mock.Of<IProjectManagerService>());
         this.container.RegisterInstance(Mock.Of<IContentPipelineService>());
@@ -184,20 +184,20 @@ internal sealed partial class BrowserRevealFixture : IDisposable
     {
         var project = this.Projects.ActiveProject!;
         var key = Guid.CreateVersion7();
-        var root = CookPublicationPaths.Generation(project.ProjectRoot, key);
+        var root = CookPublicationPaths.Generation(project.ProjectRoot.FullPath, key);
         Directory.CreateDirectory(root);
         await File.WriteAllBytesAsync(Path.Combine(root, CookedGeneration.MarkerFileName), [], token).ConfigureAwait(true);
         var digest = new string('0', 64);
         var products = outputs.Select(item =>
         {
-            var path = Uri.UnescapeDataString(item.IdentityUri.AbsolutePath);
+            var path = item.Identity.VirtualPath;
             var descriptor = path["/Content/".Length..];
             Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(root, descriptor))!);
             var kind = item.Kind == AssetKind.Geometry ? ContentCookAssetKind.Geometry : ContentCookAssetKind.Material;
-            var sourceUri = new Uri(item.IdentityUri.AbsoluteUri + ".json");
+            var sourceUri = item.Identity.WithAuthoringSuffix();
             var sourceRelativePath = path.TrimStart('/') + ".json";
-            var sourcePath = Path.Combine(project.ProjectRoot, sourceRelativePath);
-            return new CookProvenance.Product(sourceUri, digest, [], [new(new(sourceUri, item.IdentityUri, kind, "Content", path) { DescriptorRelativePath = descriptor }, "Content")])
+            var sourcePath = project.ProjectRoot.Combine(sourceRelativePath);
+            return new CookProvenance.Product(sourceUri, digest, [], [new(new(sourceUri, item.Identity, kind, "Content", path) { DescriptorRelativePath = descriptor }, "Content")])
             {
                 ReuseFingerprint = digest,
                 SourceInput = new(sourceUri, kind, "Content", sourceRelativePath, sourcePath, path, ContentCookInputRole.Primary),
@@ -209,10 +209,10 @@ internal sealed partial class BrowserRevealFixture : IDisposable
         document.Validate(project);
         var files = new NativeAtomicFileStore(new RealFileSystem());
         using var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(true);
-        var documentPath = CookPublicationPaths.Document(project.ProjectRoot, document.OperationId);
+        var documentPath = CookPublicationPaths.Document(project.ProjectRoot.FullPath, document.OperationId);
         Directory.CreateDirectory(Path.GetDirectoryName(documentPath)!);
         var version = await files.WriteAsync(documentPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), FileVersion.Missing, token).ConfigureAwait(true);
-        var headPath = CookPublicationPaths.Head(project.ProjectRoot);
+        var headPath = CookPublicationPaths.Head(project.ProjectRoot.FullPath);
         var previous = await files.ReadAsync(headPath, token).ConfigureAwait(true);
         var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
         _ = await files.WriteAsync(headPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), previous.Version, token).ConfigureAwait(true);
@@ -231,14 +231,13 @@ internal sealed partial class BrowserRevealFixture : IDisposable
             SourcePath = null,
             DescriptorPath = null,
             PrimaryState = AssetState.Cooked,
-            CookedUri = new("asset:///Art/Shared.omat"),
-            CookedMetadata = new(root, "Materials/Shared.omat", Guid.NewGuid(), new(1, 2), 1, 1, new string('0', 64))
+            CookedMetadata = new(FileSystemPath.From(root), "Materials/Shared.omat", Guid.NewGuid(), new(1, 2), 1, 1, new string('0', 64))
             {
-                VirtualPath = "/Art/Shared.omat",
+                VirtualPath = AssetPath.Parse("/Art/Shared.omat"),
             },
         };
-        this.Projects.Activate(this.Projects.ActiveProject! with { LocalFolderMounts = [new("Library", root)] });
-        _ = this.Provider.Setup(provider => provider.ResolveAsync(item.IdentityUri, It.IsAny<CancellationToken>())).ReturnsAsync(item);
+        this.Projects.Activate(this.Projects.ActiveProject! with { LocalFolderMounts = [new("Library", FileSystemPath.From(root))] });
+        _ = this.Provider.Setup(provider => provider.ResolveAsync(item.Identity, It.IsAny<CancellationToken>())).ReturnsAsync(item);
         this.items.OnNext([item]);
         return item;
     }

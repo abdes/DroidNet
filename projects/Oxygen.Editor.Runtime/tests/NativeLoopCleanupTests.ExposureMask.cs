@@ -23,7 +23,7 @@ public sealed partial class NativeLoopCleanupTests
             var cookedRoot = await this.CookExposureMaskAsync(directory.FullName).ConfigureAwait(false);
             var descriptor = Directory.EnumerateFiles(cookedRoot, "*.otex", SearchOption.AllDirectories).Single();
             var reference = new RuntimeTextureReference(
-                new Uri("asset:///Content/Textures/Meter.otex.json"),
+                AssetPath.Parse("/Content/Textures/Meter.otex"),
                 cookedRoot,
                 Path.GetRelativePath(cookedRoot, descriptor));
             await this.RunNativeCommandsAsync(commands => this.CheckCookedExposureMaskAsync(commands, reference), [cookedRoot]).ConfigureAwait(false);

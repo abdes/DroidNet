@@ -35,7 +35,7 @@ internal static class SceneTestData
     internal static GeometryComponent CreateInspectorGeometry(string name = "Geometry") => new()
     {
         Name = name,
-        Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
+        Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
     };
 
     internal static SceneNode AddNumericNode(Scene scene, float value)

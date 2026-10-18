@@ -122,7 +122,7 @@ public sealed partial class DocumentManager : IDisposable
         }
 
         if (this.projectContextService.ActiveProject is not { } project
-            || project.FindSource(sceneUri) is not { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location)
+            || project.LocateSource(sceneUri) is not { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location)
         {
             this.PublishSceneLoadFailure(sceneUri, unavailable: false);
             return false;
@@ -179,7 +179,7 @@ public sealed partial class DocumentManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(materialUri);
         if (this.projectContextService.ActiveProject is not { } project
-            || project.FindSource(materialUri) is not { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location)
+            || project.LocateSource(materialUri) is not { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location)
         {
             return false;
         }

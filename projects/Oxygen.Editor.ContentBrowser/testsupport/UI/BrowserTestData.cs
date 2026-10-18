@@ -8,6 +8,7 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.TestSupport;
 
@@ -16,10 +17,11 @@ internal static class BrowserTestData
     internal static AssetEntry CreateStatusAsset(int index)
     {
         var name = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Material {index:00}");
-        var uri = new Uri("asset:///Content/" + Uri.EscapeDataString(name) + ".omat.json");
-        return new(uri, name, AssetKind.Material, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Unknown, uri.AbsolutePath, uri.AbsolutePath, uri.AbsolutePath, CookedUri: null, CookedPath: null, AssetGuid: null, DiagnosticCodes: [], IsSelectable: true)
+        var identity = AssetPath.Create("Content", name + ".omat");
+        var file = FileSystemPath.From("C:/Query" + identity.VirtualPath + AssetPath.AuthoringSuffix);
+        return new(identity, name, AssetKind.Material, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Unknown, identity.VirtualPath, file, file, CookedPath: null, AssetGuid: null, DiagnosticCodes: [], IsSelectable: true)
         {
-            CookStatus = new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []),
+            CookStatus = new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []),
         };
     }
 
@@ -42,9 +44,18 @@ internal static class BrowserTestData
     /// <summary>Creates a folder source that never reports a folder change.</summary>
     /// <returns>The folder source.</returns>
     internal static Oxygen.Managed.Assets.Catalog.IAssetFolderSource CreateNavigationFolders()
-        => Mock.Of<Oxygen.Managed.Assets.Catalog.IAssetFolderSource>(folders => folders.FolderChanges == System.Reactive.Linq.Observable.Never<Uri>());
+        => Mock.Of<Oxygen.Managed.Assets.Catalog.IAssetFolderSource>(folders => folders.FolderChanges == System.Reactive.Linq.Observable.Never<AssetPath>());
 
-    internal static AssetEntry CreateNavigationAsset(string path, AssetKind kind) => new(new("asset://" + path), Path.GetFileName(path), kind, AssetState.Descriptor, DerivedState: null, AssetRuntimeAvailability.Unknown, path, path, path, CookedUri: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
+    /// <summary>Creates a descriptor-backed asset row.</summary>
+    /// <param name="path">The asset's identity, its virtual path without the authoring suffix.</param>
+    /// <param name="kind">The asset kind.</param>
+    /// <returns>The row.</returns>
+    internal static AssetEntry CreateNavigationAsset(string path, AssetKind kind)
+    {
+        var identity = AssetPath.Parse(path);
+        var file = FileSystemPath.From("C:/Query" + identity.VirtualPath);
+        return new(identity, identity.Name, kind, AssetState.Descriptor, DerivedState: null, AssetRuntimeAvailability.Unknown, identity.VirtualPath, file, file, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
+    }
 
     internal static Mock<IAssetFeed> CreateQueryProvider(BehaviorSubject<IReadOnlyList<AssetEntry>> updates)
     {
@@ -57,19 +68,19 @@ internal static class BrowserTestData
     internal static ProjectContextService CreateQueryProject(bool cookedMount = false)
     {
         var projects = new ProjectContextService();
-        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Query", Category = Category.Games, ProjectRoot = "C:/Query", AuthoringMounts = cookedMount ? [new("Content", "Content"), new("Cooked", ".cooked")] : [new("Content", "Content")], LocalFolderMounts = [], });
+        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Query", Category = Category.Games, ProjectRoot = FileSystemPath.From("C:/Query"), AuthoringMounts = cookedMount ? [new("Content", "Content"), new("Cooked", ".cooked")] : [new("Content", "Content")], LocalFolderMounts = [], });
         return projects;
     }
 
     internal static AssetEntry CreateQueryAsset(string name, AssetKind kind, AssetCookFreshness freshness)
     {
         var folder = kind == AssetKind.Material ? "Materials" : "Geometry";
-        var asset = CreateNavigationAsset("/Content/" + folder + "/" + Uri.EscapeDataString(name), kind);
+        var asset = CreateNavigationAsset("/Content/" + folder + "/" + name, kind);
         var current = freshness == AssetCookFreshness.Current;
         return asset with
         {
             DisplayName = name,
-            CookStatus = new(asset.IdentityUri, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []),
+            CookStatus = new(asset.Identity, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []),
         };
     }
 }

@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.Shell;
-using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -17,25 +16,25 @@ public sealed class ContentBrowserNavigationTests
     [TestMethod]
     public void FolderScopeChangesAreAtomicAndIdempotent()
     {
-        var state = new ContentBrowserState(new ProjectContextService());
-        var observed = new List<string[]>();
+        var state = new ContentBrowserState();
+        var observed = new List<AssetPath[]>();
         state.PropertyChanged += (_, _) => observed.Add([.. state.SelectedFolders]);
-        state.SetSelectedFolders(["/Content/Geometry", "/Content/Materials"]);
+        state.SetSelectedFolders([AssetPath.Parse("/Content/Geometry"), AssetPath.Parse("/Content/Materials")]);
         state.SetSelectedFolders(state.SelectedFolders);
-        state.SetSelectedFolders(["/Content/Materials", "/Content/Geometry", "/Content/Materials"]);
+        state.SetSelectedFolders([AssetPath.Parse("/Content/Materials"), AssetPath.Parse("/Content/Geometry"), AssetPath.Parse("/Content/Materials")]);
         _ = observed.Should().ContainSingle();
-        _ = observed[0].Should().BeEquivalentTo(["/Content/Geometry", "/Content/Materials"]);
-        state.SetSelectedFolders(["/Content/Scenes"]);
+        _ = observed[0].Should().BeEquivalentTo([AssetPath.Parse("/Content/Geometry"), AssetPath.Parse("/Content/Materials")]);
+        state.SetSelectedFolders([AssetPath.Parse("/Content/Scenes")]);
         _ = observed.Should().HaveCount(2);
-        _ = observed[1].Should().Equal("/Content/Scenes");
+        _ = observed[1].Should().Equal(AssetPath.Parse("/Content/Scenes"));
     }
 
     /// <summary>Successful URLs replace every selected folder, including history and layout-switch URLs.</summary>
     [TestMethod]
     public void NavigationScopeRoundTripsMultipleFoldersAndClearsAtRoot()
     {
-        var state = new ContentBrowserState(new ProjectContextService());
-        var folders = new[] { "/Content/Materials", "/Cooked/Content/Geometry" };
+        var state = new ContentBrowserState();
+        var folders = new[] { AssetPath.Parse("/Content/Materials"), AssetPath.Parse("/Cooked/Content/Geometry") };
         var url = "/(left:project//right:assets/tiles)" + RouteStateMapping.BuildSelectedQuery(folders);
         RouteStateMapping.ApplyNavigationScope(state, url);
         _ = state.SelectedFolders.Should().BeEquivalentTo(folders);
@@ -43,13 +42,5 @@ public sealed class ContentBrowserNavigationTests
         _ = state.SelectedFolders.Should().BeEquivalentTo(folders);
         RouteStateMapping.ApplyNavigationScope(state, "/(left:project//right:assets/list)");
         _ = state.SelectedFolders.Should().BeEmpty();
-    }
-
-    /// <summary>Legacy root selection has the same scope as the canonical virtual root.</summary>
-    [TestMethod]
-    public void LegacyRootDoesNotHideTheProjectOrBroadenAConcreteFolder()
-    {
-        _ = AssetsLayoutViewModel.NormalizeSelectedFolders(["."]).Should().Equal("/");
-        _ = AssetsLayoutViewModel.NormalizeSelectedFolders([".", "/Content/Materials"]).Should().Equal("/Content/Materials");
     }
 }

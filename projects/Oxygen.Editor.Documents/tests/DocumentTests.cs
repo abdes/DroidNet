@@ -328,8 +328,8 @@ public sealed class DocumentTests : DocumentTestBase
         _ = note.References.Should().Equal(pine);
         _ = document.IsDirty.Should().BeFalse();
         _ = document.History.UndoStack.Should().ContainSingle();
-        _ = this.Documents.Find(PathOf("Timber")).Should().BeSameAs(document);
-        _ = this.Documents.Find(PathOf("Wood")).Should().BeNull();
+        _ = this.Documents.Find(LocationOf("Timber")).Should().BeSameAs(document);
+        _ = this.Documents.Find(LocationOf("Wood")).Should().BeNull();
         note.Edit("third");
         _ = (await document.SaveAsync(this.Token).ConfigureAwait(false)).Succeeded.Should().BeTrue();
         _ = this.ReadText("Timber").Should().Be("third");

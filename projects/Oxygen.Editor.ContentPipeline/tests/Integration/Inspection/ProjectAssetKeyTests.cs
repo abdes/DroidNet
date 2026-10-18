@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Inspection;
@@ -41,7 +42,7 @@ public sealed class ProjectAssetKeyTests
         var cached = JsonNode.Parse(await File.ReadAllTextAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false))!;
         var map = CookedAssetKeyMap.Parse(cached["Report"]!.GetValue<string>());
         var key = map.PathsByKey.Single(static pair => string.Equals(pair.Value, "/Content/Materials/Shared.omat", StringComparison.Ordinal)).Key;
-        _ = index.Resolve(key).Should().Be(new Uri("asset:///Content/Materials/Shared.omat"));
+        _ = index.Resolve(key).Should().Be(AssetPath.Parse("/Content/Materials/Shared.omat"));
         _ = map.PathsByKey.Values.Should().Contain(["/Content/Scripts/Spin.oscript", "/Content/Input/Jump.oiact", "/Content/Input/Gameplay.oimap", "/Content/Physics/Body.opscene"]);
         workspace.WriteMaterial("Content/Materials/Shared.omat.json", "Changed content");
         index = await ProjectAssetKeyIndex.ReadAsync(workspace.ProjectContext, [], this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -60,7 +61,7 @@ public sealed class ProjectAssetKeyTests
         _ = index.IsPending.Should().BeFalse();
         _ = index.Resolve(key).Should().BeNull();
         _ = index.Resolve(map.PathsByKey.Single(static pair => string.Equals(pair.Value, "/Content/Scripts/Spin.oscript", StringComparison.Ordinal)).Key)
-            .Should().Be(new Uri("asset:///Content/Scripts/Spin.oscript"));
+            .Should().Be(AssetPath.Parse("/Content/Scripts/Spin.oscript"));
         _ = runner.Count.Should().Be(3);
         _ = File.Exists(global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationPaths.Head(workspace.Root)).Should().BeFalse();
     }

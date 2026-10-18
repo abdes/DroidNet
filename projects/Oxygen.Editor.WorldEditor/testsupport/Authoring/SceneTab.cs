@@ -69,7 +69,7 @@ internal sealed partial class SceneTab : IDisposable
 
     /// <summary>Replaces the document's file with what a scene records, as another program would; a reload reads it.</summary>
     /// <param name="scene">The scene the file records.</param>
-    public void WriteFile(Scene scene) => this.files.Put(this.Document.File.Path, scene);
+    public void WriteFile(Scene scene) => this.files.Put(this.Document.File.Path.FullPath, scene);
 
     /// <summary>Replaces the explorer layout of the document's scene in place, outside the history.</summary>
     /// <param name="entries">The layout's top-level entries.</param>

@@ -63,7 +63,6 @@ public sealed class SceneEnvironmentRulesTests
         PropertyCase.OfScene("AerialStart_BelowSchemaMinimum", Environment.AerialPerspectiveStartDepthMeters, -0.01f),
         PropertyCase.OfScene("BlackInfluence_AboveOne", Environment.AutoExposureBlackInfluence, 1.01f),
         PropertyCase.OfScene("TransitionDistance_Zero", Environment.AutoExposureTransitionDistanceEv, 0f),
-        PropertyCase.OfScene("MeteringMask_NotAnAssetUri", Environment.AutoExposureMeteringMask, new Uri("file:///c:/mask.png")),
         PropertyCase.OfScene("Backdrop_None", SceneSkyFields.Backdrop, EnvironmentBackdrop.None),
         PropertyCase.OfScene("FogDensity_Negative", SceneFogFields.Density, -0.01f),
         PropertyCase.OfScene("FogMaxOpacity_AboveOne", SceneFogFields.MaxOpacity, 1.01f),
@@ -117,22 +116,6 @@ public sealed class SceneEnvironmentRulesTests
         var result = await fixture.Authoring.ExecuteAsync(edit).ConfigureAwait(false);
 
         SceneAssert.Invalid(result, code, node: null, namesProperty ? Environment.AutoExposureCompensationCurve.Id : null);
-        SceneAssert.Unchanged(fixture, before);
-    }
-
-    [TestMethod]
-    [DataRow("file:///c:/cube.hdr", DisplayName = "FileUri")]
-    [DataRow("asset:/Content/Cube.ogeo?variant=1", DisplayName = "WithQuery")]
-    [DataRow("asset:/Content/Cube.ogeo#part", DisplayName = "WithFragment")]
-    public async Task CubemapUri_NotAnAssetUri_IsInvalid(string reference)
-    {
-        using var fixture = await AuthoringFixture.CreateAsync(SceneWith(DefaultsWithRoomToMove())).ConfigureAwait(false);
-        var edit = new SetSceneProperties(new PropertyEdit.Builder().Set(SceneSkyFields.SkySphereCubemap, new Uri(reference)).Build(), "Cubemap");
-        var before = fixture.Snapshot();
-
-        var result = await fixture.Authoring.ExecuteAsync(edit).ConfigureAwait(false);
-
-        SceneAssert.Invalid(result, SceneEditCodes.PropertyOutOfRange, node: null, SceneSkyFields.SkySphereCubemap.Id);
         SceneAssert.Unchanged(fixture, before);
     }
 

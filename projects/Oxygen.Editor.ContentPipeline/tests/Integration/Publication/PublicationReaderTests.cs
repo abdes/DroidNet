@@ -26,7 +26,7 @@ public sealed class PublicationReaderTests
         var transaction = await project.PrepareAsync(staging, cancellation.Token).ConfigureAwait(false);
         using var reader = project.Baseline.Retain();
         using var accepted = await transaction.PublishAsync(preview: null, project.Baseline, static () => { }, cancellation.Token).WaitAsync(cancellation.Token).ConfigureAwait(false);
-        var oldRoot = reader.FindProjectRoot("Content")!;
+        var oldRoot = reader.FindProjectRoot("Content")!.FullPath;
         _ = (reader.PublicationId == accepted.PublicationId).Should().BeFalse();
         using var catalog = await reader.CreateCatalogAsync(reader.Roots.Single(static root => root.Name == "Content"), cancellation.Token).ConfigureAwait(false);
         _ = File.ReadAllText(Path.Combine(oldRoot, "value.txt")).Should().Be("old:Content");

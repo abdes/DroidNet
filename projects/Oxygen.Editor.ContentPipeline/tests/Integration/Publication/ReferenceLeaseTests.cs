@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
@@ -44,7 +45,7 @@ public sealed class ReferenceLeaseTests
         var consumer = foreignLibrary ? foreignConsumer : workspace;
         if (foreignLibrary)
         {
-            consumer.Activate(consumer.ProjectContext with { LocalFolderMounts = [new("Library", workspace.CookedRoot("Art"))] });
+            consumer.Activate(consumer.ProjectContext with { LocalFolderMounts = [new("Library", FileSystemPath.From(workspace.CookedRoot("Art")))] });
             service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         }
 
@@ -61,7 +62,7 @@ public sealed class ReferenceLeaseTests
         };
         try
         {
-            var work = service.CookCurrentSceneAsync(new("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken);
+            var work = service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken);
             if (terminationFailure)
             {
                 await AssertReaderRetainedUntilDrainAsync(this.TestContext, work, consumer, openForWrite, drain).ConfigureAwait(false);

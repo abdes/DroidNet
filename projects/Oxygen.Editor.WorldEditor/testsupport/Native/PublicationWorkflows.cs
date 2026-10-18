@@ -23,6 +23,7 @@ using Oxygen.Editor.Materials.Properties;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Schemas;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
@@ -31,18 +32,18 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 
 internal static class PublicationWorkflows
 {
-    internal static Dictionary<string, string> ReadPublishedHashes(string projectRoot)
+    internal static Dictionary<string, string> ReadPublishedHashes(FileSystemPath projectRoot)
     {
-        var headPath = CookPublicationPaths.Head(projectRoot);
+        var headPath = CookPublicationPaths.Head(projectRoot.FullPath);
         if (!File.Exists(headPath))
         {
             return [];
         }
 
         var head = System.Text.Json.JsonSerializer.Deserialize<CookPublicationHead>(File.ReadAllBytes(headPath), CookPublicationDocument.JsonOptions)!;
-        var documentPath = CookPublicationPaths.Document(projectRoot, head.PublicationId);
+        var documentPath = CookPublicationPaths.Document(projectRoot.FullPath, head.PublicationId);
         var document = System.Text.Json.JsonSerializer.Deserialize<CookPublicationDocument>(File.ReadAllBytes(documentPath), CookPublicationDocument.JsonOptions)!;
-        return document.Roots.SelectMany(root => Directory.GetFiles(root.ResolvePath(projectRoot), "*", SearchOption.AllDirectories)).Append(headPath).Append(documentPath).ToDictionary(static path => path, static path => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))), StringComparer.OrdinalIgnoreCase);
+        return document.Roots.SelectMany(root => Directory.GetFiles(root.ResolvePath(projectRoot.FullPath), "*", SearchOption.AllDirectories)).Append(headPath).Append(documentPath).ToDictionary(static path => path, static path => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))), StringComparer.OrdinalIgnoreCase);
     }
 
     internal static async Task SetPublicationMaterialColorAsync(MaterialEdits edits, Document material, Vector4 color, CancellationToken cancellationToken)
@@ -77,17 +78,17 @@ internal static class PublicationWorkflows
     {
         var red = new Vector4(1, 0, 0, 1);
         await SetPublicationMaterialColorAsync(materials, material, red, cancellationToken).ConfigureAwait(true);
-        var before = await feed.ResolveAsync(material.File.AssetUri, cancellationToken).ConfigureAwait(true);
+        var before = await feed.ResolveAsync(material.File.Asset, cancellationToken).ConfigureAwait(true);
         _ = before.Should().NotBeNull();
         _ = before!.CookStatus!.Freshness.Should().Be(AssetCookFreshness.NeedsCooking);
         _ = before.CookStatus.HasPublishedOutput.Should().BeFalse();
-        _ = File.Exists(before.CookedPath).Should().BeFalse();
+        _ = File.Exists(before.CookedPath?.FullPath).Should().BeFalse();
         _ = before.RuntimeAvailability.Should().NotBe(AssetRuntimeAvailability.Mounted);
-        _ = (await services.Pipeline.CookAssetAsync(material.File.AssetUri, cancellationToken).ConfigureAwait(true)).IsPublished.Should().BeTrue();
-        var choice = await feed.ResolveAsync(material.File.AssetUri, cancellationToken).ConfigureAwait(true);
+        _ = (await services.Pipeline.CookAssetAsync(material.File.Asset, cancellationToken).ConfigureAwait(true)).IsPublished.Should().BeTrue();
+        var choice = await feed.ResolveAsync(material.File.Asset, cancellationToken).ConfigureAwait(true);
         _ = choice!.CookStatus!.Freshness.Should().Be(AssetCookFreshness.Current);
         _ = choice.RuntimeAvailability.Should().Be(AssetRuntimeAvailability.Mounted);
-        _ = File.Exists(choice.CookedPath).Should().BeTrue();
+        _ = File.Exists(choice.CookedPath?.FullPath).Should().BeTrue();
         var nodes = fixture.Source.RootNodes.Select(static node => node.Id).ToArray();
         fixture.Document.History.BeginChangeSet("Assign shared material");
         try
@@ -95,7 +96,7 @@ internal static class PublicationWorkflows
             foreach (var nodeId in nodes)
             {
                 var target = await fixture.ReadSingleMaterialSlotAsync(nodeId, cancellationToken).ConfigureAwait(true);
-                var result = await fixture.Authoring.ExecuteAsync(new SetMaterialSlot([nodeId], target, choice.IdentityUri)).ConfigureAwait(true);
+                var result = await fixture.Authoring.ExecuteAsync(new SetMaterialSlot([nodeId], target, choice.Identity)).ConfigureAwait(true);
                 _ = result.Succeeded.Should().BeTrue();
             }
         }
@@ -131,12 +132,12 @@ internal static class PublicationWorkflows
         }
         else
         {
-            var sceneUri = new Uri("asset:///Content/Scenes/" + Uri.EscapeDataString(source.Name) + ".oscene.json");
+            var sceneAsset = AssetPath.Create("Content", $"Scenes/{source.Name}.oscene");
             var cooked = await (scope switch
             {
-                CookTargetKind.Asset => services.Pipeline.CookAssetAsync(material.File.AssetUri, cancellationToken),
-                CookTargetKind.Folder => services.Pipeline.CookFolderAsync(new("asset:///Content/Materials"), cancellationToken),
-                CookTargetKind.CurrentScene => services.Pipeline.CookCurrentSceneAsync(sceneUri, cancellationToken),
+                CookTargetKind.Asset => services.Pipeline.CookAssetAsync(material.File.Asset, cancellationToken),
+                CookTargetKind.Folder => services.Pipeline.CookFolderAsync(AssetPath.Parse("/Content/Materials"), cancellationToken),
+                CookTargetKind.CurrentScene => services.Pipeline.CookCurrentSceneAsync(sceneAsset, cancellationToken),
                 _ => services.Pipeline.CookProjectAsync(cancellationToken),
             }).ConfigureAwait(true);
             _ = cooked.Status.Should().BeOneOf(OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings);
@@ -155,7 +156,7 @@ internal static class PublicationWorkflows
         _ = fixture.Document.History.Position.Should().Be(revision);
         _ = fixture.Document.History.UndoStack.Should().HaveCount(history);
         _ = fixture.Document.IsDirty.Should().Be(dirty);
-        var updated = await feed.ResolveAsync(material.File.AssetUri, cancellationToken).ConfigureAwait(true);
+        var updated = await feed.ResolveAsync(material.File.Asset, cancellationToken).ConfigureAwait(true);
         _ = updated!.CookStatus!.Freshness.Should().Be(AssetCookFreshness.Current);
         _ = updated.RuntimeAvailability.Should().Be(AssetRuntimeAvailability.Mounted);
     }
@@ -210,10 +211,10 @@ internal static class PublicationWorkflows
     /// <returns>The material's document.</returns>
     internal static async Task<Document> CreateMaterialAsync(NativeSceneFixture fixture, string name, CancellationToken cancellationToken)
     {
-        var path = Path.Combine(fixture.ProjectRoot, "Content", "Materials", name + ".omat.json");
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllBytesAsync(path, Encoding.UTF8.GetBytes(AssetTemplates.Material(name)), cancellationToken).ConfigureAwait(true);
-        var opened = await fixture.OpenDocuments.OpenAsync(new DocumentFile(path, new Uri($"asset:///Content/Materials/{name}.omat.json")), cancellationToken).ConfigureAwait(true);
+        var path = fixture.ProjectRoot.Combine("Content").Combine("Materials").Combine(name + ".omat.json");
+        _ = Directory.CreateDirectory(path.Parent!.FullPath);
+        await File.WriteAllBytesAsync(path.FullPath, Encoding.UTF8.GetBytes(AssetTemplates.Material(name)), cancellationToken).ConfigureAwait(true);
+        var opened = await fixture.OpenDocuments.OpenAsync(new DocumentFile(path, AssetPath.Create("Content", $"Materials/{name}.omat")), cancellationToken).ConfigureAwait(true);
         return opened.Document ?? throw new InvalidOperationException(opened.Problem);
     }
 

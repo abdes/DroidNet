@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using DroidNet.TimeMachine;
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Relocation;
 
@@ -27,12 +28,13 @@ public sealed class AssetRedirectsTests
         _ = await service.RelocateAsync(Move("/Content/Materials/A.omat.json", "/Content/Materials/B.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
         var second = await service.RelocateAsync(Move("/Content/Materials/B.omat.json", "/Content/Materials/C.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = redirects.Resolve("asset:///Content/Materials/A.omat.json").Should().Be("asset:///Content/Materials/C.omat.json");
+        _ = redirects.Resolve("asset:///Content/Materials/A.omat").Should().Be("asset:///Content/Materials/C.omat");
         _ = redirects.Resolve("/Content/Materials/A.omat").Should().Be("/Content/Materials/C.omat");
-        _ = redirects.Resolve(new Uri("asset:///Content/Materials/Other.omat.json")).Should().Be(new Uri("asset:///Content/Materials/Other.omat.json"));
+        _ = redirects.Resolve(AssetPath.Parse("/Content/Materials/A.omat")).Should().Be(AssetPath.Parse("/Content/Materials/C.omat"));
+        _ = redirects.Resolve(AssetPath.Parse("/Content/Materials/Other.omat")).Should().Be(AssetPath.Parse("/Content/Materials/Other.omat"));
 
         _ = await service.RelocateAsync(second.Reverse, "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = redirects.Resolve("asset:///Content/Materials/A.omat.json").Should().Be("asset:///Content/Materials/B.omat.json");
+        _ = redirects.Resolve("asset:///Content/Materials/A.omat").Should().Be("asset:///Content/Materials/B.omat");
     }
 
     /// <summary>A reference whose asset exists again at its old path is never redirected.</summary>
@@ -47,7 +49,7 @@ public sealed class AssetRedirectsTests
         _ = await service.RelocateAsync(Move("/Content/Materials/A.omat.json", "/Content/Materials/B.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
 
-        _ = redirects.Resolve("asset:///Content/Materials/A.omat.json").Should().Be("asset:///Content/Materials/A.omat.json");
+        _ = redirects.Resolve("asset:///Content/Materials/A.omat").Should().Be("asset:///Content/Materials/A.omat");
     }
 
     /// <summary>Deleted assets are reported, until something exists at that path again.</summary>
@@ -61,7 +63,7 @@ public sealed class AssetRedirectsTests
         var path = workspace.Write("Content/Materials/A.omat.json", "{}");
 
         await service.DeleteAsync(
-            ["/Content/Materials/A.omat.json"],
+            [AssetPath.Parse("/Content/Materials/A.omat.json")],
             paths =>
             {
                 File.Delete(path);
@@ -69,10 +71,10 @@ public sealed class AssetRedirectsTests
             },
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = redirects.WasDeleted(new Uri("asset:///Content/Materials/A.omat.json")).Should().BeTrue();
-        _ = redirects.WasDeleted(new Uri("asset:///Content/Materials/B.omat.json")).Should().BeFalse();
+        _ = redirects.WasDeleted(AssetPath.Parse("/Content/Materials/A.omat.json")).Should().BeTrue();
+        _ = redirects.WasDeleted(AssetPath.Parse("/Content/Materials/B.omat.json")).Should().BeFalse();
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
-        _ = redirects.WasDeleted(new Uri("asset:///Content/Materials/A.omat.json")).Should().BeFalse();
+        _ = redirects.WasDeleted(AssetPath.Parse("/Content/Materials/A.omat.json")).Should().BeFalse();
     }
 
     /// <summary>Participants follow the committed change, with the written versions, before the relocation returns.</summary>
@@ -83,7 +85,8 @@ public sealed class AssetRedirectsTests
         using var workspace = new RelocationWorkspace();
         var service = workspace.CreateService(redirects: null);
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
-        var scene = workspace.Write("Content/Scenes/Main.oscene.json", """{ "GeometryUri": "asset:///Content/Materials/A.omat.json" }""");
+        var scene = workspace.FileOf("Content/Scenes/Main.oscene.json");
+        _ = workspace.Write("Content/Scenes/Main.oscene.json", """{ "GeometryUri": "asset:///Content/Materials/A.omat" }""");
         AssetRelocationChange? followed = null;
         using var registration = service.AddParticipant(new Participant(change => followed = change));
 
@@ -92,12 +95,13 @@ public sealed class AssetRedirectsTests
         _ = followed.Should().NotBeNull();
         var rewrite = followed!.FindRewrite(scene);
         _ = rewrite.Should().NotBeNull();
-        _ = rewrite!.Written.Should().Be((await workspace.Files.ReadAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Version);
-        _ = followed.MapReference(new Uri("asset:///Content/Materials/A.omat.json")).Should().Be(new Uri("asset:///Content/Materials/B.omat.json"));
-        _ = followed.MapPath(workspace.PathOf("Content/Materials/A.omat.json")).Should().Be(workspace.PathOf("Content/Materials/B.omat.json"));
+        _ = rewrite!.Written.Should().Be((await workspace.Files.ReadAsync(scene.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false)).Version);
+        _ = followed.MapAsset(AssetPath.Parse("/Content/Materials/A.omat")).Should().Be(AssetPath.Parse("/Content/Materials/B.omat"));
+        _ = followed.MapReference("asset:///Content/Materials/A.omat").Should().Be("asset:///Content/Materials/B.omat");
+        _ = followed.MapPath(workspace.FileOf("Content/Materials/A.omat.json")).Should().Be(workspace.FileOf("Content/Materials/B.omat.json"));
     }
 
-    private static AssetRelocationRequest Move(string source, string target) => new() { Moves = [new(source, target)] };
+    private static AssetRelocationRequest Move(string source, string target) => new() { Moves = [new(AssetPath.Parse(source), AssetPath.Parse(target))] };
 
     private sealed class Participant(Action<AssetRelocationChange> follow) : IAssetRelocationParticipant
     {

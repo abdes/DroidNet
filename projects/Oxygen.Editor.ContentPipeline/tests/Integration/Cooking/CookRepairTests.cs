@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.FileSystem;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
@@ -43,7 +44,7 @@ public sealed class CookRepairTests
             workspace.Scene.Name = name;
             await workspace.WriteSceneAsync($"Content/Scenes/{name}.oscene.json").ConfigureAwait(false);
             File.Delete(Path.Combine(workspace.Root, "Content", "Scenes", $"{previousName}.oscene.json"));
-            var result = await pipeline.CookAssetAsync(new($"asset:///Content/Scenes/{Uri.EscapeDataString(name)}.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+            var result = await pipeline.CookAssetAsync(AssetPath.Parse($"/Content/Scenes/{name}.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
             AssertCookSucceeded(result);
             _ = result.IsPublished.Should().BeTrue();
             var root = workspace.CookedRoot("Content");
@@ -75,7 +76,7 @@ public sealed class CookRepairTests
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         File.Move(Path.Combine(workspace.Root, "Content/Materials/Blue.omat.json"), Path.Combine(workspace.Root, "Content/Materials/Teal.omat.json"));
 
-        var result = await pipeline.CookAssetAsync(new("asset:///Content/Materials/Teal.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await pipeline.CookAssetAsync(AssetPath.Parse("/Content/Materials/Teal.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertCookSucceeded(result);
         _ = result.IsPublished.Should().BeTrue();
@@ -100,7 +101,7 @@ public sealed class CookRepairTests
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
 
-        var result = await pipeline.CookAssetAsync(new("asset:///Content/New%20folder%20%282%29/Wet%20Rubber.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await pipeline.CookAssetAsync(AssetPath.Parse("/Content/New folder (2)/Wet Rubber.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertCookSucceeded(result);
         _ = (await api.ReadInventoryAsync(workspace.CookedRoot("Content"), artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false))
@@ -125,7 +126,7 @@ public sealed class CookRepairTests
         File.Delete(Path.Combine(workspace.Root, "Content/Materials/Blue.omat.json"));
         api.Imported.Clear();
 
-        var result = await pipeline.CookSavedAssetAsync(new("asset:///Content/Materials/Blue.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await pipeline.CookSavedAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertCookSucceeded(result);
         _ = result.IsPublished.Should().BeTrue();
@@ -157,7 +158,7 @@ public sealed class CookRepairTests
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         File.Delete(Path.Combine(workspace.Root, "Content/Materials/Blue.omat.json"));
 
-        var result = await pipeline.CookSavedAssetAsync(new("asset:///Content/Materials/Blue.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await pipeline.CookSavedAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.IsPublished.Should().BeFalse();
         _ = result.Status.Should().NotBe(OperationStatus.Succeeded);
@@ -184,7 +185,7 @@ public sealed class CookRepairTests
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         using var catalog = new FileSystemAssetCatalog(
             new NativeStorageProvider(new RealFileSystem()),
-            new() { RootFolderPath = Path.Combine(workspace.Root, "Content"), MountPoint = "Content" });
+            new() { RootFolderPath = FileSystemPath.From(Path.Combine(workspace.Root, "Content")), MountPoint = "Content" });
         _ = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
         using var automatic = new AutomaticCookService(
             workspace.ContextService, workspace.Manager, catalog, pipeline, pipeline, workspace.CookCoordinator, NullLogger<AutomaticCookService>.Instance);
@@ -227,7 +228,7 @@ public sealed class CookRepairTests
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         using var catalog = new FileSystemAssetCatalog(
             new NativeStorageProvider(new RealFileSystem()),
-            new() { RootFolderPath = Path.Combine(workspace.Root, "Content"), MountPoint = "Content" });
+            new() { RootFolderPath = FileSystemPath.From(Path.Combine(workspace.Root, "Content")), MountPoint = "Content" });
         _ = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
         using var automatic = new AutomaticCookService(
             workspace.ContextService, workspace.Manager, catalog, pipeline, pipeline, workspace.CookCoordinator, NullLogger<AutomaticCookService>.Instance);
@@ -275,7 +276,7 @@ public sealed class CookRepairTests
         using var registration = workspace.Publication.RegisterPreview(workspace.ProjectContext, () => Task.FromResult<ICookPublicationPreview?>(preview));
         File.Delete(Path.Combine(workspace.Root, "Content/Materials/Blue.omat.json"));
 
-        var result = await pipeline.CookSavedAssetAsync(new("asset:///Content/Materials/Blue.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await pipeline.CookSavedAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertCookSucceeded(result);
         _ = result.IsPublished.Should().BeTrue();
@@ -327,7 +328,7 @@ public sealed class CookRepairTests
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         File.Delete(Path.Combine(workspace.Root, "Content/Materials/Blue.omat.json"));
 
-        var result = await pipeline.CookSavedAssetAsync(new("asset:///Content/Materials/Blue.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await pipeline.CookSavedAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Status.Should().Be(OperationStatus.Cancelled);
         _ = result.Diagnostics.Should().NotContain(static diagnostic => diagnostic.Severity >= DiagnosticSeverity.Error);
@@ -400,7 +401,7 @@ public sealed class CookRepairTests
 
         api.FailNextImport = string.Equals(failure, "native", StringComparison.Ordinal);
         api.Imported.Clear();
-        var result = await pipeline.CookAssetAsync(new("asset:///Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await pipeline.CookAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         if (!string.Equals(failure, "none", StringComparison.Ordinal))
         {
             _ = result.Status.Should().BeOneOf(OperationStatus.Failed, OperationStatus.PartiallySucceeded);
@@ -459,7 +460,7 @@ public sealed class CookRepairTests
             await File.WriteAllBytesAsync(path, [0], this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 
-        var result = await pipeline.CookAssetAsync(new("asset:///Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await pipeline.CookAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(result);
         _ = result.CookedAssets.Select(static asset => asset.VirtualPath).Should().BeEquivalentTo(first.CookedAssets.Select(static asset => asset.VirtualPath));
         _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();

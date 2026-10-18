@@ -16,6 +16,7 @@ using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -93,7 +94,7 @@ public sealed partial class SceneExplorerAuthoringTests
         _ = renamed.Succeeded.Should().BeTrue();
         relocation.Verify(
             value => value.RelocateAsync(
-                It.Is<AssetRelocationRequest>(request => request.Moves.Single() == new AssetRelocationMove("/Content/Scene.oscene.json", "/Content/Lantern Demo.oscene.json")),
+                It.Is<AssetRelocationRequest>(request => request.Moves.Single() == new AssetRelocationMove(AssetPath.Parse("/Content/Scene.oscene.json"), AssetPath.Parse("/Content/Lantern Demo.oscene.json"))),
                 "Rename",
                 global,
                 It.IsAny<CancellationToken>()),

@@ -32,8 +32,8 @@ public sealed class SourceRetentionTests
             },
             this.TestContext.CancellationToken);
         _ = await operation.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
-        File.Delete(primary.SourcePath);
-        File.Delete(buffer.SourcePath);
+        File.Delete(primary.SourcePath.FullPath);
+        File.Delete(buffer.SourcePath.FullPath);
         _ = retained.Should().NotBeNull();
         _ = retained!.DirectoryRelativePath.Should().Be("Content/SourceMedia/DCC/Model");
         _ = retained.PrimaryRelativePath.Should().Be("model.gltf");
@@ -83,17 +83,17 @@ public sealed class SourceRetentionTests
         var dependency = workspace.Write("buffers/data.bin", "old");
         if (missing)
         {
-            File.Delete(dependency.SourcePath);
+            File.Delete(dependency.SourcePath.FullPath);
         }
         else
         {
-            await File.WriteAllTextAsync(dependency.SourcePath, "changed after discovery", this.TestContext.CancellationToken).ConfigureAwait(false);
+            await File.WriteAllTextAsync(dependency.SourcePath.FullPath, "changed after discovery", this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 
         var retain = () => workspace.RetainAsync("Model", [primary, dependency], this.TestContext.CancellationToken);
         _ = await retain.Should().ThrowAsync<IOException>().ConfigureAwait(false);
         _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
-        _ = File.Exists(primary.SourcePath).Should().BeTrue();
+        _ = File.Exists(primary.SourcePath.FullPath).Should().BeTrue();
     }
 
     /// <summary>Project closure during discovery cancels retention instead of copying into another activation.</summary>

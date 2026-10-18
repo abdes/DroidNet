@@ -12,6 +12,7 @@ using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Mounting;
@@ -53,7 +54,7 @@ public sealed class CookedContentMountTests
         using var fixture = new MountFixture();
         var project = fixture.Project with
         {
-            LocalFolderMounts = [.. fixture.Project.LocalFolderMounts, new("Alias", fixture.First)],
+            LocalFolderMounts = [.. fixture.Project.LocalFolderMounts, new("Alias", FileSystemPath.From(fixture.First))],
             CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "First"), new(CookedContentSourceKind.LocalFolder, "Second"), new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.LocalFolder, "Alias")],
         };
         using var reader = await fixture.CaptureAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -146,9 +147,9 @@ public sealed class CookedContentMountTests
                 ProjectId = Guid.NewGuid(),
                 Name = "Mounts",
                 Category = Category.Games,
-                ProjectRoot = this.directory.FullName,
+                ProjectRoot = FileSystemPath.From(this.directory.FullName),
                 AuthoringMounts = [new("Content", "Content")],
-                LocalFolderMounts = [new("First", this.First), new("Second", this.Second)],
+                LocalFolderMounts = [new("First", FileSystemPath.From(this.First)), new("Second", FileSystemPath.From(this.Second))],
             };
             this.Service = new();
         }
@@ -177,12 +178,12 @@ public sealed class CookedContentMountTests
                 roots,
                 [],
                 CookInputs: null);
-            var path = CookPublicationPaths.Document(project.ProjectRoot, document.OperationId);
+            var path = CookPublicationPaths.Document(project.ProjectRoot.FullPath, document.OperationId);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             using var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(false);
             var version = await this.files.WriteAsync(path, JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), FileVersion.Missing, token).ConfigureAwait(false);
             var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
-            _ = await this.files.WriteAsync(CookPublicationPaths.Head(project.ProjectRoot), JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), FileVersion.Missing, token).ConfigureAwait(false);
+            _ = await this.files.WriteAsync(CookPublicationPaths.Head(project.ProjectRoot.FullPath), JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), FileVersion.Missing, token).ConfigureAwait(false);
             return await CookPublicationReadLease.OpenUnderGateAsync(project, this.files, gate, token).ConfigureAwait(false);
         }
 

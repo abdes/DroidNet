@@ -6,6 +6,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 
@@ -90,11 +91,12 @@ public sealed class TestSupportTests
     {
         var redirects = new FakeAssetRedirects();
         redirects.Move(SampleScene.CubeGeometry, SampleScene.SphereGeometry);
-        var moved = new Uri("asset:/Content/Ball.ogeo");
+        var moved = AssetPath.Parse("/Content/Ball.ogeo");
         redirects.Move(SampleScene.SphereGeometry, moved);
 
         _ = redirects.Resolve(SampleScene.CubeGeometry).Should().Be(moved);
-        _ = redirects.Resolve(SampleScene.CubeGeometry.ToString()).Should().Be(moved.ToString());
+        _ = redirects.Resolve(SampleScene.CubeGeometry.VirtualPath).Should().Be(moved.VirtualPath);
+        _ = redirects.Resolve(SampleScene.CubeGeometry.ToUriString()).Should().Be(moved.ToUriString());
         _ = redirects.Resolve("not a uri").Should().Be("not a uri");
     }
 

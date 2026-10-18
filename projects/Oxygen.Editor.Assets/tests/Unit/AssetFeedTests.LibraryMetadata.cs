@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Editor.Assets.TestSupport;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
@@ -22,17 +23,17 @@ public sealed partial class AssetFeedTests
     public async Task StatusRefreshUsesSnapshotsAndNeverStartsLibraryInspection()
     {
         using var workspace = new AssetWorkspace();
-        var uri = new Uri("asset:///Content/Materials/Red.omat.json");
+        var identity = AssetPath.Parse("/Content/Materials/Red.omat");
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
-        var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]);
+        var catalog = new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
         var projects = workspace.ActivateProject();
         projects.Activate(projects.ActiveProject! with { LocalFolderMounts = [new("Library", workspace.Root)] });
         var updated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var known = false;
         var statuses = new Mock<IAssetCookStatusReader>();
         var metadata = statuses.As<ICookedLibraryMetadataService>();
-        _ = statuses.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<IReadOnlyList<Uri>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => [new AssetCookStatus(uri, known ? AssetCookFreshness.Current : AssetCookFreshness.Unknown, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])]);
+        _ = statuses.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<IReadOnlyList<AssetPath>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => [new AssetCookStatus(identity, known ? AssetCookFreshness.Current : AssetCookFreshness.Unknown, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])]);
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, projects, new WorkspaceCookScopeProvider(workspace), statuses.Object, new CookDocumentRegistry(), EmptyCookRuns(), runtime, NoRelocations(), NoAuthoring());
         var observer = new Observer<IReadOnlyList<AssetEntry>>(rows =>
@@ -46,7 +47,7 @@ public sealed partial class AssetFeedTests
         await provider.RefreshAsync(this.TestContext.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = updated.Task.IsCompleted.Should().BeFalse();
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        statuses.Verify(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<IReadOnlyList<Uri>>(), It.IsAny<CancellationToken>()), Times.Once);
+        statuses.Verify(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<IReadOnlyList<AssetPath>>(), It.IsAny<CancellationToken>()), Times.Once);
         known = true;
         statuses.Raise(value => value.Changed += null, EventArgs.Empty);
         await updated.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);

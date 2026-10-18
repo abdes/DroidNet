@@ -5,6 +5,7 @@
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Inspection;
 
@@ -14,7 +15,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Inspection;
 public sealed class ScriptMetadataTests
 {
     private const string Key = "10203040-5060-7080-90a0-b0c0d0e0f001";
-    private static readonly Uri Script = new("asset:///.cooked/Scripts/rotate.oscript");
+    private static readonly AssetPath Script = AssetPath.Parse("/.cooked/Scripts/rotate.oscript");
 
     [TestMethod]
     public void CookedDeclarationsKeepOrderTypesDefaultsAndAssetKinds()

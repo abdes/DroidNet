@@ -153,7 +153,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         using var fixture = new SceneAuthoringFixture();
         using var model = fixture.CreateInspectorHost("Camera");
         model.SelectComponentFilter(typeof(PerspectiveCamera));
-        _ = fixture.Node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube") });
+        _ = fixture.Node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = AssetPath.Generated.Combine("BasicShapes/Cube") });
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.SelectedComponentType.Should().Be<PerspectiveCamera>();
         _ = (await fixture.Authoring.ExecuteAsync(new RemoveComponent(fixture.Node.Id, fixture.Camera.Id)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
@@ -248,7 +248,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         {
             Name = "Other node",
         };
-        _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube") });
+        _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = AssetPath.Generated.Combine("BasicShapes/Cube") });
         scene.RootNodes.Add(node);
         using var metadata = SceneTabs.Open(scene);
         scene = metadata.Scene;

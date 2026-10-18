@@ -8,6 +8,7 @@ using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Settings;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits.Settings;
 
@@ -21,7 +22,6 @@ public sealed class SetSceneReferencesTests
 {
     public static IEnumerable<TestDataRow<ReferencesCase>> InvalidReferences =>
     [
-        new(new ReferencesCase(new SceneReferencesData { Scripts = [new Uri("https://example.com/Move.oscript")] })) { DisplayName = "NotAssetScheme" },
         new(new ReferencesCase(new SceneReferencesData { Scripts = [SampleScene.CubeGeometry] })) { DisplayName = "ScriptOfWrongType" },
         new(new ReferencesCase(new SceneReferencesData { ExtraAssets = ["/Content/../Extra.bin"] })) { DisplayName = "ExtraPathNotCanonical" },
     ];
@@ -72,8 +72,8 @@ public sealed class SetSceneReferencesTests
         => new()
         {
             Scripts = [SampleScene.MoveScript],
-            InputActions = [new Uri("asset:/Content/Jump.oiact")],
-            PhysicsSidecars = [new Uri("asset:/Content/World.opscene")],
+            InputActions = [AssetPath.Parse("/Content/Jump.oiact")],
+            PhysicsSidecars = [AssetPath.Parse("/Content/World.opscene")],
             ExtraAssets = ["/Content/Extra.bin"],
         };
 }

@@ -7,6 +7,7 @@ using DroidNet.Storage;
 using DroidNet.TimeMachine.Changes;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Shell.Unit.Tests.Documents;
 
@@ -46,11 +47,11 @@ public sealed class DocumentTabTests
         var changes = new List<string?>();
         tab.PropertyChanged += (_, args) => changes.Add(args.PropertyName);
 
-        notes.Files.Delete(document.File.Path);
+        notes.Files.Delete(document.File.Path.FullPath);
         _ = await document.CheckFileAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = tab.IsDirty.Should().BeTrue("a missing file is unsaved");
 
-        _ = await notes.Files.WriteAsync(document.File.Path, "outside"u8.ToArray(), FileVersion.Missing, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await notes.Files.WriteAsync(document.File.Path.FullPath, "outside"u8.ToArray(), FileVersion.Missing, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await document.ReloadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = tab.IsDirty.Should().BeFalse("the reload took the file as it is now");
         _ = changes.Should().Contain(nameof(tab.IsDirty)).And.HaveCountGreaterThanOrEqualTo(2);
@@ -64,10 +65,10 @@ public sealed class DocumentTabTests
         using var notes = new Notes();
         var document = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var tab = new DocumentTab(document, new DocumentEditorDescriptor(notes.Kind, static _ => new object()));
-        var moved = Path.Combine(Path.GetDirectoryName(document.File.Path)!, "Opening.note");
+        var moved = FileSystemPath.From(Path.Combine(Path.GetDirectoryName(document.File.Path.FullPath)!, "Opening.note"));
 
         await document.FollowRelocationAsync(
-            new DocumentRelocation(new DocumentFile(moved, new Uri("asset:///Content/Opening.note")), document.Version, static _ => null),
+            new DocumentRelocation(new DocumentFile(moved, AssetPath.Parse("/Content/Opening.note")), document.Version, static _ => null),
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = tab.Title.Should().Be("Opening");

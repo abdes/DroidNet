@@ -48,7 +48,7 @@ public sealed partial class DocumentManagerSceneLifetimeTests
         fixture.Participant.PendingEdit = true;
         fixture.PromptDecision = CloseDecision.Cancel;
 
-        var opened = await fixture.Manager.OpenSceneAsync(fixture.SecondUri, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var opened = await fixture.Manager.OpenSceneAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = opened.Should().BeFalse();
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
@@ -70,7 +70,7 @@ public sealed partial class DocumentManagerSceneLifetimeTests
         fixture.Participant.SaveSucceeds = false;
         fixture.PromptDecision = CloseDecision.Save;
 
-        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondUri, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeFalse();
+        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeFalse();
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Cut);
@@ -86,7 +86,7 @@ public sealed partial class DocumentManagerSceneLifetimeTests
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync().ConfigureAwait(false);
 
-        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondUri, cancellation.Token).ConfigureAwait(false)).Should().BeFalse();
+        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondAsset, cancellation.Token).ConfigureAwait(false)).Should().BeFalse();
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Cut);
@@ -102,15 +102,15 @@ public sealed partial class DocumentManagerSceneLifetimeTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         fixture.Store.BeforeRead = async path =>
         {
-            if (string.Equals(path, fixture.Files.PathOf("Second"), StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(path, fixture.Files.PathOf("Second").FullPath, StringComparison.OrdinalIgnoreCase))
             {
                 reading.SetResult();
                 await release.Task.ConfigureAwait(false);
             }
         };
-        var older = fixture.Manager.OpenSceneAsync(fixture.SecondUri, this.TestContext.CancellationToken);
+        var older = fixture.Manager.OpenSceneAsync(fixture.SecondAsset, this.TestContext.CancellationToken);
         await reading.Task.ConfigureAwait(false);
-        var newer = fixture.Manager.OpenSceneAsync(fixture.Files.FileOf("Third").AssetUri, this.TestContext.CancellationToken);
+        var newer = fixture.Manager.OpenSceneAsync(fixture.Files.FileOf("Third").Asset, this.TestContext.CancellationToken);
         release.SetResult();
 
         _ = (await older.ConfigureAwait(false)).Should().BeFalse();
@@ -131,7 +131,7 @@ public sealed partial class DocumentManagerSceneLifetimeTests
         fixture.FirstDocument.History.AddChange("Old edit", static () => { });
         fixture.PromptDecision = CloseDecision.Discard;
 
-        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondUri, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
 
         var accepted = fixture.Explorer.Scene!.AttachedObject;
         _ = accepted.Name.Should().Be("Second");
@@ -148,9 +148,9 @@ public sealed partial class DocumentManagerSceneLifetimeTests
     {
         using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
         fixture.FirstDocument.History.AddChange("Edit", static () => { });
-        File.Delete(fixture.Files.PathOf("Second"));
+        File.Delete(fixture.Files.PathOf("Second").FullPath);
 
-        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondUri, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeFalse();
+        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeFalse();
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.PasteCommand.CanExecute(parameter: null).Should().BeTrue();
@@ -169,7 +169,7 @@ public sealed partial class DocumentManagerSceneLifetimeTests
         source.Name = "Changed after capture";
         source.Components.OfType<TransformComponent>().Single().LocalPosition = new System.Numerics.Vector3(100, 0, 0);
 
-        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondUri, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+        _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
         var accepted = fixture.Explorer.Scene!.AttachedObject;
         await fixture.Explorer.PasteItemsAsync(fixture.Explorer.Scene).ConfigureAwait(false);
         await fixture.Explorer.PasteItemsAsync(fixture.Explorer.Scene).ConfigureAwait(false);
@@ -191,7 +191,7 @@ public sealed partial class DocumentManagerSceneLifetimeTests
     {
         using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
 
-        _ = (await fixture.Manager.OpenMaterialAsync(fixture.Files.WriteMaterial("Test").AssetUri, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+        _ = (await fixture.Manager.OpenMaterialAsync(fixture.Files.WriteMaterial("Test").Asset, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.PasteCommand.CanExecute(parameter: null).Should().BeTrue();
@@ -291,7 +291,7 @@ public sealed partial class DocumentManagerSceneLifetimeTests
 
         public SceneDocumentFiles Files { get; }
 
-        public Uri SecondUri => this.Files.FileOf("Second").AssetUri;
+        public AssetPath SecondAsset => this.Files.FileOf("Second").Asset;
 
         public Document FirstDocument { get; private set; } = null!;
 
@@ -316,7 +316,7 @@ public sealed partial class DocumentManagerSceneLifetimeTests
             var fixture = new LifetimeFixture();
             try
             {
-                _ = (await fixture.Manager.OpenSceneAsync(fixture.Files.FileOf("First").AssetUri).ConfigureAwait(false)).Should().BeTrue();
+                _ = (await fixture.Manager.OpenSceneAsync(fixture.Files.FileOf("First").Asset).ConfigureAwait(false)).Should().BeTrue();
                 fixture.FirstDocument = fixture.Files.Documents.Find(fixture.Files.PathOf("First"))!;
                 fixture.close.Register(fixture.Window, fixture.FirstDocument.Id, fixture.Participant);
                 var adapter = await fixture.Explorer.FindAdapterByNodeIdAsync(fixture.First.RootNodes[0].Id).ConfigureAwait(false);

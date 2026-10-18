@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Descriptors;
@@ -102,9 +103,9 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = AddNode(scene, "Camera", camera: true);
         scene.SetStartingInputContexts(
         [
-            new StartingInputContextData(new Uri("asset:///Content/Input/Menu.oimap")),
-            new StartingInputContextData(new Uri("asset:///Content/Input/Gameplay.oimap")),
-            new StartingInputContextData(new Uri("asset:///Content/Input/Overlay.oimap"), Priority: 7),
+            new StartingInputContextData(AssetPath.Parse("/Content/Input/Menu.oimap")),
+            new StartingInputContextData(AssetPath.Parse("/Content/Input/Gameplay.oimap")),
+            new StartingInputContextData(AssetPath.Parse("/Content/Input/Overlay.oimap"), Priority: 7),
         ]);
         File.WriteAllText(
             Path.Combine(workspace.Root, "Content", "Input", "Overlay.input.json"),
@@ -131,7 +132,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         WriteInputFile(workspace);
         var scene = CreateScene();
         _ = AddNode(scene, "Camera", camera: true);
-        scene.SetStartingInputContexts([new StartingInputContextData(new Uri("asset:///Content/Input/Vehicle.oimap"))]);
+        scene.SetStartingInputContexts([new StartingInputContextData(AssetPath.Parse("/Content/Input/Vehicle.oimap"))]);
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
 
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);

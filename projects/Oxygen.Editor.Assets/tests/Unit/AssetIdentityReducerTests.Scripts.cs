@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
 
@@ -21,12 +22,12 @@ public sealed partial class AssetIdentityReducerTests
         Directory.CreateDirectory(Path.GetDirectoryName(source)!);
         File.WriteAllText(source, "return {}");
 
-        var row = Reduce(workspace, [new AssetRecord(new Uri("asset:///Content/Player/move.lua"))]).Single();
+        var row = Reduce(workspace, [new AssetRecord(AssetPath.Parse("/Content/Player/move.lua"))]).Single();
 
         _ = row.Kind.Should().Be(AssetKind.Script);
         _ = row.DisplayName.Should().Be("move");
-        _ = row.IdentityUri.Should().Be(new Uri("asset:///Content/Player/move.oscript"));
-        _ = row.SourcePath.Should().Be(Path.GetFullPath(source));
+        _ = row.Identity.Should().Be(AssetPath.Parse("/Content/Player/move.oscript"));
+        _ = row.SourcePath.Should().Be(FileSystemPath.From(source));
         _ = row.DiagnosticCodes.Should().BeEmpty();
     }
 
@@ -37,8 +38,8 @@ public sealed partial class AssetIdentityReducerTests
         using var workspace = new TempWorkspace();
         var rows = Reduce(workspace,
         [
-            new AssetRecord(new Uri("asset:///Content/Player/move.lua")),
-            new AssetRecord(new Uri("asset:///Content/Player/move.luau")),
+            new AssetRecord(AssetPath.Parse("/Content/Player/move.lua")),
+            new AssetRecord(AssetPath.Parse("/Content/Player/move.luau")),
         ]);
 
         var row = rows.Should().ContainSingle().Subject;
@@ -53,7 +54,7 @@ public sealed partial class AssetIdentityReducerTests
     {
         using var workspace = new TempWorkspace();
 
-        var row = Reduce(workspace, [new AssetRecord(new Uri("asset:///Content/Gameplay/" + fileName))]).Single();
+        var row = Reduce(workspace, [new AssetRecord(AssetPath.Parse("/Content/Gameplay/" + fileName))]).Single();
 
         _ = row.Kind.Should().Be(AssetKind.InputFile);
         _ = row.DisplayName.Should().Be(fileName[..fileName.IndexOf('.', StringComparison.Ordinal)]);

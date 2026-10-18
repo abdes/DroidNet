@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.SavedSourceScenario;
@@ -41,7 +42,7 @@ public sealed class SavedSourceCookTests
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, generator, api);
-        var cook = service.CookCurrentSceneAsync(new("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken);
+        var cook = service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken);
         await entered.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         try
         {
@@ -71,7 +72,7 @@ public sealed class SavedSourceCookTests
         var first = workspace.CookCoordinator.RunAsync((_, _) => release.Task, this.TestContext.CancellationToken);
         var generator = new CapturingSceneDescriptorGenerator([]);
         var service = CreateService(workspace, generator, CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync));
-        var cook = service.CookCurrentSceneAsync(new("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken);
+        var cook = service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken);
         try
         {
             _ = generator.Scene.Should().BeNull();
@@ -111,13 +112,13 @@ public sealed class SavedSourceCookTests
 
         var path = Path.Combine(workspace.Root, relative);
         var state = SavedState(path);
-        using var registration = workspace.Documents.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(new(state, static () => { })));
+        using var registration = workspace.Documents.Register(FileSystemPath.From(path), _ => Task.FromResult<CookDocumentReadLease?>(new(state, static () => { })));
         await File.AppendAllTextAsync(path, " ", this.TestContext.CancellationToken).ConfigureAwait(false);
         var api = CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync);
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var result = material
-            ? await service.CookAssetAsync(new("asset:///" + relative), this.TestContext.CancellationToken).ConfigureAwait(false)
-            : await service.CookCurrentSceneAsync(new("asset:///" + relative), this.TestContext.CancellationToken).ConfigureAwait(false);
+            ? await service.CookAssetAsync(AssetPath.Parse("/" + relative), this.TestContext.CancellationToken).ConfigureAwait(false)
+            : await service.CookCurrentSceneAsync(AssetPath.Parse("/" + relative), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Status.Should().Be(OperationStatus.Failed);
         _ = result.Diagnostics.Should().Contain(diagnostic => diagnostic.Message.Contains("Reload", StringComparison.Ordinal));
 
@@ -136,7 +137,7 @@ public sealed class SavedSourceCookTests
         var path = Path.Combine(workspace.Root, relative);
         var state = SavedState(path);
         var acquireCount = 0;
-        using var registration = workspace.Documents.Register(path, _ =>
+        using var registration = workspace.Documents.Register(FileSystemPath.From(path), _ =>
         {
             if (++acquireCount == 2)
             {
@@ -155,7 +156,7 @@ public sealed class SavedSourceCookTests
         };
         var generator = new CapturingSceneDescriptorGenerator([]);
         var service = CreateService(workspace, generator, CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync));
-        var cook = service.CookCurrentSceneAsync(new("asset:///" + relative), this.TestContext.CancellationToken);
+        var cook = service.CookCurrentSceneAsync(AssetPath.Parse("/" + relative), this.TestContext.CancellationToken);
         var runId = await blocked.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = generator.Scene.Should().BeNull();
         MarkVersion(workspace, "Explicitly saved");

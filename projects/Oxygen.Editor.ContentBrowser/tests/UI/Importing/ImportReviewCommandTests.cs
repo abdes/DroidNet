@@ -16,6 +16,7 @@ using Oxygen.Editor.ContentBrowser.Importing;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentBrowser.UI.Tests.Importing;
@@ -39,7 +40,7 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
             ProjectId = Guid.NewGuid(),
             Name = "Import",
             Category = Category.Games,
-            ProjectRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
+            ProjectRoot = FileSystemPath.From(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
             AuthoringMounts = [new("Content", "Content")],
             LocalFolderMounts = [],
         };
@@ -63,7 +64,7 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
         using var browser = new AssetsViewModel(
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new ViewModelToView(locator.Object),
-            CreateSceneFolderImportState(projects),
+            CreateSceneFolderImportState(),
             projects,
             pipeline.Object,
             provider.Object,
@@ -86,7 +87,7 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
             _ = submitted.Should().NotBeNull();
             _ = submitted!.SourcePath.Should().Be(source);
             _ = submitted.Name.Should().Be("ReviewedCrate");
-            _ = submitted.DestinationFolder.Should().Be(new Uri("asset:///Content/Props"));
+            _ = submitted.DestinationFolder.Should().Be(AssetPath.Parse("/Content/Props"));
             _ = browser.IsOperationResultVisible.Should().BeFalse();
         }
     });
@@ -99,7 +100,7 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
             .Callback<FilePickerSpec, WindowId, CancellationToken>((spec, _, _) =>
             {
                 _ = spec.SettingsIdentifier.Should().Be("Oxygen.ImportAsset");
-                _ = spec.SuggestedStartFolder.Should().Be(project.ProjectRoot);
+                _ = spec.SuggestedStartFolder.Should().Be(project.ProjectRoot.FullPath);
                 _ = spec.FileTypeChoices.Keys.Should().Equal("Supported assets", "3D models", "Textures");
                 _ = spec.FileTypeChoices["3D models"].Should().Equal(".gltf", ".glb", ".fbx");
                 _ = spec.FileTypeChoices["Textures"].Should().NotBeEmpty();
@@ -119,10 +120,10 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
         return dialogs;
     }
 
-    private static ContentBrowserState CreateSceneFolderImportState(IProjectContextService projects)
+    private static ContentBrowserState CreateSceneFolderImportState()
     {
-        var state = new ContentBrowserState(projects);
-        state.SetSelectedFolders(["/Content/Scenes"]);
+        var state = new ContentBrowserState();
+        state.SetSelectedFolders([AssetPath.Parse("/Content/Scenes")]);
         return state;
     }
 

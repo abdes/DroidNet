@@ -8,6 +8,7 @@ using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 
@@ -44,8 +45,8 @@ public sealed partial class SceneDocuments : IDisposable
     /// <returns>The file.</returns>
     public static DocumentFile FileOf(string name)
         => new(
-            Path.Combine(Path.GetTempPath(), "Content", name + AssetFileTypes.SceneDescriptor),
-            new Uri($"asset:/Content/{name}{AssetFileTypes.SceneDescriptor}"));
+            FileSystemPath.From(Path.Combine(Path.GetTempPath(), "Content", name + AssetFileTypes.SceneDescriptor)),
+            AssetPath.Parse($"/Content/{name}{AssetFileTypes.Scene}"));
 
     /// <summary>
     /// Writes a scene to its file, as an outside tool would.
@@ -56,7 +57,7 @@ public sealed partial class SceneDocuments : IDisposable
     {
         ArgumentNullException.ThrowIfNull(data);
         var file = FileOf(data.Name);
-        this.Files.Put(file.Path, JsonSerializer.SerializeToUtf8Bytes(data as SceneFileData ?? new SceneFileData(data, explorerLayout: null), SceneFileJsonContext.Default.SceneFileData));
+        this.Files.Put(file.Path.FullPath, JsonSerializer.SerializeToUtf8Bytes(data as SceneFileData ?? new SceneFileData(data, explorerLayout: null), SceneFileJsonContext.Default.SceneFileData));
         return file;
     }
 

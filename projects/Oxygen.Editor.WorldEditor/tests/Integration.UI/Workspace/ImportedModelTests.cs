@@ -17,6 +17,7 @@ using Oxygen.Editor.LivePreview.Assets;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.CatalogWorkload;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.ModelImportScenario;
@@ -98,7 +99,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
             var cookCount = services.Runs.Runs.Count;
             await CheckImportedAssetControlsAsync(fixture, scroller, geometryRow!, materialRow!, timeout.Token).ConfigureAwait(true);
             _ = services.Runs.Runs.Should().HaveCount(cookCount, "using verified mounted outputs must not start another cook");
-            var sceneCook = await services.Pipeline.CookCurrentSceneAsync(new("asset:///Content/Scenes/" + Uri.EscapeDataString(fixture.Source.Name) + ".oscene.json"), timeout.Token).ConfigureAwait(true);
+            var sceneCook = await services.Pipeline.CookCurrentSceneAsync(AssetPath.Create("Content", $"Scenes/{fixture.Source.Name}.oscene"), timeout.Token).ConfigureAwait(true);
             _ = sceneCook.IsPublished.Should().BeTrue(DescribeWorkloadCook(sceneCook));
         }
         finally
@@ -116,13 +117,13 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         _ = row.DescriptorPath.Should().BeNull();
         if (libraryOnly)
         {
-            _ = row.ImportSourceUri.Should().BeNull();
+            _ = row.ImportSource.Should().BeNull();
             _ = row.SourcePath.Should().BeNull();
         }
         else
         {
-            _ = row.ImportSourceUri.Should().NotBeNull();
-            _ = File.Exists(row.ImportSourcePath).Should().BeTrue();
+            _ = row.ImportSource.Should().NotBeNull();
+            _ = File.Exists(row.ImportSourcePath!.FullPath).Should().BeTrue();
             _ = row.CookStatus!.Freshness.Should().Be(AssetCookFreshness.Current);
         }
     }
@@ -152,10 +153,10 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         await PickAssetAsync(materialButton, material.DisplayName, material: true, cancellationToken).ConfigureAwait(true);
         _ = fixture.Document.History.UndoStack.Should().HaveCount(2, "the enabled picker must apply an authored material edit");
-        _ = ReadMaterialUri(node).Should().Be(material.IdentityUri);
+        _ = ReadMaterialAsset(node).Should().Be(material.Identity);
         var assigned = await WaitForNodeAsync(fixture, node.Id, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.8f, 0.2f, 0.1f, 1)) < 0.001f, cancellationToken).ConfigureAwait(true);
         _ = assigned.MaterialKeys.Should().ContainSingle().Which.Should().Be(ImportedNativeKey(material));
-        _ = node.Components.OfType<GeometryComponent>().Single().Geometry.Should().Be(geometry.IdentityUri);
+        _ = node.Components.OfType<GeometryComponent>().Single().Geometry.Should().Be(geometry.Identity);
         await fixture.Document.History.UndoAsync(cancellationToken).ConfigureAwait(true);
         _ = node.Components.OfType<GeometryComponent>().Single().OverrideSlots.Should().BeEmpty();
         await fixture.Document.History.UndoAsync(cancellationToken).ConfigureAwait(true);
@@ -168,8 +169,8 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         await fixture.SaveAndReopenAsync(cancellationToken).ConfigureAwait(true);
         var reopened = await WaitForNodeAsync(fixture, node.Id, value => string.Equals(value.GeometryKey, selected.GeometryKey, StringComparison.Ordinal), cancellationToken).ConfigureAwait(true);
         _ = reopened.MaterialKeys.Should().Equal(assigned.MaterialKeys);
-        _ = fixture.Source.RootNodes[0].Components.OfType<GeometryComponent>().Single().Geometry.Should().Be(geometry.IdentityUri);
-        _ = ReadMaterialUri(fixture.Source.RootNodes[0]).Should().Be(material.IdentityUri);
+        _ = fixture.Source.RootNodes[0].Components.OfType<GeometryComponent>().Single().Geometry.Should().Be(geometry.Identity);
+        _ = ReadMaterialAsset(fixture.Source.RootNodes[0]).Should().Be(material.Identity);
     }
 
     private static string ImportedNativeKey(AssetEntry asset)

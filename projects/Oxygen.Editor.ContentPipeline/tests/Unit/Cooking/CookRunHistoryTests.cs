@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookCoordinatorScenario;
 
@@ -29,7 +30,7 @@ public sealed class CookRunHistoryTests
             return release.Task;
         };
         var first = coordinator.RunCookAsync(
-            new(CookTargetKind.Asset, new Uri("asset:///Content/Material.omat.json")),
+            new(CookTargetKind.Asset, AssetPath.Parse("/Content/Material.omat.json")),
             (operation, _) => Task.FromResult(new ContentCookResult(operation.OperationId, CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null)),
             this.TestContext.CancellationToken);
         await entered.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -71,7 +72,7 @@ public sealed class CookRunHistoryTests
             return Task.CompletedTask;
         };
         var result = await coordinator.RunCookAsync(
-            new(kind, new Uri("asset:///Content/Scope"), automatic),
+            new(kind, AssetPath.Parse("/Content/Scope"), automatic),
             (operation, _) => Task.FromResult(new ContentCookResult(operation.OperationId, kind, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null)),
             CancellationToken.None).ConfigureAwait(false);
         _ = notifications.Should().ContainSingle();
@@ -146,7 +147,7 @@ public sealed class CookRunHistoryTests
         var stopped = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var first = coordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null), (_, _) => stopped.Task, CancellationToken.None);
         var firstId = coordinator.Runs.Single().OperationId;
-        var second = coordinator.RunCookAsync(new(CookTargetKind.Asset, new("asset:///Content/Materials/Blue.omat.json")), (_, _) => Task.FromResult(2), CancellationToken.None);
+        var second = coordinator.RunCookAsync(new(CookTargetKind.Asset, AssetPath.Parse("/Content/Materials/Blue.omat.json")), (_, _) => Task.FromResult(2), CancellationToken.None);
 
         await coordinator.CancelAsync(firstId).ConfigureAwait(false);
         _ = coordinator.Runs.Single(run => run.OperationId == firstId).State.Should().Be(CookRunState.Cancelling);
@@ -167,7 +168,7 @@ public sealed class CookRunHistoryTests
         var reveal = false;
         coordinator.RunChanged += (_, args) => reveal |= args.Reveal;
         _ = await coordinator.RunCookAsync(
-            new(CookTargetKind.Asset, new("asset:///Content/Materials/Blue.omat.json"), IsAutomatic: true),
+            new(CookTargetKind.Asset, AssetPath.Parse("/Content/Materials/Blue.omat.json"), IsAutomatic: true),
             (_, _) =>
             {
                 CookRunContext.Report(new("Blue material output."));
@@ -224,7 +225,7 @@ public sealed class CookRunHistoryTests
         };
         var dirty = true;
         var captures = 0;
-        var document = new ContentPipeline.Snapshots.CookDocumentState(Path.Combine(Path.GetTempPath(), "Main.oscene.json"), "Main", IsDirty: true, "saved");
+        var document = new ContentPipeline.Snapshots.CookDocumentState(FileSystemPath.From(Path.Combine(Path.GetTempPath(), "Main.oscene.json")), "Main", IsDirty: true, "saved");
         var waiting = coordinator.RunCookAsync(
             new(CookTargetKind.Project, ScopeUri: null),
             (_, _) =>
@@ -235,7 +236,7 @@ public sealed class CookRunHistoryTests
             CancellationToken.None);
         var run = await needsSave.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = run.State.Should().Be(CookRunState.NeedsSave);
-        _ = (await coordinator.RunCookAsync(new(CookTargetKind.Asset, new("asset:///Content/Other.omat.json")), (_, _) => Task.FromResult(7), CancellationToken.None).ConfigureAwait(false)).Should().Be(7);
+        _ = (await coordinator.RunCookAsync(new(CookTargetKind.Asset, AssetPath.Parse("/Content/Other.omat.json")), (_, _) => Task.FromResult(7), CancellationToken.None).ConfigureAwait(false)).Should().Be(7);
         _ = waiting.IsCompleted.Should().BeFalse();
         dirty = false;
         _ = coordinator.ResumeAfterSave(run.OperationId).Should().BeTrue();
@@ -250,8 +251,8 @@ public sealed class CookRunHistoryTests
     public async Task FailedPreflightKeepsAffectedAndSkippedAssets()
     {
         using var coordinator = CreateCoordinator(CreateContextService());
-        var main = new Uri("asset:///Content/Scenes/Main.oscene.json");
-        var material = new Uri("asset:///Content/Materials/Blue.omat.json");
+        var main = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
+        var material = AssetPath.Parse("/Content/Materials/Blue.omat.json");
         _ = await coordinator.RunCookAsync(
             new(CookTargetKind.Project, ScopeUri: null),
             (operation, _) =>
@@ -265,7 +266,7 @@ public sealed class CookRunHistoryTests
                 Message = "Aerial Start is invalid.",
                 Domain = FailureDomain.ContentPipeline,
                 Severity = DiagnosticSeverity.Error,
-                AffectedVirtualPath = main.AbsolutePath,
+                AffectedVirtualPath = main.VirtualPath,
             };
             return Task.FromResult(new ContentCookResult(operation.OperationId, CookTargetKind.Project, OperationStatus.Failed, [issue], [], Inspection: null, Validation: null));
         },

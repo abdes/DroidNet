@@ -329,7 +329,7 @@ public partial class AssetsViewModel(
         }
 
         if (args.InvokedItem.Kind != AssetKind.Folder
-            && (args.InvokedItem.IsBuiltin || (args.InvokedItem.DescriptorPath is null && args.InvokedItem.IsCookedAsset)))
+            && (args.InvokedItem.IsBuiltin || args.InvokedItem.IsCookedOnly))
         {
             await this.OpenInspectionAsync(validate: false, args.InvokedItem.Identity, args.InvokedItem).ConfigureAwait(true);
         }

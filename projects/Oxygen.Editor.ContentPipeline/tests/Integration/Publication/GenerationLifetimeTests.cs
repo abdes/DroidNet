@@ -6,6 +6,7 @@ using System.Diagnostics;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.GenerationScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
@@ -39,9 +40,9 @@ public sealed class GenerationLifetimeTests
             _ = (await child.StandardOutput.ReadLineAsync(this.TestContext.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("ready");
             using var refused = CookedGeneration.TryClaim(root);
             _ = refused.Should().BeNull();
-            using (var gate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false))
+            using (var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false))
             {
-                _ = gate.ProjectRoot.Should().Be(project.Root);
+                _ = gate.ProjectRoot.Should().Be(FileSystemPath.From(project.Root));
             }
 
             if (terminate)
@@ -79,14 +80,14 @@ public sealed class GenerationLifetimeTests
     {
         using var project = new ProjectDirectory();
         var id = Guid.NewGuid();
-        using var operation = CookOutputLease.AcquireOperation(project.Root, id);
-        using var retry = CookOutputLease.TryAcquireRetryInput(project.Root, id);
+        using var operation = CookOutputLease.AcquireOperation(FileSystemPath.From(project.Root), id);
+        using var retry = CookOutputLease.TryAcquireRetryInput(FileSystemPath.From(project.Root), id);
         _ = retry.Should().NotBeNull();
-        using var competing = CookOutputLease.TryAcquireOperation(project.Root, id);
+        using var competing = CookOutputLease.TryAcquireOperation(FileSystemPath.From(project.Root), id);
         _ = competing.Should().BeNull();
         operation.Dispose();
-        using var recovery = CookOutputLease.AcquireOperation(project.Root, id);
-        using var cleanup = CookOutputLease.TryAcquireRetryInput(project.Root, id);
+        using var recovery = CookOutputLease.AcquireOperation(FileSystemPath.From(project.Root), id);
+        using var cleanup = CookOutputLease.TryAcquireRetryInput(FileSystemPath.From(project.Root), id);
         _ = cleanup.Should().BeNull();
     }
 }

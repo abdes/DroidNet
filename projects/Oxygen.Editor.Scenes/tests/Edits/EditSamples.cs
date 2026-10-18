@@ -68,13 +68,13 @@ public static class EditSamples
 
     private static Guid RestoredSlot { get; } = SampleScene.Tagged(4, "C2");
 
-    private static Uri GreenMaterial { get; } = new("asset:/Content/Green.omat");
+    private static AssetPath GreenMaterial { get; } = AssetPath.Parse("/Content/Green.omat");
 
-    private static Uri MaskTexture { get; } = new("asset:/Content/Mask.otex");
+    private static AssetPath MaskTexture { get; } = AssetPath.Parse("/Content/Mask.otex");
 
-    private static Uri SpinScript { get; } = new("asset:/Content/Spin.oscript");
+    private static AssetPath SpinScript { get; } = AssetPath.Parse("/Content/Spin.oscript");
 
-    private static Uri JumpScript { get; } = new("asset:/Content/Jump.oscript");
+    private static AssetPath JumpScript { get; } = AssetPath.Parse("/Content/Jump.oscript");
 
     private static MaterialSlotTarget CubeSlotTarget => new(SampleScene.CubeGeometry, SampleScene.CubeSlot, SampleScene.CubeLayoutRevision);
 
@@ -311,7 +311,7 @@ public static class EditSamples
     private static EditSample SetScenePropertiesSample =>
         new(
             nameof(SetSceneProperties),
-            static _ => new SetSceneProperties(PropertyEdit.SingleEdit<Uri?>(SceneProperties.SceneEnvironment.AutoExposureMeteringMask, MaskTexture), "Set mask"),
+            static _ => new SetSceneProperties(PropertyEdit.SingleEdit<AssetPath?>(SceneProperties.SceneEnvironment.AutoExposureMeteringMask, MaskTexture), "Set mask"),
             [new SceneChange.PropertiesChanged(Node: null, [SceneProperties.SceneEnvironment.AutoExposureMeteringMask.Id], EditPhase.Commit)],
             [new SceneChange.PropertiesChanged(Node: null, [SceneProperties.SceneEnvironment.AutoExposureMeteringMask.Id], EditPhase.Commit)])
         {
@@ -423,7 +423,7 @@ public static class EditSamples
             Asset = SpinScript,
             Tamper = static _ =>
             {
-                var scripts = new List<Uri> { SpinScript };
+                var scripts = new List<AssetPath> { SpinScript };
                 return new TamperedEdit(new SetSceneReferences(new SceneReferencesData { Scripts = scripts }), () => scripts.Add(JumpScript));
             },
         };
@@ -489,12 +489,12 @@ public static class EditSamples
     /// </summary>
     /// <param name="asset">The asset.</param>
     /// <returns>The new location.</returns>
-    public static Uri MovedTo(Uri asset)
+    public static AssetPath MovedTo(AssetPath asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        var text = asset.ToString();
+        var text = asset.VirtualPath;
         var dot = text.LastIndexOf('.');
-        return new Uri(text[..dot] + "-moved" + text[dot..]);
+        return AssetPath.Parse(text[..dot] + "-moved" + text[dot..]);
     }
 
     private static NodeId? ParentOfFirstTarget(EditSample sample) => ParentOf(sample.Build(SampleScene.Build()).Targets.First());

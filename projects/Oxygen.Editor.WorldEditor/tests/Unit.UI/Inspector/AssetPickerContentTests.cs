@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World.Inspector.Controls;
 using Oxygen.Editor.World.Inspector.Geometry;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
@@ -21,8 +22,8 @@ internal sealed class AssetPickerContentTests : VisualUserInterfaceTests
     [DataRow(true)]
     public Task PickerContentInvokeReportsTheOriginalTypedRow(bool material) => EnqueueAsync(async () =>
     {
-        var asset = new AssetPickerRow(new("Cube", new("asset:///Engine/Geometry/Cube.ogeo"), "Static Mesh", "/Engine/Geometry/Cube.ogeo", AssetPickerGroup.Engine, IsEnabled: true, "\uF158"));
-        var none = new MaterialPickerRow(new("None", Uri: null, "No material", "No explicit override", AssetPickerGroup.Engine, IsEnabled: true, "\uE790"));
+        var asset = new AssetPickerRow(new("Cube", AssetPath.Parse("/Engine/Geometry/Cube.ogeo"), "Static Mesh", "/Engine/Geometry/Cube.ogeo", AssetPickerGroup.Engine, IsEnabled: true, "\uF158"));
+        var none = new MaterialPickerRow(new("None", Asset: null, "No material", "No explicit override", AssetPickerGroup.Engine, IsEnabled: true, "\uE790"));
         var view = new AssetPickerContent
         {
             Width = 440,

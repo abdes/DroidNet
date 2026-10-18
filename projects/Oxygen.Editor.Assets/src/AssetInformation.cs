@@ -38,7 +38,7 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
         {
             facts.Add(new("Source", source.FullPath));
         }
-        else if (asset.IsCookedAsset)
+        else if (asset.IsCookedOnly)
         {
             facts.Add(new("Source", "Unavailable · read-only"));
         }
@@ -77,7 +77,7 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
         }
 
         var outputs = asset.CookedCompanions.Prepend(asset)
-            .Where(static item => item.IsCookedAsset)
+            .Where(static item => item.IsCookedOnly)
             .Select(static item => item.Identity)
             .Concat(asset.CookStatus?.Outputs.Where(output => output.SourceAssetUri == asset.Identity).Select(static output => output.CookedAssetUri) ?? [])
             .Distinct()

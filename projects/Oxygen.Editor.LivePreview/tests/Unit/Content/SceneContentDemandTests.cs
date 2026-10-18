@@ -18,6 +18,7 @@ using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Tests.Content;
 
@@ -29,9 +30,9 @@ namespace Oxygen.Editor.LivePreview.Tests.Content;
 [TestCategory("Content Demand")]
 public sealed partial class SceneContentDemandTests
 {
-    private static readonly Uri Geometry = new("asset:///Content/Geometry/Custom.ogeo.json");
-    private static readonly Uri Material = new("asset:///Content/Materials/Custom.omat.json");
-    private static readonly Uri Targeted = new("asset:///Content/Materials/Targeted.omat.json");
+    private static readonly AssetPath Geometry = AssetPath.Parse("/Content/Geometry/Custom.ogeo");
+    private static readonly AssetPath Material = AssetPath.Parse("/Content/Materials/Custom.omat");
+    private static readonly AssetPath Targeted = AssetPath.Parse("/Content/Materials/Targeted.omat");
 
     public TestContext TestContext { get; set; }
 
@@ -149,12 +150,12 @@ public sealed partial class SceneContentDemandTests
         {
             this.projects.Activate(this.Documents.Project);
             _ = this.assets.SetupGet(value => value.Items).Returns(Observable.Return<IReadOnlyList<AssetEntry>>([]));
-            _ = this.assets.Setup(value => value.ResolveAsync(It.IsAny<Uri>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((Uri uri, CancellationToken _) => Entry(uri, this.Freshness));
-            _ = this.pipeline.Setup(value => value.CookPreviewAssetAsync(It.IsAny<Uri>(), It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()))
-                .Returns((Uri uri, ProjectContext _, CancellationToken token) =>
+            _ = this.assets.Setup(value => value.ResolveAsync(It.IsAny<AssetPath>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((AssetPath asset, CancellationToken _) => Entry(asset, this.Freshness));
+            _ = this.pipeline.Setup(value => value.CookPreviewAssetAsync(It.IsAny<AssetPath>(), It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()))
+                .Returns((AssetPath asset, ProjectContext _, CancellationToken token) =>
                 {
-                    this.Requests.Add((uri, token));
+                    this.Requests.Add((asset, token));
                     var cook = new TaskCompletionSource<ContentCookResult>(TaskCreationOptions.RunContinuationsAsynchronously);
                     this.cooks.Add(cook);
                     return cook.Task.WaitAsync(token);
@@ -166,9 +167,9 @@ public sealed partial class SceneContentDemandTests
 
         public AssetCookFreshness Freshness { get; init; } = AssetCookFreshness.NeedsCooking;
 
-        public List<(Uri Uri, CancellationToken Token)> Requests { get; } = [];
+        public List<(AssetPath Asset, CancellationToken Token)> Requests { get; } = [];
 
-        public IEnumerable<Uri> Demanded => this.Requests.Select(static request => request.Uri);
+        public IEnumerable<AssetPath> Demanded => this.Requests.Select(static request => request.Asset);
 
         public async Task<(Document Document, Scene Built)> OpenAsync(bool withGeometry, bool withTargetedOverride = false)
         {
@@ -200,7 +201,7 @@ public sealed partial class SceneContentDemandTests
             var built = this.Documents.NewScene();
             var node = new SceneNode(built) { Name = "Cube" };
             built.RootNodes.Add(node);
-            node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = new Uri("asset:///Engine/Generated/BasicShapes/Cube") });
+            node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = AssetPath.Parse("/Engine/Generated/BasicShapes/Cube") });
             var document = await this.Documents.OpenAsync(built).ConfigureAwait(false);
             await Task.Yield();
             return (document, built);
@@ -220,10 +221,10 @@ public sealed partial class SceneContentDemandTests
             this.Documents.Dispose();
         }
 
-        private static AssetEntry Entry(Uri uri, AssetCookFreshness freshness)
-            => new(uri, uri.Segments[^1], uri.AbsolutePath.Contains("/Materials/", StringComparison.Ordinal) ? AssetKind.Material : AssetKind.Geometry, AssetState.Descriptor, DerivedState: null, AssetRuntimeAvailability.NotMounted, uri.AbsolutePath, SourcePath: null, DescriptorPath: uri.AbsolutePath, CookedUri: null, CookedPath: null, AssetGuid: null, DiagnosticCodes: [], IsSelectable: true)
+        private static AssetEntry Entry(AssetPath asset, AssetCookFreshness freshness)
+            => new(asset, asset.Name, asset.VirtualPath.Contains("/Materials/", StringComparison.Ordinal) ? AssetKind.Material : AssetKind.Geometry, AssetState.Descriptor, DerivedState: null, AssetRuntimeAvailability.NotMounted, asset.VirtualPath, SourcePath: null, DescriptorPath: FileSystemPath.From(@"C:\LivePreviewTests\Content").Combine(asset.RelativePath + AssetPath.AuthoringSuffix), CookedPath: null, AssetGuid: null, DiagnosticCodes: [], IsSelectable: true)
             {
-                CookStatus = new(uri, freshness, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
+                CookStatus = new(asset, freshness, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
             };
     }
 }

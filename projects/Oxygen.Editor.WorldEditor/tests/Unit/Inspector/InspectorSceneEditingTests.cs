@@ -12,6 +12,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 
@@ -24,8 +25,8 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 [TestCategory("Inspector")]
 public sealed class InspectorSceneEditingTests
 {
-    private static readonly Uri GameplayContext = new("asset:///Content/Input/Gameplay.oimap");
-    private static readonly Uri MenuContext = new("asset:///Content/Input/Menu.oimap");
+    private static readonly AssetPath GameplayContext = AssetPath.Parse("/Content/Input/Gameplay.oimap");
+    private static readonly AssetPath MenuContext = AssetPath.Parse("/Content/Input/Menu.oimap");
 
     [TestMethod]
     public async Task CameraDrag_OverTwoCameras_IsOneUndoStepThatRestoresEach()

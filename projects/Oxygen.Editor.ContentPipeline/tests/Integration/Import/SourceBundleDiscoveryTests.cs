@@ -29,7 +29,7 @@ public sealed class SourceBundleDiscoveryTests
     {
         using var workspace = new RetentionWorkspace();
         var primary = workspace.Write("model.gltf", "source");
-        var directory = Path.Combine(Path.GetDirectoryName(primary.SourcePath)!, "empty-textures");
+        var directory = Path.Combine(Path.GetDirectoryName(primary.SourcePath.FullPath)!, "empty-textures");
         _ = Directory.CreateDirectory(directory);
         var native = new DelegateSourceAnalyzer(async (execution, token) =>
         {
@@ -42,7 +42,7 @@ public sealed class SourceBundleDiscoveryTests
                 }],
             };
         });
-        var retained = await RetainDiscoveredAsync(workspace, primary.SourcePath, native, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var retained = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, native, this.TestContext.CancellationToken).ConfigureAwait(false);
         var root = Path.Combine(workspace.ProjectRoot, retained.Source!.DirectoryRelativePath);
         _ = retained.Source.Files.Should().ContainSingle();
         _ = Directory.Exists(Path.Combine(root, "empty-textures")).Should().BeTrue();
@@ -76,16 +76,16 @@ public sealed class SourceBundleDiscoveryTests
         }
 
         var primary = workspace.Write("Models/model." + extension, original);
-        var originalRoot = Path.GetDirectoryName(Path.GetDirectoryName(primary.SourcePath))!;
+        var originalRoot = Path.GetDirectoryName(Path.GetDirectoryName(primary.SourcePath.FullPath))!;
         if (bufferBytes is not null)
         {
             var dependency = workspace.Write("Shared/mesh data.bin", string.Empty);
-            await File.WriteAllBytesAsync(dependency.SourcePath, bufferBytes, this.TestContext.CancellationToken).ConfigureAwait(false);
+            await File.WriteAllBytesAsync(dependency.SourcePath.FullPath, bufferBytes, this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var native = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var retained = await RetainDiscoveredAsync(workspace, primary.SourcePath, native, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var retained = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, native, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = retained.Source.Should().NotBeNull();
         var source = retained.Source!;
         Directory.Delete(originalRoot, recursive: true);
@@ -122,14 +122,14 @@ public sealed class SourceBundleDiscoveryTests
             if (string.Equals(observed, "old source", StringComparison.Ordinal))
             {
                 var facts = await SourceFactsAsync(execution, token, "data.bin").ConfigureAwait(false);
-                await File.WriteAllTextAsync(primary.SourcePath, "new source", token).ConfigureAwait(false);
+                await File.WriteAllTextAsync(primary.SourcePath.FullPath, "new source", token).ConfigureAwait(false);
                 return facts;
             }
 
             return await SourceFactsAsync(execution, token, "../Shared/data.bin").ConfigureAwait(false);
         });
 
-        var result = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = inspector.Executions.Should().HaveCount(2);
         _ = result.Source!.PrimaryRelativePath.Should().Be("Models/model.gltf");
         _ = result.Source.Files.Select(static file => file.RelativePath).Should().BeEquivalentTo("Models/model.gltf", "Shared/data.bin");
@@ -145,10 +145,10 @@ public sealed class SourceBundleDiscoveryTests
         using var workspace = new RetentionWorkspace();
         var primary = workspace.Write("model.gltf", "source");
         var inspector = new DelegateSourceAnalyzer((execution, token) => SourceFactsAsync(execution, token, "missing.bin"));
-        Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
+        Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
         var failure = await retain.Should().ThrowAsync<CookInputDiscoveryException>().ConfigureAwait(false);
         _ = failure.Which.Diagnostics.Should().ContainSingle(issue => issue.Code == AssetImportDiagnosticCodes.SourceMissing
-            && issue.AffectedPath == Path.Combine(Path.GetDirectoryName(primary.SourcePath)!, "missing.bin"));
+            && issue.AffectedPath == Path.Combine(Path.GetDirectoryName(primary.SourcePath.FullPath)!, "missing.bin"));
         _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
         _ = inspector.Executions.Should().OnlyContain(execution => !Directory.Exists(execution.OperationRoot));
     }
@@ -178,9 +178,9 @@ public sealed class SourceBundleDiscoveryTests
                 }],
             };
         });
-        Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
+        Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
         var failure = await retain.Should().ThrowAsync<CookInputDiscoveryException>().ConfigureAwait(false);
-        _ = failure.Which.Diagnostics.Should().ContainSingle(issue => issue.AffectedPath == primary.SourcePath && issue.OperationId != Guid.Empty);
+        _ = failure.Which.Diagnostics.Should().ContainSingle(issue => issue.AffectedPath == primary.SourcePath.FullPath && issue.OperationId != Guid.Empty);
         _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
     }
 
@@ -194,7 +194,7 @@ public sealed class SourceBundleDiscoveryTests
         var state = new CookDocumentState(primary.SourcePath, "Model", IsDirty: true, primary.DiscoveryHash);
         using var registration = workspace.Documents.Register(primary.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(state, () => { })));
         var inspector = new DelegateSourceAnalyzer((execution, token) => SourceFactsAsync(execution, token));
-        Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
+        Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await retain.Should().ThrowAsync<CookInputsNeedSaveException>().ConfigureAwait(false);
         _ = inspector.Executions.Should().BeEmpty();
         _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
@@ -225,7 +225,7 @@ public sealed class SourceBundleDiscoveryTests
             token.ThrowIfCancellationRequested();
             return await SourceFactsAsync(execution, token).ConfigureAwait(false);
         });
-        Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, cancellation.Token).ConfigureAwait(false);
+        Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, inspector, cancellation.Token).ConfigureAwait(false);
         _ = await retain.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         _ = inspector.Executions.Should().ContainSingle();
         _ = inspector.Executions.Should().OnlyContain(execution => !Directory.Exists(execution.OperationRoot));
@@ -241,9 +241,9 @@ public sealed class SourceBundleDiscoveryTests
         var primary = workspace.Write("model.gltf", "saved");
         var state = new CookDocumentState(primary.SourcePath, "Model", IsDirty: false, primary.DiscoveryHash);
         using var registration = workspace.Documents.Register(primary.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(state, () => { })));
-        await File.WriteAllTextAsync(primary.SourcePath, "external edit", this.TestContext.CancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(primary.SourcePath.FullPath, "external edit", this.TestContext.CancellationToken).ConfigureAwait(false);
         var inspector = new DelegateSourceAnalyzer((execution, token) => SourceFactsAsync(execution, token));
-        Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
+        Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await retain.Should().ThrowAsync<IOException>().WithMessage("*changed outside the editor*").ConfigureAwait(false);
         _ = inspector.Executions.Should().BeEmpty();
     }
@@ -257,7 +257,7 @@ public sealed class SourceBundleDiscoveryTests
         var primary = workspace.Write("model.gltf", "source");
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var inspector = new DelegateSourceAnalyzer((_, _) => Task.FromException<NativeSourceAnalysisReport>(new ContentPipelineTerminationException(new IOException("Worker termination failed"), drain.Task)));
-        Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
+        Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
         var failure = await retain.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
         var scratch = inspector.Executions.Single().OperationRoot;
         var marker = Path.Combine(Path.GetDirectoryName(scratch)!, "operation.lock");
@@ -319,8 +319,7 @@ public sealed class SourceBundleDiscoveryTests
 
     private static Task<ImportSourceRetentionResult> RetainDiscoveredAsync(RetentionWorkspace workspace, string sourcePath, IEngineContentPipelineApi native, CancellationToken cancellationToken)
     {
-        var input = new ContentCookInput(new Uri(sourcePath), ContentCookAssetKind.ForeignSource, "Content", Path.GetFileName(sourcePath), sourcePath, OutputVirtualPath: null, ContentCookInputRole.Primary);
-        var recipe = new ContentImportManifestBuilder().BuildModelJob(input, [], "Model", new SceneImportTarget("Content", "Model").CreateLayout(sourcePath), NativeMaterialSlotProvenance.Create());
+        var recipe = new ContentImportManifestBuilder().BuildModelJob(Path.GetFileName(sourcePath), [], "Model", new SceneImportTarget("Content", "Model").CreateLayout(sourcePath), NativeMaterialSlotProvenance.Create());
         var discovery = new SceneImportSourceDiscovery(workspace.Documents, workspace.Coordinator, native);
         return workspace.Coordinator.RunAsync(
             (operation, token) => workspace.Retention.RetainAsync(operation, "Model", captureToken => discovery.DiscoverAsync(operation, sourcePath, recipe, captureToken), token),

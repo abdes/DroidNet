@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -39,12 +40,12 @@ public sealed class InputFileCookTests
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
 
-        var result = await service.CookFolderAsync(new("asset:///Content/Gameplay"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookFolderAsync(AssetPath.Parse("/Content/Gameplay"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = File.Exists(workspace.CookedPath("Content/Gameplay/Jump.oiact")).Should().BeTrue();
         _ = File.Exists(workspace.CookedPath("Content/Gameplay/Gameplay.oimap")).Should().BeTrue();
-        var again = await service.CookFolderAsync(new("asset:///Content/Gameplay"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var again = await service.CookFolderAsync(AssetPath.Parse("/Content/Gameplay"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = again.IsUpToDate.Should().BeTrue(
             $"status {again.Status}; cooked [{string.Join(", ", again.CookedAssets.Select(static asset => asset.CookedAssetUri))}]; "
             + string.Join("; ", again.Diagnostics.Select(static issue => issue.Code + ": " + (issue.TechnicalMessage ?? issue.Message))));
@@ -62,7 +63,7 @@ public sealed class InputFileCookTests
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
 
-        var result = await service.CookFolderAsync(new("asset:///Content/Gameplay"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookFolderAsync(AssetPath.Parse("/Content/Gameplay"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.IsPublished.Should().BeFalse();
         _ = result.Diagnostics.Should().Contain(static diagnostic => diagnostic.Code == ScriptDiagnosticCodes.InputReferenceUnsupported && diagnostic.Message.Contains("'Boost'", StringComparison.Ordinal));

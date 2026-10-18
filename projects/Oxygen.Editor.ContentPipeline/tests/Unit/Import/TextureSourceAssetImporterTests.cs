@@ -6,6 +6,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 
@@ -23,7 +24,7 @@ public sealed class TextureSourceAssetImporterTests
             Directory.CreateDirectory(Path.GetDirectoryName(image)!);
             await File.WriteAllBytesAsync(image, [1, 2, 3]).ConfigureAwait(false);
             var request = new TextureSourceImportRequest(
-                CreateProject(root), image, new Uri("asset:///Content/Textures"), "Wood",
+                CreateProject(root), image, AssetPath.Parse("/Content/Textures"), "Wood",
                 "albedo", "srgb", "rgba8_srgb");
 
             var assetUri = await TextureSourceAssetImporter.CreateAsync(request).ConfigureAwait(false);
@@ -31,7 +32,7 @@ public sealed class TextureSourceAssetImporterTests
             var descriptorPath = Path.Combine(expectedDirectory, "Wood.otex.json");
             using var descriptor = JsonDocument.Parse(await File.ReadAllBytesAsync(descriptorPath).ConfigureAwait(false));
 
-            _ = assetUri.Should().Be(new Uri("asset:///Content/Textures/Wood.otex.json"));
+            _ = assetUri.Should().Be(AssetPath.Parse("/Content/Textures/Wood.otex.json"));
             _ = File.ReadAllBytes(Path.Combine(expectedDirectory, "Wood.png")).Should().Equal([1, 2, 3]);
             _ = descriptor.RootElement.GetProperty("source").GetString().Should().Be("Wood.png");
             _ = descriptor.RootElement.GetProperty("virtual_path").GetString().Should().Be("/Content/Textures/Wood.otex");
@@ -59,7 +60,7 @@ public sealed class TextureSourceAssetImporterTests
             var descriptor = Path.Combine(folder, "Wood.otex.json");
             await File.WriteAllTextAsync(descriptor, "owned").ConfigureAwait(false);
             var request = new TextureSourceImportRequest(
-                CreateProject(root), image, new Uri("asset:///Content/Textures"), "Wood",
+                CreateProject(root), image, AssetPath.Parse("/Content/Textures"), "Wood",
                 "albedo", "srgb", "rgba8_srgb");
 
             Func<Task> import = () => TextureSourceAssetImporter.CreateAsync(request);
@@ -83,7 +84,7 @@ public sealed class TextureSourceAssetImporterTests
         {
             var image = Path.Combine(root, "Outside", "recovered.tga");
             var request = new TextureSourceImportRequest(
-                CreateProject(root), image, new Uri("asset:///Content/Textures"), "Recovered",
+                CreateProject(root), image, AssetPath.Parse("/Content/Textures"), "Recovered",
                 "normal", "linear", "bc7");
 
             Func<Task> initialImport = () => TextureSourceAssetImporter.CreateAsync(request);
@@ -94,7 +95,7 @@ public sealed class TextureSourceAssetImporterTests
             await File.WriteAllBytesAsync(image, [4, 5, 6]).ConfigureAwait(false);
             var assetUri = await TextureSourceAssetImporter.CreateAsync(request).ConfigureAwait(false);
 
-            _ = assetUri.Should().Be(new Uri("asset:///Content/Textures/Recovered.otex.json"));
+            _ = assetUri.Should().Be(AssetPath.Parse("/Content/Textures/Recovered.otex.json"));
             _ = File.Exists(Path.Combine(root, "Content", "Textures", "Recovered.otex.json")).Should().BeTrue();
         }
         finally
@@ -141,7 +142,7 @@ public sealed class TextureSourceAssetImporterTests
             _ = TextureSourceAssetImporter.FindCubeFaces(selected).Should().Equal(names.Select(name => Path.Combine(outside, $"sky_{name}.hdr")));
             _ = TextureSourceAssetImporter.StripFaceSuffix("sky_negy").Should().Be("sky");
             var request = new TextureSourceImportRequest(
-                CreateProject(root), selected, new Uri("asset:///Content/Sky"), "Sky", "hdr_env", "linear", "rgba16f")
+                CreateProject(root), selected, AssetPath.Parse("/Content/Sky"), "Sky", "hdr_env", "linear", "rgba16f")
             {
                 Cube = new TextureCubeImport(CubeLayout.SixFaces),
             };
@@ -179,7 +180,7 @@ public sealed class TextureSourceAssetImporterTests
             var image = Path.Combine(root, "diagram.hdr");
             File.WriteAllText(image, "#?RADIANCE\n\n-Y 451 +X 599\n");
             var request = new TextureSourceImportRequest(
-                CreateProject(root), image, new Uri("asset:///Content/Sky"), "Diagram", "hdr_env", "linear", "rgba16f")
+                CreateProject(root), image, AssetPath.Parse("/Content/Sky"), "Diagram", "hdr_env", "linear", "rgba16f")
             {
                 Cube = new TextureCubeImport(CubeLayout.HorizontalCross),
             };
@@ -196,7 +197,7 @@ public sealed class TextureSourceAssetImporterTests
     private static ProjectContext CreateProject(string root) => new()
     {
         ProjectId = Guid.NewGuid(),
-        ProjectRoot = root,
+        ProjectRoot = FileSystemPath.From(root),
         Name = "Texture test",
         Category = Category.Games,
         AuthoringMounts = [new("Content", "Content")],

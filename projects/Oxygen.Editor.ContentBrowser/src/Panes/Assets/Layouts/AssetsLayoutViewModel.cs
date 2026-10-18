@@ -305,9 +305,9 @@ public abstract partial class AssetsLayoutViewModel(
 
     private static bool HasCookedProjection(AssetEntry asset)
         => asset.PrimaryState is AssetState.Cooked
-           || (asset.BuiltinOrigin is not null && asset.IsCookedAsset)
+           || (asset.BuiltinOrigin is not null && asset.IsCookedOnly)
            || asset.DerivedState is AssetState.Cooked or AssetState.Stale
-           || (asset.PrimaryState is AssetState.Broken && asset.DescriptorPath is null && asset.IsCookedAsset);
+           || (asset.PrimaryState is AssetState.Broken && asset.IsCookedOnly);
 
     private void ApplyScriptProblems(AssetBrowserRow row)
     {

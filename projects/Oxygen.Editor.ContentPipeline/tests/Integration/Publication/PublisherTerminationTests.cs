@@ -6,6 +6,7 @@ using System.Diagnostics;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 
@@ -105,7 +106,7 @@ public sealed class PublisherTerminationTests
         {
             try
             {
-                return await CookOutputLease.AcquireWriteAsync(root, timeout.Token).ConfigureAwait(false);
+                return await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(root), timeout.Token).ConfigureAwait(false);
             }
             catch (CookOutputBusyException) when (elapsed.Elapsed < TimeSpan.FromSeconds(5))
             {

@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspection;
 
@@ -28,16 +29,16 @@ internal sealed class ContentPriorityTests : DroidNet.Tests.VisualUserInterfaceT
         var directory = Directory.CreateTempSubdirectory("Oxygen-PriorityControls-");
         try
         {
-            var first = Directory.CreateDirectory(Path.Combine(directory.FullName, "First")).FullName;
-            var second = Directory.CreateDirectory(Path.Combine(directory.FullName, "Second")).FullName;
-            await File.WriteAllBytesAsync(Path.Combine(first, "container.index.bin"), [], this.TestContext.CancellationToken).ConfigureAwait(true);
-            await File.WriteAllBytesAsync(Path.Combine(second, "container.index.bin"), [], this.TestContext.CancellationToken).ConfigureAwait(true);
+            var first = FileSystemPath.From(Directory.CreateDirectory(Path.Combine(directory.FullName, "First")).FullName);
+            var second = FileSystemPath.From(Directory.CreateDirectory(Path.Combine(directory.FullName, "Second")).FullName);
+            await File.WriteAllBytesAsync(first.Combine("container.index.bin").FullPath, [], this.TestContext.CancellationToken).ConfigureAwait(true);
+            await File.WriteAllBytesAsync(second.Combine("container.index.bin").FullPath, [], this.TestContext.CancellationToken).ConfigureAwait(true);
             var project = new ProjectContext
             {
                 ProjectId = Guid.NewGuid(),
                 Name = "Priority",
                 Category = Category.Games,
-                ProjectRoot = directory.FullName,
+                ProjectRoot = FileSystemPath.From(directory.FullName),
                 AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [new("First", first), new("Second", second)],
             };

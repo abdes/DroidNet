@@ -4,6 +4,7 @@
 
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
@@ -23,7 +24,7 @@ internal static class CookCoordinatorScenario
         ProjectId = Guid.NewGuid(),
         Name = "Cook coordination",
         Category = Category.Games,
-        ProjectRoot = Path.GetTempPath(),
+        ProjectRoot = FileSystemPath.From(Path.GetTempPath()),
         AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
         LocalFolderMounts = [],
     };

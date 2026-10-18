@@ -8,6 +8,7 @@ using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Materials.Documents;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.Materials.Tests;
@@ -51,7 +52,7 @@ internal sealed class MaterialDocuments : IDisposable
 
     public string PathOf(string name) => Path.Combine(this.directory.FullName, name + ".omat.json");
 
-    public DocumentFile FileOf(string name) => new(this.PathOf(name), new Uri($"asset:///Content/Materials/{name}.omat.json"));
+    public DocumentFile FileOf(string name) => new(FileSystemPath.From(this.PathOf(name)), AssetPath.Parse($"/Content/Materials/{name}.omat"));
 
     public void Dispose()
     {

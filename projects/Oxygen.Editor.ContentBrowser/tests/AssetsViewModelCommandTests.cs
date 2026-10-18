@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentBrowser.Relocation;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
@@ -32,8 +33,8 @@ public sealed class AssetsViewModelCommandTests
             _ = browser.CookSelectedAssetCommand.CanExecute(parameter: null).Should().BeFalse();
             _ = browser.CookSelectedToolTip.Should().StartWith("Select assets");
 
-            var clay = CreateAsset("/Content/Materials/Clay.omat.json", AssetKind.Material, descriptor: "C:/Project/Content/Materials/Clay.omat.json");
-            var bolt = CreateAsset("/Content/Geometry/Bolt.ogeo.json", AssetKind.Geometry, descriptor: "C:/Project/Content/Geometry/Bolt.ogeo.json");
+            var clay = CreateAsset("/Content/Materials/Clay.omat", AssetKind.Material, descriptor: FileSystemPath.From("C:/Project/Content/Materials/Clay.omat.json"));
+            var bolt = CreateAsset("/Content/Geometry/Bolt.ogeo", AssetKind.Geometry, descriptor: FileSystemPath.From("C:/Project/Content/Geometry/Bolt.ogeo.json"));
             state.PublishSelection([clay, bolt]);
             _ = browser.CookSelectedAssetCommand.CanExecute(parameter: null).Should().BeTrue();
             _ = browser.CopyPathCommand.CanExecute(parameter: null).Should().BeTrue();
@@ -66,7 +67,7 @@ public sealed class AssetsViewModelCommandTests
         {
             using (browser)
             {
-                var clay = CreateAsset("/Content/Materials/Clay.omat.json", AssetKind.Material, descriptor: clayPath);
+                var clay = CreateAsset("/Content/Materials/Clay.omat", AssetKind.Material, descriptor: FileSystemPath.From(clayPath));
                 state.PublishSelection([clay]);
                 _ = browser.RenameSelectedCommand.CanExecute(parameter: null).Should().BeTrue();
                 _ = browser.RenameToolTip.Should().StartWith("Rename (F2)").And.Contain("Content that uses it is updated");
@@ -75,19 +76,19 @@ public sealed class AssetsViewModelCommandTests
                 _ = browser.PasteCommand.CanExecute(parameter: null).Should().BeFalse();
 
                 browser.CopySelectedCommand.Execute(parameter: null);
-                state.SetSelectedFolders(["/Content/Materials"]);
+                state.SetSelectedFolders([AssetPath.Parse("/Content/Materials")]);
                 _ = browser.PasteCommand.CanExecute(parameter: null).Should().BeTrue();
-                state.SetSelectedFolders(["/Cooked/Content"]);
+                state.SetSelectedFolders([AssetPath.Parse("/Cooked/Content")]);
                 _ = browser.PasteCommand.CanExecute(parameter: null).Should().BeFalse();
 
                 state.PublishSelection([clay]);
                 await browser.RenameSelectedCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
                 workflow.Verify(value => value.RelocateAsync(
-                    It.Is<AssetRelocationRequest>(request => request.Moves.Single().SourcePath == "/Content/Materials/Clay.omat.json"
-                        && request.Moves.Single().TargetPath == "/Content/Materials/Brick.omat.json"),
+                    It.Is<AssetRelocationRequest>(request => request.Moves.Single().Source == AssetPath.Parse("/Content/Materials/Clay.omat.json")
+                        && request.Moves.Single().Target == AssetPath.Parse("/Content/Materials/Brick.omat.json")),
                     "Rename"));
 
-                var output = CreateAsset("/Content/Geometry/Robot/Body.ogeo", AssetKind.Geometry, descriptor: null) with { ImportSourceUri = new Uri("asset:///Content/SourceMedia/Robot/robot.gltf") };
+                var output = CreateAsset("/Content/Geometry/Robot/Body.ogeo", AssetKind.Geometry, descriptor: null) with { ImportSource = AssetPath.Parse("/Content/SourceMedia/Robot/robot.gltf") };
                 state.PublishSelection([output]);
                 _ = browser.RenameSelectedCommand.CanExecute(parameter: null).Should().BeFalse();
                 _ = browser.RenameToolTip.Should().Contain("Rename output group");
@@ -121,19 +122,19 @@ public sealed class AssetsViewModelCommandTests
         {
             using (browser)
             {
-                state.PublishSelection([CreateAsset("/Content/Materials/Clay.omat.json", AssetKind.Material, descriptor: clayPath)]);
+                state.PublishSelection([CreateAsset("/Content/Materials/Clay.omat", AssetKind.Material, descriptor: FileSystemPath.From(clayPath))]);
                 browser.CopySelectedCommand.Execute(parameter: null);
 
-                state.SetClipboard(["/Content/Materials"], isCut: false);
-                state.SetSelectedFolders(["/Content/Props"]);
+                state.SetClipboard([AssetPath.Parse("/Content/Materials")], isCut: false);
+                state.SetSelectedFolders([AssetPath.Parse("/Content/Props")]);
                 await browser.PasteCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
-                workflow.Verify(value => value.PasteAsync(It.Is<IReadOnlyList<string>>(items => items.SequenceEqual(new[] { "/Content/Materials" })), false, "/Content/Props"));
+                workflow.Verify(value => value.PasteAsync(It.Is<IReadOnlyList<AssetPath>>(items => items.SequenceEqual(new[] { AssetPath.Parse("/Content/Materials") })), false, AssetPath.Parse("/Content/Props")));
 
-                _ = workflow.Setup(value => value.PasteAsync(It.IsAny<IReadOnlyList<string>>(), true, "/Content/Props"))
+                _ = workflow.Setup(value => value.PasteAsync(It.IsAny<IReadOnlyList<AssetPath>>(), true, AssetPath.Parse("/Content/Props")))
                     .ReturnsAsync(new AssetRelocationOutcome(Succeeded: true, "Move", "Moved."));
-                state.SetClipboard(["/Content/Materials"], isCut: true);
+                state.SetClipboard([AssetPath.Parse("/Content/Materials")], isCut: true);
                 await browser.PasteCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
-                workflow.Verify(value => value.PasteAsync(It.Is<IReadOnlyList<string>>(items => items.SequenceEqual(new[] { "/Content/Materials" })), true, "/Content/Props"));
+                workflow.Verify(value => value.PasteAsync(It.Is<IReadOnlyList<AssetPath>>(items => items.SequenceEqual(new[] { AssetPath.Parse("/Content/Materials") })), true, AssetPath.Parse("/Content/Props")));
                 _ = state.Clipboard.Should().BeEmpty("cut items are pasted once");
             }
         }
@@ -154,13 +155,13 @@ public sealed class AssetsViewModelCommandTests
             CreateFolderRequestMessage? request = null;
             messenger.Register<CreateFolderRequestMessage>(this, (_, message) => request = message);
 
-            state.SetSelectedFolders(["/Content/Materials"]);
+            state.SetSelectedFolders([AssetPath.Parse("/Content/Materials")]);
             _ = browser.CreateFolderCommand.CanExecute(parameter: null).Should().BeTrue();
             browser.CreateFolderCommand.Execute(parameter: null);
             _ = request.Should().NotBeNull();
-            _ = request!.ParentFolder.Should().Be("/Content/Materials");
+            _ = request!.ParentFolder.Should().Be(AssetPath.Parse("/Content/Materials"));
 
-            state.SetSelectedFolders(["/Cooked/Content"]);
+            state.SetSelectedFolders([AssetPath.Parse("/Cooked/Content")]);
             _ = browser.CreateFolderCommand.CanExecute(parameter: null).Should().BeFalse();
             _ = browser.CreateFolderToolTip.Should().Contain("read-only");
         }
@@ -174,11 +175,11 @@ public sealed class AssetsViewModelCommandTests
             ProjectId = Guid.NewGuid(),
             Name = "Commands",
             Category = Category.Games,
-            ProjectRoot = root,
+            ProjectRoot = FileSystemPath.From(root),
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
             LocalFolderMounts = [],
         });
-        var state = new ContentBrowserState(projects);
+        var state = new ContentBrowserState();
         var messenger = new StrongReferenceMessenger();
         var browser = new AssetsViewModel(
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
@@ -199,9 +200,9 @@ public sealed class AssetsViewModelCommandTests
         return (browser, state, messenger);
     }
 
-    private static AssetEntry CreateAsset(string path, AssetKind kind, string? descriptor)
+    private static AssetEntry CreateAsset(string path, AssetKind kind, FileSystemPath? descriptor)
         => new(
-            new Uri("asset://" + path),
+            AssetPath.Parse(path),
             Path.GetFileName(path),
             kind,
             AssetState.Descriptor,
@@ -210,7 +211,6 @@ public sealed class AssetsViewModelCommandTests
             path,
             SourcePath: null,
             DescriptorPath: descriptor,
-            CookedUri: null,
             CookedPath: null,
             AssetGuid: null,
             [],

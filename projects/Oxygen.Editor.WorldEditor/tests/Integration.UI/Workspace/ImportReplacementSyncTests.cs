@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.ModelImportScenario;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
@@ -50,11 +51,11 @@ public sealed class ImportReplacementSyncTests : DroidNet.Tests.VisualUserInterf
         var history = fixture.Document.History.UndoStack.Count;
         var dirty = fixture.Document.IsDirty;
 
-        var path = Path.Combine(fixture.ProjectRoot, "Incoming", "Triangle." + format);
+        var path = fixture.ProjectRoot.Combine("Incoming").Combine("Triangle." + format).FullPath;
         await File.WriteAllTextAsync(path, Recolor(await File.ReadAllTextAsync(path, timeout.Token).ConfigureAwait(true), format), timeout.Token).ConfigureAwait(true);
         var project = services.Projects.ActiveProject!;
         var review = await SceneImportReplacement.ReviewAsync(project, "Triangle", timeout.Token).ConfigureAwait(true);
-        var replaced = await services.Pipeline.ImportSourceAsync(new(project, path, "Triangle", new("asset:///Content/Models")) { Replacement = review }, timeout.Token).ConfigureAwait(true);
+        var replaced = await services.Pipeline.ImportSourceAsync(new(project, path, "Triangle", AssetPath.Parse("/Content/Models")) { Replacement = review }, timeout.Token).ConfigureAwait(true);
         _ = replaced.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, replaced.Diagnostics.Select(static issue => issue.Message)));
         _ = replaced.CookedAssets.Select(static asset => asset.CookedAssetUri).Should().BeEquivalentTo(first.CookedAssets.Select(static asset => asset.CookedAssetUri));
 

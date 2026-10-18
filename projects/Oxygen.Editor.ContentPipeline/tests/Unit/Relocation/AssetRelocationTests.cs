@@ -28,11 +28,11 @@ public sealed class AssetRelocationTests
     private const string Scene = """
         { "Id": "6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10", "Name": "Main",
           "RootNodes": [ { "Name": "Box", "Components": [ { "$type": "GeometryComponent",
-            "GeometryUri": "asset:///Content/Geometry/Box.ogeo.json",
-            "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Geometry/Box.ogeo.json", "MaterialUri": "asset:///Content/Materials/Red.omat.json" } ],
-            "TargetedOverrides": [ { "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Geometry/Box.ogeo.json", "MaterialUri": "asset:///Content/Materials/Red.omat.json" } ] } ] } ] },
+            "GeometryUri": "asset:///Content/Geometry/Box.ogeo",
+            "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Geometry/Box.ogeo", "MaterialUri": "asset:///Content/Materials/Red.omat" } ],
+            "TargetedOverrides": [ { "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Geometry/Box.ogeo", "MaterialUri": "asset:///Content/Materials/Red.omat" } ] } ] } ] },
             { "Name": "Robot", "Components": [ { "$type": "GeometryComponent", "GeometryUri": "asset:///Content/Geometry/Robot/robot_Body.ogeo" } ] } ],
-          "Environment": { "PostProcess": { "AutoExposureMeteringMask": "asset:///Content/Textures/Wood.otex.json" } } }
+          "Environment": { "PostProcess": { "AutoExposureMeteringMask": "asset:///Content/Textures/Wood.otex" } } }
         """;
 
     public TestContext TestContext { get; set; } = null!;
@@ -47,11 +47,11 @@ public sealed class AssetRelocationTests
 
         _ = workspace.Exists("Content/Materials/Red.omat.json").Should().BeFalse();
         _ = workspace.Exists("Content/Materials/Blue.omat.json").Should().BeTrue();
-        _ = plan.Referrers.Should().BeEquivalentTo("/Content/Geometry/Box.ogeo.json", "/Content/Scenes/Main.oscene.json");
+        _ = plan.Referrers.Should().BeEquivalentTo([AssetPath.Parse("/Content/Geometry/Box.ogeo.json"), AssetPath.Parse("/Content/Scenes/Main.oscene.json")]);
         var scene = workspace.Read("Content/Scenes/Main.oscene.json");
-        _ = scene.Should().NotContain("Red.omat").And.Contain("asset:///Content/Materials/Blue.omat.json");
+        _ = scene.Should().NotContain("Red.omat").And.Contain("asset:///Content/Materials/Blue.omat");
         _ = workspace.ReadJson("Content/Scenes/Main.oscene.json")["RootNodes"]![0]!["Components"]![0]!["TargetedOverrides"]![0]!["OverrideSlots"]![0]!["MaterialUri"]!.GetValue<string>()
-            .Should().Be("asset:///Content/Materials/Blue.omat.json");
+            .Should().Be("asset:///Content/Materials/Blue.omat");
         _ = workspace.ReadJson("Content/Geometry/Box.ogeo.json")["lods"]![0]!["submeshes"]![0]!["material_ref"]!.GetValue<string>().Should().Be("/Content/Materials/Blue.omat");
     }
 
@@ -67,7 +67,7 @@ public sealed class AssetRelocationTests
 
         await history.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = workspace.Exists("Content/Materials/Red.omat.json").Should().BeTrue();
-        _ = workspace.Read("Content/Scenes/Main.oscene.json").Should().Contain("asset:///Content/Materials/Red.omat.json").And.NotContain("Blue.omat");
+        _ = workspace.Read("Content/Scenes/Main.oscene.json").Should().Contain("asset:///Content/Materials/Red.omat").And.NotContain("Blue.omat");
         _ = history.CanUndo.Should().BeFalse();
 
         await history.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -122,7 +122,7 @@ public sealed class AssetRelocationTests
         _ = texture["source"]!.GetValue<string>().Should().Be("Oak.png");
         _ = texture["virtual_path"]!.GetValue<string>().Should().Be("/Content/Textures/Oak.otex");
         _ = workspace.Read("Content/Materials/Red.omat.json").Should().Contain("/Content/Textures/Oak.otex");
-        _ = workspace.Read("Content/Scenes/Main.oscene.json").Should().Contain("asset:///Content/Textures/Oak.otex.json");
+        _ = workspace.Read("Content/Scenes/Main.oscene.json").Should().Contain("asset:///Content/Textures/Oak.otex");
     }
 
     /// <summary>A populated folder moves as one unit; references and file-relative sources follow it.</summary>
@@ -149,7 +149,7 @@ public sealed class AssetRelocationTests
         using var workspace = CreateContent();
         _ = workspace.WriteModel("Content/SourceMedia/DCC/Robot", "robot.gltf", "Robot");
         _ = workspace.Write("Content/Materials/Robot/Paint.omat.json", """{ "name": "Paint" }""");
-        var request = new AssetRelocationRequest { GroupMoves = [new("/Content/SourceMedia/DCC/Robot/robot.gltf", "Hero")] };
+        var request = new AssetRelocationRequest { GroupMoves = [new(AssetPath.Parse("/Content/SourceMedia/DCC/Robot/robot.gltf"), "Hero")] };
 
         var plan = await workspace.Service.RelocateAsync(request, "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -231,7 +231,7 @@ public sealed class AssetRelocationTests
         using var workspace = CreateContent();
         _ = workspace.Write("Content/Player/jump.lua", "return {}");
         _ = workspace.Write("Content/Player/move.luau", "return {}");
-        var request = new AssetRelocationRequest { Moves = [new("/Content/Player/jump.lua", "/Content/Player/move.lua")] };
+        var request = new AssetRelocationRequest { Moves = [new(AssetPath.Parse("/Content/Player/jump.lua"), AssetPath.Parse("/Content/Player/move.lua"))] };
 
         Func<Task> work = () => workspace.Service.RelocateAsync(request, "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
 
@@ -248,9 +248,9 @@ public sealed class AssetRelocationTests
         _ = workspace.Write("Content/Scripts/move.lua", "return {}");
         _ = workspace.Write("Content/Player/move.luau", "return {}");
 
-        var copies = await workspace.Service.CopyAsync(["/Content/Scripts/move.lua"], "/Content/Player", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var copies = await workspace.Service.CopyAsync([AssetPath.Parse("/Content/Scripts/move.lua")], AssetPath.Parse("/Content/Player"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = copies.Should().ContainSingle().Which.Should().EndWith("move (2).lua");
+        _ = copies.Should().ContainSingle().Which.Name.Should().Be("move (2).lua");
     }
 
     /// <summary>Renaming a script rewrites the slots and parameters that refer to the script it cooks to.</summary>
@@ -282,7 +282,7 @@ public sealed class AssetRelocationTests
         using var workspace = CreateContent();
         _ = workspace.WriteModel("Content/SourceMedia/DCC/Robot", "robot.gltf", "Robot");
         _ = workspace.WriteModel("Content/SourceMedia/DCC/Car", "car.gltf", "Car");
-        var request = new AssetRelocationRequest { GroupMoves = [new("/Content/SourceMedia/DCC/Robot/robot.gltf", "Car/Robot")] };
+        var request = new AssetRelocationRequest { GroupMoves = [new(AssetPath.Parse("/Content/SourceMedia/DCC/Robot/robot.gltf"), "Car/Robot")] };
 
         Func<Task> work = () => workspace.Service.RelocateAsync(request, "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
 
@@ -344,7 +344,7 @@ public sealed class AssetRelocationTests
     public async Task UnsavedDocumentsRejectRelocation()
     {
         using var workspace = CreateContent();
-        var path = workspace.PathOf("Content/Scenes/Main.oscene.json");
+        var path = workspace.FileOf("Content/Scenes/Main.oscene.json");
         using var registration = workspace.Documents.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(null));
         registration.UpdateState(new(path, "Main", IsDirty: true, SavedContentHash: string.Empty));
 
@@ -360,9 +360,9 @@ public sealed class AssetRelocationTests
     public async Task CopyCreatesUniqueCopiesWithTheirOwnIdentity()
     {
         using var workspace = CreateContent();
-        var copies = await workspace.Service.CopyAsync(["/Content/Textures/Wood.otex.json"], "/Content/Textures", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var copies = await workspace.Service.CopyAsync([AssetPath.Parse("/Content/Textures/Wood.otex.json")], AssetPath.Parse("/Content/Textures"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = copies.Should().ContainSingle().Which.Should().Be("/Content/Textures/Wood (2).otex.json");
+        _ = copies.Should().ContainSingle().Which.Should().Be(AssetPath.Parse("/Content/Textures/Wood (2).otex.json"));
         var copy = workspace.ReadJson("Content/Textures/Wood (2).otex.json");
         _ = copy["virtual_path"]!.GetValue<string>().Should().Be("/Content/Textures/Wood (2).otex");
         _ = copy["source"]!.GetValue<string>().Should().Be("Wood (2).png");
@@ -380,7 +380,7 @@ public sealed class AssetRelocationTests
         var recycled = new List<string>();
 
         await workspace.Service.DeleteAsync(
-            ["/Content/Textures/Wood.otex.json", "/Content/SourceMedia/DCC/Robot/robot.gltf"],
+            [AssetPath.Parse("/Content/Textures/Wood.otex.json"), AssetPath.Parse("/Content/SourceMedia/DCC/Robot/robot.gltf")],
             paths =>
             {
                 recycled.AddRange(paths);
@@ -408,8 +408,8 @@ public sealed class AssetRelocationTests
         _ = await workspace.Service.RelocateAsync(Move("/Content/Shared", "/Content/Props/Shared"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var report = reports.Should().ContainSingle().Subject;
-        _ = report.Moves.Should().Contain(move => move.IsDirectory && move.Source == workspace.PathOf("Content/Shared") && move.Target == workspace.PathOf("Content/Props/Shared"));
-        _ = report.RewrittenFiles.Should().Contain(workspace.PathOf("Content/Props/Shared/far.otex.json"));
+        _ = report.Moves.Should().Contain(move => move.IsDirectory && move.Source == workspace.FileOf("Content/Shared") && move.Target == workspace.FileOf("Content/Props/Shared"));
+        _ = report.RewrittenFiles.Should().Contain(workspace.FileOf("Content/Props/Shared/far.otex.json"));
         _ = report.DeletedFiles.Should().BeEmpty();
         _ = report.FoldersChanged.Should().BeTrue();
     }
@@ -423,10 +423,10 @@ public sealed class AssetRelocationTests
         var reports = new List<AssetFilesChangedEventArgs>();
         workspace.Service.FilesChanged += (_, args) => reports.Add(args);
 
-        _ = await workspace.Service.CopyAsync(["/Content/Materials/Red.omat.json", "/Content/Textures"], "/Content/Geometry", this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await workspace.Service.CopyAsync([AssetPath.Parse("/Content/Materials/Red.omat.json"), AssetPath.Parse("/Content/Textures")], AssetPath.Parse("/Content/Geometry"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var report = reports.Should().ContainSingle().Subject;
-        _ = report.CreatedFiles.Should().BeEquivalentTo(workspace.PathOf("Content/Geometry/Red.omat.json"), workspace.PathOf("Content/Geometry/Textures"));
+        _ = report.CreatedFiles.Should().BeEquivalentTo([workspace.FileOf("Content/Geometry/Red.omat.json"), workspace.FileOf("Content/Geometry/Textures")]);
         _ = report.Moves.Should().BeEmpty();
         _ = report.FoldersChanged.Should().BeTrue("a folder was copied");
     }
@@ -443,7 +443,7 @@ public sealed class AssetRelocationTests
         workspace.Service.FilesChanged += (_, args) => reports.Add(args);
 
         await workspace.Service.DeleteAsync(
-            ["/Content/Textures/Wood.otex.json", "/Content/SourceMedia/DCC/Robot/robot.gltf"],
+            [AssetPath.Parse("/Content/Textures/Wood.otex.json"), AssetPath.Parse("/Content/SourceMedia/DCC/Robot/robot.gltf")],
             paths =>
             {
                 recycled.AddRange(paths);
@@ -452,7 +452,7 @@ public sealed class AssetRelocationTests
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var report = reports.Should().ContainSingle().Subject;
-        _ = report.DeletedFiles.Should().BeEquivalentTo(recycled);
+        _ = report.DeletedFiles.Should().BeEquivalentTo(recycled.Select(FileSystemPath.From));
         _ = report.Moves.Should().BeEmpty();
         _ = report.FoldersChanged.Should().BeTrue("the model's bundle folder was recycled");
     }
@@ -493,7 +493,7 @@ public sealed class AssetRelocationTests
         var recycled = new List<string>();
 
         await workspace.Service.DeleteAsync(
-            ["/Content/Textures/Wood.otex.json"],
+            [AssetPath.Parse("/Content/Textures/Wood.otex.json")],
             paths =>
             {
                 recycled.AddRange(paths);
@@ -526,10 +526,10 @@ public sealed class AssetRelocationTests
     public async Task FindReferrersListsUsers()
     {
         using var workspace = CreateContent();
-        _ = (await workspace.Service.FindReferrersAsync("/Content/Materials/Red.omat.json", this.TestContext.CancellationToken).ConfigureAwait(false))
-            .Should().BeEquivalentTo("/Content/Geometry/Box.ogeo.json", "/Content/Scenes/Main.oscene.json");
-        _ = (await workspace.Service.FindReferrersAsync("/Content/Textures", this.TestContext.CancellationToken).ConfigureAwait(false))
-            .Should().BeEquivalentTo("/Content/Materials/Red.omat.json", "/Content/Scenes/Main.oscene.json");
+        _ = (await workspace.Service.FindReferrersAsync(AssetPath.Parse("/Content/Materials/Red.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false))
+            .Should().BeEquivalentTo([AssetPath.Parse("/Content/Geometry/Box.ogeo.json"), AssetPath.Parse("/Content/Scenes/Main.oscene.json")]);
+        _ = (await workspace.Service.FindReferrersAsync(AssetPath.Parse("/Content/Textures"), this.TestContext.CancellationToken).ConfigureAwait(false))
+            .Should().BeEquivalentTo([AssetPath.Parse("/Content/Materials/Red.omat.json"), AssetPath.Parse("/Content/Scenes/Main.oscene.json")]);
     }
 
     /// <summary>The review of a delete lists only the files outside the deleted items that use them.</summary>
@@ -540,9 +540,9 @@ public sealed class AssetRelocationTests
         using var workspace = CreateContent();
 
         var referrers = await workspace.Service.FindReferrersOutsideAsync(
-            ["/Content/Materials/Red.omat.json", "/Content/Geometry/Box.ogeo.json"], this.TestContext.CancellationToken).ConfigureAwait(false);
+            [AssetPath.Parse("/Content/Materials/Red.omat.json"), AssetPath.Parse("/Content/Geometry/Box.ogeo.json")], this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = referrers.Should().Equal("/Content/Scenes/Main.oscene.json");
+        _ = referrers.Should().Equal(AssetPath.Parse("/Content/Scenes/Main.oscene.json"));
     }
 
     /// <summary>A catalog change, such as an edit outside the editor, makes the next search read the files again.</summary>
@@ -551,16 +551,16 @@ public sealed class AssetRelocationTests
     public async Task CatalogChangeRefreshesTheReferrers()
     {
         using var workspace = CreateContent();
-        const string red = "/Content/Materials/Red.omat.json";
+        var red = AssetPath.Parse("/Content/Materials/Red.omat.json");
         _ = await workspace.Service.FindReferrersAsync(red, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = workspace.Write("Content/Geometry/Crate.ogeo.json", Geometry.Replace("Box", "Crate", StringComparison.Ordinal));
 
         var cached = await workspace.Service.FindReferrersAsync(red, this.TestContext.CancellationToken).ConfigureAwait(false);
-        workspace.ChangeInCatalog(new Uri("asset:///Content/Geometry/Crate.ogeo.json"));
+        workspace.ChangeInCatalog(AssetPath.Parse("/Content/Geometry/Crate.ogeo.json"));
         var fresh = await workspace.Service.FindReferrersAsync(red, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = cached.Should().NotContain("/Content/Geometry/Crate.ogeo.json");
-        _ = fresh.Should().Contain("/Content/Geometry/Crate.ogeo.json");
+        _ = cached.Should().NotContain(AssetPath.Parse("/Content/Geometry/Crate.ogeo.json"));
+        _ = fresh.Should().Contain(AssetPath.Parse("/Content/Geometry/Crate.ogeo.json"));
     }
 
     /// <summary>A scene moves to any folder like any asset, and the scenes that reference it follow.</summary>
@@ -576,7 +576,7 @@ public sealed class AssetRelocationTests
 
         _ = workspace.Exists("Content/Scenes/Main.oscene.json").Should().BeFalse();
         _ = workspace.Exists("Content/Levels/Start.oscene.json").Should().BeTrue();
-        _ = plan.Referrers.Should().Contain("/Content/Levels/Lobby.oscene.json");
+        _ = plan.Referrers.Should().Contain(AssetPath.Parse("/Content/Levels/Lobby.oscene.json"));
         _ = workspace.ReadJson("Content/Levels/Lobby.oscene.json")["References"]!["ExtraAssets"]![0]!.GetValue<string>().Should().Be("/Content/Levels/Start.oscene");
         _ = history.UndoStack.Should().ContainSingle();
     }
@@ -588,9 +588,9 @@ public sealed class AssetRelocationTests
     {
         using var workspace = CreateContent();
 
-        var copies = await workspace.Service.CopyAsync(["/Content/Scenes/Main.oscene.json"], "/Content/Scenes", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var copies = await workspace.Service.CopyAsync([AssetPath.Parse("/Content/Scenes/Main.oscene.json")], AssetPath.Parse("/Content/Scenes"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = copies.Should().ContainSingle().Which.Should().Be("/Content/Scenes/Main (2).oscene.json");
+        _ = copies.Should().ContainSingle().Which.Should().Be(AssetPath.Parse("/Content/Scenes/Main (2).oscene.json"));
         var copy = workspace.ReadJson("Content/Scenes/Main (2).oscene.json");
         _ = copy["Name"]!.GetValue<string>().Should().Be("Main (2)");
         _ = Guid.Parse(copy["Id"]!.GetValue<string>()).Should().NotBe(Guid.Parse("6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10"));
@@ -611,7 +611,7 @@ public sealed class AssetRelocationTests
         var recycled = new List<string>();
 
         var delete = () => workspace.Service.DeleteAsync(
-            [source],
+            [AssetPath.Parse(source)],
             paths =>
             {
                 recycled.AddRange(paths);
@@ -629,12 +629,12 @@ public sealed class AssetRelocationTests
     public void FindOpenDocuments_NamesTheOpenDocumentsInsideTheDeletedItems()
     {
         using var workspace = CreateContent();
-        using var scene = workspace.Documents.Register(workspace.PathOf("Content/Scenes/Main.oscene.json"), _ => Task.FromResult<CookDocumentReadLease?>(null));
-        scene.UpdateState(new CookDocumentState(workspace.PathOf("Content/Scenes/Main.oscene.json"), "Main", IsDirty: true, string.Empty));
-        using var material = workspace.Documents.Register(workspace.PathOf("Content/Materials/Red.omat.json"), _ => Task.FromResult<CookDocumentReadLease?>(null));
-        material.UpdateState(new CookDocumentState(workspace.PathOf("Content/Materials/Red.omat.json"), "Red", IsDirty: false, string.Empty));
+        using var scene = workspace.Documents.Register(workspace.FileOf("Content/Scenes/Main.oscene.json"), _ => Task.FromResult<CookDocumentReadLease?>(null));
+        scene.UpdateState(new CookDocumentState(workspace.FileOf("Content/Scenes/Main.oscene.json"), "Main", IsDirty: true, string.Empty));
+        using var material = workspace.Documents.Register(workspace.FileOf("Content/Materials/Red.omat.json"), _ => Task.FromResult<CookDocumentReadLease?>(null));
+        material.UpdateState(new CookDocumentState(workspace.FileOf("Content/Materials/Red.omat.json"), "Red", IsDirty: false, string.Empty));
 
-        var open = workspace.Service.FindOpenDocuments(["/Content/Scenes"]);
+        var open = workspace.Service.FindOpenDocuments([AssetPath.Parse("/Content/Scenes")]);
 
         _ = open.Should().Equal(("Main", true));
     }
@@ -651,7 +651,7 @@ public sealed class AssetRelocationTests
         return workspace;
     }
 
-    private static AssetRelocationRequest Move(string source, string target) => new() { Moves = [new(source, target)] };
+    private static AssetRelocationRequest Move(string source, string target) => new() { Moves = [new(AssetPath.Parse(source), AssetPath.Parse(target))] };
 
     private static Dictionary<string, string> Snapshot(string root)
         => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)

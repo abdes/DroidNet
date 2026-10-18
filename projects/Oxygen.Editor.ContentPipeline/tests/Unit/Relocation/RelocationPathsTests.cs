@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Relocation;
 
@@ -16,16 +17,16 @@ public sealed class RelocationPathsTests
     [TestMethod]
     public void RenameTrimsTheTypedNameAndPutsItInNfc()
     {
-        var renamed = RelocationPaths.Rename("/Content/Materials/Red.omat.json", " Cafe\u0301 ", isFolder: false);
+        var renamed = RelocationPaths.Rename(AssetPath.Parse("/Content/Materials/Red.omat.json"), " Cafe\u0301 ", isFolder: false);
 
-        _ = renamed.Should().Be("/Content/Materials/Caf\u00E9.omat.json");
+        _ = renamed.Should().Be(AssetPath.Parse("/Content/Materials/Caf\u00E9.omat.json"));
     }
 
     /// <summary>Identity is case-sensitive: a folder differing only in case does not contain a path.</summary>
     [TestMethod]
     public void FolderDifferingOnlyInCaseDoesNotContainAPath()
     {
-        _ = RelocationPaths.IsSameOrInside("/Content/Materials/Red.omat", "/Content/materials").Should().BeFalse();
-        _ = RelocationPaths.IsSameOrInside("/Content/Materials/Red.omat", "/Content/Materials").Should().BeTrue();
+        _ = AssetPath.Parse("/Content/Materials/Red.omat").IsSameOrInside(AssetPath.Parse("/Content/materials")).Should().BeFalse();
+        _ = AssetPath.Parse("/Content/Materials/Red.omat").IsSameOrInside(AssetPath.Parse("/Content/Materials")).Should().BeTrue();
     }
 }

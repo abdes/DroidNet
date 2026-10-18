@@ -46,14 +46,12 @@ public sealed class SetGeometryTests
     }
 
     [TestMethod]
-    [DataRow("asset:///Content/Materials/Red.omat.json")]
-    [DataRow("https://example.com/Content/Geometry/Crate.ogeo")]
-    public async Task NotAGeometryAsset_IsInvalid(string geometry)
+    public async Task NotAGeometryAsset_IsInvalid()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetGeometry([SampleScene.Mesh], new Uri(geometry))).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetGeometry([SampleScene.Mesh], SampleScene.RedMaterial)).ConfigureAwait(false);
 
         SceneAssert.Invalid(result, SceneEditCodes.AssetReferenceInvalid, SampleScene.Mesh);
         SceneAssert.Unchanged(fixture, before);

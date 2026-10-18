@@ -13,6 +13,7 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
@@ -60,7 +61,7 @@ internal sealed class MaterialDocuments : IDisposable
 
     public string PathOf(string name) => Path.Combine(this.Folder, name + ".omat.json");
 
-    public DocumentFile FileOf(string name) => new(this.PathOf(name), new Uri($"asset:///Content/Materials/{name}.omat.json"));
+    public DocumentFile FileOf(string name) => new(FileSystemPath.From(this.PathOf(name)), AssetPath.Parse($"/Content/Materials/{name}.omat"));
 
     public DocumentTab TabOf(Document document) => new(document, new DocumentEditorDescriptor(this.Kind, static _ => new object()));
 

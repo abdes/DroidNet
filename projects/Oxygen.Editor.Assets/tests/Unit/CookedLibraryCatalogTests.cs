@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Core;
 using Oxygen.Testing;
 using Testably.Abstractions;
 
@@ -45,7 +46,7 @@ public sealed class CookedLibraryCatalogTests
         _ = library.DescriptorPath.Should().BeNull();
         _ = library.SourcePath.Should().BeNull();
         _ = library.CanCook.Should().BeFalse();
-        _ = library.CookedUri.Should().Be(new Uri("asset:///Content/Shared.omat"));
+        _ = library.Identity.Should().Be(AssetPath.Parse("/Content/Shared.omat"));
     }
 
     /// <summary>A new publication order changes the effective source, and a restarted catalog keeps it.</summary>
@@ -69,7 +70,7 @@ public sealed class CookedLibraryCatalogTests
     }
 
     private static AssetRecord SharedMaterial(IReadOnlyList<AssetRecord> records)
-        => records.Single(static record => string.Equals(record.Uri.AbsolutePath, "/Content/Shared.omat", StringComparison.Ordinal));
+        => records.Single(static record => record.Identity == AssetPath.Parse("/Content/Shared.omat"));
 
     private sealed class Fixture : IDisposable
     {
@@ -90,7 +91,7 @@ public sealed class CookedLibraryCatalogTests
                 ProjectId = Guid.NewGuid(),
                 Name = "Libraries",
                 Category = Category.Games,
-                ProjectRoot = this.directory.FullName,
+                ProjectRoot = FileSystemPath.From(this.directory.FullName),
                 AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [new("First", this.First), new("Second", this.Second)],
             });
@@ -101,11 +102,11 @@ public sealed class CookedLibraryCatalogTests
             this.SecondRoot = FakeCookPublication.Root(CookPublicationRootOwner.Library, "Second", secondIndex, this.Second);
         }
 
-        public string ProjectOutput { get; }
+        public FileSystemPath ProjectOutput { get; }
 
-        public string First { get; }
+        public FileSystemPath First { get; }
 
-        public string Second { get; }
+        public FileSystemPath Second { get; }
 
         public FakeCookPublication.PublishedRoot ProjectRoot { get; }
 
@@ -118,7 +119,7 @@ public sealed class CookedLibraryCatalogTests
         public FakeCookPublication Publication { get; }
 
         public void Publish(params FakeCookPublication.PublishedRoot[] roots)
-            => this.Publication.Publish(roots, new Dictionary<string, string> { ["Content"] = this.ProjectOutput });
+            => this.Publication.Publish(roots, new Dictionary<string, FileSystemPath> { ["Content"] = this.ProjectOutput });
 
         public AssetCatalog CreateCatalog()
         {
@@ -130,33 +131,33 @@ public sealed class CookedLibraryCatalogTests
         }
 
         public IReadOnlyList<AssetEntry> Reduce(IReadOnlyList<AssetRecord> records)
-            => new AssetIdentityReducer().Reduce(records, this.Projects.ActiveProject!, new(this.Projects.ActiveProject!.ProjectId, this.directory.FullName, Path.Combine(this.directory.FullName, ".cooked")));
+            => new AssetIdentityReducer().Reduce(records, this.Projects.ActiveProject!, new(this.Projects.ActiveProject!.ProjectId, FileSystemPath.From(this.directory.FullName), Path.Combine(this.directory.FullName, ".cooked")));
 
         /// <summary>Describes the copy of an asset that one library provides.</summary>
         /// <param name="effective">The asset as ordinary resolution selected it.</param>
         /// <param name="library">The library folder.</param>
         /// <returns>The library's own row.</returns>
-        public AssetEntry LibraryCopy(AssetEntry effective, string library)
+        public AssetEntry LibraryCopy(AssetEntry effective, FileSystemPath library)
         {
-            var source = effective.OverriddenCookedSources.Prepend(effective.CookedMetadata!).Single(metadata => string.Equals(metadata.RootFolderPath, library, StringComparison.OrdinalIgnoreCase));
+            var source = effective.OverriddenCookedSources.Prepend(effective.CookedMetadata!).Single(metadata => metadata.RootFolderPath == library);
             return AssetIdentity.FromCookedSource(effective, source, this.Projects.ActiveProject!);
         }
 
         public void Dispose() => this.directory.Delete(recursive: true);
 
-        private (string Folder, Document Index) WriteRoot(string relative, byte value)
+        private (FileSystemPath Folder, Document Index) WriteRoot(string relative, byte value)
         {
-            var root = Path.GetFullPath(Path.Combine(this.directory.FullName, relative));
-            _ = Directory.CreateDirectory(Path.Combine(root, "payloads"));
+            var root = FileSystemPath.From(Path.Combine(this.directory.FullName, relative));
+            _ = Directory.CreateDirectory(root.Combine("payloads").FullPath);
             byte[] bytes = [value];
-            File.WriteAllBytes(Path.Combine(root, "payloads", "shared.bin"), bytes);
+            File.WriteAllBytes(root.Combine("payloads/shared.bin").FullPath, bytes);
             var index = new Document(
                 1,
                 IndexFeatures.HasVirtualPaths,
                 Guid.CreateVersion7(),
                 [new(new AssetKey(1, 2), "payloads/shared.bin", "/Content/Shared.omat", 1, 1, SHA256.HashData(bytes))],
                 []);
-            using var stream = File.Create(Path.Combine(root, "container.index.bin"));
+            using var stream = File.Create(root.Combine("container.index.bin").FullPath);
             LooseCookedIndexFixture.Write(stream, index);
             return (root, index);
         }

@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
@@ -29,10 +30,10 @@ public sealed class PreviewCookTests
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
-        var materialUri = new Uri("asset:///Content/Materials/Blue.omat.json");
+        var materialUri = AssetPath.Parse("/Content/Materials/Blue.omat.json");
         var scenePath = Path.Combine(workspace.Root, "Content", "Scenes", "Main.oscene.json");
         var scene = SavedState(scenePath) with { IsDirty = true };
-        using var registration = workspace.Documents.Register(scenePath, _ => Task.FromResult<CookDocumentReadLease?>(new(scene, static () => { })));
+        using var registration = workspace.Documents.Register(FileSystemPath.From(scenePath), _ => Task.FromResult<CookDocumentReadLease?>(new(scene, static () => { })));
         var hold = WriterHold.Take(workspace.CookCoordinator, this.TestContext.CancellationToken);
         var saved = pipeline.CookSavedAssetAsync(materialUri, workspace.ProjectContext, this.TestContext.CancellationToken);
         var preview = pipeline.CookPreviewAssetAsync(materialUri, workspace.ProjectContext, this.TestContext.CancellationToken);
@@ -46,8 +47,8 @@ public sealed class PreviewCookTests
         _ = (await saved.ConfigureAwait(false)).Should().BeSameAs(result);
         _ = result.InputSnapshot.Should().NotBeNull();
         var snapshot = result.InputSnapshot!;
-        _ = snapshot.Inputs.Should().NotContain(input => input.AssetUri != null && input.AssetUri.AbsolutePath.EndsWith(".oscene.json", StringComparison.Ordinal));
-        _ = snapshot.Documents.Should().NotContain(document => string.Equals(document.SourcePath, scene.SourcePath, StringComparison.OrdinalIgnoreCase));
+        _ = snapshot.Inputs.Should().NotContain(input => input.AssetUri != null && input.AssetUri.VirtualPath.EndsWith(".oscene.json", StringComparison.Ordinal));
+        _ = snapshot.Documents.Should().NotContain(document => document.SourcePath == scene.SourcePath);
         _ = scene.IsDirty.Should().BeTrue();
     }
 
@@ -62,12 +63,12 @@ public sealed class PreviewCookTests
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
-        var geometryUri = new Uri("asset:///Content/Geometry/AuthoredCube.ogeo.json");
+        var geometryUri = AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo.json");
         var result = await pipeline.CookPreviewAssetAsync(geometryUri, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(result);
         _ = result.CookedAssets.Should().HaveCount(2);
         _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == geometryUri);
-        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == new Uri("asset:///Content/Materials/Red.omat.json"));
+        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Materials/Red.omat.json"));
         _ = workspace.CookCoordinator.Runs.Should().ContainSingle().Which.Request.IsDemand.Should().BeTrue();
     }
 }

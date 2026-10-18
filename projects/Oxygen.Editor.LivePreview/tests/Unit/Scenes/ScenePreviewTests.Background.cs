@@ -8,6 +8,7 @@ using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Tests.Scenes;
 
@@ -26,8 +27,8 @@ public sealed partial class ScenePreviewTests
         {
             AtmosphereEnabled = false,
             Background = new() { Enabled = true, ColorRgb = new Vector3(0.25f, 0.5f, 0.75f) },
-            SkySphere = new() { Enabled = false, Source = SkySphereSource.SolidColor, Cubemap = new Uri("asset:///Content/Sky.otex.json") },
-            SkyLight = new() { Source = SkyLightSource.CapturedScene, Cubemap = new Uri("asset:///Content/Light.otex.json") },
+            SkySphere = new() { Enabled = false, Source = SkySphereSource.SolidColor, Cubemap = AssetPath.Parse("/Content/Sky.otex") },
+            SkyLight = new() { Source = SkyLightSource.CapturedScene, Cubemap = AssetPath.Parse("/Content/Light.otex") },
         };
         scene.SetEnvironment(environment);
 

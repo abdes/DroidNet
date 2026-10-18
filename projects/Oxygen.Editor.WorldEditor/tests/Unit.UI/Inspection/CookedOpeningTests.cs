@@ -40,33 +40,33 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
         try
         {
             var projects = CreateQueryProject();
-            var uri = new Uri("asset:///Content/Shared.omat");
+            var asset = AssetPath.Parse("/Content/Shared.omat");
             await File.WriteAllBytesAsync(Path.Combine(directory.FullName, "Shared.omat"), [1], this.TestContext.CancellationToken).ConfigureAwait(true);
-            var low = new CookedAssetMetadata(directory.FullName, "Shared.omat", Guid.CreateVersion7(), new(1, 2), 1, 1, new string('0', 64))
+            var low = new CookedAssetMetadata(FileSystemPath.From(directory.FullName), "Shared.omat", Guid.CreateVersion7(), new(1, 2), 1, 1, new string('0', 64))
             {
-                VirtualPath = uri.AbsolutePath,
+                VirtualPath = asset,
             };
             var high = low with
             {
-                RootFolderPath = Path.Combine(projects.ActiveProject!.ProjectRoot, ".cooked", "Content"),
+                RootFolderPath = projects.ActiveProject!.ProjectRoot.Combine(".cooked").Combine("Content"),
                 AssetKey = new(3, 4),
             };
-            var effective = new AssetEntry(uri, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Mounted, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, uri, Path.Combine(high.RootFolderPath, "Shared.omat"), AssetGuid: null, [], IsSelectable: true)
+            var effective = new AssetEntry(asset, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Mounted, asset.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: high.RootFolderPath.Combine("Shared.omat"), AssetGuid: null, [], IsSelectable: true)
             {
                 CookedMetadata = high,
                 OverriddenCookedSources = [low],
             };
             var provider = new Mock<IAssetFeed>();
-            _ = provider.Setup(value => value.ResolveAsync(uri, It.IsAny<CancellationToken>())).ReturnsAsync(effective);
-            var scope = new CookedInspectionScope(projects.ActiveProject!, new("asset:///Library/Shared.omat"), Validate: false)
+            _ = provider.Setup(value => value.ResolveAsync(asset, It.IsAny<CancellationToken>())).ReturnsAsync(effective);
+            var scope = new CookedInspectionScope(projects.ActiveProject!, AssetPath.Parse("/Library/Shared.omat"), Validate: false)
             {
-                AssetUri = uri,
+                Asset = asset,
                 CookedSource = low,
             };
-            var inspection = new CookInspectionResult(directory.FullName, Succeeded: true, low.SourceIdentity, [new(uri.AbsolutePath, ContentCookAssetKind.Material)], [], []);
-            var report = new CookedOutputReport(projects.ActiveProject!.ProjectId, scope.ScopeUri, DateTimeOffset.UtcNow, [new("Library", IsPresent: true, inspection, Validation: null, [])]);
+            var inspection = new CookInspectionResult(directory.FullName, Succeeded: true, low.SourceIdentity, [new(asset.VirtualPath, ContentCookAssetKind.Material)], [], []);
+            var report = new CookedOutputReport(projects.ActiveProject!.ProjectId, scope.Scope, DateTimeOffset.UtcNow, [new("Library", IsPresent: true, inspection, Validation: null, [])]);
             var pipeline = new Mock<IContentPipelineService>();
-            _ = pipeline.Setup(value => value.InspectCookedOutputAsync(scope.ScopeUri, It.IsAny<CancellationToken>(), validate: false, projects.ActiveProject)).ReturnsAsync(report);
+            _ = pipeline.Setup(value => value.InspectCookedOutputAsync(scope.Scope, It.IsAny<CancellationToken>(), validate: false, projects.ActiveProject)).ReturnsAsync(report);
             using var model = new CookedInspectionViewModel(pipeline.Object, provider.Object, projects, _ => Task.FromResult(true));
             var view = new CookedInspectionView
             {
@@ -113,12 +113,12 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
             AssetKind.Geometry => "ogeo",
             _ => "otex",
         };
-        var uri = builtin ? AssetUris.BuildGeneratedUri(kind == AssetKind.Material ? "Materials/Default" : "BasicShapes/Cube") : new Uri("asset:///Library/Main." + extension);
-        var item = new AssetEntry(uri, "Main", kind, builtin ? AssetState.Generated : AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.NotMounted, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, builtin ? null : uri, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
+        var uri = builtin ? AssetPath.Generated.Combine(kind == AssetKind.Material ? "Materials/Default" : "BasicShapes/Cube") : AssetPath.Parse("/Library/Main." + extension);
+        var item = new AssetEntry(uri, "Main", kind, builtin ? AssetState.Generated : AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.NotMounted, uri.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
         using var items = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
         var provider = CreateQueryProvider(items);
         var projects = CreateQueryProject();
-        var state = new ContentBrowserState(projects);
+        var state = new ContentBrowserState();
         using var layout = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var layoutView = new ListLayoutView
@@ -144,8 +144,8 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
         layout.InvokeItemCommand.Execute(item);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = requested.Should().NotBeNull();
-        _ = requested!.AssetUri.Should().Be(uri);
-        _ = requested.ScopeUri.Should().Be(uri);
+        _ = requested!.Asset.Should().Be(uri);
+        _ = requested.Scope.Should().Be(uri);
         _ = sourceOpens.Should().Be(0);
     });
 
@@ -158,15 +158,15 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
     public Task UncopiedBuiltinInspectionShowsEngineInformation(bool geometry) => EnqueueAsync(async () =>
     {
         var projects = CreateQueryProject();
-        var uri = AssetUris.BuildGeneratedUri(geometry ? "BasicShapes/Cube" : "Materials/Default");
-        var item = new AssetEntry(uri, geometry ? "Cube" : "Default", geometry ? AssetKind.Geometry : AssetKind.Material, AssetState.Generated, DerivedState: null, AssetRuntimeAvailability.Mounted, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, CookedUri: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
+        var uri = AssetPath.Generated.Combine(geometry ? "BasicShapes/Cube" : "Materials/Default");
+        var item = new AssetEntry(uri, geometry ? "Cube" : "Default", geometry ? AssetKind.Geometry : AssetKind.Material, AssetState.Generated, DerivedState: null, AssetRuntimeAvailability.Mounted, uri.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
         using var items = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
         var provider = CreateQueryProvider(items);
         _ = provider.Setup(value => value.ResolveAsync(uri, It.IsAny<CancellationToken>())).ReturnsAsync(item);
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
         var scope = new CookedInspectionScope(projects.ActiveProject!, uri, Validate: false)
         {
-            AssetUri = uri,
+            Asset = uri,
         };
         using var model = new CookedInspectionViewModel(pipeline.Object, provider.Object, projects, _ => Task.FromResult(true));
         var view = new CookedInspectionView
@@ -189,17 +189,16 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
         AssertIdleInspectionCommands(view, Visibility.Collapsed);
         _ = view.FindDescendant<AssetInformationView>()!.ViewModel!.Description.Should().Contain("No separate cooking is needed");
         pipeline.VerifyNoOtherCalls();
-        var copyUri = new Uri(geometry ? "asset:///Content/Geometry/Cube.ogeo" : "asset:///Content/Materials/Default.omat");
+        var copyUri = AssetPath.Parse(geometry ? "/Content/Geometry/Cube.ogeo" : "/Content/Materials/Default.omat");
         var copy = item with
         {
-            IdentityUri = copyUri,
-            CookedUri = copyUri,
-            BuiltinOriginUri = uri,
+            Identity = copyUri,
+            BuiltinOrigin = uri,
         };
         items.OnNext([item, copy]);
         var cookedKind = geometry ? ContentCookAssetKind.Geometry : ContentCookAssetKind.Material;
-        var physicalRoot = Path.Combine(projects.ActiveProject!.ProjectRoot, ".cooked", "Content");
-        var inspection = new CookInspectionResult(physicalRoot, Succeeded: true, SourceIdentity: Guid.NewGuid(), [new(copyUri.AbsolutePath, cookedKind)], [], []);
+        var physicalRoot = projects.ActiveProject!.ProjectRoot.Combine(".cooked").Combine("Content").FullPath;
+        var inspection = new CookInspectionResult(physicalRoot, Succeeded: true, SourceIdentity: Guid.NewGuid(), [new(copyUri.VirtualPath, cookedKind)], [], []);
         var outputRoot = new CookedRootReport("Content", IsPresent: true, inspection, Validation: null, [new(copyUri, uri, [])]);
         var report = new CookedOutputReport(projects.ActiveProject.ProjectId, uri, DateTimeOffset.UtcNow, [outputRoot]);
         _ = pipeline.Setup(value => value.InspectCookedOutputAsync(uri, It.IsAny<CancellationToken>(), It.IsAny<bool>(), projects.ActiveProject)).ReturnsAsync(report);

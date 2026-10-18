@@ -30,7 +30,7 @@ public sealed record EditSample(
     public bool CarriesAssetReference { get; init; }
 
     /// <summary>Gets the asset reference the edit writes; set when <see cref="CarriesAssetReference"/> is true.</summary>
-    public Uri? Asset { get; init; }
+    public AssetPath? Asset { get; init; }
 
     /// <summary>Gets the node that holds <see cref="Asset"/>, or <see langword="null"/> for the scene's own references.</summary>
     public NodeId? AssetNode { get; init; }

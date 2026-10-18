@@ -26,17 +26,14 @@ public sealed partial class SceneDescriptorGeneratorTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>An explicit builtin material uses its native identity even without builtin geometry.</summary>
-    /// <param name="materialName">The case variant of the authored builtin reference.</param>
     /// <returns>The test task.</returns>
     [TestMethod]
-    [DataRow("Default")]
-    [DataRow("default")]
-    public async Task AuthoredGeometryWithDefaultOverrideUsesCatalogMaterialPath(string materialName)
+    public async Task AuthoredGeometryWithDefaultOverrideUsesCatalogMaterialPath()
     {
         using var workspace = new DescriptorWorkspace();
         var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Authored mesh" };
-        var geometryUri = new Uri("asset:///Content/Geometry/Imported.ogeo");
+        var geometryUri = AssetPath.Parse("/Content/Geometry/Imported.ogeo");
         var geometry = new GeometryComponent
         {
             Name = "Geometry",
@@ -45,7 +42,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
             Target = new(geometryUri, Guid.NewGuid(), new string('a', 64)),
-            Material = AssetUris.BuildGeneratedUri("Materials/" + materialName),
+            Material = AssetPath.Generated.Combine("Materials/Default"),
         });
         _ = node.AddComponent(geometry);
         scene.RootNodes.Add(node);
@@ -56,7 +53,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = result.Diagnostics.Should().BeEmpty();
         var descriptor = JsonNode.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false))!;
         _ = descriptor["renderables"]![0]!["material_overrides"]![0]!["material_ref"]!.GetValue<string>().Should().Be(catalog.DefaultMaterial.VirtualPath);
-        _ = result.Dependencies.Should().ContainSingle(input => input.AssetUri == AssetUris.BuildGeneratedUri("Materials/Default"));
+        _ = result.Dependencies.Should().ContainSingle(input => input.AssetUri == AssetPath.Generated.Combine("Materials/Default"));
     }
 
     /// <summary>Preserves every native descriptor field, including thin bounds and default material parameters.</summary>
@@ -76,15 +73,15 @@ public sealed partial class SceneDescriptorGeneratorTests
         {
             var input = inputs.Single(input => input.AssetUri == definition.AssetUri);
             _ = input.OutputVirtualPath.Should().Be(definition.Contribution.VirtualPath);
-            var written = JsonNode.Parse(await File.ReadAllTextAsync(input.SourceAbsolutePath, this.TestContext.CancellationToken).ConfigureAwait(false));
+            var written = JsonNode.Parse(await File.ReadAllTextAsync(input.SourceAbsolutePath.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false));
             _ = JsonNode.DeepEquals(written, JsonNode.Parse(definition.Contribution.Descriptor.GetRawText())).Should().BeTrue(definition.Name);
         }
 
         var material = inputs.Single(static input => input.Kind == ContentCookAssetKind.Material);
-        var materialJson = JsonNode.Parse(await File.ReadAllTextAsync(material.SourceAbsolutePath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        var materialJson = JsonNode.Parse(await File.ReadAllTextAsync(material.SourceAbsolutePath.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         _ = JsonNode.DeepEquals(materialJson, JsonNode.Parse(catalog.DefaultMaterial.Descriptor.GetRawText())).Should().BeTrue();
-        _ = catalog.Find(AssetUris.BuildGeneratedUri("BasicShapes/IcoSphere"))!.CanonicalName.Should().Be("IcoSphere");
-        _ = catalog.Find(AssetUris.BuildGeneratedUri("BasicShapes/ArrowGizmo")).Should().BeNull();
+        _ = catalog.Find(AssetPath.Generated.Combine("BasicShapes/IcoSphere"))!.CanonicalName.Should().Be("IcoSphere");
+        _ = catalog.Find(AssetPath.Generated.Combine("BasicShapes/ArrowGizmo")).Should().BeNull();
     }
 
     /// <summary>Does not fabricate a descriptor or default material for an unknown engine name.</summary>
@@ -95,7 +92,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var service = new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture());
 
-        var inputs = await service.EnsureDescriptorsAsync(CreateScope(workspace), [AssetUris.BuildGeneratedUri("BasicShapes/Unknown")], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var inputs = await service.EnsureDescriptorsAsync(CreateScope(workspace), [AssetPath.Generated.Combine("BasicShapes/Unknown")], this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = inputs.Should().BeEmpty();
         _ = Directory.Exists(Path.Combine(workspace.Root, ".pipeline")).Should().BeFalse();
@@ -113,9 +110,9 @@ public sealed partial class SceneDescriptorGeneratorTests
         var inputs = await service.EnsureDescriptorsAsync(
             scope,
             [
-                AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
-                AssetUris.BuildGeneratedUri("BasicShapes/Sphere"),
-                AssetUris.BuildGeneratedUri("BasicShapes/Plane"),
+                AssetPath.Generated.Combine("BasicShapes/Cube"),
+                AssetPath.Generated.Combine("BasicShapes/Sphere"),
+                AssetPath.Generated.Combine("BasicShapes/Plane"),
             ],
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -154,7 +151,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var geometry = new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
+            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
         };
         var catalogProvider = new BuiltinCatalogFixture();
         var catalog = await catalogProvider.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -162,7 +159,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
             Target = new(geometry.Geometry, slots.Slots[0].SlotId, slots.LayoutRevision),
-            Material = new Uri("asset:///Content/Materials/Red.omat.json"),
+            Material = AssetPath.Parse("/Content/Materials/Red.omat"),
         });
         _ = node.AddComponent(geometry);
         _ = node.AddComponent(new PerspectiveCamera { Name = "Camera" });
@@ -194,7 +191,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             "Engine_Generated_BasicShapes_Cube.ogeo.json")).Should().BeTrue();
         _ = result.Dependencies.Should().OnlyContain(input => input.Role == ContentCookInputRole.GeneratedDescriptor);
         _ = result.Dependencies.Should().Contain(input =>
-            input.AssetUri == AssetUris.BuildGeneratedUri("BasicShapes/Cube")
+            input.AssetUri == AssetPath.Generated.Combine("BasicShapes/Cube")
             && input.OutputVirtualPath == "/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");
         _ = result.Dependencies.Should().Contain(input =>
             input.OutputVirtualPath == "/Content/Materials/OxygenEditor_Default.omat");
@@ -317,7 +314,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
+            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
         });
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Light", CastsShadows = false });
         scene.RootNodes.Add(node);
@@ -345,7 +342,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
+            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
         });
         scene.RootNodes.Add(node);
         scene.SetEnvironment(new SceneEnvironmentData
@@ -438,7 +435,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
+            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
         });
         scene.RootNodes.Add(node);
         scene.SetEnvironment(new SceneEnvironmentData
@@ -484,7 +481,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
+            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
         });
         scene.RootNodes.Add(node);
         scene.SetEnvironment(new SceneEnvironmentData
@@ -516,7 +513,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new Uri("asset:///Content/Geometry/Foo.ogeo.json"),
+            Geometry = AssetPath.Parse("/Content/Geometry/Foo.ogeo"),
         });
         scene.RootNodes.Add(node);
 
@@ -605,7 +602,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             new() { AutoExposureCompensationCurve = [new(2f, 1f), new(2f, 2f)] },
             new() { AutoExposureCompensationCurve = [new(0f, float.NaN)] },
             new() { AutoExposureCompensationCurve = Enumerable.Range(0, 65).Select(static i => new ExposureCompensationKeyData(i, 0f)).ToImmutableArray() },
-            new() { AutoExposureMeteringMask = new Uri("mask.otex", UriKind.Relative) },
+            new() { AutoExposureMeteringMask = AssetPath.Parse("/Content/Textures/mask.omat") },
         ];
         foreach (var authored in invalid)
         {
@@ -674,7 +671,7 @@ public sealed partial class SceneDescriptorGeneratorTests
                     {
                         case float value: _ = encoded.GetSingle().Should().Be(value, property.Name); break;
                         case bool value: _ = encoded.GetBoolean().Should().Be(value, property.Name); break;
-                        case Uri value: _ = encoded.GetString().Should().Be(value.AbsolutePath[..^5], property.Name); break;
+                        case AssetPath value: _ = encoded.GetString().Should().Be(value.VirtualPath, property.Name); break;
                         case ImmutableArray<ExposureCompensationKeyData> keys:
                             _ = encoded.GetArrayLength().Should().Be(keys.Length);
                             for (var index = 0; index < keys.Length; index++)
@@ -704,8 +701,8 @@ public sealed partial class SceneDescriptorGeneratorTests
         var scene = CreateScene();
         scene.RootNodes.Add(new SceneNode(scene) { Name = "Root" });
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
-        var backdrop = new Uri("asset:///Content/Textures/Backdrop.otex.json");
-        var light = new Uri("asset:///Content/Textures/Light.otex.json");
+        var backdrop = AssetPath.Parse("/Content/Textures/Backdrop.otex");
+        var light = AssetPath.Parse("/Content/Textures/Light.otex");
         scene.SetEnvironment(new SceneEnvironmentData
         {
             AtmosphereEnabled = false,
@@ -752,7 +749,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = secondEnvironment.GetProperty("sky_light").TryGetProperty("cubemap_ref", out _).Should().BeFalse();
 
         // A disabled system's cubemap source is not referenced either, even when the texture is gone.
-        var missing = new Uri("asset:///Content/Textures/Missing.otex.json");
+        var missing = AssetPath.Parse("/Content/Textures/Missing.otex");
         scene.SetEnvironment(scene.Environment with
         {
             SkySphere = scene.Environment.SkySphere with { Enabled = false, Source = SkySphereSource.Cubemap, Cubemap = missing },
@@ -785,9 +782,9 @@ public sealed partial class SceneDescriptorGeneratorTests
         var issue = result.Diagnostics.Single();
         _ = issue.Severity.Should().Be(DiagnosticSeverity.Error);
         _ = issue.AffectedEntity!.SceneId.Should().Be(scene.Id);
-        _ = issue.AffectedVirtualPath.Should().Be(scope.Inputs[0].AssetUri.AbsolutePath);
+        _ = issue.AffectedVirtualPath.Should().Be(scope.Inputs[0].AssetUri.VirtualPath);
         _ = issue.SuggestedAction!.Payload["PropertyPath"].Should().Be(SceneEnvironmentConstraints.AerialStartPropertyPath);
-        _ = issue.SuggestedAction.Payload["AssetUri"].Should().Be(scope.Inputs[0].AssetUri.AbsoluteUri);
+        _ = issue.SuggestedAction.Payload["AssetUri"].Should().Be(scope.Inputs[0].AssetUri.ToUriString());
         _ = scene.Environment.SkyAtmosphere.AerialPerspectiveStartDepthMeters.Should().Be(value);
         _ = File.Exists(result.DescriptorPath).Should().BeFalse();
     }
@@ -822,16 +819,16 @@ public sealed partial class SceneDescriptorGeneratorTests
         {
             Scripts =
             [
-                new("asset:///Content/Scripts/Z.oscript.json"),
-                new("asset:///Content/Scripts/A.oscript.json"),
-                new("asset:///Content/Scripts/A.oscript.json"),
+                AssetPath.Parse("/Content/Scripts/Z.oscript"),
+                AssetPath.Parse("/Content/Scripts/A.oscript"),
+                AssetPath.Parse("/Content/Scripts/A.oscript"),
             ],
-            InputActions = [new("asset:///Content/Input/Jump.oiact.json")],
-            PhysicsSidecars = [new("asset:///Content/Physics/Main.opscene.json")],
+            InputActions = [AssetPath.Parse("/Content/Input/Jump.oiact")],
+            PhysicsSidecars = [AssetPath.Parse("/Content/Physics/Main.opscene")],
             ExtraAssets = ["/.cooked/Extras/Z.bin", "/.cooked/Extras/A.bin", "/.cooked/Extras/A.bin"],
         });
         var node = new SceneNode(scene) { Name = "Authored mesh" };
-        var geometryUri = new Uri("asset:///Content/Geometry/Imported.ogeo.json");
+        var geometryUri = AssetPath.Parse("/Content/Geometry/Imported.ogeo");
         var geometry = new GeometryComponent
         {
             Name = "Geometry",
@@ -840,7 +837,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
             Target = new(geometryUri, Guid.NewGuid(), new string('a', 64)),
-            Material = new Uri("asset:///Content/Materials/Surface.omat.json"),
+            Material = AssetPath.Parse("/Content/Materials/Surface.omat"),
         });
         _ = node.AddComponent(geometry);
         scene.RootNodes.Add(node);
@@ -886,7 +883,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var scene = CreateScene();
         scene.SetReferences(new SceneReferencesData
         {
-            Scripts = [new("asset:///Content/Scripts/NotAScript.omat.json")],
+            Scripts = [AssetPath.Parse("/Content/Scripts/NotAScript.omat")],
         });
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
 
@@ -905,23 +902,6 @@ public sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scene = CreateScene();
         scene.SetReferences(new SceneReferencesData { ExtraAssets = [path] });
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
-
-        var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        _ = result.Diagnostics.Should().ContainSingle().Which.Severity.Should().Be(DiagnosticSeverity.Error);
-        _ = File.Exists(result.DescriptorPath).Should().BeFalse();
-    }
-
-    [TestMethod]
-    [DataRow("asset://host/Content/Scripts/Orbit.oscript.json")]
-    [DataRow("asset:///Content/Scripts/Orbit.oscript.json?version=1")]
-    [DataRow("relative/Orbit.oscript.json")]
-    public async Task SceneReferenceWithNonCanonicalAssetUriFailsGeneration(string reference)
-    {
-        using var workspace = new DescriptorWorkspace();
-        var scene = CreateScene();
-        scene.SetReferences(new SceneReferencesData { Scripts = [new Uri(reference, UriKind.RelativeOrAbsolute)] });
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
 
         var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -952,14 +932,14 @@ public sealed partial class SceneDescriptorGeneratorTests
         var projectContext = ProjectContext.FromProject(workspace.Project);
         return new ContentCookScope(
             projectContext,
-            new ProjectCookScope(projectContext.ProjectId, workspace.Root, Path.Combine(workspace.Root, ".cooked")),
+            new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),
             [
                 new ContentCookInput(
-                    new Uri("asset:///Content/Scenes/Main.oscene.json"),
+                    AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
                     ContentCookAssetKind.Scene,
                     "Content",
                     "Content/Scenes/Main.oscene.json",
-                    sceneSource,
+                    FileSystemPath.From(sceneSource),
                     "/Content/Scenes/Main.oscene",
                     ContentCookInputRole.Primary),
             ],
@@ -988,7 +968,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             AutoExposureSpotMeterRadius = 0.35f,
             AutoExposureBlackInfluence = 0.35f,
             AutoExposureTransitionDistanceEv = 2.5f,
-            AutoExposureMeteringMask = new Uri("asset:///Content/Textures/Meter.otex.json"),
+            AutoExposureMeteringMask = AssetPath.Parse("/Content/Textures/Meter.otex"),
             AutoExposureCompensationCurve = [new(-4f, 1f), new(12f, -0.5f)],
             BloomIntensity = 0.6f,
             BloomThreshold = 2.25f,

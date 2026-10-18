@@ -70,7 +70,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             ProjectId = Guid.NewGuid(),
             Name = "Project",
             Category = Category.Games,
-            ProjectRoot = @"C:\Project",
+            ProjectRoot = FileSystemPath.From(@"C:\Project"),
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
         };
@@ -134,7 +134,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             ProjectId = Guid.NewGuid(),
             Name = "Project",
             Category = Category.Games,
-            ProjectRoot = @"C:\Project",
+            ProjectRoot = FileSystemPath.From(@"C:\Project"),
             AuthoringMounts = [],
             LocalFolderMounts = [],
         };
@@ -214,7 +214,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         var resolver = new AuthoringTargetResolver();
         var context = CreateContext("Project") with
         {
-            LocalFolderMounts = [new LocalFolderMount("StudioLibrary", @"D:\Studio\SharedContent")],
+            LocalFolderMounts = [new LocalFolderMount("StudioLibrary", FileSystemPath.From(@"D:\Studio\SharedContent"))],
         };
 
         var target = resolver.ResolveCreateTarget(
@@ -234,7 +234,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         var resolver = new AuthoringTargetResolver();
         var context = CreateContext("Project") with
         {
-            LocalFolderMounts = [new LocalFolderMount("StudioLibrary", @"D:\Studio\SharedContent")],
+            LocalFolderMounts = [new LocalFolderMount("StudioLibrary", FileSystemPath.From(@"D:\Studio\SharedContent"))],
         };
 
         var target = resolver.ResolveCreateTarget(
@@ -712,7 +712,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             ProjectId = Guid.NewGuid(),
             Name = name,
             Category = Category.Games,
-            ProjectRoot = @"C:\Project",
+            ProjectRoot = FileSystemPath.From(@"C:\Project"),
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
         };

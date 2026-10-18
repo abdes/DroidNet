@@ -37,7 +37,7 @@ internal sealed partial class SceneDocumentFiles : IDisposable
             ProjectId = info.Id,
             Name = "Scene documents",
             Category = Category.Games,
-            ProjectRoot = this.root,
+            ProjectRoot = FileSystemPath.From(this.root),
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
         };
@@ -83,20 +83,20 @@ internal sealed partial class SceneDocumentFiles : IDisposable
     /// <summary>Gets the file of a scene.</summary>
     /// <param name="name">The scene's name.</param>
     /// <returns>The scene's file.</returns>
-    public DocumentFile FileOf(string name) => new(this.PathOf(name), new Uri($"asset:///Content/{name}.oscene.json"));
+    public DocumentFile FileOf(string name) => new(this.PathOf(name), AssetPath.Parse($"/Content/{name}.oscene"));
 
     /// <summary>Gets the path of a scene's file.</summary>
     /// <param name="name">The scene's name, after the folder it is in below the Content mount, if any.</param>
     /// <returns>The path.</returns>
-    public string PathOf(string name) => Path.GetFullPath(Path.Combine(this.root, "Content", name + ".oscene.json"));
+    public FileSystemPath PathOf(string name) => FileSystemPath.From(Path.Combine(this.root, "Content", name + ".oscene.json"));
 
     /// <summary>Writes a scene file.</summary>
     /// <param name="name">The scene's name, after the folder it is in below the Content mount, if any.</param>
     /// <param name="data">What the file records.</param>
     public void Write(string name, SceneData data)
     {
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(this.PathOf(name))!);
-        File.WriteAllBytes(this.PathOf(name), JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData));
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(this.PathOf(name).FullPath)!);
+        File.WriteAllBytes(this.PathOf(name).FullPath, JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData));
     }
 
     /// <summary>Writes a new material file below the Content mount.</summary>
@@ -104,22 +104,22 @@ internal sealed partial class SceneDocumentFiles : IDisposable
     /// <returns>The material's file.</returns>
     public DocumentFile WriteMaterial(string name)
     {
-        var path = Path.GetFullPath(Path.Combine(this.root, "Content", "Materials", name + ".omat.json"));
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, AssetTemplates.Material(name));
-        return new DocumentFile(path, new Uri($"asset:///Content/Materials/{name}.omat.json"));
+        var path = FileSystemPath.From(Path.Combine(this.root, "Content", "Materials", name + ".omat.json"));
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(path.FullPath)!);
+        File.WriteAllText(path.FullPath, AssetTemplates.Material(name));
+        return new DocumentFile(path, AssetPath.Parse($"/Content/Materials/{name}.omat"));
     }
 
     /// <summary>Writes a file that may not be a scene.</summary>
     /// <param name="name">The scene's name.</param>
     /// <param name="text">The file's text.</param>
-    public void WriteText(string name, string text) => File.WriteAllText(this.PathOf(name), text);
+    public void WriteText(string name, string text) => File.WriteAllText(this.PathOf(name).FullPath, text);
 
     /// <summary>Reads a scene file.</summary>
     /// <param name="name">The scene's name.</param>
     /// <returns>What the file records.</returns>
     public SceneData Read(string name)
-        => JsonSerializer.Deserialize(File.ReadAllBytes(this.PathOf(name)), SceneJsonContext.Default.SceneData)!;
+        => JsonSerializer.Deserialize(File.ReadAllBytes(this.PathOf(name).FullPath), SceneJsonContext.Default.SceneData)!;
 
     /// <summary>Writes an empty scene file and opens it.</summary>
     /// <param name="name">The scene's name.</param>

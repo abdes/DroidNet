@@ -7,6 +7,7 @@ using DroidNet.Aura.Dialogs;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Importing;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -26,7 +27,7 @@ public sealed class SceneImportDialogViewModelTests
         var model = new SceneImportDialogViewModel(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "/Content/Models", Mock.Of<IDialogService>());
         _ = model.CanAccept.Should().BeTrue();
         _ = model.Request!.Name.Should().Be("Crate");
-        _ = model.Request.DestinationFolder.Should().Be(new Uri("asset:///Content/Models"));
+        _ = model.Request.DestinationFolder.Should().Be(AssetPath.Parse("/Content/Models"));
         _ = model.SourceLocation.Should().Contain("/Content/SourceMedia/DCC/Crate");
     }
 
@@ -55,7 +56,7 @@ public sealed class SceneImportDialogViewModelTests
         var root = Directory.CreateTempSubdirectory("OxygenImportReview-");
         try
         {
-            var project = CreateProject() with { ProjectRoot = root.FullName };
+            var project = CreateProject() with { ProjectRoot = FileSystemPath.From(root.FullName) };
             _ = Directory.CreateDirectory(Path.Combine(root.FullName, "Content/SourceMedia/DCC/Crate"));
             var model = new SceneImportDialogViewModel(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "/Content/Models", Mock.Of<IDialogService>());
             _ = model.CanAccept.Should().BeFalse();
@@ -75,7 +76,7 @@ public sealed class SceneImportDialogViewModelTests
     public void ProjectSourceIsKeptInPlace()
     {
         var project = CreateProject();
-        var model = new SceneImportDialogViewModel(project, Path.Combine(project.ProjectRoot, "Content/SourceMedia/DCC/Crate.fbx"), "/Content/Models", Mock.Of<IDialogService>());
+        var model = new SceneImportDialogViewModel(project, Path.Combine(project.ProjectRoot.FullPath, "Content/SourceMedia/DCC/Crate.fbx"), "/Content/Models", Mock.Of<IDialogService>());
         _ = model.CanAccept.Should().BeTrue();
         _ = model.SourceLocation.Should().Contain("stay");
     }
@@ -119,8 +120,8 @@ public sealed class SceneImportDialogViewModelTests
         var directory = Directory.CreateTempSubdirectory("OxygenReplacementReview-");
         try
         {
-            var project = CreateProject() with { ProjectRoot = directory.FullName };
-            var root = Path.Combine(project.ProjectRoot, "Content/SourceMedia/DCC/Crate");
+            var project = CreateProject() with { ProjectRoot = FileSystemPath.From(directory.FullName) };
+            var root = Path.Combine(project.ProjectRoot.FullPath, "Content/SourceMedia/DCC/Crate");
             _ = Directory.CreateDirectory(root);
             var bytes = System.Text.Encoding.UTF8.GetBytes("original source");
             await File.WriteAllBytesAsync(Path.Combine(root, "model.gltf"), bytes, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -136,7 +137,7 @@ public sealed class SceneImportDialogViewModelTests
             await model.ReviewReplacementCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
             _ = model.CanAccept.Should().BeTrue();
             _ = model.PrimaryButtonText.Should().Be("Replace and import");
-            _ = model.Request!.Replacement!.SourceUri.Should().Be(new Uri("asset:///Content/SourceMedia/DCC/Crate/model.gltf"));
+            _ = model.Request!.Replacement!.SourceUri.Should().Be(AssetPath.Parse("/Content/SourceMedia/DCC/Crate/model.gltf"));
             _ = model.DestinationFolder.Should().Be("/Content/Models");
             _ = model.ReplacementMessage.Should().Contain("/Content/Materials/Models/Crate").And.Contain("/Content/Geometry/Models/Crate").And.Contain("/Content/Scenes/Models/Crate");
             model.Name = "Another";
@@ -154,7 +155,7 @@ public sealed class SceneImportDialogViewModelTests
         ProjectId = Guid.NewGuid(),
         Name = "Import",
         Category = Category.Games,
-        ProjectRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
+        ProjectRoot = FileSystemPath.From(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
         AuthoringMounts = [new("Content", "Content")],
         LocalFolderMounts = [],
     };

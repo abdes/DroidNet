@@ -21,6 +21,7 @@ using Oxygen.Editor.LivePreview.Assets;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.CatalogWorkload;
@@ -81,8 +82,8 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
                 Width = 1920 / scale,
                 Height = 1080 / scale,
             };
-            var state = new ContentBrowserState(services.Projects);
-            state.SetSelectedFolders(["/Content"]);
+            var state = new ContentBrowserState();
+            state.SetSelectedFolders([AssetPath.Content]);
             await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
             using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
             using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());

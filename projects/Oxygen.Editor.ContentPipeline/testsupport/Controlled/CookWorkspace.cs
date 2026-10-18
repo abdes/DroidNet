@@ -75,7 +75,7 @@ internal sealed partial class CookWorkspace : IDisposable
             CookInputs: null);
         var path = CookPublicationPaths.Document(this.Root, document.OperationId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        using var gate = await CookOutputLease.AcquireWriteAsync(this.Root, token).ConfigureAwait(false);
+        using var gate = await CookOutputLease.AcquireWriteAsync(this.ProjectContext.ProjectRoot, token).ConfigureAwait(false);
         var version = await this.Files.WriteAsync(path, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), DroidNet.Storage.FileVersion.Missing, token).ConfigureAwait(false);
         var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
         _ = await this.Files.WriteAsync(CookPublicationPaths.Head(this.Root), System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), DroidNet.Storage.FileVersion.Missing, token).ConfigureAwait(false);
@@ -83,13 +83,13 @@ internal sealed partial class CookWorkspace : IDisposable
 
     public void Activate(ProjectContext context)
     {
-        var info = new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot, context.Thumbnail)
+        var info = new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot.FullPath, context.Thumbnail)
         {
             AuthoringMounts = [.. context.AuthoringMounts],
             LocalFolderMounts = [.. context.LocalFolderMounts],
             CookedContentOrder = [.. context.CookedContentOrder],
         };
-        File.WriteAllText(Path.Combine(context.ProjectRoot, "Project.oxy"), ProjectInfo.ToJson(info));
+        File.WriteAllText(Path.Combine(context.ProjectRoot.FullPath, "Project.oxy"), ProjectInfo.ToJson(info));
         this.ContextService.Activate(context);
     }
 
@@ -110,7 +110,7 @@ internal sealed partial class CookWorkspace : IDisposable
     public async Task<string> ExportRootAsync(string mount, CancellationToken token)
     {
         using var selected = await this.Publication.AcquireReadAsync(this.ProjectContext, token).ConfigureAwait(false);
-        var source = selected.FindProjectRoot(mount) ?? throw new InvalidOperationException("Cook the fixture before exporting it.");
+        var source = selected.FindProjectRoot(mount)?.FullPath ?? throw new InvalidOperationException("Cook the fixture before exporting it.");
         var destination = Path.Combine(this.Root, "exports", mount);
         if (Directory.Exists(destination))
         {

@@ -108,7 +108,7 @@ public sealed class PropertyScenarioTests
         _ = gesture.IsEnded.Should().BeTrue("the save commits the open gesture");
         _ = document.History.UndoStack.Should().ContainSingle();
         _ = document.IsDirty.Should().BeFalse("the saved file holds the committed value");
-        var stored = await documents.Files.ReadAsync(document.File.Path, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var stored = await documents.Files.ReadAsync(document.File.Path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false);
         var file = JsonSerializer.Deserialize(stored.Content.AsSpan(), SceneJsonContext.Default.SceneData)!;
         _ = file.RootNodes.Single(node => node.Id == SampleScene.A).Components.OfType<TransformData>().Single().Position.X.Should().Be(5f);
     }

@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
@@ -27,20 +28,19 @@ public sealed partial class AssetIdentityReducerTests
     public void CookedRecordsUseIndexedTypeAndPhysicalDescriptor(byte assetType, AssetKind kind)
     {
         using var workspace = new TempWorkspace();
-        var root = workspace.SourcePath("Library");
+        var root = FileSystemPath.From(workspace.SourcePath("Library"));
         var physical = workspace.SourcePath("Library/payloads/7.bin");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(physical)!);
         File.WriteAllBytes(physical, [1]);
-        var record = new AssetRecord(new Uri("asset:///Content/Wood.png"))
+        var record = new AssetRecord(AssetPath.Parse("/Content/Wood.png"))
         {
             Cooked = new(root, "payloads/7.bin", Guid.NewGuid(), new AssetKey(1, 2), assetType, 1, new string('0', 64)),
         };
         var row = Reduce(workspace, [record]).Single();
         _ = row.Kind.Should().Be(kind);
-        _ = row.CookedPath.Should().Be(physical);
+        _ = row.CookedPath.Should().Be(FileSystemPath.From(physical));
         _ = row.CookedMetadata.Should().Be(record.Cooked);
-        _ = row.IdentityUri.Should().Be(record.Uri);
-        _ = row.CookedUri.Should().Be(record.Uri);
+        _ = row.Identity.Should().Be(record.Identity);
         _ = row.DescriptorPath.Should().BeNull();
         _ = row.SourcePath.Should().BeNull();
         _ = row.PrimaryState.Should().Be(AssetState.Cooked);
@@ -52,9 +52,9 @@ public sealed partial class AssetIdentityReducerTests
     public void InvalidCookedDescriptorLocationIsReportedOnTheAsset()
     {
         using var workspace = new TempWorkspace();
-        var record = new AssetRecord(new Uri("asset:///Content/Shape.ogeo"))
+        var record = new AssetRecord(AssetPath.Parse("/Content/Shape.ogeo"))
         {
-            Cooked = new(workspace.SourcePath("Library"), "../outside.ogeo", Guid.NewGuid(), new AssetKey(1, 2), 2, 1, new string('0', 64)),
+            Cooked = new(FileSystemPath.From(workspace.SourcePath("Library")), "../outside.ogeo", Guid.NewGuid(), new AssetKey(1, 2), 2, 1, new string('0', 64)),
         };
         var row = Reduce(workspace, [record]).Single();
         _ = row.CookedPath.Should().BeNull();

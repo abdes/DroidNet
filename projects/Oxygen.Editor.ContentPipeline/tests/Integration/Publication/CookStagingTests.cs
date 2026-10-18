@@ -8,6 +8,7 @@ using DroidNet.Storage;
 using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using Oxygen.Testing;
 using Testably.Abstractions;
 
@@ -67,7 +68,7 @@ public sealed class CookStagingTests
         using var project = new StagingProject();
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         cancellation.CancelAfter(TimeSpan.FromSeconds(5));
-        using (await CookOutputLease.AcquireWriteAsync(project.Root, cancellation.Token).ConfigureAwait(false))
+        using (await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), cancellation.Token).ConfigureAwait(false))
         {
         }
 
@@ -170,7 +171,7 @@ public sealed class CookStagingTests
                 new ProjectContext
                 {
                     ProjectId = Guid.NewGuid(),
-                    ProjectRoot = this.Root,
+                    ProjectRoot = FileSystemPath.From(this.Root),
                     Name = "Staging",
                     Category = Category.Games,
                     AuthoringMounts = [new("Content", "Content")],
@@ -193,10 +194,10 @@ public sealed class CookStagingTests
 
         public async Task<CookPublicationReadLease> CaptureBaselineAsync(CancellationToken token)
         {
-            this.ownership ??= CookOutputLease.AcquireOperation(this.Root, this.Operation.OperationId);
+            this.ownership ??= CookOutputLease.AcquireOperation(this.Operation.Project.ProjectRoot, this.Operation.OperationId);
             if (this.baseline is null)
             {
-                using var gate = await CookOutputLease.AcquireWriteAsync(this.Root, token).ConfigureAwait(false);
+                using var gate = await CookOutputLease.AcquireWriteAsync(this.Operation.Project.ProjectRoot, token).ConfigureAwait(false);
                 if (Directory.Exists(this.PublishedRoot))
                 {
                     NativeInventoryFixture.WriteIndex(this.PublishedRoot, [], this.sourceKey);

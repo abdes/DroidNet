@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookCoordinatorScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
@@ -32,7 +33,7 @@ public sealed class CookAttentionTests
                 _ = needsSave.TrySetResult(change);
             }
         };
-        var document = new ContentPipeline.Snapshots.CookDocumentState(Path.Combine(Path.GetTempPath(), "Main.oscene.json"), "Main", IsDirty: true, SavedContentHash: "saved");
+        var document = new ContentPipeline.Snapshots.CookDocumentState(FileSystemPath.From(Path.Combine(Path.GetTempPath(), "Main.oscene.json")), "Main", IsDirty: true, SavedContentHash: "saved");
         var work = coordinator.RunCookAsync<int>(new(CookTargetKind.Project, ScopeUri: null, IsAutomatic: automatic), (_, _) => throw new CookInputsNeedSaveException([document]), CancellationToken.None);
         var blocked = await needsSave.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = blocked.Reveal.Should().Be(!automatic);
@@ -52,7 +53,7 @@ public sealed class CookAttentionTests
         var finish = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var first = coordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null), (_, _) => finish.Task, CancellationToken.None);
         var firstId = coordinator.Runs.Single().OperationId;
-        var second = coordinator.RunCookAsync(new(CookTargetKind.Asset, new Uri("asset:///Content/Other.omat.json")), (_, _) => Task.FromResult(2), CancellationToken.None);
+        var second = coordinator.RunCookAsync(new(CookTargetKind.Asset, AssetPath.Parse("/Content/Other.omat.json")), (_, _) => Task.FromResult(2), CancellationToken.None);
         events.Clear();
         finish.SetException(new IOException("First cook failed."));
         Func<Task> failed = () => first;

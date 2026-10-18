@@ -12,6 +12,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Cooking;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Cooking;
@@ -33,13 +34,13 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
             ProjectId = Guid.NewGuid(),
             Name = "Import",
             Category = Category.Games,
-            ProjectRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
+            ProjectRoot = FileSystemPath.From(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
             AuthoringMounts = [new("Content", "Content")],
             LocalFolderMounts = [],
         };
         projects.Activate(project);
-        var source = new Uri("asset:///Content/SourceMedia/DCC/Crate/Crate.gltf");
-        var request = new SceneImportRequest(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "Crate", new("asset:///Content/Models"));
+        var source = AssetPath.Parse("/Content/SourceMedia/DCC/Crate/Crate.gltf");
+        var request = new SceneImportRequest(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "Crate", AssetPath.Parse("/Content/Models"));
         var snapshot = new CookRunSnapshot
         {
             OperationId = Guid.NewGuid(),

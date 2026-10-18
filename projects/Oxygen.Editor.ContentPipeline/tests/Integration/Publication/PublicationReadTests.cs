@@ -8,6 +8,7 @@ using DroidNet.Storage;
 using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Testing;
 using Testably.Abstractions;
 using static Oxygen.Editor.ContentPipeline.TestSupport.GenerationScenario;
@@ -27,18 +28,18 @@ public sealed class PublicationReadTests
         using var project = new ProjectDirectory();
         var context = PublicationContext(project.Root);
         var files = new NativeAtomicFileStore(new RealFileSystem());
-        using var firstGate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var firstGate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         var oldRoot = await WritePublicationFixtureAsync(context, files, FileVersion.Missing, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var old = await CookPublicationReadLease.OpenUnderGateAsync(context, files, firstGate, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var retained = old.Retain();
         firstGate.Dispose();
 
-        using var nextGate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var nextGate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         var nextRoot = await WritePublicationFixtureAsync(context, files, old.Head.Version, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var next = await CookPublicationReadLease.OpenUnderGateAsync(context, files, nextGate, this.TestContext.CancellationToken).ConfigureAwait(false);
         nextGate.Dispose();
-        _ = old.FindProjectRoot("Content").Should().Be(oldRoot);
-        _ = next.FindProjectRoot("Content").Should().Be(nextRoot);
+        _ = old.FindProjectRoot("Content").Should().Be(FileSystemPath.From(oldRoot));
+        _ = next.FindProjectRoot("Content").Should().Be(FileSystemPath.From(nextRoot));
         _ = (next.PublicationId == old.PublicationId).Should().BeFalse();
         _ = ReclaimGeneration(oldRoot).Should().BeFalse();
         old.Dispose();
@@ -58,7 +59,7 @@ public sealed class PublicationReadTests
         using var project = new ProjectDirectory();
         var context = PublicationContext(project.Root);
         var files = new NativeAtomicFileStore(new RealFileSystem());
-        using var gate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await WritePublicationFixtureAsync(context, files, FileVersion.Missing, this.TestContext.CancellationToken).ConfigureAwait(false);
         var headBytes = await files.ReadAsync(CookPublicationPaths.Head(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         var head = JsonSerializer.Deserialize<CookPublicationHead>(headBytes.Content.AsSpan(), CookPublicationDocument.JsonOptions)!;
@@ -81,7 +82,7 @@ public sealed class PublicationReadTests
         using var project = new ProjectDirectory();
         var context = PublicationContext(project.Root);
         var files = new NativeAtomicFileStore(new RealFileSystem());
-        using var gate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         var root = await WritePublicationFixtureAsync(context, files, FileVersion.Missing, this.TestContext.CancellationToken).ConfigureAwait(false);
         var headBytes = await files.ReadAsync(CookPublicationPaths.Head(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         var head = JsonSerializer.Deserialize<CookPublicationHead>(headBytes.Content.AsSpan(), CookPublicationDocument.JsonOptions)!;
@@ -123,7 +124,7 @@ public sealed class PublicationReadTests
         using var project = new ProjectDirectory();
         var context = PublicationContext(project.Root);
         var files = new NativeAtomicFileStore(new RealFileSystem());
-        using var gate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         var root = await WritePublicationFixtureAsync(context, files, FileVersion.Missing, this.TestContext.CancellationToken).ConfigureAwait(false);
         if (deleteRoot)
         {
@@ -139,7 +140,7 @@ public sealed class PublicationReadTests
         _ = publication.Roots.Should().ContainSingle();
         _ = publication.RootPaths.Should().Equal(root);
         _ = publication.UnavailableRoots.Should().ContainSingle();
-        _ = publication.FindProjectRoot("Content").Should().Be(root);
+        _ = publication.FindProjectRoot("Content").Should().Be(FileSystemPath.From(root));
         Action admit = publication.RequireAvailableGenerations;
         _ = admit.Should().Throw<InvalidDataException>();
     }
@@ -152,7 +153,7 @@ public sealed class PublicationReadTests
         using var project = new ProjectDirectory();
         var context = PublicationContext(project.Root);
         var files = new NativeAtomicFileStore(new RealFileSystem());
-        using var gate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         using var publication = await CookPublicationReadLease.OpenUnderGateAsync(context, files, gate, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = publication.PublicationId.Should().BeNull();
         _ = publication.Roots.Should().BeEmpty();

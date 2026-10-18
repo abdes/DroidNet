@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -108,7 +109,7 @@ public sealed class ImportReplacementTests
             }
 
             var review = await SceneImportReplacement.ReviewAsync(workspace.ProjectContext, "Model", this.TestContext.CancellationToken).ConfigureAwait(false);
-            var request = new SceneImportRequest(workspace.ProjectContext, incoming, "Model", new("asset:///Content/Models")) { Replacement = review };
+            var request = new SceneImportRequest(workspace.ProjectContext, incoming, "Model", AssetPath.Parse("/Content/Models")) { Replacement = review };
             var preview = new FailingPublicationPreview();
             await using var previewLifetime = preview.ConfigureAwait(false);
             using var registration = string.Equals(failure, "publication", StringComparison.Ordinal) ? publication.RegisterPreview(workspace.ProjectContext, () => Task.FromResult<ICookPublicationPreview?>(preview)) : null;
@@ -193,15 +194,15 @@ public sealed class ImportReplacementTests
 
             var original = await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false);
             var dirty = false;
-            var state = new global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(primary, "Model", IsDirty: true, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(original)));
-            using var registration = workspace.Documents.Register(primary, _ => Task.FromResult<global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentReadLease?>(dirty ? new(state, static () =>
+            var state = new global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(FileSystemPath.From(primary), "Model", IsDirty: true, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(original)));
+            using var registration = workspace.Documents.Register(FileSystemPath.From(primary), _ => Task.FromResult<global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentReadLease?>(dirty ? new(state, static () =>
 { }) : null));
             runner.BeforeBatch = () =>
             {
                 dirty = string.Equals(conflict, "dirty during cook", StringComparison.Ordinal);
                 return Task.CompletedTask;
             };
-            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, incoming, "Model", new("asset:///Content/Models")) { Replacement = review }, this.TestContext.CancellationToken).ConfigureAwait(false);
+            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, incoming, "Model", AssetPath.Parse("/Content/Models")) { Replacement = review }, this.TestContext.CancellationToken).ConfigureAwait(false);
 
             _ = result.Status.Should().Be(OperationStatus.Failed);
             _ = (await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(original);
@@ -237,7 +238,7 @@ public sealed class ImportReplacementTests
             var incoming = Path.Combine(external.FullName, "model.fbx");
             await File.WriteAllTextAsync(incoming, replacement, this.TestContext.CancellationToken).ConfigureAwait(false);
             var review = await SceneImportReplacement.ReviewAsync(workspace.ProjectContext, "Model", this.TestContext.CancellationToken).ConfigureAwait(false);
-            var result = await service.ImportSourceAsync(new SceneImportRequest(workspace.ProjectContext, incoming, "Model", new("asset:///Content/Models")) { Replacement = review }, this.TestContext.CancellationToken).ConfigureAwait(false);
+            var result = await service.ImportSourceAsync(new SceneImportRequest(workspace.ProjectContext, incoming, "Model", AssetPath.Parse("/Content/Models")) { Replacement = review }, this.TestContext.CancellationToken).ConfigureAwait(false);
             await this.AssertReplacementReadyAsync(workspace, service, source, first, result, primary, replacement).ConfigureAwait(false);
         }
         finally
@@ -260,7 +261,7 @@ public sealed class ImportReplacementTests
         _ = (await File.ReadAllTextAsync(notes, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("unrelated work");
     }
 
-    private async Task AssertReplacementReadyAsync(CookWorkspace workspace, ContentPipelineService service, Uri source, ContentCookResult first, ContentCookResult result, string primary, string expected)
+    private async Task AssertReplacementReadyAsync(CookWorkspace workspace, ContentPipelineService service, AssetPath source, ContentCookResult first, ContentCookResult result, string primary, string expected)
     {
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = result.RetainedSourceUri.Should().Be(source);

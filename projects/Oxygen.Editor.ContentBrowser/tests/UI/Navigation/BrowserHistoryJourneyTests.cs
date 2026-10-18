@@ -12,6 +12,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.ContentBrowser.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserControls;
 
 namespace Oxygen.Editor.ContentBrowser.UI.Tests.Navigation;
@@ -34,7 +35,7 @@ public sealed partial class BrowserHistoryJourneyTests : DroidNet.Tests.VisualUs
         var (physical, expected) = await fixture.ConfigurePhysicalNavigationAsync(mount, this.TestContext.CancellationToken).ConfigureAwait(true);
         await fixture.OpenAsync().ConfigureAwait(true);
         await fixture.NavigateHistoryFolderAsync(physical, this.TestContext.CancellationToken, relativeToContent: false).ConfigureAwait(true);
-        _ = fixture.Browser.Breadcrumbs[^1].RelativePath.Trim('/').Should().Be(expected, fixture.Diagnostics);
+        _ = fixture.Browser.Breadcrumbs[^1].Folder.Should().Be(AssetPath.Parse("/" + expected), fixture.Diagnostics);
         _ = fixture.Explorer.SelectedItem!.Label.Should().Be("Materials");
         _ = fixture.Explorer.ShownItems.Should().Contain(fixture.Explorer.SelectedItem);
     });
@@ -67,6 +68,9 @@ public sealed partial class BrowserHistoryJourneyTests : DroidNet.Tests.VisualUs
         root.Children.Add(view);
         using var scaledHost = new ScaledXamlHost();
         await scaledHost.LoadAsync(root, 1, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // The project opens on its Scenes folder; the query runs over the whole project.
+        await fixture.Browser.NavigateToBreadcrumbAsync(0).ConfigureAwait(true);
         await CheckHistoryQueryControlsAsync(fixture, view).ConfigureAwait(true);
         await fixture.NavigateHistoryFolderAsync("Materials", this.TestContext.CancellationToken).ConfigureAwait(true);
         await AssertHistoryScopeAsync(fixture, view, items, "Materials", tiles: true).ConfigureAwait(true);
@@ -139,10 +143,10 @@ public sealed partial class BrowserHistoryJourneyTests : DroidNet.Tests.VisualUs
         await WaitForRenderAsync().ConfigureAwait(true);
         var path = "/Content/" + folder;
         var expected = all.Where(item => item.DisplayPath.StartsWith(path + "/", StringComparison.Ordinal)).ToArray();
-        _ = fixture.Browser.Breadcrumbs[^1].RelativePath.Trim('/').Should().Be(path.Trim('/'), fixture.Diagnostics);
+        _ = fixture.Browser.Breadcrumbs[^1].Folder.Should().Be(AssetPath.Parse(path), fixture.Diagnostics);
         _ = fixture.Explorer.SelectedItem!.Label.Should().Be(folder);
         _ = (fixture.Layout is TilesLayoutViewModel).Should().Be(tiles);
-        _ = fixture.Layout.Assets.Select(static row => row.Item.IdentityUri).Should().BeEquivalentTo(expected.Select(static item => item.IdentityUri));
+        _ = fixture.Layout.Assets.Select(static row => row.Item.Identity).Should().BeEquivalentTo(expected.Select(static item => item.Identity));
         var layoutView = tiles ? (FrameworkElement)view.FindDescendant<TilesLayoutView>()! : view.FindDescendant<ListLayoutView>()!;
         var selector = layoutView.FindDescendant<ListViewBase>()!;
         selector.SelectedIndex = 0;
@@ -152,9 +156,9 @@ public sealed partial class BrowserHistoryJourneyTests : DroidNet.Tests.VisualUs
         var commands = (AssetsViewModel)fixture.Browser.RightPaneViewModel!;
         _ = commands.CookSelectedAssetCommand.CanExecute(parameter: null).Should().BeTrue();
         await commands.CookSelectedAssetCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-        _ = fixture.HistoryPipeline.Invocations[^1].Arguments.Should().HaveElementAt(0, selected.IdentityUri);
+        _ = fixture.HistoryPipeline.Invocations[^1].Arguments.Should().HaveElementAt(0, selected.Identity);
         _ = commands.CookSelectedFolderCommand.CanExecute(parameter: null).Should().BeTrue();
         await commands.CookSelectedFolderCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-        _ = fixture.HistoryPipeline.Invocations[^1].Arguments.Should().HaveElementAt(0, new Uri("asset://" + path));
+        _ = fixture.HistoryPipeline.Invocations[^1].Arguments.Should().HaveElementAt(0, AssetPath.Parse(path));
     }
 }

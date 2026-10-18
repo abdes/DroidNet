@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.PublicationScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
@@ -38,7 +39,7 @@ public sealed class ProducedSourceMetadataTests
         _ = (await File.ReadAllBytesAsync(captured, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(update.Before);
         _ = (await File.ReadAllBytesAsync(Path.Combine(project.Root, update.RelativePath), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(update.After);
         await File.WriteAllTextAsync(Path.Combine(project.Root, update.RelativePath), "later authored change", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var writer = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         var loaded = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var selection = await CookPublicationReadLease.OpenUnderGateAsync(project.Context, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = selection.PublicationId.Should().Be(project.Operation.OperationId);
@@ -132,8 +133,8 @@ public sealed class ProducedSourceMetadataTests
 
             if (persisted)
             {
-                using var writer = await CookOutputLease.AcquireWriteAsync(replica.FullName, this.TestContext.CancellationToken).ConfigureAwait(false);
-                var loaded = await CookPublicationTransaction.LoadAsync(project.Context with { ProjectRoot = replica.FullName }, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
+                using var writer = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(replica.FullName), this.TestContext.CancellationToken).ConfigureAwait(false);
+                var loaded = await CookPublicationTransaction.LoadAsync(project.Context with { ProjectRoot = FileSystemPath.From(replica.FullName) }, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
                 await loaded.RecoverAsync(writer).ConfigureAwait(false);
                 foreach (var update in new[] { first, second })
                 {
@@ -154,22 +155,22 @@ public sealed class ProducedSourceMetadataTests
     {
         using var project = new PublicationProject(hadPrevious: true);
         var update = await this.CreateSourceUpdateAsync(project, "Model").ConfigureAwait(false);
-        var uri = new Uri("asset:///Content/SourceMedia/DCC/Model/model.gltf");
+        var uri = AssetPath.Parse("/Content/SourceMedia/DCC/Model/model.gltf");
         var input = new ContentCookInput(
             uri,
             ContentCookAssetKind.ForeignSource,
             "Content",
             "Content/SourceMedia/DCC/Model/model.gltf",
-            Path.Combine(project.Root, "Content/SourceMedia/DCC/Model/model.gltf"),
+            FileSystemPath.From(Path.Combine(project.Root, "Content/SourceMedia/DCC/Model/model.gltf")),
             OutputVirtualPath: null,
             ContentCookInputRole.Primary);
-        ImmutableArray<CookSnapshotInput> consumed = [new(AssetUri: null, Path.Combine(project.Root, update.RelativePath), update.RelativePath, update.BeforeHash)];
+        ImmutableArray<CookSnapshotInput> consumed = [new(AssetUri: null, FileSystemPath.From(Path.Combine(project.Root, update.RelativePath)), update.RelativePath, update.BeforeHash)];
         var graph = new CookDependencyGraph(
             [input],
             consumed,
-            ImmutableDictionary<Uri,
-            ImmutableArray<Uri>>.Empty.Add(uri, []),
-            ImmutableDictionary<Uri,
+            ImmutableDictionary<AssetPath,
+            ImmutableArray<AssetPath>>.Empty.Add(uri, []),
+            ImmutableDictionary<AssetPath,
             ImmutableArray<string>>.Empty.Add(uri, [update.RelativePath]),
             [],
             [],
@@ -178,7 +179,7 @@ public sealed class ProducedSourceMetadataTests
         const string producer = "native-producer";
         var beforeFingerprint = CookIncrementalPlanner.Fingerprint(input, producer, consumed, graph);
         var reuseFingerprint = CookIncrementalPlanner.Fingerprint(input, producer, accepted, graph);
-        var output = new ContentCookedAsset(uri, new("asset:///Content/Geometry/Model.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Geometry/Model.ogeo")
+        var output = new ContentCookedAsset(uri, AssetPath.Parse("/Content/Geometry/Model.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Geometry/Model.ogeo")
         {
             DescriptorRelativePath = "Geometry/Model.ogeo",
         };

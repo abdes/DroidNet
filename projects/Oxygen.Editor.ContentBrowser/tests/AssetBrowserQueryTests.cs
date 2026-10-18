@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -89,7 +90,7 @@ public sealed class AssetBrowserQueryTests
         var query = new AssetBrowserQuery();
         Select(query.StatusOptions, "Not imported");
         _ = query.Matches(model).Should().BeTrue();
-        _ = query.Matches(model with { ImportSourceUri = model.IdentityUri }).Should().BeFalse();
+        _ = query.Matches(model with { ImportSource = model.Identity }).Should().BeFalse();
     }
 
     /// <summary>Searching a grouped built-in also matches the path of its cooked copy.</summary>
@@ -97,7 +98,7 @@ public sealed class AssetBrowserQueryTests
     public void SearchMatchesTheCookedCopyOfAGroupedBuiltin()
     {
         var origin = CreateAsset("Default", AssetKind.Material, AssetCookFreshness.Current) with { PrimaryState = AssetState.Generated, CookStatus = null };
-        var copy = origin with { IdentityUri = new("asset:///Content/Materials/OxygenEditor_Default.omat"), DisplayPath = "/Content/Materials/OxygenEditor_Default.omat", BuiltinOriginUri = origin.IdentityUri };
+        var copy = origin with { Identity = AssetPath.Parse("/Content/Materials/OxygenEditor_Default.omat"), DisplayPath = "/Content/Materials/OxygenEditor_Default.omat", BuiltinOrigin = origin.Identity };
         var grouped = origin with { CookedCompanions = [copy] };
         _ = new AssetBrowserQuery { SearchText = "OxygenEditor_Default" }.Matches(grouped).Should().BeTrue();
     }
@@ -107,25 +108,24 @@ public sealed class AssetBrowserQueryTests
 
     private static AssetEntry CreateAsset(string name, AssetKind kind, AssetCookFreshness freshness)
     {
-        var uri = new Uri("asset:///Content/" + Uri.EscapeDataString(name));
+        var identity = AssetPath.Create("Content", name);
         var current = freshness == AssetCookFreshness.Current;
         return new(
-            uri,
+            identity,
             name,
             kind,
             AssetState.Descriptor,
             DerivedState: null,
             AssetRuntimeAvailability.Unknown,
-            uri.AbsolutePath,
+            identity.VirtualPath,
             SourcePath: null,
             DescriptorPath: null,
-            CookedUri: null,
             CookedPath: null,
             AssetGuid: null,
             [],
             IsSelectable: true)
         {
-            CookStatus = new(uri, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []),
+            CookStatus = new(identity, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []),
         };
     }
 }

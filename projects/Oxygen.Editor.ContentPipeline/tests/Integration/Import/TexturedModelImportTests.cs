@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
@@ -39,7 +40,7 @@ public sealed class TexturedModelImportTests
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var pipeline = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-        var request = new SceneImportRequest(workspace.ProjectContext, primary, "Textured", new Uri("asset:///Content/Models"));
+        var request = new SceneImportRequest(workspace.ProjectContext, primary, "Textured", AssetPath.Parse("/Content/Models"));
 
         var imported = await pipeline.ImportSourceAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -47,7 +48,7 @@ public sealed class TexturedModelImportTests
         _ = imported.IsPublished.Should().BeTrue();
         _ = imported.Diagnostics.Should().NotContain(issue => issue.Code == "material.texture_missing");
         var retainedUri = imported.RetainedSourceUri!;
-        var retained = CookInputResolver.Resolve(workspace.ProjectContext, retainedUri, ContentCookInputRole.Primary).SourceAbsolutePath;
+        var retained = CookInputResolver.Resolve(workspace.ProjectContext, retainedUri, ContentCookInputRole.Primary).SourceAbsolutePath.FullPath;
         var retainedImage = Path.Combine(Path.GetDirectoryName(retained)!, imageName);
         _ = File.Exists(retainedImage).Should().BeTrue();
         _ = (await File.ReadAllBytesAsync(retainedImage, this.TestContext.CancellationToken).ConfigureAwait(false))

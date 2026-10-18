@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Core.Compatibility;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
@@ -25,13 +26,10 @@ public sealed class ImportedOutputOwnershipTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>An authored descriptor cannot silently take over an import-owned native identity.</summary>
-    /// <param name="authoredRequest">Whether the request selects the descriptor instead of the cooked identity.</param>
     /// <returns>The asynchronous namespace-conflict regression.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
-    [DataRow(false)]
-    [DataRow(true)]
-    public async Task ImportedOutputConflictsWithAuthoredDescriptor(bool authoredRequest)
+    public async Task ImportedOutputConflictsWithAuthoredDescriptor()
     {
         using var workspace = new CookWorkspace();
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -41,9 +39,9 @@ public sealed class ImportedOutputOwnershipTests
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         var material = first.CookedAssets.First(static asset => asset.Kind == ContentCookAssetKind.Material).CookedAssetUri;
-        workspace.WriteMaterial(material.AbsolutePath.TrimStart('/') + ".json", "Authored conflict");
+        workspace.WriteMaterial(material.VirtualPath.TrimStart('/') + ".json", "Authored conflict");
         var count = runner.Count;
-        var result = await service.CookAssetAsync(authoredRequest ? new Uri(material + ".json") : material, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookAssetAsync(material, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Status.Should().Be(OperationStatus.Failed);
         _ = result.Diagnostics.Should().Contain(issue => issue.Message.Contains("conflicts with authored descriptor", StringComparison.Ordinal));
         _ = runner.Count.Should().Be(count);
@@ -150,8 +148,8 @@ public sealed class ImportedOutputOwnershipTests
         var result = await (scope switch
         {
             "asset" => service.CookAssetAsync(geometry.CookedAssetUri, this.TestContext.CancellationToken),
-            "folder" => service.CookFolderAsync(new Uri(geometry.CookedAssetUri, "."), this.TestContext.CancellationToken),
-            _ => service.CookCurrentSceneAsync(new("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken),
+            "folder" => service.CookFolderAsync(geometry.CookedAssetUri.Parent!, this.TestContext.CancellationToken),
+            _ => service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken),
         }).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = result.CookedAssets.Should().Contain(asset => asset.CookedAssetUri == geometry.CookedAssetUri && asset.SourceAssetUri == source);
@@ -181,10 +179,10 @@ public sealed class ImportedOutputOwnershipTests
             before = await File.ReadAllBytesAsync(index, this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 
-        var settingsPath = Path.Combine(workspace.Root, Uri.UnescapeDataString(source.AbsolutePath).TrimStart('/') + ".import.json");
+        var settingsPath = Path.Combine(workspace.Root, source.VirtualPath.TrimStart('/') + ".import.json");
         var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(settingsPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var layout = settings.CreateLayout();
-        var missing = new Uri("asset://" + layout.VirtualMountRoot + "/" + layout.GeometryDirectory + "/Missing.ogeo");
+        var missing = AssetPath.Parse(layout.VirtualMountRoot + "/" + layout.GeometryDirectory + "/Missing.ogeo");
         var result = await service.CookAssetAsync(missing, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Status.Should().Be(OperationStatus.Failed);
         _ = result.IsPublished.Should().BeFalse();
@@ -262,7 +260,7 @@ public sealed class ImportedOutputOwnershipTests
         var geometry = first.CookedAssets.First(static output => output.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
         AddGeometryNode(workspace, geometry, "Imported mesh");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var scene = new Uri("asset:///Content/Scenes/Main.oscene.json");
+        var scene = AssetPath.Parse("/Content/Scenes/Main.oscene");
         var index = Path.Combine(workspace.CookedRoot("Content"), "container.index.bin");
         var before = await File.ReadAllBytesAsync(index, this.TestContext.CancellationToken).ConfigureAwait(false);
         if (externalBuffer)

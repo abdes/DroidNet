@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
@@ -44,18 +45,18 @@ public sealed class CrossMountImportTests
         descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/" + materialPath[..^5];
         await File.WriteAllTextAsync(geometryPath, descriptor.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);
         workspace.WriteMaterial(materialPath, "Red");
-        AddGeometryNode(workspace, new("asset:///" + geometrySource), "Mesh");
+        AddGeometryNode(workspace, AssetPath.Parse("/" + geometrySource[..^5]), "Mesh");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-        var result = await service.CookCurrentSceneAsync(new("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = result.CookedAssets.Should().HaveCount(3);
         _ = result.CookedAssets.Should().OnlyHaveUniqueItems(static asset => asset.CookedAssetUri);
-        var materialUri = new Uri("asset:///" + materialPath[..^5]);
+        var materialUri = AssetPath.Parse("/" + materialPath[..^5]);
         _ = result.CookedAssets.Should().Contain(asset => asset.CookedAssetUri == materialUri);
-        _ = (await service.CookCurrentSceneAsync(new("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
+        _ = (await service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
     }
 
     /// <summary>A scene can consume imported geometry in another mount in both new and existing publications.</summary>
@@ -81,7 +82,7 @@ public sealed class CrossMountImportTests
         AddGeometryNode(workspace, geometry, "Imported mesh");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-        var result = await service.CookCurrentSceneAsync(new("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = result.CookedAssets.Concat(result.ReusedAssets).Should().Contain(asset => asset.CookedAssetUri == geometry);
         _ = result.InputsAreCurrent.Should().BeTrue();

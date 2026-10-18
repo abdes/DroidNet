@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
 
@@ -25,8 +26,8 @@ public sealed partial class AssetFeedTests
     {
         using var workspace = new AssetWorkspace();
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
-        var red = new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json"));
-        var blue = new AssetRecord(new Uri("asset:///Content/Materials/Blue.omat.json"));
+        var red = new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"));
+        var blue = new AssetRecord(AssetPath.Parse("/Content/Materials/Blue.omat.json"));
         var catalog = new TestProjectAssetCatalog([red]);
         var relocation = new Mock<IAssetRelocationService>();
         var authoring = new Mock<IAssetAuthoring>();
@@ -37,7 +38,7 @@ public sealed partial class AssetFeedTests
         WriteMaterial(workspace.SourcePath("Content/Materials/Blue.omat.json"));
         catalog.SetRecordsOnRefresh([red, blue]);
 
-        var created = AssetFilesChangedEventArgs.ForCreated([workspace.SourcePath("Content/Materials/Blue.omat.json")], foldersCreated: false);
+        var created = AssetFilesChangedEventArgs.ForCreated([FileSystemPath.From(workspace.SourcePath("Content/Materials/Blue.omat.json"))], foldersCreated: false);
         if (fromAuthoring)
         {
             authoring.Raise(value => value.FilesChanged += null, created);
@@ -50,6 +51,6 @@ public sealed partial class AssetFeedTests
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = catalog.RefreshCount.Should().Be(2);
-        _ = rows.Select(static row => row.IdentityUri).Should().Contain(blue.Uri);
+        _ = rows.Select(static row => row.Identity).Should().Contain(AssetPath.Parse("/Content/Materials/Blue.omat"));
     }
 }

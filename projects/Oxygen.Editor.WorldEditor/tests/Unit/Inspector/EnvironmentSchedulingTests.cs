@@ -9,6 +9,7 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 
@@ -91,7 +92,7 @@ public sealed class EnvironmentSchedulingTests
 
     private static AssetEntry CreateTexture(string name)
         => new(
-            new Uri("asset:///Textures/metering-mask.otex"),
+            AssetPath.Parse("/Textures/metering-mask.otex"),
             name,
             AssetKind.Texture,
             AssetState.Descriptor,
@@ -100,7 +101,6 @@ public sealed class EnvironmentSchedulingTests
             "Textures/metering-mask",
             SourcePath: null,
             DescriptorPath: null,
-            CookedUri: null,
             CookedPath: null,
             AssetGuid: null,
             [],

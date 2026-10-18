@@ -17,6 +17,7 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.World.Cooking;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.WorldEditor.TestSupport.CookingScenario;
@@ -53,7 +54,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
         await using var publication = await fixture.StartWorkspacePreviewAsync(services, catalog).ConfigureAwait(true);
         using var document = fixture.RegisterMainCookDocument(services);
-        var uri = new Uri("asset:///Content/Scenes/Main.oscene.json");
+        var uri = AssetPath.Parse("/Content/Scenes/Main.oscene");
         _ = (await services.Pipeline.CookCurrentSceneAsync(uri, timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
         var originalOutput = ReadPublishedHashes(fixture.ProjectRoot);
         await fixture.SetSavedLegacyAerialStartAsync().ConfigureAwait(true);

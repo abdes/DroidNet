@@ -13,6 +13,7 @@ using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LivePreview.Tests.Play;
@@ -50,7 +51,7 @@ public sealed partial class PlaySessionTests
 
         _ = fixture.Session.Status.Failure!.Stage.Should().Be(PlayStage.Save);
         _ = fixture.Session.Status.Failure.Code.Should().Be(PlayDiagnosticCodes.SaveFailed);
-        fixture.Pipeline.Verify(value => value.CookCurrentSceneAsync(It.IsAny<Uri>(), It.IsAny<CancellationToken>()), Times.Never);
+        fixture.Pipeline.Verify(value => value.CookCurrentSceneAsync(It.IsAny<AssetPath>(), It.IsAny<CancellationToken>()), Times.Never);
         _ = fixture.Results.SelectMany(static result => result.Diagnostics).Should().Contain(static diagnostic => diagnostic.Code == PlayDiagnosticCodes.SaveFailed);
     }
 
@@ -59,7 +60,7 @@ public sealed partial class PlaySessionTests
     {
         using var fixture = new PlayFixture(installedPlayer: true);
         var document = await fixture.Documents.OpenAsync(fixture.Documents.NewScene()).ConfigureAwait(false);
-        _ = fixture.Pipeline.Setup(value => value.CookCurrentSceneAsync(document.File.AssetUri, It.IsAny<CancellationToken>()))
+        _ = fixture.Pipeline.Setup(value => value.CookCurrentSceneAsync(document.File.Asset, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.CurrentScene, OperationStatus.Failed, [], [], Inspection: null, Validation: null));
 
         await fixture.Session.PlayAsync(document.Id).ConfigureAwait(false);

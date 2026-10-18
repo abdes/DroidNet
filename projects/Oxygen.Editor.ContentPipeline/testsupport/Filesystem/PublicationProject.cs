@@ -9,6 +9,7 @@ using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using Oxygen.Testing;
 using Testably.Abstractions;
 
@@ -88,8 +89,8 @@ internal sealed partial class PublicationProject : IDisposable
 
     public async Task<CookStagingArea> StageAsync(CancellationToken cancellationToken)
     {
-        this.ownership = CookOutputLease.AcquireOperation(this.Root, this.Operation.OperationId);
-        using (var gate = await CookOutputLease.AcquireWriteAsync(this.Root, cancellationToken).ConfigureAwait(false))
+        this.ownership = CookOutputLease.AcquireOperation(FileSystemPath.From(this.Root), this.Operation.OperationId);
+        using (var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(this.Root), cancellationToken).ConfigureAwait(false))
         {
             this.baseline = await CookPublicationReadLease.OpenUnderGateAsync(this.Context, this.Files, gate, cancellationToken).ConfigureAwait(false);
         }

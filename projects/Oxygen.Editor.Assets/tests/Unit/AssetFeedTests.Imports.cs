@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Editor.Assets.TestSupport;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
@@ -61,16 +62,16 @@ public sealed partial class AssetFeedTests
         provider.Assets(AssetRule.For(AssetKind.Material)).Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => choices = value), this.TestContext.CancellationToken);
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = rows.Should().HaveCount(4);
-        _ = rows.Should().OnlyHaveUniqueItems(static row => row.IdentityUri);
-        var model = rows.Single(row => row.IdentityUri == source);
+        _ = rows.Should().OnlyHaveUniqueItems(static row => row.Identity);
+        var model = rows.Single(row => row.Identity == source);
         _ = model.PrimaryState.Should().Be(AssetState.Source);
         _ = model.CanReimport.Should().BeTrue();
         _ = model.Information.Facts.Single(static fact => string.Equals(fact.Label, "Outputs", StringComparison.Ordinal)).Value.Should().Contain("Main (Geometry)").And.Contain("Paint (Material)").And.Contain("Crate (Scene)");
-        var outputs = rows.Where(row => row.IdentityUri != source).ToArray();
-        _ = outputs.Should().OnlyContain(row => row.ImportSourceUri == source && row.CanCook && row.CanReimport && row.DescriptorPath == null && row.SourcePath == null);
+        var outputs = rows.Where(row => row.Identity != source).ToArray();
+        _ = outputs.Should().OnlyContain(row => row.ImportSource == source && row.CanCook && row.CanReimport && row.DescriptorPath == null && row.SourcePath == null);
         _ = outputs.Should().OnlyContain(row => row.CookStatus!.HasAvailableOutput == verified);
-        _ = outputs.Should().OnlyContain(row => row.Information.Facts.Any(fact => fact.Label == "Imported from" && fact.Value == source.AbsolutePath));
-        _ = choices.Should().ContainSingle().Which.IdentityUri.Should().Be(state.Outputs.Single(static output => output.Kind == ContentCookAssetKind.Material).CookedAssetUri);
+        _ = outputs.Should().OnlyContain(row => row.Information.Facts.Any(fact => fact.Label == "Imported from" && fact.Value == source.VirtualPath));
+        _ = choices.Should().ContainSingle().Which.Identity.Should().Be(state.Outputs.Single(static output => output.Kind == ContentCookAssetKind.Material).CookedAssetUri);
     }
 
     /// <summary>Equal virtual names in a foreign library do not acquire the project's source ownership or reimport action.</summary>
@@ -85,18 +86,18 @@ public sealed partial class AssetFeedTests
         var source = await WriteModelSourceAsync(workspace, configured: true, this.TestContext.CancellationToken).ConfigureAwait(false);
         var projects = workspace.ActivateProject();
         var project = projects.ActiveProject!;
-        var ownedRoot = workspace.SourcePath(".cooked/Content");
-        Directory.CreateDirectory(ownedRoot);
+        var ownedRoot = FileSystemPath.From(workspace.SourcePath(".cooked/Content"));
+        Directory.CreateDirectory(ownedRoot.FullPath);
         var publication = new FakeCookPublication(project.ProjectId, project.ProjectRoot);
-        publication.Publish([], new Dictionary<string, string> { ["Content"] = ownedRoot });
+        publication.Publish([], new Dictionary<string, FileSystemPath> { ["Content"] = ownedRoot });
         using var selected = publication.Lease();
         var state = ModelStatus(workspace, source, verified: true) with { OutputRoots = selected.ProjectRoots };
         var output = state.Outputs.Single(static asset => asset.Kind == ContentCookAssetKind.Material);
-        var root = library ? workspace.SourcePath("Library") : ownedRoot;
+        var root = library ? FileSystemPath.From(workspace.SourcePath("Library")) : ownedRoot;
         const string descriptor = "Models/Crate/Materials/Paint.omat";
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(root, descriptor))!);
-        await File.WriteAllTextAsync(Path.Combine(root, descriptor), "output", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var metadata = new CookedAssetMetadata(root, descriptor, Guid.NewGuid(), new(1, 2), 1, 6, new string('0', 64)) { VirtualPath = output.VirtualPath };
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(root.Combine(descriptor).FullPath)!);
+        await File.WriteAllTextAsync(root.Combine(descriptor).FullPath, "output", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var metadata = new CookedAssetMetadata(root, descriptor, Guid.NewGuid(), new(1, 2), 1, 6, new string('0', 64)) { VirtualPath = AssetPath.Parse(output.VirtualPath) };
         var records = new AssetRecord[] { new(source), new(output.CookedAssetUri) { Cooked = metadata } };
         var reader = new DelegateStatusReader((_, uris, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>(uris.Select(uri => state with { AssetUri = uri }).ToArray()));
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
@@ -104,7 +105,14 @@ public sealed partial class AssetFeedTests
         var row = await provider.ResolveAsync(output.CookedAssetUri, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = row!.CanCook.Should().Be(!library);
         _ = row.CanReimport.Should().Be(!library);
-        _ = row.ImportSourceUri.Should().Be(library ? null : source);
+        if (library)
+        {
+            _ = row.ImportSource.Should().BeNull();
+        }
+        else
+        {
+            _ = row.ImportSource.Should().Be(source);
+        }
         _ = row.CookedMetadata.Should().BeSameAs(metadata);
     }
 
@@ -138,10 +146,10 @@ public sealed partial class AssetFeedTests
         _ = reads.Should().Be(1);
     }
 
-    private static async Task<Uri> WriteModelSourceAsync(AssetWorkspace workspace, bool configured, CancellationToken cancellationToken)
+    private static async Task<AssetPath> WriteModelSourceAsync(AssetWorkspace workspace, bool configured, CancellationToken cancellationToken)
     {
-        var uri = new Uri("asset:///Content/SourceMedia/DCC/Crate/model.gltf");
-        var path = workspace.SourcePath(uri.AbsolutePath.TrimStart('/'));
+        var identity = AssetPath.Parse("/Content/SourceMedia/DCC/Crate/model.gltf");
+        var path = workspace.SourcePath(identity.VirtualPath.TrimStart('/'));
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(path, "{}", cancellationToken).ConfigureAwait(false);
         if (configured)
@@ -149,20 +157,20 @@ public sealed partial class AssetFeedTests
             await File.WriteAllTextAsync(path + ".import.json", "{}", cancellationToken).ConfigureAwait(false);
         }
 
-        return uri;
+        return identity;
     }
 
-    private static AssetCookStatus ModelStatus(AssetWorkspace workspace, Uri source, bool verified) => new(
+    private static AssetCookStatus ModelStatus(AssetWorkspace workspace, AssetPath source, bool verified) => new(
         source,
         verified ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate,
         HasPublishedOutput: true,
         verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing,
         [
-            new(source, new("asset:///Content/Models/Crate/Geometry/Main.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Models/Crate/Geometry/Main.ogeo"),
-            new(source, new("asset:///Content/Models/Crate/Materials/Paint.omat"), ContentCookAssetKind.Material, "Content", "/Content/Models/Crate/Materials/Paint.omat"),
-            new(source, new("asset:///Content/Models/Crate/Scenes/Crate.oscene"), ContentCookAssetKind.Scene, "Content", "/Content/Models/Crate/Scenes/Crate.oscene"),
+            new(source, AssetPath.Parse("/Content/Models/Crate/Geometry/Main.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Models/Crate/Geometry/Main.ogeo"),
+            new(source, AssetPath.Parse("/Content/Models/Crate/Materials/Paint.omat"), ContentCookAssetKind.Material, "Content", "/Content/Models/Crate/Materials/Paint.omat"),
+            new(source, AssetPath.Parse("/Content/Models/Crate/Scenes/Crate.oscene"), ContentCookAssetKind.Scene, "Content", "/Content/Models/Crate/Scenes/Crate.oscene"),
         ],
         [],
         [])
-    { SourcePaths = [workspace.SourcePath(source.AbsolutePath.TrimStart('/'))] };
+    { SourcePaths = [FileSystemPath.From(workspace.SourcePath(source.VirtualPath.TrimStart('/')))] };
 }

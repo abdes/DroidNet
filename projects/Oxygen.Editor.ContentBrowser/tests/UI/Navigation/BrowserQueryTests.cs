@@ -54,8 +54,8 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([material, other, mesh]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
-        var state = new ContentBrowserState(projects);
-        state.SetSelectedFolders(["/Content"]);
+        var state = new ContentBrowserState();
+        state.SetSelectedFolders([AssetPath.Parse("/Content")]);
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         using var list = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
         using var tile = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
@@ -86,8 +86,8 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
         _ = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(search).Should().Be("Search assets");
         search.Text = "Blue";
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = list.Assets.Should().ContainSingle().Which.Item.IdentityUri.Should().Be(material.IdentityUri);
-        _ = tile.Assets.Should().ContainSingle().Which.Item.IdentityUri.Should().Be(material.IdentityUri);
+        _ = list.Assets.Should().ContainSingle().Which.Item.Identity.Should().Be(material.Identity);
+        _ = tile.Assets.Should().ContainSingle().Which.Item.Identity.Should().Be(material.Identity);
         updates.OnNext([material with { CookStatus = material.CookStatus! with { Freshness = AssetCookFreshness.Current, HasPublishedOutput = true, OutputAvailability = CookedOutputAvailability.Present } }, other, mesh]);
         await WaitForRenderAsync().ConfigureAwait(true);
         var clear = FindEmptyQueryReset(list, tile, assetsView);
@@ -108,8 +108,8 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([CreateQueryAsset("Blue", AssetKind.Material, AssetCookFreshness.NeedsCooking)]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject(cookedMount: true);
-        var state = new ContentBrowserState(projects);
-        state.SetSelectedFolders(["/Cooked/Content/Materials"]);
+        var state = new ContentBrowserState();
+        state.SetSelectedFolders([AssetPath.Parse("/Cooked/Content/Materials")]);
         using var model = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var view = new ListLayoutView
@@ -122,7 +122,7 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
         var browse = view.FindDescendant<Button>(button => string.Equals(button.Content as string, "Browse source content", StringComparison.Ordinal))!;
         ((IInvokeProvider)new ButtonAutomationPeer(browse).GetPattern(PatternInterface.Invoke)).Invoke();
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = state.SelectedFolders.Should().Equal("/Content/Materials");
+        _ = state.SelectedFolders.Should().Equal(AssetPath.Parse("/Content/Materials"));
         _ = model.Assets.Should().ContainSingle();
         provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
     });
@@ -137,21 +137,20 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
     {
         var origin = CreateQueryAsset("Default", AssetKind.Material, AssetCookFreshness.Current) with
         {
-            IdentityUri = AssetUris.BuildGeneratedUri("Materials/Default"),
+            Identity = AssetPath.Generated.Combine("Materials/Default"),
             DisplayPath = "/Engine/Generated/Materials/Default",
             PrimaryState = AssetState.Generated,
             SourcePath = null,
             DescriptorPath = null,
             CookStatus = null,
-            Generated = new("Default", "oxygen.material-descriptor.v1", "/Content/Materials/OxygenEditor_Default.omat", GeneratedAssetCategory.Standard),
+            Generated = new("Default", "oxygen.material-descriptor.v1", AssetPath.Parse("/Content/Materials/OxygenEditor_Default.omat"), GeneratedAssetCategory.Standard),
         };
         var copy = origin with
         {
-            IdentityUri = new("asset:///Content/Materials/OxygenEditor_Default.omat"),
-            BuiltinOriginUri = origin.IdentityUri,
+            Identity = AssetPath.Parse("/Content/Materials/OxygenEditor_Default.omat"),
+            BuiltinOrigin = origin.Identity,
             DisplayPath = "/Content/Materials/OxygenEditor_Default.omat",
-            CookedUri = new("asset:///Content/Materials/OxygenEditor_Default.omat"),
-            CookedPath = "C:/Query/.cooked/Content/Materials/OxygenEditor_Default.omat",
+            CookedPath = FileSystemPath.From("C:/Query/.cooked/Content/Materials/OxygenEditor_Default.omat"),
         };
         var scenes = new[]
         {
@@ -161,7 +160,7 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([origin, copy, .. scenes]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject(cookedMount: true);
-        var state = new ContentBrowserState(projects);
+        var state = new ContentBrowserState();
         state.Query.TypeOptions.Single(option => string.Equals(option.Label, "Materials", StringComparison.Ordinal)).IsSelected = true;
         state.Query.TypeOptions.Single(option => string.Equals(option.Label, "Scenes", StringComparison.Ordinal)).IsSelected = true;
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
@@ -181,13 +180,13 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
         _ = model.Assets.Should().HaveCount(3);
         _ = model.Assets.Should().ContainSingle(row => row.Item.IsBuiltin);
         model.SelectedAsset = copy;
-        _ = model.SelectedAsset!.IdentityUri.Should().Be(origin.IdentityUri);
+        _ = model.SelectedAsset!.Identity.Should().Be(origin.Identity);
         updates.OnNext([copy, .. scenes, origin]);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.Assets.Should().HaveCount(3);
-        _ = model.SelectedAsset!.IdentityUri.Should().Be(origin.IdentityUri);
-        state.SetSelectedFolders(["/Cooked/Content/Materials"]);
-        _ = model.Assets.Should().ContainSingle().Which.Item.IdentityUri.Should().Be(copy.IdentityUri);
+        _ = model.SelectedAsset!.Identity.Should().Be(origin.Identity);
+        state.SetSelectedFolders([AssetPath.Parse("/Cooked/Content/Materials")]);
+        _ = model.Assets.Should().ContainSingle().Which.Item.Identity.Should().Be(copy.Identity);
     });
 
     private static Button FindEmptyQueryReset(ListLayoutViewModel list, TilesLayoutViewModel tile, UserControl assetsView)

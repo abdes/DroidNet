@@ -41,26 +41,26 @@ internal static class IncrementalCookScenario
     {
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         var node = new SceneNode(workspace.Scene) { Name = "Cube" };
-        var geometry = new GeometryComponent { Name = "Geometry", Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube") };
+        var geometry = new GeometryComponent { Name = "Geometry", Geometry = AssetPath.Generated.Combine("BasicShapes/Cube") };
         geometry.OverrideSlots.Add(await CreateBuiltinMaterialSlotAsync(
-            workspace, geometry, new("asset:///Content/Materials/Blue.omat.json")).ConfigureAwait(false));
+            workspace, geometry, AssetPath.Parse("/Content/Materials/Blue.omat")).ConfigureAwait(false));
         _ = node.AddComponent(geometry);
         workspace.Scene.RootNodes.Add(node);
         workspace.Scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto } });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
     }
 
-    internal static async Task<MaterialsSlot> CreateBuiltinMaterialSlotAsync(CookWorkspace workspace, GeometryComponent geometry, Uri materialUri, CancellationToken cancellationToken = default)
+    internal static async Task<MaterialsSlot> CreateBuiltinMaterialSlotAsync(CookWorkspace workspace, GeometryComponent geometry, AssetPath material, CancellationToken cancellationToken = default)
     {
         var catalog = await new BuiltinCatalogFixture().GetBuiltinGeometryCatalogAsync(
             workspace.Root, "Content", cancellationToken).ConfigureAwait(false);
-        var geometryUri = geometry.Geometry;
-        var inventory = (catalog.Find(geometryUri)
+        var geometryAsset = geometry.Geometry;
+        var inventory = (catalog.Find(geometryAsset)
             ?? throw new InvalidOperationException("The native fixture has no matching builtin geometry.")).MaterialSlots;
         return new MaterialsSlot
         {
-            Target = new(geometryUri, inventory.Slots.Single().SlotId, inventory.LayoutRevision),
-            Material = materialUri,
+            Target = new(geometryAsset, inventory.Slots.Single().SlotId, inventory.LayoutRevision),
+            Material = material,
         };
     }
 }

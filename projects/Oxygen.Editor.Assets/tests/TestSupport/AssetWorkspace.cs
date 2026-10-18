@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets.TestSupport;
 
@@ -12,18 +13,18 @@ internal sealed class AssetWorkspace : IDisposable
     /// <summary>Initializes a new instance of the <see cref="AssetWorkspace"/> class.</summary>
     public AssetWorkspace()
     {
-        this.Root = Path.Combine(Path.GetTempPath(), "oxygen-assets-tests", Guid.NewGuid().ToString("N"));
-        _ = Directory.CreateDirectory(this.Root);
+        this.Root = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "oxygen-assets-tests", Guid.NewGuid().ToString("N")));
+        _ = Directory.CreateDirectory(this.Root.FullPath);
     }
 
     /// <summary>Gets the project root folder.</summary>
-    public string Root { get; }
+    public FileSystemPath Root { get; }
 
     /// <summary>Resolves a project-relative path.</summary>
     /// <param name="relative">A path relative to the project root, with forward slashes.</param>
     /// <returns>The absolute path.</returns>
     public string SourcePath(string relative)
-        => Path.Combine(this.Root, relative.Replace('/', Path.DirectorySeparatorChar));
+        => Path.Combine(this.Root.FullPath, relative.Replace('/', Path.DirectorySeparatorChar));
 
     /// <summary>Saves a project file for this folder and activates it.</summary>
     /// <returns>A project context service whose active project is this workspace.</returns>
@@ -42,20 +43,20 @@ internal sealed class AssetWorkspace : IDisposable
             });
 
         var context = service.ActiveProject!;
-        var info = new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot)
+        var info = new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot.FullPath)
         {
             AuthoringMounts = [.. context.AuthoringMounts],
         };
-        File.WriteAllText(Path.Combine(this.Root, "Project.oxy"), ProjectInfo.ToJson(info));
+        File.WriteAllText(Path.Combine(this.Root.FullPath, "Project.oxy"), ProjectInfo.ToJson(info));
         return service;
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
-        if (Directory.Exists(this.Root))
+        if (Directory.Exists(this.Root.FullPath))
         {
-            Directory.Delete(this.Root, recursive: true);
+            Directory.Delete(this.Root.FullPath, recursive: true);
         }
     }
 }

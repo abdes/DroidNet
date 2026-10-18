@@ -3,11 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal sealed class FixedCookScopeProvider(string projectRoot) : IProjectCookScopeProvider
 {
     public ProjectCookScope CreateScope(ProjectContext context)
-        => new(context.ProjectId, projectRoot, Path.Combine(projectRoot, ".cooked"));
+        => new(context.ProjectId, FileSystemPath.From(projectRoot), Path.Combine(projectRoot, ".cooked"));
 }

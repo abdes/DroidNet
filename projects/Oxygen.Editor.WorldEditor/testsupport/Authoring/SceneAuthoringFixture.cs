@@ -13,6 +13,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Workspace;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
@@ -27,7 +28,7 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     {
         this.interaction = interaction;
         this.Projects.Activate(SceneTabs.Project);
-        _ = this.Slots.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<Uri>(), It.IsAny<CancellationToken>())).ReturnsAsync((ProjectContext _, Uri uri, CancellationToken _) => new GeometryMaterialSlotMetadata(uri, Guid.Parse("20000000-0000-0000-0000-000000000001"), new string('a', 64), [new(TargetFor(uri).SlotId, "Surface", [new(0, 0, Guid.Empty)])]));
+        _ = this.Slots.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<AssetPath>(), It.IsAny<CancellationToken>())).ReturnsAsync((ProjectContext _, AssetPath asset, CancellationToken _) => new GeometryMaterialSlotMetadata(asset, Guid.Parse("20000000-0000-0000-0000-000000000001"), new string('a', 64), [new(TargetFor(asset).SlotId, "Surface", [new(0, 0, Guid.Empty)])]));
         var scene = new Scene
         {
             Name = "UI Test Scene",
@@ -81,7 +82,7 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
 
     public StrongReferenceMessenger Messenger { get; } = new();
 
-    public static MaterialSlotTarget TargetFor(Uri geometry) => new(geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+    public static MaterialSlotTarget TargetFor(AssetPath geometry) => new(geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
 
     public void Dispose() => this.Tab.Dispose();
 }

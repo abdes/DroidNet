@@ -18,7 +18,7 @@ public sealed class OpenDocumentsTests : DocumentTestBase
     public async Task OpenAsync_ForAnOpenFile_FindsItsDocument()
     {
         var (document, _) = await this.OpenNoteAsync("Wood").ConfigureAwait(false);
-        var sameFile = new DocumentFile(PathOf("Wood").ToUpperInvariant(), UriOf("Wood"));
+        var sameFile = new DocumentFile(FileSystemPath.From(PathOf("Wood").ToUpperInvariant()), UriOf("Wood"));
 
         var result = await this.Documents.OpenAsync(sameFile, this.Token).ConfigureAwait(false);
 
@@ -63,7 +63,7 @@ public sealed class OpenDocumentsTests : DocumentTestBase
     {
         this.FileSystem.File.WriteAllText(Path.Combine(Folder, "readme.md"), "text");
 
-        var result = await this.Documents.OpenAsync(new DocumentFile(Path.Combine(Folder, "readme.md"), AssetPath.Parse("/Content/readme.md")), this.Token).ConfigureAwait(false);
+        var result = await this.Documents.OpenAsync(new DocumentFile(FileSystemPath.From(Path.Combine(Folder, "readme.md")), AssetPath.Parse("/Content/readme.md")), this.Token).ConfigureAwait(false);
 
         _ = result.Document.Should().BeNull();
         _ = result.Problem.Should().Contain("No editor opens 'readme.md'");
@@ -108,9 +108,9 @@ public sealed class OpenDocumentsTests : DocumentTestBase
         var material = new NoteKind(".omat.json") { Name = "Material" };
         using var documents = new OpenDocuments([json, material], this.Store);
 
-        _ = documents.FindKind(@"C:\Project\Content\Wood.OMAT.json").Should().BeSameAs(material);
-        _ = documents.FindKind(@"C:\Project\Content\settings.json").Should().BeSameAs(json);
-        _ = documents.FindKind(@"C:\Project\Content\.json").Should().BeNull();
+        _ = documents.FindKind(FileSystemPath.From(@"C:\Project\Content\Wood.OMAT.json")).Should().BeSameAs(material);
+        _ = documents.FindKind(FileSystemPath.From(@"C:\Project\Content\settings.json")).Should().BeSameAs(json);
+        _ = documents.FindKind(FileSystemPath.From(@"C:\Project\Content\.json")).Should().BeNull();
     }
 
     [TestMethod]
@@ -140,6 +140,6 @@ public sealed class OpenDocumentsTests : DocumentTestBase
 
         _ = closed.Should().BeSameAs(document);
         _ = note.IsDisposed.Should().BeTrue();
-        _ = this.Documents.Find(PathOf("Wood")).Should().BeNull();
+        _ = this.Documents.Find(LocationOf("Wood")).Should().BeNull();
     }
 }

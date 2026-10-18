@@ -22,7 +22,7 @@ namespace Oxygen.Editor.Scenes.Tests.Edits.Assets;
 [TestClass]
 public sealed class SetMaterialSlotTests
 {
-    private static readonly Uri BlueMaterial = new("asset:/Content/Blue.omat");
+    private static readonly AssetPath BlueMaterial = AssetPath.Parse("/Content/Blue.omat");
 
     private static MaterialSlotTarget CubeTarget => new(SampleScene.CubeGeometry, SampleScene.CubeSlot, SampleScene.CubeLayoutRevision);
 
@@ -92,15 +92,12 @@ public sealed class SetMaterialSlotTests
     }
 
     [TestMethod]
-    [DataRow("https://example.com/Blue.omat", DisplayName = "NotAsset")]
-    [DataRow("asset:/Content/Blue.omat?variant=1", DisplayName = "WithQuery")]
-    [DataRow("asset:/Content/Blue.omat#variant", DisplayName = "WithFragment")]
-    public async Task InvalidMaterialUri_IsInvalid(string material)
+    public async Task NotAMaterialAsset_IsInvalid()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetMaterialSlot([SampleScene.Mesh], CubeTarget, new Uri(material, UriKind.Absolute))).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetMaterialSlot([SampleScene.Mesh], CubeTarget, SampleScene.CubeGeometry)).ConfigureAwait(false);
 
         SceneAssert.Invalid(result, SceneEditCodes.AssetReferenceInvalid, SampleScene.Mesh);
         SceneAssert.Unchanged(fixture, before);

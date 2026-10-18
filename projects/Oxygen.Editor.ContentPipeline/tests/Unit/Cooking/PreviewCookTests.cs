@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.SavedSourceScenario;
 
@@ -20,15 +21,15 @@ public sealed class PreviewCookTests
     /// <param name="identity">The non-authorable preview scope.</param>
     /// <returns>The asynchronous scope regression.</returns>
     [TestMethod]
-    [DataRow("asset:///Content/Scenes/Main.oscene.json")]
-    [DataRow("asset://Engine/Generated/BasicShapes/Cylinder")]
-    [DataRow("asset://Engine/Generated/Materials/Default")]
-    [DataRow("asset:///Content/Models/Source.fbx")]
+    [DataRow("/Content/Scenes/Main.oscene.json")]
+    [DataRow("/Engine/Generated/BasicShapes/Cylinder")]
+    [DataRow("/Engine/Generated/Materials/Default")]
+    [DataRow("/Content/Models/Source.fbx")]
     public async Task PreviewDemandRejectsNonAssetScopes(string identity)
     {
         using var workspace = new CookWorkspace();
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync));
-        Func<Task> request = () => pipeline.CookPreviewAssetAsync(new(identity), workspace.ProjectContext, this.TestContext.CancellationToken);
+        Func<Task> request = () => pipeline.CookPreviewAssetAsync(AssetPath.Parse(identity), workspace.ProjectContext, this.TestContext.CancellationToken);
         _ = await request.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
         _ = workspace.CookCoordinator.Runs.Should().BeEmpty();
     }

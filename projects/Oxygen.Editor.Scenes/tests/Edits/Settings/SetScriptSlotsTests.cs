@@ -88,19 +88,6 @@ public sealed class SetScriptSlotsTests
     }
 
     [TestMethod]
-    public async Task AssetParameterNotAnAssetUri_IsInvalid()
-    {
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var notAsset = new ScriptSlot { Id = Guid.NewGuid(), Script = SampleScene.MoveScript }.WithOverride("texture", ScriptValue.FromAsset(new Uri("https://example.com/Red.omat")));
-        var before = fixture.Snapshot();
-
-        var result = await fixture.Authoring.ExecuteAsync(new SetScriptSlots(SampleScene.Script, [notAsset])).ConfigureAwait(false);
-
-        SceneAssert.Invalid(result, SceneEditCodes.AssetReferenceInvalid, SampleScene.Script);
-        SceneAssert.Unchanged(fixture, before);
-    }
-
-    [TestMethod]
     public async Task EqualSlots_AppliesWithoutAnEntry()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);

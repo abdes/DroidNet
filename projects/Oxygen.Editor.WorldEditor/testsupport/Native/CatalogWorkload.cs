@@ -12,6 +12,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
@@ -19,15 +20,15 @@ internal static class CatalogWorkload
 {
     internal static async Task SeedCatalogWorkloadAsync(NativeSceneFixture fixture, ProjectContext project, ContentPipelineService pipeline, BuiltinGeometryCatalog builtins, CancellationToken cancellationToken)
     {
-        var request = new SceneImportRequest(project, Path.Combine(AppContext.BaseDirectory, "Fixtures/static_scalar_triangle.gltf"), "Triangle", new Uri("asset:///Content/Models"));
+        var request = new SceneImportRequest(project, Path.Combine(AppContext.BaseDirectory, "Fixtures/static_scalar_triangle.gltf"), "Triangle", AssetPath.Parse("/Content/Models"));
         var imported = await pipeline.ImportSourceAsync(request, cancellationToken).ConfigureAwait(true);
         _ = imported.IsPublished.Should().BeTrue(DescribeWorkloadCook(imported));
         var mesh = imported.CookedAssets.Single(static asset => asset.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
         for (var index = 0; index < 998; index++)
         {
             var relative = WorkloadMaterialPath(index);
-            var path = Path.Combine(fixture.ProjectRoot, relative);
-            _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var path = fixture.ProjectRoot.Combine(relative);
+            _ = Directory.CreateDirectory(path.Parent!.FullPath);
             var name = "M" + index.ToString("D4", CultureInfo.InvariantCulture);
             var source = $$"""
                     {
@@ -44,7 +45,7 @@ internal static class CatalogWorkload
                       }
                     }
                     """;
-            await File.WriteAllTextAsync(path, source, cancellationToken).ConfigureAwait(true);
+            await File.WriteAllTextAsync(path.FullPath, source, cancellationToken).ConfigureAwait(true);
         }
 
         var scene = fixture.Source;
@@ -58,7 +59,7 @@ internal static class CatalogWorkload
         _ = cooked.IsPublished.Should().BeTrue(DescribeWorkloadCook(cooked));
     }
 
-    internal static void SeedCatalogWorkloadScene(Scene scene, BuiltinGeometryCatalog builtins, Uri mesh, IReadOnlyDictionary<Uri, GeometryMaterialSlotMetadata> inventories)
+    internal static void SeedCatalogWorkloadScene(Scene scene, BuiltinGeometryCatalog builtins, AssetPath mesh, IReadOnlyDictionary<AssetPath, GeometryMaterialSlotMetadata> inventories)
     {
         var authoringGeometries = builtins.AuthoringGeometries.ToArray();
         for (var index = 0; index < 98; index++)
@@ -78,7 +79,7 @@ internal static class CatalogWorkload
             };
             var inventory = inventories[geometryUri];
             var target = new MaterialSlotTarget(geometryUri, inventory.Slots.Should().ContainSingle().Which.SlotId, inventory.LayoutRevision);
-            geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = new Uri("asset:///" + WorkloadMaterialPath(index % 2 == 0 ? 0 : index)) });
+            geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = WorkloadMaterialAsset(index % 2 == 0 ? 0 : index) });
             _ = node.AddComponent(geometry);
             var position = new Vector3(index % 10, index / 10, 0);
             position *= 2;
@@ -122,4 +123,6 @@ internal static class CatalogWorkload
     }));
 
     internal static string WorkloadMaterialPath(int index) => string.Create(CultureInfo.InvariantCulture, $"Content/Materials/Group{index % 10}/M{index:D4}.omat.json");
+
+    internal static AssetPath WorkloadMaterialAsset(int index) => AssetPath.Parse(string.Create(CultureInfo.InvariantCulture, $"/Content/Materials/Group{index % 10}/M{index:D4}.omat"));
 }

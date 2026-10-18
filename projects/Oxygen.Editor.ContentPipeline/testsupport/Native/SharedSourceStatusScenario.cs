@@ -47,7 +47,7 @@ internal static class SharedSourceStatusScenario
         _ = cooked.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, cooked.Diagnostics.Select(static issue => issue.Message)));
         _ = cooked.CookedAssets.Count(static asset => asset.Kind == ContentCookAssetKind.Geometry).Should().Be(meshCount);
         var geometry = cooked.CookedAssets.First(static asset => asset.Kind == ContentCookAssetKind.Geometry);
-        var missing = new Uri(geometry.CookedAssetUri, "Missing.ogeo");
+        var missing = geometry.CookedAssetUri.WithName("Missing.ogeo");
         var requested = cooked.CookedAssets.Select(static asset => asset.CookedAssetUri).Prepend(source).Append(missing).ToArray();
         var workers = runner.Count;
         var watch = Stopwatch.StartNew();

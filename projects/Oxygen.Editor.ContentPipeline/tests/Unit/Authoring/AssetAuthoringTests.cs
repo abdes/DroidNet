@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Authoring;
@@ -31,7 +32,7 @@ public sealed class AssetAuthoringTests : IDisposable
             ProjectId = Guid.NewGuid(),
             Name = "Script authoring tests",
             Category = Category.Games,
-            ProjectRoot = this.root,
+            ProjectRoot = FileSystemPath.From(this.root),
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
         };
@@ -61,10 +62,10 @@ public sealed class AssetAuthoringTests : IDisposable
     [TestMethod]
     public void DefaultFolderIsTheBrowsedFolderOrTheKindFolderAtTheMountRoot()
     {
-        _ = AssetAuthoring.GetDefaultFolder(this.Project, "/Content/Player", "Scripts").Should().Be("/Content/Player");
-        _ = AssetAuthoring.GetDefaultFolder(this.Project, "/Content", "Scripts").Should().Be("/Content/Scripts");
-        _ = AssetAuthoring.GetDefaultFolder(this.Project, "/", "Scripts").Should().Be("/Content/Scripts");
-        _ = AssetAuthoring.GetDefaultFolder(this.Project, null, "Input").Should().Be("/Content/Input");
+        _ = AssetAuthoring.GetDefaultFolder(this.Project, AssetPath.Parse("/Content/Player"), "Scripts").Should().Be(AssetPath.Parse("/Content/Player"));
+        _ = AssetAuthoring.GetDefaultFolder(this.Project, AssetPath.Parse("/Content"), "Scripts").Should().Be(AssetPath.Parse("/Content/Scripts"));
+        _ = AssetAuthoring.GetDefaultFolder(this.Project, null, "Scripts").Should().Be(AssetPath.Parse("/Content/Scripts"));
+        _ = AssetAuthoring.GetDefaultFolder(this.Project, null, "Input").Should().Be(AssetPath.Parse("/Content/Input"));
     }
 
     /// <summary>A name that would cook to the same asset as a cataloged file of the kind is rejected.</summary>
@@ -75,15 +76,15 @@ public sealed class AssetAuthoringTests : IDisposable
         this.Catalog("/Content/Player/move.luau");
         var token = this.TestContext.CancellationToken;
 
-        _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.Script, "move", "/Content/Player", token).ConfigureAwait(false))
+        _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.Script, "move", AssetPath.Parse("/Content/Player"), token).ConfigureAwait(false))
             .Should().Contain("move.luau");
-        _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.Script, "jump", "/Content/Player", token).ConfigureAwait(false))
+        _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.Script, "jump", AssetPath.Parse("/Content/Player"), token).ConfigureAwait(false))
             .Should().BeNull();
-        _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.Script, "jump", "/Elsewhere", token).ConfigureAwait(false))
+        _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.Script, "jump", AssetPath.Parse("/Elsewhere"), token).ConfigureAwait(false))
             .Should().NotBeNull();
-        _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.InputFile, new string('a', 64), "/Content/Player", token).ConfigureAwait(false))
+        _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.InputFile, new string('a', 64), AssetPath.Parse("/Content/Player"), token).ConfigureAwait(false))
             .Should().BeNull();
-        _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.InputFile, new string('a', 256), "/Content/Player", token).ConfigureAwait(false))
+        _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.InputFile, new string('a', 256), AssetPath.Parse("/Content/Player"), token).ConfigureAwait(false))
             .Should().NotBeNull();
     }
 
@@ -95,9 +96,9 @@ public sealed class AssetAuthoringTests : IDisposable
         this.Catalog("/Content/Input/NewInput1.input.json");
         this.Catalog("/Content/Input/NewInput2.input-action.json");
 
-        var proposal = await this.Authoring.ProposeAsync(this.Project, AuthoredAssetKind.InputFile, "/Content", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var proposal = await this.Authoring.ProposeAsync(this.Project, AuthoredAssetKind.InputFile, AssetPath.Parse("/Content"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = proposal.Should().Be(new AssetProposal("/Content/Input", "NewInput3"));
+        _ = proposal.Should().Be(new AssetProposal(AssetPath.Parse("/Content/Input"), "NewInput3"));
     }
 
     /// <summary>An input file is written from its template, with its mapping context named after it, and reported.</summary>
@@ -105,14 +106,14 @@ public sealed class AssetAuthoringTests : IDisposable
     [TestMethod]
     public async Task InputFileIsWrittenFromItsTemplate()
     {
-        var reports = new List<string>();
+        var reports = new List<FileSystemPath>();
         this.Authoring.FilesChanged += (_, args) => reports.AddRange(args.CreatedFiles);
 
-        var path = await this.Authoring.CreateAsync(this.Project, AuthoredAssetKind.InputFile, "Player", "/Content/Input", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var path = await this.Authoring.CreateAsync(this.Project, AuthoredAssetKind.InputFile, "Player", AssetPath.Parse("/Content/Input"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = path.Should().Be(Path.Combine(this.root, "Content", "Input", "Player.input.json"));
+        _ = path.Should().Be(FileSystemPath.From(Path.Combine(this.root, "Content", "Input", "Player.input.json")));
         _ = reports.Should().Equal(path);
-        _ = (await File.ReadAllTextAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(AssetTemplates.InputFile("Player"));
+        _ = (await File.ReadAllTextAsync(path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(AssetTemplates.InputFile("Player"));
     }
 
     /// <summary>A new scene goes to the Scenes folder at a mount root, named after its file, with an identity of its own.</summary>
@@ -120,16 +121,16 @@ public sealed class AssetAuthoringTests : IDisposable
     [TestMethod]
     public async Task SceneIsWrittenEmptyWithItsOwnIdentity()
     {
-        var proposal = await this.Authoring.ProposeAsync(this.Project, AuthoredAssetKind.Scene, "/Content", this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = proposal.Should().Be(new AssetProposal("/Content/Scenes", "NewScene1"));
+        var proposal = await this.Authoring.ProposeAsync(this.Project, AuthoredAssetKind.Scene, AssetPath.Parse("/Content"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = proposal.Should().Be(new AssetProposal(AssetPath.Parse("/Content/Scenes"), "NewScene1"));
         _ = Directory.CreateDirectory(Path.Combine(this.root, "Content", "Scenes"));
 
-        var first = await this.Authoring.CreateAsync(this.Project, AuthoredAssetKind.Scene, "Intro", "/Content/Scenes", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var second = await this.Authoring.CreateAsync(this.Project, AuthoredAssetKind.Scene, "Outro", "/Content/Scenes", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var first = await this.Authoring.CreateAsync(this.Project, AuthoredAssetKind.Scene, "Intro", AssetPath.Parse("/Content/Scenes"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var second = await this.Authoring.CreateAsync(this.Project, AuthoredAssetKind.Scene, "Outro", AssetPath.Parse("/Content/Scenes"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = first.Should().Be(Path.Combine(this.root, "Content", "Scenes", "Intro.oscene.json"));
-        using var intro = JsonDocument.Parse(await File.ReadAllTextAsync(first, this.TestContext.CancellationToken).ConfigureAwait(false));
-        using var outro = JsonDocument.Parse(await File.ReadAllTextAsync(second, this.TestContext.CancellationToken).ConfigureAwait(false));
+        _ = first.Should().Be(FileSystemPath.From(Path.Combine(this.root, "Content", "Scenes", "Intro.oscene.json")));
+        using var intro = JsonDocument.Parse(await File.ReadAllTextAsync(first.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        using var outro = JsonDocument.Parse(await File.ReadAllTextAsync(second.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         _ = intro.RootElement.GetProperty("Name").GetString().Should().Be("Intro");
         _ = intro.RootElement.GetProperty("RootNodes").GetArrayLength().Should().Be(0);
         _ = intro.RootElement.GetProperty("Id").GetGuid().Should().NotBe(outro.RootElement.GetProperty("Id").GetGuid());
@@ -140,14 +141,14 @@ public sealed class AssetAuthoringTests : IDisposable
     [TestMethod]
     public async Task MaterialIsWrittenAsAReadableSourceNamedAfterItsFile()
     {
-        var proposal = await this.Authoring.ProposeAsync(this.Project, AuthoredAssetKind.Material, "/Content", this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = proposal.Should().Be(new AssetProposal("/Content/Materials", "NewMaterial1"));
+        var proposal = await this.Authoring.ProposeAsync(this.Project, AuthoredAssetKind.Material, AssetPath.Parse("/Content"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = proposal.Should().Be(new AssetProposal(AssetPath.Parse("/Content/Materials"), "NewMaterial1"));
         _ = Directory.CreateDirectory(Path.Combine(this.root, "Content", "Materials"));
 
-        var path = await this.Authoring.CreateAsync(this.Project, AuthoredAssetKind.Material, "Wood", "/Content/Materials", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var path = await this.Authoring.CreateAsync(this.Project, AuthoredAssetKind.Material, "Wood", AssetPath.Parse("/Content/Materials"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = path.Should().Be(Path.Combine(this.root, "Content", "Materials", "Wood.omat.json"));
-        var source = MaterialSourceReader.Read(await File.ReadAllBytesAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false));
+        _ = path.Should().Be(FileSystemPath.From(Path.Combine(this.root, "Content", "Materials", "Wood.omat.json")));
+        var source = MaterialSourceReader.Read(await File.ReadAllBytesAsync(path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         _ = source.Name.Should().Be("Wood");
         _ = source.AlphaMode.Should().Be(MaterialAlphaMode.Opaque);
         _ = source.DoubleSided.Should().BeFalse();
@@ -161,11 +162,11 @@ public sealed class AssetAuthoringTests : IDisposable
         var existing = Path.Combine(this.root, "Content", "Player", "move.lua");
         await File.WriteAllTextAsync(existing, "-- mine", this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var create = () => this.Authoring.CreateAsync(this.Project, AuthoredAssetKind.Script, "move", "/Content/Player", this.TestContext.CancellationToken);
+        var create = () => this.Authoring.CreateAsync(this.Project, AuthoredAssetKind.Script, "move", AssetPath.Parse("/Content/Player"), this.TestContext.CancellationToken);
 
         _ = await create.Should().ThrowAsync<AssetCreationException>().WithMessage("*move.lua*already exists*").ConfigureAwait(false);
         _ = (await File.ReadAllTextAsync(existing, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("-- mine");
     }
 
-    private void Catalog(string virtualPath) => this.records.Add(new(new Uri("asset://" + virtualPath)));
+    private void Catalog(string virtualPath) => this.records.Add(new(AssetPath.Parse(virtualPath)));
 }

@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using DroidNet.Routing;
 using Oxygen.Editor.ContentBrowser.Shell;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -17,10 +18,22 @@ public sealed class RouteStateMappingTests
     [TestMethod]
     public void MultipleFoldersSurviveRouterNormalization()
     {
-        string[] folders = ["/Cooked/Content/Models/Crate/Geometry", "/Cooked/Content/Models/Crate/Materials"];
+        AssetPath[] folders = [AssetPath.Parse("/Cooked/Content/Models/Crate/Geometry"), AssetPath.Parse("/Cooked/Content/Models/Crate/Materials")];
         var url = "/(left:project//right:assets/tiles)" + RouteStateMapping.BuildSelectedQuery(folders);
         var serialized = DefaultUrlSerializer.Instance.Serialize(DefaultUrlSerializer.Instance.Parse(url));
         _ = RouteStateMapping.ParseSelectedFoldersFromUrl(url).Should().Equal(folders);
         _ = RouteStateMapping.ParseSelectedFoldersFromUrl(serialized).Should().Equal(folders);
+    }
+
+    /// <summary>The query carries escaped virtual paths; a value that is not one selects nothing.</summary>
+    [TestMethod]
+    public void QueryCarriesEscapedVirtualPathsAndIgnoresOtherValues()
+    {
+        var folder = AssetPath.Parse("/Content/Materials");
+
+        _ = RouteStateMapping.BuildSelectedQuery([folder]).Should().Be("?selected=%2FContent%2FMaterials");
+        _ = RouteStateMapping.ParseSelectedFoldersFromUrl("/(left:project//right:assets/tiles)?selected=%2FContent%2FMaterials").Should().Equal(folder);
+        _ = RouteStateMapping.ParseSelectedFoldersFromUrl("/(left:project//right:assets/tiles)?selected=Content%2FMaterials").Should().BeEmpty();
+        _ = RouteStateMapping.BuildSelectedQuery([]).Should().BeEmpty("no folder selected browses the whole project");
     }
 }

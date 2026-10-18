@@ -11,6 +11,7 @@ using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Tests.TestSupport;
 
@@ -75,10 +76,10 @@ internal sealed partial class SceneDocuments : IDisposable
     public void Dispose() => this.Open.Dispose();
 
     private static DocumentFile FileOf(string name)
-        => new(Path.Combine(Root, "Content", name + AssetFileTypes.SceneDescriptor), new Uri($"asset:///Content/{name}{AssetFileTypes.SceneDescriptor}"));
+        => new(FileSystemPath.From(Path.Combine(Root, "Content", name + AssetFileTypes.SceneDescriptor)), AssetPath.Parse($"/Content/{name}{AssetFileTypes.Scene}"));
 
     private void Write(DocumentFile file, Scene scene)
-        => this.Files.Put(file.Path, JsonSerializer.SerializeToUtf8Bytes(scene.Dehydrate(), SceneJsonContext.Default.SceneData));
+        => this.Files.Put(file.Path.FullPath, JsonSerializer.SerializeToUtf8Bytes(scene.Dehydrate(), SceneJsonContext.Default.SceneData));
 
     /// <summary>Files held in memory.</summary>
     internal sealed class MemoryFiles : IAtomicFileStore

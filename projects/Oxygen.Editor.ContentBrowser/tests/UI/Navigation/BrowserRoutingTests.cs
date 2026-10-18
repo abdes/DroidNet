@@ -32,11 +32,11 @@ public sealed partial class BrowserRoutingTests : DroidNet.Tests.VisualUserInter
     [TestMethod]
     public Task ActualBrowserRouterNeverReusesDisposedLayouts() => EnqueueAsync(async () =>
     {
-        var asset = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
+        var asset = CreateNavigationAsset("/Content/Materials/Blue.omat", AssetKind.Material);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([asset]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
-        var state = new ContentBrowserState(projects);
+        var state = new ContentBrowserState();
         var container = new Container();
         await using var containerLifetime = container.ConfigureAwait(true);
         container.RegisterInstance<IProjectContextService>(projects);
@@ -63,7 +63,7 @@ public sealed partial class BrowserRoutingTests : DroidNet.Tests.VisualUserInter
             await WaitForRenderAsync().ConfigureAwait(true);
             var current = outlet.Layout!;
             _ = current.Should().NotBeSameAs(previous).And.NotBeSameAs(first);
-            _ = current.SelectedAsset!.IdentityUri.Should().Be(asset.IdentityUri);
+            _ = current.SelectedAsset!.Identity.Should().Be(asset.Identity);
             _ = current.Query.SearchText.Should().Be("Blue");
             UserControl view = tiles ? container.Resolve<TilesLayoutView>() : container.Resolve<ListLayoutView>();
             ((DroidNet.Mvvm.IViewFor)view).ViewModel = current;

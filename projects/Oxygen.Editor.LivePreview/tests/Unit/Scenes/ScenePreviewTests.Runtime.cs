@@ -114,11 +114,11 @@ public sealed partial class ScenePreviewTests
         var node = new SceneNode(built) { Name = "Saved geometry" };
         built.RootNodes.Add(node);
         var target = new MaterialSlotTarget(
-            new Uri("asset:///Engine/Generated/BasicShapes/Cube"),
+            AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"),
             Guid.Parse("10000000-0000-0000-0000-000000000001"),
             new string('a', 64));
-        var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.GeometryUri };
-        geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = new Uri("asset:///Content/Materials/Saved.omat.json") });
+        var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.Geometry };
+        geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = AssetPath.Parse("/Content/Materials/Saved.omat") });
         node.Components.Add(geometry);
         var document = await fixture.OpenAsync(built).ConfigureAwait(false);
 
