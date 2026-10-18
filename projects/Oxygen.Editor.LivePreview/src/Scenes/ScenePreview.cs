@@ -114,8 +114,6 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                 cancellationToken,
                 out var readinessOutcome)
             ? Task.FromResult(readinessOutcome)
-            : TryClassifyUnresolvedImportedGeometry(scene, node, geometry, out var geometryOutcome)
-            ? Task.FromResult(geometryOutcome)
             : this.ExecuteNodeSyncAsync(
             scene,
             node,

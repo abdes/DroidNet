@@ -100,6 +100,27 @@ public sealed partial class ScenePreviewTests
         _ = (cleared.SlotId, cleared.MaterialPath).Should().Be((target.SlotId, null));
     }
 
+    [TestMethod]
+    public async Task ImportedGeometry_IsAttachedInTheEngine()
+    {
+        using var fixture = new PreviewFixture();
+        var built = fixture.Documents.NewScene();
+        var node = new SceneNode(built) { Name = "Crate" };
+        built.RootNodes.Add(node);
+        node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = new(new Uri("asset:///Engine/Generated/BasicShapes/Cube")) });
+        var document = await fixture.OpenAsync(built).ConfigureAwait(false);
+        _ = await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false);
+        fixture.Requests.Clear();
+        fixture.Results.Clear();
+        var imported = new Uri("asset:///Imported/Crate/Geometry/Crate.ogeo");
+
+        _ = await PreviewFixture.AuthoringOf(document).ExecuteAsync(new SetGeometry([node.Id], imported)).ConfigureAwait(false);
+
+        _ = fixture.World.Commands.OfType<RuntimeSetGeometry>().Should().ContainSingle(command => command.NodeId == node.Id);
+        _ = fixture.Results.SelectMany(static result => result.Diagnostics)
+            .Should().NotContain(static diagnostic => diagnostic.Code == LiveSyncDiagnosticCodes.GeometryUnresolvedAtRuntime);
+    }
+
     private static SetProperties Move(NodeId node, float x)
         => new(new Dictionary<NodeId, PropertyEdit> { [node] = PropertyEdit.SingleEdit(SceneProperties.Transform.PositionX, x) }, "Move");
 }

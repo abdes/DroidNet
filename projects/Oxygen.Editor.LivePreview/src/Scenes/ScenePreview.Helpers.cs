@@ -10,7 +10,6 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Interop;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -19,33 +18,6 @@ namespace Oxygen.Editor.LivePreview.Scenes;
 /// <summary>Builds the outcomes and scopes of projections.</summary>
 internal sealed partial class ScenePreview
 {
-    private static bool TryClassifyUnresolvedImportedGeometry(
-        Scene scene,
-        SceneNode node,
-        GeometryComponent geometry,
-        out SyncOutcome outcome)
-    {
-        if (geometry.Geometry?.Uri is { } uri &&
-            string.Equals(AssetUriHelper.GetMountPoint(uri), "Imported", StringComparison.OrdinalIgnoreCase) &&
-            geometry.Geometry.Asset is null)
-        {
-            outcome = Rejected(
-                SceneOperationKinds.EditGeometry,
-                Scope(
-                    scene,
-                    node,
-                    componentType: nameof(GeometryComponent),
-                    componentName: geometry.Name,
-                    assetVirtualPath: uri.ToString()),
-                LiveSyncDiagnosticCodes.GeometryUnresolvedAtRuntime,
-                $"Imported geometry '{uri}' is not resolved in the authoring catalog; live sync was skipped.");
-            return true;
-        }
-
-        outcome = null!;
-        return false;
-    }
-
     private static SceneNode? FindNode(Scene scene, NodeId nodeId)
     {
         foreach (var root in scene.RootNodes)
