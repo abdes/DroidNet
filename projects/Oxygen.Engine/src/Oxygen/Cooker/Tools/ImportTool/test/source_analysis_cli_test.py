@@ -72,9 +72,11 @@ class SourceAnalysisCliTests(unittest.TestCase):
         self.assertFalse((self.root / ".cooked").exists())
 
     def test_unsupported_job_cannot_overwrite_its_primary_source(self):
-        source = self.root / "script.luau"
-        source.write_text("return 42", encoding="utf-8")
-        manifest = self.manifest([{"type": "script", "source": source.name}])
+        source = self.root / "rubber.physics-material.json"
+        source.write_text('{"name":"Rubber"}', encoding="utf-8")
+        manifest = self.manifest(
+            [{"type": "physics-material-descriptor", "source": source.name}]
+        )
         report = self.root / "failure.json"
         result = self.analyze(manifest, report)
         self.assertNotEqual(result.returncode, 0)
@@ -82,7 +84,7 @@ class SourceAnalysisCliTests(unittest.TestCase):
         self.assertFalse(json.loads(report.read_text(encoding="utf-8"))["complete"])
         result = self.analyze(manifest, source)
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(source.read_text(encoding="utf-8"), "return 42")
+        self.assertEqual(source.read_text(encoding="utf-8"), '{"name":"Rubber"}')
 
     @unittest.skipUnless(os.name == "nt", "Windows case-insensitive path identity")
     def test_report_cannot_create_a_missing_source_through_case_alias(self):
