@@ -37,6 +37,7 @@ using Oxygen.Editor.LivePreview.Content;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.MaterialEditor;
+using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;

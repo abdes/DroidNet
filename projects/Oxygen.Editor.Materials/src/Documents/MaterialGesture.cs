@@ -4,7 +4,7 @@
 
 using Oxygen.Managed.Assets.Authoring.Materials;
 
-namespace Oxygen.Editor.MaterialEditor;
+namespace Oxygen.Editor.Materials.Documents;
 
 /// <summary>
 ///     An edit gesture in progress on a material: the source before it began, and how it ends.

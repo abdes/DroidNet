@@ -6,7 +6,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.Documents;
 using Oxygen.Managed.Assets.Authoring.Materials;
 
-namespace Oxygen.Editor.MaterialEditor.Tests;
+namespace Oxygen.Editor.Materials.Tests.Documents;
 
 /// <summary>Checks the material kind: how a material file opens, saves a copy and follows a relocation.</summary>
 [TestClass]
@@ -26,7 +26,7 @@ public sealed class MaterialDocumentKindTests
         var document = await materials.OpenAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = document.Title.Should().Be("Wood");
-        _ = MaterialDocuments.ContentOf(document).Source.Name.Should().Be("Wood");
+        _ = MaterialDocuments.ContentOf(document).Material.Source.Name.Should().Be("Wood");
     }
 
     /// <summary>A file that is not a material fails the open with the reason.</summary>
@@ -59,7 +59,7 @@ public sealed class MaterialDocumentKindTests
         _ = written.Name.Should().Be("Wood Copy");
         _ = written.TextureReferences["base_color"].Should().Be("/Content/Textures/Bark.otex");
         _ = document.IsDirty.Should().BeTrue();
-        _ = MaterialDocuments.ContentOf(document).Source.Name.Should().Be("Wood");
+        _ = MaterialDocuments.ContentOf(document).Material.Source.Name.Should().Be("Wood");
     }
 
     /// <summary>A relocation renames the material and moves its texture references, without a history entry.</summary>
@@ -79,7 +79,7 @@ public sealed class MaterialDocumentKindTests
             new DocumentRelocation(materials.FileOf("Oak"), document.Version, static path => path.Replace("/Bark.", "/Oak.", StringComparison.Ordinal)),
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var source = MaterialDocuments.ContentOf(document).Source;
+        var source = MaterialDocuments.ContentOf(document).Material.Source;
         _ = document.Title.Should().Be("Oak");
         _ = source.Name.Should().Be("Oak");
         _ = source.TextureReferences["base_color"].Should().Be("/Content/Textures/Oak.otex");

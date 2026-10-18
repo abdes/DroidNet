@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Security.Cryptography;
-using System.Text.Json;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -274,7 +274,7 @@ internal sealed class AssetIdentityReducer
             _ = MaterialSourceReader.Read(bytes);
             canRead = true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
+        catch (AssetFormatException)
         {
             canRead = false;
         }

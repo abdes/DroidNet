@@ -10,6 +10,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Shell.Documents;
 using Testably.Abstractions;

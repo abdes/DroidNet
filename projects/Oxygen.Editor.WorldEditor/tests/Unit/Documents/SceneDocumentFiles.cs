@@ -9,7 +9,7 @@ using DroidNet.Storage.Native;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.MaterialEditor;
+using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;

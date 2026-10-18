@@ -4,7 +4,7 @@
 
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls;
-using Oxygen.Editor.Schemas;
+using Oxygen.Editor.Materials.Documents;
 
 namespace Oxygen.Editor.MaterialEditor;
 

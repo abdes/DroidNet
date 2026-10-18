@@ -4,6 +4,7 @@
 
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Materials.Documents;
 using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.MaterialEditor;
@@ -89,14 +90,11 @@ public sealed partial class MaterialEditorViewModel
 
         if (this.observedContent is { } previous)
         {
-            previous.SourceChanged -= this.OnContentSourceChanged;
+            previous.Material.Changed -= this.OnContentSourceChanged;
         }
 
         this.observedContent = content;
-        if (content is not null)
-        {
-            content.SourceChanged += this.OnContentSourceChanged;
-        }
+        content?.Material.Changed += this.OnContentSourceChanged;
     }
 
     // Undo, redo and relocations change the source behind the controls; the controls show the new values.

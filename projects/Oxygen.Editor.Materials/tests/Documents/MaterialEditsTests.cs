@@ -5,12 +5,13 @@
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Relocation;
-using Oxygen.Editor.MaterialEditor.PropertyPipeline;
+using Oxygen.Editor.Materials.Documents;
+using Oxygen.Editor.Materials.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.MaterialEditor.Tests;
+namespace Oxygen.Editor.Materials.Tests.Documents;
 
 /// <summary>Checks material edits: what they change, what they record in the document's history, and what they refuse.</summary>
 [TestClass]
@@ -30,17 +31,17 @@ public sealed class MaterialEditsTests
         var result = materials.Edits.Apply(document, PropertyEdit.SingleEdit(MaterialDescriptors.Metalness, 0.75f));
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = MaterialDocuments.ContentOf(document).Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.75f);
+        _ = MaterialDocuments.ContentOf(document).Material.Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.75f);
         _ = document.History.UndoStack.Should().ContainSingle();
         _ = document.IsDirty.Should().BeTrue();
 
         _ = materials.Edits.Undo(document).Succeeded.Should().BeTrue();
 
-        _ = MaterialDocuments.ContentOf(document).Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.0f);
+        _ = MaterialDocuments.ContentOf(document).Material.Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.0f);
         _ = document.IsDirty.Should().BeFalse();
 
         _ = materials.Edits.Redo(document).Succeeded.Should().BeTrue();
-        _ = MaterialDocuments.ContentOf(document).Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.75f);
+        _ = MaterialDocuments.ContentOf(document).Material.Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.75f);
     }
 
     /// <summary>A rejected edit changes neither the source nor the history, and is published as a failed operation.</summary>
@@ -52,12 +53,12 @@ public sealed class MaterialEditsTests
         var results = new Mock<IOperationResultPublisher>();
         var edits = new MaterialEdits(materials.Validation, results.Object);
         var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var before = MaterialDocuments.ContentOf(document).Source;
+        var before = MaterialDocuments.ContentOf(document).Material.Source;
 
         var result = edits.Apply(document, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 4.0f));
 
         _ = result.Succeeded.Should().BeFalse();
-        _ = MaterialDocuments.ContentOf(document).Source.Should().BeSameAs(before);
+        _ = MaterialDocuments.ContentOf(document).Material.Source.Should().BeSameAs(before);
         _ = document.History.UndoStack.Should().BeEmpty();
         results.Verify(value => value.Publish(It.Is<OperationResult>(published => published.Status == OperationStatus.Failed)), Times.Once);
     }
@@ -77,13 +78,13 @@ public sealed class MaterialEditsTests
 
         _ = materials.Edits.Apply(document, edit).Succeeded.Should().BeTrue();
 
-        var source = MaterialDocuments.ContentOf(document).Source;
+        var source = MaterialDocuments.ContentOf(document).Material.Source;
         _ = (source.PbrMetallicRoughness.MetallicFactor, source.PbrMetallicRoughness.RoughnessFactor).Should().Be((0.5f, 0.25f));
         _ = source.AlphaMode.Should().Be(MaterialAlphaMode.Mask);
         _ = document.History.UndoStack.Should().ContainSingle();
 
         _ = materials.Edits.Undo(document).Succeeded.Should().BeTrue();
-        _ = MaterialDocuments.ContentOf(document).Source.AlphaMode.Should().Be(MaterialAlphaMode.Opaque);
+        _ = MaterialDocuments.ContentOf(document).Material.Source.AlphaMode.Should().Be(MaterialAlphaMode.Opaque);
     }
 
     /// <summary>A save of a material that does not match the engine's schema is refused with the reason, and writes nothing.</summary>
@@ -98,10 +99,10 @@ public sealed class MaterialEditsTests
         _ = materials.Edits.Apply(document, PropertyEdit.SingleEdit(MaterialDescriptors.Metalness, 0.5f));
 
         // The edits refuse such a source; it reaches the content only from outside them, as a broken history entry would.
-        var pbr = content.Source.PbrMetallicRoughness;
-        content.Replace(content.Source with
+        var pbr = content.Material.Source.PbrMetallicRoughness;
+        content.Material.Replace(content.Material.Source with
         {
-            PbrMetallicRoughness = new(pbr.BaseColorR, pbr.BaseColorG, pbr.BaseColorB, pbr.BaseColorA, pbr.MetallicFactor, roughnessFactor: 4.0f, pbr.BaseColorTexture, pbr.MetallicRoughnessTexture),
+            PbrMetallicRoughness = new(pbr.BaseColorR, pbr.BaseColorG, pbr.BaseColorB, pbr.BaseColorA, pbr.MetallicFactor, roughnessFactor: 4.0f),
         });
 
         var result = await document.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -149,7 +150,7 @@ public sealed class MaterialEditsTests
 
         _ = document.Content.HasEditsInProgress.Should().BeFalse();
         _ = document.History.UndoStack.Should().ContainSingle();
-        _ = MaterialDocuments.ContentOf(document).Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(1.0f);
+        _ = MaterialDocuments.ContentOf(document).Material.Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(1.0f);
     }
 
     /// <summary>A cancelled gesture restores the source it began with, and Undo during a gesture cancels it.</summary>
@@ -165,7 +166,7 @@ public sealed class MaterialEditsTests
         _ = materials.Edits.CanUndo(document).Should().BeTrue();
         _ = materials.Edits.Undo(document).Succeeded.Should().BeTrue();
 
-        _ = MaterialDocuments.ContentOf(document).Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.5f);
+        _ = MaterialDocuments.ContentOf(document).Material.Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.5f);
         _ = document.History.UndoStack.Should().BeEmpty();
         _ = materials.Edits.Preview(document, session, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.1f)).Succeeded.Should().BeFalse("the gesture ended");
     }
@@ -197,12 +198,12 @@ public sealed class MaterialEditsTests
         var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = materials.Edits.SetTexture(document, "base_color", "/Content/Textures/Bark.otex").Succeeded.Should().BeTrue();
-        _ = MaterialDocuments.ContentOf(document).Source.TextureReferences["base_color"].Should().Be("/Content/Textures/Bark.otex");
+        _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences["base_color"].Should().Be("/Content/Textures/Bark.otex");
         _ = materials.Edits.SetTexture(document, "base_color", null).Succeeded.Should().BeTrue();
-        _ = MaterialDocuments.ContentOf(document).Source.TextureReferences.Should().NotContainKey("base_color");
+        _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences.Should().NotContainKey("base_color");
 
-        _ = materials.Edits.SetTexture(document, "no_such_channel", "/Content/Textures/Bark.otex").Succeeded.Should().BeFalse();
-        _ = materials.Edits.SetTexture(document, "base_color", "Textures/Bark.otex").Succeeded.Should().BeFalse();
+        _ = materials.Edits.SetTexture(document, "no_such_channel", "/Content/Textures/Bark.otex").Code.Should().Be(MaterialDiagnosticCodes.TextureChannelInvalid);
+        _ = materials.Edits.SetTexture(document, "base_color", "Textures/Bark.otex").Code.Should().Be(MaterialDiagnosticCodes.TexturePathInvalid);
         _ = document.History.UndoStack.Should().HaveCount(2);
     }
 
@@ -221,6 +222,6 @@ public sealed class MaterialEditsTests
 
         _ = edits.Undo(document).Succeeded.Should().BeTrue();
 
-        _ = MaterialDocuments.ContentOf(document).Source.TextureReferences["base_color"].Should().Be("/Content/Textures/Oak.otex");
+        _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences["base_color"].Should().Be("/Content/Textures/Oak.otex");
     }
 }

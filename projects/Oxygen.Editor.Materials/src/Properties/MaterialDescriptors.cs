@@ -5,7 +5,7 @@
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Authoring.Materials;
 
-namespace Oxygen.Editor.MaterialEditor.PropertyPipeline;
+namespace Oxygen.Editor.Materials.Properties;
 
 /// <summary>
 /// Schema-driven property descriptors for <c>oxygen.material-descriptor.schema.json</c>.
@@ -37,98 +37,137 @@ public sealed class MaterialDescriptors
         this.ById = byId;
     }
 
+    /// <summary>Gets the base color red channel descriptor.</summary>
+    public static PropertyId<float> BaseColorR { get; } = new(Kind, "/parameters/base_color/0");
+
+    /// <summary>Gets the base color green channel descriptor.</summary>
+    public static PropertyId<float> BaseColorG { get; } = new(Kind, "/parameters/base_color/1");
+
+    /// <summary>Gets the base color blue channel descriptor.</summary>
+    public static PropertyId<float> BaseColorB { get; } = new(Kind, "/parameters/base_color/2");
+
+    /// <summary>Gets the base color alpha channel descriptor.</summary>
+    public static PropertyId<float> BaseColorA { get; } = new(Kind, "/parameters/base_color/3");
+
+    /// <summary>Gets the metalness scalar descriptor.</summary>
+    public static PropertyId<float> Metalness { get; } = new(Kind, "/parameters/metalness");
+
+    /// <summary>Gets the roughness scalar descriptor.</summary>
+    public static PropertyId<float> Roughness { get; } = new(Kind, "/parameters/roughness");
+
+    /// <summary>Gets the ambient occlusion scalar descriptor.</summary>
+    public static PropertyId<float> AmbientOcclusion { get; } = new(Kind, "/parameters/ambient_occlusion");
+
+    /// <summary>Gets the alpha cutoff descriptor.</summary>
+    public static PropertyId<float> AlphaCutoff { get; } = new(Kind, "/parameters/alpha_cutoff");
+
+    /// <summary>Gets the normal texture scale descriptor.</summary>
+    public static PropertyId<float> NormalScale { get; } = new(Kind, "/parameters/normal_scale");
+
+    /// <summary>Gets the double-sided flag descriptor.</summary>
+    public static PropertyId<bool> DoubleSided { get; } = new(Kind, "/parameters/double_sided");
+
+    /// <summary>Gets the alpha mode descriptor.</summary>
+    public static PropertyId<MaterialAlphaMode> AlphaMode { get; } = new(Kind, "/alpha_mode");
+
+    /// <summary>Gets the shared catalog instance.</summary>
+    public static MaterialDescriptors Catalog { get; } = Build();
+
     /// <summary>
     /// Gets the descriptor table, indexed by <see cref="PropertyId"/>.
     /// </summary>
     public IReadOnlyDictionary<PropertyId, PropertyDescriptor> ById { get; }
 
-    /// <summary>The base color red channel descriptor.</summary>
-    public static PropertyId<float> BaseColorR { get; } = new(Kind, "/parameters/base_color/0");
-
-    /// <summary>The base color green channel descriptor.</summary>
-    public static PropertyId<float> BaseColorG { get; } = new(Kind, "/parameters/base_color/1");
-
-    /// <summary>The base color blue channel descriptor.</summary>
-    public static PropertyId<float> BaseColorB { get; } = new(Kind, "/parameters/base_color/2");
-
-    /// <summary>The base color alpha channel descriptor.</summary>
-    public static PropertyId<float> BaseColorA { get; } = new(Kind, "/parameters/base_color/3");
-
-    /// <summary>The metalness scalar descriptor.</summary>
-    public static PropertyId<float> Metalness { get; } = new(Kind, "/parameters/metalness");
-
-    /// <summary>The roughness scalar descriptor.</summary>
-    public static PropertyId<float> Roughness { get; } = new(Kind, "/parameters/roughness");
-
-    /// <summary>The ambient occlusion scalar descriptor.</summary>
-    public static PropertyId<float> AmbientOcclusion { get; } = new(Kind, "/parameters/ambient_occlusion");
-
-    /// <summary>The alpha cutoff descriptor.</summary>
-    public static PropertyId<float> AlphaCutoff { get; } = new(Kind, "/parameters/alpha_cutoff");
-
-    /// <summary>The normal texture scale descriptor.</summary>
-    public static PropertyId<float> NormalScale { get; } = new(Kind, "/parameters/normal_scale");
-
-    /// <summary>The double-sided flag descriptor.</summary>
-    public static PropertyId<bool> DoubleSided { get; } = new(Kind, "/parameters/double_sided");
-
-    /// <summary>The alpha mode descriptor.</summary>
-    public static PropertyId<MaterialAlphaMode> AlphaMode { get; } = new(Kind, "/alpha_mode");
-
-    /// <summary>The shared catalog instance.</summary>
-    public static MaterialDescriptors Catalog { get; } = Build();
-
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0051:Method is too long", Justification = "simple initialization code better kept together")]
     private static MaterialDescriptors Build()
     {
         var unitFloat = new EditorAnnotation { Group = "Parameters", Renderer = "slider", Step = 0.01, SoftMin = 0.0, SoftMax = 1.0 };
         var byId = new Dictionary<PropertyId, PropertyDescriptor>();
 
-        Register(byId, BaseColorR, unitFloat with { Renderer = "color-rgba" },
+        Register(
+            byId,
+            BaseColorR,
+            unitFloat with { Renderer = "color-rgba" },
             static state => state.Source.PbrMetallicRoughness.BaseColorR,
             static (state, v) => state.ReplacePbr(p => Pbr(p, baseColorR: v)),
             ValidateUnitFloat);
-        Register(byId, BaseColorG, unitFloat with { Renderer = "color-rgba" },
+
+        Register(
+            byId,
+            BaseColorG,
+            unitFloat with { Renderer = "color-rgba" },
             static state => state.Source.PbrMetallicRoughness.BaseColorG,
             static (state, v) => state.ReplacePbr(p => Pbr(p, baseColorG: v)),
             ValidateUnitFloat);
-        Register(byId, BaseColorB, unitFloat with { Renderer = "color-rgba" },
+
+        Register(
+            byId,
+            BaseColorB,
+            unitFloat with { Renderer = "color-rgba" },
             static state => state.Source.PbrMetallicRoughness.BaseColorB,
             static (state, v) => state.ReplacePbr(p => Pbr(p, baseColorB: v)),
             ValidateUnitFloat);
-        Register(byId, BaseColorA, unitFloat with { Renderer = "color-rgba" },
+
+        Register(
+            byId,
+            BaseColorA,
+            unitFloat with { Renderer = "color-rgba" },
             static state => state.Source.PbrMetallicRoughness.BaseColorA,
             static (state, v) => state.ReplacePbr(p => Pbr(p, baseColorA: v)),
             ValidateUnitFloat);
-        Register(byId, Metalness, unitFloat,
+
+        Register(
+            byId,
+            Metalness,
+            unitFloat,
             static state => state.Source.PbrMetallicRoughness.MetallicFactor,
             static (state, v) => state.ReplacePbr(p => Pbr(p, metallicFactor: v)),
             ValidateUnitFloat);
-        Register(byId, Roughness, unitFloat,
+
+        Register(
+            byId,
+            Roughness,
+            unitFloat,
             static state => state.Source.PbrMetallicRoughness.RoughnessFactor,
             static (state, v) => state.ReplacePbr(p => Pbr(p, roughnessFactor: v)),
             ValidateUnitFloat);
-        Register(byId, AlphaCutoff, unitFloat,
+
+        Register(
+            byId,
+            AlphaCutoff,
+            unitFloat,
             static state => state.Source.AlphaCutoff,
             static (state, v) => state.Replace(s => WithAlphaCutoff(s, v)),
             ValidateUnitFloat);
 
-        Register(byId, AmbientOcclusion, unitFloat,
+        Register(
+            byId,
+            AmbientOcclusion,
+            unitFloat,
             static state => state.Source.OcclusionStrength,
             static (state, v) => state.Replace(s => WithOcclusionStrength(s, v)),
             ValidateUnitFloat);
 
-        Register(byId, NormalScale,
+        Register(
+            byId,
+            NormalScale,
             new EditorAnnotation { Group = "Parameters", Renderer = "numberbox", Step = 0.01, SoftMin = 0.0, SoftMax = 4.0 },
             static state => state.Source.NormalScale,
             static (state, v) => state.Replace(s => WithNormalScale(s, v)),
             ValidateNonNegativeFloat);
 
-        Register(byId, DoubleSided, new EditorAnnotation { Group = "Surface", Renderer = "checkbox" },
+        Register(
+            byId,
+            DoubleSided,
+            new EditorAnnotation { Group = "Surface", Renderer = "checkbox" },
             static state => state.Source.DoubleSided,
             static (state, v) => state.Replace(s => WithDoubleSided(s, v)),
             static _ => ValidationResult.Ok);
 
-        Register(byId, AlphaMode, new EditorAnnotation { Group = "Surface", Renderer = "enum-dropdown" },
+        Register(
+            byId,
+            AlphaMode,
+            new EditorAnnotation { Group = "Surface", Renderer = "enum-dropdown" },
             static state => state.Source.AlphaMode,
             static (state, v) => state.SetAlphaMode(v),
             static value => Enum.IsDefined(value)
@@ -194,27 +233,13 @@ public sealed class MaterialDescriptors
             baseColorB: baseColorB ?? source.BaseColorB,
             baseColorA: baseColorA ?? source.BaseColorA,
             metallicFactor: metallicFactor ?? source.MetallicFactor,
-            roughnessFactor: roughnessFactor ?? source.RoughnessFactor,
-            baseColorTexture: source.BaseColorTexture,
-            metallicRoughnessTexture: source.MetallicRoughnessTexture);
+            roughnessFactor: roughnessFactor ?? source.RoughnessFactor);
 
     private static MaterialSource WithAlphaCutoff(MaterialSource source, float v) => source with { AlphaCutoff = v };
 
     private static MaterialSource WithDoubleSided(MaterialSource source, bool v) => source with { DoubleSided = v };
 
-    private static MaterialSource WithNormalScale(MaterialSource source, float scale)
-    {
-        var normal = source.NormalTexture is { } n
-            ? (NormalTextureRef?)(n with { Scale = scale })
-            : null;
-        return source with { NormalTexture = normal, NormalScale = scale };
-    }
+    private static MaterialSource WithNormalScale(MaterialSource source, float scale) => source with { NormalScale = scale };
 
-    private static MaterialSource WithOcclusionStrength(MaterialSource source, float strength)
-    {
-        var occlusion = source.OcclusionTexture is { } o
-            ? (OcclusionTextureRef?)(o with { Strength = strength })
-            : null;
-        return source with { OcclusionTexture = occlusion, OcclusionStrength = strength };
-    }
+    private static MaterialSource WithOcclusionStrength(MaterialSource source, float strength) => source with { OcclusionStrength = strength };
 }

@@ -11,7 +11,7 @@ using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.MaterialEditor.PropertyPipeline;
+using Oxygen.Editor.Materials.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Cooking;
 using static DroidNet.Tests.UiTestHosting;

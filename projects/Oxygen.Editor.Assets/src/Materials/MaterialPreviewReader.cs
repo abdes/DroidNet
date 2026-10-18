@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Assets.Diagnostics;
 
 namespace Oxygen.Editor.Assets.Materials;
 
@@ -68,7 +69,7 @@ internal static class MaterialPreviewReader
             var pbr = source.PbrMetallicRoughness;
             return new MaterialPreviewColor(pbr.BaseColorR, pbr.BaseColorG, pbr.BaseColorB, pbr.BaseColorA);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or FormatException or System.Text.Json.JsonException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or AssetFormatException)
         {
             return null;
         }

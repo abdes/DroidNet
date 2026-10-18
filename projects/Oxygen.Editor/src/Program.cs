@@ -29,7 +29,7 @@ using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Diagnostics;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.MaterialEditor;
+using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
@@ -460,7 +460,10 @@ public static partial class Program
         container.RegisterMapping<ContentPipeline.Publication.ICookPublicationReader, ContentPipeline.Publication.CookPublicationService>();
         container.Register<ContentPipeline.Mounting.CookedContentMountService>(Reuse.Singleton);
         container.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
+        // Materials: one document kind and one set of edits for every workspace window.
         container.Register<MaterialValidation>(Reuse.Singleton);
+        container.Register<MaterialDocumentKind>(Reuse.Singleton);
+        container.Register<MaterialEdits>(Reuse.Singleton);
 
         // The session's asset relocations, resolved by undo, redo and paste in every open document. Created here, so
         // a workspace child container never creates a second instance that the root's services would not see.

@@ -4,7 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.MaterialEditor;
+namespace Oxygen.Editor.Materials.Documents;
 
 /// <content>Logging for <see cref="MaterialEdits"/>.</content>
 public sealed partial class MaterialEdits

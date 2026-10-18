@@ -5,7 +5,8 @@
 namespace Oxygen.Managed.Assets.Authoring.Materials;
 
 /// <summary>
-/// PBR metallic-roughness parameters aligned with the glTF 2.0 model.
+/// PBR metallic-roughness parameters aligned with the glTF 2.0 model. The textures are in
+/// <see cref="MaterialSource.TextureReferences"/>.
 /// </summary>
 public sealed record MaterialPbrMetallicRoughness
 {
@@ -18,17 +19,13 @@ public sealed record MaterialPbrMetallicRoughness
     /// <param name="baseColorA">Base color alpha channel.</param>
     /// <param name="metallicFactor">Metallic factor.</param>
     /// <param name="roughnessFactor">Roughness factor.</param>
-    /// <param name="baseColorTexture">Optional base color texture reference.</param>
-    /// <param name="metallicRoughnessTexture">Optional packed metallic-roughness texture reference.</param>
     public MaterialPbrMetallicRoughness(
         float baseColorR,
         float baseColorG,
         float baseColorB,
         float baseColorA,
         float metallicFactor,
-        float roughnessFactor,
-        MaterialTextureRef? baseColorTexture,
-        MaterialTextureRef? metallicRoughnessTexture)
+        float roughnessFactor)
     {
         this.BaseColorR = baseColorR;
         this.BaseColorG = baseColorG;
@@ -36,8 +33,6 @@ public sealed record MaterialPbrMetallicRoughness
         this.BaseColorA = baseColorA;
         this.MetallicFactor = metallicFactor;
         this.RoughnessFactor = roughnessFactor;
-        this.BaseColorTexture = baseColorTexture;
-        this.MetallicRoughnessTexture = metallicRoughnessTexture;
     }
 
     /// <summary>
@@ -69,14 +64,4 @@ public sealed record MaterialPbrMetallicRoughness
     /// Gets the roughness factor.
     /// </summary>
     public float RoughnessFactor { get; }
-
-    /// <summary>
-    /// Gets the optional base color texture reference.
-    /// </summary>
-    public MaterialTextureRef? BaseColorTexture { get; }
-
-    /// <summary>
-    /// Gets the optional packed metallic-roughness texture reference.
-    /// </summary>
-    public MaterialTextureRef? MetallicRoughnessTexture { get; }
 }

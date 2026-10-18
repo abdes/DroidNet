@@ -167,9 +167,7 @@ public sealed class AssetRuleTests
             stream,
             new MaterialSource(
                 "Wood",
-                new MaterialPbrMetallicRoughness(r, g, b, a, metallicFactor: 0.0f, roughnessFactor: 0.5f, baseColorTexture: null, metallicRoughnessTexture: null),
-                normalTexture: null,
-                occlusionTexture: null,
+                new MaterialPbrMetallicRoughness(r, g, b, a, metallicFactor: 0.0f, roughnessFactor: 0.5f),
                 alphaMode: MaterialAlphaMode.Opaque,
                 alphaCutoff: 0.5f,
                 doubleSided: false));

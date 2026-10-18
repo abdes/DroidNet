@@ -7,12 +7,12 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.MaterialEditor.PropertyPipeline;
+using Oxygen.Editor.Materials.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.MaterialEditor;
+namespace Oxygen.Editor.Materials.Documents;
 
 /// <summary>
 ///     Edits material documents: each accepted change replaces the material's source and records one entry, whose undo
@@ -67,7 +67,7 @@ public sealed partial class MaterialEdits(
             return rejected;
         }
 
-        var state = new MaterialEditState(content.Source);
+        var state = new MaterialEditState(content.Material.Source);
         PropertyApply.ApplyToTarget(state, edit, MaterialDescriptors.Catalog.ById);
         if (this.ValidateEdited(document, state.Source) is { } invalid)
         {
@@ -91,18 +91,12 @@ public sealed partial class MaterialEdits(
         ArgumentException.ThrowIfNullOrWhiteSpace(channel);
         var content = ContentOf(document);
         content.Gesture?.Finish(commit: true);
-        if (!MaterialSource.TextureChannels.Contains(channel, StringComparer.Ordinal))
+        if (Material.CheckTexture(channel, virtualPath) is { } code)
         {
-            return this.Reject(document, "MATERIAL_TEXTURE_CHANNEL_INVALID", $"Texture channel '{channel}' is not supported.");
+            return this.Reject(document, code, $"The {channel} texture cannot be '{virtualPath}'.");
         }
 
-        if (virtualPath is not null
-            && (!Oxygen.Managed.Assets.Filesystem.VirtualPath.IsCanonicalAbsolute(virtualPath) || virtualPath.IndexOf('/', 1) < 2))
-        {
-            return this.Reject(document, "MATERIAL_TEXTURE_PATH_INVALID", $"Texture channel '{channel}' requires a canonical absolute virtual path.");
-        }
-
-        var updated = content.Source.WithTextureReference(channel, virtualPath);
+        var updated = content.Material.Source.WithTextureReference(channel, virtualPath);
         if (this.ValidateEdited(document, updated) is { } invalid)
         {
             return invalid;
@@ -125,7 +119,7 @@ public sealed partial class MaterialEdits(
         content.Gesture?.Finish(commit: true);
         var session = new MaterialEditSession(document.Id, Guid.NewGuid());
         MaterialGesture? gesture = null;
-        gesture = new MaterialGesture(session, $"Edit {field}", content.Source, commit => this.FinishGesture(document, content, gesture!, commit));
+        gesture = new MaterialGesture(session, $"Edit {field}", content.Material.Source, commit => this.FinishGesture(document, content, gesture!, commit));
         content.Gesture = gesture;
         return session;
     }
@@ -151,14 +145,14 @@ public sealed partial class MaterialEdits(
             return rejected;
         }
 
-        var state = new MaterialEditState(content.Source);
+        var state = new MaterialEditState(content.Material.Source);
         PropertyApply.ApplyToTarget(state, edit, MaterialDescriptors.Catalog.ById);
         if (this.ValidateEdited(document, state.Source) is { } invalid)
         {
             return invalid;
         }
 
-        content.Replace(state.Source);
+        content.Material.Replace(state.Source);
         return Accepted;
     }
 
@@ -243,13 +237,13 @@ public sealed partial class MaterialEdits(
     // One entry per accepted change; undoing it records the inverse, which the history routes to the other stack.
     private void Commit(Document document, MaterialContent content, MaterialSource source, string label)
     {
-        var previous = content.Source;
-        if (MaterialContent.SameSource(previous, source))
+        var previous = content.Material.Source;
+        if (Material.AreSame(previous, source))
         {
             return;
         }
 
-        content.Replace(source);
+        content.Material.Replace(source);
         document.History.AddChange(new SimpleAction(() => this.Restore(document, previous, label))
         {
             Key = new MaterialHistoryKey(label, previous),
@@ -267,8 +261,8 @@ public sealed partial class MaterialEdits(
         }
 
         content.Gesture = null;
-        var last = content.Source;
-        content.Replace(gesture.Before);
+        var last = content.Material.Source;
+        content.Material.Replace(gesture.Before);
         if (commit)
         {
             this.Commit(document, content, last, gesture.Label);
@@ -287,7 +281,7 @@ public sealed partial class MaterialEdits(
         {
             if (!descriptors.TryGetValue(id, out var descriptor))
             {
-                return this.Reject(document, "PROPERTY_UNKNOWN", $"Unknown property id: {id.Qualified()}.");
+                return this.Reject(document, MaterialDiagnosticCodes.PropertyUnknown, $"Unknown property id: {id.Qualified()}.");
             }
 
             var check = descriptor.ValidateBoxed(value);
@@ -301,7 +295,9 @@ public sealed partial class MaterialEdits(
     }
 
     private MaterialEditResult? ValidateEdited(Document document, MaterialSource source)
-        => validation.ValidateEdited(source) is { } problem ? this.Reject(document, "MATERIAL_SCHEMA_REJECTED", problem) : null;
+        => validation.ValidateEdited(source) is { } problem
+            ? this.Reject(document, problem.Code, string.IsNullOrEmpty(problem.Explanation) ? problem.Message : $"{problem.Message} {problem.Explanation}")
+            : null;
 
     private MaterialEditResult Reject(Document document, string code, string message)
     {
@@ -313,7 +309,7 @@ public sealed partial class MaterialEdits(
             code,
             "Material property edit was rejected.",
             message);
-        return new MaterialEditResult(Succeeded: false, OperationId: operationId);
+        return new MaterialEditResult(Succeeded: false, OperationId: operationId, code);
     }
 
     private MaterialSource FollowRedirects(Document document, MaterialSource source, bool warn)
@@ -323,7 +319,7 @@ public sealed partial class MaterialEdits(
             return source;
         }
 
-        var resolved = MaterialContent.Retarget(source, path =>
+        var resolved = Material.Retarget(source, path =>
         {
             var current = redirects.Resolve(path);
             return string.Equals(current, path, StringComparison.Ordinal) ? null : current;
@@ -334,7 +330,7 @@ public sealed partial class MaterialEdits(
         }
 
         // Warn only for textures the step brings back; one the material already shows as missing was reported before.
-        var shown = ContentOf(document).Source.TextureReferences.Values.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var shown = ContentOf(document).Material.Source.TextureReferences.Values.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var deleted = resolved.TextureReferences.Values
             .Where(path => !shown.Contains(path) && redirects.WasDeleted(new Uri(Oxygen.Managed.Core.AssetUris.Scheme + "://" + path)))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -346,7 +342,7 @@ public sealed partial class MaterialEdits(
                 document,
                 OperationStatus.SucceededWithWarnings,
                 DiagnosticSeverity.Warning,
-                "MATERIAL_RESTORED_DELETED_TEXTURE",
+                MaterialDiagnosticCodes.TextureRestoredDeleted,
                 "Restored a reference to a deleted texture",
                 $"{names} was deleted, so the restored reference shows as missing until you choose another texture.");
         }

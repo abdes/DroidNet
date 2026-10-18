@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Text.Json;
 using Oxygen.Editor.Documents;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Assets.Diagnostics;
 
-namespace Oxygen.Editor.MaterialEditor;
+namespace Oxygen.Editor.Materials.Documents;
 
 /// <summary>
 ///     The material document kind: a material's source descriptor, edited as a <see cref="MaterialContent"/>.
@@ -32,7 +32,7 @@ public sealed class MaterialDocumentKind(MaterialValidation validation) : IDocum
         {
             source = MaterialSourceReader.Read(content.Span);
         }
-        catch (Exception exception) when (exception is JsonException or InvalidDataException or InvalidOperationException or FormatException)
+        catch (AssetFormatException exception)
         {
             return Task.FromResult(DocumentDecodeResult.Failed($"'{Path.GetFileName(file.Path)}' is not a valid material: {exception.Message}"));
         }

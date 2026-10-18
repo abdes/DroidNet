@@ -297,11 +297,7 @@ public sealed partial class AssetIdentityReducerTests
                     0.0f,
                     1.0f,
                     metallicFactor: 0.0f,
-                    roughnessFactor: 0.5f,
-                    baseColorTexture: null,
-                    metallicRoughnessTexture: null),
-                normalTexture: null,
-                occlusionTexture: null,
+                    roughnessFactor: 0.5f),
                 alphaMode: MaterialAlphaMode.Opaque,
                 alphaCutoff: 0.5f,
                 doubleSided: false));

@@ -17,6 +17,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.MaterialEditor;
+using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
@@ -43,8 +44,6 @@ public partial class WorkspaceViewModel
                 resolver.Resolve<ISceneNodeInteraction>(IfUnresolved.ReturnDefault),
                 resolver.Resolve<IAssetRedirects>(IfUnresolved.ReturnDefault)),
             Reuse.Singleton);
-        childContainer.Register<MaterialDocumentKind>(Reuse.Singleton);
-        childContainer.Register<MaterialEdits>(Reuse.Singleton);
         childContainer.RegisterDelegate(
             resolver => new OpenDocuments(
                 [resolver.Resolve<SceneDocumentKind>(), resolver.Resolve<MaterialDocumentKind>()],

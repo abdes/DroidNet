@@ -32,7 +32,7 @@ public sealed partial class MaterialEditorViewModelTests
         editor.MetallicFactor = 0.25;
         await WaitForEditsAsync(document, entries: 1).ConfigureAwait(false);
 
-        _ = MaterialDocuments.ContentOf(document).Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.25f);
+        _ = MaterialDocuments.ContentOf(document).Material.Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.25f);
         _ = editor.IsDirty.Should().BeTrue();
 
         await editor.SaveAsync().ConfigureAwait(false);
@@ -54,7 +54,7 @@ public sealed partial class MaterialEditorViewModelTests
         editor.SetBaseColor(new ColorChannels(0.5, 0.25, 0.125, 1.0));
         await WaitForEditsAsync(document, entries: 1).ConfigureAwait(false);
 
-        var pbr = MaterialDocuments.ContentOf(document).Source.PbrMetallicRoughness;
+        var pbr = MaterialDocuments.ContentOf(document).Material.Source.PbrMetallicRoughness;
         _ = (pbr.BaseColorR, pbr.BaseColorG, pbr.BaseColorB).Should().Be((0.5f, 0.25f, 0.125f));
         _ = document.History.UndoStack.Should().ContainSingle();
     }
@@ -147,7 +147,7 @@ public sealed partial class MaterialEditorViewModelTests
 
         _ = editor.DisplayName.Should().Be("Oak");
         _ = editor.MaterialUriText.Should().Be(materials.FileOf("Oak").AssetUri.ToString());
-        _ = MaterialDocuments.ContentOf(document).Source.TextureReferences["base_color"].Should().Be("/Content/Textures/Oak.otex");
+        _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences["base_color"].Should().Be("/Content/Textures/Oak.otex");
         _ = editor.IsDirty.Should().BeFalse();
     }
 

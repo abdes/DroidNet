@@ -252,14 +252,14 @@ registry's validation in S1.10.
 ### 3.7 The material kind
 
 Materials become documents of the material kind, the second kind after scenes.
-The model stays `MaterialSource` (immutable); `Material` in World comes with the
-rest of S1.8.
+The model is `Material` in `Oxygen.Editor.Materials`, over the immutable
+`MaterialSource`.
 
-- `MaterialDocumentKind` (Material Editor) opens `.omat.json` files: decode with
+- `MaterialDocumentKind` (Materials) opens `.omat.json` files: decode with
   `MaterialSourceReader`, then name the source from the file stem, as
   `Document.Title` does. A file that does not decode fails the open with the
   reader's message.
-- `MaterialContent : IDocumentContent` holds the current `MaterialSource` and
+- `MaterialContent : IDocumentContent` holds the `Material` and
   the open gesture, if any. `HasEditsInProgress` is the open gesture;
   `FinishEditsAsync` commits it as one history entry. `Capture` validates
   against the engine schema (`MaterialSchemaValidator`; a refusal carries the
@@ -384,7 +384,7 @@ closability comes from the descriptor (3.6).
 | `Document`, `OpenDocuments`, kinds and contents            | `Oxygen.Editor.Documents`                   |
 | `DocumentTab`, `IDocumentArea`, `DocumentEditorDescriptor` | `Oxygen.Editor.Shell`                       |
 | `EditorDocumentService`, close coordinator, prompts        | `Oxygen.Editor.Documents` until S1.10       |
-| `MaterialDocumentKind`, `MaterialContent`, `MaterialEdits` | `Oxygen.Editor.MaterialEditor`              |
+| `MaterialDocumentKind`, `MaterialContent`, `MaterialEdits` | `Oxygen.Editor.Materials`                   |
 | `DocumentRelocations`, `AssetTemplates.Material`           | `Oxygen.Editor.ContentPipeline`             |
 | Open-document cook registrar                               | `Oxygen.Editor.ContentPipeline` until S1.11 |
 | Cooked Inspector panel                                     | `Oxygen.Editor.WorldEditor` until S1.12     |

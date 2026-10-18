@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 using Json.Schema;
 using Oxygen.Editor.Schemas;
 
-namespace Oxygen.Editor.MaterialEditor;
+namespace Oxygen.Editor.Materials.Properties;
 
 /// <summary>
 /// Validates authored material JSON against the engine schema embedded

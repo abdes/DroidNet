@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.ContentPipeline.Relocation;
 

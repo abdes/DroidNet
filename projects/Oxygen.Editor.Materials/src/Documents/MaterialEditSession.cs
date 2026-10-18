@@ -5,7 +5,7 @@
 using System.Runtime.InteropServices;
 using DroidNet.Documents;
 
-namespace Oxygen.Editor.MaterialEditor;
+namespace Oxygen.Editor.Materials.Documents;
 
 /// <summary>
 ///     Names an edit gesture on a material document, such as dragging a slider: its previews and its end.

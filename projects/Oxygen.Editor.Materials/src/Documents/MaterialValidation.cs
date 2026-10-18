@@ -5,9 +5,12 @@
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.Materials.Properties;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Assets.Diagnostics;
+using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.MaterialEditor;
+namespace Oxygen.Editor.Materials.Documents;
 
 /// <summary>
 ///     Checks material sources against the engine's material schema, and an edited source against the editor's overlay
@@ -37,8 +40,11 @@ public sealed partial class MaterialValidation
     ///     Checks a source about to be saved against the engine's schema.
     /// </summary>
     /// <param name="source">The source to save.</param>
-    /// <returns>Why the source cannot be saved, or <see langword="null"/> when it can.</returns>
-    public string? ValidateForSave(MaterialSource source)
+    /// <returns>
+    ///     Why the source cannot be saved, with the code <see cref="MaterialDiagnosticCodes.EditRejected"/>, or
+    ///     <see langword="null"/> when it can.
+    /// </returns>
+    public AssetProblem? ValidateForSave(MaterialSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
         if (!TryWrite(source, out var json, out var problem))
@@ -52,7 +58,7 @@ public sealed partial class MaterialValidation
         }
 
         var engine = schemas.ValidateAgainstEngineSchema(json);
-        return engine.IsValid ? null : "The material does not match the engine schema: " + string.Join("; ", engine.Errors);
+        return engine.IsValid ? null : Rejected("The material does not match the engine schema.", engine.Errors);
     }
 
     /// <summary>
@@ -60,7 +66,7 @@ public sealed partial class MaterialValidation
     /// </summary>
     /// <param name="source">The edited source.</param>
     /// <returns>Why the edit is rejected, or <see langword="null"/> when it is accepted.</returns>
-    public string? ValidateEdited(MaterialSource source)
+    public AssetProblem? ValidateEdited(MaterialSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
         if (!TryWrite(source, out var json, out var problem))
@@ -75,11 +81,13 @@ public sealed partial class MaterialValidation
 
         var engine = schemas.ValidateAgainstEngineSchema(json);
         var overlay = schemas.ValidateAgainstMergedSchema(json);
-        return engine.IsValid && overlay.IsValid ? null : string.Join("; ", engine.Errors.Concat(overlay.Errors));
+        return engine.IsValid && overlay.IsValid
+            ? null
+            : Rejected("The material does not match the engine schema or the editor's constraints.", engine.Errors.Concat(overlay.Errors));
     }
 
     // The writer checks the source against the engine schema it embeds, and refuses to write one that does not match.
-    private static bool TryWrite(MaterialSource source, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out JsonObject? json, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? problem)
+    private static bool TryWrite(MaterialSource source, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out JsonObject? json, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out AssetProblem? problem)
     {
         try
         {
@@ -87,13 +95,16 @@ public sealed partial class MaterialValidation
             problem = null;
             return true;
         }
-        catch (InvalidDataException exception)
+        catch (AssetFormatException exception)
         {
             json = null;
-            problem = exception.Message;
+            problem = Rejected(exception.Problem.Message, exception.Problem.Explanation is { } explanation ? [explanation] : []);
             return false;
         }
     }
+
+    private static AssetProblem Rejected(string message, IEnumerable<string> errors)
+        => new(DiagnosticSeverity.Error, MaterialDiagnosticCodes.EditRejected, message) { Explanation = string.Join(Environment.NewLine, errors) };
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Schema discovery is optional; the writer still validates every save against the embedded engine schema.")]
     private MaterialSchemaValidator? LoadValidator()

@@ -313,9 +313,7 @@ public sealed class AssetCookStatusTests
             using var buffer = new MemoryStream();
             MaterialSourceWriter.Write(buffer, new MaterialSource(
                 "Material",
-                new MaterialPbrMetallicRoughness(1, 1, 1, 1, 0, roughness, baseColorTexture: null, metallicRoughnessTexture: null),
-                normalTexture: null,
-                occlusionTexture: null,
+                new MaterialPbrMetallicRoughness(1, 1, 1, 1, 0, roughness),
                 MaterialAlphaMode.Opaque,
                 0.5f,
                 doubleSided: false));

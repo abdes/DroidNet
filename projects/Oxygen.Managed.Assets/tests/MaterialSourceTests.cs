@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Assets.Diagnostics;
 
 namespace Oxygen.Managed.Assets.Tests;
 
@@ -25,7 +26,7 @@ public sealed class MaterialSourceTests
         {
             PbrMetallicRoughness = new MaterialPbrMetallicRoughness(
                 pbr.BaseColorR, pbr.BaseColorG, pbr.BaseColorB, pbr.BaseColorA,
-                pbr.MetallicFactor, 0.25f, pbr.BaseColorTexture, pbr.MetallicRoughnessTexture),
+                pbr.MetallicFactor, 0.25f),
         };
         var written = MaterialSourceWriter.ToJson(edited);
         _ = written["parameters"]!["roughness"]!.GetValue<float>().Should().Be(0.75f);
@@ -118,7 +119,7 @@ public sealed class MaterialSourceTests
     }
 
     [TestMethod]
-    public void SameImageWithIndependentUvBindingsIsNotProjectedAsPackedOrm()
+    public void SameImageWithIndependentUvBindingsKeepsBothBindings()
     {
         var source = MaterialSourceReader.Read("""
             { "textures": {
@@ -126,7 +127,7 @@ public sealed class MaterialSourceTests
                 "roughness": {"virtual_path":"/Art/Surface.otex","uv_set":1}
             } }
             """u8);
-        _ = source.PbrMetallicRoughness.MetallicRoughnessTexture.Should().BeNull();
+        _ = source.TextureReferences.Should().Contain("metallic", "/Art/Surface.otex").And.Contain("roughness", "/Art/Surface.otex");
         var output = MaterialSourceWriter.ToJson(source with { AlphaCutoff = 0.3f });
         _ = output["textures"]!["roughness"]!["uv_set"]!.GetValue<int>().Should().Be(1);
         _ = output["textures"]!["metallic"]!["uv_set"]!.GetValue<int>().Should().Be(0);
@@ -158,17 +159,69 @@ public sealed class MaterialSourceTests
     }
 
     [TestMethod]
-    [DataRow("{\"Schema\":\"oxygen.material.v1\",\"Type\":\"PBR\"}")]
-    [DataRow("{\"parameters\":{\"metalness\":2}}")]
-    [DataRow("{\"parameters\":{\"emissive_intensity\":65505}}")]
-    [DataRow("{\"parameters\":{\"emissive_color\":[1,-1,0]}}")]
-    [DataRow("{\"parameters\":{\"emissive_factor\":[1,1,1]}}")]
-    [DataRow("{\"parameters\":{\"normal_scale\":1e100}}")]
-    [DataRow("{\"textures\":{\"normal\":{\"virtual_path\":\"asset:///Art/Normal.otex\"}}}")]
-    [DataRow("{\"textures\":{\"normal\":{\"virtual_path\":\"/Art/../Normal.otex\"}}}")]
-    public void InvalidOrRetiredSourceIsRejectedWithoutClamping(string json)
+    [DataRow("{\"Schema\":\"oxygen.material.v1\",\"Type\":\"PBR\"}", MaterialSourceCodes.SchemaMismatch)]
+    [DataRow("{\"parameters\":{\"metalness\":2}}", MaterialSourceCodes.SchemaMismatch)]
+    [DataRow("{\"parameters\":{\"emissive_intensity\":65505}}", MaterialSourceCodes.SchemaMismatch)]
+    [DataRow("{\"parameters\":{\"emissive_color\":[1,-1,0]}}", MaterialSourceCodes.SchemaMismatch)]
+    [DataRow("{\"parameters\":{\"emissive_factor\":[1,1,1]}}", MaterialSourceCodes.SchemaMismatch)]
+    [DataRow("{\"parameters\":{\"normal_scale\":1e100}}", MaterialSourceCodes.NumberOutOfRange)]
+    [DataRow("{\"textures\":{\"normal\":{\"virtual_path\":\"asset:///Art/Normal.otex\"}}}", MaterialSourceCodes.TexturePathInvalid)]
+    [DataRow("{\"textures\":{\"normal\":{\"virtual_path\":\"/Art/../Normal.otex\"}}}", MaterialSourceCodes.TexturePathInvalid)]
+    public void InvalidOrRetiredSourceIsRejectedWithoutClamping(string json, string code)
     {
         Action read = () => MaterialSourceReader.Read(Encoding.UTF8.GetBytes(json));
-        _ = read.Should().Throw<InvalidDataException>();
+        _ = read.Should().Throw<AssetFormatException>().Which.Problem.Code.Should().Be(code);
+    }
+
+    [TestMethod]
+    public void Read_NotJson_ReportsWhereTheErrorIs()
+    {
+        Action read = () => MaterialSourceReader.Read("{\n  \"name\": \"Bark\",\n  oops\n}"u8);
+
+        var problem = read.Should().Throw<AssetFormatException>().Which.Problem;
+        _ = problem.Code.Should().Be(MaterialSourceCodes.NotJson);
+        _ = problem.Line.Should().Be(3);
+        _ = problem.Column.Should().Be(3);
+    }
+
+    [TestMethod]
+    public void NewSource_HasNoTextureAndUnitScales()
+    {
+        var source = new MaterialSource(
+            name: null,
+            new MaterialPbrMetallicRoughness(1, 1, 1, 1, metallicFactor: 0, roughnessFactor: 0.5f),
+            MaterialAlphaMode.Opaque,
+            alphaCutoff: 0.5f,
+            doubleSided: false);
+
+        _ = source.TextureReferences.Should().BeEmpty();
+        _ = source.NormalScale.Should().Be(1.0f);
+        _ = source.OcclusionStrength.Should().Be(1.0f);
+    }
+
+    [TestMethod]
+    [DataRow("no_such_channel", "/Content/Textures/Bark.otex")]
+    [DataRow("base_color", "Textures/Bark.otex")]
+    [DataRow("base_color", "/Bark.otex")]
+    [DataRow("base_color", "")]
+    public void WithTextureReference_InvalidChannelOrPath_ThrowsAndKeepsTheSource(string channel, string virtualPath)
+    {
+        var source = MaterialSourceReader.Read("""{"textures":{"base_color":{"virtual_path":"/Content/Textures/Oak.otex"}}}"""u8);
+
+        var act = () => source.WithTextureReference(channel, virtualPath);
+
+        _ = act.Should().Throw<ArgumentException>();
+        _ = source.TextureReferences.Should().Equal(new Dictionary<string, string>(StringComparer.Ordinal) { ["base_color"] = "/Content/Textures/Oak.otex" });
+    }
+
+    [TestMethod]
+    public void NormalScale_IsWrittenWhenANormalTextureIsAssigned()
+    {
+        var source = MaterialSourceReader.Read("{}"u8).WithTextureReference("normal", "/Content/Textures/Normal.otex");
+
+        var written = MaterialSourceWriter.ToJson(source);
+
+        _ = written["parameters"]!["normal_scale"]!.GetValue<float>().Should().Be(1.0f);
+        _ = written["textures"]!["normal"]!["virtual_path"]!.GetValue<string>().Should().Be("/Content/Textures/Normal.otex");
     }
 }

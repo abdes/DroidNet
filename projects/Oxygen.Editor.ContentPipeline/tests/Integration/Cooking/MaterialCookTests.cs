@@ -237,11 +237,7 @@ public sealed class MaterialCookTests
                 baseColorB: 0.1f,
                 baseColorA: 1.0f,
                 metallicFactor: metallicFactor,
-                roughnessFactor: roughnessFactor,
-                baseColorTexture: null,
-                metallicRoughnessTexture: null),
-            normalTexture: null,
-            occlusionTexture: null,
+                roughnessFactor: roughnessFactor),
             alphaMode: MaterialAlphaMode.Opaque,
             alphaCutoff: 0.5f,
             doubleSided: false);

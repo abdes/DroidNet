@@ -17,7 +17,8 @@ using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.MaterialEditor.PropertyPipeline;
+using Oxygen.Editor.Materials.Documents;
+using Oxygen.Editor.Materials.Properties;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Shell.Documents;
@@ -524,7 +525,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.isLoading = true;
         try
         {
-            var source = ((MaterialContent)this.document.Content).Source;
+            var source = ((MaterialContent)this.document.Content).Material.Source;
             var pbr = source.PbrMetallicRoughness;
 
             this.DisplayName = this.document.Title;
