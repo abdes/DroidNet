@@ -179,12 +179,13 @@ target_link_libraries(
 # ------------------------------------------------------------------------------
 
 # UnicodeCodeGen writes Internal/Generated.UnicodeTables.h into the source tree,
-# where it is versioned, from the pinned Unicode Character Database. A stamp in
+# where it is versioned, from the pinned Unicode Character Database in Unicode/,
+# the data the virtual path rules are stated against. A stamp in
 # the build tree is the only declared output, so Clean never deletes the
 # versioned header. The generator writes the header only when its text changes,
 # so a regeneration that changes nothing recompiles nothing.
 set(_unicode_tool_dir "${CMAKE_CURRENT_SOURCE_DIR}/Tools/UnicodeCodeGen")
-set(_unicode_ucd_dir "${_unicode_tool_dir}/ucd/15.1.0")
+set(_unicode_ucd_dir "${CMAKE_CURRENT_SOURCE_DIR}/Unicode/15.1.0")
 set(
   _unicode_tables
   "${CMAKE_CURRENT_SOURCE_DIR}/Internal/Generated.UnicodeTables.h"

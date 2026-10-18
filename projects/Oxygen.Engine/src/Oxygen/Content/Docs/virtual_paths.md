@@ -82,7 +82,8 @@ treats the second as a collision.
 Unicode 15.1 is pinned. Its stability policies guarantee that NFC and simple
 case folding of assigned code points never change, so implementations on any
 later Unicode version agree on every accepted segment. The engine normalizes
-with utf8proc 2.9.0 (Unicode 15.1). The assigned ranges and the simple case
-folding table come from the database in
-[Tools/UnicodeCodeGen](../Tools/UnicodeCodeGen/README.md), which the Content
-build turns into `Internal/Generated.UnicodeTables.h`.
+with utf8proc 2.9.0 (Unicode 15.1). Every implementation generates its assigned
+ranges and simple case folding table from the one database in
+[Unicode](../Unicode/README.md); the Content build turns it into
+`Internal/Generated.UnicodeTables.h` through
+[UnicodeCodeGen](../Tools/UnicodeCodeGen/README.md).

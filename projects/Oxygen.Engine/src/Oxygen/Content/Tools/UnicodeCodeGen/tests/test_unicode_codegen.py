@@ -14,7 +14,7 @@ import pytest
 
 from unicode_codegen import cli, cpp, ucd
 
-_DATABASE = Path(__file__).resolve().parents[1] / "ucd" / "15.1.0"
+_DATABASE = Path(__file__).resolve().parents[3] / "Unicode" / "15.1.0"
 
 
 def test_assigned_ranges_are_merged_and_sorted() -> None:
