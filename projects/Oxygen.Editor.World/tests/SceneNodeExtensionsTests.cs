@@ -3,21 +3,16 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Moq;
 
 namespace Oxygen.Editor.World.Tests;
 
 [TestClass]
 public class SceneNodeExtensionsTests
 {
-    private readonly Mock<IProject> projectMock = new();
-
-    private IProject ExampleProject => this.projectMock.Object;
-
     [TestMethod]
     public void DescendantsAndSelf_Includes_Node_And_All_Descendants()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var root = new SceneNode(scene) { Name = "Root" };
         var child = new SceneNode(scene) { Name = "Child" };
         var grand = new SceneNode(scene) { Name = "Grand" };
@@ -38,7 +33,7 @@ public class SceneNodeExtensionsTests
     [TestMethod]
     public void AncestorsAndSelf_Includes_Node_Then_Parents()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var root = new SceneNode(scene) { Name = "Root" };
         var child = new SceneNode(scene) { Name = "Child" };
         var grand = new SceneNode(scene) { Name = "Grand" };
@@ -59,7 +54,7 @@ public class SceneNodeExtensionsTests
     [TestMethod]
     public void FindByPath_ExactPath_Finds_Node()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var root = new SceneNode(scene) { Name = "Root" };
         var child = new SceneNode(scene) { Name = "Child" };
         var grand = new SceneNode(scene) { Name = "Grand" };
@@ -76,7 +71,7 @@ public class SceneNodeExtensionsTests
     [TestMethod]
     public void FindByPath_SingleLevelWildcard_Finds_First_Matching()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var root = new SceneNode(scene) { Name = "Root" };
         var child1 = new SceneNode(scene) { Name = "ChildA" };
         var child2 = new SceneNode(scene) { Name = "ChildB" };
@@ -94,7 +89,7 @@ public class SceneNodeExtensionsTests
     [TestMethod]
     public void FindByPath_RecursiveWildcard_Finds_Deep_Node()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var root = new SceneNode(scene) { Name = "Root" };
         var a = new SceneNode(scene) { Name = "A" };
         var b = new SceneNode(scene) { Name = "B" };
@@ -113,7 +108,7 @@ public class SceneNodeExtensionsTests
     [TestMethod]
     public void FindByPath_NullPath_ThrowsArgumentNull()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
 
         var act = () => scene.FindByPath(null!);
 
@@ -123,7 +118,7 @@ public class SceneNodeExtensionsTests
     [TestMethod]
     public void FindByPath_EmptyPath_ReturnsNull()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var root = new SceneNode(scene) { Name = "Root" };
         scene.RootNodes.Add(root);
 
@@ -135,7 +130,7 @@ public class SceneNodeExtensionsTests
     [TestMethod]
     public void FindByPath_LeadingTrailingAndDuplicateSeparators_AreHandled()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var root = new SceneNode(scene) { Name = "Root" };
         var child = new SceneNode(scene) { Name = "Child" };
 
@@ -152,7 +147,7 @@ public class SceneNodeExtensionsTests
     [TestMethod]
     public void FindByPath_MultipleRoots_FirstMatchIsReturned()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var r1 = new SceneNode(scene) { Name = "R1" };
         var r2 = new SceneNode(scene) { Name = "R2" };
         var a = new SceneNode(scene) { Name = "X" };
@@ -172,7 +167,7 @@ public class SceneNodeExtensionsTests
     [TestMethod]
     public void FindByPath_DuplicateNames_Returns_FirstMatchingNode()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var root = new SceneNode(scene) { Name = "Root" };
         var s1 = new SceneNode(scene) { Name = "Same" };
         var s2 = new SceneNode(scene) { Name = "Same" };
@@ -189,7 +184,7 @@ public class SceneNodeExtensionsTests
     [TestMethod]
     public void FindByPath_CaseInsensitive_MatchesRegardlessOfCase()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var root = new SceneNode(scene) { Name = "Root" };
         var child = new SceneNode(scene) { Name = "Child" };
         var grand = new SceneNode(scene) { Name = "Grand" };
@@ -206,7 +201,7 @@ public class SceneNodeExtensionsTests
     [TestMethod]
     public void FindByPath_NoMatch_ReturnsNull()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var root = new SceneNode(scene) { Name = "Root" };
         scene.RootNodes.Add(root);
 
@@ -218,7 +213,7 @@ public class SceneNodeExtensionsTests
     [TestMethod]
     public void FindByPath_OnlyRecursiveWildcard_ReturnsFirstNode()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var r = new SceneNode(scene) { Name = "Root" };
         var c = new SceneNode(scene) { Name = "Child" };
         r.AddChild(c);

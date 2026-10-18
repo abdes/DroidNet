@@ -4,60 +4,248 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using System.Text;
-using System.Text.Json;
 using AwesomeAssertions;
-using Moq;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.World.Tests.TestSupport;
 using Oxygen.Managed.Core;
+using SceneData = Oxygen.Editor.World.Serialization.SceneData;
 
 namespace Oxygen.Editor.World.Tests;
 
+/// <summary>
+/// Verifies core <see cref="Scene"/> invariants, property notifications, and node queries.
+/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory($"{nameof(Scene)}.Json")]
-public class SceneTests
+[TestCategory(nameof(Scene))]
+public sealed class SceneTests
 {
-    private readonly Mock<IProject> projectMock = new();
+    [TestMethod]
+    [DataRow(null)]
+    [DataRow("")]
+    [DataRow("   ")]
+    public void Name_WhenNullEmptyOrWhitespace_ThrowsArgumentException(string? invalidName)
+    {
+        var scene = new Scene { Name = "Valid Initial" };
 
-    private IProject ExampleProject => this.projectMock.Object;
+        Action act = () => scene.Name = invalidName!;
+
+        _ = act.Should().Throw<ArgumentException>();
+    }
 
     [TestMethod]
-    public void DuplicateStoredLightAssignmentRejectsHydrationBeforeReplacingScene()
+    public void Name_WhenValid_SetsPropertyAndRaisesNotification()
     {
-        var scene = new Scene(this.ExampleProject) { Name = "Accepted" };
-        var retained = new SceneNode(scene) { Name = "Retained" };
-        scene.RootNodes.Add(retained);
-        var candidate = new SceneData
+        var scene = new Scene { Name = "Initial" };
+        var recorder = new PropertyChangeRecorder(scene);
+
+        scene.Name = "Valid Scene Name";
+
+        _ = scene.Name.Should().Be("Valid Scene Name");
+        _ = recorder.ChangingCount(nameof(Scene.Name)).Should().Be(1);
+        _ = recorder.ChangedCount(nameof(Scene.Name)).Should().Be(1);
+    }
+
+    [TestMethod]
+    public void AllNodes_ReturnsDepthFirstInHierarchyOrderAcrossSeveralRoots()
+    {
+        var scene = new Scene { Name = "Multi-root Scene" };
+        var root1 = new SceneNode(scene) { Name = "Root1" };
+        var child1a = new SceneNode(scene) { Name = "Child1A" };
+        var child1b = new SceneNode(scene) { Name = "Child1B" };
+        var grandChild1 = new SceneNode(scene) { Name = "GrandChild1" };
+        root1.AddChild(child1a);
+        child1a.AddChild(grandChild1);
+        root1.AddChild(child1b);
+
+        var root2 = new SceneNode(scene) { Name = "Root2" };
+        var child2a = new SceneNode(scene) { Name = "Child2A" };
+        root2.AddChild(child2a);
+
+        scene.RootNodes.Add(root1);
+        scene.RootNodes.Add(root2);
+
+        var nodes = scene.AllNodes.ToList();
+
+        _ = nodes.Should().Equal([root1, child1a, grandChild1, child1b, root2, child2a]);
+    }
+
+    [TestMethod]
+    public void SetEnvironment_WhenValueDiffers_RaisesPropertyChangingAndPropertyChangedExactlyOnce()
+    {
+        var scene = new Scene { Name = "Scene" };
+        var recorder = new PropertyChangeRecorder(scene);
+        var newEnv = new SceneEnvironmentData
         {
-            Id = SceneId.New(),
-            Name = "Invalid lights",
-            RootNodes =
-            [
-                new SceneNodeData
-                {
-                    Id = NodeId.New(),
-                    Name = "Hidden owner", IsVisible = false,
-                    Components = [new DirectionalLightData { Name = "Light", AtmosphereSlot = AtmosphereLightSlot.Primary }],
-                },
-                new SceneNodeData
-                {
-                    Id = NodeId.New(),
-                    Name = "Duplicate",
-                    Components = [new DirectionalLightData { Name = "Light", AtmosphereSlot = AtmosphereLightSlot.Primary }],
-                },
-            ],
+            AtmosphereEnabled = false,
+            Background = new BackgroundEnvironmentData { Enabled = true, ColorRgb = new Vector3(0.5f, 0.5f, 0.5f) },
         };
-        var hydrate = () => scene.Hydrate(candidate);
-        _ = hydrate.Should().Throw<ArgumentException>().WithMessage("*Hidden owner*");
-        _ = scene.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(retained);
+
+        scene.SetEnvironment(newEnv);
+
+        _ = recorder.ChangingCount(nameof(Scene.Environment)).Should().Be(1);
+        _ = recorder.ChangedCount(nameof(Scene.Environment)).Should().Be(1);
+    }
+
+    [TestMethod]
+    public void SetEnvironment_WhenValueIsEqual_RaisesNoNotifications()
+    {
+        var scene = new Scene { Name = "Scene" };
+        var initial = new SceneEnvironmentData
+        {
+            AtmosphereEnabled = true,
+            Background = new BackgroundEnvironmentData { Enabled = true, ColorRgb = new Vector3(0.1f, 0.2f, 0.3f) },
+        };
+        scene.SetEnvironment(initial);
+        var recorder = new PropertyChangeRecorder(scene);
+
+        var duplicateInstance = new SceneEnvironmentData
+        {
+            AtmosphereEnabled = true,
+            Background = new BackgroundEnvironmentData { Enabled = true, ColorRgb = new Vector3(0.1f, 0.2f, 0.3f) },
+        };
+        scene.SetEnvironment(duplicateInstance);
+
+        _ = recorder.ChangingCount(nameof(Scene.Environment)).Should().Be(0);
+        _ = recorder.ChangedCount(nameof(Scene.Environment)).Should().Be(0);
+    }
+
+    [TestMethod]
+    public void SetReferences_WhenValueDiffers_RaisesPropertyChangingAndPropertyChangedExactlyOnce()
+    {
+        var scene = new Scene { Name = "Scene" };
+        var recorder = new PropertyChangeRecorder(scene);
+        var references = new SceneReferencesData
+        {
+            Scripts = [new Uri("asset:///Content/Scripts/Test.oscript")],
+        };
+
+        scene.SetReferences(references);
+
+        _ = recorder.ChangingCount(nameof(Scene.References)).Should().Be(1);
+        _ = recorder.ChangedCount(nameof(Scene.References)).Should().Be(1);
+    }
+
+    [TestMethod]
+    public void SetReferences_WhenValueIsEqual_RaisesNoNotifications()
+    {
+        var scene = new Scene { Name = "Scene" };
+        var references = new SceneReferencesData
+        {
+            Scripts = [new Uri("asset:///Content/Scripts/Test.oscript")],
+        };
+        scene.SetReferences(references);
+        var recorder = new PropertyChangeRecorder(scene);
+
+        var duplicateInstance = new SceneReferencesData
+        {
+            Scripts = [new Uri("asset:///Content/Scripts/Test.oscript")],
+        };
+        scene.SetReferences(duplicateInstance);
+
+        _ = recorder.ChangingCount(nameof(Scene.References)).Should().Be(0);
+        _ = recorder.ChangedCount(nameof(Scene.References)).Should().Be(0);
+    }
+
+    [TestMethod]
+    public void SetStartingCamera_WhenValueDiffers_RaisesPropertyChangingAndPropertyChangedExactlyOnce()
+    {
+        var scene = new Scene { Name = "Scene" };
+        var recorder = new PropertyChangeRecorder(scene);
+        var cameraId = NodeId.New();
+
+        scene.SetStartingCamera(cameraId);
+
+        _ = scene.StartingCamera.Should().Be(cameraId);
+        _ = recorder.ChangingCount(nameof(Scene.StartingCamera)).Should().Be(1);
+        _ = recorder.ChangedCount(nameof(Scene.StartingCamera)).Should().Be(1);
+    }
+
+    [TestMethod]
+    public void SetStartingCamera_WhenValueIsEqual_RaisesNoNotifications()
+    {
+        var scene = new Scene { Name = "Scene" };
+        var cameraId = NodeId.New();
+        scene.SetStartingCamera(cameraId);
+        var recorder = new PropertyChangeRecorder(scene);
+
+        scene.SetStartingCamera(cameraId);
+
+        _ = recorder.ChangingCount(nameof(Scene.StartingCamera)).Should().Be(0);
+        _ = recorder.ChangedCount(nameof(Scene.StartingCamera)).Should().Be(0);
+    }
+
+    [TestMethod]
+    public void SetStartingCamera_WithEmptyNodeId_StoresNull()
+    {
+        var scene = new Scene { Name = "Scene" };
+        scene.SetStartingCamera(NodeId.New());
+
+        scene.SetStartingCamera(NodeId.Empty);
+
+        _ = scene.StartingCamera.Should().BeNull();
+    }
+
+    [TestMethod]
+    public void SetStartingInputContexts_WhenValueDiffers_RaisesPropertyChangingAndPropertyChangedExactlyOnce()
+    {
+        var scene = new Scene { Name = "Scene" };
+        var recorder = new PropertyChangeRecorder(scene);
+        StartingInputContextData[] contexts = [new(new Uri("asset:///Content/Input/Move.oimap"), Priority: 2)];
+
+        scene.SetStartingInputContexts(contexts);
+
+        _ = recorder.ChangingCount(nameof(Scene.StartingInputContexts)).Should().Be(1);
+        _ = recorder.ChangedCount(nameof(Scene.StartingInputContexts)).Should().Be(1);
+    }
+
+    [TestMethod]
+    public void SetStartingInputContexts_WhenValueIsEqual_RaisesNoNotifications()
+    {
+        var scene = new Scene { Name = "Scene" };
+        StartingInputContextData[] contexts = [new(new Uri("asset:///Content/Input/Move.oimap"), Priority: 2)];
+        scene.SetStartingInputContexts(contexts);
+        var recorder = new PropertyChangeRecorder(scene);
+
+        StartingInputContextData[] sameContexts = [new(new Uri("asset:///Content/Input/Move.oimap"), Priority: 2)];
+        scene.SetStartingInputContexts(sameContexts);
+
+        _ = recorder.ChangingCount(nameof(Scene.StartingInputContexts)).Should().Be(0);
+        _ = recorder.ChangedCount(nameof(Scene.StartingInputContexts)).Should().Be(0);
+    }
+
+    [TestMethod]
+    public void EffectiveStartingCamera_WhenAuthoredNodeMissing_ReturnsNull()
+    {
+        var scene = new Scene { Name = "Scene" };
+        var cameraNode = new SceneNode(scene) { Name = "Camera" };
+        _ = cameraNode.AddComponent(new PerspectiveCamera { Name = "Camera" });
+        scene.RootNodes.Add(cameraNode);
+        var nonExistentNodeId = NodeId.New();
+
+        scene.SetStartingCamera(nonExistentNodeId);
+
+        _ = scene.EffectiveStartingCamera.Should().BeNull();
+    }
+
+    [TestMethod]
+    public void EffectiveStartingCamera_WhenAuthoredNodeHasNoCameraComponent_ReturnsNull()
+    {
+        var scene = new Scene { Name = "Scene" };
+        var nodeWithoutCamera = new SceneNode(scene) { Name = "NodeWithoutCamera" };
+        scene.RootNodes.Add(nodeWithoutCamera);
+
+        scene.SetStartingCamera(nodeWithoutCamera.Id);
+
+        _ = scene.EffectiveStartingCamera.Should().BeNull();
     }
 
     [TestMethod]
     public void Dehydrate_Returns_SceneData_With_RootNodes()
     {
         // Arrange
-        var scene = new Scene(this.ExampleProject) { Name = "Scene Name" };
+        var scene = new Scene { Name = "Scene Name" };
         var node1 = new SceneNode(scene) { Name = "Node 1" };
         var node2 = new SceneNode(scene) { Name = "Node 2" };
         scene.RootNodes.Add(node1);
@@ -76,802 +264,17 @@ public class SceneTests
     }
 
     [TestMethod]
-    [DataRow(false)]
-    [DataRow(true)]
-    public void EmptySceneReferences_CreatedOrHydrated_RejectDirectMutation(bool hydrate)
-    {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
-        if (hydrate)
-        {
-            var data = scene.Dehydrate();
-            _ = data.References.Should().BeNull();
-            scene.Hydrate(data);
-        }
-
-        var reference = new Uri("asset:///Content/Scripts/Orbit.oscript");
-        foreach (var collection in new[]
-        {
-            scene.References.Scripts,
-            scene.References.InputActions,
-            scene.References.PhysicsSidecars,
-        })
-        {
-            var edit = () => collection.Add(reference);
-            _ = edit.Should().Throw<NotSupportedException>();
-            _ = collection.Should().BeEmpty();
-        }
-
-        var extraEdit = () => scene.References.ExtraAssets.Add("/Content/Extra.otex");
-        _ = extraEdit.Should().Throw<NotSupportedException>();
-        _ = scene.References.ExtraAssets.Should().BeEmpty();
-    }
-
-    [TestMethod]
-    public void HydratedSceneReferencesCannotBeMutatedOutsideSceneCommands()
-    {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
-        var script = new Uri("asset:///Content/Scripts/Orbit.oscript");
-        scene.Hydrate(new SceneData
-        {
-            Id = scene.Id,
-            Name = scene.Name,
-            RootNodes = [],
-            References = new SceneReferencesData { Scripts = [script] },
-        });
-
-        var edit = () => scene.References.Scripts.Add(new Uri("asset:///Content/Scripts/Other.oscript"));
-
-        _ = edit.Should().Throw<NotSupportedException>();
-        _ = scene.References.Scripts.Should().ContainSingle().Which.Should().Be(script);
-    }
-
-    [TestMethod]
-    public async Task Deserialize_MissingEnvironmentField_LoadsDefaults()
-    {
-        const string json = """
-            {
-              "Id": "11111111-1111-1111-1111-111111111111",
-              "Name": "Default Scene",
-              "RootNodes": []
-            }
-            """;
-
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-        await using var streamLifetime = stream.ConfigureAwait(false);
-        var serializer = new SceneSerializer(this.ExampleProject);
-
-        var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
-
-        _ = scene.Environment.Should().Be(new SceneEnvironmentData());
-    }
-
-    [TestMethod]
-    public void LocalFogVolume_RoundTripsThroughItsData()
-    {
-        var volume = new LocalFogVolumeComponent
-        {
-            Name = "Fog",
-            Enabled = false,
-            RadialFogExtinction = 2f,
-            HeightFogExtinction = 0.5f,
-            HeightFogFalloff = 10f,
-            HeightFogOffset = -1f,
-            FogPhaseG = 0.6f,
-            FogAlbedo = new Vector3(0.5f, 0.6f, 0.7f),
-            FogEmissive = new Vector3(0.1f, 0.2f, 0.3f),
-            SortPriority = -4,
-        };
-
-        var json = JsonSerializer.Serialize<ComponentData>(volume.Dehydrate(), SceneJsonContext.Default.ComponentData);
-        var restored = (LocalFogVolumeComponent)Components.GameComponent.CreateAndHydrate(JsonSerializer.Deserialize(json, SceneJsonContext.Default.ComponentData)!);
-
-        _ = restored.Dehydrate().Should().Be(volume.Dehydrate());
-    }
-
-    [TestMethod]
-    public async Task Deserialize_SceneSavedWithoutFog_LoadsDefaultFog()
-    {
-        const string json = """
-            {
-              "Id": "11111111-1111-1111-1111-111111111111",
-              "Name": "Before Fog",
-              "RootNodes": [],
-              "Environment": { "AtmosphereEnabled": true }
-            }
-            """;
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-        await using var streamLifetime = stream.ConfigureAwait(false);
-        var serializer = new SceneSerializer(this.ExampleProject);
-
-        var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
-
-        _ = scene.Environment.Fog.Should().Be(new FogEnvironmentData());
-    }
-
-    [TestMethod]
-    public async Task Deserialize_SceneWithLegacyBackgroundColor_MigratesToEnabledBackground()
-    {
-        const string json = """
-            {
-              "Id": "11111111-1111-1111-1111-111111111111",
-              "Name": "Before Backdrop",
-              "RootNodes": [],
-              "Environment": { "AtmosphereEnabled": false, "BackgroundColor": { "X": 0.1, "Y": 0.2, "Z": 0.3 } }
-            }
-            """;
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-        await using var streamLifetime = stream.ConfigureAwait(false);
-        var serializer = new SceneSerializer(this.ExampleProject);
-
-        var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
-
-        _ = scene.Environment.Background.Should().Be(new BackgroundEnvironmentData { Enabled = true, ColorRgb = new Vector3(0.1f, 0.2f, 0.3f) });
-        _ = scene.Environment.LegacyBackgroundColor.Should().BeNull();
-        _ = scene.Environment.SkySphere.Should().Be(new SkySphereEnvironmentData());
-        _ = scene.Environment.SkyLight.Should().Be(new SkyLightEnvironmentData());
-        var saved = new MemoryStream();
-        await using var savedLifetime = saved.ConfigureAwait(false);
-        await serializer.SerializeAsync(saved, scene).ConfigureAwait(false);
-        _ = Encoding.UTF8.GetString(saved.ToArray()).Should().NotContain("BackgroundColor");
-    }
-
-    [TestMethod]
-    public async Task Deserialize_LegacyBackgroundColorOutsideTheSdrRange_ClampsIt()
-    {
-        const string json = """
-            {
-              "Id": "22222222-2222-2222-2222-222222222222",
-              "Name": "Bright Background",
-              "RootNodes": [],
-              "Environment": { "AtmosphereEnabled": false, "BackgroundColor": { "X": 2, "Y": -0.5, "Z": 0.25 } }
-            }
-            """;
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-        await using var streamLifetime = stream.ConfigureAwait(false);
-
-        var scene = await new SceneSerializer(this.ExampleProject).DeserializeAsync(stream).ConfigureAwait(false);
-
-        _ = scene.Environment.Background.ColorRgb.Should().Be(new Vector3(1f, 0f, 0.25f));
-    }
-
-    [TestMethod]
-    public async Task Fog_RoundTripsThroughSaveAndLoad()
-    {
-        var fog = new FogEnvironmentData
-        {
-            Enabled = true,
-            Density = 0.03f,
-            SecondDensity = 0.01f,
-            InscatteringLuminanceRgb = new Vector3(0.2f, 0.3f, 0.4f),
-            VolumetricFogEnabled = true,
-            VolumetricAlbedoRgb = new Vector3(0.5f, 0.6f, 0.7f),
-            VisibleInReflectionCaptures = false,
-        };
-        var scene = Scene.CreateAndHydrate(this.ExampleProject, new SceneData
-        {
-            Id = SceneId.New(),
-            Name = "Fog Round Trip",
-            Environment = new SceneEnvironmentData { Fog = fog },
-        });
-        var serializer = new SceneSerializer(this.ExampleProject);
-        var stream = new MemoryStream();
-        await using var streamLifetime = stream.ConfigureAwait(false);
-
-        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
-        stream.Position = 0;
-        var restored = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
-
-        _ = restored.Environment.Fog.Should().Be(fog);
-    }
-
-    [TestMethod]
-    public async Task SceneReferences_RoundTripAndRemainOmittedWhenEmpty()
-    {
-        var references = new SceneReferencesData
-        {
-            Scripts = [new("asset:///Content/Scripts/Orbit.oscript.json")],
-            InputActions = [new("asset:///Content/Input/Jump.oiact")],
-            PhysicsSidecars = [new("asset:///Content/Physics/Main.opscene")],
-            ExtraAssets = ["/.cooked/Extras/lookup.bin"],
-        };
-        var scene = Scene.CreateAndHydrate(this.ExampleProject, new SceneData
-        {
-            Id = SceneId.New(),
-            Name = "Reference Round Trip",
-            References = references,
-        });
-        var serializer = new SceneSerializer(this.ExampleProject);
-        var stream = new MemoryStream();
-        await using var streamLifetime = stream.ConfigureAwait(false);
-
-        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
-        stream.Position = 0;
-        var restored = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
-
-        _ = restored.References.Should().BeEquivalentTo(references);
-        var emptyStream = new MemoryStream();
-        await using var emptyStreamLifetime = emptyStream.ConfigureAwait(false);
-        await serializer.SerializeAsync(emptyStream, new Scene(this.ExampleProject) { Name = "Empty References" }).ConfigureAwait(false);
-        var json = Encoding.UTF8.GetString(emptyStream.ToArray());
-        _ = json.Should().NotContain("\"References\"");
-    }
-
-    [TestMethod]
-    public async Task Deserialize_ObsoleteFlatExposure_IsRejected()
-    {
-        const string json = """
-            {
-              "Id": "11111111-1111-1111-1111-111111111111",
-              "Name": "Obsolete Exposure",
-              "RootNodes": [],
-              "Environment": { "ExposureMode": "Auto", "ManualExposureEv": 9.7 }
-            }
-            """;
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-        await using var streamLifetime = stream.ConfigureAwait(false);
-        var serializer = new SceneSerializer(this.ExampleProject);
-        var deserialize = async () => await serializer.DeserializeAsync(stream).ConfigureAwait(false);
-        _ = await deserialize.Should().ThrowAsync<JsonException>().ConfigureAwait(false);
-    }
-
-    [TestMethod]
-    public void Hydrate_PreservesAuthoredExposureWithoutDefaultRewrite()
-    {
-        var exposure = new PostProcessEnvironmentData
-        {
-            ExposureMode = ExposureMode.Auto,
-            ExposureKey = 10.0f,
-            ManualExposureEv = 9.7f,
-        };
-        var scene = Scene.CreateAndHydrate(this.ExampleProject, new SceneData
-        {
-            Id = SceneId.New(),
-            Name = "Authored Exposure",
-            Environment = new SceneEnvironmentData { PostProcess = exposure },
-        });
-        _ = scene.Environment.PostProcess.Should().Be(exposure);
-    }
-
-    [TestMethod]
-    public async Task Deserialize_NullSkyAtmosphere_LoadsDefaults()
-    {
-        const string json = """
-            {
-              "Id": "11111111-1111-1111-1111-111111111111",
-              "Name": "Scene With Null Sky",
-              "RootNodes": [],
-              "Environment": {
-                "AtmosphereEnabled": true,
-                "SkyAtmosphere": null
-              }
-            }
-            """;
-
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-        await using var streamLifetime = stream.ConfigureAwait(false);
-        var serializer = new SceneSerializer(this.ExampleProject);
-
-        var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
-
-        _ = scene.Environment.SkyAtmosphere.Should().Be(new SkyAtmosphereEnvironmentData());
-    }
-
-    [TestMethod]
-    public async Task Environment_AllFields_RoundTripThroughJson()
-    {
-        var scene = new Scene(this.ExampleProject) { Name = "Environment Scene" };
-        var expected = CreateAuthoredEnvironment();
-        scene.SetEnvironment(expected);
-        expected = scene.Environment;
-
-        var serializer = new SceneSerializer(this.ExampleProject);
-        var stream = new MemoryStream();
-        await using var streamLifetime = stream.ConfigureAwait(false);
-        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
-        stream.Position = 0;
-
-        var restored = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
-
-        _ = restored.Environment.Should().BeEquivalentTo(expected);
-    }
-
-    [TestMethod]
-    public async Task GeometryMaterialSlot_SerializesStableTargetAndMaterialIdentityOnly()
-    {
-        var scene = new Scene(this.ExampleProject) { Name = "Material Slot Scene" };
-        var node = new SceneNode(scene) { Name = "Cube" };
-        var geometry = new GeometryComponent
-        {
-            Name = "Geometry",
-            Node = node,
-            Geometry = new("asset:///Engine/Generated/BasicShapes/Cube"),
-        };
-        var target = new Slots.MaterialSlotTarget(geometry.Geometry!.Uri, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
-        var materialSlot = new Slots.MaterialsSlot { Target = target };
-        materialSlot.Material.Uri = new("asset:///Content/Materials/Red.omat.json");
-        geometry.OverrideSlots.Add(materialSlot);
-        node.Components.Add(geometry);
-        scene.RootNodes.Add(node);
-
-        var serializer = new SceneSerializer(this.ExampleProject);
-        var stream = new MemoryStream();
-        await using var streamLifetime = stream.ConfigureAwait(false);
-        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
-        var json = Encoding.UTF8.GetString(stream.ToArray());
-
-        _ = json.Should().Contain("asset:///Content/Materials/Red.omat.json");
-        _ = json.Should().NotContain("DescriptorPath");
-        _ = json.Should().NotContain("CookedPath");
-        _ = json.Should().NotContain("PrimaryState");
-        _ = json.Should().NotContain("DerivedState");
-        _ = json.Should().NotContain("RuntimeAvailability");
-        _ = json.Should().NotContain("ThumbnailKey");
-        _ = json.Should().NotContain("Diagnostic");
-        stream.Position = 0;
-        var restored = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
-        _ = restored.RootNodes.Single().Components.OfType<GeometryComponent>().Single().OverrideSlots.OfType<Slots.MaterialsSlot>().Single().Target.Should().Be(target);
-    }
-
-    [TestMethod]
-    public void Environment_ObsoleteSunNodeIdIsRejected()
-    {
-        Action read = () => System.Text.Json.JsonSerializer.Deserialize<SceneEnvironmentData>(
-            "{\"SunNodeId\":\"33333333-3333-3333-3333-333333333333\"}");
-        _ = read.Should().Throw<System.Text.Json.JsonException>();
-    }
-
-    [TestMethod]
-    public void Hydrate_Populates_Scene_From_SceneData()
-    {
-        // Arrange
-        // Act: build DTO in code then hydrate into domain Scene (more robust than relying on string literals)
-        var data = new Serialization.SceneData
-        {
-            Id = SceneId.Empty,
-            Name = "Scene Name",
-            RootNodes = [
-                new()
-                {
-                    Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000001")),
-                    Name = "Node 1",
-                    Components =
-                    [
-                        new Serialization.TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
-                    ],
-                },
-                new()
-                {
-                    Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000002")),
-                    Name = "Node 2",
-                    Components =
-                    [
-                        new Serialization.TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
-                    ],
-                },
-            ],
-        };
-
-        var scene = new Scene(this.ExampleProject) { Name = data.Name, Id = data.Id };
-        scene.Hydrate(data);
-
-        // Assert - hydrate logic sets values and attaches created nodes to the scene
-        _ = scene.Name.Should().Be("Scene Name");
-        _ = scene.Project.Should().BeSameAs(this.ExampleProject);
-        _ = scene.RootNodes.Should().HaveCount(2);
-        _ = scene.RootNodes[0].Name.Should().Be("Node 1");
-        _ = scene.RootNodes[1].Name.Should().Be("Node 2");
-        foreach (var node in scene.RootNodes)
-        {
-            _ = node.Scene.Should().BeSameAs(scene);
-        }
-    }
-
-    [TestMethod]
-    public void Hydrate_With_Empty_RootNodes_Populates_Empty_RootNodes()
-    {
-        // Arrange
-        // Act: construct DTO equivalent to the JSON literal used previously
-        var data = new Serialization.SceneData { Id = SceneId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000010")), Name = "Scene Name", RootNodes = [] };
-
-        var scene = new Scene(this.ExampleProject) { Name = data.Name, Id = data.Id };
-        scene.Hydrate(data);
-
-        // Assert
-        _ = scene.Name.Should().Be("Scene Name");
-        _ = scene.Project.Should().BeSameAs(this.ExampleProject);
-        _ = scene.RootNodes.Should().BeEmpty();
-    }
-
-    [TestMethod]
     public void CreateAndHydrate_Throws_When_Required_Properties_Missing()
     {
         // Arrange: Scene factory requires Name to be set by caller. Creating a DTO with missing Name
         // should still allow the factory to accept data, but CreateAndHydrate uses the DTO.Name as the scene
         // Name. We assert that creating a Scene with null Name is not allowed via object initializer.
-        var data = new Serialization.SceneData { Id = SceneId.New(), Name = null!, RootNodes = [] };
+        var data = new SceneData { Id = SceneId.New(), Name = null!, RootNodes = [] };
 
         // Act: factory CreateAndHydrate expects a non-null Name (the code assigns Name first). Simulate misuse.
-        var act = () => Scene.CreateAndHydrate(this.ExampleProject, data);
+        var act = () => Scene.CreateAndHydrate(data);
 
         // Assert - creating a scene with a null name should fail validation
         _ = act.Should().Throw<ArgumentException>();
     }
-
-    [TestMethod]
-    public void Dehydrate_Then_Hydrate_Restores_SceneContents()
-    {
-        // Arrange
-        var scene = new Scene(this.ExampleProject) { Name = "RoundTrip Scene" };
-        var node1 = new SceneNode(scene) { Name = "Node A" };
-        var node2 = new SceneNode(scene) { Name = "Node B" };
-
-        // avoid adding abstract GameComponent; keep default transform only
-        scene.RootNodes.Add(node1);
-        scene.RootNodes.Add(node2);
-
-        // Act: Dehydrate -> DTO then hydrate a new Scene using the DTO (unit check; no JSON serializer)
-        var dto = scene.Dehydrate();
-        var deserialized = new Scene(this.ExampleProject) { Name = dto.Name, Id = dto.Id };
-        deserialized.Hydrate(dto);
-
-        // Assert basic structural equivalence
-        _ = deserialized.Should().NotBeNull();
-        _ = deserialized!.Name.Should().Be(scene.Name);
-        _ = deserialized.Project.Should().BeSameAs(this.ExampleProject);
-        _ = deserialized.RootNodes.Should().HaveCount(2);
-        _ = deserialized.RootNodes[0].Name.Should().Be("Node A");
-        _ = deserialized.RootNodes[1].Name.Should().Be("Node B");
-
-        // Nodes should reference their parent scene
-        foreach (var n in deserialized.RootNodes)
-        {
-            _ = n.Scene.Should().BeSameAs(deserialized);
-        }
-    }
-
-    [TestMethod]
-    public void Hydrate_Node_Sets_NodeScene_For_All_RootNodes()
-    {
-        // Arrange: construct DTO programmatically (avoid JSON literal fragility)
-        var data = new Serialization.SceneData
-        {
-            Id = SceneId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000040")),
-            Name = "Scene Name",
-            RootNodes = [
-                new()
-                {
-                    Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000041")),
-                    Name = "Node 1",
-                    Components =
-                    [
-                        new Serialization.TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
-                    ],
-                },
-                new()
-                {
-                    Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000042")),
-                    Name = "Node 2",
-                    Components =
-                    [
-                        new Serialization.TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
-                    ],
-                },
-            ],
-        };
-
-        var scene = new Scene(this.ExampleProject) { Name = data.Name, Id = data.Id };
-        scene.Hydrate(data);
-
-        // Assert
-        foreach (var node in scene!.RootNodes)
-        {
-            _ = node.Scene.Should().BeSameAs(scene);
-        }
-    }
-
-    [TestMethod]
-    public void AddChild_Attaches_Child_And_Sets_Parent()
-    {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
-        var parent = new SceneNode(scene) { Name = "Parent" };
-        var child = new SceneNode(scene) { Name = "Child" };
-
-        parent.AddChild(child);
-
-        _ = child.Parent.Should().BeSameAs(parent);
-        _ = parent.Children.Should().Contain(child);
-    }
-
-    [TestMethod]
-    public void RemoveChild_Detaches_Child()
-    {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
-        var parent = new SceneNode(scene) { Name = "Parent" };
-        var child = new SceneNode(scene) { Name = "Child" };
-
-        parent.AddChild(child);
-        parent.RemoveChild(child);
-
-        _ = child.Parent.Should().BeNull();
-        _ = parent.Children.Should().NotContain(child);
-    }
-
-    [TestMethod]
-    public void SetParent_Reparents_Node_From_Old_To_New_Parent()
-    {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
-        var parent1 = new SceneNode(scene) { Name = "Parent1" };
-        var parent2 = new SceneNode(scene) { Name = "Parent2" };
-        var child = new SceneNode(scene) { Name = "Child" };
-
-        parent1.AddChild(child);
-        parent2.AddChild(child); // Should move from parent1 to parent2
-
-        _ = child.Parent.Should().BeSameAs(parent2);
-        _ = parent1.Children.Should().NotContain(child);
-        _ = parent2.Children.Should().Contain(child);
-    }
-
-    [TestMethod]
-    public void SetParent_Direct_Circular_Reference_Throws()
-    {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
-
-        var act = () => node.AddChild(node);
-
-        _ = act.Should().Throw<InvalidOperationException>().WithMessage("*circular reference*");
-    }
-
-    [TestMethod]
-    public void SetParent_Indirect_Circular_Reference_Throws()
-    {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
-        var parent = new SceneNode(scene) { Name = "Parent" };
-        var child = new SceneNode(scene) { Name = "Child" };
-        var grandChild = new SceneNode(scene) { Name = "GrandChild" };
-
-        parent.AddChild(child);
-        child.AddChild(grandChild);
-
-        var act = () => grandChild.AddChild(parent);
-
-        _ = act.Should().Throw<InvalidOperationException>().WithMessage("*circular reference*");
-    }
-
-    [TestMethod]
-    public void Descendants_Returns_All_Descendants_In_Tree()
-    {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var child1 = new SceneNode(scene) { Name = "Child1" };
-        var child2 = new SceneNode(scene) { Name = "Child2" };
-        var grandChild = new SceneNode(scene) { Name = "GrandChild" };
-
-        root.AddChild(child1);
-        root.AddChild(child2);
-        child1.AddChild(grandChild);
-
-        var descendants = root.Descendants().ToList();
-
-        _ = descendants.Should().HaveCount(3);
-        _ = descendants.Should().Contain(child1);
-        _ = descendants.Should().Contain(child2);
-        _ = descendants.Should().Contain(grandChild);
-    }
-
-    [TestMethod]
-    public void Ancestors_Returns_Ordered_Ancestors()
-    {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var child = new SceneNode(scene) { Name = "Child" };
-        var grandChild = new SceneNode(scene) { Name = "GrandChild" };
-
-        root.AddChild(child);
-        child.AddChild(grandChild);
-
-        var ancestors = grandChild.Ancestors().ToList();
-
-        _ = ancestors.Should().HaveCount(2);
-        _ = ancestors[0].Should().BeSameAs(child);
-        _ = ancestors[1].Should().BeSameAs(root);
-    }
-
-    [TestMethod]
-    public void Dehydrate_Includes_Nested_Children()
-    {
-        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var child = new SceneNode(scene) { Name = "Child" };
-
-        root.AddChild(child);
-        scene.RootNodes.Add(root);
-
-        var dto = scene.Dehydrate();
-
-        // Verify DTO hierarchy captures nested nodes
-        _ = dto.RootNodes.Should().Contain(r => r.Name == "Root");
-        var rootDto = dto.RootNodes.Single(r => string.Equals(r.Name, "Root", StringComparison.Ordinal));
-        _ = rootDto.Children.Should().Contain(c => c.Name == "Child");
-    }
-
-    [TestMethod]
-    public void Hydrate_Populates_Nested_Hierarchy()
-    {
-        // Arrange: construct nested DTO programmatically
-        var data = new Serialization.SceneData
-        {
-            Id = SceneId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000050")),
-            Name = "Scene",
-            RootNodes = [
-                new()
-                {
-                    Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000051")),
-                    Name = "Root",
-                    Components =
-                    [
-                        new Serialization.TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
-                    ],
-                    Children =
-                    [
-                        new()
-                        {
-                            Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000052")),
-                            Name = "Child",
-                            Components =
-                            [
-                                new Serialization.TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
-                            ],
-                        },
-                    ],
-                },
-            ],
-        };
-
-        var scene = new Scene(this.ExampleProject) { Name = data.Name, Id = data.Id };
-        scene.Hydrate(data);
-
-        _ = scene.Should().NotBeNull();
-        _ = scene!.RootNodes.Should().ContainSingle();
-
-        var root = scene.RootNodes[0];
-        _ = root.Name.Should().Be("Root");
-        _ = root.Children.Should().ContainSingle();
-
-        var child = root.Children[0];
-        _ = child.Name.Should().Be("Child");
-        _ = child.Parent.Should().BeSameAs(root);
-        _ = child.Scene.Should().BeSameAs(scene);
-    }
-
-    [TestMethod]
-    public void GeometryComponent_Targeted_And_Component_Overrides_Are_Preserved_InMemory()
-    {
-        // Arrange
-        var scene = new Scene(this.ExampleProject) { Name = "Geometry Scene" };
-        var node = new SceneNode(scene) { Name = "MeshNode" };
-        scene.RootNodes.Add(node);
-
-        var geo = new GeometryComponent
-        {
-            Name = "HeroGeometry",
-            Node = node,
-            Geometry = new("asset:///Engine/Generated/BasicShapes/Cube"),
-        };
-
-        // component-level override
-        var compMat = new Slots.MaterialsSlot();
-        compMat.Material.Uri = new("asset:///Engine/Generated/Materials/Default");
-        geo.OverrideSlots.Add(compMat);
-
-        // targeted override for LOD 0, submesh 1
-        var target = new GeometryOverrideTarget { LodIndex = 0, SubmeshIndex = 1 };
-        var mat = new Slots.MaterialsSlot();
-        mat.Material.Uri = new("asset:///Engine/Generated/Materials/Gold");
-        target.OverrideSlots.Add(mat);
-        geo.TargetedOverrides.Add(target);
-
-        node.Components.Add(geo);
-
-        // Act: all operations performed in-memory (unit test) — no JSON serialization
-        var dto = scene.Dehydrate();
-        var restored = new Scene(this.ExampleProject) { Name = dto.Name, Id = dto.Id };
-        restored.Hydrate(dto);
-
-        // Assert we have the same in-memory structure
-        _ = restored.RootNodes.Should().ContainSingle();
-        var rnode = restored.RootNodes[0];
-        var rgeo = rnode.Components.OfType<GeometryComponent>().Single();
-
-        _ = rgeo.Should().NotBeNull();
-        _ = rgeo.Geometry!.Uri.Should().Be("asset:///Engine/Generated/BasicShapes/Cube");
-        _ = rgeo.OverrideSlots.OfType<Slots.MaterialsSlot>().Should().ContainSingle();
-        _ = rgeo.OverrideSlots.OfType<Slots.MaterialsSlot>().First().Material.Uri.Should().Be("asset:///Engine/Generated/Materials/Default");
-
-        _ = rgeo.TargetedOverrides.Should().ContainSingle();
-        var rt = rgeo.TargetedOverrides[0];
-        _ = rt.OverrideSlots.OfType<Slots.MaterialsSlot>().Should().ContainSingle();
-        _ = rt.OverrideSlots.OfType<Slots.MaterialsSlot>().First().Material.Uri.Should().Be("asset:///Engine/Generated/Materials/Gold");
-    }
-
-    private static SceneEnvironmentData CreateAuthoredEnvironment() => new()
-    {
-        AtmosphereEnabled = false,
-        Background = new BackgroundEnvironmentData { Enabled = true, ColorRgb = new Vector3(0.2f, 0.3f, 0.4f) },
-        SkySphere = new SkySphereEnvironmentData
-        {
-            Enabled = true,
-            Source = SkySphereSource.SolidColor,
-            Cubemap = new Uri("asset:///Content/Sky.otex.json"),
-            SolidColorRgb = new Vector3(2.0f, 3.0f, 4.0f),
-            Intensity = 256.0f,
-            RotationRadians = 1.5f,
-            TintRgb = new Vector3(0.9f, 0.8f, 0.7f),
-        },
-        SkyLight = new SkyLightEnvironmentData
-        {
-            Enabled = false,
-            Source = SkyLightSource.SpecifiedCubemap,
-            Cubemap = new Uri("asset:///Content/Light.otex.json"),
-            Intensity = 2.0f,
-            TintRgb = new Vector3(0.5f, 0.6f, 0.7f),
-            DiffuseIntensity = 0.25f,
-            SpecularIntensity = 0.75f,
-            CubemapAngleRadians = -0.5f,
-            LowerHemisphereColor = new Vector3(0.1f, 0.2f, 0.3f),
-            LowerHemisphereIsSolidColor = false,
-            LowerHemisphereBlendAlpha = 0.4f,
-            VolumetricScatteringIntensity = 3.0f,
-            AffectReflections = false,
-        },
-        SkyAtmosphere = new SkyAtmosphereEnvironmentData
-        {
-            PlanetRadiusMeters = 6_400_000.0f,
-            AtmosphereHeightMeters = 90_000.0f,
-            GroundAlbedoRgb = new Vector3(0.1f, 0.2f, 0.3f),
-            RayleighScaleHeightMeters = 7_000.0f,
-            MieScaleHeightMeters = 1_400.0f,
-            MieAnisotropy = 0.7f,
-            SkyLuminanceFactorRgb = new Vector3(1.1f, 1.0f, 0.9f),
-            AerialPerspectiveDistanceScale = 1.2f,
-            AerialScatteringStrength = 0.8f,
-            AerialPerspectiveStartDepthMeters = 40.0f,
-            HeightFogContribution = 0.6f,
-            SunDiskEnabled = false,
-        },
-        PostProcess = CreateAuthoredPostProcess(),
-    };
-
-    private static PostProcessEnvironmentData CreateAuthoredPostProcess()
-        => new()
-        {
-            ToneMapper = ToneMappingMode.Reinhard,
-            ExposureMode = ExposureMode.ManualCamera,
-            ExposureEnabled = false,
-            ExposureCompensationEv = 1.25f,
-            ExposureKey = 11.0f,
-            ManualExposureEv = 5.5f,
-            AutoExposureMinEv = -3.0f,
-            AutoExposureMaxEv = 14.0f,
-            AutoExposureSpeedUp = 4.0f,
-            AutoExposureSpeedDown = 2.0f,
-            AutoExposureMeteringMode = MeteringMode.Spot,
-            AutoExposureLowPercentile = 0.2f,
-            AutoExposureHighPercentile = 0.8f,
-            AutoExposureMinLogLuminance = -10.0f,
-            AutoExposureLogLuminanceRange = 20.0f,
-            AutoExposureTargetLuminance = 0.25f,
-            AutoExposureSpotMeterRadius = 0.4f,
-            AutoExposureBlackInfluence = 0.35f,
-            AutoExposureTransitionDistanceEv = 2.5f,
-            AutoExposureMeteringMask = new Uri("asset:///Game/Textures/Meter.otex.json"),
-            AutoExposureCompensationCurve = [new(-4f, 1f), new(12f, -0.5f)],
-            BloomIntensity = 0.7f,
-            BloomThreshold = 1.5f,
-            Saturation = 0.9f,
-            Contrast = 1.1f,
-            VignetteIntensity = 0.3f,
-            DisplayGamma = 2.4f,
-        };
 }

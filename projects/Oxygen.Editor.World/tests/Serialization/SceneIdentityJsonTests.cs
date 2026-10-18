@@ -8,7 +8,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Tests;
+namespace Oxygen.Editor.World.Tests.Serialization;
 
 /// <summary>
 /// Typed ids must keep the scene file format: every id is written as the plain GUID string it was before.
@@ -16,12 +16,11 @@ namespace Oxygen.Editor.World.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory($"{nameof(Scene)}.Json")]
-public class SceneIdentityJsonTests
+public sealed class SceneIdentityJsonTests
 {
     private static readonly SceneId Scene = SceneId.FromValue(Guid.Parse("00000000-0000-4000-8000-000000000101"));
     private static readonly NodeId Camera = NodeId.FromValue(Guid.Parse("00000000-0000-4000-8000-000000000201"));
     private static readonly ComponentId Transform = ComponentId.FromValue(Guid.Parse("00000000-0000-4000-8000-000000000301"));
-    private static readonly FolderId Folder = FolderId.FromValue(Guid.Parse("00000000-0000-4000-8000-000000000401"));
 
     [TestMethod]
     public void IdsAreWrittenAsGuidStrings()
@@ -35,10 +34,7 @@ public class SceneIdentityJsonTests
         _ = node.EnumerateObject().First().Name.Should().Be("Id");
         _ = node.GetProperty("Id").GetString().Should().Be(Camera.ToString());
         _ = node.GetProperty("Components")[0].GetProperty("Id").GetString().Should().Be(Transform.ToString());
-        _ = root.GetProperty("Play").GetProperty("StartingCamera").GetString().Should().Be(Camera.ToString());
-        var folder = root.GetProperty("ExplorerLayout")[0];
-        _ = folder.GetProperty("FolderId").GetString().Should().Be(Folder.ToString());
-        _ = folder.GetProperty("Children")[0].GetProperty("NodeId").GetString().Should().Be(Camera.ToString());
+        _ = root.GetProperty("StartingCamera").GetString().Should().Be(Camera.ToString());
     }
 
     [TestMethod]
@@ -51,9 +47,7 @@ public class SceneIdentityJsonTests
         _ = data.Id.Should().Be(Scene);
         _ = data.RootNodes[0].Id.Should().Be(Camera);
         _ = data.RootNodes[0].Components[0].Id.Should().Be(Transform);
-        _ = data.Play!.StartingCamera.Should().Be(Camera);
-        _ = data.ExplorerLayout![0].FolderId.Should().Be(Folder);
-        _ = data.ExplorerLayout[0].Children![0].NodeId.Should().Be(Camera);
+        _ = data.StartingCamera.Should().Be(Camera);
     }
 
     private static SceneData CreateScene() => new()
@@ -69,16 +63,6 @@ public class SceneIdentityJsonTests
                 Components = [new TransformData { Id = Transform, Name = "Transform" }],
             },
         ],
-        Play = new ScenePlayData { StartingCamera = Camera },
-        ExplorerLayout =
-        [
-            new ExplorerEntryData
-            {
-                Type = "Folder",
-                FolderId = Folder,
-                Name = "Cameras",
-                Children = [new ExplorerEntryData { NodeId = Camera }],
-            },
-        ],
+        StartingCamera = Camera,
     };
 }

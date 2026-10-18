@@ -2,15 +2,21 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Tests;
+namespace Oxygen.Editor.World.Tests.Components;
 
+/// <summary>
+/// Verifies camera component defaults, round-trips, and physical exposure validation.
+/// </summary>
 [TestClass]
-public class CameraComponentTests
+[ExcludeFromCodeCoverage]
+[TestCategory(nameof(CameraComponent))]
+public sealed class CameraComponentTests
 {
     [TestMethod]
     public void PerspectiveCamera_Defaults_ShouldUseEditorDegreeUnits()

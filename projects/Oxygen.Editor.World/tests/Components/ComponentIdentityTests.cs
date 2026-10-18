@@ -2,15 +2,20 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using Moq;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Tests;
+namespace Oxygen.Editor.World.Tests.Components;
 
+/// <summary>
+/// Verifies component identity persistence and identity repair on duplicate or empty GUIDs.
+/// </summary>
 [TestClass]
+[ExcludeFromCodeCoverage]
+[TestCategory(nameof(ComponentId))]
 public sealed class ComponentIdentityTests
 {
     [TestMethod]
@@ -33,8 +38,7 @@ public sealed class ComponentIdentityTests
     [TestMethod]
     public void SceneNodeHydrate_ShouldRepairEmptyOrDuplicateComponentIdentities()
     {
-        var project = new Mock<IProject>().Object;
-        var scene = new Scene(project) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var duplicateId = ComponentId.FromValue(Guid.Parse("11111111-1111-1111-1111-111111111111"));
         var data = new SceneNodeData
         {

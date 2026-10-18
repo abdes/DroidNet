@@ -7,27 +7,28 @@ using System.Numerics;
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
-using Moq;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World.Tests;
+namespace Oxygen.Editor.World.Tests.Components;
 
+/// <summary>
+/// Verifies scripting component serialization, slot ordering, default omissions, and value validation.
+/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory($"{nameof(ScriptingComponent)}.Json")]
-public class ScriptingComponentTests
+[TestCategory(nameof(ScriptingComponent))]
+public sealed class ScriptingComponentTests
 {
     private static readonly Uri MoveScript = new("asset:///Content/Player/move.oscript");
     private static readonly Uri LookScript = new("asset:///Content/Player/look.oscript");
-
-    private readonly Mock<IProject> projectMock = new();
 
     public TestContext TestContext { get; set; } = null!;
 
     [TestMethod]
     public async Task SaveAndReopenKeepSlotsOrderExecutionOrderAndEveryValueType()
     {
-        var scene = new Scene(this.projectMock.Object) { Name = "Scripted" };
+        var scene = new Scene { Name = "Scripted" };
         var target = new SceneNode(scene) { Name = "Target" };
         var player = new SceneNode(scene) { Name = "Player" };
         scene.RootNodes.Add(target);
@@ -47,7 +48,7 @@ public class ScriptingComponentTests
         var scripting = new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [second, first, unassigned] };
         _ = player.AddComponent(scripting);
 
-        var reopened = await RoundTripAsync(scene, this.projectMock.Object, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var reopened = await RoundTripAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var slots = reopened.AllNodes.Single(node => node.Id == player.Id).Components.OfType<ScriptingComponent>().Single().Slots;
         _ = slots.Should().Equal(second, first, unassigned);
@@ -79,7 +80,7 @@ public class ScriptingComponentTests
             """;
         var data = JsonSerializer.Deserialize(json, SceneJsonContext.Default.ComponentData)!;
 
-        var hydrate = () => Components.GameComponent.CreateAndHydrate(data);
+        var hydrate = () => GameComponent.CreateAndHydrate(data);
 
         _ = hydrate.Should().Throw<JsonException>().WithMessage("*'speed'*");
     }
@@ -97,13 +98,14 @@ public class ScriptingComponentTests
         _ = left.WithoutOverrides(["speed"]).Overrides.Should().BeEmpty();
     }
 
-    private static async Task<Scene> RoundTripAsync(Scene scene, IProject project, CancellationToken cancellationToken)
+    private static async Task<Scene> RoundTripAsync(Scene scene, CancellationToken cancellationToken)
     {
-        var serializer = new SceneSerializer(project);
-        using var saved = new MemoryStream();
-        await serializer.SerializeAsync(saved, scene).ConfigureAwait(false);
-        using var reopened = new MemoryStream(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(saved.ToArray())));
+        var saved = new MemoryStream();
+        await using var savedLifetime = saved.ConfigureAwait(false);
+        await SceneSerializer.SerializeAsync(saved, scene).ConfigureAwait(false);
+        var reopened = new MemoryStream(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(saved.ToArray())));
+        await using var reopenedLifetime = reopened.ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        return await serializer.DeserializeAsync(reopened).ConfigureAwait(false);
+        return await SceneSerializer.DeserializeAsync(reopened).ConfigureAwait(false);
     }
 }

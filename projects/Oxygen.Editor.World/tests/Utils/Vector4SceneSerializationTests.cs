@@ -2,17 +2,24 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
-using Moq;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.World.Tests.TestSupport;
 using Oxygen.Editor.World.Utils;
 
-namespace Oxygen.Editor.World.Tests;
+namespace Oxygen.Editor.World.Tests.Utils;
 
+/// <summary>
+/// Verifies Vector4 serialization, member conventions, and scene round-tripping.
+/// </summary>
 [TestClass]
+[ExcludeFromCodeCoverage]
+[TestCategory(nameof(Vector4JsonConverter))]
 public sealed class Vector4SceneSerializationTests
 {
     private static readonly JsonSerializerOptions VectorOptions = new() { Converters = { new Vector4JsonConverter() } };
@@ -20,21 +27,17 @@ public sealed class Vector4SceneSerializationTests
     [TestMethod]
     public async Task DirectionalCascadeDistancesSurviveTheSceneJsonRoundTrip()
     {
-        var project = Mock.Of<IProject>();
-        var scene = new Scene(project) { Name = "Cascade serialization" };
+        var scene = new Scene { Name = "Cascade serialization" };
         var node = new SceneNode(scene) { Name = "Sun" };
         var expected = new Vector4(16, 48, 128, 256);
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun", SplitMode = DirectionalCsmSplitMode.ManualDistances, CascadeDistances = expected });
         scene.RootNodes.Add(node);
-        var serializer = new SceneSerializer(project);
-        var stream = new MemoryStream();
+
+        var stream = await SceneTestSupport.SerializeToStreamAsync(scene).ConfigureAwait(false);
         await using var streamLifetime = stream.ConfigureAwait(false);
 
-        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
-
         _ = Encoding.UTF8.GetString(stream.ToArray()).Should().Contain("\"W\": 256");
-        stream.Position = 0;
-        var reopened = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
+        var reopened = await SceneTestSupport.DeserializeFromStreamAsync(stream).ConfigureAwait(false);
         var light = reopened.RootNodes.Single().Components.OfType<DirectionalLightComponent>().Single();
         _ = light.CascadeDistances.Should().Be(expected);
         _ = light.SplitMode.Should().Be(DirectionalCsmSplitMode.ManualDistances);
@@ -48,5 +51,25 @@ public sealed class Vector4SceneSerializationTests
         var value = JsonSerializer.Deserialize<Vector4>(json, VectorOptions);
 
         _ = value.Should().Be(new Vector4(x, y, z, w));
+    }
+
+    [TestMethod]
+    [DataRow("[]")]
+    [DataRow("\"not-an-object\"")]
+    public void Vector3JsonConverter_WhenInvalidJsonToken_ThrowsJsonException(string json)
+    {
+        var options = new JsonSerializerOptions { Converters = { new Vector3JsonConverter() } };
+        Action act = () => JsonSerializer.Deserialize<Vector3>(json, options);
+        _ = act.Should().Throw<JsonException>();
+    }
+
+    [TestMethod]
+    [DataRow("[]")]
+    [DataRow("\"not-an-object\"")]
+    public void QuaternionJsonConverter_WhenInvalidJsonToken_ThrowsJsonException(string json)
+    {
+        var options = new JsonSerializerOptions { Converters = { new QuaternionJsonConverter() } };
+        Action act = () => JsonSerializer.Deserialize<Quaternion>(json, options);
+        _ = act.Should().Throw<JsonException>();
     }
 }

@@ -13,7 +13,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Moq" />
     </ItemGroup>
 
 </Project>

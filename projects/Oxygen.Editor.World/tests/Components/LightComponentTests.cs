@@ -2,14 +2,20 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World.Tests;
+namespace Oxygen.Editor.World.Tests.Components;
 
+/// <summary>
+/// Verifies directional light component defaults, property notifications, and serialization round trips.
+/// </summary>
 [TestClass]
+[ExcludeFromCodeCoverage]
+[TestCategory(nameof(DirectionalLightComponent))]
 public sealed class LightComponentTests
 {
     [TestMethod]

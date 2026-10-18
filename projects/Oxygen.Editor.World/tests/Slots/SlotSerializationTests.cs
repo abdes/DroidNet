@@ -2,14 +2,20 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 
-namespace Oxygen.Editor.World.Tests;
+namespace Oxygen.Editor.World.Tests.Slots;
 
+/// <summary>
+/// Verifies round-trip dehydration and hydration of override slots.
+/// </summary>
 [TestClass]
-public class SlotSerializationTests
+[ExcludeFromCodeCoverage]
+[TestCategory(nameof(OverrideSlot))]
+public sealed class SlotSerializationTests
 {
     [TestMethod]
     public void OverridableProperty_FromDto_ToDto_RoundTrip()
