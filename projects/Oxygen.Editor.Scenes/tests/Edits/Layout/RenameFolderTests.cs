@@ -6,8 +6,8 @@ using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits.Layout;
 
@@ -26,7 +26,7 @@ public sealed class RenameFolderTests
         var result = await fixture.Authoring.ExecuteAsync(new RenameFolder(SampleScene.F, "Boxes")).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.F)!.Name.Should().Be("Boxes");
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.F)!.Name.Should().Be("Boxes");
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.LayoutChanged());
     }
 

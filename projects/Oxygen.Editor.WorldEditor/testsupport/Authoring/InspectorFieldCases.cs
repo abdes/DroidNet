@@ -5,6 +5,7 @@
 using System.Numerics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 

@@ -54,7 +54,7 @@ public sealed class CookedDependencyReportTests
     public void AssetTargetReferenceRequiresMatchingIndexedType(byte indexedType, bool expectedMatch)
     {
         var reference = new CookedKeyReference("22222222-2222-4222-8222-222222222222", CookedKeyReferenceTargetKind.Asset, 2);
-        var target = new Oxygen.Managed.Assets.Catalog.CookedAssetMetadata(
+        var target = new Managed.Assets.Catalog.CookedAssetMetadata(
             "C:\\Cooked", "assets/target.bin", Guid.CreateVersion7(), new(1, 2), indexedType, 0, new string('0', 64));
 
         _ = global::Oxygen.Editor.ContentPipeline.Publication.CookedLibraryReadSet.MatchesExpectedAssetType(reference, target).Should().Be(expectedMatch);

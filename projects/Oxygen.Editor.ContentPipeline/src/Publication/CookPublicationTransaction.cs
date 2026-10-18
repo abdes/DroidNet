@@ -8,7 +8,6 @@ using System.Text.Json;
 using DroidNet.Storage;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 

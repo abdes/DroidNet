@@ -5,7 +5,7 @@
 using System.Text.Json.Serialization;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;

@@ -4,7 +4,7 @@
 
 using System.Collections.Immutable;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.World.Components;
 
 /// <summary>
 /// One script attached to a node: the script, when it runs relative to other scripts, and the parameter values that

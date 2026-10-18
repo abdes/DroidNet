@@ -9,9 +9,10 @@ using Moq;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Scripting;
-using Oxygen.Editor.World.Scripting;
 using Oxygen.Editor.WorldEditor.TestSupport;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
@@ -33,7 +34,7 @@ public sealed partial class ScriptingViewModelTests : IDisposable
 
     private readonly Subject<ScriptAnalysisSnapshot> changes = new();
     private readonly List<ScriptAnalysisSnapshot> current = [];
-    private readonly Scene scene = new(Mock.Of<IProject>()) { Name = "Main" };
+    private readonly Scene scene = new() { Name = "Main" };
     private SceneNode player;
     private SceneTab? tab;
     private ScriptingComponent scripting = new() { Name = ScriptingComponent.DefaultName, Slots = [new ScriptSlot { Script = MoveScript }] };

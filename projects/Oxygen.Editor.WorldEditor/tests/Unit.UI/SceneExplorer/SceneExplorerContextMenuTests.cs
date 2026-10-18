@@ -12,12 +12,13 @@ using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
@@ -143,14 +144,14 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
     [TestMethod]
     public Task ContextMenuFolderCopyAndPaste_PastesTheFolderWithItsNodeInOneUndoStep() => EnqueueAsync(async () =>
     {
-        using var harness = new AuthoringHarness(out var scene, out _, static (built, node) => built.SetExplorerLayout(
+        using var harness = new AuthoringHarness(out var scene, out _, layout: static node =>
         [
             new ExplorerEntryData
             {
                 Type = "Folder", FolderId = FolderId.New(), Name = "Group",
                 Children = [new ExplorerEntryData { Type = "Node", NodeId = node.Id }],
             },
-        ]));
+        ]);
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
         var folder = explorer.ShownItems.OfType<FolderAdapter>().Single();
@@ -159,7 +160,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         var backgroundMenu = explorer.BuildContextMenuSource(anchor: null);
         await GetMenuCommand(backgroundMenu, "Paste at scene root").ExecuteAsync(parameter: null).ConfigureAwait(true);
 
-        _ = scene.ExplorerLayout!.Where(static entry => entry.Name == "Group").Should().HaveCount(2);
+        _ = harness.Layout.Where(static entry => entry.Name == "Group").Should().HaveCount(2);
         _ = scene.RootNodes.Should().HaveCount(2);
         _ = harness.History.UndoStack.Should().ContainSingle();
         _ = explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Copied);
@@ -294,17 +295,17 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         private readonly Scene scene;
         private readonly List<SceneTab> openDocuments = [];
 
-        public AuthoringHarness(out Scene scene, out SceneNode node, Action<Scene, SceneNode>? build = null)
+        public AuthoringHarness(out Scene scene, out SceneNode node, Action<Scene, SceneNode>? build = null, Func<SceneNode, IList<ExplorerEntryData>>? layout = null)
         {
-            var project = new Project(new ProjectInfo("Authoring", Category.Games, @"H:\AuthoringTreeTests", "preview.png")) { Name = "Authoring" };
-            var built = new Scene(project) { Name = "Scene" };
+            var project = new Project(new ProjectInfo("Authoring", Category.Games, @"H:\AuthoringTreeTests", "preview.png"));
+            var built = new Scene { Name = "Scene" };
             var builtNode = new SceneNode(built) { Name = "Node" };
             built.RootNodes.Add(builtNode);
             build?.Invoke(built, builtNode);
             this.Manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
             _ = this.Manager.SetupGet(value => value.CurrentProject).Returns(project);
             this.Documents = new TestDocumentArea();
-            var metadata = SceneTabs.Open(built);
+            var metadata = SceneTabs.Open(built, layout: layout?.Invoke(builtNode));
             scene = metadata.Scene;
             node = metadata.NodeOf(builtNode);
             this.scene = scene;
@@ -321,6 +322,9 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         /// <summary>Gets the history of the harness's first scene.</summary>
         public DroidNet.TimeMachine.HistoryKeeper History => this.openDocuments[0].Document.History;
 
+        /// <summary>Gets the explorer layout of the harness's first scene.</summary>
+        public IList<ExplorerEntryData> Layout => this.openDocuments[0].Layout;
+
         public IMessenger Messenger { get; } = new StrongReferenceMessenger();
 
         public void Dispose()
@@ -333,7 +337,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
 
         public Scene AddScene(string name)
         {
-            var added = new Scene(this.scene.Project) { Name = name };
+            var added = new Scene { Name = name };
             var metadata = SceneTabs.Open(added);
             added = metadata.Scene;
             this.openDocuments.Add(metadata);

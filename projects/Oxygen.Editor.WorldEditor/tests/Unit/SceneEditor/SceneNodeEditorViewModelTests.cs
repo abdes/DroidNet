@@ -15,6 +15,7 @@ using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Workspace;
@@ -187,8 +188,7 @@ public sealed class SceneNodeEditorViewModelTests
 
     private static Scene CreateScene()
     {
-        var project = new Mock<IProject>().Object;
-        return new Scene(project) { Name = "Test Scene" };
+        return new Scene { Name = "Test Scene" };
     }
 
     private static SceneNode CreateNode(Scene scene)

@@ -7,6 +7,8 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ContentBrowser.Scripts;
+using Oxygen.Editor.Scripting;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Scripting;
 
 namespace Oxygen.Editor.World.Inspector.Scripting;

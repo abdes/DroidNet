@@ -92,7 +92,7 @@ public static class SceneEditCodes
     public const string MaterialSlotInventoryUnavailable = DiagnosticCodes.ScenePrefix + "MaterialSlot.InventoryUnavailable";
 
     /// <summary>The starting camera is not a camera node of the scene.</summary>
-    public const string PlayCameraInvalid = DiagnosticCodes.ScenePrefix + "Play.CameraInvalid";
+    public const string StartingCameraInvalid = DiagnosticCodes.ScenePrefix + "StartingCamera.Invalid";
 
     /// <summary>An entry repeats, such as an input context or a script slot identity.</summary>
     public const string EntryDuplicate = DiagnosticCodes.ScenePrefix + "Entry.Duplicate";

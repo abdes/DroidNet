@@ -5,7 +5,6 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using DroidNet.Storage;
-using Moq;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Documents;
@@ -30,15 +29,12 @@ internal sealed partial class SceneDocuments : IDisposable
     /// <summary>Initializes a new instance of the <see cref="SceneDocuments"/> class.</summary>
     public SceneDocuments()
     {
-        var info = new ProjectInfo("Live preview", Category.Games, Root);
-        var project = new Mock<IProject>();
-        _ = project.SetupGet(value => value.ProjectInfo).Returns(info);
-        this.Project = project.Object;
+        this.Project = ProjectContext.FromProjectInfo(new ProjectInfo("Live preview", Category.Games, Root));
         this.Open = new OpenDocuments([new SceneDocumentKind(this.Project)], this.Files);
     }
 
-    /// <summary>Gets the project every scene belongs to.</summary>
-    public IProject Project { get; }
+    /// <summary>Gets the project every scene is opened in.</summary>
+    public ProjectContext Project { get; }
 
     /// <summary>Gets the open documents.</summary>
     public OpenDocuments Open { get; }
@@ -49,7 +45,7 @@ internal sealed partial class SceneDocuments : IDisposable
     /// <summary>Creates an empty scene of the project, for a test to build and open.</summary>
     /// <param name="name">The scene's name, which names its file.</param>
     /// <returns>The scene.</returns>
-    public Scene NewScene(string name = "Test Scene") => new(this.Project) { Name = name };
+    public Scene NewScene(string name = "Test Scene") => new() { Name = name };
 
     /// <summary>Writes a scene to its file and opens it.</summary>
     /// <param name="scene">The scene the file records.</param>

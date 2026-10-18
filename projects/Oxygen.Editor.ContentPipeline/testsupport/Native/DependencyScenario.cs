@@ -4,6 +4,7 @@
 
 using System.Text.Json.Nodes;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets.Model;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;

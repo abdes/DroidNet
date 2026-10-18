@@ -13,7 +13,6 @@ using Microsoft.UI.Xaml.Markup;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Importing;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ContentBrowser.UI.Tests.Importing;
 

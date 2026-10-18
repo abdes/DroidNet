@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Documents;
-using Oxygen.Editor.World.Scripting;
+using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Play;

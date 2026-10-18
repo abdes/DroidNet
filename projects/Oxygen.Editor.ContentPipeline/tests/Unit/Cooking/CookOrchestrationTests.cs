@@ -4,7 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
-using Oxygen.Editor.World;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 
@@ -389,9 +389,9 @@ public sealed class CookOrchestrationTests
 
     private sealed class InvalidManifestBuilder : IContentImportManifestBuilder
     {
-        public ContentImportJob BuildModelJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string name, ContentImportLayout layout, global::Oxygen.Editor.ContentPipeline.Import.NativeMaterialSlotProvenance provenance) => new ContentImportManifestBuilder().BuildModelJob(input, dependsOn, name, layout, provenance);
+        public ContentImportJob BuildModelJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string name, ContentImportLayout layout, ContentPipeline.Import.NativeMaterialSlotProvenance provenance) => new ContentImportManifestBuilder().BuildModelJob(input, dependsOn, name, layout, provenance);
 
-        public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings? modelSettings = null) => new ContentImportManifestBuilder().BuildJob(input, dependsOn, modelSettings);
+        public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, ContentPipeline.Import.NativeSceneImportSettings? modelSettings = null) => new ContentImportManifestBuilder().BuildJob(input, dependsOn, modelSettings);
 
         public ContentImportManifest BuildManifest(ContentCookScope scope)
             => CreateInvalid();

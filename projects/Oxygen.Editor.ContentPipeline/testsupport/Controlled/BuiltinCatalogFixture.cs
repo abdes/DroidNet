@@ -8,7 +8,7 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 internal sealed class BuiltinCatalogFixture : IBuiltinGeometryCatalogProvider
 {
     /// <inheritdoc />
-    public async Task<BuiltinGeometryCatalog> GetBuiltinGeometryCatalogAsync(string projectRoot, string mountName, CancellationToken cancellationToken, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts = null)
+    public async Task<BuiltinGeometryCatalog> GetBuiltinGeometryCatalogAsync(string projectRoot, string mountName, CancellationToken cancellationToken, Managed.Core.Compatibility.NativeArtifactLease? artifacts = null)
     {
         var json = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "BuiltinGeometryCatalog.json"), cancellationToken).ConfigureAwait(false);
         var catalog = BuiltinGeometryCatalog.Parse(json);

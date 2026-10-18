@@ -257,9 +257,7 @@ public sealed partial class WorkspaceInteractionServiceTests
 
     private static Scene CreateScene()
     {
-        var project = new Mock<IProject>();
-        _ = project.SetupGet(value => value.ProjectInfo).Returns(ProjectInfo);
-        return new Scene(project.Object) { Name = "Test Scene" };
+        return new Scene { Name = "Test Scene" };
     }
 
     private sealed class CapturingOperationResultPublisher : IOperationResultPublisher

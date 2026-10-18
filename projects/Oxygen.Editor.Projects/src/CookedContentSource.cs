@@ -4,7 +4,7 @@
 
 using System.Text.Json.Serialization;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.Projects;
 
 /// <summary>Identifies the owner of a cooked-content source group.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<CookedContentSourceKind>))]

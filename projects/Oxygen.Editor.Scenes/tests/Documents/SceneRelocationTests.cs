@@ -7,7 +7,7 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 

@@ -116,10 +116,10 @@ internal sealed partial class SceneContentDemand : IDisposable
     {
         _ = this.followed.Remove(entry);
         entry.Document.ContentReplaced -= entry.OnContentReplaced;
-        if (entry.Authoring is { } authoring)
+        if (entry.Content is { } content)
         {
-            authoring.Changed -= entry.OnChanged;
-            entry.Authoring = null;
+            content.Authoring.Changed -= entry.OnChanged;
+            entry.Content = null;
         }
 
         foreach (var demand in entry.Demands.Values.ToArray())
@@ -133,20 +133,20 @@ internal sealed partial class SceneContentDemand : IDisposable
     // Opening and reloading start from the content as it is: every reference is demanded again.
     private void Observe(FollowedDocument entry, bool demandAll)
     {
-        if (entry.Authoring is { } previous)
+        if (entry.Content is { } previous)
         {
-            previous.Changed -= entry.OnChanged;
+            previous.Authoring.Changed -= entry.OnChanged;
         }
 
         var content = SceneContent.Of(entry.Document);
-        entry.Authoring = content.Authoring;
-        entry.Authoring.Changed += entry.OnChanged;
+        entry.Content = content;
+        content.Authoring.Changed += entry.OnChanged;
         this.Refresh(entry, demandAll);
     }
 
     private void Refresh(FollowedDocument entry, bool demandAll)
     {
-        if (this.disposed || entry.Authoring is not { } authoring)
+        if (this.disposed || entry.Content?.Authoring is not { } authoring)
         {
             return;
         }
@@ -173,7 +173,7 @@ internal sealed partial class SceneContentDemand : IDisposable
     private void StartDemand(FollowedDocument entry, Uri uri)
     {
         if ((entry.Demands.TryGetValue(uri, out var existing) && !existing.IsCancelled) || this.projects.ActiveProject is not { } project
-            || entry.Authoring?.Scene.Project.ProjectInfo?.Id != project.ProjectId)
+            || entry.Content?.Project.ProjectId != project.ProjectId)
         {
             return;
         }
@@ -236,7 +236,7 @@ internal sealed partial class SceneContentDemand : IDisposable
     {
         public Document Document { get; } = document;
 
-        public Oxygen.Editor.Scenes.Authoring.SceneAuthoring? Authoring { get; set; }
+        public SceneContent? Content { get; set; }
 
         public HashSet<Uri> Referenced { get; set; } = [];
 

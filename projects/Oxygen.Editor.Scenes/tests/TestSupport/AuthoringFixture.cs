@@ -5,10 +5,10 @@
 using System.Text.Json;
 using DroidNet.Documents;
 using DroidNet.TimeMachine;
-using Moq;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
@@ -52,6 +52,9 @@ public sealed partial class AuthoringFixture : IDisposable
 
     /// <summary>Gets the live scene.</summary>
     public Scene Scene => this.Content.Scene;
+
+    /// <summary>Gets the live scene's explorer layout.</summary>
+    public IList<ExplorerEntryData> Layout => this.Authoring.Layout;
 
     /// <summary>Gets the document's history.</summary>
     public HistoryKeeper History { get; }
@@ -128,7 +131,7 @@ public sealed partial class AuthoringFixture : IDisposable
     /// <returns>The snapshot.</returns>
     public SceneSnapshot Snapshot()
         => new(
-            JsonSerializer.Serialize(this.Scene.Dehydrate(), SceneJsonContext.Default.SceneData),
+            JsonSerializer.Serialize(new SceneFileData(this.Scene.Dehydrate(), this.Layout), SceneFileJsonContext.Default.SceneFileData),
             string.Join(',', this.Interaction?.Hidden ?? []),
             this.History.UndoStack.Count,
             this.History.RedoStack.Count,
@@ -154,11 +157,11 @@ public sealed partial class AuthoringFixture : IDisposable
 
     private static async Task<SceneContent> DecodeAsync(SceneData data, DocumentId document, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, HistoryKeeper history)
     {
-        var kind = new SceneDocumentKind(Mock.Of<IProject>(), interaction, redirects);
+        var kind = new SceneDocumentKind(FakeMaterialSlotProvider.Project, interaction, redirects);
         var file = new DocumentFile(
             Path.Combine(Path.GetTempPath(), "Content", data.Name + AssetFileTypes.SceneDescriptor),
             new Uri($"asset:/Content/{data.Name}{AssetFileTypes.SceneDescriptor}"));
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(data as SceneFileData ?? new SceneFileData(data, explorerLayout: null), SceneFileJsonContext.Default.SceneFileData);
         var result = await kind.DecodeAsync(file, bytes, new DocumentDecodeContext(document, history), CancellationToken.None).ConfigureAwait(true);
         return result.Content as SceneContent ?? throw new InvalidOperationException($"The test scene did not decode: {result.Problem}");
     }

@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
@@ -23,17 +22,17 @@ public sealed class SceneAdapterLayoutTests
         var child = new SceneNode(scene) { Name = "Child" };
         scene.RootNodes.Add(parent);
         parent.AddChild(child);
-        scene.SetExplorerLayout(
-            [
-                new ExplorerEntryData { Type = "Node", NodeId = parent.Id },
-                new ExplorerEntryData
-                {
-                    Type = "Node",
-                    NodeId = parent.Id,
-                    Children = [new ExplorerEntryData { Type = "Node", NodeId = child.Id }],
-                },
-            ]);
-        var adapter = SceneAdapter.BuildLayoutTree(scene);
+        IList<ExplorerEntryData> layout =
+        [
+            new ExplorerEntryData { Type = "Node", NodeId = parent.Id },
+            new ExplorerEntryData
+            {
+                Type = "Node",
+                NodeId = parent.Id,
+                Children = [new ExplorerEntryData { Type = "Node", NodeId = child.Id }],
+            },
+        ];
+        var adapter = SceneAdapter.BuildLayoutTree(scene, layout);
 
         var children = await adapter.Children.ConfigureAwait(false);
 
@@ -50,18 +49,18 @@ public sealed class SceneAdapterLayoutTests
     {
         var scene = CreateScene();
         var folderId = FolderId.New();
-        scene.SetExplorerLayout(
-            [
-                new ExplorerEntryData { Type = "Folder", FolderId = folderId, Name = "First" },
-                new ExplorerEntryData
-                {
-                    Type = "Folder",
-                    FolderId = folderId,
-                    Name = "Duplicate",
-                    Children = [new ExplorerEntryData { Type = "Folder", FolderId = FolderId.New(), Name = "Nested" }],
-                },
-            ]);
-        var adapter = SceneAdapter.BuildLayoutTree(scene);
+        IList<ExplorerEntryData> layout =
+        [
+            new ExplorerEntryData { Type = "Folder", FolderId = folderId, Name = "First" },
+            new ExplorerEntryData
+            {
+                Type = "Folder",
+                FolderId = folderId,
+                Name = "Duplicate",
+                Children = [new ExplorerEntryData { Type = "Folder", FolderId = FolderId.New(), Name = "Nested" }],
+            },
+        ];
+        var adapter = SceneAdapter.BuildLayoutTree(scene, layout);
 
         var children = await adapter.Children.ConfigureAwait(false);
 
@@ -85,29 +84,29 @@ public sealed class SceneAdapterLayoutTests
         nodeA.AddChild(nodeB);
         var folderId = FolderId.New();
         var nestedFolderId = FolderId.New();
-        scene.SetExplorerLayout(
-            [
-                new ExplorerEntryData
-                {
-                    Type = "Folder",
-                    FolderId = folderId,
-                    Name = "Group",
-                    Children =
-                    [
-                        new ExplorerEntryData
-                        {
-                            Type = "Folder",
-                            FolderId = nestedFolderId,
-                            Name = "Nested",
-                            Children = [new ExplorerEntryData { Type = "Node", NodeId = nodeB.Id }],
-                        },
-                        new ExplorerEntryData { Type = "Node", NodeId = nodeA.Id },
-                    ],
-                },
-                new ExplorerEntryData { Type = "Node", NodeId = NodeId.New() },
-                new ExplorerEntryData { Type = "Node", NodeId = nodeC.Id },
-            ]);
-        var adapter = SceneAdapter.BuildLayoutTree(scene);
+        IList<ExplorerEntryData> layout =
+        [
+            new ExplorerEntryData
+            {
+                Type = "Folder",
+                FolderId = folderId,
+                Name = "Group",
+                Children =
+                [
+                    new ExplorerEntryData
+                    {
+                        Type = "Folder",
+                        FolderId = nestedFolderId,
+                        Name = "Nested",
+                        Children = [new ExplorerEntryData { Type = "Node", NodeId = nodeB.Id }],
+                    },
+                    new ExplorerEntryData { Type = "Node", NodeId = nodeA.Id },
+                ],
+            },
+            new ExplorerEntryData { Type = "Node", NodeId = NodeId.New() },
+            new ExplorerEntryData { Type = "Node", NodeId = nodeC.Id },
+        ];
+        var adapter = SceneAdapter.BuildLayoutTree(scene, layout);
 
         var children = await adapter.Children.ConfigureAwait(false);
 
@@ -131,8 +130,8 @@ public sealed class SceneAdapterLayoutTests
         scene.RootNodes.Add(parent);
         parent.AddChild(child);
         var parentEntry = new ExplorerEntryData { Type = "Node", NodeId = parent.Id };
-        scene.SetExplorerLayout([parentEntry]);
-        var adapter = SceneAdapter.BuildLayoutTree(scene);
+        IList<ExplorerEntryData> layout = [parentEntry];
+        var adapter = SceneAdapter.BuildLayoutTree(scene, layout);
 
         var children = await adapter.Children.ConfigureAwait(false);
 
@@ -149,8 +148,8 @@ public sealed class SceneAdapterLayoutTests
         var child = new SceneNode(scene) { Name = "Child" };
         scene.RootNodes.Add(parent);
         parent.AddChild(child);
-        scene.SetExplorerLayout([new ExplorerEntryData { Type = "Node", NodeId = child.Id }]);
-        var adapter = SceneAdapter.BuildLayoutTree(scene);
+        IList<ExplorerEntryData> layout = [new ExplorerEntryData { Type = "Node", NodeId = child.Id }];
+        var adapter = SceneAdapter.BuildLayoutTree(scene, layout);
 
         _ = await adapter.Children.ConfigureAwait(false);
 
@@ -164,8 +163,6 @@ public sealed class SceneAdapterLayoutTests
 
     private static Scene CreateScene()
     {
-        var project = new Project(new ProjectInfo("Layout", Category.Games, "H:/LayoutTreeTests", "preview.png")) { Name = "Layout" };
-        var scene = new Scene(project) { Name = "Scene" };
-        return scene;
+        return new Scene { Name = "Scene" };
     }
 }

@@ -61,11 +61,6 @@ public record SceneNodeData : NamedData
     public bool IsRayCastingSelectable { get; init; } = true;
 
     /// <summary>
-    /// Gets a value indicating whether gets or initializes a value indicating whether the node is expanded in the scene explorer.
-    /// </summary>
-    public bool IsExpanded { get; init; }
-
-    /// <summary>
     /// Gets a value indicating whether gets or initializes a value indicating whether the node ignores parent transform.
     /// </summary>
     public bool IgnoreParentTransform { get; init; }

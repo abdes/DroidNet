@@ -12,6 +12,7 @@ using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Geometry;
@@ -238,7 +239,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         using var fixture = new SceneAuthoringFixture();
         using var model = fixture.CreateInspectorHost("Camera");
         model.SelectComponentFilter(typeof(PerspectiveCamera));
-        var scene = new Scene(Mock.Of<IProject>())
+        var scene = new Scene
         {
             Name = "Other scene",
         };

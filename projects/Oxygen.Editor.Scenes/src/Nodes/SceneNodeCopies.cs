@@ -5,6 +5,7 @@
 using Oxygen.Editor.Scenes.Edits;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
@@ -46,12 +47,14 @@ public static class SceneNodeCopies
     /// skipped.
     /// </remarks>
     /// <param name="scene">The scene.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <param name="nodes">The nodes to duplicate.</param>
     /// <param name="transforms">The local transforms of the copies, by source id; others keep their source's.</param>
     /// <returns>The insert, or <see langword="null"/> when none of the nodes exists.</returns>
-    public static InsertNodes? DuplicateInPlace(Scene scene, IReadOnlyCollection<NodeId> nodes, IReadOnlyDictionary<NodeId, TransformData>? transforms = null)
+    public static InsertNodes? DuplicateInPlace(Scene scene, IList<ExplorerEntryData> layout, IReadOnlyCollection<NodeId> nodes, IReadOnlyDictionary<NodeId, TransformData>? transforms = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(nodes);
         var requested = nodes.ToHashSet();
         var sources = requested.Select(id => scene.AllNodes.FirstOrDefault(node => node.Id == id)).OfType<SceneNode>()
@@ -61,7 +64,6 @@ public static class SceneNodeCopies
             return null;
         }
 
-        var layout = scene.ExplorerLayout ?? [];
         var copies = Copy(scene, sources.Select(static source => source.Dehydrate()), transforms);
         var graph = FinalPlaces(sources, source => SceneGraph.PositionOf(scene, source), static at => at.Index, static at => at.Parent, static (at, index) => at with { Index = index });
         var places = FinalPlaces(

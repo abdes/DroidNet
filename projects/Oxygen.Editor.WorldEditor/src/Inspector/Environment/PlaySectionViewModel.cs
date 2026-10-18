@@ -256,9 +256,9 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedCameraChanged(StartingCameraChoice? value)
     {
-        if (!this.updating && value is not null && this.scene is { } current && value.Id != current.Play.StartingCamera)
+        if (!this.updating && value is not null && this.scene is { } current && value.Id != current.StartingCamera)
         {
-            _ = this.ApplyAsync(current.Play with { StartingCamera = value.Id });
+            _ = this.ApplyAsync(new SetStartingCamera(value.Id));
         }
     }
 
@@ -276,10 +276,10 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
 
     private Task EditContextsAsync(Func<List<StartingInputContextData>, List<StartingInputContextData>> edit)
         => this.scene is { } current
-            ? this.ApplyAsync(current.Play with { StartingInputContexts = edit([.. current.Play.StartingInputContexts]) })
+            ? this.ApplyAsync(new SetStartingInputContexts(edit([.. current.StartingInputContexts])))
             : Task.CompletedTask;
 
-    private Task ApplyAsync(ScenePlayData play)
+    private Task ApplyAsync(ISceneEdit edit)
     {
         if (!this.CanEdit || this.authoringProvider?.Invoke() is not { } authoring)
         {
@@ -287,17 +287,17 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
             return Task.CompletedTask;
         }
 
-        this.pending = this.ApplyCoreAsync(authoring, play);
+        this.pending = this.ApplyCoreAsync(authoring, edit);
         return this.pending;
     }
 
-    private async Task ApplyCoreAsync(SceneAuthoring authoring, ScenePlayData play)
+    private async Task ApplyCoreAsync(SceneAuthoring authoring, ISceneEdit edit)
     {
         this.isBusy = true;
         this.ErrorMessage = string.Empty;
         try
         {
-            var result = await authoring.ExecuteAsync(new SetScenePlay(play)).ConfigureAwait(true);
+            var result = await authoring.ExecuteAsync(edit).ConfigureAwait(true);
             if (!result.Succeeded)
             {
                 this.ErrorMessage = result.Diagnostics.FirstOrDefault(static diagnostic => diagnostic.IsError)?.Message ?? "The play settings could not be changed.";
@@ -313,7 +313,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     private void RefreshCameras()
     {
         var cameras = this.scene?.AllNodes.Where(IsCamera).ToArray() ?? [];
-        var authored = this.scene?.Play.StartingCamera;
+        var authored = this.scene?.StartingCamera;
         var gone = authored is { } id && cameras.All(camera => camera.Id != id);
         var goneName = gone ? this.scene?.AllNodes.FirstOrDefault(node => node.Id == authored)?.Name : null;
 
@@ -348,7 +348,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
 
     private void RefreshContexts()
     {
-        var entries = this.scene?.Play.StartingInputContexts ?? [];
+        var entries = this.scene?.StartingInputContexts ?? [];
         var canEdit = this.CanEdit;
         var rows = entries
             .Select(entry =>
@@ -388,7 +388,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
 
     private void RefreshCandidates()
     {
-        var listed = this.scene?.Play.StartingInputContexts.Select(static entry => entry.Context).ToHashSet() ?? [];
+        var listed = this.scene?.StartingInputContexts.Select(static entry => entry.Context).ToHashSet() ?? [];
         var contexts = AssetRule.For(AssetKind.InputMappingContext).Apply(this.assets);
         var candidates = contexts
             .Where(asset => !listed.Contains(asset.IdentityUri))
@@ -440,7 +440,9 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     private void OnSceneChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (ReferenceEquals(sender, this.scene)
-            && (string.IsNullOrEmpty(args.PropertyName) || string.Equals(args.PropertyName, nameof(Scene.Play), StringComparison.Ordinal)))
+            && (string.IsNullOrEmpty(args.PropertyName)
+                || string.Equals(args.PropertyName, nameof(Scene.StartingCamera), StringComparison.Ordinal)
+                || string.Equals(args.PropertyName, nameof(Scene.StartingInputContexts), StringComparison.Ordinal)))
         {
             this.Refresh();
         }

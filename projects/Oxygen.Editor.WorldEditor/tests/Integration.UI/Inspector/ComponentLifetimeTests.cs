@@ -6,7 +6,7 @@ using AwesomeAssertions;
 using DroidNet.Tests;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Nodes;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Interop;

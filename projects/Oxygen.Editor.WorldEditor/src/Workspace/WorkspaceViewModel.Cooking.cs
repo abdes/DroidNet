@@ -87,7 +87,7 @@ public partial class WorkspaceViewModel
 
     private static bool IsSceneProperty(string property)
         => string.Equals(property, SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal)
-            || Oxygen.Editor.ContentPipeline.ScenePlayPropertyPaths.IsPlayProperty(property);
+            || Oxygen.Editor.ContentPipeline.SceneStartingPropertyPaths.IsStartingProperty(property);
 
     private static NodeId? FindScriptSlotNode(DiagnosticRecord issue, string property)
         => Oxygen.Editor.ContentPipeline.ScriptSlotDiagnostics.TryParsePropertyPath(property, out _, out _)

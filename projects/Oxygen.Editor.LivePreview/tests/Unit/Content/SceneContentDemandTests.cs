@@ -16,6 +16,7 @@ using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 
 namespace Oxygen.Editor.LivePreview.Tests.Content;
@@ -146,7 +147,7 @@ public sealed partial class SceneContentDemandTests
 
         public DemandFixture()
         {
-            this.projects.Activate(ProjectContext.FromProjectInfo(this.Documents.Project.ProjectInfo));
+            this.projects.Activate(this.Documents.Project);
             _ = this.assets.SetupGet(value => value.Items).Returns(Observable.Return<IReadOnlyList<AssetEntry>>([]));
             _ = this.assets.Setup(value => value.ResolveAsync(It.IsAny<Uri>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((Uri uri, CancellationToken _) => Entry(uri, this.Freshness));

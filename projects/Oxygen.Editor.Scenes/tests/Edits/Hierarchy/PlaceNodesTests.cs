@@ -72,6 +72,6 @@ public sealed class PlaceNodesTests
             id,
             new NodePosition(node.Parent?.Id, siblings.IndexOf(node)),
             NodePose.LocalOf(node),
-            LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(id))!);
+            LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(id))!);
     }
 }

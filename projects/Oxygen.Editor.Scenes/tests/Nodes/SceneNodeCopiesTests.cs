@@ -10,7 +10,7 @@ using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Tests.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -95,7 +95,7 @@ public sealed class SceneNodeCopiesTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
 
-        var insert = SceneNodeCopies.DuplicateInPlace(fixture.Scene, [SampleScene.A, SampleScene.A1]);
+        var insert = SceneNodeCopies.DuplicateInPlace(fixture.Scene, fixture.Layout, [SampleScene.A, SampleScene.A1]);
 
         _ = insert.Should().NotBeNull();
         var copy = insert!.Inserts.Should().ContainSingle().Which.Node;
@@ -121,11 +121,11 @@ public sealed class SceneNodeCopiesTests
     public async Task DuplicateInPlace_EachCopyFollowsItsSourceInItsFolder()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var insert = SceneNodeCopies.DuplicateInPlace(fixture.Scene, [SampleScene.B, SampleScene.A2]);
+        var insert = SceneNodeCopies.DuplicateInPlace(fixture.Scene, fixture.Layout, [SampleScene.B, SampleScene.A2]);
         var inF = LayoutPosition.InFolder(SampleScene.F, 0);
         var inAF = LayoutPosition.InFolder(SampleScene.AF, 0);
-        var entriesInF = LayoutScopes.EntriesOf(fixture.Scene, inF);
-        var entriesInAF = LayoutScopes.EntriesOf(fixture.Scene, inAF);
+        var entriesInF = LayoutScopes.EntriesOf(fixture.Layout, inF);
+        var entriesInAF = LayoutScopes.EntriesOf(fixture.Layout, inAF);
 
         var result = await fixture.Authoring.ExecuteAsync(insert!).ConfigureAwait(false);
 
@@ -133,7 +133,7 @@ public sealed class SceneNodeCopiesTests
         _ = fixture.History.UndoStack.Should().ContainSingle();
 
         // B's copy sits between B and G in F, and right after B among the root nodes.
-        var afterInF = LayoutScopes.EntriesOf(fixture.Scene, inF);
+        var afterInF = LayoutScopes.EntriesOf(fixture.Layout, inF);
         _ = afterInF.Should().HaveCount(entriesInF.Count + 1);
         _ = afterInF.Should().HaveElementAt(0, entriesInF[0]);
         _ = afterInF.Should().HaveElementAt(2, entriesInF[1]);
@@ -143,7 +143,7 @@ public sealed class SceneNodeCopiesTests
         _ = roots.Should().HaveElementAt(roots.IndexOf(SampleScene.B) + 1, copyOfB);
 
         // A2's copy follows A2 in AF and among the children of A.
-        var afterInAF = LayoutScopes.EntriesOf(fixture.Scene, inAF);
+        var afterInAF = LayoutScopes.EntriesOf(fixture.Layout, inAF);
         _ = afterInAF.Should().HaveCount(entriesInAF.Count + 1);
         _ = afterInAF.Should().HaveElementAt(0, entriesInAF[0]);
         var copyOfA2 = afterInAF[1].Node!.Value;
@@ -156,7 +156,7 @@ public sealed class SceneNodeCopiesTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
 
-        var insert = SceneNodeCopies.DuplicateInPlace(fixture.Scene, [NodeId.New()]);
+        var insert = SceneNodeCopies.DuplicateInPlace(fixture.Scene, fixture.Layout, [NodeId.New()]);
 
         _ = insert.Should().BeNull();
     }

@@ -12,7 +12,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Scripting;
+using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LivePreview.Tests.Play;
@@ -91,7 +91,7 @@ public sealed partial class PlaySessionTests
         public PlayFixture(bool installedPlayer)
         {
             var projects = new ProjectContextService();
-            projects.Activate(ProjectContext.FromProjectInfo(this.Documents.Project.ProjectInfo));
+            projects.Activate(this.Documents.Project);
             this.coordinator = new ContentCookCoordinator(projects, NullLogger<ContentCookCoordinator>.Instance);
             var files = new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
             var publication = new CookPublicationService(this.coordinator, projects, files, Mock.Of<IProjectManagerService>());

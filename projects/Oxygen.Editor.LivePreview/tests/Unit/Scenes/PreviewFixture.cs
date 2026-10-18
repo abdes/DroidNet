@@ -12,6 +12,7 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Interop;
 using Oxygen.Managed.Core.Diagnostics;
 

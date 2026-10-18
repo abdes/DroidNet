@@ -27,7 +27,7 @@ public sealed record DirectionalLightData : LightComponentData
     /// <summary>Gets the explicitly assigned atmosphere source slot.</summary>
     public AtmosphereLightSlot AtmosphereSlot { get; init; } = AtmosphereLightSlot.None;
 
-    /// <summary>Gets whether surfaces evaluate atmosphere transmittance per pixel.</summary>
+    /// <summary>Gets a value indicating whether surfaces evaluate atmosphere transmittance per pixel.</summary>
     public bool UsePerPixelAtmosphereTransmittance { get; init; }
 
     /// <summary>Gets the RGB luminance multiplier for the analytic disk.</summary>

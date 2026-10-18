@@ -7,7 +7,6 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 

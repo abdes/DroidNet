@@ -9,10 +9,10 @@ using DroidNet.Routing;
 using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.TestSupport;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
@@ -43,7 +43,7 @@ public sealed partial class SceneExplorerDropTests
     public async Task CommitDropAsync_NodeOntoFolder_GroupsItInOneUndoStep()
     {
         using var harness = CreateHarness(out var scene, out var parent, out var child, folderId: FolderId.New());
-        scene.SetExplorerLayout(
+        harness.Metadata.ReplaceLayout(
             [
                 new ExplorerEntryData { Type = "Node", NodeId = parent.Id },
                 new ExplorerEntryData
@@ -63,7 +63,7 @@ public sealed partial class SceneExplorerDropTests
         var result = await explorer.CommitDropAsync(new TreeDropRequest([parentAdapter!], folder!, 0, TreeDropOperation.Move)).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = scene.ExplorerLayout!.Single(entry => entry.FolderId == harness.FolderId).Children!.Select(static entry => entry.NodeId).Should().Contain(parent.Id);
+        _ = harness.Metadata.Layout.Single(entry => entry.FolderId == harness.FolderId).Children!.Select(static entry => entry.NodeId).Should().Contain(parent.Id);
         _ = harness.Metadata.Document.History.UndoStack.Should().ContainSingle();
     }
 
@@ -87,7 +87,7 @@ public sealed partial class SceneExplorerDropTests
     public async Task FindFolderAdapterAsync_ReturnsIndexedFolderWithoutForceLoading()
     {
         using var harness = CreateHarness(out var scene, out var parent, out var child, folderId: FolderId.New());
-        scene.SetExplorerLayout(
+        harness.Metadata.ReplaceLayout(
             [
                 new ExplorerEntryData
                 {
@@ -110,8 +110,8 @@ public sealed partial class SceneExplorerDropTests
 
     private static Harness CreateHarness(out Scene scene, out SceneNode parent, out SceneNode child, FolderId? folderId = null)
     {
-        var project = new Project(new ProjectInfo("Drop", Category.Games, "H:/DropTreeTests", "preview.png")) { Name = "Drop" };
-        scene = new Scene(project) { Name = "Scene" };
+        var project = new Project(new ProjectInfo("Drop", Category.Games, "H:/DropTreeTests", "preview.png"));
+        scene = new Scene { Name = "Scene" };
         parent = new SceneNode(scene) { Name = "Parent" };
         child = new SceneNode(scene) { Name = "Child" };
         scene.RootNodes.Add(parent);

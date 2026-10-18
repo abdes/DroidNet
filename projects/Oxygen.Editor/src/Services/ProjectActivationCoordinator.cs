@@ -413,7 +413,7 @@ internal sealed partial class ProjectActivationCoordinator(
     }
 
     private async Task<ProjectContext?> LoadProjectContextAsync(
-        Oxygen.Editor.World.IProjectInfo projectInfo,
+        Oxygen.Editor.Projects.IProjectInfo projectInfo,
         Guid operationId,
         List<DiagnosticRecord> diagnostics,
         bool openInitialScene,

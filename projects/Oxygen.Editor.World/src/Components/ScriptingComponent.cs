@@ -6,11 +6,10 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.World.Components;
 
 /// <summary>
 /// The scripts attached to a node, in slot order. Scripts run in the player, never in editor viewports.

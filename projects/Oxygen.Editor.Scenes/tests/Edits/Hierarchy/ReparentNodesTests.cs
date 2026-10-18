@@ -195,16 +195,16 @@ public sealed class ReparentNodesTests
     public async Task MovedNode_KeepsItsLayoutEntryFoldersAndExpandedState()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        LayoutQuery.Folder(fixture.Scene, SampleScene.AF)!.IsExpanded = false;
+        LayoutQuery.Folder(fixture.Layout, SampleScene.AF)!.IsExpanded = false;
 
         var result = await fixture.Authoring.ExecuteAsync(new ReparentNodes([SampleScene.A], SampleScene.B, preserveWorld: false)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutScopes.TryScopeOf(fixture.Scene, LayoutEntryId.Of(SampleScene.A), out var scope).Should().BeTrue();
+        _ = LayoutScopes.TryScopeOf(fixture.Layout, LayoutEntryId.Of(SampleScene.A), out var scope).Should().BeTrue();
         _ = scope.Should().Be(SampleScene.B);
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.AF))!.Node.Should().Be(SampleScene.A);
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.InFolder(SampleScene.AF, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.A2));
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.AF)!.IsExpanded.Should().BeFalse();
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.AF))!.Node.Should().Be(SampleScene.A);
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(SampleScene.AF, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.A2));
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.AF)!.IsExpanded.Should().BeFalse();
     }
 
     [TestMethod]
@@ -221,6 +221,6 @@ public sealed class ReparentNodesTests
         _ = fixture.Scene.RootNodes.Select(static node => node.Id).Should().Equal(rootBefore);
         _ = fixture.Node(SampleScene.A).Children.Select(static node => node.Id).Should().Equal(childrenBefore);
         _ = NodePose.LocalOf(fixture.Node(SampleScene.B)).Should().Be(localBefore);
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.A2)).Should().Be(LayoutPosition.InFolder(SampleScene.AF, 0));
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.A2)).Should().Be(LayoutPosition.InFolder(SampleScene.AF, 0));
     }
 }

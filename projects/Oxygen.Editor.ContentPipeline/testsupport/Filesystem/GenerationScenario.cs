@@ -6,7 +6,6 @@ using System.Text.Json;
 using DroidNet.Storage;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using Oxygen.Testing;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;

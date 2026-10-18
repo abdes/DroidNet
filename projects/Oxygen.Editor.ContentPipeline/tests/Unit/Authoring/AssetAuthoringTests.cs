@@ -8,7 +8,6 @@ using DroidNet.Storage.Native;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
 using Testably.Abstractions;

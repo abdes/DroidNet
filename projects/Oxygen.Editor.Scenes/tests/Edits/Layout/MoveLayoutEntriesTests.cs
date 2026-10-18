@@ -9,7 +9,7 @@ using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits.Layout;
@@ -75,15 +75,15 @@ public sealed class MoveLayoutEntriesTests
     {
         ArgumentNullException.ThrowIfNull(row);
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var entriesBefore = LayoutQuery.EntryCount(fixture.Scene);
+        var entriesBefore = LayoutQuery.EntryCount(fixture.Layout);
 
         var result = await fixture.Authoring.ExecuteAsync(new MoveLayoutEntries(row.Entries, row.To)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutScopes.EntriesOf(fixture.Scene, row.Container).Should().Equal(row.Expected);
+        _ = LayoutScopes.EntriesOf(fixture.Layout, row.Container).Should().Equal(row.Expected);
 
         // A move takes entries out of their old place: none is left behind or duplicated.
-        _ = LayoutQuery.EntryCount(fixture.Scene).Should().Be(entriesBefore);
+        _ = LayoutQuery.EntryCount(fixture.Layout).Should().Be(entriesBefore);
     }
 
     [TestMethod]
@@ -94,8 +94,8 @@ public sealed class MoveLayoutEntriesTests
 
         _ = await SceneAssert.RoundTripAsync(fixture, edit).ConfigureAwait(false);
 
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.B)).Should().Be(LayoutPosition.InFolder(SampleScene.F, 0));
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.Cam)).Should().Be(LayoutPosition.AtRoot(2));
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.B)).Should().Be(LayoutPosition.InFolder(SampleScene.F, 0));
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.Cam)).Should().Be(LayoutPosition.AtRoot(2));
     }
 
     [TestMethod]
@@ -144,10 +144,10 @@ public sealed class MoveLayoutEntriesTests
         var result = await fixture.Authoring.ExecuteAsync(new MoveLayoutEntries([LayoutEntryId.Of(SampleScene.F)], LayoutPosition.AtRoot(0))).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.F)).Should().Be(LayoutPosition.AtRoot(0));
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.InFolder(SampleScene.F, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.B), LayoutEntryId.Of(SampleScene.G));
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.F)!.IsExpanded.Should().BeTrue();
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.G)!.IsExpanded.Should().BeFalse();
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.F)).Should().Be(LayoutPosition.AtRoot(0));
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(SampleScene.F, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.B), LayoutEntryId.Of(SampleScene.G));
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.F)!.IsExpanded.Should().BeTrue();
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.G)!.IsExpanded.Should().BeFalse();
     }
 
     // Rows are offsets from the root's count: B is not in the root, so a move to the root may use 0..count.
@@ -157,7 +157,7 @@ public sealed class MoveLayoutEntriesTests
     public async Task Index_OutsideZeroToCount_IsInvalid(int offsetFromCount)
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var count = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0)).Count;
+        var count = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0)).Count;
         var index = offsetFromCount < 0 ? offsetFromCount : count + offsetFromCount;
         var before = fixture.Snapshot();
 
@@ -171,12 +171,12 @@ public sealed class MoveLayoutEntriesTests
     public async Task Index_Count_Appends()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var count = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0)).Count;
+        var count = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0)).Count;
 
         var result = await fixture.Authoring.ExecuteAsync(new MoveLayoutEntries([LayoutEntryId.Of(SampleScene.B)], LayoutPosition.AtRoot(count))).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.B)).Should().Be(LayoutPosition.AtRoot(count));
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.B)).Should().Be(LayoutPosition.AtRoot(count));
     }
 
     [TestMethod]
@@ -210,13 +210,13 @@ public sealed class MoveLayoutEntriesTests
         _ = fixture.History.UndoStack.Should().ContainSingle();
         _ = fixture.Node(SampleScene.Cam).Parent!.Id.Should().Be(SampleScene.A);
         _ = LocalPosition(fixture, SampleScene.Cam).Should().Be(Vector3.Zero);
-        _ = LayoutScopes.PositionOf(fixture.Scene, cam).Should().Be(LayoutPosition.InFolder(SampleScene.AF, 0));
+        _ = LayoutScopes.PositionOf(fixture.Layout, cam).Should().Be(LayoutPosition.InFolder(SampleScene.AF, 0));
 
         // The single entry undoes the reparent and the move together.
         SceneAssert.Applied(await fixture.Authoring.UndoAsync().ConfigureAwait(false));
         _ = fixture.Node(SampleScene.Cam).Parent.Should().BeNull();
         _ = LocalPosition(fixture, SampleScene.Cam).Should().Be(Vector3.Zero);
-        _ = LayoutScopes.PositionOf(fixture.Scene, cam).Should().Be(LayoutPosition.AtRoot(2));
+        _ = LayoutScopes.PositionOf(fixture.Layout, cam).Should().Be(LayoutPosition.AtRoot(2));
         _ = fixture.Snapshot().Document.Should().Be(before.Document);
     }
 

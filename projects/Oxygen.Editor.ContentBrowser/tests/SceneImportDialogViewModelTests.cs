@@ -7,7 +7,6 @@ using DroidNet.Aura.Dialogs;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Importing;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 

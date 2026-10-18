@@ -7,7 +7,9 @@ using AwesomeAssertions;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Interop;
 using Oxygen.Managed.Core.Diagnostics;
@@ -173,7 +175,7 @@ public sealed partial class ScenePreviewTests
         var result = await sync.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Should().BeFalse();
-        _ = fixture.Preview.RegisterDocument(PreviewFixture.AuthoringOf(document), OwnerThread.Capture()).Should().BeFalse();
+        _ = fixture.Preview.RegisterDocument(SceneContent.Of(document), OwnerThread.Capture()).Should().BeFalse();
         _ = fixture.Preview.IsReady(document.Id).Should().BeFalse();
     }
 

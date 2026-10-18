@@ -6,7 +6,7 @@ using System.Globalization;
 using System.Numerics;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.World.Components;
 
 /// <summary>
 /// A typed script parameter value set on a slot.

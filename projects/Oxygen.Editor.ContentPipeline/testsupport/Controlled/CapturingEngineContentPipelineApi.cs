@@ -13,7 +13,7 @@ internal sealed class CapturingEngineContentPipelineApi(CookValidationResult val
 
     public Func<ContentImportExecution, CancellationToken, Task>? BeforeImport { get; init; }
 
-    public required Func<ContentSourceAnalysisExecution, CancellationToken, Task<global::Oxygen.Editor.ContentPipeline.Import.NativeSourceAnalysisReport>> SourceAnalysis { get; init; }
+    public required Func<ContentSourceAnalysisExecution, CancellationToken, Task<Import.NativeSourceAnalysisReport>> SourceAnalysis { get; init; }
 
     public List<ContentImportExecution> Executions { get; } = [];
 
@@ -27,10 +27,10 @@ internal sealed class CapturingEngineContentPipelineApi(CookValidationResult val
 
     public string? ValidatedRoot { get; private set; }
 
-    public Task<global::Oxygen.Editor.ContentPipeline.Import.NativeSourceAnalysisReport> AnalyzeSourcesAsync(ContentSourceAnalysisExecution execution, CancellationToken cancellationToken) => this.SourceAnalysis(execution, cancellationToken);
+    public Task<Import.NativeSourceAnalysisReport> AnalyzeSourcesAsync(ContentSourceAnalysisExecution execution, CancellationToken cancellationToken) => this.SourceAnalysis(execution, cancellationToken);
 
     public Task<BuiltinGeometryCatalog> GetBuiltinGeometryCatalogAsync(string projectRoot, string mountName, CancellationToken cancellationToken,
-        Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts = null)
+        Managed.Core.Compatibility.NativeArtifactLease? artifacts = null)
         => new BuiltinCatalogFixture().GetBuiltinGeometryCatalogAsync(projectRoot, mountName, cancellationToken, artifacts);
 
     public async Task<NativeImportResult> ImportAsync(
@@ -70,7 +70,7 @@ internal sealed class CapturingEngineContentPipelineApi(CookValidationResult val
         return importResult ?? new NativeImportResult(Succeeded: true, Diagnostics: []);
     }
 
-    public Task<global::Oxygen.Editor.ContentPipeline.Inspection.CookedInventoryReport> ReadInventoryAsync(string root, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+    public Task<Inspection.CookedInventoryReport> ReadInventoryAsync(string root, Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
     {
         this.InspectedRoot = root;
         if (!this.inspected.Succeeded)
@@ -82,7 +82,7 @@ internal sealed class CapturingEngineContentPipelineApi(CookValidationResult val
         return Task.FromResult(Oxygen.Testing.NativeInventoryFixture.Read(root, forceFailure: !validation.Succeeded));
     }
 
-    public Task RemoveCookedOutputsAsync(string operationRoot, string cookedRoot, Guid sourceKey, global::Oxygen.Editor.ContentPipeline.Inspection.CookedOutputRemoval removal, Oxygen.Managed.Core.Compatibility.NativeArtifactLease artifacts, CancellationToken cancellationToken)
+    public Task RemoveCookedOutputsAsync(string operationRoot, string cookedRoot, Guid sourceKey, Inspection.CookedOutputRemoval removal, Managed.Core.Compatibility.NativeArtifactLease artifacts, CancellationToken cancellationToken)
         => throw new NotSupportedException("Controlled native output does not remove cooked outputs.");
 
     public Task<CookInspectionResult> InspectLooseCookedRootAsync(

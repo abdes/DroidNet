@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Resources.Generator.Localized_8f7683a5;
+using DroidNet.Resources.Generator.Localized_e0db1f46;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.Projects;
 
 /// <summary>
 /// Represents a category for a project within the Oxygen Editor.

@@ -14,7 +14,6 @@ using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LivePreview.Tests.Session;

@@ -54,8 +54,9 @@ public partial class SceneExplorerViewModel
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Installing runs from a document event; a failure is logged and leaves the tree empty instead of terminating the editor.")]
     private async Task<bool> InstallOpenedSceneAsync(Document document)
     {
-        var scene = SceneContent.Of(document).Scene;
-        if (!ReferenceEquals(this.projectManager.CurrentProject, scene.Project))
+        var content = SceneContent.Of(document);
+        var scene = content.Scene;
+        if (this.projectContexts is { } projects && projects.ActiveProject?.ProjectId != content.Project.ProjectId)
         {
             return false;
         }

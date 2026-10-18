@@ -6,6 +6,7 @@ using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 

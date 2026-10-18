@@ -6,7 +6,6 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Scripting;
 using Oxygen.Managed.Core.Diagnostics;
 

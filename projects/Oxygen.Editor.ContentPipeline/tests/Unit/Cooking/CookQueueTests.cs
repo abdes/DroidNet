@@ -121,7 +121,7 @@ public sealed class CookQueueTests
         using var coordinator = CreateCoordinator(context);
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var failure = new ContentPipelineTerminationException(new Win32Exception(5), drain.Task);
-        var first = coordinator.RunAsync<int>((_, _) => Task.FromException<int>(failure), CancellationToken.None);
+        var first = coordinator.RunAsync((_, _) => Task.FromException<int>(failure), CancellationToken.None);
         var failed = async () => await first.ConfigureAwait(false);
         _ = await failed.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
 
@@ -145,7 +145,7 @@ public sealed class CookQueueTests
     {
         var context = CreateContextService();
         using var coordinator = CreateCoordinator(context);
-        var first = coordinator.RunAsync<int>((_, _) => Task.FromException<int>(new IOException("input missing")), CancellationToken.None);
+        var first = coordinator.RunAsync((_, _) => Task.FromException<int>(new IOException("input missing")), CancellationToken.None);
         var failed = async () => await first.ConfigureAwait(false);
         _ = await failed.Should().ThrowAsync<IOException>().ConfigureAwait(false);
         _ = (await coordinator.RunAsync((_, _) => Task.FromResult(2), CancellationToken.None).ConfigureAwait(false)).Should().Be(2);

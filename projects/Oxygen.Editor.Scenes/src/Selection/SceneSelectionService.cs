@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Documents;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Selection;
@@ -60,9 +60,10 @@ PrimaryFolderId: null);
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<SceneNode> Reconcile(DocumentId documentId, Scene scene)
+    public IReadOnlyList<SceneNode> Reconcile(DocumentId documentId, Scene scene, IList<ExplorerEntryData> layout)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(layout);
 
         if (!this.contexts.TryGetValue(documentId, out var context))
         {
@@ -74,7 +75,7 @@ PrimaryFolderId: null);
             .Where(byId.ContainsKey)
             .ToArray();
 
-        var folderIds = GetFolderIds(scene.ExplorerLayout);
+        var folderIds = GetFolderIds(layout);
         var survivingFolderIds = context.SelectedFolderIds.Where(folderIds.Contains).ToArray();
         NodeId? primaryNode = context.PrimaryNodeId is { } nodeId && survivingIds.Contains(nodeId)
             ? nodeId
@@ -142,10 +143,10 @@ PrimaryFolderId: null);
     public SceneSelectionContext GetContext(DocumentId documentId)
         => this.contexts.TryGetValue(documentId, out var context) ? context : SceneSelectionContext.Empty;
 
-    private static HashSet<FolderId> GetFolderIds(IList<ExplorerEntryData>? layout)
+    private static HashSet<FolderId> GetFolderIds(IList<ExplorerEntryData> layout)
     {
         var ids = new HashSet<FolderId>();
-        var pending = new Stack<ExplorerEntryData>(layout ?? []);
+        var pending = new Stack<ExplorerEntryData>(layout);
         while (pending.TryPop(out var entry))
         {
             if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase) && entry.FolderId is { } id)

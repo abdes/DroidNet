@@ -3,29 +3,35 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Authoring;
 
-/// <summary>What an edit may use while it validates and applies: the scene and the ports of the scene's authoring.</summary>
+/// <summary>What an edit may use while it validates and applies: the scene, its explorer layout and the ports of the scene's authoring.</summary>
 public sealed class SceneEditScope
 {
     private readonly List<SceneDiagnostic> warnings = [];
 
     /// <summary>Initializes a new instance of the <see cref="SceneEditScope"/> class.</summary>
     /// <param name="scene">The scene the edit validates against and applies to.</param>
+    /// <param name="layout">The scene's explorer layout, which the edit keeps in step with the scene.</param>
     /// <param name="interaction">The nodes hidden and locked in the editor, if the editor keeps them.</param>
     /// <param name="redirects">The session's asset renames and moves, if the editor tracks them.</param>
-    internal SceneEditScope(Scene scene, ISceneNodeInteraction? interaction, IAssetRedirects? redirects)
+    internal SceneEditScope(Scene scene, IList<ExplorerEntryData> layout, ISceneNodeInteraction? interaction, IAssetRedirects? redirects)
     {
         this.Scene = scene;
+        this.Layout = layout;
         this.Interaction = interaction;
         this.Redirects = redirects;
     }
 
     /// <summary>Gets the scene.</summary>
     public Scene Scene { get; }
+
+    /// <summary>Gets the scene's explorer layout: an entry for every node, and the folders that group them.</summary>
+    public IList<ExplorerEntryData> Layout { get; }
 
     /// <summary>Gets the nodes hidden and locked in the editor, or <see langword="null"/> when nothing keeps them.</summary>
     public ISceneNodeInteraction? Interaction { get; }
@@ -149,9 +155,10 @@ public sealed class SceneEditScope
 
     /// <summary>Creates a scope over another scene, with the same ports, such as a scratch copy to validate a batch on.</summary>
     /// <param name="scene">The scene.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <returns>The scope.</returns>
-    internal SceneEditScope On(Scene scene)
-        => new(scene, this.Interaction is { } interaction ? new ScratchNodeInteraction(interaction) : null, this.Redirects) { Replaying = this.Replaying };
+    internal SceneEditScope On(Scene scene, IList<ExplorerEntryData> layout)
+        => new(scene, layout, this.Interaction is { } interaction ? new ScratchNodeInteraction(interaction) : null, this.Redirects) { Replaying = this.Replaying };
 
     /// <summary>Takes the warnings reported since the last call.</summary>
     /// <returns>The warnings.</returns>

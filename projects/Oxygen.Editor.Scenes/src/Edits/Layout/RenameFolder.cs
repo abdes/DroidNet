@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
-using Oxygen.Editor.World;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Layout;
@@ -24,14 +24,14 @@ public sealed record RenameFolder(FolderId Folder, string Name) : ISceneEdit
     SceneEditValidation ISceneEdit.Validate(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        if (scope.CheckScope(SceneLayout.ScopeOfEntry(scope.Scene.ExplorerLayout ?? [], LayoutEntryId.Of(this.Folder)).Scope) is { IsValid: false } refused)
+        if (scope.CheckScope(SceneLayout.ScopeOfEntry(scope.Layout, LayoutEntryId.Of(this.Folder)).Scope) is { IsValid: false } refused)
         {
             return refused;
         }
 
         return string.IsNullOrWhiteSpace(this.Name)
             ? SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.NameEmpty, "Folder names cannot be empty."))
-            : SceneLayout.Find(scope.Scene.ExplorerLayout, LayoutEntryId.Of(this.Folder)) is null
+            : SceneLayout.Find(scope.Layout, LayoutEntryId.Of(this.Folder)) is null
             ? SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.FolderMissing, "The folder no longer exists."))
             : SceneEditValidation.Valid;
     }
@@ -40,7 +40,7 @@ public sealed record RenameFolder(FolderId Folder, string Name) : ISceneEdit
     SceneEditApplication ISceneEdit.Apply(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var folder = SceneLayout.Find(scope.Scene.ExplorerLayout, LayoutEntryId.Of(this.Folder))!.Value.Entry;
+        var folder = SceneLayout.Find(scope.Layout, LayoutEntryId.Of(this.Folder))!.Value.Entry;
         var name = this.Name.Trim();
         var before = folder.Name ?? string.Empty;
         if (string.Equals(before, name, StringComparison.Ordinal))

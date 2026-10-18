@@ -5,6 +5,7 @@
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.Scenes.Properties;

@@ -4,10 +4,9 @@
 
 using AwesomeAssertions;
 using DroidNet.Documents;
-using Moq;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
@@ -45,7 +44,7 @@ public sealed class SceneSelectionServiceTests
         var sut = new SceneSelectionService();
         sut.SetSelection(SceneDocument, [selected, stale], "test");
 
-        var reconciled = sut.Reconcile(SceneDocument, scene);
+        var reconciled = sut.Reconcile(SceneDocument, scene, []);
 
         _ = reconciled.Should().Equal(selected);
         _ = sut.GetSelectedNodes(SceneDocument, scene).Should().Equal(selected);
@@ -157,14 +156,14 @@ public sealed class SceneSelectionServiceTests
         var stale = new SceneNode(staleScene) { Name = "Stale" };
         scene.RootNodes.Add(selected);
         var folderId = FolderId.New();
-        scene.SetExplorerLayout([new ExplorerEntryData { Type = "Folder", FolderId = folderId }]);
+        IList<ExplorerEntryData> layout = [new ExplorerEntryData { Type = "Folder", FolderId = folderId }];
         var sut = new SceneSelectionService();
         sut.Publish(
             SceneDocument,
             new SceneSelectionContext(SceneSelectionKind.Mixed, [selected.Id, stale.Id], [folderId], stale.Id, PrimaryFolderId: null),
             "SceneExplorer");
 
-        var reconciled = sut.Reconcile(SceneDocument, scene);
+        var reconciled = sut.Reconcile(SceneDocument, scene, layout);
 
         _ = reconciled.Should().Equal(selected);
         var context = sut.GetContext(SceneDocument);
@@ -184,7 +183,7 @@ public sealed class SceneSelectionServiceTests
         var events = new List<SceneSelectionChangedEventArgs>();
         sut.SelectionChanged += (_, args) => events.Add(args);
 
-        var reconciled = sut.Reconcile(SceneDocument, scene);
+        var reconciled = sut.Reconcile(SceneDocument, scene, []);
 
         _ = reconciled.Should().BeEmpty();
         _ = sut.GetContext(SceneDocument).Should().Be(SceneSelectionContext.Empty);
@@ -215,12 +214,12 @@ public sealed class SceneSelectionServiceTests
         var node = new SceneNode(scene) { Name = "Selected" };
         scene.RootNodes.Add(node);
         var folderId = FolderId.New();
-        scene.SetExplorerLayout([new ExplorerEntryData { Type = "Folder", FolderId = folderId }]);
+        IList<ExplorerEntryData> layout = [new ExplorerEntryData { Type = "Folder", FolderId = folderId }];
         var sut = new SceneSelectionService();
         var context = new SceneSelectionContext(SceneSelectionKind.Mixed, [node.Id], [folderId], PrimaryNodeId: null, folderId);
         sut.Publish(SceneDocument, context, "test");
 
-        _ = sut.Reconcile(SceneDocument, scene);
+        _ = sut.Reconcile(SceneDocument, scene, layout);
 
         _ = sut.GetContext(SceneDocument).Should().BeSameAs(context, "an unchanged reconciliation preserves the snapshot");
         _ = sut.GetContext(SceneDocument).PrimaryNodeId.Should().BeNull();
@@ -234,19 +233,19 @@ public sealed class SceneSelectionServiceTests
         var first = FolderId.New();
         var second = FolderId.New();
         var deleted = FolderId.New();
-        scene.SetExplorerLayout(
-            [
-                new ExplorerEntryData
-                {
-                    Type = "Folder",
-                    FolderId = first,
-                    Children = [new ExplorerEntryData { Type = "Folder", FolderId = second }],
-                },
-            ]);
+        IList<ExplorerEntryData> layout =
+        [
+            new ExplorerEntryData
+            {
+                Type = "Folder",
+                FolderId = first,
+                Children = [new ExplorerEntryData { Type = "Folder", FolderId = second }],
+            },
+        ];
         var sut = new SceneSelectionService();
         sut.Publish(SceneDocument, new SceneSelectionContext(SceneSelectionKind.Folder, [], [first, second, deleted], PrimaryNodeId: null, deleted), "test");
 
-        _ = sut.Reconcile(SceneDocument, scene);
+        _ = sut.Reconcile(SceneDocument, scene, layout);
 
         var context = sut.GetContext(SceneDocument);
         _ = context.SelectedFolderIds.Should().Equal(first, second);
@@ -262,7 +261,7 @@ public sealed class SceneSelectionServiceTests
         var sut = new SceneSelectionService();
         sut.Publish(SceneDocument, new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId), "test");
 
-        _ = sut.Reconcile(SceneDocument, scene);
+        _ = sut.Reconcile(SceneDocument, scene, []);
 
         _ = sut.GetContext(SceneDocument).Should().BeSameAs(SceneSelectionContext.Empty);
     }
@@ -279,14 +278,13 @@ public sealed class SceneSelectionServiceTests
         var sut = new SceneSelectionService();
         sut.Publish(SceneDocument, new SceneSelectionContext(SceneSelectionKind.Node, [first.Id, second.Id, deletedId], [], deletedId, PrimaryFolderId: null), "test");
 
-        _ = sut.Reconcile(SceneDocument, scene);
+        _ = sut.Reconcile(SceneDocument, scene, []);
 
         _ = sut.GetContext(SceneDocument).PrimaryNodeId.Should().Be(first.Id);
     }
 
     private static Scene CreateScene()
     {
-        var project = new Mock<IProject>().Object;
-        return new Scene(project) { Name = "Test Scene" };
+        return new Scene { Name = "Test Scene" };
     }
 }

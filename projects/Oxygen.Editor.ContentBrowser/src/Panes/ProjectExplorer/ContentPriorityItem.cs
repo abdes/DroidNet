@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World;
+using Oxygen.Editor.Projects;
 
 #pragma warning disable IDE0130 // The project-tree views and models use the established ProjectExplorer namespace.
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;

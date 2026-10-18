@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.Projects;
 
 /// <summary>A project's settings, saved in its manifest and shared by everyone who opens the project.</summary>
 public sealed record ProjectSettings

@@ -7,11 +7,11 @@ using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Tests.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
-using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Nodes;
@@ -39,7 +39,7 @@ public sealed class SceneClipboardTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
 
-        var clipboard = SceneClipboard.Capture(fixture.Scene, [SampleScene.A], [SampleScene.F]);
+        var clipboard = SceneClipboard.Capture(fixture.Scene, fixture.Layout, [SampleScene.A], [SampleScene.F]);
 
         _ = clipboard.Should().NotBeNull();
         var entries = clipboard!.Entries;
@@ -60,7 +60,7 @@ public sealed class SceneClipboardTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
 
-        var clipboard = SceneClipboard.Capture(fixture.Scene, [NodeId.New()], [FolderId.New()]);
+        var clipboard = SceneClipboard.Capture(fixture.Scene, fixture.Layout, [NodeId.New()], [FolderId.New()]);
 
         _ = clipboard.Should().BeNull();
     }
@@ -74,7 +74,7 @@ public sealed class SceneClipboardTests
             .Build();
         using var fixture = await AuthoringFixture.CreateAsync(scene).ConfigureAwait(false);
 
-        var clipboard = SceneClipboard.Capture(fixture.Scene, [UnderSingular], []);
+        var clipboard = SceneClipboard.Capture(fixture.Scene, fixture.Layout, [UnderSingular], []);
 
         _ = clipboard.Should().NotBeNull();
         _ = clipboard!.WorldNodes.Should().BeNull();
@@ -103,26 +103,26 @@ public sealed class SceneClipboardTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var clipboard = Capture(fixture, [], [SampleScene.F]);
         var paste = BuildPaste(fixture, clipboard, new PasteTarget(), cut: false);
-        var rootBefore = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0));
+        var rootBefore = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0));
 
         var result = await fixture.Authoring.ExecuteAsync(paste).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        var added = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0)).Except(rootBefore).Should().ContainSingle().Which;
+        var added = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0)).Except(rootBefore).Should().ContainSingle().Which;
         var copy = added.Folder!.Value;
         _ = copy.Should().NotBe(SampleScene.F);
-        _ = LayoutQuery.Folder(fixture.Scene, copy)!.Name.Should().Be("F");
+        _ = LayoutQuery.Folder(fixture.Layout, copy)!.Name.Should().Be("F");
 
         // The explorer reads a missing flag as collapsed, so a copy that lost the flag would show collapsed.
-        _ = (LayoutQuery.Folder(fixture.Scene, copy)!.IsExpanded ?? false).Should().BeTrue();
+        _ = (LayoutQuery.Folder(fixture.Layout, copy)!.IsExpanded ?? false).Should().BeTrue();
 
-        var inside = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.InFolder(copy, 0));
+        var inside = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(copy, 0));
         _ = inside.Should().HaveCount(2);
         _ = inside[0].Node.Should().NotBeNull().And.NotBe(SampleScene.B);
         var nested = inside[1].Folder!.Value;
         _ = nested.Should().NotBe(SampleScene.G);
-        _ = LayoutQuery.Folder(fixture.Scene, nested)!.Name.Should().Be("G");
-        _ = (LayoutQuery.Folder(fixture.Scene, nested)!.IsExpanded ?? false).Should().BeFalse();
+        _ = LayoutQuery.Folder(fixture.Layout, nested)!.Name.Should().Be("G");
+        _ = (LayoutQuery.Folder(fixture.Layout, nested)!.IsExpanded ?? false).Should().BeFalse();
     }
 
     [TestMethod]
@@ -184,7 +184,7 @@ public sealed class SceneClipboardTests
         _ = fixture.History.UndoStack.Should().HaveCount(before.UndoCount + 1);
         _ = fixture.Node(SampleScene.B).Parent!.Id.Should().Be(SampleScene.A);
         _ = fixture.Node(SampleScene.Cam).Parent!.Id.Should().Be(SampleScene.A);
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.InFolder(SampleScene.AF, 0)).Should().Equal(
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(SampleScene.AF, 0)).Should().Equal(
             LayoutEntryId.Of(SampleScene.A2),
             LayoutEntryId.Of(SampleScene.B),
             LayoutEntryId.Of(SampleScene.Cam));
@@ -205,14 +205,14 @@ public sealed class SceneClipboardTests
         var result = await fixture.Authoring.ExecuteAsync(paste).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutScopes.TryScopeOf(fixture.Scene, LayoutEntryId.Of(SampleScene.F), out var scope).Should().BeTrue();
+        _ = LayoutScopes.TryScopeOf(fixture.Layout, LayoutEntryId.Of(SampleScene.F), out var scope).Should().BeTrue();
         _ = scope.Should().Be(SampleScene.A);
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.UnderNode(SampleScene.A, 0)).Should().Contain(LayoutEntryId.Of(SampleScene.F));
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.InFolder(SampleScene.F, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.B), LayoutEntryId.Of(SampleScene.G));
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.UnderNode(SampleScene.A, 0)).Should().Contain(LayoutEntryId.Of(SampleScene.F));
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(SampleScene.F, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.B), LayoutEntryId.Of(SampleScene.G));
         _ = fixture.Node(SampleScene.B).Parent!.Id.Should().Be(SampleScene.A);
         _ = NodePose.LocalOf(fixture.Node(SampleScene.B)).Should().Be(localBefore);
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.F)!.IsExpanded.Should().BeTrue();
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.G)!.IsExpanded.Should().BeFalse();
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.F)!.IsExpanded.Should().BeTrue();
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.G)!.IsExpanded.Should().BeFalse();
     }
 
     [TestMethod]
@@ -241,7 +241,7 @@ public sealed class SceneClipboardTests
         SceneAssert.Applied(await fixture.Authoring.ExecuteAsync(new RemoveNodes([SampleScene.B])).ConfigureAwait(false));
         var before = fixture.Snapshot();
 
-        var built = clipboard.TryPaste(fixture.Scene, new PasteTarget(Parent: SampleScene.A), cut: true, preserveWorld: false, out var paste, out var error);
+        var built = clipboard.TryPaste(fixture.Scene, fixture.Layout, new PasteTarget(Parent: SampleScene.A), cut: true, preserveWorld: false, out var paste, out var error);
 
         _ = built.Should().BeFalse();
         _ = paste.Should().BeNull();
@@ -285,7 +285,7 @@ public sealed class SceneClipboardTests
         var clipboard = Capture(fixture, [SampleScene.A2], [SampleScene.G]);
         var before = fixture.Snapshot();
 
-        var built = clipboard.TryPaste(fixture.Scene, new PasteTarget(), cut: true, preserveWorld: false, out var paste, out var error);
+        var built = clipboard.TryPaste(fixture.Scene, fixture.Layout, new PasteTarget(), cut: true, preserveWorld: false, out var paste, out var error);
 
         _ = built.Should().BeFalse();
         _ = paste.Should().BeNull();
@@ -300,16 +300,16 @@ public sealed class SceneClipboardTests
         var clipboard = Capture(fixture, [], [SampleScene.G]);
         var paste = BuildPaste(fixture, clipboard, new PasteTarget(), cut: false);
         var before = fixture.Snapshot();
-        var rootBefore = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0));
+        var rootBefore = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0));
 
         var result = await fixture.Authoring.ExecuteAsync(paste).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        var added = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0)).Except(rootBefore).Should().ContainSingle().Which;
+        var added = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0)).Except(rootBefore).Should().ContainSingle().Which;
         var copy = added.Folder!.Value;
         _ = copy.Should().NotBe(SampleScene.G);
-        _ = LayoutQuery.Folder(fixture.Scene, copy)!.Name.Should().Be("G");
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.InFolder(copy, 0)).Should().BeEmpty();
+        _ = LayoutQuery.Folder(fixture.Layout, copy)!.Name.Should().Be("G");
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(copy, 0)).Should().BeEmpty();
 
         SceneAssert.Applied(await fixture.Authoring.UndoAsync().ConfigureAwait(false));
         _ = fixture.Snapshot().Document.Should().Be(before.Document);
@@ -340,11 +340,11 @@ public sealed class SceneClipboardTests
         => entry.NodeId is { } node ? LayoutEntryId.Of(node) : LayoutEntryId.Of(entry.FolderId!.Value);
 
     private static SceneClipboard Capture(AuthoringFixture fixture, IReadOnlyList<NodeId> nodes, IReadOnlyList<FolderId> folders)
-        => SceneClipboard.Capture(fixture.Scene, nodes, folders) ?? throw new InvalidOperationException("The selection captured nothing.");
+        => SceneClipboard.Capture(fixture.Scene, fixture.Layout, nodes, folders) ?? throw new InvalidOperationException("The selection captured nothing.");
 
     private static SceneEditBatch BuildPaste(AuthoringFixture fixture, SceneClipboard clipboard, PasteTarget target, bool cut, bool preserveWorld = false)
     {
-        var built = clipboard.TryPaste(fixture.Scene, target, cut, preserveWorld, out var edit, out var error);
+        var built = clipboard.TryPaste(fixture.Scene, fixture.Layout, target, cut, preserveWorld, out var edit, out var error);
         _ = built.Should().BeTrue($"the paste must build, but: {error?.Code}");
         return edit!;
     }

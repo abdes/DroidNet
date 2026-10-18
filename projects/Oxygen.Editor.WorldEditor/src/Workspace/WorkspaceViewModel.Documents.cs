@@ -38,7 +38,7 @@ public partial class WorkspaceViewModel
     {
         childContainer.RegisterDelegate(
             resolver => new SceneDocumentKind(
-                resolver.Resolve<IProjectManagerService>().CurrentProject
+                resolver.Resolve<IProjectContextService>().ActiveProject
                     ?? throw new InvalidOperationException("A workspace opens only with a project."),
                 resolver.Resolve<ISceneNodeInteraction>(IfUnresolved.ReturnDefault),
                 resolver.Resolve<IAssetRedirects>(IfUnresolved.ReturnDefault)),

@@ -15,6 +15,7 @@ using Microsoft.UI.Xaml.Markup;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.TestSupport;

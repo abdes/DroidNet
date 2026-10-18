@@ -2,8 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.Scenes.Layout;
 
 namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 
@@ -16,24 +15,24 @@ public static class LayoutQuery
     /// <summary>
     /// Finds a folder's entry anywhere in a scene's explorer layout.
     /// </summary>
-    /// <param name="scene">The scene.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <param name="folder">The folder.</param>
     /// <returns>The folder's entry, or <see langword="null"/> when the layout has no such folder.</returns>
-    public static ExplorerEntryData? Folder(Scene scene, FolderId folder)
+    public static ExplorerEntryData? Folder(IList<ExplorerEntryData> layout, FolderId folder)
     {
-        ArgumentNullException.ThrowIfNull(scene);
-        return Find(scene.ExplorerLayout, folder);
+        ArgumentNullException.ThrowIfNull(layout);
+        return Find(layout, folder);
     }
 
     /// <summary>
     /// Counts every entry of a scene's explorer layout, nested ones included.
     /// </summary>
-    /// <param name="scene">The scene.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <returns>The number of node and folder entries.</returns>
-    public static int EntryCount(Scene scene)
+    public static int EntryCount(IList<ExplorerEntryData> layout)
     {
-        ArgumentNullException.ThrowIfNull(scene);
-        return Count(scene.ExplorerLayout);
+        ArgumentNullException.ThrowIfNull(layout);
+        return Count(layout);
     }
 
     private static ExplorerEntryData? Find(IEnumerable<ExplorerEntryData>? entries, FolderId folder)

@@ -11,9 +11,9 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Play;
-using Oxygen.Editor.World.Scripting;
 using Serilog.Events;
 
 namespace Oxygen.Editor.World.Workspace;

@@ -12,6 +12,7 @@ using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
@@ -475,7 +476,7 @@ public partial class SceneEditorViewModel
         IReadOnlyList<NodeId> nodeIds,
         IReadOnlyDictionary<NodeId, TransformData>? transforms)
     {
-        if (SceneNodeCopies.DuplicateInPlace(authoring.Scene, nodeIds, transforms) is not { } duplicate)
+        if (SceneNodeCopies.DuplicateInPlace(authoring.Scene, authoring.Layout, nodeIds, transforms) is not { } duplicate)
         {
             return;
         }

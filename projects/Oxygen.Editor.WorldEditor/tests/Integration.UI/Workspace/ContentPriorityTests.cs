@@ -6,7 +6,6 @@ using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Edits.Assets;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
@@ -33,7 +32,7 @@ public sealed partial class ContentPriorityTests : DroidNet.Tests.VisualUserInte
         var libraryProject = Path.Combine(fixture.ProjectRoot, "LibraryProject");
         var (_, libraryKey) = await fixture.CookTestMaterialAsync("Shared", timeout.Token, blue, libraryProject).ConfigureAwait(true);
         _ = libraryKey.Should().Be(key, "stable asset keys preserve the same logical identity while source precedence selects its content");
-        var project = ProjectContext.FromProject(fixture.Source.Project) with
+        var project = fixture.Projects.ActiveProject! with
         {
             AuthoringMounts = [new("Content", "Content")],
             LocalFolderMounts = [new("Library", await fixture.GetCookedRootAsync(libraryProject, timeout.Token).ConfigureAwait(true))],

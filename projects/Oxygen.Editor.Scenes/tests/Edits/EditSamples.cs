@@ -12,11 +12,12 @@ using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Edits.Settings;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
@@ -100,7 +101,8 @@ public static class EditSamples
         SetMaterialSlotSample,
         RemoveMaterialSlotsSample,
         RestoreMaterialSlotsSample,
-        SetScenePlaySample,
+        SetStartingCameraSample,
+        SetStartingInputContextsSample,
         SetSceneReferencesSample,
         SetScriptSlotsSample,
         SetEditorHiddenSample,
@@ -387,19 +389,26 @@ public static class EditSamples
             HasTargets = true,
         };
 
-    private static EditSample SetScenePlaySample =>
+    private static EditSample SetStartingCameraSample =>
         new(
-            nameof(SetScenePlay),
-            static _ => new SetScenePlay(PlayWith([new StartingInputContextData(SampleScene.PlayInput)])),
-            [new SceneChange.ScenePlayChanged()],
-            [new SceneChange.ScenePlayChanged()])
+            nameof(SetStartingCamera),
+            static _ => new SetStartingCamera(SampleScene.Cam),
+            [new SceneChange.StartingCameraChanged()],
+            [new SceneChange.StartingCameraChanged()]);
+
+    private static EditSample SetStartingInputContextsSample =>
+        new(
+            nameof(SetStartingInputContexts),
+            static _ => new SetStartingInputContexts([new StartingInputContextData(SampleScene.PlayInput)]),
+            [new SceneChange.StartingInputContextsChanged()],
+            [new SceneChange.StartingInputContextsChanged()])
         {
             CarriesAssetReference = true,
             Asset = SampleScene.PlayInput,
             Tamper = static _ =>
             {
                 var contexts = new List<StartingInputContextData> { new(SampleScene.PlayInput) };
-                return new TamperedEdit(new SetScenePlay(PlayWith(contexts)), contexts.Clear);
+                return new TamperedEdit(new SetStartingInputContexts(contexts), contexts.Clear);
             },
         };
 
@@ -524,7 +533,4 @@ public static class EditSamples
         => new(
             new Dictionary<NodeId, PropertyEdit> { [SampleScene.A1] = PropertyEdit.SingleEdit(SceneProperties.Transform.PositionX, 5f) },
             "Move");
-
-    private static ScenePlayData PlayWith(IList<StartingInputContextData> contexts)
-        => new() { StartingCamera = SampleScene.Cam, StartingInputContexts = contexts };
 }

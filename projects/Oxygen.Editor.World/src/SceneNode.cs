@@ -27,7 +27,6 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
     private bool isRayCastingSelectable = true;
     private bool ignoreParentTransform;
     private bool isStatic;
-    private bool isExpanded;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="SceneNode" /> class.
@@ -48,24 +47,6 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
     ///     Gets the identity of the node, authored in the scene file.
     /// </summary>
     public NodeId Id { get; init; } = NodeId.New();
-
-    /// <summary>
-    ///     Gets or sets a value indicating whether the scene node is expanded in the scene explorer.
-    /// </summary>
-    public bool IsExpanded
-    {
-        get => this.isExpanded;
-        set
-        {
-            if (this.isExpanded == value)
-            {
-                return;
-            }
-
-            this.isExpanded = value;
-            this.OnPropertyChanged();
-        }
-    }
 
     /// <summary>
     ///     Gets or sets a value indicating whether the scene node is loaded in the Game Engine.
@@ -420,7 +401,6 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
             this.IsRayCastingSelectable = data.IsRayCastingSelectable;
             this.IgnoreParentTransform = data.IgnoreParentTransform;
             this.IsStatic = data.IsStatic;
-            this.IsExpanded = data.IsExpanded;
 
             // 5. Children
             if (data.Children != null)
@@ -456,7 +436,6 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
             IsRayCastingSelectable = this.IsRayCastingSelectable,
             IgnoreParentTransform = this.IgnoreParentTransform,
             IsStatic = this.IsStatic,
-            IsExpanded = this.IsExpanded,
         };
     }
 

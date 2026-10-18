@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
-using Oxygen.Editor.World;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -25,7 +25,8 @@ public sealed class SceneBuilder
     private SceneId id = SceneId.New();
     private string name = "Scene";
     private SceneEnvironmentData environment = new();
-    private ScenePlayData? play;
+    private NodeId? startingCamera;
+    private IList<StartingInputContextData>? startingInputContexts;
     private SceneReferencesData? references;
 
     /// <summary>
@@ -185,13 +186,24 @@ public sealed class SceneBuilder
     }
 
     /// <summary>
-    /// Sets the scene's play settings.
+    /// Sets the camera node the scene starts viewing through.
     /// </summary>
-    /// <param name="value">The play settings.</param>
+    /// <param name="value">The camera node.</param>
     /// <returns>This builder.</returns>
-    public SceneBuilder Play(ScenePlayData value)
+    public SceneBuilder StartingCamera(NodeId value)
     {
-        this.play = value;
+        this.startingCamera = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the input mapping contexts that are active when the scene starts.
+    /// </summary>
+    /// <param name="value">The contexts, in order.</param>
+    /// <returns>This builder.</returns>
+    public SceneBuilder StartingInputContexts(IList<StartingInputContextData> value)
+    {
+        this.startingInputContexts = value;
         return this;
     }
 
@@ -210,21 +222,22 @@ public sealed class SceneBuilder
     /// Builds a new, independent copy of the scene data.
     /// </summary>
     /// <returns>The scene data.</returns>
-    public SceneData Build()
+    public SceneFileData Build()
     {
-        var data = new SceneData
+        var data = new SceneFileData
         {
             Id = this.id,
             Name = this.name,
             RootNodes = [.. this.NodesUnder(parent: null)],
             Environment = this.environment,
-            Play = this.play,
+            StartingCamera = this.startingCamera,
+            StartingInputContexts = this.startingInputContexts,
             References = this.references,
             ExplorerLayout = [.. this.EntriesIn(underNode: null, inFolder: null)],
         };
 
         // A serializer round trip gives every build its own lists and proves the data is a valid scene file.
-        return JsonSerializer.Deserialize(JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData), SceneJsonContext.Default.SceneData)!;
+        return JsonSerializer.Deserialize(JsonSerializer.SerializeToUtf8Bytes(data, SceneFileJsonContext.Default.SceneFileData), SceneFileJsonContext.Default.SceneFileData)!;
     }
 
     private static ExplorerEntryData NodeEntry(NodeId nodeId, List<ExplorerEntryData> children)

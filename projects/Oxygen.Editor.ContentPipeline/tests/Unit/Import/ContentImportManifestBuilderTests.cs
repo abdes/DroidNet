@@ -4,7 +4,6 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
@@ -75,7 +74,7 @@ public sealed class ContentImportManifestBuilderTests
             Path.GetFullPath("model.gltf"),
             null,
             ContentCookInputRole.Primary);
-        var settings = new global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings(4, global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.ImporterIdentity, "Content", "RetainedName", "Content/SourceMedia", "model.gltf", new string('a', 64), ["model.gltf"], "Models/Retained")
+        var settings = new ContentPipeline.Import.NativeSceneImportSettings(4, global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.ImporterIdentity, "Content", "RetainedName", "Content/SourceMedia", "model.gltf", new string('a', 64), ["model.gltf"], "Models/Retained")
         {
             MaterialSlotProvenance = global::Oxygen.Editor.ContentPipeline.Import.NativeMaterialSlotProvenance.Create(),
             BakeTransforms = true,
@@ -300,7 +299,7 @@ public sealed class ContentImportManifestBuilderTests
             {
                 AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             };
-            this.Project = new Project(projectInfo) { Name = "TestProject" };
+            this.Project = new Project(projectInfo);
             var key = Guid.CreateVersion7();
             this.Output = new("Content", key, global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationPaths.Generation(this.Root, key));
         }
@@ -309,7 +308,7 @@ public sealed class ContentImportManifestBuilderTests
 
         public Project Project { get; }
 
-        public global::Oxygen.Editor.ContentPipeline.Publication.CookStagingRoot Output { get; }
+        public Publication.CookStagingRoot Output { get; }
 
         public void Dispose()
         {

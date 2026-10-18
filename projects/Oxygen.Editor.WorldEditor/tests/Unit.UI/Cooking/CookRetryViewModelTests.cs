@@ -11,7 +11,6 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Cooking;
 using Oxygen.Managed.Core.Diagnostics;
 

@@ -33,27 +33,25 @@ typography/layout roles.
 Other required references:
 
 - [Oxygen engineering rules](../../oxygen/RULES.md) and repository AGENTS.md.
-- [Scene Explorer LLD](../lld/scene-explorer.md), [scene authoring
-  model](../lld/scene-authoring-model.md), [documents and
-  commands](../lld/documents-and-commands.md).
+- [Scene Explorer LLD](../lld/scene-explorer.md),
+  [scene authoring model](../lld/scene-authoring-model.md),
+  [documents and commands](../lld/documents-and-commands.md).
 - [Settings architecture](../lld/settings-architecture.md), particularly the
   workspace-visibility storage/lifetime contract.
-- [Property pipeline](../lld/property-pipeline.md) and [viewport interaction
-  contract](../lld/viewport-and-tools.md#16-v01-viewport-interaction-contract).
-- [DynamicTree
-  filtering](../../../projects/Controls/DynamicTree/design/filtering.md),
-  [mutation
-  UI](../../../projects/Controls/DynamicTree/design/tree-mutation-ui.md),
+- [Property pipeline](../lld/property-pipeline.md) and
+  [viewport interaction contract](../lld/viewport-and-tools.md#16-v01-viewport-interaction-contract).
+- [DynamicTree filtering](../../../projects/Controls/DynamicTree/design/filtering.md),
+  [mutation UI](../../../projects/Controls/DynamicTree/design/tree-mutation-ui.md),
   [typeahead/focus](../../../projects/Controls/DynamicTree/design/typeahead-focus.md),
   and its actual public APIs/tests. The README contains examples that do not
   match every current API; source is authoritative for what already exists.
-- [Build/test workflows](../../../tooling/doc/build.md) and [MSTest
-  guidance](../../../.github/prompts/csharp-mstest.prompt.md).
+- [Build/test workflows](../../../tooling/doc/build.md) and
+  [MSTest guidance](../../../.github/prompts/csharp-mstest.prompt.md).
 
 This plan is scoped design implementation, not a reopening of delivered ED-M03
-or a competing ED-M08.4–M08.6 viewport milestone. It owns Explorer/control work and
-consumes the runtime picking/overlay capabilities owned by ED-M08.4–M08.6 and the
-existing runtime integration boundaries. Missing native support must be
+or a competing ED-M08.4–M08.6 viewport milestone. It owns Explorer/control work
+and consumes the runtime picking/overlay capabilities owned by ED-M08.4–M08.6
+and the existing runtime integration boundaries. Missing native support must be
 implemented by its owner under explicit authorization, not hidden behind a
 successful UI-only test.
 
@@ -73,31 +71,26 @@ implementation.
 
 Sources consulted on 2026-10-03:
 
-- [Unity 6.6
-  Hierarchy](https://docs.unity3d.com/6000.6/Documentation/Manual/Hierarchy.html)
+- [Unity 6.6 Hierarchy](https://docs.unity3d.com/6000.6/Documentation/Manual/Hierarchy.html)
   explicitly separates sibling reordering from parenting and distinguishes Paste
   as Child with local/world transform preservation. This supports explicit
   intent rather than a surprising implicit parent change. Oxygen chooses
   preserve-world for its normal reparent operations; it does not copy Unity's
   multi-scene model.
-- [Godot
-  Node.reparent](https://docs.godotengine.org/en/stable/classes/class_node.html#class-node-method-reparent)
+- [Godot Node.reparent](https://docs.godotengine.org/en/stable/classes/class_node.html#class-node-method-reparent)
   defaults to retaining global transforms and documents recursive duplication.
   This supports preserving pose and complete subtrees; Oxygen retains its own
   identity, reference and transform rules, including allowed duplicate node
   names.
-- [Microsoft
-  drag/drop](https://learn.microsoft.com/en-us/windows/apps/develop/data/drag-and-drop)
+- [Microsoft drag/drop](https://learn.microsoft.com/en-us/windows/apps/develop/data/drag-and-drop)
   separates source allowed operations, target acceptance, asynchronous deferrals
   and completion. Oxygen's domain command remains the one mutation authority;
   DropCompleted must not delete the source a second time.
-- [Microsoft
-  clipboard](https://learn.microsoft.com/en-us/windows/apps/develop/communication/copy-and-paste)
+- [Microsoft clipboard](https://learn.microsoft.com/en-us/windows/apps/develop/communication/copy-and-paste)
   distinguishes Copy/Move payloads and emphasizes built-in text-control
   handling. Oxygen's node clipboard must not steal a rename/search TextBox's
   native shortcuts.
-- [Microsoft contextual
-  commanding](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/collection-commanding)
+- [Microsoft contextual commanding](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/collection-commanding)
   recommends item context menus alongside frequent-action accelerators,
   including right-click, Shift+F10/Menu key and touch/pen invocation. The
   toolbar is the discoverable fast path; the context menu gives the same
@@ -132,7 +125,7 @@ preservation checklist for the old UI.
 
 ### Project data model and activation gap
 
-Read `projects/Oxygen.Editor.World/src/IProject.cs` and `IProjectInfo.cs`,
+Read `projects/Oxygen.Editor.Projects/src/IProject.cs` and `IProjectInfo.cs`,
 `projects/Oxygen.Editor.Projects/src/{Project,ProjectInfo,ProjectContext,ProjectManagerService}.cs`,
 and `WorldEditor/src/Workspace/WorkspaceViewModel.ResolveInitialSceneAsync`.
 
@@ -707,11 +700,10 @@ batch order, filtered range/index correctness, focus and recycled rows. Controls
 DemoApp consumes the hooks with non-Oxygen data/actions. DynamicTree has no
 Oxygen reference and no alternate application-specific tree implementation.
 
-**Status (updated 2026-10-05 per P1):** SE-01 is **validated**
-— C32/C34/C35/C38, T9 and T10 are closed with focused Models/WinUI regression
-coverage. The direct
-trailing template takes precedence over
-selectors; fixed-width empty slots and recycled content are covered. Demo-owned
+**Status (updated 2026-10-05 per P1):** SE-01 is **validated** —
+C32/C34/C35/C38, T9 and T10 are closed with focused Models/WinUI regression
+coverage. The direct trailing template takes precedence over selectors;
+fixed-width empty slots and recycled content are covered. Demo-owned
 lock/visibility hover commands and loaded-status cells remain aligned across
 depths and densities. Final review corrected passive status content intercepting
 row input and made hover subscriptions idempotent. Debug|x64 builds and analyzer
@@ -761,8 +753,8 @@ Unit/Unit.UI/Integration.UI tests and owning LLDs.
 4. Extend the existing document command owner with typed, identity-based
    hierarchy requests/results. It orchestrates Mutator/Organizer within that
    path; no second history/dirty authority is permitted, and the retired
-   `SceneExplorerService` facade must not be revived (D-a / C39).
-   Capture immutable context, selection roots, target/sibling index and
+   `SceneExplorerService` facade must not be revived (D-a / C39). Capture
+   immutable context, selection roots, target/sibling index and
    graph/layout/transform before/after.
 5. Prevalidate the complete batch, commit graph and layout together, advance
    scene revision/dirty/history synchronously, reconcile projection, then
@@ -770,8 +762,9 @@ Unit/Unit.UI/Integration.UI tests and owning LLDs.
    identities, exact sibling order, local transforms and layout. No
    before-command UI deletion/move, fire-and-forget backend mutation or
    duplicate VM history entries.
-6. Implement preserve-world reparent and grouping-only folder move from section 4. Resolve Before/After insertion against underlying siblings, including
-   filtered or collapsed destinations. Cut/paste and drag share this
+6. Implement preserve-world reparent and grouping-only folder move from
+   section 4. Resolve Before/After insertion against underlying siblings,
+   including filtered or collapsed destinations. Cut/paste and drag share this
    implementation. Enforce cycles, locks, scope and ownership on programmatic
    commands too.
 7. Replace shallow adapter clipboard with authored snapshots for Copy and
@@ -840,12 +833,11 @@ The single-loaded-scene policy is implemented and qualified (C30/C31, D6/T8):
 the document owner stages source data before close guards, then retires the old
 editable graph and installs the accepted replacement. Failed/cancelled staging
 retains the old scene; post-retirement failure exposes explicit recovery.
-`DefaultSceneId` is persisted in the project
-manifest/model and propagated through `ProjectContext`; workspace startup
-resolves the initial scene from it (after any explicit activation request) and
-no longer falls back to `LastOpenedScene` or first-listed discovery; the
-competing `ActiveScene` writes in `SceneExplorerViewModel`/`DocumentManager` are
-removed.
+`DefaultSceneId` is persisted in the project manifest/model and propagated
+through `ProjectContext`; workspace startup resolves the initial scene from it
+(after any explicit activation request) and no longer falls back to
+`LastOpenedScene` or first-listed discovery; the competing `ActiveScene` writes
+in `SceneExplorerViewModel`/`DocumentManager` are removed.
 
 Rename is routed through the command owner: `Scene`/`SceneNode`/`Folder` adapter
 labels are read-only presentation, `SceneExplorerViewModel.CommitRenameAsync`
@@ -869,8 +861,9 @@ followed by projection reconciliation, and the tree-first `OnItemAdded`/
 `OnItemRemoved` backend/history handlers plus the shallow adapter clipboard are
 removed — completing atomic authoring for create/delete/move. The organizer's
 layout overlay now initializes lazily from the root nodes instead of throwing on
-a freshly loaded, layout-less scene (fixes the `ExplorerLayout is not
-initialized` failure on the legacy tree-first create-folder path).
+a freshly loaded, layout-less scene (fixes the
+`ExplorerLayout is not initialized` failure on the legacy tree-first
+create-folder path).
 
 Clipboard and selection context are landed: `ISceneSelectionService` now carries
 a typed `SceneSelectionContext` (scene/folder/node/mixed kind plus primary
@@ -878,10 +871,10 @@ identity) published by the Explorer alongside the node subset, and
 `DuplicateNodesAsync` deep-copies node hierarchies with fresh node/component
 identities while preserving asset and material-slot references. Copy captures
 authored DTO/world-pose snapshots, Cut stages source root identities as a move,
-and Paste duplicates or moves at the resolved destination. Scene name search is landed
-(`SearchAsync`/`ClearSearchAsync`): it matches node and folder names through the
-scene index, expands matching nodes' scene ancestry to reveal collapsed
-descendants, and restores the prior expansion on clear.
+and Paste duplicates or moves at the resolved destination. Scene name search is
+landed (`SearchAsync`/`ClearSearchAsync`): it matches node and folder names
+through the scene index, expands matching nodes' scene ancestry to reveal
+collapsed descendants, and restores the prior expansion on clear.
 
 Step 6 is complete: `MoveFolderToParentAsync` (grouping-only folder reparent),
 `ReorderNodesAsync`/`MoveNodeToSiblingIndex` (layout-only sibling insertion with
@@ -907,15 +900,15 @@ continuations that mutate UI-bound tree collections now use
 `ReconcileProjectionAsync` touched an `ObservableCollection` from a thread-pool
 thread after a command await.
 
-Historical evidence: 68 Projects tests and 265 WorldEditor Unit tests pass (drop-hook,
-folder-index, layout-initialization, command-routing, selection-context,
-deep-copy, keyboard-clipboard routing, search, reorder/folder-move and
-context-menu cases); WorldEditor src, Unit, and Oxygen.Editor.App build clean.
-An independent adversarial review (2026-10-04) found SE-01 and SE-02 **not
-complete**: source-level correctness defects and contract decisions required
-closure. Decisions D1–D8 are now recorded; remaining implementation and
-verification are tracked in the corrective-action checklist below and
-must be closed before SE-03. Restated per P6 — there is no deferred
+Historical evidence: 68 Projects tests and 265 WorldEditor Unit tests pass
+(drop-hook, folder-index, layout-initialization, command-routing,
+selection-context, deep-copy, keyboard-clipboard routing, search,
+reorder/folder-move and context-menu cases); WorldEditor src, Unit, and
+Oxygen.Editor.App build clean. An independent adversarial review (2026-10-04)
+found SE-01 and SE-02 **not complete**: source-level correctness defects and
+contract decisions required closure. Decisions D1–D8 are now recorded; remaining
+implementation and verification are tracked in the corrective-action checklist
+below and must be closed before SE-03. Restated per P6 — there is no deferred
 `AuthoringChanged` event to wire: `SceneContentDemandService` observes the model
 directly. It subscribes `RootNodes` and, per node, `Children`, `Components` and
 each `GeometryComponent.OverrideSlots`
@@ -937,28 +930,28 @@ with no queued work is mislabelled `[ ]` blocked, not `[~]`. An item closes only
 when its code, its contract-doc recording and its regression tests are all done;
 "code landed" alone never does.
 
-**Current verification (2026-10-05):** Debug/x64 source and all three owning test
-projects build; the product analyzer-enabled build succeeds with warnings
+**Current verification (2026-10-05):** Debug/x64 source and all three owning
+test projects build; the product analyzer-enabled build succeeds with warnings
 (not an analyzer-clean claim). Recorded TRX results: 240/240 focused WorldEditor
-document, Explorer and Inspector model tests, 181/181 complete DynamicTree Models
-tests and 8/8 Inspector routing Unit.UI tests, zero failures/skips. These include
-identity restoration, foreign writes during refill, immutable snapshots,
+document, Explorer and Inspector model tests, 181/181 complete DynamicTree
+Models tests and 8/8 Inspector routing Unit.UI tests, zero failures/skips. These
+include identity restoration, foreign writes during refill, immutable snapshots,
 folder-primary reconciliation, collapsed node/nested-folder reveal, transient
-expansion across rebuild, root exclusivity and stale/inactive Inspector messages.
-Inspector routing uses dispatcher-only tests, with no rendering wait or physical
-input/focus requirement. Changed-file hooks and `git diff --check` passed.
-This evidence supersedes the stale selection/search open entries, not the
-historical full-lane totals or unrun context-menu/lifecycle acceptance.
+expansion across rebuild, root exclusivity and stale/inactive Inspector
+messages. Inspector routing uses dispatcher-only tests, with no rendering wait
+or physical input/focus requirement. Changed-file hooks and `git diff --check`
+passed. This evidence supersedes the stale selection/search open entries, not
+the historical full-lane totals or unrun context-menu/lifecycle acceptance.
 
 Verification evidence (2026-10-04): `Oxygen.Editor.WorldEditor.Unit.Tests` full
 project green — 313 total, 313 succeeded, 0 failed, 0 skipped (272 baseline +
 five search/layout tests with C25/C26/C27, two delete tests with C42, five
 failure-visibility tests with C40/C41/C43/D-f, twelve primitive-shape tests with
-C48), plus `Oxygen.Managed.Core.Tests` 95/95 (`traverse Invoke-Tests --start
-projects/Oxygen.Editor.WorldEditor/tests/Unit --configuration Debug`). The
-strict-mock helper `ConfigureHierarchySync` previously omitted the native rename
-and transform publishes added with C2/C1/C3, so four tests threw while their
-defects were marked closed.
+C48), plus `Oxygen.Managed.Core.Tests` 95/95
+(`traverse Invoke-Tests --start projects/Oxygen.Editor.WorldEditor/tests/Unit --configuration Debug`).
+The strict-mock helper `ConfigureHierarchySync` previously omitted the native
+rename and transform publishes added with C2/C1/C3, so four tests threw while
+their defects were marked closed.
 
 #### Recorded owner decisions and remaining implementation/verification
 
@@ -976,24 +969,25 @@ defects were marked closed.
       so the contract agrees; the plan's conflict row now records the decision
       instead of the superseded grouping-only restriction.
 - [x] D3 — **decided 2026-10-05 by the orchestrator under the owner's V0.1
-      delegation** (previously mislabelled "unapproved"): selection carries a row
-      kind (node / folder / mixed / root) and an explicit primary identity rather
-      than deriving primary from row order; a folder or mixed selection shows the
-      summary surface, the root row shows scene Environment, and an empty node
-      subset never means "every non-node case". **Closed 2026-10-05:** C16–C19/T5
-      implement and verify the decision; `documents-and-commands.md` §7 and
-      `scene-explorer.md` §7 record the immutable typed context, one primary,
-      reconciliation, transient reveal and stale-message rules.
-- [x] D4 — **closed 2026-10-05**: workspace
-      persistence covers Hide, Lock and category preferences as typed
-      per-project settings with scene-scoped lifetime, one coordinated workspace
-      interaction service owning typed substate — not new fields on scene DTOs.
-      Hide, Lock and category storage/restore are implemented; the settings LLD now
-      records `WorldEditor/SceneInteraction`. Owner clarification: Eye and Lock are
-      fixed-width, fixed-order status slots; the chevron/icon/label area fills the
-      remaining width. No movable or resizable column feature is required.
-      C49 verifies independent scene records across switches and restart, category
-      reset, invalid-state diagnostics and stale-restore rejection.
+      delegation** (previously mislabelled "unapproved"): selection carries a
+      row kind (node / folder / mixed / root) and an explicit primary identity
+      rather than deriving primary from row order; a folder or mixed selection
+      shows the summary surface, the root row shows scene Environment, and an
+      empty node subset never means "every non-node case". **Closed
+      2026-10-05:** C16–C19/T5 implement and verify the decision;
+      `documents-and-commands.md` §7 and `scene-explorer.md` §7 record the
+      immutable typed context, one primary, reconciliation, transient reveal and
+      stale-message rules.
+- [x] D4 — **closed 2026-10-05**: workspace persistence covers Hide, Lock and
+      category preferences as typed per-project settings with scene-scoped
+      lifetime, one coordinated workspace interaction service owning typed
+      substate — not new fields on scene DTOs. Hide, Lock and category
+      storage/restore are implemented; the settings LLD now records
+      `WorldEditor/SceneInteraction`. Owner clarification: Eye and Lock are
+      fixed-width, fixed-order status slots; the chevron/icon/label area fills
+      the remaining width. No movable or resizable column feature is required.
+      C49 verifies independent scene records across switches and restart,
+      category reset, invalid-state diagnostics and stale-restore rejection.
 - [x] D5 — **decided by the owner (2026-10-04)**, both clauses: folder Delete =
       grouping-only promotion that never deletes nodes and never changes
       scene-graph parentage or transforms; node Delete = subtree deletion;
@@ -1009,26 +1003,28 @@ defects were marked closed.
       Delete as layout-only promotion that leaves parentage and world pose
       untouched. T11 closed the last evidence gap on 2026-10-05 (`bff041741`),
       so decision, code, contract and tests are all in place.
-- [x] D6 — **closed 2026-10-05**: keep the one-time `LastOpenedScene`
-      migration as an explicit recovery path, persist
-      `DefaultSceneId`, and seed it at project creation; usage history may remain
-      but never overrides the configured default. The field, serialization, context
-      propagation, startup resolution and C31's creation seed are implemented.
-      `project-services.md` §7 now records the creation/migration/default contract.
-      `ProjectValidationAndContextTests` passed all 23 cases in Debug/x64, including
-      starter-ID seeding and missing-ID regressions. The combined Projects lane
-      passes 69 cases; T8 verifies configured-default precedence and rejects missing
-      defaults without silently choosing a discovered scene. `ActiveScene` reports
-      only an explicitly accepted graph, not inferred metadata.
-- [x] D7 — **closed 2026-10-05**: Copy transfers a
-      same-project immutable snapshot (never live adapters or source-only ids), Cut
-      is bound to the scene it came from, and the clipboard is cleared only on a
-      successful project switch, with one intent path and no second history
-      authority. C11/C50 implement snapshot capture and project/scene lifetime
-      enforcement; `scene-explorer.md` §15 records the contract.
-      `DocumentManagerSceneLifetimeTests` verifies successful/cancelled scene and
-      project replacements, failed saves, stale loads, repeated snapshot Paste,
-      material-tab retention and post-retirement recovery in the 270-case Unit lane.
+- [x] D6 — **closed 2026-10-05**: keep the one-time `LastOpenedScene` migration
+      as an explicit recovery path, persist `DefaultSceneId`, and seed it at
+      project creation; usage history may remain but never overrides the
+      configured default. The field, serialization, context propagation, startup
+      resolution and C31's creation seed are implemented. `project-services.md`
+      §7 now records the creation/migration/default contract.
+      `ProjectValidationAndContextTests` passed all 23 cases in Debug/x64,
+      including starter-ID seeding and missing-ID regressions. The combined
+      Projects lane passes 69 cases; T8 verifies configured-default precedence
+      and rejects missing defaults without silently choosing a discovered scene.
+      `ActiveScene` reports only an explicitly accepted graph, not inferred
+      metadata.
+- [x] D7 — **closed 2026-10-05**: Copy transfers a same-project immutable
+      snapshot (never live adapters or source-only ids), Cut is bound to the
+      scene it came from, and the clipboard is cleared only on a successful
+      project switch, with one intent path and no second history authority.
+      C11/C50 implement snapshot capture and project/scene lifetime enforcement;
+      `scene-explorer.md` §15 records the contract.
+      `DocumentManagerSceneLifetimeTests` verifies successful/cancelled scene
+      and project replacements, failed saves, stale loads, repeated snapshot
+      Paste, material-tab retention and post-retirement recovery in the 270-case
+      Unit lane.
 - [x] D8 — **decided by the owner and ratified in the analysis this row points
       at**:
       [`D8-show-in-editor-runtime-capability.md`](../review/D8-show-in-editor-runtime-capability.md)
@@ -1036,36 +1032,35 @@ defects were marked closed.
       per-team action plans (E1–E3 engine, I1–I4 interop/runtime, W1–W7 editor)
       and the qualification cases. This row does not restate them. What binds
       the plan: - **D8a** is a scene-scoped hidden-node snapshot applied in
-      `ScenePrepPipeline::PrepareView`. An editor-hidden node **does
-      not render and does not cast shadows** in editing views (R2) — it is
-      dropped, so no draw, no depth, no shadow-caster source; the UE5.7 parity
-      basis is `bHiddenEd`, which removes the actor and its direct shadows from
-      the editor viewport without touching runtime state. The existing
-      shadow-only route (`main_view_visible = false`) is deliberately **not**
-      used, because it exists to keep off-frustum casters shading the scene and
-      a hidden node must stop shading it. No depth-prepass change is required
-      for this, since dropped geometry never reaches the prepass. -
-      Editor-hidden nodes stay **fully visible in game, in game viewports, in
-      cooked assets and in capture/validation views** (R3/R6). The mask never
-      writes `kVisible`, never dirties and never cooks (R4); the eye toggle
-      records an undo step — which is why the eye must never be routed through
+      `ScenePrepPipeline::PrepareView`. An editor-hidden node **does not render
+      and does not cast shadows** in editing views (R2) — it is dropped, so no
+      draw, no depth, no shadow-caster source; the UE5.7 parity basis is
+      `bHiddenEd`, which removes the actor and its direct shadows from the
+      editor viewport without touching runtime state. The existing shadow-only
+      route (`main_view_visible = false`) is deliberately **not** used, because
+      it exists to keep off-frustum casters shading the scene and a hidden node
+      must stop shading it. No depth-prepass change is required for this, since
+      dropped geometry never reaches the prepass. - Editor-hidden nodes stay
+      **fully visible in game, in game viewports, in cooked assets and in
+      capture/validation views** (R3/R6). The mask never writes `kVisible`,
+      never dirties and never cooks (R4); the eye toggle records an undo step —
+      which is why the eye must never be routed through
       `RuntimeSetVisibility`/`SetVisibilityCommand`. - Inheritance follows
       **actual scene ancestors only**, never logical folders (R1); the editor
       sends hidden roots and the engine resolves the closure (DD2), as a
       revisioned per-activation snapshot applied to every editing viewport of
-      the active scene (DD3, R6). - **D8b** is ED-M08.4–M08.6 work: picking does not
-      exist at any layer. The Explorer contributes category and hidden-set
+      the active scene (DD3, R6). - **D8b** is ED-M08.4–M08.6 work: picking does
+      not exist at any layer. The Explorer contributes category and hidden-set
       filters on each pick request (DD4); hidden nodes cannot be picked in
       viewports (R8) yet Explorer selection still works, and a hidden node
       selected (individually or in a multi-selection) in the Scene Explorer
       shows its transform gizmo at its world transform (R9, W7 — owner decision
-      on Q4). - Editor side (C49 /
-      W1–W4) is **unblocked and buildable now**: workspace service,
-      `WorldEditor/SceneVisibility` persistence, the eye/lock slots and the
-      binding with the `SupportsEditingViewMask` warning fallback (Q2 — the eye
-      works immediately and logs a diagnostic while suppression awaits I4).
-      Engine and interop work needs separate authorization and build evidence,
-      so it is not scheduled from this plan.
+      on Q4). - Editor side (C49 / W1–W4) is **unblocked and buildable now**:
+      workspace service, `WorldEditor/SceneVisibility` persistence, the eye/lock
+      slots and the binding with the `SupportsEditingViewMask` warning fallback
+      (Q2 — the eye works immediately and logs a diagnostic while suppression
+      awaits I4). Engine and interop work needs separate authorization and build
+      evidence, so it is not scheduled from this plan.
 
 #### Show in Editor & Lock — interaction contract (owner, 2026-10-05)
 
@@ -1159,8 +1154,9 @@ Selection
       `InspectorSelectionRoutingTests` passes all eight routing cases (T5).
 - [x] C17 — closed 2026-10-05: generic `ActiveItem` and `SelectionSettled`
       preserve explicit primary independently of row order. Reconciliation
-      preserves a surviving node/folder primary and uses first-survivor fallback.
-      Selection-policy, Explorer and selection-service regressions pass.
+      preserves a surviving node/folder primary and uses first-survivor
+      fallback. Selection-policy, Explorer and selection-service regressions
+      pass.
 - [x] C18 — closed 2026-10-05: Explorer consumes service notifications and
       restores selection by identity. Projection refill suppresses intermediate
       empty writes and restores the latest context, including foreign writes
@@ -1168,8 +1164,8 @@ Selection
       lazy adapter parents; node and nested-folder reveal tests assert visible,
       selected replacement rows without authoring expansion.
 - [x] C19 — closed 2026-10-05: scene root is exclusive in both directions and
-      excluded from bulk/range selection. Generic policy and Explorer tests
-      pass in the 181 Models / 240 focused Unit lanes.
+      excluded from bulk/range selection. Generic policy and Explorer tests pass
+      in the 181 Models / 240 focused Unit lanes.
 
 Context menu
 
@@ -1179,13 +1175,16 @@ Context menu
       `SceneExplorerContextMenuTests` pass in the UI project.
 - [x] C21 — toolbar and context menus share action availability and execution.
       Node, folder and mixed clipboard actions use the atomic command owner;
-      ordinary Paste preserves local transforms, explicit child Paste keeps world pose.
+      ordinary Paste preserves local transforms, explicit child Paste keeps
+      world pose.
 - [x] C22 — production row/background `ContextRequested` mounting handles
-      pointer/touch and keyboard requests, settles inline rename and edit sessions,
-      and dismisses on recycling, unload or stale context. Menu keyboard/pointer
-      placement and dismissal regressions pass; generic tree UI lane passes 47 cases.
+      pointer/touch and keyboard requests, settles inline rename and edit
+      sessions, and dismisses on recycling, unload or stale context. Menu
+      keyboard/pointer placement and dismissal regressions pass; generic tree UI
+      lane passes 47 cases.
 - [x] C23 — full-batch eligibility checks every target, lineage and lock.
-      Disabled reasons are accessible; non-anchor lock and toolbar parity tests pass.
+      Disabled reasons are accessible; non-anchor lock and toolbar parity tests
+      pass.
 
 Search / index
 
@@ -1226,7 +1225,8 @@ Search / index
       before/after and checks `Metadata.IsDirty` is false.
 - [x] C37 — closed 2026-10-05: expansion restoration uses stable identities and
       fresh adapters, preserving transient folder state across reload rather
-      than writing authored expansion. `ReconcileDuringSearch_KeepsTransientExpansionUnauthoredAndRestorable`
+      than writing authored expansion.
+      `ReconcileDuringSearch_KeepsTransientExpansionUnauthoredAndRestorable`
       passes in the 240-test lane, asserting rebuilt adapter identity,
       clear-search collapse, serialized-layout equality and no dirty state.
       Selection-reveal expansion has equivalent rebuild coverage.
@@ -1256,95 +1256,110 @@ Scene lifecycle
 Generic tree
 
 - [x] C32 — `DynamicTree.cs:919` recycling does not fully detach subscriptions /
-      reset drop state. **Implementation landed 2026-10-05:** `DynamicTreeItem.ResetRecycledRowState()`
-      now clears the interactive-pointer flag, the drop-into cue and an open rename on the recycled
-      part, and `ItemsRepeater_OnElementClearing` drops the control's `dropIndicatorElement` when
-      the cleared container _is_ the cue carrier (the case a hover-expand rebuild creates mid-drag,
-      which left the cue painted on whichever row the container was next bound to). The stale
-      interactive flag was not cosmetic: `TreeItem_DragStarting` cancels a drag started on a row
-      that still looks mid-press. Managed proof added 2026-10-05:
-      `Recycling_ClearsInteractionStateAndDetachesExpansionHandler_Async` clears an
-      actual repeater container mid-rename with a drop cue and seeded interactive-pointer
-      state, proves the old row can no longer expand through the tree, and verifies
-      newly prepared rows can expand again.
-- [x] C33 — demo compact profile is 28/12 DIP, not required 32/14; comfortable 40.
+      reset drop state. **Implementation landed 2026-10-05:**
+      `DynamicTreeItem.ResetRecycledRowState()` now clears the
+      interactive-pointer flag, the drop-into cue and an open rename on the
+      recycled part, and `ItemsRepeater_OnElementClearing` drops the control's
+      `dropIndicatorElement` when the cleared container _is_ the cue carrier
+      (the case a hover-expand rebuild creates mid-drag, which left the cue
+      painted on whichever row the container was next bound to). The stale
+      interactive flag was not cosmetic: `TreeItem_DragStarting` cancels a drag
+      started on a row that still looks mid-press. Managed proof added
+      2026-10-05:
+      `Recycling_ClearsInteractionStateAndDetachesExpansionHandler_Async` clears
+      an actual repeater container mid-rename with a drop cue and seeded
+      interactive-pointer state, proves the old row can no longer expand through
+      the tree, and verifies newly prepared rows can expand again.
+- [x] C33 — demo compact profile is 28/12 DIP, not required 32/14;
+      comfortable 40.
 - [x] C34 — `DynamicTreeViewModel.cs:438,694` displayed-scope keyboard/typeahead
-      scan hidden items. **Implementation landed 2026-10-05:** the view model gained
-      `InteractionScope` and a private `NavigableItems` projection, and every keyboard entry point
-      (next/previous visible, first/last in tree, typeahead) walks it instead of the raw shown
-      list; the control pushes its existing `SelectionScope` into the view model from
-      `UpdateDisplayedItems()`, and `SelectionScope` now has a property-changed callback so the
-      push happens when the scope changes. Out-of-scope focus enters the range at its boundary
-      (Down → first, Up → last) rather than stepping through hidden rows. Default
-      `ShownItems` behaviour is untouched, which is why the existing suites pass unchanged.
-      Selection then inherits the scope through the existing `SelectDisplayedItem` path, honouring
-      "translate displayed range endpoints to items, never use a filtered index as a source index".
-      Review on 2026-10-05 found the five flat-list call-sites had reverted despite
-      the helper surviving; they are restored. Plain Home/End sibling navigation and
-      initial focus also use the scope. The control supplies its actual displayed source,
-      so a retained predicate does not restrict navigation when rendering filtering is
-      disabled, and keyboard range selection uses `SelectDisplayedItem`.
+      scan hidden items. **Implementation landed 2026-10-05:** the view model
+      gained `InteractionScope` and a private `NavigableItems` projection, and
+      every keyboard entry point (next/previous visible, first/last in tree,
+      typeahead) walks it instead of the raw shown list; the control pushes its
+      existing `SelectionScope` into the view model from
+      `UpdateDisplayedItems()`, and `SelectionScope` now has a property-changed
+      callback so the push happens when the scope changes. Out-of-scope focus
+      enters the range at its boundary (Down → first, Up → last) rather than
+      stepping through hidden rows. Default `ShownItems` behaviour is untouched,
+      which is why the existing suites pass unchanged. Selection then inherits
+      the scope through the existing `SelectDisplayedItem` path, honouring
+      "translate displayed range endpoints to items, never use a filtered index
+      as a source index". Review on 2026-10-05 found the five flat-list
+      call-sites had reverted despite the helper surviving; they are restored.
+      Plain Home/End sibling navigation and initial focus also use the scope.
+      The control supplies its actual displayed source, so a retained predicate
+      does not restrict navigation when rendering filtering is disabled, and
+      keyboard range selection uses `SelectDisplayedItem`.
       `ViewModelDisplayedScopeTests` now has 17 cases covering boundaries, both
-      directions, absent/hidden focus, empty projections, typeahead wrapping, filter
-      removal and the historical default. Nine UI cases prove keyboard routing,
-      filtering/scope changes, typeahead, ranges and SelectAll.
+      directions, absent/hidden focus, empty projections, typeahead wrapping,
+      filter removal and the historical default. Nine UI cases prove keyboard
+      routing, filtering/scope changes, typeahead, ranges and SelectAll.
 - [x] C35 — `DynamicTree.cs:1567` Escape clears only typeahead; drag
-      cancellation/restoration absent. **Implementation landed 2026-10-05:** Escape now outranks
-      typeahead and clipboard staging while an internal drag is in flight — it calls `ClearDragState()`,
-      which cancels the pending hover-expand, drops the drag sources and clears the cue. Restoration is
-      then automatic rather than a second mechanism: `TreeItem_Drop` bails when `draggedItems` is null,
-      reports `DataPackageOperation.None` and commits nothing, so the tree is exactly as it was before
-      the drag. Managed proof added 2026-10-05: move/copy cancellation clears the cue,
-      prevents the 600 ms hover expansion, rejects a subsequent drop without structural
-      or selection changes, and preserves typeahead/clipboard Escape ordering.
-      Uncancelled move/copy cases prove the extracted internal drag lifecycle still
-      commits. These exercise the same logical lifecycle used by the event handlers.
-      Already-completed hover expansion is
-      presentation state and is not rolled back by cancellation.
+      cancellation/restoration absent. **Implementation landed 2026-10-05:**
+      Escape now outranks typeahead and clipboard staging while an internal drag
+      is in flight — it calls `ClearDragState()`, which cancels the pending
+      hover-expand, drops the drag sources and clears the cue. Restoration is
+      then automatic rather than a second mechanism: `TreeItem_Drop` bails when
+      `draggedItems` is null, reports `DataPackageOperation.None` and commits
+      nothing, so the tree is exactly as it was before the drag. Managed proof
+      added 2026-10-05: move/copy cancellation clears the cue, prevents the 600
+      ms hover expansion, rejects a subsequent drop without structural or
+      selection changes, and preserves typeahead/clipboard Escape ordering.
+      Uncancelled move/copy cases prove the extracted internal drag lifecycle
+      still commits. These exercise the same logical lifecycle used by the event
+      handlers. Already-completed hover expansion is presentation state and is
+      not rolled back by cancellation.
 - [x] C36 — `ContextMenu.cs:119` attached host disposed on unload without Loaded
       recreation.
 - [x] C38 — `DynamicTreeViewModel.cs:933-934` `HideChildrenAsync` guard is
       inert: `removeIndex` is `shownItems.IndexOf(item) + 1`, so a missing item
-      yields `0` and `Debug.Assert(removeIndex != -1, "expecting item … to be in the
-shown list")` still passes; the assertion can only fire when `IndexOf`
-      returns `-2`, which is unreachable. It must test `removeIndex != 0`. Found
-      while closing C27; belongs with the C34/C35 generic-tree work rather than
-      the search group. **Closed 2026-10-05, and the finding proved itself:** with the guard
-      corrected to `removeIndex != 0`, the WorldEditor unit suite died with
-      `Assertion Failed: expecting item Inner to be in the shown list` — the search-clear path in
-      `SearchAsync_RevealsNodeInsideCollapsedNestedFolders` restores a collapse on a nested folder
-      that is no longer in the flat list. That is a legitimate collapse of an already-hidden branch,
-      so the guard now logs at Debug and returns instead of asserting: the subtree is already out of
-      the shown list, the caller still records the collapsed state on the item, and hiding its
-      children has nothing to do. An inert assertion became a real defect signal and then a handled
-      case; suite is green again (0 failed). Generic regression
-      `CollapseItemAsync_AlreadyHiddenBranch_PreservesShownItems` now also proves
-      that collapsing a hidden nested branch does not remove unrelated shown rows
-      and that re-expanding the outer branch respects the inner collapsed state.
+      yields `0` and
+      `Debug.Assert(removeIndex != -1, "expecting item … to be in the shown list")`
+      still passes; the assertion can only fire when `IndexOf` returns `-2`,
+      which is unreachable. It must test `removeIndex != 0`. Found while closing
+      C27; belongs with the C34/C35 generic-tree work rather than the search
+      group. **Closed 2026-10-05, and the finding proved itself:** with the
+      guard corrected to `removeIndex != 0`, the WorldEditor unit suite died
+      with `Assertion Failed: expecting item Inner to be in the shown list` —
+      the search-clear path in
+      `SearchAsync_RevealsNodeInsideCollapsedNestedFolders` restores a collapse
+      on a nested folder that is no longer in the flat list. That is a
+      legitimate collapse of an already-hidden branch, so the guard now logs at
+      Debug and returns instead of asserting: the subtree is already out of the
+      shown list, the caller still records the collapsed state on the item, and
+      hiding its children has nothing to do. An inert assertion became a real
+      defect signal and then a handled case; suite is green again (0 failed).
+      Generic regression
+      `CollapseItemAsync_AlreadyHiddenBranch_PreservesShownItems` now also
+      proves that collapsing a hidden nested branch does not remove unrelated
+      shown rows and that re-expanding the outer branch respects the inner
+      collapsed state.
 
 Command surface and result publication (found by the P7 design review, each
 re-verified)
 
 - [x] C39 — `SceneExplorerService` was a **second mutation surface with no
-      history authority** — narrowed 2026-10-04 by `e4eaf2f44`: the uncalled facade
-      (create node, create folder, move, update-moved, rename, four private helpers,
-      17 orphaned log methods) is deleted, and what survives is
+      history authority** — narrowed 2026-10-04 by `e4eaf2f44`: the uncalled
+      facade (create node, create folder, move, update-moved, rename, four
+      private helpers, 17 orphaned log methods) is deleted, and what survives is
       `AddNodeAsync`/`DeleteItemsAsync`, which now leave `AuthoringChanged` with
       **no production publisher** and still carry the D5-contradicting
-      `promoteChildrenToParent: false` branch. Left deliberately as a unit rather
-      than half-removed: retirement is tracked with its consumer repoint, not
-      patched in dead code. Closed 2026-10-05 (`9d54484ea`): the service, its interface,
-      log helpers, event args and DI registration are deleted, the D5-violating branch
-      went with them, and `SceneSaveRevisionTests` now drives the real command service.
-      Original evidence: zero `AddChange`/`BeginChangeSet`
-      calls in the file, still DI-registered (`WorkspaceViewModel.cs:202`), and its
-      folder delete calls `sceneOrganizer.RemoveFolder(..., promoteChildrenToParent:
-false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
-      — the opposite of the D5 rule just recorded in `scene-explorer.md:105-108`.
+      `promoteChildrenToParent: false` branch. Left deliberately as a unit
+      rather than half-removed: retirement is tracked with its consumer repoint,
+      not patched in dead code. Closed 2026-10-05 (`9d54484ea`): the service,
+      its interface, log helpers, event args and DI registration are deleted,
+      the D5-violating branch went with them, and `SceneSaveRevisionTests` now
+      drives the real command service. Original evidence: zero
+      `AddChange`/`BeginChangeSet` calls in the file, still DI-registered
+      (`WorkspaceViewModel.cs:202`), and its folder delete calls
+      `sceneOrganizer.RemoveFolder(..., promoteChildrenToParent: false)`
+      (`SceneExplorerService.cs:272`), which **discards** contained entries —
+      the opposite of the D5 rule just recorded in `scene-explorer.md:105-108`.
       Its only remaining src caller is the dead `RenameItemAsync`, but its
       `AuthoringChanged` event is consumed by
-      `SceneContentDemandService.Lifecycle.cs:33,42`, so pruning needs that consumer
-      checked first. Doc §5:97-99 forbids this shape.
+      `SceneContentDemandService.Lifecycle.cs:33,42`, so pruning needs that
+      consumer checked first. Doc §5:97-99 forbids this shape.
 - [x] C40 — duplication and paste failures publish **no operation result**.
       Closed 2026-10-05 (`ce3538328`): all eleven paths publish through
       `PublishSceneFailure` under a new `Scene.Node.Duplicate` kind,
@@ -1378,10 +1393,11 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       `DeleteItemsAsync_WhenFolderIsStale_LeavesExplorerLayoutUnseeded` (red
       before, green after).
 - [x] C44 — four `UpdateNodeTransformAsync` calls discarded their
-      `Task<SyncOutcome>` (`SceneDocumentCommandService.Hierarchy.cs:449, :553,
-:770, :787`). Deferred work returns an immediate `SkippedNotRunning` whose
-      eventual replay failure _is_ visible through `PublishReplayFailures`, but
-      a synchronous `Rejected`/`Failed` from dispatch or interop is published
+      `Task<SyncOutcome>`
+      (`SceneDocumentCommandService.Hierarchy.cs:449, :553, :770, :787`).
+      Deferred work returns an immediate `SkippedNotRunning` whose eventual
+      replay failure _is_ visible through `PublishReplayFailures`, but a
+      synchronous `Rejected`/`Failed` from dispatch or interop is published
       nowhere: the managed edit stands while native silently diverges. Same
       defect class as the rename path closed today, and not a one-line
       consequence of it — it needs the operation id threaded into
@@ -1421,9 +1437,9 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       seeded, so the rejection leaves an uncommitted, un-undoable seed behind
       while reporting `CREATE_FOLDER_FAILED`. Same fix as C45 — validate before
       seeding — found during that change and deliberately not bundled into it.
-      Closed 2026-10-05 (`8b09817c3`): the parent node is resolved before any seeding and
-      rejection publishes `STALE_TARGET`; red check observed on both the wrong code and the
-      left-behind seed.
+      Closed 2026-10-05 (`8b09817c3`): the parent node is resolved before any
+      seeding and rejection publishes `STALE_TARGET`; red check observed on both
+      the wrong code and the left-behind seed.
 - [x] C48 — quick-add and `CreatePrimitiveAsync` offered only **five of the
       ten** canonical primitive shapes: `NormalizePrimitiveKind` had no arm for
       Capsule, IcoSphere, Torus, Quad or SubdividedCube, so those fell through
@@ -1468,107 +1484,128 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       is why only the synchronous path was silent. Remaining half of the class
       is C44.
 - [x] C49 — workspace interaction persistence previously existed only for Hide.
-      **Implementation landed 2026-10-05 (`Workspace/WorkspaceInteractionService.cs`):** one
-      coordinated service owns the typed substate — hidden ids, locked ids and the picking
+      **Implementation landed 2026-10-05
+      (`Workspace/WorkspaceInteractionService.cs`):** one coordinated service
+      owns the typed substate — hidden ids, locked ids and the picking
       categories — as a single project-scoped `SettingKey<ProjectInteraction>`
-      (`WorldEditor`/`SceneInteraction`) holding per-scene records, written through a serialized
-      queue like the preview preferences. Entries key on the stable authored node id; a stored
-      record whose `ProjectId` differs from the loaded project is ignored, which is the
-      path-reuse rejection the settings LLD requires. The Explorer applies it to realized rows
+      (`WorldEditor`/`SceneInteraction`) holding per-scene records, written
+      through a serialized queue like the preview preferences. Entries key on
+      the stable authored node id; a stored record whose `ProjectId` differs
+      from the loaded project is ignored, which is the path-reuse rejection the
+      settings LLD requires. The Explorer applies it to realized rows
       (`LayoutItemAdapter.IsHiddenInEditor` for the explicit entry,
-      `IsEffectivelyHiddenInEditor` for the actual-scene-ancestor closure per R1, folders never
-      contributing; the scene root keeps its permanent lock), and it owns `ToggleEditorHidden`,
-      `ToggleEditorLocked` and `ShowAllInEditor`. It never touches the scene document, so no
-      authoring dirty, cook or `kVisible` write is possible from this path, and a missing service
-      reports a visible warning instead of silently doing nothing (D-f).
-      ~~Outstanding: the eye toggle does not yet record the undo step.~~ **(1) closed 2026-10-05 —
-      `SetEditorHiddenAsync` records the batch as one undo step through the command owner without
-      dirtying (C52).** **(2)–(3) closed 2026-10-05:** `EditingViewMaskService` publishes
-      `OXE.SETTINGS.EDITING_VIEW_MASK_UNAVAILABLE` once per scene activation as the ratified Q2 fallback,
-      with `SupportsEditingViewMask` as the single seam the native work flips; and restore is wired into
-      `InitializeLoadedSceneAsync`, so stored state reloads instead of being write-only.
-      **W3 row slots rewritten (`6ecb6954c`).** The first attempt (`3967b205f`) was rejected by the
-      owner: a StackPanel of always-on buttons, a static lock glyph that never changed, and a hidden
-      glyph that rendered as a stray link — it ignored the written UI spec. It is replaced by a
-      dedicated `SceneRowActions` control implementing the contract: two fixed 32-DIP columns reserved by
-      `TrailingContentWidth=88` (64 DIPs of content plus the tree's 4/20-DIP margins; the original
-      64-DIP allocation clipped the lock slot), quiet-by-default /
-      loud-when-suppressed, eye-off and lock pinned permanently for suppressed states independent of
-      hover, slots never migrate and their hover lifetimes are independent, hover subscribed on the
-      owning row and removed on unload (idempotent under recycling), and vetted Segoe Fluent glyphs
-      shared with the controls-demo. Clicks still route to the command owner, preserving the C52 undo
-      step. **Correction to this row's earlier claim:** it said no production caller constructs
-      `SceneExplorerViewModel`. Wrong — `WorkspaceViewModel.cs:204-207` registers it and the command
-      service in the per-window child container, which resolves app-container singles (proven by
-      `WorkspaceViewModel.cs:174` resolving `PreviewSettingsService`), so the injection is real.
-      **Proven by tests:** undo/redo round-trip, one-step-per-batch, no-dirty, idempotent-no-step,
-      missing-owner visible failure (unit lane 317/0); the full quiet/loud matrix, per-slot pinning,
-      slot independence, and non-collapsing geometry (`SceneRowActionsTests`, UI lane failed 0/skipped 0).
-      Those two are now covered too (`SceneDocumentCommandServiceTests.WorkspaceInteraction.cs`): a
-      stored record reloads its hidden/lock ids on scene restore, a record with a different
-      `ProjectId` is rejected on the reused path scope, and the mask warning fires exactly once per
-      scene activation and re-arms on the next — unit lane total 320, failed 0.
-      **Row-action corrective validation:** the actual Explorer view and realized node rows pass
-      27 focused UI cases, including the eight-state matrix, nonblank pixel captures and
-      opacity-normalized glyph-shape comparisons, accent lock treatment, passive hit testing and
-      tab stops, real hide undo/redo, workspace restore, nested-depth geometry, adapter recycling,
-      and repeated unload/reload. Presentation and command bindings now live in XAML visual states;
-      code-behind owns row hover and subscription lifetimes. Scene/folder rows reserve the same
-      geometry without node-state actions. The related Explorer, editor-hide, workspace and mask
-      regressions pass 49/49. These are rendered-component tests, not OS pointer injection or
-      running-editor acceptance; historical lane totals above are unchanged. Remaining
-      outside the verified state/row-action subset: the **native/interop
-      implementation of the eye** (D8a E1–E3, I1–I4 — the excluded, separately-authorized task).
-      The owner removed configurable
+      `IsEffectivelyHiddenInEditor` for the actual-scene-ancestor closure per
+      R1, folders never contributing; the scene root keeps its permanent lock),
+      and it owns `ToggleEditorHidden`, `ToggleEditorLocked` and
+      `ShowAllInEditor`. It never touches the scene document, so no authoring
+      dirty, cook or `kVisible` write is possible from this path, and a missing
+      service reports a visible warning instead of silently doing nothing (D-f).
+      ~~Outstanding: the eye toggle does not yet record the undo step.~~ **(1)
+      closed 2026-10-05 — `SetEditorHiddenAsync` records the batch as one undo
+      step through the command owner without dirtying (C52).** **(2)–(3) closed
+      2026-10-05:** `EditingViewMaskService` publishes
+      `OXE.SETTINGS.EDITING_VIEW_MASK_UNAVAILABLE` once per scene activation as
+      the ratified Q2 fallback, with `SupportsEditingViewMask` as the single
+      seam the native work flips; and restore is wired into
+      `InitializeLoadedSceneAsync`, so stored state reloads instead of being
+      write-only. **W3 row slots rewritten (`6ecb6954c`).** The first attempt
+      (`3967b205f`) was rejected by the owner: a StackPanel of always-on
+      buttons, a static lock glyph that never changed, and a hidden glyph that
+      rendered as a stray link — it ignored the written UI spec. It is replaced
+      by a dedicated `SceneRowActions` control implementing the contract: two
+      fixed 32-DIP columns reserved by `TrailingContentWidth=88` (64 DIPs of
+      content plus the tree's 4/20-DIP margins; the original 64-DIP allocation
+      clipped the lock slot), quiet-by-default / loud-when-suppressed, eye-off
+      and lock pinned permanently for suppressed states independent of hover,
+      slots never migrate and their hover lifetimes are independent, hover
+      subscribed on the owning row and removed on unload (idempotent under
+      recycling), and vetted Segoe Fluent glyphs shared with the controls-demo.
+      Clicks still route to the command owner, preserving the C52 undo step.
+      **Correction to this row's earlier claim:** it said no production caller
+      constructs `SceneExplorerViewModel`. Wrong —
+      `WorkspaceViewModel.cs:204-207` registers it and the command service in
+      the per-window child container, which resolves app-container singles
+      (proven by `WorkspaceViewModel.cs:174` resolving
+      `PreviewSettingsService`), so the injection is real. **Proven by tests:**
+      undo/redo round-trip, one-step-per-batch, no-dirty, idempotent-no-step,
+      missing-owner visible failure (unit lane 317/0); the full quiet/loud
+      matrix, per-slot pinning, slot independence, and non-collapsing geometry
+      (`SceneRowActionsTests`, UI lane failed 0/skipped 0). Those two are now
+      covered too (`SceneDocumentCommandServiceTests.WorkspaceInteraction.cs`):
+      a stored record reloads its hidden/lock ids on scene restore, a record
+      with a different `ProjectId` is rejected on the reused path scope, and the
+      mask warning fires exactly once per scene activation and re-arms on the
+      next — unit lane total 320, failed 0. **Row-action corrective
+      validation:** the actual Explorer view and realized node rows pass 27
+      focused UI cases, including the eight-state matrix, nonblank pixel
+      captures and opacity-normalized glyph-shape comparisons, accent lock
+      treatment, passive hit testing and tab stops, real hide undo/redo,
+      workspace restore, nested-depth geometry, adapter recycling, and repeated
+      unload/reload. Presentation and command bindings now live in XAML visual
+      states; code-behind owns row hover and subscription lifetimes.
+      Scene/folder rows reserve the same geometry without node-state actions.
+      The related Explorer, editor-hide, workspace and mask regressions pass
+      49/49. These are rendered-component tests, not OS pointer injection or
+      running-editor acceptance; historical lane totals above are unchanged.
+      Remaining outside the verified state/row-action subset: the
+      **native/interop implementation of the eye** (D8a E1–E3, I1–I4 — the
+      excluded, separately-authorized task). The owner removed configurable
       column placement from scope: status slots stay fixed and the main content
-      fills the remaining space. Per-scene Hide/Lock/category state survives switching
-      and restart without overwriting another scene. Invalid saved records publish
-      diagnostics; clearing a scene resets categories and invalidates in-flight restores.
-      These regressions pass in the 270-case Unit lane and the 49-case UI lane.
-      Original gap: `settings-architecture.md:65`
-      recorded hidden nodes but lacked typed storage and coordinated ownership of Lock,
-      category preferences and their lifetime. D4 chose one coordinated workspace
-      service with typed settings and project/scene-scoped lifetime, not new fields on scene DTOs.
-      Lock here
+      fills the remaining space. Per-scene Hide/Lock/category state survives
+      switching and restart without overwriting another scene. Invalid saved
+      records publish diagnostics; clearing a scene resets categories and
+      invalidates in-flight restores. These regressions pass in the 270-case
+      Unit lane and the 49-case UI lane. Original gap:
+      `settings-architecture.md:65` recorded hidden nodes but lacked typed
+      storage and coordinated ownership of Lock, category preferences and their
+      lifetime. D4 chose one coordinated workspace service with typed settings
+      and project/scene-scoped lifetime, not new fields on scene DTOs. Lock here
       means the editor-editability lock specified in the "Show in Editor & Lock"
       contract above — orthogonal to viewport suppression and to runtime
       visibility — and the persistence must key on the stable node id, so a
       renamed or reordered node keeps its state.
-- [x] C50 — clipboard lifetime is not enforced. **Closed 2026-10-05:** the payload is stamped
-      with the project and scene that produced it (`StampClipboardOrigin` on Copy and Cut),
-      `CanPaste` refuses a payload outside its lifetime, and `PasteItemsAsync` re-checks at the only
-      moment damage is possible — before any command reaches the document — clearing the staging and
-      publishing a visible `OXE.SCENE.CLIPBOARD_INVALIDATED` warning. A project switch also drops
-      the payload proactively when the new project's scene initializes. The ratified rule is
-      enforced exactly as decided: snapshot Copy survives a scene switch inside one project, Cut is
-      bound to the scene that staged it, and nothing survives a project switch. Enforcement lives on
-      the one existing intent path, so no second history authority appears. Copy carries source ids and
-      live-adapter-derived state instead of an immutable snapshot, Cut is
-      scene-bound only by construction, and nothing clears the clipboard on a
-      successful project switch, so a stale payload can be pasted into another
-      project's scene. Scope is decided in D7 — snapshot at copy time, explicit
-      invalidation on project switch, one intent path so no second history
-      authority appears.
-- [x] C52 — the editor-hide toggle must record an undo step (owner ratified 2026-10-05,
-      propagated across `documents-and-commands.md` §8, D8 R4/W1, settings §5.1, live-engine-sync,
-      runtime-integration, scene-authoring-model, property-inspector,
-      standalone-runtime-validation and the ED-M08 rows). Today
-      `WorkspaceInteractionService.SetHidden` writes workspace state only, so Ctrl+Z does not reach
-      an accidental hide. The step must be recorded by the document command owner — never by the
-      workspace service, which would be the second history authority D7 forbids — must not dirty the
-      document, must not change saved source or cook demand, and must undo/redo as one batch per
-      user intent. Lock stays non-undoable: the ratified wording names only the eye toggle.
-      **Closed 2026-10-05 (`985e7c1db`):** `SetEditorHiddenAsync` enters the same authoring gate as
-      every mutation, targets authored ids, skips ids already in the requested state so an
-      idempotent request records no step, applies the batch through the workspace service and
-      registers one undo step per batch using the layout history's forward/reverse ping-pong. It
-      calls neither `MarkDirtyAsync` nor live sync — which is what makes it the ratified exception
-      rather than a loophole. Failures are visible under the new `Scene.Node.SetEditorHidden` kind
-      (`AUTHORING_SUSPENDED`, `WORKSPACE_STATE_UNAVAILABLE`), and Explorer hide/show and Show All
-      route through it. Undo/redo, one-step-per-batch, idempotent-no-step and no-dirty proof now
-      exists in `SceneDocumentCommandServiceTests.WorkspaceInteraction.cs`
-      (also covered by the current focused document lane); C49 records the
-      row-action and persistence evidence. The original test gap is closed.
+- [x] C50 — clipboard lifetime is not enforced. **Closed 2026-10-05:** the
+      payload is stamped with the project and scene that produced it
+      (`StampClipboardOrigin` on Copy and Cut), `CanPaste` refuses a payload
+      outside its lifetime, and `PasteItemsAsync` re-checks at the only moment
+      damage is possible — before any command reaches the document — clearing
+      the staging and publishing a visible `OXE.SCENE.CLIPBOARD_INVALIDATED`
+      warning. A project switch also drops the payload proactively when the new
+      project's scene initializes. The ratified rule is enforced exactly as
+      decided: snapshot Copy survives a scene switch inside one project, Cut is
+      bound to the scene that staged it, and nothing survives a project switch.
+      Enforcement lives on the one existing intent path, so no second history
+      authority appears. Copy carries source ids and live-adapter-derived state
+      instead of an immutable snapshot, Cut is scene-bound only by construction,
+      and nothing clears the clipboard on a successful project switch, so a
+      stale payload can be pasted into another project's scene. Scope is decided
+      in D7 — snapshot at copy time, explicit invalidation on project switch,
+      one intent path so no second history authority appears.
+- [x] C52 — the editor-hide toggle must record an undo step (owner ratified
+      2026-10-05, propagated across `documents-and-commands.md` §8, D8 R4/W1,
+      settings §5.1, live-engine-sync, runtime-integration,
+      scene-authoring-model, property-inspector, standalone-runtime-validation
+      and the ED-M08 rows). Today `WorkspaceInteractionService.SetHidden` writes
+      workspace state only, so Ctrl+Z does not reach an accidental hide. The
+      step must be recorded by the document command owner — never by the
+      workspace service, which would be the second history authority D7 forbids
+      — must not dirty the document, must not change saved source or cook
+      demand, and must undo/redo as one batch per user intent. Lock stays
+      non-undoable: the ratified wording names only the eye toggle. **Closed
+      2026-10-05 (`985e7c1db`):** `SetEditorHiddenAsync` enters the same
+      authoring gate as every mutation, targets authored ids, skips ids already
+      in the requested state so an idempotent request records no step, applies
+      the batch through the workspace service and registers one undo step per
+      batch using the layout history's forward/reverse ping-pong. It calls
+      neither `MarkDirtyAsync` nor live sync — which is what makes it the
+      ratified exception rather than a loophole. Failures are visible under the
+      new `Scene.Node.SetEditorHidden` kind (`AUTHORING_SUSPENDED`,
+      `WORKSPACE_STATE_UNAVAILABLE`), and Explorer hide/show and Show All route
+      through it. Undo/redo, one-step-per-batch, idempotent-no-step and no-dirty
+      proof now exists in
+      `SceneDocumentCommandServiceTests.WorkspaceInteraction.cs` (also covered
+      by the current focused document lane); C49 records the row-action and
+      persistence evidence. The original test gap is closed.
 - [x] C42 — dead and unsafe public API on the command interface. **Closed
       2026-10-04 (`e4eaf2f44`)**: `RenameItemAsync` deleted from the interface
       and implementation (no callers, no test removed) together with the
@@ -1608,24 +1645,25 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       entry. Exact serialized layout checks also exposed and fixed normalization
       changing omitted node children into empty arrays.
 - [x] T2 — preserve-world ignored-parent + exact layout/order/TRS undo/redo +
-      native convergence. Closed 2026-10-05: reparent, same-/cross-scope grouping
-      and reorder tests assert exact saved layout, parent identity, local TRS,
-      world pose and one history entry through undo/redo. Synchronization-boundary
-      assertions capture destination parent and TRS on every replay. Four
-      `HierarchyNativeSynchronizationTests` cases reuse the existing three-node
-      native fixture and query all nine local TRS values at initial state,
-      commit, undo and redo. The native query API exposes local TRS, not parent
-      identity/world pose; those assertions remain managed/boundary evidence.
+      native convergence. Closed 2026-10-05: reparent, same-/cross-scope
+      grouping and reorder tests assert exact saved layout, parent identity,
+      local TRS, world pose and one history entry through undo/redo.
+      Synchronization-boundary assertions capture destination parent and TRS on
+      every replay. Four `HierarchyNativeSynchronizationTests` cases reuse the
+      existing three-node native fixture and query all nine local TRS values at
+      initial state, commit, undo and redo. The native query API exposes local
+      TRS, not parent identity/world pose; those assertions remain
+      managed/boundary evidence.
 - [x] T3 — rename reaches native; delete-undo recreates the subtree.
       (`RenameNodeAsync_WhenCommitted_RecordsSingleUndoStep` verifies the native
       rename call; `DeleteNodesAsync_Undo_RecreatesFullSubtreeInNative` verifies
       `CreateNodeAsync` twice, root + child.)
 - [x] T4 — immutable snapshots, sequential-scene Copy, repeated Copy Paste,
       Escape cancels Cut. Closed 2026-10-05: source edits after capture leave
-      collapsed descendants/components and captured world poses unchanged;
-      Copy survives a document switch and repeated Paste retains its snapshot.
-      Escape cancels Cut without authoring and preserves reusable Copy intent.
-      The ready command/clipboard batch passes in the full 334-case Unit lane.
+      collapsed descendants/components and captured world poses unchanged; Copy
+      survives a document switch and repeated Paste retains its snapshot. Escape
+      cancels Cut without authoring and preserves reusable Copy intent. The
+      ready command/clipboard batch passes in the full 334-case Unit lane.
 - [x] T5 — closed 2026-10-05: C16–C19 are covered by
       `SceneExplorerSelectionTests`, `SceneSelectionServiceTests`,
       `ViewModelSelectionPolicyTests` and eight dispatcher-only
@@ -1641,42 +1679,43 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       folder ancestry.)
 - [x] T7 — captured context, stale dismissal, full-batch eligibility and toolbar
       parity pass in ten Explorer UI tests. Keyboard/pointer host placement and
-      programmatic dismissal pass in eleven Menus UI cases; inline rename and tree
-      interaction regressions pass in the 47-case tree UI lane. Native WinUI
-      `ContextRequested` supplies keyboard, mouse and touch entry points.
+      programmatic dismissal pass in eleven Menus UI cases; inline rename and
+      tree interaction regressions pass in the 47-case tree UI lane. Native
+      WinUI `ContextRequested` supplies keyboard, mouse and touch entry points.
 - [x] T8 — guarded replacement, material-tab retention, configured default,
-      cancellation/failure recovery and clipboard lifetime pass in the Unit lane;
-      staged source/activation identity tests pass in Projects; all-window close
-      preparation passes in Documents.
+      cancellation/failure recovery and clipboard lifetime pass in the Unit
+      lane; staged source/activation identity tests pass in Projects; all-window
+      close preparation passes in Documents.
 - [x] T9 — generic recycling detach, displayed-scope keyboard, reload/reattach,
       Escape cancel. **Closed 2026-10-05:** focused in-process regressions in
       `ViewModelDisplayedScopeTests`, `ViewModelExpansionTests` and
-      `DynamicTreeInteractionTests` cover these contracts using the existing shared
-      WinUI host. Actual repeater clearing/preparation verifies row reset and handler
-      detach/reattach; direct keyboard/drag dispatch verifies displayed navigation,
-      Escape ordering, hover cancellation and mutation-free cancelled drops.
-      Two unload/reload cycles verify focus observers and displayed navigation;
-      view-model replacement releases the prior displayed source. The repeater
-      keyboard handler is reattached idempotently on load.
-      Coverage adds 18 Models cases and 17 UI cases relative to the committed tree.
-      Full Debug|x64 lanes pass, 169/169 Models and 106/106 UI, with no skipped cases.
+      `DynamicTreeInteractionTests` cover these contracts using the existing
+      shared WinUI host. Actual repeater clearing/preparation verifies row reset
+      and handler detach/reattach; direct keyboard/drag dispatch verifies
+      displayed navigation, Escape ordering, hover cancellation and
+      mutation-free cancelled drops. Two unload/reload cycles verify focus
+      observers and displayed navigation; view-model replacement releases the
+      prior displayed source. The repeater keyboard handler is reattached
+      idempotently on load. Coverage adds 18 Models cases and 17 UI cases
+      relative to the committed tree. Full Debug|x64 lanes pass, 169/169 Models
+      and 106/106 UI, with no skipped cases.
 - [x] T10 — 32/40 density profiles + measured 1,000-item lazy-tree workload.
       Closed 2026-10-05: normal/compact tree styles consume WinUI's
       `ListViewItemMinHeight` and `ControlContentThemeFontSize`; compact scopes
-      native `DensityStyles/Compact.xaml` to the tree. Actual rows measure
-      32/40 DIP with 14-point labels at widths 300/600 and a 320-DIP viewport.
-      Four UI cases cover recycled rows, profile switching, enlarged labels,
+      native `DensityStyles/Compact.xaml` to the tree. Actual rows measure 32/40
+      DIP with 14-point labels at widths 300/600 and a 320-DIP viewport. Four UI
+      cases cover recycled rows, profile switching, enlarged labels,
       end/middle/top scrolling and two reloads with unchanged observer counts.
       Maximum realized rows are 15 compact / 12 normal (limits 64 / 52), not
-      1,000; three scrolls measured 71–112 ms in the full lane run.
-      The Models workload measures initialization 9.46 ms, filtering 5.68 ms
-      and 50 edits plus one refresh 7.23 ms; edits trigger no immediate predicate
-      evaluations, and the refresh evaluates exactly 1,000 loaded items.
-      Both lanes assert zero collapsed-branch loads; Models additionally asserts
-      zero shown-source changes, stable item identities and observer release
-      across filter cycles/disposal. Timings are observations, not
-      machine-dependent pass thresholds. Full lanes pass 170 Models / 110 UI;
-      the demo builds and uses the same tested density helper.
+      1,000; three scrolls measured 71–112 ms in the full lane run. The Models
+      workload measures initialization 9.46 ms, filtering 5.68 ms and 50 edits
+      plus one refresh 7.23 ms; edits trigger no immediate predicate
+      evaluations, and the refresh evaluates exactly 1,000 loaded items. Both
+      lanes assert zero collapsed-branch loads; Models additionally asserts zero
+      shown-source changes, stable item identities and observer release across
+      filter cycles/disposal. Timings are observations, not machine-dependent
+      pass thresholds. Full lanes pass 170 Models / 110 UI; the demo builds and
+      uses the same tested density helper.
 - [x] T11 — D5's layout-only qualifier was untested beyond the flat root-folder
       case: folder Delete inside a nested folder, and inside a folder whose
       grouping followed a D2 reparent, must both promote entries without
@@ -1693,32 +1732,32 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       and obsolete demands are invalidated, with no stale demand surviving a
       rename or reparent. Replaces the `AuthoringChanged` "integration note"
       that P6 retired. Closed 2026-10-05: 8 Unit tests prove the command path
-      mutates the observed collections and re-exposes created sources, green in `9d54484ea`
-      (313/313), and the five service-level Unit.UI tests ran for the first time and pass
-      (`df463f890`/`1996f30e7`, 14/14). Getting them to run at all exposed a latent harness
-      hang: contentless demand tests awaited a composition tick that never came, because the
-      shared test window is created only lazily — fixed by realizing it in the fixture, one
-      line, no assertion changed, and five pre-existing contentless tests in the same class
-      stopped hanging as a side effect.
+      mutates the observed collections and re-exposes created sources, green in
+      `9d54484ea` (313/313), and the five service-level Unit.UI tests ran for
+      the first time and pass (`df463f890`/`1996f30e7`, 14/14). Getting them to
+      run at all exposed a latent harness hang: contentless demand tests awaited
+      a composition tick that never came, because the shared test window is
+      created only lazily — fixed by realizing it in the fixture, one line, no
+      assertion changed, and five pre-existing contentless tests in the same
+      class stopped hanging as a side effect.
 
-- [x] T13 — stabilize the shared inspector field finder. Closed 2026-10-05:
-      hit testing uses host coordinates even when the content root is offset;
-      layout is updated before sampling nonzero caption bounds, and unstable
-      candidates reset the visibility gate. A bounded wait observes the final
-      `ViewChanged` event plus stable offset/extent instead of a fixed delay or
-      exact requested offset (scroll anchoring can adjust it).
-      Six small pending-scroll/layout regressions cover value/label captions
-      from three offsets; cancellation propagates. They and existing cascade
-      presentation cases pass 18/18. All 39 native component-field cases pass
-      with the same finder, alongside four native hierarchy cases (43/43).
-      Existing fixtures only; no global pointer/keyboard injection or exclusive
-      workstation use.
+- [x] T13 — stabilize the shared inspector field finder. Closed 2026-10-05: hit
+      testing uses host coordinates even when the content root is offset; layout
+      is updated before sampling nonzero caption bounds, and unstable candidates
+      reset the visibility gate. A bounded wait observes the final `ViewChanged`
+      event plus stable offset/extent instead of a fixed delay or exact
+      requested offset (scroll anchoring can adjust it). Six small
+      pending-scroll/layout regressions cover value/label captions from three
+      offsets; cancellation propagates. They and existing cascade presentation
+      cases pass 18/18. All 39 native component-field cases pass with the same
+      finder, alongside four native hierarchy cases (43/43). Existing fixtures
+      only; no global pointer/keyboard injection or exclusive workstation use.
 
 #### Progress-note corrections (reconcile §6 with the above)
 
-- [x] P1 — §6 records SE-01 as validated; T10 is closed.
-      C32/C34/C35/C38 and T9 are closed with regression evidence. (C33/C36
-      had already closed, so the original "until C32–C36" range was too wide.)
+- [x] P1 — §6 records SE-01 as validated; T10 is closed. C32/C34/C35/C38 and T9
+      are closed with regression evidence. (C33/C36 had already closed, so the
+      original "until C32–C36" range was too wide.)
 - [x] P2 — condition met (C8/C9/C10 closed); the §6 atomic graph+layout claim is
       kept and cited.
 - [x] P3 — §6 records the completed C30/C31 guarded replacement and default
@@ -1776,23 +1815,23 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
 
 ### SE-03 — Showcase UI, workspace protection and live integration
 
-**Editor entry gate (verified 2026-10-05): clear.** C20–C23/T7,
-C30/T8, D4/C49 and D6/D7 are closed with the evidence recorded above.
-No editor-owned correction remains before SE-03. UI-dependent tests reside in
-UI test projects and run on the shared dispatcher host.
+**Editor entry gate (verified 2026-10-05): clear.** C20–C23/T7, C30/T8, D4/C49
+and D6/D7 are closed with the evidence recorded above. No editor-owned
+correction remains before SE-03. UI-dependent tests reside in UI test projects
+and run on the shared dispatcher host.
 
 **Existing foundation; do not plan again:** project/scene-scoped local hide,
 lock and category persistence; Explorer eye/lock row slots; hide/show history
 semantics; actual-scene-ancestry hide projection; DynamicTree, toolbar and
 Menus-host context-menu integration.
 
-**Native hide is deferred by user choice.** Do not start D8a engine/interop
-mask implementation until the user decides it is the right time. It may remain
-pending while editor work proceeds and blocks native/full qualification, not
-the editor deliverable. D8b's ED-M08.4–M08.6-supported native picking path remains a
+**Native hide is deferred by user choice.** Do not start D8a engine/interop mask
+implementation until the user decides it is the right time. It may remain
+pending while editor work proceeds and blocks native/full qualification, not the
+editor deliverable. D8b's ED-M08.4–M08.6-supported native picking path remains a
 separate runtime dependency for end-to-end category-picking qualification. The
-[D8 capability analysis](../review/D8-show-in-editor-runtime-capability.md)
-owns native scope and authorization.
+[D8 capability analysis](../review/D8-show-in-editor-runtime-capability.md) owns
+native scope and authorization.
 
 **Editor-owned implementation and status (verified 2026-10-05):**
 
@@ -1805,8 +1844,8 @@ owns native scope and authorization.
 3. **Implemented and focused-UI verified:** category controls persist through
    the existing workspace service and filter Scene Explorer rows using
    DynamicTree's filtered projection. Their equal-width columns use all
-   available header space; categories absent from the scene take zero width.
-   The filter does not alter selection or viewport behavior.
+   available header space; categories absent from the scene take zero width. The
+   filter does not alter selection or viewport behavior.
 4. **Complete:** Inspect/reveal clears search, expands target ancestry, focuses
    and brings the row into view, then applies document-scoped selection and the
    requested Inspector component without moving the viewport.
@@ -1819,12 +1858,12 @@ owns native scope and authorization.
    authoring lock gates are complete; the focused Explorer header test and
    WorldEditor Unit/Unit.UI builds provide the recorded verification evidence.
 
-**Remaining live-engine item — tracked separately under ED-M08.4–M08.6:** implement
-viewport picking and selection policy independently of the Explorer-only
-category filters, and enforce lock exclusion in transform/gizmo manipulation.
-Locked nodes stay selectable by viewport picking and marquee. ED-M08.4 owns
-picking and selection; ED-M08.5 owns manipulation. Preserve the existing workspace service and
-generic DynamicTree contracts.
+**Remaining live-engine item — tracked separately under ED-M08.4–M08.6:**
+implement viewport picking and selection policy independently of the
+Explorer-only category filters, and enforce lock exclusion in transform/gizmo
+manipulation. Locked nodes stay selectable by viewport picking and marquee.
+ED-M08.4 owns picking and selection; ED-M08.5 owns manipulation. Preserve the
+existing workspace service and generic DynamicTree contracts.
 
 **Editor acceptance:** search has the specified presentation and density
 behavior and remains transient; category filters persist and affect Explorer
@@ -1834,13 +1873,13 @@ as viewport hit-test filters. The eye must report that viewport suppression is
 pending while native hide is deferred; do not present a false success.
 
 **Native/full qualification:** remains blocked until native hide is explicitly
-authorized and implemented, and native category picking is verified through
-the supported runtime path. Preserve authored visibility, lighting and
-shadow-caster behavior; editing hide must affect only editing-view geometry,
-shadows and picking, keep the selected transform gizmo visible, restore after
-view recreation, and never affect qualification views. Capture project,
-document, scene and view generations; report failures through existing
-operation/result surfaces.
+authorized and implemented, and native category picking is verified through the
+supported runtime path. Preserve authored visibility, lighting and shadow-caster
+behavior; editing hide must affect only editing-view geometry, shadows and
+picking, keep the selected transform gizmo visible, restore after view
+recreation, and never affect qualification views. Capture project, document,
+scene and view generations; report failures through existing operation/result
+surfaces.
 
 ## 7. Design-target verification, not old-UI fidelity
 
@@ -1871,9 +1910,10 @@ call.
 | Workload                                | At least the PRD's 100-node scene and a 1,000-item generic lazy tree: bounded realized rows, no unsolicited lazy loads on generic filtering, no whole-tree rebuild per value change, no expanding observer counts after reload.                                                                                                                                   | DynamicTree/Explorer measured tests, SE-01/03               |
 
 T9 uses the existing shared WinUI host, direct keyboard/drag interaction entry
-points, actual repeater/load/unload events and render waits. For editor integration
-interaction tests, use real header/automation/native input. Test within the tree's bounded ScrollViewer; do not wrap it in another
-unconstrained scroller or treat virtualization as proven by a small example.
+points, actual repeater/load/unload events and render waits. For editor
+integration interaction tests, use real header/automation/native input. Test
+within the tree's bounded ScrollViewer; do not wrap it in another unconstrained
+scroller or treat virtualization as proven by a small example.
 
 Visual review compares the **new native UI to the brief and showcase**, never to
 old Explorer screenshots. Use optional local-only screenshots of the target
@@ -1935,8 +1975,8 @@ MSBuild.exe projects/Controls/Menus/tests/Controls.Menus.UI.Tests.csproj /restor
 traverse Invoke-Tests --start projects/Controls/Menus/tests --configuration Debug
 ```
 
-For native additions follow [engine
-instructions](../../../projects/Oxygen.Engine/AGENTS.md) and the owning
+For native additions follow
+[engine instructions](../../../projects/Oxygen.Engine/AGENTS.md) and the owning
 runtime/interop workflow only after authorization. Do not guess a CMake target
 or run a whole engine build from this managed checklist. Record native
 dependency/build/test ownership before implementation and keep SE-03's native
@@ -1948,10 +1988,11 @@ acceptance blocked until the required API and observed behavior exist.
 | SE-02 | validated | All editor-owned corrections and decisions are closed. Current evidence: 270 WorldEditor Unit, 49 WorldEditor UI, 69 Projects, 68 Documents, 181 DynamicTree Models, 47 DynamicTree UI and 11 Menus UI cases pass. Owning builds and analyzer-enabled Editor app build pass; analyzer warnings remain. Only separately owned native D8a/D8b qualification carries forward. Historical totals remain bounded prior evidence. | Implementer      |
 | SE-03 | validated | Editor-owned Explorer presentation/search/reveal, Explorer-only category filters and current authoring lock gates are complete; WorldEditor Unit and Unit.UI Debug/x64 builds succeeded and the focused header/filter UI test passed. Live viewport/runtime integration remains tracked under ED-M08.4–M08.6; native hide remains deferred by user choice.                                                                  | Implementer      |
 
-Use `ready`, `in_progress`, `landed_needs_validation`, `blocked`, `validated` accurately.
-Document contract decisions and named dependencies next to the slice, not as a
-new sequence of small milestones. Keep one concise outcome/evidence/remaining
-record per slice, not a session diary. No automatic commits.
+Use `ready`, `in_progress`, `landed_needs_validation`, `blocked`, `validated`
+accurately. Document contract decisions and named dependencies next to the
+slice, not as a new sequence of small milestones. Keep one concise
+outcome/evidence/remaining record per slice, not a session diary. No automatic
+commits.
 
 **Full completion:** all three slices' exits met; DynamicTree proven usable
 without Oxygen; every target action production-connected; correct

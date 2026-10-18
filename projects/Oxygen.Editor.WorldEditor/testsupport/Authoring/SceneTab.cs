@@ -6,6 +6,7 @@ using DroidNet.Documents;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
 
@@ -54,6 +55,9 @@ internal sealed partial class SceneTab : IDisposable
     /// <summary>Gets what edits the document's scene now.</summary>
     public SceneAuthoring Authoring => ((SceneContent)this.Document.Content).Authoring;
 
+    /// <summary>Gets the explorer layout of the document's scene now.</summary>
+    public IList<ExplorerEntryData> Layout => this.Authoring.Layout;
+
     /// <summary>Gets the node of the document's scene that has the identity of a node the test built.</summary>
     /// <param name="node">The node the test built.</param>
     /// <returns>The document's node.</returns>
@@ -66,6 +70,19 @@ internal sealed partial class SceneTab : IDisposable
     /// <summary>Replaces the document's file with what a scene records, as another program would; a reload reads it.</summary>
     /// <param name="scene">The scene the file records.</param>
     public void WriteFile(Scene scene) => this.files.Put(this.Document.File.Path, scene);
+
+    /// <summary>Replaces the explorer layout of the document's scene in place, outside the history.</summary>
+    /// <param name="entries">The layout's top-level entries.</param>
+    public void ReplaceLayout(IEnumerable<ExplorerEntryData> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        var layout = this.Layout;
+        layout.Clear();
+        foreach (var entry in entries)
+        {
+            layout.Add(entry);
+        }
+    }
 
     /// <inheritdoc/>
     public void Dispose()

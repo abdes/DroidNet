@@ -545,7 +545,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
         return await revertSync(cancellationToken).ConfigureAwait(false);
     }
 
-    private RuntimeSetEnvironment BuildEnvironmentCommand(Scene scene, SceneEnvironmentData environment)
+    private RuntimeSetEnvironment BuildEnvironmentCommand(SceneEnvironmentData environment)
     {
         var sky = environment.SkyAtmosphere ?? new SkyAtmosphereEnvironmentData();
         var post = environment.PostProcess ?? new PostProcessEnvironmentData();
@@ -585,7 +585,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                 post.AutoExposureBlackInfluence,
                 post.AutoExposureTransitionDistanceEv,
                 [.. post.AutoExposureCompensationCurve.Select(static key => new RuntimeExposureCompensationKey(key.MeteredEv, key.CompensationEv))],
-                this.CreateTextureReference(scene, post.AutoExposureMeteringMask, "exposure mask"),
+                this.CreateTextureReference(post.AutoExposureMeteringMask, "exposure mask"),
                 post.BloomIntensity,
                 post.BloomThreshold,
                 post.Saturation,
@@ -598,14 +598,14 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
 
             // Only a cubemap the renderer uses is loaded, so a stale reference
             // behind another source or a disabled system cannot reject the edit.
-            SkySphereCubemap = this.CreateTextureReference(scene, skySphere.ActiveCubemap, "sky sphere cubemap"),
+            SkySphereCubemap = this.CreateTextureReference(skySphere.ActiveCubemap, "sky sphere cubemap"),
             SkyLight = skyLight,
-            SkyLightCubemap = this.CreateTextureReference(scene, skyLight.ActiveCubemap, "sky light cubemap"),
+            SkyLightCubemap = this.CreateTextureReference(skyLight.ActiveCubemap, "sky light cubemap"),
             Background = environment.Background ?? new(),
         };
     }
 
-    private RuntimeTextureReference? CreateTextureReference(Scene scene, Uri? texture, string label)
+    private RuntimeTextureReference? CreateTextureReference(Uri? texture, string label)
     {
         if (texture is null)
         {
@@ -614,10 +614,9 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
 
         var path = ContentPipeline.ContentPipelinePaths.ToNativeDescriptorPath(texture, AssetFileTypes.Texture);
         var separator = path.IndexOf('/', 1);
-        if (separator <= 1 || scene.Project.ProjectInfo.Location is not { } projectRoot
-            || !Path.IsPathFullyQualified(projectRoot))
+        if (separator <= 1)
         {
-            throw new InvalidOperationException($"The {label} requires a saved project and a source mount.");
+            throw new InvalidOperationException($"The {label} requires a source mount.");
         }
 
         var cookedRoot = this.engineService.ContentStatus.Bindings.SingleOrDefault(root => string.Equals(root.ProjectMount, path[1..separator], StringComparison.OrdinalIgnoreCase))?.Path
@@ -717,7 +716,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     {
         var scene = projection.Snapshot;
         cancellationToken.ThrowIfCancellationRequested();
-        var target = new RuntimeSceneTarget(world.Commands.RunId, scene.Id, projection.Lifetime.Id, Guid.NewGuid()) { ProjectId = scene.Project.ProjectInfo?.Id ?? Guid.Empty };
+        var target = new RuntimeSceneTarget(world.Commands.RunId, scene.Id, projection.Lifetime.Id, Guid.NewGuid()) { ProjectId = projection.Lifetime.Project.ProjectId };
         world = new WorldDispatch(world.Commands, target, cancellationToken);
         lock (this.documentGate)
         {
@@ -764,7 +763,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
             return false;
         }
 
-        world.Execute(this.BuildEnvironmentCommand(scene, scene.Environment));
+        world.Execute(this.BuildEnvironmentCommand(scene.Environment));
         lock (this.documentGate)
         {
             if (!this.IsDocumentCurrent(projection.Lifetime) || this.activeWorld?.Target != target)
@@ -863,7 +862,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
             SceneOperationKinds.EditEnvironment,
             LiveSyncDiagnosticCodes.EnvironmentRejected,
             LiveSyncDiagnosticCodes.EnvironmentFailed,
-            world => world.Execute(this.BuildEnvironmentCommand(scene, environment)),
+            world => world.Execute(this.BuildEnvironmentCommand(environment)),
             cancellationToken,
             dispatchOverride);
     }

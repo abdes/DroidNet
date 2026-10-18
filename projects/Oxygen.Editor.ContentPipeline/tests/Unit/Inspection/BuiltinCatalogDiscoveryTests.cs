@@ -194,7 +194,7 @@ public sealed class BuiltinCatalogDiscoveryTests
     private sealed partial class CatalogDiscoveryFixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("oxygen-builtin-discovery-");
-        private readonly Oxygen.Testing.TemporaryNativeArtifacts native;
+        private readonly Testing.TemporaryNativeArtifacts native;
 
         public CatalogDiscoveryFixture()
         {

@@ -48,7 +48,7 @@ internal sealed partial class SceneDocumentFiles : IDisposable
         _ = projects.SetupGet(value => value.CurrentProject).Returns(this.Project);
         this.ProjectManager = projects.Object;
         this.Documents = new OpenDocuments(
-            [new SceneDocumentKind(this.Project, interaction), new MaterialDocumentKind(new MaterialValidation())],
+            [new SceneDocumentKind(this.Context, interaction), new MaterialDocumentKind(new MaterialValidation())],
             store ?? new NativeAtomicFileStore(new RealFileSystem()));
     }
 
@@ -71,7 +71,7 @@ internal sealed partial class SceneDocumentFiles : IDisposable
     /// <returns>What the file records.</returns>
     public static SceneData Data(SceneId id, string name, params string[] nodes)
     {
-        var scene = new Scene(Mock.Of<IProject>()) { Name = name };
+        var scene = new Scene { Name = name };
         foreach (var node in nodes)
         {
             scene.RootNodes.Add(new SceneNode(scene) { Name = node });

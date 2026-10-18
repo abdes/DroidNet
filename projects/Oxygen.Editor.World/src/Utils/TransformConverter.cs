@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.World.Utils;
 
@@ -16,7 +17,7 @@ public static class TransformConverter
     /// </summary>
     /// <param name="transform">The transform to convert.</param>
     /// <returns>A tuple containing position, rotation, and scale as native types.</returns>
-    public static (Vector3 position, Quaternion rotation, Vector3 scale) ToNative(TransformComponent transform)
+    public static (Vector3 Position, Quaternion Rotation, Vector3 Scale) ToNative(TransformComponent transform)
     {
         ArgumentNullException.ThrowIfNull(transform);
 
@@ -112,7 +113,7 @@ public static class TransformConverter
         return SelectBestRepresentation(pitchDeg, yawDeg, rollDeg, pitchAlt, yawAlt, rollAlt);
 
         // Local helper: Handle gimbal lock case (pitch = +/- 90 degrees)
-        static (float pitchDeg, float yawDeg, float rollDeg) HandleGimbalLock(Quaternion q, float test)
+        static (float PitchDeg, float YawDeg, float RollDeg) HandleGimbalLock(Quaternion q, float test)
         {
             const float RadToDeg = 180f / MathF.PI;
             var pitch = MathF.CopySign(MathF.PI / 2f, test);
@@ -131,7 +132,7 @@ public static class TransformConverter
         }
 
         // Local helper: Compute angles for normal case (no gimbal lock)
-        static (float pitchDeg, float yawDeg, float rollDeg) ComputeNormalAngles(Quaternion q, float test)
+        static (float PitchDeg, float YawDeg, float RollDeg) ComputeNormalAngles(Quaternion q, float test)
         {
             const float RadToDeg = 180f / MathF.PI;
 
@@ -143,7 +144,7 @@ public static class TransformConverter
         }
 
         // Local helper: Compute alternative representation with pitch beyond [-90, 90]
-        static (float pitchAlt, float yawAlt, float rollAlt) ComputeAlternativeRepresentation(
+        static (float PitchAlt, float YawAlt, float RollAlt) ComputeAlternativeRepresentation(
             float pitchDeg,
             float yawDeg,
             float rollDeg)

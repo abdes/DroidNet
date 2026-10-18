@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Assets;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 
 namespace Oxygen.Editor.World.Inspector.Geometry;
@@ -102,9 +103,10 @@ public sealed partial class GeometryViewModel
                 return;
             }
 
-            if (nodes.Any(node => node.Scene.Project.ProjectInfo.Id != project.ProjectId))
+            // The inspected scene is a document of the active project's workspace; a node of another scene is stale.
+            if (this.authoringProvider?.Invoke() is not { } authoring || nodes.Exists(node => !ReferenceEquals(node.Scene, authoring.Scene)))
             {
-                this.SetMaterialSlotsUnavailable("The originating project is no longer active.");
+                this.SetMaterialSlotsUnavailable("The selection is no longer in the inspected scene.");
                 return;
             }
 

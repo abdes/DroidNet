@@ -4,7 +4,7 @@
 
 using System.Numerics;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Scenes.Properties;

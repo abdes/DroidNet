@@ -10,6 +10,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Workspace;
 
@@ -25,12 +26,9 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     public SceneAuthoringFixture(WorkspaceInteractionService? interaction = null)
     {
         this.interaction = interaction;
-        var info = new ProjectInfo("UI slot fixtures", Category.Games, Path.Combine(Path.GetTempPath(), "Oxygen-UI-Slots"));
-        var project = new Mock<IProject>();
-        _ = project.SetupGet(value => value.ProjectInfo).Returns(info);
-        this.Projects.Activate(ProjectContext.FromProjectInfo(info));
+        this.Projects.Activate(SceneTabs.Project);
         _ = this.Slots.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<Uri>(), It.IsAny<CancellationToken>())).ReturnsAsync((ProjectContext _, Uri uri, CancellationToken _) => new GeometryMaterialSlotMetadata(uri, Guid.Parse("20000000-0000-0000-0000-000000000001"), new string('a', 64), [new(TargetFor(uri).SlotId, "Surface", [new(0, 0, Guid.Empty)])]));
-        var scene = new Scene(project.Object)
+        var scene = new Scene
         {
             Name = "UI Test Scene",
         };

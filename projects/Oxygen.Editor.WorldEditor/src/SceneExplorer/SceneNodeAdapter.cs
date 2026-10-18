@@ -16,7 +16,6 @@ public sealed partial class SceneNodeAdapter : LayoutItemAdapter, ITreeItem<Scen
     public SceneNodeAdapter(SceneNode payload)
     {
         this.AttachedObject = payload ?? throw new ArgumentNullException(nameof(payload));
-        this.IsExpanded = this.AttachedObject.IsExpanded;
         this.AttachedObject.PropertyChanged += this.OnPayloadPropertyChanged;
     }
 
@@ -53,10 +52,6 @@ public sealed partial class SceneNodeAdapter : LayoutItemAdapter, ITreeItem<Scen
         if (string.Equals(e.PropertyName, nameof(SceneNode.Name), StringComparison.Ordinal))
         {
             this.OnPropertyChanged(nameof(this.Label));
-        }
-        else if (string.Equals(e.PropertyName, nameof(SceneNode.IsExpanded), StringComparison.Ordinal))
-        {
-            this.IsExpanded = this.AttachedObject.IsExpanded;
         }
     }
 }

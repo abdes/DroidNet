@@ -6,7 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Scripting;
+using Oxygen.Editor.Scripting;
 using Oxygen.Interop.Scripting;
 
 namespace Oxygen.Editor.LivePreview.Play;

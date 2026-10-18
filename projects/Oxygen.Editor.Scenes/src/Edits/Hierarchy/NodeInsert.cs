@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.Scenes.Edits.Hierarchy;

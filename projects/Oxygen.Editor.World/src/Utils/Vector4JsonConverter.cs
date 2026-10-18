@@ -36,7 +36,10 @@ public sealed class Vector4JsonConverter : JsonConverter<Vector4>
             }
 
             var propName = reader.GetString();
-            _ = reader.Read();
+            if (!reader.Read())
+            {
+                throw new JsonException("Unexpected end when reading Vector4");
+            }
 
             switch (propName)
             {

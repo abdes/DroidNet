@@ -27,11 +27,11 @@ public sealed partial class SceneDescriptorGenerator
     /// missing, which is reported.</returns>
     private static int? CreateStartingCamera(Scene scene, IReadOnlyDictionary<NodeId, int> nodeIndices, PropertySite site)
     {
-        if (scene.Play.StartingCamera is { } authored && scene.EffectiveStartingCamera is null)
+        if (scene.StartingCamera is { } authored && scene.EffectiveStartingCamera is null)
         {
             var name = scene.AllNodes.FirstOrDefault(node => node.Id == authored)?.Name;
             site.Report(
-                ScenePlayPropertyPaths.StartingCamera,
+                SceneStartingPropertyPaths.StartingCamera,
                 name is null
                     ? "The starting camera was deleted. Pick another camera in the scene's Play section, or return it to Automatic."
                     : $"The starting camera '{name}' is no longer a camera. Pick another camera in the scene's Play section, or return it to Automatic.");
@@ -49,19 +49,19 @@ public sealed partial class SceneDescriptorGenerator
     private static List<NativeStartingInputContext>? CreateStartingInputContexts(Scene scene, ContentCookScope scope, PropertySite site)
     {
         var contexts = new List<NativeStartingInputContext>();
-        foreach (var entry in scene.Play.StartingInputContexts)
+        foreach (var entry in scene.StartingInputContexts)
         {
             var path = Uri.UnescapeDataString(entry.Context.AbsolutePath);
             if (!path.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.OrdinalIgnoreCase))
             {
-                site.Report(ScenePlayPropertyPaths.StartingInputContexts, $"'{path}' is not an input mapping context. Remove it from the scene's starting input contexts.");
+                site.Report(SceneStartingPropertyPaths.StartingInputContexts, $"'{path}' is not an input mapping context. Remove it from the scene's starting input contexts.");
                 continue;
             }
 
             if (InputContextSources.Find(scope.Project, entry.Context).IsUndeclared)
             {
                 site.Report(
-                    ScenePlayPropertyPaths.StartingInputContexts,
+                    SceneStartingPropertyPaths.StartingInputContexts,
                     $"No input file in {Path.GetDirectoryName(path)?.Replace('\\', '/')} declares the starting input context '{Path.GetFileNameWithoutExtension(path)}'. Remove it, or declare it in an input file.");
                 continue;
             }
@@ -105,7 +105,7 @@ public sealed partial class SceneDescriptorGenerator
                     SceneId = this.Scene.Id,
                     SceneName = this.Scene.Name,
                     AssetVirtualPath = AssetUriHelper.GetVirtualPath(this.SceneInput.AssetUri),
-                    ComponentName = ScenePlayPropertyPaths.IsPlayProperty(propertyPath) ? "Play" : "Environment",
+                    ComponentName = SceneStartingPropertyPaths.IsStartingProperty(propertyPath) ? "Play" : "Environment",
                 },
                 SuggestedAction = new PrimaryAction
                 {

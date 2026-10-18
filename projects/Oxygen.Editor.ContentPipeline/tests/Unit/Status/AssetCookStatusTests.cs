@@ -14,7 +14,6 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Compatibility;
 
@@ -233,7 +232,7 @@ public sealed class AssetCookStatusTests
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var producer = Path.Combine(project.Root, "producer.bin");
         await File.WriteAllTextAsync(producer, "new producer", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var native = new Oxygen.Testing.TemporaryNativeArtifacts([new NativeArtifactLocation("producer", producer)]);
+        using var native = new Testing.TemporaryNativeArtifacts([new NativeArtifactLocation("producer", producer)]);
         var verifiedProducer = await native.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         var producerArtifacts = verifiedProducer.Artifacts!;
         await using var producerLifetime = producerArtifacts.ConfigureAwait(false);
@@ -265,7 +264,7 @@ public sealed class AssetCookStatusTests
         public static readonly Uri SourceUri = new("asset:///Content/Material.omat.json");
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("oxygen-status-");
         private readonly NativeAtomicFileStore files = new(new Testably.Abstractions.RealFileSystem());
-        private readonly Oxygen.Testing.TemporaryNativeArtifacts native;
+        private readonly Testing.TemporaryNativeArtifacts native;
         private readonly CookPublicationService publication;
         private readonly Mock<IEngineContentPipelineApi> api = new();
         private readonly ProjectManagerService manager = new(new NativeStorageProvider(new Testably.Abstractions.RealFileSystem()));
@@ -340,7 +339,7 @@ public sealed class AssetCookStatusTests
             var producer = verified.Artifacts!;
             await using var producerLifetime = producer.ConfigureAwait(false);
             _ = verified.Succeeded.Should().BeTrue();
-            var plan = CookIncrementalPlanner.CreatePlan(producer.Fingerprint, graph.Files, graph, new(this.Project.ProjectId, [], []), ImmutableDictionary<string, global::Oxygen.Editor.ContentPipeline.Inspection.CookedInventoryReport>.Empty);
+            var plan = CookIncrementalPlanner.CreatePlan(producer.Fingerprint, graph.Files, graph, new(this.Project.ProjectId, [], []), ImmutableDictionary<string, ContentPipeline.Inspection.CookedInventoryReport>.Empty);
             using var baseline = await this.publication.AcquireReadAsync(this.Project, cancellationToken).ConfigureAwait(false);
             using var ownership = CookOutputLease.AcquireOperation(this.Root, operation.OperationId);
             var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content"], this.files, this.manager, cancellationToken).ConfigureAwait(false);
@@ -387,7 +386,7 @@ public sealed class AssetCookStatusTests
             this.directory.Delete(recursive: true);
         }
 
-        private CookProvenance CreateProvenance(ContentCookedAsset[] outputs, CookIncrementalPlan plan, CookDependencyGraph graph, global::Oxygen.Editor.ContentPipeline.Inspection.CookedInventoryReport inventory)
+        private CookProvenance CreateProvenance(ContentCookedAsset[] outputs, CookIncrementalPlan plan, CookDependencyGraph graph, ContentPipeline.Inspection.CookedInventoryReport inventory)
             => new(
                 this.Project.ProjectId,
                 [new CookProvenance.Root("Content", inventory.SourceKey, inventory.IndexSha256)],
@@ -426,7 +425,7 @@ public sealed class AssetCookStatusTests
             private CookSourceFacts Describe(ContentCookInput source)
             {
                 var output = source.OutputVirtualPath ?? throw new InvalidOperationException("The fixture requires a descriptor output.");
-                global::Oxygen.Editor.ContentPipeline.Import.NativeLogicalDependency[] references = source.AssetUri == primary.AssetUri
+                ContentPipeline.Import.NativeLogicalDependency[] references = source.AssetUri == primary.AssetUri
                     ? [.. dependencies.Select(uri => new global::Oxygen.Editor.ContentPipeline.Import.NativeLogicalDependency(
                         CookInputResolver.Resolve(project, uri, ContentCookInputRole.Dependency).OutputVirtualPath ?? throw new InvalidOperationException("The fixture requires a material output."),
                         "material",

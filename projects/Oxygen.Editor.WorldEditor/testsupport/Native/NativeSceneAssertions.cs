@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;

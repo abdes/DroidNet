@@ -11,9 +11,9 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
@@ -41,15 +41,16 @@ internal static class SceneTabs
     /// <param name="scene">The scene the document's file records.</param>
     /// <param name="interaction">The lock and hide state the document's edits respect, if any.</param>
     /// <param name="redirects">The asset moves and deletions the document's edits see, if any.</param>
+    /// <param name="layout">The explorer layout the file records beside the scene, if any.</param>
     /// <returns>The scene's document, with its tab; the caller disposes it.</returns>
-    public static SceneTab Open(Scene scene, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null)
+    public static SceneTab Open(Scene scene, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null, IList<ExplorerEntryData>? layout = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var kind = new SceneDocumentKind(scene.Project, interaction, redirects);
+        var kind = new SceneDocumentKind(Project, interaction, redirects);
         var files = new MemoryFileStore();
         var name = string.IsNullOrEmpty(scene.Name) ? "Scene" : scene.Name;
         var file = new DocumentFile(Path.Combine(Root, "Content", name + ".oscene.json"), new Uri($"asset:///Content/{name}.oscene.json"));
-        files.Put(file.Path, scene);
+        files.Put(file.Path, scene, layout);
         return new SceneTab(kind, files, file);
     }
 
@@ -61,9 +62,10 @@ internal static class SceneTabs
         /// <summary>Writes what a scene records to a file, as another program would.</summary>
         /// <param name="path">The file's path.</param>
         /// <param name="scene">The scene.</param>
-        public void Put(string path, Scene scene)
+        /// <param name="layout">The explorer layout the file records beside the scene, if any.</param>
+        public void Put(string path, Scene scene, IList<ExplorerEntryData>? layout = null)
         {
-            var content = JsonSerializer.SerializeToUtf8Bytes(scene.Dehydrate(), SceneJsonContext.Default.SceneData);
+            var content = JsonSerializer.SerializeToUtf8Bytes(new SceneFileData(scene.Dehydrate(), layout), SceneFileJsonContext.Default.SceneFileData);
             this.files[path] = new FileSnapshot(ImmutableArray.Create(content), VersionOf(content));
         }
 

@@ -8,8 +8,8 @@ using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.EditorView;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -240,8 +240,8 @@ public sealed class SceneEditBatchTests
         var validation = await fixture.Authoring.ValidateAsync(batch).ConfigureAwait(false);
 
         _ = validation.Should().Be(SceneEditValidation.Valid);
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.F).Should().NotBeNull();
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.AF)!.IsExpanded.Should().BeTrue();
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.F).Should().NotBeNull();
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.AF)!.IsExpanded.Should().BeTrue();
         SceneAssert.Unchanged(fixture, before);
     }
 
@@ -285,7 +285,7 @@ public sealed class SceneEditBatchTests
         {
             Label = "Collapse folder",
             Changes = [new SceneChange.LayoutChanged()],
-            Effect = scope => LayoutQuery.Folder(scope.Scene, folder)!.IsExpanded = false,
+            Effect = scope => LayoutQuery.Folder(scope.Layout, folder)!.IsExpanded = false,
         };
 
     // Applies, and returns a revert that is always rejected: a defect the batch must report while rolling back.

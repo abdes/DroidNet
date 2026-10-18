@@ -5,7 +5,7 @@
 using System.Text.Json.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Serialization;
+namespace Oxygen.Editor.Scenes.Layout;
 
 /// <summary>
 /// Lightweight editor-only DTO used to persist the Scene Explorer layout.

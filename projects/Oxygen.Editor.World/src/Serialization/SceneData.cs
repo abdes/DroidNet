@@ -35,15 +35,16 @@ public record SceneData : NamedData
     public SceneReferencesData? References { get; init; }
 
     /// <summary>
-    /// Gets how the scene starts when played, or <see langword="null"/> when it starts with the defaults.
+    /// Gets the camera node the scene starts viewing through, or <see langword="null"/> for the first camera in
+    /// hierarchy order.
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    public ScenePlayData? Play { get; init; }
+    public NodeId? StartingCamera { get; init; }
 
     /// <summary>
-    /// Gets optional editor-only data representing the scene explorer layout (folders and node references).
-    /// This field is ignored by runtime code but saved/loaded to preserve editor state.
+    /// Gets the input mapping contexts that are active when the scene starts, in order, or <see langword="null"/> for
+    /// none.
     /// </summary>
-    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
-    public IList<ExplorerEntryData>? ExplorerLayout { get; init; } = null;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IList<StartingInputContextData>? StartingInputContexts { get; init; }
 }

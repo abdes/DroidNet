@@ -4,6 +4,7 @@
 
 using DroidNet.Documents;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
@@ -80,13 +81,14 @@ internal sealed partial class ScenePreview
     /// after the call is projected after the next full sync, and none raised before it, since the sync's snapshot holds
     /// those.
     /// </remarks>
-    /// <param name="authoring">The authoring of the document's scene.</param>
+    /// <param name="content">The document's scene content.</param>
     /// <param name="documentOwner">The document's owner thread.</param>
     /// <returns><see langword="false"/> when the preview is disposed.</returns>
-    internal bool RegisterDocument(SceneAuthoring authoring, OwnerThread documentOwner)
+    internal bool RegisterDocument(SceneContent content, OwnerThread documentOwner)
     {
-        ArgumentNullException.ThrowIfNull(authoring);
-        if (!this.Register(authoring.Scene, authoring.Document, documentOwner))
+        ArgumentNullException.ThrowIfNull(content);
+        var authoring = content.Authoring;
+        if (!this.Register(authoring.Scene, authoring.Document, documentOwner, content.Project))
         {
             return false;
         }
@@ -198,7 +200,7 @@ internal sealed partial class ScenePreview
         }
         else
         {
-            _ = this.RegisterDocument(content.Authoring, entry.Owner);
+            _ = this.RegisterDocument(content, entry.Owner);
         }
     }
 
@@ -234,7 +236,7 @@ internal sealed partial class ScenePreview
     private void Show(FollowedDocument entry)
     {
         var content = SceneContent.Of(entry.Document);
-        if (!this.RegisterDocument(content.Authoring, entry.Owner))
+        if (!this.RegisterDocument(content, entry.Owner))
         {
             return;
         }
@@ -257,7 +259,7 @@ internal sealed partial class ScenePreview
         }
     }
 
-    private bool Register(Scene scene, DocumentId documentId, OwnerThread documentOwner)
+    private bool Register(Scene scene, DocumentId documentId, OwnerThread documentOwner, ProjectContext project)
     {
         lock (this.documentGate)
         {
@@ -276,7 +278,7 @@ internal sealed partial class ScenePreview
                 this.RetireDocument(previous, ReferenceEquals(previous.Scene, scene) ? "another document opened the scene" : "its content was replaced");
             }
 
-            var lifetime = new DocumentLifetime(scene, documentId, documentOwner);
+            var lifetime = new DocumentLifetime(scene, documentId, documentOwner, project);
             this.openScenes[scene.Id] = lifetime;
             this.pendingPropertySyncs.Register(scene.Id, lifetime.Id);
         }
@@ -390,7 +392,7 @@ internal sealed partial class ScenePreview
                 return null;
             }
 
-            var snapshot = Scene.CreateAndHydrate(scene.Project, scene.Dehydrate());
+            var snapshot = Scene.CreateAndHydrate(scene.Dehydrate());
             var boundary = new SceneSyncRevision(lifetime.Id, lifetime.Revision, lifetime.Sequence);
             return new(lifetime, snapshot, boundary);
         }
@@ -453,13 +455,16 @@ internal sealed partial class ScenePreview
         public EventHandler<DocumentContentReplacedEventArgs>? OnContentReplaced { get; set; }
     }
 
-    private sealed class DocumentLifetime(Scene scene, DocumentId documentId, OwnerThread owner)
+    private sealed class DocumentLifetime(Scene scene, DocumentId documentId, OwnerThread owner, ProjectContext project)
     {
         public Guid Id { get; } = Guid.NewGuid();
 
         public Scene Scene { get; } = scene;
 
         public DocumentId DocumentId { get; } = documentId;
+
+        // The project the document is opened in: its engine target and the roots its texture references resolve from.
+        public ProjectContext Project { get; } = project;
 
         // The thread that owns the document: its scene is read and its events are raised there.
         public OwnerThread Owner { get; } = owner;

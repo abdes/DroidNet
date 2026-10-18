@@ -303,7 +303,7 @@ scene, which already holds them.
 | `MaterialSlotsChanged(NodeId)`                                                             | material slots                              |
 | `LayoutChanged`                                                                            | every edit that changes the explorer layout |
 | `EditorVisibilityChanged(NodeId[])`                                                        | hide or show in editor                      |
-| `ScenePlayChanged`, `SceneReferencesChanged`                                               | scene settings                              |
+| `StartingCameraChanged`, `StartingInputContextsChanged`, `SceneReferencesChanged`          | scene settings                              |
 | `ScriptSlotsChanged(NodeId)`                                                               | script slots                                |
 
 Consumers:
@@ -372,7 +372,7 @@ its targets exist, but no lock.
 
 `NodeId`, `ComponentId` and `SceneId` (`Oxygen.Managed.Core`, shared with the
 Runtime and the Interop, so the engine API takes them and the `Guid` is unboxed
-only at the native boundary), `FolderId` (World, explorer layout) and
+only at the native boundary), `FolderId` (Scenes, explorer layout) and
 `DocumentId` (Documents: documents are an editor concept, so neither
 Managed.Core nor the Runtime knows them) are `readonly record struct` wrappers
 of `Guid` with JSON converters that keep the file format unchanged.
@@ -434,12 +434,12 @@ batch.
 
 - **In history.** An entry recorded before an asset moved holds the old URI.
   Edits that carry asset references (`SetGeometry`, `SetMaterialSlot`,
-  `InsertNodes`, `SetScenePlay`, `SetSceneReferences`, `SetScriptSlots`,
-  `SetSceneProperties`) retarget them through `scope.Redirects` in `Validate`
-  and `Apply`, and report a reference to a deleted asset as an
-  `AssetReference.Deleted` warning naming the node that holds it (none for the
-  scene's own references). This replaces `RedirectCaptured`, `RedirectOrNull`
-  and `WarnIfDeleted`.
+  `InsertNodes`, `SetStartingInputContexts`, `SetSceneReferences`,
+  `SetScriptSlots`, `SetSceneProperties`) retarget them through
+  `scope.Redirects` in `Validate` and `Apply`, and report a reference to a
+  deleted asset as an `AssetReference.Deleted` warning naming the node that
+  holds it (none for the scene's own references). This replaces
+  `RedirectCaptured`, `RedirectOrNull` and `WarnIfDeleted`.
 - **On relocation.** `SceneContent.ApplyRelocation` changes the scene outside
   the history (the relocation's undo is global). It runs on the scene thread
   through the authoring and raises `GeometryChanged` for every retargeted node
@@ -497,29 +497,29 @@ public sealed record NodeInsert(SceneNodeData Node, NodePosition At, LayoutPosit
 public sealed record NodePlacementState(NodeId Node, NodePosition At, TransformData Local, LayoutPosition Layout);
 ```
 
-| Edit                                                                               | Replaces                                                                                                       | Revert                                                                                                   |
-| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `InsertNodes(NodeInsert[])`                                                        | `CreatePrimitive/Light/LocalFogVolume/Camera/EmptyNode`, `CreateNode`, the three `DuplicateNodes*`, paste-copy | `RemoveNodes(roots)`                                                                                     |
-| `RemoveNodes(NodeId[] roots)`                                                      | `DeleteNodes`                                                                                                  | `InsertNodes` with each root's data, positions and layout entry subtree (folders under it, `IsExpanded`) |
-| `RenameNode(NodeId, string)`                                                       | `RenameNode`                                                                                                   | `RenameNode` with the old name                                                                           |
-| `ReparentNodes(NodeId[], NodeId? parent, bool preserveWorld, NodeId? after)`       | `ReparentNodes`, paste-cut of nodes                                                                            | `PlaceNodes` with each node's prior placement state                                                      |
-| `ReorderNode(NodeId, NodePosition, LayoutPosition)`                                | `ReorderNodes`                                                                                                 | `PlaceNodes` with the prior state                                                                        |
-| `PlaceNodes(NodePlacementState[])`                                                 | the reparent undo paths                                                                                        | `PlaceNodes` with the states it replaced                                                                 |
-| `CreateFolder(FolderId, LayoutPosition, string name, bool? isExpanded)`            | `CreateFolder`                                                                                                 | `RemoveFolder(id, promoteChildren: false)`                                                               |
-| `RemoveFolder(FolderId, bool promoteChildren)`                                     | `DeleteFolder`, the folder part of `DeleteItems`                                                               | `RestoreFolder` with its entry, position and its children's prior positions                              |
-| `RestoreFolder(ExplorerEntryData entry, LayoutPosition, LayoutEntryId[] children)` | the folder undo paths                                                                                          | `RemoveFolder`                                                                                           |
-| `RenameFolder(FolderId, string)`                                                   | `RenameFolder`                                                                                                 | `RenameFolder` with the old name                                                                         |
-| `MoveLayoutEntries(LayoutEntryId[], LayoutPosition to)`                            | the same-scope part of `MoveNodesToFolder`, `RemoveNodesFromFolder`, `MoveFolderToParent`                      | `PlaceLayoutEntries` with each entry's prior position                                                    |
-| `AddComponent(NodeId, ComponentData, int index)`                                   | `AddComponent` (with 3.10.1)                                                                                   | `RemoveComponent`                                                                                        |
-| `RemoveComponent(NodeId, ComponentId)`                                             | `RemoveComponent`                                                                                              | `AddComponent` with its data at its old index                                                            |
-| `SetProperties`, `SetSceneProperties`                                              | 3.10                                                                                                           | the captured before values, coupled ones included                                                        |
-| `SetGeometry(NodeId[], Uri)`                                                       | `EditGeometry`                                                                                                 | per node, the old geometry                                                                               |
-| `SetMaterialSlot(NodeId[], MaterialSlotTarget, Uri?)`                              | `EditMaterialSlot`                                                                                             | per node, the old slot state                                                                             |
-| `RemoveMaterialSlots(IReadOnlyDictionary<NodeId, MaterialSlotTarget[]>)`           | `ClearUnresolvedMaterialSlots`                                                                                 | `RestoreMaterialSlots`, the slots at their positions                                                     |
-| `SetScenePlay(ScenePlayData)`, `SetSceneReferences(SceneReferencesData)`           | the same methods                                                                                               | the old value                                                                                            |
-| `SetScriptSlots(NodeId, ImmutableArray<ScriptSlot>)`                               | `EditScriptSlots`                                                                                              | the old slots                                                                                            |
-| `SetEditorHidden(NodeId[], bool)` (`ChangesDocument = false`)                      | `SetEditorHidden`                                                                                              | the old flags                                                                                            |
-| `SceneEditBatch`                                                                   | change sets, `DeleteItems`, paste, the view compositions                                                       | 3.5                                                                                                      |
+| Edit                                                                                                                            | Replaces                                                                                                       | Revert                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `InsertNodes(NodeInsert[])`                                                                                                     | `CreatePrimitive/Light/LocalFogVolume/Camera/EmptyNode`, `CreateNode`, the three `DuplicateNodes*`, paste-copy | `RemoveNodes(roots)`                                                                                     |
+| `RemoveNodes(NodeId[] roots)`                                                                                                   | `DeleteNodes`                                                                                                  | `InsertNodes` with each root's data, positions and layout entry subtree (folders under it, `IsExpanded`) |
+| `RenameNode(NodeId, string)`                                                                                                    | `RenameNode`                                                                                                   | `RenameNode` with the old name                                                                           |
+| `ReparentNodes(NodeId[], NodeId? parent, bool preserveWorld, NodeId? after)`                                                    | `ReparentNodes`, paste-cut of nodes                                                                            | `PlaceNodes` with each node's prior placement state                                                      |
+| `ReorderNode(NodeId, NodePosition, LayoutPosition)`                                                                             | `ReorderNodes`                                                                                                 | `PlaceNodes` with the prior state                                                                        |
+| `PlaceNodes(NodePlacementState[])`                                                                                              | the reparent undo paths                                                                                        | `PlaceNodes` with the states it replaced                                                                 |
+| `CreateFolder(FolderId, LayoutPosition, string name, bool? isExpanded)`                                                         | `CreateFolder`                                                                                                 | `RemoveFolder(id, promoteChildren: false)`                                                               |
+| `RemoveFolder(FolderId, bool promoteChildren)`                                                                                  | `DeleteFolder`, the folder part of `DeleteItems`                                                               | `RestoreFolder` with its entry, position and its children's prior positions                              |
+| `RestoreFolder(ExplorerEntryData entry, LayoutPosition, LayoutEntryId[] children)`                                              | the folder undo paths                                                                                          | `RemoveFolder`                                                                                           |
+| `RenameFolder(FolderId, string)`                                                                                                | `RenameFolder`                                                                                                 | `RenameFolder` with the old name                                                                         |
+| `MoveLayoutEntries(LayoutEntryId[], LayoutPosition to)`                                                                         | the same-scope part of `MoveNodesToFolder`, `RemoveNodesFromFolder`, `MoveFolderToParent`                      | `PlaceLayoutEntries` with each entry's prior position                                                    |
+| `AddComponent(NodeId, ComponentData, int index)`                                                                                | `AddComponent` (with 3.10.1)                                                                                   | `RemoveComponent`                                                                                        |
+| `RemoveComponent(NodeId, ComponentId)`                                                                                          | `RemoveComponent`                                                                                              | `AddComponent` with its data at its old index                                                            |
+| `SetProperties`, `SetSceneProperties`                                                                                           | 3.10                                                                                                           | the captured before values, coupled ones included                                                        |
+| `SetGeometry(NodeId[], Uri)`                                                                                                    | `EditGeometry`                                                                                                 | per node, the old geometry                                                                               |
+| `SetMaterialSlot(NodeId[], MaterialSlotTarget, Uri?)`                                                                           | `EditMaterialSlot`                                                                                             | per node, the old slot state                                                                             |
+| `RemoveMaterialSlots(IReadOnlyDictionary<NodeId, MaterialSlotTarget[]>)`                                                        | `ClearUnresolvedMaterialSlots`                                                                                 | `RestoreMaterialSlots`, the slots at their positions                                                     |
+| `SetStartingCamera(NodeId?)`, `SetStartingInputContexts(StartingInputContextData[])`, `SetSceneReferences(SceneReferencesData)` | the same methods                                                                                               | the old value                                                                                            |
+| `SetScriptSlots(NodeId, ImmutableArray<ScriptSlot>)`                                                                            | `EditScriptSlots`                                                                                              | the old slots                                                                                            |
+| `SetEditorHidden(NodeId[], bool)` (`ChangesDocument = false`)                                                                   | `SetEditorHidden`                                                                                              | the old flags                                                                                            |
+| `SceneEditBatch`                                                                                                                | change sets, `DeleteItems`, paste, the view compositions                                                       | 3.5                                                                                                      |
 
 `LayoutEntryId` is a node id or a folder id. `PlaceLayoutEntries` puts entries
 at positions captured from one layout, so they return exactly where they were;
@@ -730,8 +730,9 @@ the gate goes only in the last task.
    registration boundary, relocation mount wait, role transfer order); the
    per-operation methods stay until their last caller moves. After task 5; your
    check in the editor.
-7. **Settings and editor view:** `SetScenePlay`, `SetSceneReferences`,
-   `SetScriptSlots`, `SetEditorHidden`; their partials go. After task 6.
+7. **Settings and editor view:** `SetStartingCamera`,
+   `SetStartingInputContexts`, `SetSceneReferences`, `SetScriptSlots`,
+   `SetEditorHidden`; their partials go. After task 6.
 8. **Properties:** immutable `PropertyEdit`, descriptor engine mappings,
    `IComponentRules`, `SetProperties`, `SetSceneProperties`, gestures; gizmo,
    transform controller, inspector coordinator, camera move, atmosphere reset;

@@ -9,10 +9,10 @@ using DroidNet.Routing;
 using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
@@ -25,9 +25,9 @@ public sealed partial class SceneExplorerSearchTests
     [TestMethod]
     public async Task SearchAsync_RevealsCollapsedDescendantAndRestoresExpansion()
     {
-        var project = new Project(new ProjectInfo("Search", Category.Games, "H:/SearchTests", "preview.png")) { Name = "Search" };
-        var scene = new Scene(project) { Name = "Scene" };
-        var parent = new SceneNode(scene) { Name = "Parent", IsExpanded = false };
+        var project = new Project(new ProjectInfo("Search", Category.Games, "H:/SearchTests", "preview.png"));
+        var scene = new Scene { Name = "Scene" };
+        var parent = new SceneNode(scene) { Name = "Parent" };
         var child = new SceneNode(scene) { Name = "FindMe" };
         parent.AddChild(child);
         scene.RootNodes.Add(parent);
@@ -63,7 +63,7 @@ public sealed partial class SceneExplorerSearchTests
         scene.RootNodes.Add(node);
         var outerId = FolderId.New();
         var innerId = FolderId.New();
-        scene.SetExplorerLayout(
+        harness.Metadata.ReplaceLayout(
             [
                 new ExplorerEntryData
                 {
@@ -116,7 +116,7 @@ public sealed partial class SceneExplorerSearchTests
         var collapsedFolderId = FolderId.New();
         var matchingFolderId = FolderId.New();
         var unresolvedFolderId = FolderId.New();
-        scene.SetExplorerLayout(
+        harness.Metadata.ReplaceLayout(
             [
                 new ExplorerEntryData
                 {
@@ -170,12 +170,12 @@ public sealed partial class SceneExplorerSearchTests
         var collapsedId = FolderId.New();
         var expandedId = FolderId.New();
         var nestedId = FolderId.New();
-        SetCollapsedAndNestedLayout(scene, (first.Id, collapsedId), (second.Id, expandedId, nestedId));
+        SetCollapsedAndNestedLayout(harness.Metadata, (first.Id, collapsedId), (second.Id, expandedId, nestedId));
         using var explorer = harness.Build();
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
 
-        var layoutBefore = JsonSerializer.Serialize(scene.ExplorerLayout);
+        var layoutBefore = JsonSerializer.Serialize(harness.Metadata.Layout);
         var collapsed = await explorer.FindFolderAdapterAsync(collapsedId).ConfigureAwait(false);
         var expanded = await explorer.FindFolderAdapterAsync(expandedId).ConfigureAwait(false);
         var nested = await explorer.FindFolderAdapterAsync(nestedId).ConfigureAwait(false);
@@ -195,7 +195,7 @@ public sealed partial class SceneExplorerSearchTests
         _ = collapsed.IsExpanded.Should().BeFalse("clearing search should restore the prior collapsed state");
         _ = nested.IsExpanded.Should().BeFalse("clearing search should restore nested collapsed state");
         _ = expanded.IsExpanded.Should().BeTrue("clearing search must not collapse folders the search did not expand");
-        _ = JsonSerializer.Serialize(scene.ExplorerLayout).Should().Be(layoutBefore, "search must not write authored layout state");
+        _ = JsonSerializer.Serialize(harness.Metadata.Layout).Should().Be(layoutBefore, "search must not write authored layout state");
         _ = harness.Metadata.Document.IsDirty.Should().BeFalse("search must not dirty the document");
     }
 
@@ -206,7 +206,7 @@ public sealed partial class SceneExplorerSearchTests
         var scene = harness.Scene;
         var node = new SceneNode(scene) { Name = "FindMe" };
         scene.RootNodes.Add(node);
-        scene.SetExplorerLayout(
+        harness.Metadata.ReplaceLayout(
             [
                 new ExplorerEntryData
                 {
@@ -239,7 +239,7 @@ public sealed partial class SceneExplorerSearchTests
         scene.RootNodes.Add(find);
         scene.RootNodes.Add(other);
         var folderId = FolderId.New();
-        scene.SetExplorerLayout(
+        harness.Metadata.ReplaceLayout(
             [
                 new ExplorerEntryData
                 {
@@ -255,7 +255,7 @@ public sealed partial class SceneExplorerSearchTests
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
 
-        bool? StoredExpansion() => scene.ExplorerLayout!.Single(entry => entry.FolderId == folderId).IsExpanded;
+        bool? StoredExpansion() => harness.Metadata.Layout.Single(entry => entry.FolderId == folderId).IsExpanded;
         _ = (await explorer.SearchAsync("FindMe").ConfigureAwait(false)).Should().Be(1);
         var folder = await explorer.FindFolderAdapterAsync(folderId).ConfigureAwait(false);
         _ = folder!.IsExpanded.Should().BeTrue("search expands the collapsed match ancestry");
@@ -276,8 +276,8 @@ public sealed partial class SceneExplorerSearchTests
     }
 
     // A collapsed folder holding one node, and an expanded folder holding a collapsed folder that holds the other.
-    private static void SetCollapsedAndNestedLayout(Scene scene, (NodeId Node, FolderId Folder) collapsed, (NodeId Node, FolderId Outer, FolderId Folder) nested)
-        => scene.SetExplorerLayout(
+    private static void SetCollapsedAndNestedLayout(SceneTab tab, (NodeId Node, FolderId Folder) collapsed, (NodeId Node, FolderId Outer, FolderId Folder) nested)
+        => tab.ReplaceLayout(
             [
                 new ExplorerEntryData
                 {
@@ -309,8 +309,8 @@ public sealed partial class SceneExplorerSearchTests
 
     private static Harness CreateHarness()
     {
-        var project = new Project(new ProjectInfo("Search", Category.Games, "H:/SearchTests", "preview.png")) { Name = "Search" };
-        var scene = new Scene(project) { Name = "Scene" };
+        var project = new Project(new ProjectInfo("Search", Category.Games, "H:/SearchTests", "preview.png"));
+        var scene = new Scene { Name = "Scene" };
         return new Harness(project, scene);
     }
 

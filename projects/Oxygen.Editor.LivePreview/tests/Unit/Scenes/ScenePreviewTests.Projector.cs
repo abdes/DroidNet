@@ -10,6 +10,7 @@ using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -96,7 +97,7 @@ public sealed partial class ScenePreviewTests
         _ = await PreviewFixture.AuthoringOf(document).ExecuteAsync(new SetMaterialSlot([cube.Id], target, material: null)).ConfigureAwait(false);
 
         var cleared = fixture.World.Commands.OfType<RuntimeSetMaterialOverride>().Should().ContainSingle().Subject;
-        _ = (cleared.SlotId, cleared.MaterialPath).Should().Be((target.SlotId, (string?)null));
+        _ = (cleared.SlotId, cleared.MaterialPath).Should().Be((target.SlotId, null));
     }
 
     private static SetProperties Move(NodeId node, float x)

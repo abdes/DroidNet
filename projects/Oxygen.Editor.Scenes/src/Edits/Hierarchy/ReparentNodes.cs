@@ -5,6 +5,7 @@
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
@@ -71,10 +72,10 @@ public sealed record ReparentNodes : ISceneEdit
     {
         ArgumentNullException.ThrowIfNull(scope);
         var scene = scope.Scene;
-        var layout = SceneLayout.Of(scene);
+        var layout = scope.Layout;
         var nodes = SceneGraph.TopLevel(scope, this.Nodes);
         var parent = this.DestinationOf(scope);
-        var states = nodes.Select(node => SceneGraph.PlacementOf(scene, node)).ToArray();
+        var states = nodes.Select(node => SceneGraph.PlacementOf(scene, layout, node)).ToArray();
         var locals = nodes.ToDictionary(static node => node.Id, node => this.LocalAfterMove(node, parent));
 
         SceneGraph.MoveInto(scene, nodes, parent, this.After is { } after ? scope.FindNode(after) : null);

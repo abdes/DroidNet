@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Interop;
 
 namespace Oxygen.Editor.LivePreview.Tests.Scenes;
@@ -65,7 +66,7 @@ public sealed class SceneWireTests
     [TestMethod]
     public void ComponentPresence_CoversEveryEngineComponent()
     {
-        var scene = new Scene(new Moq.Mock<IProject>().Object) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Node" };
         node.Components.Add(new PerspectiveCamera { Name = "Camera" });
         node.Components.Add(new SpotLightComponent { Name = "Spot" });

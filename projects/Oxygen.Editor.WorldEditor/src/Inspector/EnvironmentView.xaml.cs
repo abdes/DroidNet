@@ -172,7 +172,7 @@ public sealed partial class EnvironmentView
             this.ShowAllSceneProperties();
             this.SkyAtmosphereView.FocusAerialStart();
         }
-        else if (ScenePlayPropertyPaths.IsPlayProperty(property))
+        else if (SceneStartingPropertyPaths.IsStartingProperty(property))
         {
             this.ShowAllSceneProperties();
             if (this.PlayView.FocusField(property))

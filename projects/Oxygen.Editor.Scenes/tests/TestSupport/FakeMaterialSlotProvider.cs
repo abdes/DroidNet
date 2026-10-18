@@ -5,7 +5,6 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 

@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Json.Schema;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Scripting;

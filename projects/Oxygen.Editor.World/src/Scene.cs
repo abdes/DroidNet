@@ -10,30 +10,21 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.World;
 
 /// <summary>
-///     Represents a scene in a game project.
+///     Represents a scene: its node hierarchy and its scene-level settings.
 /// </summary>
 /// <remarks>
-///     The <see cref="Scene" /> class represents a scene within a game project. It includes properties for the project
-///     that owns the scene and the entities within the scene. The class also provides methods for JSON serialization and
-///     deserialization.
+///     A scene does not know where it is stored or which project opened it; whoever holds it knows that. The class
+///     also provides methods for JSON serialization and deserialization.
 /// </remarks>
 public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
 {
     /// <summary>
     ///     Initializes a new instance of the <see cref="Scene"/> class.
     /// </summary>
-    /// <param name="project">The owner <see cref="IProject"/>.</param>
-    public Scene(IProject project)
+    public Scene()
     {
-        this.Project = project;
         this.Name = "Untitled Scene"; // Initialize required property
     }
-
-    /// <summary>
-    ///     Gets the project that owns the scene.
-    /// </summary>
-    [JsonIgnore]
-    public IProject Project { get; init; }
 
     /// <summary>
     ///     Gets the identity of the scene, authored in its file.
@@ -56,13 +47,19 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     public Serialization.SceneReferencesData References { get; private set; } = NormalizeReferences(references: null);
 
     /// <summary>
-    /// Gets how the scene starts when played, with a read-only context list.
+    /// Gets the camera node the scene starts viewing through, or <see langword="null"/> for the first camera in
+    /// hierarchy order.
     /// </summary>
-    public Serialization.ScenePlayData Play { get; private set; } = NormalizePlay(play: null);
+    public NodeId? StartingCamera { get; private set; }
 
     /// <summary>
-    /// Gets the camera node a played scene starts viewing through: the authored starting camera, else the first
-    /// camera in hierarchy order.
+    /// Gets the input mapping contexts that are active when the scene starts, in order.
+    /// </summary>
+    public IReadOnlyList<Serialization.StartingInputContextData> StartingInputContexts { get; private set; } = NormalizeContexts(contexts: null);
+
+    /// <summary>
+    /// Gets the camera node the scene starts viewing through: the authored starting camera, else the first camera in
+    /// hierarchy order.
     /// </summary>
     /// <remarks>
     /// An authored starting camera that is missing or no longer a camera is returned as <see langword="null"/>;
@@ -70,7 +67,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// </remarks>
     [JsonIgnore]
     public SceneNode? EffectiveStartingCamera
-        => this.Play.StartingCamera is { } id
+        => this.StartingCamera is { } id
             ? this.AllNodes.FirstOrDefault(node => node.Id == id && node.Components.OfType<CameraComponent>().Any())
             : this.AllNodes.FirstOrDefault(static node => node.Components.OfType<CameraComponent>().Any());
 
@@ -81,21 +78,14 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     public IEnumerable<SceneNode> AllNodes => this.RootNodes.SelectMany(r => new[] { r }.Concat(r.Descendants()));
 
     /// <summary>
-    /// Gets editor-only explorer layout persisted alongside the scene file.
-    /// This is ignored by the runtime scene graph but included in scene DTOs.
-    /// </summary>
-    [JsonIgnore]
-    public IList<Serialization.ExplorerEntryData>? ExplorerLayout { get; private set; }
-
-    /// <summary>
     ///     Creates and hydrates a <see cref="Scene"/> instance from the specified DTO.
     /// </summary>
-    /// <param name="project">Owner project for the new scene.</param>
     /// <param name="data">DTO containing scene data.</param>
     /// <returns>A hydrated <see cref="Scene"/> instance.</returns>
-    public static Scene CreateAndHydrate(IProject project, Serialization.SceneData data)
+    public static Scene CreateAndHydrate(Serialization.SceneData data)
     {
-        var scene = new Scene(project) { Name = data.Name, Id = data.Id };
+        ArgumentNullException.ThrowIfNull(data);
+        var scene = new Scene { Name = data.Name, Id = data.Id };
         scene.Hydrate(data);
         return scene;
     }
@@ -108,6 +98,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// <param name="data">DTO containing scene data.</param>
     public void Hydrate(Serialization.SceneData data)
     {
+        Serialization.SceneSerializer.EnsureFactories();
         if (LightValidation.ValidateScene(data) is { } error)
         {
             throw new ArgumentException(error, nameof(data));
@@ -124,7 +115,8 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
 
             this.Environment = NormalizeEnvironment(data.Environment);
             this.References = NormalizeReferences(data.References);
-            this.Play = NormalizePlay(data.Play);
+            this.StartingCamera = NormalizeCamera(data.StartingCamera);
+            this.StartingInputContexts = NormalizeContexts(data.StartingInputContexts);
         }
     }
 
@@ -142,16 +134,9 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
                 RootNodes = [.. this.RootNodes.Select(n => n.Dehydrate())],
                 Environment = NormalizeEnvironment(this.Environment),
                 References = this.References.IsEmpty ? null : NormalizeReferences(this.References),
-                Play = this.Play.IsEmpty ? null : NormalizePlay(this.Play),
-                ExplorerLayout = this.ExplorerLayout,
+                StartingCamera = this.StartingCamera,
+                StartingInputContexts = this.StartingInputContexts.Count == 0 ? null : [.. this.StartingInputContexts],
             };
-
-    /// <summary>
-    /// Replaces editor-only Scene Explorer layout data.
-    /// </summary>
-    /// <param name="explorerLayout">The new explorer layout, or <see langword="null"/> to clear it.</param>
-    public void SetExplorerLayout(IList<Serialization.ExplorerEntryData>? explorerLayout)
-        => this.ExplorerLayout = explorerLayout;
 
     /// <summary>
     /// Replaces scene-level environment authoring data.
@@ -186,18 +171,33 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     }
 
     /// <summary>
-    /// Replaces how the scene starts when played.
+    /// Replaces the camera node the scene starts viewing through.
     /// </summary>
-    /// <param name="play">The new play settings.</param>
-    public void SetPlay(Serialization.ScenePlayData play)
+    /// <param name="camera">The camera node, or <see langword="null"/> for the first camera in hierarchy order.</param>
+    public void SetStartingCamera(NodeId? camera)
     {
-        ArgumentNullException.ThrowIfNull(play);
-        var normalized = NormalizePlay(play);
-        if (!Serialization.ScenePlayData.AreEquivalent(this.Play, normalized))
+        var normalized = NormalizeCamera(camera);
+        if (this.StartingCamera != normalized)
         {
-            this.OnPropertyChanging(nameof(this.Play));
-            this.Play = normalized;
-            this.OnPropertyChanged(nameof(this.Play));
+            this.OnPropertyChanging(nameof(this.StartingCamera));
+            this.StartingCamera = normalized;
+            this.OnPropertyChanged(nameof(this.StartingCamera));
+        }
+    }
+
+    /// <summary>
+    /// Replaces the input mapping contexts that are active when the scene starts.
+    /// </summary>
+    /// <param name="contexts">The contexts, in order.</param>
+    public void SetStartingInputContexts(IEnumerable<Serialization.StartingInputContextData> contexts)
+    {
+        ArgumentNullException.ThrowIfNull(contexts);
+        var normalized = NormalizeContexts(contexts);
+        if (!this.StartingInputContexts.SequenceEqual(normalized))
+        {
+            this.OnPropertyChanging(nameof(this.StartingInputContexts));
+            this.StartingInputContexts = normalized;
+            this.OnPropertyChanged(nameof(this.StartingInputContexts));
         }
     }
 
@@ -238,16 +238,10 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
         };
     }
 
-    private static Serialization.ScenePlayData NormalizePlay(Serialization.ScenePlayData? play)
-    {
-        play ??= new();
-        ArgumentNullException.ThrowIfNull(play.StartingInputContexts, nameof(play));
-        return new()
-        {
-            StartingCamera = play.StartingCamera is { IsEmpty: true } ? null : play.StartingCamera,
-            StartingInputContexts = new List<Serialization.StartingInputContextData>(play.StartingInputContexts).AsReadOnly(),
-        };
-    }
+    private static NodeId? NormalizeCamera(NodeId? camera) => camera is { IsEmpty: true } ? null : camera;
+
+    private static ReadOnlyCollection<Serialization.StartingInputContextData> NormalizeContexts(IEnumerable<Serialization.StartingInputContextData>? contexts)
+        => new List<Serialization.StartingInputContextData>(contexts ?? []).AsReadOnly();
 
     private static bool ReferencesEqual(Serialization.SceneReferencesData left, Serialization.SceneReferencesData right)
         => left.Scripts.SequenceEqual(right.Scripts)

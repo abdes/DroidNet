@@ -5,7 +5,7 @@
 using System.Text.Json.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.Scenes.Layout;
 
 /// <summary>
 ///     Identifies a folder of a scene's explorer layout. Folders exist only in the editor; the engine never sees them.

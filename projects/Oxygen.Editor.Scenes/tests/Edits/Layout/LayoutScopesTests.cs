@@ -4,8 +4,8 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits.Layout;
 
@@ -62,7 +62,7 @@ public sealed class LayoutScopesTests
         ArgumentNullException.ThrowIfNull(row);
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
 
-        var found = LayoutScopes.TryScopeOf(fixture.Scene, row.Position, out var scope);
+        var found = LayoutScopes.TryScopeOf(fixture.Layout, row.Position, out var scope);
 
         _ = found.Should().BeTrue();
         _ = scope.Should().Be(row.Scope);
@@ -73,7 +73,7 @@ public sealed class LayoutScopesTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
 
-        var position = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.B));
+        var position = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.B));
 
         _ = position.Should().Be(LayoutPosition.InFolder(SampleScene.F, 0));
     }
@@ -85,7 +85,7 @@ public sealed class LayoutScopesTests
         ArgumentNullException.ThrowIfNull(row);
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
 
-        var entries = LayoutScopes.EntriesOf(fixture.Scene, row.Container);
+        var entries = LayoutScopes.EntriesOf(fixture.Layout, row.Container);
 
         _ = entries.Should().Equal(row.Expected);
     }
@@ -95,7 +95,7 @@ public sealed class LayoutScopesTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
 
-        var entries = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.InFolder(SampleScene.F, 7));
+        var entries = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(SampleScene.F, 7));
 
         _ = entries.Should().Equal(LayoutEntryId.Of(SampleScene.B), LayoutEntryId.Of(SampleScene.G));
     }
@@ -105,7 +105,7 @@ public sealed class LayoutScopesTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
 
-        var entries = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.InFolder(FolderId.New(), 0));
+        var entries = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(FolderId.New(), 0));
 
         _ = entries.Should().BeEmpty();
     }
@@ -117,7 +117,7 @@ public sealed class LayoutScopesTests
         ArgumentNullException.ThrowIfNull(row);
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
 
-        var end = LayoutScopes.EndOf(fixture.Scene, LayoutPosition.InFolder(SampleScene.F, 0), row.Moving);
+        var end = LayoutScopes.EndOf(fixture.Layout, LayoutPosition.InFolder(SampleScene.F, 0), row.Moving);
 
         _ = end.Should().Be(LayoutPosition.InFolder(SampleScene.F, row.Index));
     }
@@ -127,11 +127,11 @@ public sealed class LayoutScopesTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         LayoutEntryId[] moving = [LayoutEntryId.Of(SampleScene.B)];
-        var end = LayoutScopes.EndOf(fixture.Scene, LayoutPosition.InFolder(SampleScene.F, 0), moving);
+        var end = LayoutScopes.EndOf(fixture.Layout, LayoutPosition.InFolder(SampleScene.F, 0), moving);
 
         var result = await fixture.Authoring.ExecuteAsync(new MoveLayoutEntries(moving, end)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.InFolder(SampleScene.F, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.G), LayoutEntryId.Of(SampleScene.B));
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(SampleScene.F, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.G), LayoutEntryId.Of(SampleScene.B));
     }
 }

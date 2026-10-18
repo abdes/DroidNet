@@ -6,7 +6,7 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Settings;
-using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -92,10 +92,10 @@ public sealed partial class StartingCameraToggle(Func<SceneAuthoring?>? authorin
             return;
         }
 
-        var play = current.Play with { StartingCamera = isStartingCamera ? node.Id : null };
-        if (!ScenePlayData.AreEquivalent(play, current.Play))
+        NodeId? camera = isStartingCamera ? node.Id : null;
+        if (camera != current.StartingCamera)
         {
-            _ = await authoring.ExecuteAsync(new SetScenePlay(play)).ConfigureAwait(true);
+            _ = await authoring.ExecuteAsync(new SetStartingCamera(camera)).ConfigureAwait(true);
         }
 
         this.Refresh();
@@ -107,8 +107,8 @@ public sealed partial class StartingCameraToggle(Func<SceneAuthoring?>? authorin
         try
         {
             this.IsAvailable = this.camera is not null;
-            this.IsChecked = this.camera is { } node && this.scene?.Play.StartingCamera == node.Id;
-            this.IsAutomatic = this.camera is { } automatic && this.scene is { Play.StartingCamera: null } current
+            this.IsChecked = this.camera is { } node && this.scene?.StartingCamera == node.Id;
+            this.IsAutomatic = this.camera is { } automatic && this.scene is { StartingCamera: null } current
                 && ReferenceEquals(current.EffectiveStartingCamera, automatic);
         }
         finally
@@ -119,7 +119,7 @@ public sealed partial class StartingCameraToggle(Func<SceneAuthoring?>? authorin
 
     private void OnSceneChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (string.IsNullOrEmpty(args.PropertyName) || string.Equals(args.PropertyName, nameof(Scene.Play), StringComparison.Ordinal))
+        if (string.IsNullOrEmpty(args.PropertyName) || string.Equals(args.PropertyName, nameof(Scene.StartingCamera), StringComparison.Ordinal))
         {
             this.Refresh();
         }

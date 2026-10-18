@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -34,8 +35,7 @@ public sealed class ScriptCookingTests : IDisposable
         this.project = new Project(new ProjectInfo("Test", Category.Games, this.root)
         {
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-        })
-        { Name = "Test" };
+        });
     }
 
     public TestContext TestContext { get; set; } = null!;
@@ -196,7 +196,7 @@ public sealed class ScriptCookingTests : IDisposable
 
     private Scene CreateScene(out SceneNode target, out SceneNode player)
     {
-        var scene = new Scene(this.project) { Name = "Main", Id = SceneId.New() };
+        var scene = new Scene { Name = "Main", Id = SceneId.New() };
         scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto } });
         target = new SceneNode(scene) { Name = "Target" };
         player = new SceneNode(scene) { Name = "Player" };

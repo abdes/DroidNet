@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Scenes.Layout;
+
 namespace Oxygen.Editor.World.SceneExplorer;
 
 /// <summary>
@@ -12,15 +14,16 @@ public partial class SceneAdapter
 {
     /// <summary>
     /// Builds a layout adapter tree rooted at a new <see cref="SceneAdapter" /> using the scene's
-    /// current <see cref="Scene.ExplorerLayout" />. Nodes are wrapped in <see cref="SceneNodeAdapter" />
+    /// explorer layout. Nodes are wrapped in <see cref="SceneNodeAdapter" />
     /// so layout operations remain scene-agnostic.
     /// </summary>
     /// <param name="scene">Scene backing the adapter tree.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <returns>Root <see cref="SceneAdapter" /> with layout-only children attached.</returns>
-    public static SceneAdapter BuildLayoutTree(Scene scene)
+    public static SceneAdapter BuildLayoutTree(Scene scene, IList<ExplorerEntryData> layout)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var root = new SceneAdapter(scene)
+        var root = new SceneAdapter(scene, layout)
         {
             IsExpanded = true,
             IsLocked = true,

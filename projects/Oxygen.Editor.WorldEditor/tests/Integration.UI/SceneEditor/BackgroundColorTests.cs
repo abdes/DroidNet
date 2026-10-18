@@ -71,10 +71,7 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
 
     private static async Task CheckNativeBackgroundWorkflowAsync(EngineService engine, IOperationResultPublisher results, string directory, CancellationToken cancellationToken)
     {
-        var project = new Project(new ProjectInfo("Native UI", Category.Games, directory, "preview.png"))
-        {
-            Name = "Native UI",
-        };
+        var project = ProjectContext.FromProjectInfo(new ProjectInfo("Native UI", Category.Games, directory, "preview.png"));
         var path = Path.Combine(directory, "Content", "Scenes", "Background.oscene.json");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var data = new SceneData { Id = SceneId.New(), Name = "Background", Environment = new SceneEnvironmentData { AtmosphereEnabled = true } };

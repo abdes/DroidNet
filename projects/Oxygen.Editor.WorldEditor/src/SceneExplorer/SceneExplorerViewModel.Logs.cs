@@ -7,6 +7,7 @@ using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;

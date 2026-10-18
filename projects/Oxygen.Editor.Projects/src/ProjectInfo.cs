@@ -5,8 +5,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Oxygen.Editor.World;
-using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;

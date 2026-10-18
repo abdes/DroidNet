@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.Projects;
 
 /// <summary>
 /// Represents an authoring mount point within a project.

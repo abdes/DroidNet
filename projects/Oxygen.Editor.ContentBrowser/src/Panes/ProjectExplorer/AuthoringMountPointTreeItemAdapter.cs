@@ -7,7 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Controls;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.World;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Filesystem;
 using Oxygen.Managed.Core;
 

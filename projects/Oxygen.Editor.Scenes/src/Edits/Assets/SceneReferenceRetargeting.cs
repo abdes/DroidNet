@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets.Model;
@@ -136,15 +137,15 @@ internal static class SceneReferenceRetargeting
     }
 
     /// <summary>Re-points the starting input contexts.</summary>
-    /// <param name="play">The play settings.</param>
+    /// <param name="contexts">The starting input contexts.</param>
     /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
-    /// <returns>The re-pointed play settings, or null when nothing changed.</returns>
-    internal static ScenePlayData? Retarget(ScenePlayData play, Func<Uri, Uri?> map)
+    /// <returns>The re-pointed contexts, or null when nothing changed.</returns>
+    internal static IReadOnlyList<StartingInputContextData>? Retarget(IReadOnlyList<StartingInputContextData> contexts, Func<Uri, Uri?> map)
     {
-        ArgumentNullException.ThrowIfNull(play);
+        ArgumentNullException.ThrowIfNull(contexts);
         ArgumentNullException.ThrowIfNull(map);
         var changed = false;
-        var contexts = play.StartingInputContexts.Select(entry =>
+        var retargeted = contexts.Select(entry =>
         {
             if (entry?.Context is not { } context || map(context) is not { } moved)
             {
@@ -154,7 +155,7 @@ internal static class SceneReferenceRetargeting
             changed = true;
             return entry with { Context = moved };
         }).ToList();
-        return changed ? play with { StartingInputContexts = contexts } : null;
+        return changed ? retargeted : null;
     }
 
     /// <summary>Re-points the environment's metering mask and sky cubemaps.</summary>

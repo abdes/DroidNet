@@ -8,7 +8,6 @@ using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Core.Diagnostics;
 

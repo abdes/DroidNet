@@ -8,7 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.LivePreview.Play;
-using Oxygen.Editor.World.Scripting;
+using Oxygen.Editor.Scripting;
 
 namespace Oxygen.Editor.World.Problems;
 

@@ -66,7 +66,7 @@ public sealed partial class SceneEditorQuickAddMenuTests
 
         public Fixture()
         {
-            this.Metadata = SceneTabs.Open(new Scene(Mock.Of<IProject>()) { Name = "Quick Add" });
+            this.Metadata = SceneTabs.Open(new Scene { Name = "Quick Add" });
             var input = new Mock<IDocumentInputCommitter>();
             _ = input.Setup(value => value.CommitAsync(It.IsAny<WindowId>())).Returns(Task.CompletedTask);
             this.Editor = new(

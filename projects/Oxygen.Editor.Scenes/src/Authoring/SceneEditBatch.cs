@@ -4,8 +4,8 @@
 
 using System.Text.Json;
 using Oxygen.Editor.Scenes.Changes;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Authoring;
@@ -36,7 +36,8 @@ public sealed record SceneEditBatch(string Label, IReadOnlyList<ISceneEdit> Edit
     SceneEditValidation ISceneEdit.Validate(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        return ((ISceneEdit)this).Apply(scope.On(Scratch(scope.Scene))) is SceneEditApplication.Rejected rejected
+        var (scene, layout) = Scratch(scope.Scene, scope.Layout);
+        return ((ISceneEdit)this).Apply(scope.On(scene, layout)) is SceneEditApplication.Rejected rejected
             ? rejected.Validation
             : SceneEditValidation.Valid;
     }
@@ -88,14 +89,12 @@ public sealed record SceneEditBatch(string Label, IReadOnlyList<ISceneEdit> Edit
         return new SceneEditApplication.Applied(new SceneEditBatch(this.Label, reverts), changes);
     }
 
-    // A copy that shares nothing with the scene, its explorer layout included, so applying to it leaves the scene as is.
-    private static Scene Scratch(Scene scene)
+    // A copy that shares nothing with the scene or its explorer layout, so applying to it leaves both as they are.
+    private static (Scene Scene, IList<ExplorerEntryData> Layout) Scratch(Scene scene, IList<ExplorerEntryData> layout)
     {
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(scene.Dehydrate(), SceneJsonContext.Default.SceneData);
-        var data = JsonSerializer.Deserialize(bytes, SceneJsonContext.Default.SceneData)!;
-        var scratch = Scene.CreateAndHydrate(scene.Project, data);
-        scratch.SetExplorerLayout(data.ExplorerLayout);
-        return scratch;
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(new SceneFileData(scene.Dehydrate(), layout), SceneFileJsonContext.Default.SceneFileData);
+        var data = JsonSerializer.Deserialize(bytes, SceneFileJsonContext.Default.SceneFileData)!;
+        return (Scene.CreateAndHydrate(data), data.ExplorerLayout ?? []);
     }
 
     // An exact inverse cannot be refused on the state its edit left, so a refused revert is a defect.

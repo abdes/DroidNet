@@ -8,6 +8,7 @@ using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.LivePreview.Tests.Scenes;
 

@@ -87,7 +87,7 @@ internal sealed partial class ScenePreview
                 return false;
             }
 
-            var snapshotScene = new Scene(node.Scene.Project) { Id = node.Scene.Id, Name = node.Scene.Name };
+            var snapshotScene = new Scene { Id = node.Scene.Id, Name = node.Scene.Name };
             snapshotScene.SetEnvironment(node.Scene.Environment);
             var snapshot = SceneNode.CreateAndHydrate(snapshotScene, node.Dehydrate());
             var commands = new List<RuntimeWorldCommand> { new RuntimeCreateNode(snapshot.Name, node.Id, parentId, InitializeWorldAsRoot: false) };

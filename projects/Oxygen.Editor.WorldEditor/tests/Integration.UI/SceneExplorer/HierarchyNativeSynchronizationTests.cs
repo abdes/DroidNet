@@ -7,8 +7,9 @@ using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
@@ -36,7 +37,8 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
     {
         var fixture = new NativeSceneFixture(
             automatic: false,
-            scene => SeedHierarchy(scene, ignoreParentTransform));
+            scene => SeedHierarchy(scene, ignoreParentTransform),
+            layout: HierarchyLayout);
         await using var lifetime = fixture.ConfigureAwait(true);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
@@ -44,7 +46,7 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
         var source = fixture.Source.RootNodes[0];
         var destination = fixture.Source.RootNodes[1];
         var moved = source.Children.Single();
-        var folderId = fixture.Source.ExplorerLayout![1].Children!.Single().FolderId!.Value;
+        var folderId = fixture.Layout[1].Children!.Single().FolderId!.Value;
         var before = SourceNodeProperties(moved);
         await AssertNativeLocalTrsAsync(fixture, moved.Id, before, timeout.Token).ConfigureAwait(true);
 
@@ -106,30 +108,37 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
         source.AddChild(moved);
         scene.RootNodes.Add(source);
         scene.RootNodes.Add(destination);
-        scene.SetExplorerLayout(
-            [
-                new ExplorerEntryData
-                {
-                    Type = "Node",
-                    NodeId = source.Id,
-                    Children = [new ExplorerEntryData { Type = "Node", NodeId = moved.Id }],
-                },
-                new ExplorerEntryData
-                {
-                    Type = "Node",
-                    NodeId = destination.Id,
-                    Children =
-                    [
-                        new ExplorerEntryData
-                        {
-                            Type = "Folder",
-                            FolderId = FolderId.New(),
-                            Name = "Group",
-                            Children = [],
-                        },
-                    ],
-                },
-            ]);
+    }
+
+    // The source holds the moved node; the destination holds an empty folder the moved node can be grouped into.
+    private static IList<ExplorerEntryData> HierarchyLayout(Scene scene)
+    {
+        var source = scene.RootNodes[0];
+        var destination = scene.RootNodes[1];
+        return
+        [
+            new ExplorerEntryData
+            {
+                Type = "Node",
+                NodeId = source.Id,
+                Children = [new ExplorerEntryData { Type = "Node", NodeId = source.Children.Single().Id }],
+            },
+            new ExplorerEntryData
+            {
+                Type = "Node",
+                NodeId = destination.Id,
+                Children =
+                [
+                    new ExplorerEntryData
+                    {
+                        Type = "Folder",
+                        FolderId = FolderId.New(),
+                        Name = "Group",
+                        Children = [],
+                    },
+                ],
+            },
+        ];
     }
 
     private static async Task AssertNativeLocalTrsAsync(

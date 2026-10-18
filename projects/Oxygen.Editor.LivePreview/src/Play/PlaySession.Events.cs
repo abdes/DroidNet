@@ -5,7 +5,7 @@
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Runtime.Player;
-using Oxygen.Editor.World.Scripting;
+using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LivePreview.Play;

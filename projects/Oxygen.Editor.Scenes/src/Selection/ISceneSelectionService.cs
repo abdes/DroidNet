@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Documents;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Scenes.Selection;
@@ -45,8 +46,9 @@ public interface ISceneSelectionService
     /// </summary>
     /// <param name="documentId">The document identity.</param>
     /// <param name="scene">The scene model.</param>
+    /// <param name="layout">The scene's explorer layout, whose folders a folder selection must still name.</param>
     /// <returns>Selected nodes that survived reconciliation.</returns>
-    public IReadOnlyList<SceneNode> Reconcile(DocumentId documentId, Scene scene);
+    public IReadOnlyList<SceneNode> Reconcile(DocumentId documentId, Scene scene, IList<ExplorerEntryData> layout);
 
     /// <summary>
     /// Clears selection for a document.

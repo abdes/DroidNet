@@ -9,7 +9,6 @@ using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 

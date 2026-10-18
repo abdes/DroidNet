@@ -5,7 +5,7 @@
 using System.Text.Json.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.Projects;
 
 /// <summary>
 ///     Represents the metadata information about a project within the Oxygen Editor.

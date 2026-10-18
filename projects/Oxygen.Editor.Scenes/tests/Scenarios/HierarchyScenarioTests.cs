@@ -9,7 +9,7 @@ using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Scenarios;
@@ -26,7 +26,7 @@ public sealed class HierarchyScenarioTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
         var cube = SceneNodeTemplates.Primitive(fixture.Scene, PrimitiveKind.Cube);
-        var created = await fixture.Authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(fixture.Scene, cube)])).ConfigureAwait(false);
+        var created = await fixture.Authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(fixture.Scene, fixture.Layout, cube)])).ConfigureAwait(false);
         var recorded = fixture.History.UndoStack.Count;
 
         var undone = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
@@ -88,7 +88,7 @@ public sealed class HierarchyScenarioTests
         SceneAssert.Applied(deleted);
         _ = fixture.Node(SampleScene.B).Parent!.Id.Should().Be(SampleScene.A);
         _ = LocalOf(fixture, SampleScene.B).Should().Be(local);
-        _ = LayoutScopes.TryScopeOf(fixture.Scene, LayoutEntryId.Of(SampleScene.B), out var scope).Should().BeTrue();
+        _ = LayoutScopes.TryScopeOf(fixture.Layout, LayoutEntryId.Of(SampleScene.B), out var scope).Should().BeTrue();
         _ = scope.Should().Be(SampleScene.A, "the promoted entry stays in A's scope");
     }
 
@@ -100,8 +100,8 @@ public sealed class HierarchyScenarioTests
         _ = await source.Authoring.ExecuteAsync(new RenameNode(SampleScene.A, "Renamed")).ConfigureAwait(false);
         var sourceEdited = source.Snapshot();
         var targetBefore = target.Snapshot();
-        var clipboard = SceneClipboard.Capture(source.Scene, [SampleScene.B], []) ?? throw new InvalidOperationException("B was not captured.");
-        _ = clipboard.TryPaste(target.Scene, new PasteTarget(), cut: false, preserveWorld: false, out var paste, out _).Should().BeTrue();
+        var clipboard = SceneClipboard.Capture(source.Scene, source.Layout, [SampleScene.B], []) ?? throw new InvalidOperationException("B was not captured.");
+        _ = clipboard.TryPaste(target.Scene, target.Layout, new PasteTarget(), cut: false, preserveWorld: false, out var paste, out _).Should().BeTrue();
         _ = await target.Authoring.ExecuteAsync(paste!).ConfigureAwait(false);
 
         var undoneInTarget = await target.Authoring.UndoAsync().ConfigureAwait(false);
@@ -118,8 +118,8 @@ public sealed class HierarchyScenarioTests
     public async Task CanExecuteChecks_ValidateRepeatedly_ChangeNothing()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var clipboard = SceneClipboard.Capture(fixture.Scene, [SampleScene.B], []) ?? throw new InvalidOperationException("B was not captured.");
-        _ = clipboard.TryPaste(fixture.Scene, new PasteTarget(Parent: SampleScene.A), cut: false, preserveWorld: false, out var paste, out _).Should().BeTrue();
+        var clipboard = SceneClipboard.Capture(fixture.Scene, fixture.Layout, [SampleScene.B], []) ?? throw new InvalidOperationException("B was not captured.");
+        _ = clipboard.TryPaste(fixture.Scene, fixture.Layout, new PasteTarget(Parent: SampleScene.A), cut: false, preserveWorld: false, out var paste, out _).Should().BeTrue();
         ISceneEdit[] checks = [paste!, DeleteCamAndF(), new ReparentNodes([SampleScene.B], SampleScene.A, preserveWorld: true)];
         var before = fixture.Snapshot();
 

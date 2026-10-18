@@ -17,6 +17,7 @@ using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scripting;
 using Oxygen.Interop.Scripting;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;

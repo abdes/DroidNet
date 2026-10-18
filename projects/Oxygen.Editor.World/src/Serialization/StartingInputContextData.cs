@@ -5,7 +5,7 @@
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
-/// An input mapping context a played scene activates when it starts.
+/// An input mapping context the scene activates when it starts.
 /// </summary>
 /// <param name="Context">The mapping context asset.</param>
 /// <param name="Priority">The priority it is added with, or <see langword="null"/> for the context's own.</param>

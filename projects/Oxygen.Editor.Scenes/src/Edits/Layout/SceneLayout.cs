@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Layout;
@@ -13,8 +13,8 @@ namespace Oxygen.Editor.Scenes.Edits.Layout;
 /// <remarks>
 /// <para>
 /// Every node has one entry, in the scope of its scene parent: the root for a root node, or under its parent's entry.
-/// Folders group entries inside one scope. <see cref="Complete(Scene)"/> gives a scene's layout an entry for every node, so the
-/// edits always find one; the scene document does it when it decodes.
+/// Folders group entries inside one scope. <see cref="Complete(Scene, IList{ExplorerEntryData})"/> gives a scene's layout an entry
+/// for every node, so the edits always find one; the scene document does it when it decodes.
 /// </para>
 /// <para>
 /// The read methods never change the layout, so validation can use them.
@@ -28,11 +28,11 @@ internal static class SceneLayout
     /// <summary>The entry type of a folder.</summary>
     public const string FolderType = "Folder";
 
-    /// <summary>Gives a scene a layout with an entry for every node and a child list for every folder.</summary>
+    /// <summary>Completes a scene's layout: an entry for every node and a child list for every folder.</summary>
     /// <param name="scene">The scene.</param>
-    public static void Complete(Scene scene)
+    /// <param name="layout">The scene's layout, completed in place.</param>
+    public static void Complete(Scene scene, IList<ExplorerEntryData> layout)
     {
-        var layout = scene.ExplorerLayout ?? [];
         foreach (var folder in Folders(layout))
         {
             _ = folder.EnsureChildren();
@@ -42,21 +42,6 @@ internal static class SceneLayout
         {
             Complete(layout, root, layout);
         }
-
-        scene.SetExplorerLayout(layout);
-    }
-
-    /// <summary>Gets a scene's layout, completed first if it has none.</summary>
-    /// <param name="scene">The scene.</param>
-    /// <returns>The layout.</returns>
-    public static IList<ExplorerEntryData> Of(Scene scene)
-    {
-        if (scene.ExplorerLayout is null)
-        {
-            Complete(scene);
-        }
-
-        return scene.ExplorerLayout!;
     }
 
     /// <summary>Tests whether an entry is a node's entry.</summary>

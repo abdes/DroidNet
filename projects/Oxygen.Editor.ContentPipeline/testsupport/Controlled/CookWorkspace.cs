@@ -22,13 +22,13 @@ internal sealed partial class CookWorkspace : IDisposable
         {
             AuthoringMounts = authoringMounts is null ? [new ProjectMountPoint("Content", "Content")] : [.. authoringMounts],
         };
-        this.Project = new Project(projectInfo) { Name = "TestProject" };
+        this.Project = new Project(projectInfo);
         File.WriteAllText(Path.Combine(this.Root, "Project.oxy"), ProjectInfo.ToJson(projectInfo));
         this.ProjectContext = ProjectContext.FromProject(this.Project);
         this.Activate(this.ProjectContext);
         this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
         this.Publication = new(this.CookCoordinator, this.ContextService, this.Files, this.Manager);
-        this.Scene = new Scene(this.Project) { Name = "Main" };
+        this.Scene = new Scene { Name = "Main" };
         var producer = Path.Combine(this.Root, "producer.bin");
         File.WriteAllText(producer, "fixed test producer");
         this.Compatibility = new([new("test/producer", producer)]);
@@ -52,9 +52,9 @@ internal sealed partial class CookWorkspace : IDisposable
 
     public Scene Scene { get; }
 
-    public Oxygen.Testing.TemporaryNativeArtifacts Compatibility { get; }
+    public Testing.TemporaryNativeArtifacts Compatibility { get; }
 
-    public global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry Documents { get; } = new();
+    public Snapshots.CookDocumentRegistry Documents { get; } = new();
 
     public async Task SeedEmptyPublicationAsync(string mount, CancellationToken token)
     {
@@ -171,7 +171,7 @@ internal sealed partial class CookWorkspace : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var stream = File.Create(path);
         await using var lifetime = stream.ConfigureAwait(false);
-        await new SceneSerializer(this.Project).SerializeAsync(stream, this.Scene).ConfigureAwait(false);
+        await SceneSerializer.SerializeAsync(stream, this.Scene).ConfigureAwait(false);
     }
 
     public void Dispose()

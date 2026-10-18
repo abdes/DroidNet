@@ -35,7 +35,7 @@ public sealed record PlaceNodes : ISceneEdit
     {
         ArgumentNullException.ThrowIfNull(scope);
         var moved = this.Placements.Select(static placement => placement.Node).ToHashSet();
-        var layout = scope.Scene.ExplorerLayout ?? [];
+        var layout = scope.Layout;
         foreach (var placement in this.Placements)
         {
             if (scope.FindNode(placement.Node) is not { } node)
@@ -71,9 +71,9 @@ public sealed record PlaceNodes : ISceneEdit
     {
         ArgumentNullException.ThrowIfNull(scope);
         var scene = scope.Scene;
-        var layout = SceneLayout.Of(scene);
+        var layout = scope.Layout;
         var nodes = this.Placements.Select(placement => (Placement: placement, Node: scope.FindNode(placement.Node)!)).ToArray();
-        var before = nodes.Select(pair => SceneGraph.PlacementOf(scene, pair.Node)).ToArray();
+        var before = nodes.Select(pair => SceneGraph.PlacementOf(scene, layout, pair.Node)).ToArray();
         var entries = nodes.Select(pair => SceneLayout.Find(layout, LayoutEntryId.Of(pair.Node.Id))?.Entry ?? SceneLayout.EntryFor(pair.Node)).ToArray();
 
         SceneGraph.Place(scene, [.. nodes.Select(static pair => (pair.Node, pair.Placement.At))]);

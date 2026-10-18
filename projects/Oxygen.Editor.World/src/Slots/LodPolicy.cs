@@ -21,6 +21,4 @@ namespace Oxygen.Editor.World.Slots;
 [JsonDerivedType(typeof(FixedLodPolicy), "Fixed")]
 [JsonDerivedType(typeof(DistanceLodPolicy), "Distance")]
 [JsonDerivedType(typeof(ScreenSpaceErrorLodPolicy), "ScreenSpaceError")]
-public abstract class LodPolicy
-{
-}
+public abstract class LodPolicy;

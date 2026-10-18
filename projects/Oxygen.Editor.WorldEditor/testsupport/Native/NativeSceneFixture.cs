@@ -41,9 +41,11 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Cooking;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
@@ -80,7 +82,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     public async Task SaveSceneChangedInMemoryAsync(CancellationToken cancellationToken)
     {
         this.Model.SetScene(value: null);
-        WriteSceneFile(this.Document.File.Path, this.Source.Dehydrate());
+        WriteSceneFile(this.Document.File.Path, new SceneFileData(this.Source.Dehydrate(), this.Layout));
         _ = (await this.Document.CheckFileAsync(cancellationToken).ConfigureAwait(true)).Should().Be(DocumentFileState.Reloaded);
         await this.AdoptContentAsync(cancellationToken).ConfigureAwait(true);
     }
@@ -92,7 +94,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         this.Model.SetScene(value: null);
         var data = this.Source.Dehydrate();
         var environment = data.Environment;
-        WriteSceneFile(this.Document.File.Path, data with { Environment = environment with { SkyAtmosphere = environment.SkyAtmosphere with { AerialPerspectiveStartDepthMeters = -1 } } });
+        WriteSceneFile(this.Document.File.Path, new SceneFileData(data with { Environment = environment with { SkyAtmosphere = environment.SkyAtmosphere with { AerialPerspectiveStartDepthMeters = -1 } } }, this.Layout));
         var reload = await this.Document.ReloadAsync().ConfigureAwait(true);
         _ = reload.Succeeded.Should().BeTrue(reload.Problem);
         await this.AdoptContentAsync(CancellationToken.None).ConfigureAwait(true);
@@ -209,6 +211,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     private readonly IEngineService previewEngine;
     private readonly EngineProbe probe;
     private readonly IOperationResultPublisher previewResults;
+    private readonly Project loadedProject;
     private IScenePreview? preview;
     private readonly ProjectContextService projectContexts = new();
     private readonly ContentCookCoordinator materialCookCoordinator;
@@ -235,7 +238,8 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     ///     gives the fixture its own engine and stops the shared one for the duration of the test.
     /// </param>
     /// <param name="loggerFactory">Receives native engine logs; implies a fixture-owned engine.</param>
-    public NativeSceneFixture(bool automatic, Action<Scene>? seed = null, EngineStartupSettings? engineSettings = null, ILoggerFactory? loggerFactory = null)
+    /// <param name="layout">Authors the initial scene's explorer layout, from the seeded scene.</param>
+    public NativeSceneFixture(bool automatic, Action<Scene>? seed = null, EngineStartupSettings? engineSettings = null, ILoggerFactory? loggerFactory = null, Func<Scene, IList<ExplorerEntryData>>? layout = null)
     {
         var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
         this.hosting = new HostingContext
@@ -263,29 +267,26 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         }
 
         (this.previewEngine, this.probe) = EngineProbe.Of(this.engine);
-        var project = new Project(new ProjectInfo("Environment fields", Category.Games, this.directory.FullName, "preview.png") { AuthoringMounts = [new("Content", "Content")], })
-        {
-            Name = "Environment fields",
-        };
-        File.WriteAllText(Path.Combine(this.directory.FullName, "Project.oxy"), ProjectInfo.ToJson(project.ProjectInfo));
-        this.projectContexts.Activate(ProjectContext.FromProjectInfo(project.ProjectInfo));
+        this.loadedProject = new Project(new ProjectInfo("Environment fields", Category.Games, this.directory.FullName, "preview.png") { AuthoringMounts = [new("Content", "Content")], });
+        File.WriteAllText(Path.Combine(this.directory.FullName, "Project.oxy"), ProjectInfo.ToJson(this.loadedProject.ProjectInfo));
+        this.projectContexts.Activate(ProjectContext.FromProjectInfo(this.loadedProject.ProjectInfo));
         this.materialCookCoordinator = new(this.projectContexts, NullLogger<ContentCookCoordinator>.Instance);
         this.materialPipeline = new(this.projectContexts, this.materialCookCoordinator, new CookDocumentRegistry());
         this.activeMaterialSlotProvider = this.materialPipeline.Pipeline;
         _ = this.materialSlotProvider.Setup(provider => provider.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<Uri>(), It.IsAny<CancellationToken>()))
             .Returns((ProjectContext context, Uri uri, CancellationToken token) => this.activeMaterialSlotProvider.ReadAsync(context, uri, token));
         var mode = automatic ? ExposureMode.Auto : ExposureMode.Manual;
-        this.Source = Scene.CreateAndHydrate(project, new SceneData { Id = SceneId.New(), Name = "Environment", Environment = new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = mode } }, });
+        this.Source = Scene.CreateAndHydrate(new SceneData { Id = SceneId.New(), Name = "Environment", Environment = new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = mode } }, });
         seed?.Invoke(this.Source);
         _ = this.AssetCatalog.Setup(value => value.Items).Returns(this.feedAssets);
         _ = this.AssetCatalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         // The scene is a document of the project, saved where the editor saves scenes.
-        this.sceneKind = new SceneDocumentKind(project);
+        this.sceneKind = new SceneDocumentKind(this.projectContexts.ActiveProject!);
         this.materialKind = new MaterialDocumentKind(this.materialValidation);
         this.sceneDocuments = new OpenDocuments([this.sceneKind, this.materialKind], new ImmediateReadFileStore(new NativeAtomicFileStore(new RealFileSystem())));
         this.previewResults = results;
-        this.OpenScene(this.WriteScene(this.Source));
+        this.OpenScene(this.WriteScene(this.Source, layout?.Invoke(this.Source)));
         this.Model = new EnvironmentViewModel(() => this.Authoring);
         this.Model.SetScene(this.Source);
     }
@@ -296,6 +297,9 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
 
     /// <summary>Gets what edits the document's scene.</summary>
     public SceneAuthoring Authoring => ((SceneContent)this.Document.Content).Authoring;
+
+    /// <summary>Gets the explorer layout of the document's scene.</summary>
+    public IList<ExplorerEntryData> Layout => this.Authoring.Layout;
 
     /// <summary>Gets the scene's document.</summary>
     public Oxygen.Editor.Documents.Document Document { get; private set; }
@@ -505,28 +509,27 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
 
     public async Task SwitchToNewSceneAsync(int cascades, CancellationToken cancellationToken)
     {
-        var project = this.Source.Project;
         var stale = this.target;
         this.CloseScene();
-        var next = Scene.CreateAndHydrate(project, new SceneData { Id = SceneId.New(), Name = "Next scene" });
+        var next = Scene.CreateAndHydrate(new SceneData { Id = SceneId.New(), Name = "Next scene" });
         SeedShadowTransitionScene(next, cascades);
         this.OpenScene(this.WriteScene(next));
         this.Model.SetScene(this.Source);
         await this.SynchronizeAsync(stale, cancellationToken).ConfigureAwait(true);
     }
 
-    private static void WriteSceneFile(string path, SceneData data)
+    private static void WriteSceneFile(string path, SceneFileData data)
     {
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllBytes(path, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData));
+        File.WriteAllBytes(path, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneFileJsonContext.Default.SceneFileData));
     }
 
     // Saves a scene built in memory as a scene file of the project, named after the scene.
-    private DocumentFile WriteScene(Scene scene)
+    private DocumentFile WriteScene(Scene scene, IList<ExplorerEntryData>? layout = null)
     {
         var relative = $"Content/Scenes/{scene.Name}.oscene.json";
         var file = new DocumentFile(Path.Combine(this.ProjectRoot, relative.Replace('/', Path.DirectorySeparatorChar)), new Uri("asset:///" + Uri.EscapeDataString(relative).Replace("%2F", "/", StringComparison.Ordinal)));
-        WriteSceneFile(file.Path, scene.Dehydrate());
+        WriteSceneFile(file.Path, new SceneFileData(scene.Dehydrate(), layout));
         return file;
     }
 
@@ -624,7 +627,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     private PreviewSession CreatePreviewSession(CookPublicationService publication, IContentCookCoordinator coordinator, IProjectContextService projects, IAssetPublicationTarget catalog)
     {
         var manager = new Mock<IProjectManagerService>();
-        _ = manager.SetupGet(value => value.CurrentProject).Returns(this.Source.Project);
+        _ = manager.SetupGet(value => value.CurrentProject).Returns(this.loadedProject);
         _ = manager.Setup(value => value.LoadProjectInfoAsync(It.IsAny<string>())).Returns((string root) => this.manager.LoadProjectInfoAsync(root));
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);

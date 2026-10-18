@@ -9,6 +9,7 @@ using System.Numerics;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Interop;
 
 namespace Oxygen.Editor.LivePreview.Scenes;

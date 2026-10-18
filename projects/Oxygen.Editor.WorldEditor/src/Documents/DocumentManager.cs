@@ -228,7 +228,7 @@ public sealed partial class DocumentManager : IDisposable
 
         var openScenes = this.documentArea.Documents.Where(static document => document.Content is SceneContent).ToArray();
         var existing = openScenes.FirstOrDefault(document => document.File.IsAt(file.Path));
-        if (existing is { Content: SceneContent { Scene: var current } })
+        if (existing is { Content: SceneContent current })
         {
             var selected = await this.documentArea.ShowAsync(existing).ConfigureAwait(true);
             if (selected)
@@ -294,7 +294,8 @@ public sealed partial class DocumentManager : IDisposable
 
     private async Task<bool> InstallSceneAsync(Document document, ProjectContext project, SceneReplacement replacement)
     {
-        var scene = ((SceneContent)document.Content).Scene;
+        var content = (SceneContent)document.Content;
+        var scene = content.Scene;
         replacement.Incoming = document;
         this.installing = document.File;
         try
@@ -318,7 +319,7 @@ public sealed partial class DocumentManager : IDisposable
 
         replacement.Installed = true;
         this.LogOpenedNewScene(scene);
-        await this.MarkSceneActivatedAsync(scene).ConfigureAwait(true);
+        await this.MarkSceneActivatedAsync(content).ConfigureAwait(true);
         return true;
     }
 
@@ -328,11 +329,11 @@ public sealed partial class DocumentManager : IDisposable
     private async void OnOpenMaterialRequested(object recipient, OpenMaterialRequestMessage message)
         => message.Reply(await this.OpenMaterialAsync(message.MaterialUri).ConfigureAwait(true));
 
-    private async Task MarkSceneActivatedAsync(World.Scene scene)
+    private async Task MarkSceneActivatedAsync(SceneContent content)
     {
         if (this.projectContextService.ActiveProject is not { } project
-            || scene.Project.ProjectInfo.Id != project.ProjectId
-            || !string.Equals(scene.Project.ProjectInfo.Location, project.ProjectRoot, StringComparison.OrdinalIgnoreCase))
+            || content.Project.ProjectId != project.ProjectId
+            || !string.Equals(content.Project.ProjectRoot, project.ProjectRoot, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -341,11 +342,11 @@ public sealed partial class DocumentManager : IDisposable
         // the identity. The workspace still finds scenes remembered by name before.
         try
         {
-            await this.projectUsage.UpdateLastOpenedSceneAsync(project.Name, project.ProjectRoot, scene.Id.ToString()).ConfigureAwait(true);
+            await this.projectUsage.UpdateLastOpenedSceneAsync(project.Name, project.ProjectRoot, content.Scene.Id.ToString()).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            this.LogSceneUsageUpdateFailed(ex, scene.Name, project.Name);
+            this.LogSceneUsageUpdateFailed(ex, content.Scene.Name, project.Name);
         }
     }
 

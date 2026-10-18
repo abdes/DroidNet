@@ -9,11 +9,11 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Documents;
@@ -173,5 +173,7 @@ public sealed class SceneContentTests
         => content.Scene.AllNodes.Single(candidate => candidate.Id == node).Components.OfType<TransformComponent>().Single().LocalPosition.X;
 
     private static string StateOf(Document document)
-        => JsonSerializer.Serialize(SceneContent.Of(document).Scene.Dehydrate(), SceneJsonContext.Default.SceneData);
+        => JsonSerializer.Serialize(
+            new SceneFileData(SceneContent.Of(document).Scene.Dehydrate(), SceneContent.Of(document).Authoring.Layout),
+            SceneFileJsonContext.Default.SceneFileData);
 }

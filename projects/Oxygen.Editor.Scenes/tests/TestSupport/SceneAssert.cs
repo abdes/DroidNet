@@ -137,15 +137,16 @@ public static class SceneAssert
         // Equivalency compares members, so two kinds with the same members would pass without the kinds checked first.
         _ = actual.Select(static change => change.GetType().Name).Should().Equal(expected.Select(static change => change.GetType().Name));
 
-        // The kinds without members (LayoutChanged, ScenePlayChanged, SceneReferencesChanged) have nothing to compare
-        // by members: the kind check above is their whole comparison.
+        // The kinds without members (LayoutChanged, StartingCameraChanged, StartingInputContextsChanged,
+        // SceneReferencesChanged) have nothing to compare by members: the kind check above is their whole comparison.
         _ = actual.Should().BeEquivalentTo(
             expected,
             static options => options
                 .WithStrictOrdering()
                 .PreferringRuntimeMemberTypes()
                 .ComparingByValue<SceneChange.LayoutChanged>()
-                .ComparingByValue<SceneChange.ScenePlayChanged>()
+                .ComparingByValue<SceneChange.StartingCameraChanged>()
+                .ComparingByValue<SceneChange.StartingInputContextsChanged>()
                 .ComparingByValue<SceneChange.SceneReferencesChanged>());
     }
 

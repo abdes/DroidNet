@@ -89,7 +89,7 @@ public sealed class SourceDependencyDiscoveryTests
             InputActions = [actionOutputUri],
             PhysicsSidecars = [physicsOutputUri],
         });
-        workspace.Scene.SetPlay(new ScenePlayData { StartingInputContexts = [new StartingInputContextData(mappingOutputUri)] });
+        workspace.Scene.SetStartingInputContexts([new StartingInputContextData(mappingOutputUri)]);
         workspace.WriteText("Content/Input/Controls.input.json", """{ "contexts": [ { "name": "Gameplay", "priority": 3, "mappings": [] } ] }""");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var discovery = new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));

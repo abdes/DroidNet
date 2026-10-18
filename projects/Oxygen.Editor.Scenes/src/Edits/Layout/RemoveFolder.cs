@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
-using Oxygen.Editor.World;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Layout;
@@ -28,12 +28,12 @@ public sealed record RemoveFolder(FolderId Folder, bool PromoteChildren) : IScen
     SceneEditValidation ISceneEdit.Validate(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        if (scope.CheckScope(SceneLayout.ScopeOfEntry(scope.Scene.ExplorerLayout ?? [], LayoutEntryId.Of(this.Folder)).Scope) is { IsValid: false } refused)
+        if (scope.CheckScope(SceneLayout.ScopeOfEntry(scope.Layout, LayoutEntryId.Of(this.Folder)).Scope) is { IsValid: false } refused)
         {
             return refused;
         }
 
-        return SceneLayout.Find(scope.Scene.ExplorerLayout, LayoutEntryId.Of(this.Folder)) is not { } found
+        return SceneLayout.Find(scope.Layout, LayoutEntryId.Of(this.Folder)) is not { } found
             ? SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.FolderMissing, "The folder no longer exists."))
             : !this.PromoteChildren && found.Entry.Children is { Count: > 0 }
             ? SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.FolderNotEmpty, "The folder is not empty."))
@@ -44,7 +44,7 @@ public sealed record RemoveFolder(FolderId Folder, bool PromoteChildren) : IScen
     SceneEditApplication ISceneEdit.Apply(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var layout = SceneLayout.Of(scope.Scene);
+        var layout = scope.Layout;
         var at = SceneLayout.PositionOf(layout, LayoutEntryId.Of(this.Folder))!;
         var (folder, list) = SceneLayout.Find(layout, LayoutEntryId.Of(this.Folder))!.Value;
         var children = folder.Children?.ToArray() ?? [];

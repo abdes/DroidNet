@@ -5,7 +5,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using static Oxygen.Editor.ContentPipeline.TestSupport.SnapshotScenario;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;

@@ -7,8 +7,8 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
-using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits.Layout;
@@ -32,8 +32,8 @@ public sealed class RemoveFolderTests
 
         SceneAssert.Applied(result);
         LayoutEntryId[] expected = [LayoutEntryId.Of(SampleScene.A), LayoutEntryId.Of(SampleScene.B), LayoutEntryId.Of(SampleScene.G), .. RootAfterF.Select(static node => LayoutEntryId.Of(node))];
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0)).Should().Equal(expected);
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.F)).Should().BeNull();
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0)).Should().Equal(expected);
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.F)).Should().BeNull();
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.LayoutChanged());
     }
 
@@ -46,7 +46,7 @@ public sealed class RemoveFolderTests
         var result = await fixture.Authoring.ExecuteAsync(new RemoveFolder(SampleScene.AF, PromoteChildren: true)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.UnderNode(SampleScene.A, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.A1), LayoutEntryId.Of(SampleScene.A2));
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.UnderNode(SampleScene.A, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.A1), LayoutEntryId.Of(SampleScene.A2));
         _ = fixture.Node(SampleScene.A2).Parent!.Id.Should().Be(SampleScene.A);
         _ = SceneTransformMath.WorldMatrix(fixture.Node(SampleScene.A2)).Should().Be(worldBefore);
     }
@@ -59,8 +59,8 @@ public sealed class RemoveFolderTests
         var result = await fixture.Authoring.ExecuteAsync(new RemoveFolder(SampleScene.F, PromoteChildren: true)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.G)).Should().Be(LayoutPosition.AtRoot(2));
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.G).Should().NotBeNull();
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.G)).Should().Be(LayoutPosition.AtRoot(2));
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.G).Should().NotBeNull();
     }
 
     [TestMethod]
@@ -70,10 +70,10 @@ public sealed class RemoveFolderTests
 
         _ = await SceneAssert.RoundTripAsync(fixture, new RemoveFolder(SampleScene.F, PromoteChildren: true)).ConfigureAwait(false);
 
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.F)).Should().Be(LayoutPosition.AtRoot(1));
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.InFolder(SampleScene.F, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.B), LayoutEntryId.Of(SampleScene.G));
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.F)!.IsExpanded.Should().BeTrue();
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.G)!.IsExpanded.Should().BeFalse();
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.F)).Should().Be(LayoutPosition.AtRoot(1));
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(SampleScene.F, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.B), LayoutEntryId.Of(SampleScene.G));
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.F)!.IsExpanded.Should().BeTrue();
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.G)!.IsExpanded.Should().BeFalse();
     }
 
     [TestMethod]
@@ -85,8 +85,8 @@ public sealed class RemoveFolderTests
         var result = await fixture.Authoring.ExecuteAsync(new RemoveFolder(SampleScene.F, PromoteChildren: true)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.B)).Should().Be(LayoutPosition.AtRoot(1));
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.F)).Should().BeNull();
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.B)).Should().Be(LayoutPosition.AtRoot(1));
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.F)).Should().BeNull();
     }
 
     [TestMethod]
@@ -122,8 +122,8 @@ public sealed class RemoveFolderTests
         var result = await fixture.Authoring.ExecuteAsync(new RemoveFolder(SampleScene.G, PromoteChildren: false)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.G)).Should().BeNull();
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.InFolder(SampleScene.F, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.B));
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.G)).Should().BeNull();
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(SampleScene.F, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.B));
     }
 
     [TestMethod]

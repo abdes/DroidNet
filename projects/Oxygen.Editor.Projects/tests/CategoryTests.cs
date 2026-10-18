@@ -4,7 +4,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Projects.Tests;
 

@@ -94,11 +94,11 @@ public sealed class CookRunHistoryTests
             Message = "The import tool changed.",
             AffectedPath = "ImportTool.exe",
         };
-        Func<Task> cook = () => coordinator.RunCookAsync<int>(
+        Func<Task> cook = () => coordinator.RunCookAsync(
             new(CookTargetKind.Project, ScopeUri: null),
-            (_, _) => Task.FromException<int>(new Oxygen.Managed.Core.Compatibility.NativeCompatibilityException([diagnostic])),
+            (_, _) => Task.FromException<int>(new Managed.Core.Compatibility.NativeCompatibilityException([diagnostic])),
             CancellationToken.None);
-        _ = await cook.Should().ThrowAsync<Oxygen.Managed.Core.Compatibility.NativeCompatibilityException>().ConfigureAwait(false);
+        _ = await cook.Should().ThrowAsync<Managed.Core.Compatibility.NativeCompatibilityException>().ConfigureAwait(false);
         var run = coordinator.Runs.Single();
         _ = run.Diagnostics.Should().ContainSingle().Which.Should().Be(diagnostic with { OperationId = run.OperationId });
     }
@@ -187,7 +187,7 @@ public sealed class CookRunHistoryTests
         using var coordinator = CreateCoordinator(CreateContextService());
         var drained = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var failure = new ContentPipelineTerminationException(new IOException("Termination failed."), drained.Task);
-        var operation = coordinator.RunCookAsync<int>(new(CookTargetKind.Project, ScopeUri: null), (_, _) => Task.FromException<int>(failure), CancellationToken.None);
+        var operation = coordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null), (_, _) => Task.FromException<int>(failure), CancellationToken.None);
         Func<Task> failed = async () => _ = await operation.ConfigureAwait(false);
         _ = await failed.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
         _ = coordinator.Runs.Single().State.Should().Be(CookRunState.Cancelling);
@@ -224,7 +224,7 @@ public sealed class CookRunHistoryTests
         };
         var dirty = true;
         var captures = 0;
-        var document = new global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(Path.Combine(Path.GetTempPath(), "Main.oscene.json"), "Main", IsDirty: true, "saved");
+        var document = new ContentPipeline.Snapshots.CookDocumentState(Path.Combine(Path.GetTempPath(), "Main.oscene.json"), "Main", IsDirty: true, "saved");
         var waiting = coordinator.RunCookAsync(
             new(CookTargetKind.Project, ScopeUri: null),
             (_, _) =>

@@ -38,9 +38,9 @@ public sealed record ReorderNode(NodeId Node, NodePosition At, LayoutPosition La
     {
         ArgumentNullException.ThrowIfNull(scope);
         var scene = scope.Scene;
-        var layout = SceneLayout.Of(scene);
+        var layout = scope.Layout;
         var node = scope.FindNode(this.Node)!;
-        var state = SceneGraph.PlacementOf(scene, node);
+        var state = SceneGraph.PlacementOf(scene, layout, node);
         SceneGraph.Detach(scene, node);
         SceneGraph.Attach(scene, node, this.At.Parent is { } parent ? scope.FindNode(parent) : null, this.At.Index);
 
@@ -53,7 +53,7 @@ public sealed record ReorderNode(NodeId Node, NodePosition At, LayoutPosition La
         SceneLayout.RequireContainer(layout, this.Layout).Insert(this.Layout.Index, entry?.Entry ?? SceneLayout.EntryFor(node));
 
         SceneLayout.Prune(layout);
-        var after = SceneGraph.PlacementOf(scene, node);
+        var after = SceneGraph.PlacementOf(scene, layout, node);
         return after.At == state.At && after.Layout == state.Layout
             ? new SceneEditApplication.Applied(this, [])
             : new SceneEditApplication.Applied(new PlaceNodes([state]), [new SceneChange.NodesPlaced([this.Node]), new SceneChange.LayoutChanged()]);
@@ -74,7 +74,7 @@ public sealed record ReorderNode(NodeId Node, NodePosition At, LayoutPosition La
             return place;
         }
 
-        var layout = scope.Scene.ExplorerLayout ?? [];
+        var layout = scope.Layout;
         var (found, layoutScope) = SceneLayout.ScopeOf(layout, this.Layout);
         if (!found || SceneLayout.ContainerOf(layout, this.Layout) is not { } container)
         {

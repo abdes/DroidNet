@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.World.Components;
 
 /// <summary>Validates complete authored light values before hydration, edits or cooking.</summary>
 public static class LightValidation

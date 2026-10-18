@@ -3,15 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.World.Components;
 
 /// <summary>
 /// Base component for authored light data shared by every light kind.
 /// </summary>
-public abstract partial class LightComponent : GameComponent
+public abstract class LightComponent : GameComponent
 {
     private bool affectsWorld = true;
     private Vector3 color = Vector3.One;

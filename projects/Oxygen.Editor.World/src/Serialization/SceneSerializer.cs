@@ -4,6 +4,7 @@
 
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 
 namespace Oxygen.Editor.World.Serialization;
@@ -11,8 +12,7 @@ namespace Oxygen.Editor.World.Serialization;
 /// <summary>
 /// Utility class for serializing and deserializing scenes using high-performance source-generated JSON.
 /// </summary>
-/// <param name="project">The project that owns the scenes being serialized/deserialized.</param>
-public class SceneSerializer(IProject project)
+public static class SceneSerializer
 {
     private static readonly Lazy<bool> FactoriesInitialized = new(() =>
     {
@@ -46,19 +46,14 @@ public class SceneSerializer(IProject project)
     /// <param name="stream">The stream containing the JSON scene data.</param>
     /// <returns>A new <see cref="Scene"/> instance populated with the deserialized data.</returns>
     /// <exception cref="JsonException">Thrown if deserialization fails.</exception>
-    public async Task<Scene> DeserializeAsync(Stream stream)
+    public static async Task<Scene> DeserializeAsync(Stream stream)
     {
-        _ = FactoriesInitialized.Value; // Ensure factories are registered
-
+        EnsureFactories();
         var data = await JsonSerializer.DeserializeAsync(stream, SceneJsonContext.Default.SceneData)
             .ConfigureAwait(false) ?? throw new JsonException("Failed to deserialize scene data.");
 
         // Use the canonical factory to set required init-only properties then hydrate.
-        var scene = Scene.CreateAndHydrate(project, data);
-
-        // Preserve editor-only explorer layout on the returned Scene instance so UI can read it.
-        scene.SetExplorerLayout(data.ExplorerLayout);
-        return scene;
+        return Scene.CreateAndHydrate(data);
     }
 
     /// <summary>
@@ -68,8 +63,7 @@ public class SceneSerializer(IProject project)
     /// <param name="targetScene">The existing scene to populate with deserialized data.</param>
     /// <exception cref="JsonException">Thrown if deserialization fails.</exception>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "keep API consistent - all methods are instance methods")]
-    public async Task DeserializeIntoAsync(Stream stream, Scene targetScene)
+    public static async Task DeserializeIntoAsync(Stream stream, Scene targetScene)
     {
         var data = await JsonSerializer.DeserializeAsync(stream, SceneJsonContext.Default.SceneData)
             .ConfigureAwait(false);
@@ -79,9 +73,7 @@ public class SceneSerializer(IProject project)
             return;
         }
 
-        // Hydrate scene content (nodes) but also transfer editor-only explorer layout
         targetScene.Hydrate(data);
-        targetScene.SetExplorerLayout(data.ExplorerLayout);
     }
 
     /// <summary>
@@ -90,11 +82,15 @@ public class SceneSerializer(IProject project)
     /// <param name="stream">The stream to write the JSON scene data to.</param>
     /// <param name="scene">The scene to serialize.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "keep API consistent - all methods are instance methods")]
-    public async Task SerializeAsync(Stream stream, Scene scene)
+    public static async Task SerializeAsync(Stream stream, Scene scene)
     {
         var data = scene.Dehydrate();
         await JsonSerializer.SerializeAsync(stream, data, SceneJsonContext.Default.SceneData)
             .ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Registers the component and slot factories that hydration looks types up in.
+    /// </summary>
+    internal static void EnsureFactories() => _ = FactoriesInitialized.Value;
 }

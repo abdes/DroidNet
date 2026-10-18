@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.World.Components;
 
 /// <summary>
 /// A spherical volume of fog placed by its node's transform. The volume's

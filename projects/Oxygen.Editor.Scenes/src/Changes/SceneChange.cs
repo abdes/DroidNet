@@ -65,8 +65,11 @@ public abstract record SceneChange
     /// <param name="Nodes">The nodes.</param>
     public sealed record EditorVisibilityChanged(IReadOnlyList<NodeId> Nodes) : SceneChange;
 
-    /// <summary>How the scene starts when played changed.</summary>
-    public sealed record ScenePlayChanged : SceneChange;
+    /// <summary>The camera node the scene starts viewing through changed.</summary>
+    public sealed record StartingCameraChanged : SceneChange;
+
+    /// <summary>The input mapping contexts that are active when the scene starts changed.</summary>
+    public sealed record StartingInputContextsChanged : SceneChange;
 
     /// <summary>The scene's asset references changed.</summary>
     public sealed record SceneReferencesChanged : SceneChange;

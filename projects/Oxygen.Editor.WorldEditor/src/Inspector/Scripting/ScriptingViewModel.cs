@@ -19,6 +19,8 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Settings;
+using Oxygen.Editor.Scripting;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Problems;
 using Oxygen.Editor.World.Scripting;
 using Oxygen.Managed.Assets;

@@ -2,15 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World;
-
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
 /// Represents a game project.
 /// </summary>
 /// <param name="info">The metadata information about this project.</param>
-public partial class Project(IProjectInfo info) : GameObject, IProject
+public sealed class Project(IProjectInfo info) : IProject
 {
     /// <inheritdoc/>
     public IProjectInfo ProjectInfo { get; } = info;

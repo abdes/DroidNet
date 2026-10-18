@@ -118,7 +118,7 @@ public sealed class IncrementalCookTests
         var context = workspace.ProjectContext with
         {
             LocalFolderMounts = [new("Scripts", libraryRoot)],
-            CookedContentOrder = [new(Oxygen.Editor.World.CookedContentSourceKind.ProjectOutput), new(Oxygen.Editor.World.CookedContentSourceKind.LocalFolder, "Scripts")],
+            CookedContentOrder = [new(Oxygen.Editor.Projects.CookedContentSourceKind.ProjectOutput), new(Oxygen.Editor.Projects.CookedContentSourceKind.LocalFolder, "Scripts")],
         };
         workspace.Activate(context);
         workspace.Scene.SetReferences(new SceneReferencesData

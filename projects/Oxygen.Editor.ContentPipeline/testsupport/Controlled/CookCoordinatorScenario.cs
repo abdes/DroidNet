@@ -4,7 +4,6 @@
 
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 

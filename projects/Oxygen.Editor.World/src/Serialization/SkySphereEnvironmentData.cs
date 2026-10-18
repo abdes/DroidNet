@@ -7,6 +7,8 @@ using System.Text.Json.Serialization;
 
 namespace Oxygen.Editor.World.Serialization;
 
+#pragma warning disable SA1402 // File may only contain a single type
+
 /// <summary>
 /// What a Sky Sphere shows, mirroring Oxygen's native <c>SkySphereSource</c>.
 /// </summary>
@@ -152,3 +154,5 @@ public sealed record BackgroundEnvironmentData
     /// <summary>Gets the linear SDR color.</summary>
     public Vector3 ColorRgb { get; init; }
 }
+
+#pragma warning restore SA1402 // File may only contain a single type

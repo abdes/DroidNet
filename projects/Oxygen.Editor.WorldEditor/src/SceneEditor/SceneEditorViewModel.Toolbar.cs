@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 
@@ -140,7 +141,7 @@ public partial class SceneEditorViewModel
         if (this.Authoring is { } authoring)
         {
             var node = template(authoring.Scene);
-            _ = await authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(authoring.Scene, node)])).ConfigureAwait(true);
+            _ = await authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(authoring.Scene, authoring.Layout, node)])).ConfigureAwait(true);
         }
     }
 

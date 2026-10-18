@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World;
+using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentPipeline;
 

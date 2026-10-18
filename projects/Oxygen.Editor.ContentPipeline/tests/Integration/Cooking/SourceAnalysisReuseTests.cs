@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
@@ -28,7 +29,7 @@ public sealed class SourceAnalysisReuseTests
     {
         using var workspace = new CookWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
-        var second = new Scene(workspace.Project) { Name = "Second" };
+        var second = new Scene { Name = "Second" };
         var node = new SceneNode(second) { Name = "OtherCube" };
         _ = node.AddComponent(new GeometryComponent
         {
@@ -39,7 +40,7 @@ public sealed class SourceAnalysisReuseTests
         var source = File.Create(Path.Combine(workspace.Root, "Content", "Scenes", "Second.oscene.json"));
         await using (source.ConfigureAwait(false))
         {
-            await new Oxygen.Editor.World.Serialization.SceneSerializer(workspace.Project).SerializeAsync(source, second).ConfigureAwait(false);
+            await Oxygen.Editor.World.Serialization.SceneSerializer.SerializeAsync(source, second).ConfigureAwait(false);
         }
 
         using var compatibility = EditorNativeCompatibilityService.ForCooking();

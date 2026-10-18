@@ -1,0 +1,77 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using System.Text.Json;
+using AwesomeAssertions;
+using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
+
+namespace Oxygen.Editor.Scenes.Tests.Documents;
+
+/// <summary>
+/// The scene file keeps its format: the explorer layout is written after the scene, with plain GUID strings for its ids,
+/// and a reader of the scene alone, such as the cook, skips it.
+/// </summary>
+[TestClass]
+public sealed class SceneFileJsonTests
+{
+    private static readonly SceneId Scene = SceneId.FromValue(Guid.Parse("00000000-0000-4000-8000-000000000101"));
+    private static readonly NodeId Camera = NodeId.FromValue(Guid.Parse("00000000-0000-4000-8000-000000000201"));
+    private static readonly FolderId Folder = FolderId.FromValue(Guid.Parse("00000000-0000-4000-8000-000000000401"));
+
+    [TestMethod]
+    public void LayoutIsWrittenLastWithGuidStrings()
+    {
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(CreateFile(), SceneFileJsonContext.Default.SceneFileData));
+        var root = json.RootElement;
+
+        _ = root.EnumerateObject().First().Name.Should().Be("Id");
+        _ = root.EnumerateObject().Last().Name.Should().Be("ExplorerLayout");
+        var folder = root.GetProperty("ExplorerLayout")[0];
+        _ = folder.GetProperty("FolderId").GetString().Should().Be(Folder.ToString());
+        _ = folder.GetProperty("Children")[0].GetProperty("NodeId").GetString().Should().Be(Camera.ToString());
+    }
+
+    [TestMethod]
+    public void LayoutReadsBackFromGuidStrings()
+    {
+        var json = JsonSerializer.Serialize(CreateFile(), SceneFileJsonContext.Default.SceneFileData);
+
+        var data = JsonSerializer.Deserialize(json, SceneFileJsonContext.Default.SceneFileData)!;
+
+        _ = data.Id.Should().Be(Scene);
+        _ = data.RootNodes[0].Id.Should().Be(Camera);
+        _ = data.ExplorerLayout![0].FolderId.Should().Be(Folder);
+        _ = data.ExplorerLayout[0].Children![0].NodeId.Should().Be(Camera);
+    }
+
+    [TestMethod]
+    public void SceneReaderSkipsTheLayout()
+    {
+        var json = JsonSerializer.Serialize(CreateFile(), SceneFileJsonContext.Default.SceneFileData);
+
+        var data = JsonSerializer.Deserialize(json, SceneJsonContext.Default.SceneData)!;
+
+        _ = data.Id.Should().Be(Scene);
+        _ = data.RootNodes.Should().ContainSingle().Which.Id.Should().Be(Camera);
+    }
+
+    private static SceneFileData CreateFile() => new()
+    {
+        Id = Scene,
+        Name = "Main",
+        RootNodes = [new SceneNodeData { Id = Camera, Name = "Camera" }],
+        ExplorerLayout =
+        [
+            new ExplorerEntryData
+            {
+                Type = "Folder",
+                FolderId = Folder,
+                Name = "Cameras",
+                Children = [new ExplorerEntryData { NodeId = Camera }],
+            },
+        ],
+    };
+}

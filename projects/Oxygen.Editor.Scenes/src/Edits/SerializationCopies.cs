@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.Scenes.Edits;
@@ -26,5 +27,5 @@ internal static class SerializationCopies
     /// <param name="entry">The entry.</param>
     /// <returns>The copy.</returns>
     public static ExplorerEntryData Copy(ExplorerEntryData entry)
-        => JsonSerializer.Deserialize(JsonSerializer.SerializeToUtf8Bytes(entry, SceneJsonContext.Default.ExplorerEntryData), SceneJsonContext.Default.ExplorerEntryData)!;
+        => JsonSerializer.Deserialize(JsonSerializer.SerializeToUtf8Bytes(entry, SceneFileJsonContext.Default.ExplorerEntryData), SceneFileJsonContext.Default.ExplorerEntryData)!;
 }

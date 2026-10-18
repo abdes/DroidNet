@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets.Model;
@@ -34,18 +35,18 @@ public sealed partial class SceneDescriptorGeneratorTests
     public async Task AuthoredGeometryWithDefaultOverrideUsesCatalogMaterialPath(string materialName)
     {
         using var workspace = new DescriptorWorkspace();
-        var scene = CreateScene(workspace.Project);
-        var node = new Oxygen.Editor.World.SceneNode(scene) { Name = "Authored mesh" };
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Authored mesh" };
         var geometryUri = new Uri("asset:///Content/Geometry/Imported.ogeo");
-        var geometry = new Oxygen.Editor.World.GeometryComponent
+        var geometry = new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new Oxygen.Managed.Assets.Model.AssetReference<Oxygen.Managed.Assets.Model.GeometryAsset>(geometryUri),
+            Geometry = new AssetReference<GeometryAsset>(geometryUri),
         };
-        geometry.OverrideSlots.Add(new Oxygen.Editor.World.Slots.MaterialsSlot
+        geometry.OverrideSlots.Add(new MaterialsSlot
         {
             Target = new(geometryUri, Guid.NewGuid(), new string('a', 64)),
-            Material = new Oxygen.Managed.Assets.Model.AssetReference<Oxygen.Managed.Assets.Model.MaterialAsset>(AssetUris.BuildGeneratedUri("Materials/" + materialName)),
+            Material = new AssetReference<MaterialAsset>(AssetUris.BuildGeneratedUri("Materials/" + materialName)),
         });
         _ = node.AddComponent(geometry);
         scene.RootNodes.Add(node);
@@ -147,7 +148,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
         var transform = node.Components.OfType<TransformComponent>().Single();
         transform.LocalPosition = new Vector3(1.0f, 2.0f, 3.0f);
@@ -210,7 +211,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "TopDown" };
         _ = node.AddComponent(new OrthographicCamera
         {
@@ -260,7 +261,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         var parent = new SceneNode(scene)
         {
             Name = "Parent",
@@ -280,7 +281,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         };
         parent.AddChild(child);
         scene.RootNodes.Add(parent);
-        var savedScene = await RoundTripSavedSceneAsync(scene, workspace.Project).ConfigureAwait(false);
+        var savedScene = await RoundTripSavedSceneAsync(scene).ConfigureAwait(false);
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
         var result = await generator.GenerateAsync(savedScene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -312,7 +313,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Fixture", IsVisible = false, CastsShadows = true };
         _ = node.AddComponent(new GeometryComponent
         {
@@ -340,7 +341,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
         _ = node.AddComponent(new GeometryComponent
         {
@@ -400,7 +401,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         scene.RootNodes.Add(new SceneNode(scene) { Name = "Plain" });
         var foggy = new SceneNode(scene) { Name = "Foggy" };
         _ = foggy.AddComponent(new LocalFogVolumeComponent
@@ -433,7 +434,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
         _ = node.AddComponent(new GeometryComponent
         {
@@ -479,7 +480,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
         _ = node.AddComponent(new GeometryComponent
         {
@@ -511,7 +512,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "AuthoredMesh" };
         _ = node.AddComponent(new GeometryComponent
         {
@@ -538,7 +539,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
 
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -560,7 +561,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     public async Task GenerateAsyncEmitsNativeDefaultCapturedSkyLight(bool atmosphereEnabled)
     {
         using var workspace = new DescriptorWorkspace();
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         scene.RootNodes.Add(new SceneNode(scene) { Name = "Root" });
         scene.SetEnvironment(new SceneEnvironmentData { AtmosphereEnabled = atmosphereEnabled });
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
@@ -644,7 +645,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         scene.RootNodes.Add(new SceneNode(scene) { Name = "Root" });
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
         foreach (var toneMapper in Enum.GetValues<ToneMappingMode>())
@@ -658,7 +659,7 @@ public sealed partial class SceneDescriptorGeneratorTests
                     Background = new() { Enabled = true, ColorRgb = new Vector3(0.05f, 0.25f, 0.75f) },
                     PostProcess = authored,
                 });
-                var savedScene = await RoundTripSavedSceneAsync(scene, workspace.Project).ConfigureAwait(false);
+                var savedScene = await RoundTripSavedSceneAsync(scene).ConfigureAwait(false);
                 var result = await generator.GenerateAsync(savedScene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
                 _ = result.Diagnostics.Should().BeEmpty();
                 using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -701,7 +702,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         scene.RootNodes.Add(new SceneNode(scene) { Name = "Root" });
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
         var backdrop = new Uri("asset:///Content/Textures/Backdrop.otex.json");
@@ -713,7 +714,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             SkyLight = new() { Source = SkyLightSource.SpecifiedCubemap, Cubemap = light, CubemapIlluminanceLux = 8000f, SpecularIntensity = 0.25f, CubemapAngleRadians = -1f, LowerHemisphereIsSolidColor = false, AffectReflections = false },
         });
 
-        var result = await generator.GenerateAsync(await RoundTripSavedSceneAsync(scene, workspace.Project).ConfigureAwait(false), scope, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await generator.GenerateAsync(await RoundTripSavedSceneAsync(scene).ConfigureAwait(false), scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
         using (var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false)))
@@ -744,7 +745,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             SkySphere = scene.Environment.SkySphere with { Source = SkySphereSource.SolidColor },
             SkyLight = scene.Environment.SkyLight with { Source = SkyLightSource.CapturedScene },
         });
-        var unused = await generator.GenerateAsync(await RoundTripSavedSceneAsync(scene, workspace.Project).ConfigureAwait(false), scope, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var unused = await generator.GenerateAsync(await RoundTripSavedSceneAsync(scene).ConfigureAwait(false), scope, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = unused.Diagnostics.Should().BeEmpty();
         using var second = JsonDocument.Parse(await File.ReadAllTextAsync(unused.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var secondEnvironment = second.RootElement.GetProperty("environment");
@@ -758,7 +759,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             SkySphere = scene.Environment.SkySphere with { Enabled = false, Source = SkySphereSource.Cubemap, Cubemap = missing },
             SkyLight = scene.Environment.SkyLight with { Enabled = false, Source = SkyLightSource.SpecifiedCubemap, Cubemap = missing },
         });
-        var disabled = await generator.GenerateAsync(await RoundTripSavedSceneAsync(scene, workspace.Project).ConfigureAwait(false), scope, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var disabled = await generator.GenerateAsync(await RoundTripSavedSceneAsync(scene).ConfigureAwait(false), scope, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = disabled.Diagnostics.Should().BeEmpty();
         using var third = JsonDocument.Parse(await File.ReadAllTextAsync(disabled.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var thirdEnvironment = third.RootElement.GetProperty("environment");
@@ -777,7 +778,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         scene.SetEnvironment(scene.Environment with { SkyAtmosphere = new SkyAtmosphereEnvironmentData { AerialPerspectiveStartDepthMeters = value } });
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -802,7 +803,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         scene.RootNodes.Add(new SceneNode(scene) { Name = "Node" });
         scene.SetEnvironment(scene.Environment with { SkyAtmosphere = new SkyAtmosphereEnvironmentData { AerialPerspectiveStartDepthMeters = value } });
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
@@ -817,7 +818,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         scene.SetReferences(new SceneReferencesData
         {
             Scripts =
@@ -830,9 +831,9 @@ public sealed partial class SceneDescriptorGeneratorTests
             PhysicsSidecars = [new("asset:///Content/Physics/Main.opscene.json")],
             ExtraAssets = ["/.cooked/Extras/Z.bin", "/.cooked/Extras/A.bin", "/.cooked/Extras/A.bin"],
         });
-        var node = new Oxygen.Editor.World.SceneNode(scene) { Name = "Authored mesh" };
+        var node = new SceneNode(scene) { Name = "Authored mesh" };
         var geometryUri = new Uri("asset:///Content/Geometry/Imported.ogeo.json");
-        var geometry = new Oxygen.Editor.World.GeometryComponent
+        var geometry = new GeometryComponent
         {
             Name = "Geometry",
             Geometry = new AssetReference<GeometryAsset>(geometryUri),
@@ -845,7 +846,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(geometry);
         scene.RootNodes.Add(node);
 
-        var savedScene = await RoundTripSavedSceneAsync(scene, workspace.Project).ConfigureAwait(false);
+        var savedScene = await RoundTripSavedSceneAsync(scene).ConfigureAwait(false);
         _ = savedScene.References.Scripts.Should().Equal(scene.References.Scripts);
         _ = savedScene.References.PhysicsSidecars.Should().Equal(scene.References.PhysicsSidecars);
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
@@ -871,9 +872,9 @@ public sealed partial class SceneDescriptorGeneratorTests
     public async Task LegacySceneWithoutReferenceCollectionsLoadsAndRemainsUnchanged()
     {
         using var workspace = new DescriptorWorkspace();
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
 
-        var savedScene = await RoundTripSavedSceneAsync(scene, workspace.Project).ConfigureAwait(false);
+        var savedScene = await RoundTripSavedSceneAsync(scene).ConfigureAwait(false);
 
         _ = savedScene.References.IsEmpty.Should().BeTrue();
         _ = savedScene.Dehydrate().References.Should().BeNull();
@@ -883,7 +884,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     public async Task SceneReferenceWithWrongDescriptorExtensionFailsGeneration()
     {
         using var workspace = new DescriptorWorkspace();
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         scene.SetReferences(new SceneReferencesData
         {
             Scripts = [new("asset:///Content/Scripts/NotAScript.omat.json")],
@@ -903,7 +904,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     public async Task SceneReferenceWithNonCanonicalExtraPathFailsGeneration(string path)
     {
         using var workspace = new DescriptorWorkspace();
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         scene.SetReferences(new SceneReferencesData { ExtraAssets = [path] });
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
 
@@ -920,7 +921,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     public async Task SceneReferenceWithNonCanonicalAssetUriFailsGeneration(string reference)
     {
         using var workspace = new DescriptorWorkspace();
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         scene.SetReferences(new SceneReferencesData { Scripts = [new Uri(reference, UriKind.RelativeOrAbsolute)] });
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
 
@@ -930,9 +931,9 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = File.Exists(result.DescriptorPath).Should().BeFalse();
     }
 
-    private static Scene CreateScene(IProject project)
+    private static Scene CreateScene()
     {
-        var scene = new Scene(project)
+        var scene = new Scene
         {
             Name = "Main",
             Id = SceneId.FromValue(new Guid(0x10000000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)),
@@ -1023,14 +1024,13 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = light.GetProperty("common").GetProperty("shadow").GetProperty("normal_bias").GetSingle().Should().Be(0.04f);
     }
 
-    private static async Task<Scene> RoundTripSavedSceneAsync(Scene scene, IProject project)
+    private static async Task<Scene> RoundTripSavedSceneAsync(Scene scene)
     {
         var stream = new MemoryStream();
         await using var lifetime = stream.ConfigureAwait(false);
-        var serializer = new SceneSerializer(project);
-        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
+        await SceneSerializer.SerializeAsync(stream, scene).ConfigureAwait(false);
         stream.Position = 0;
-        return await serializer.DeserializeAsync(stream).ConfigureAwait(false);
+        return await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
     }
 
     private sealed partial class DescriptorWorkspace : IDisposable
@@ -1043,7 +1043,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             {
                 AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             };
-            this.Project = new Project(projectInfo) { Name = "TestProject" };
+            this.Project = new Project(projectInfo);
         }
 
         public string Root { get; }

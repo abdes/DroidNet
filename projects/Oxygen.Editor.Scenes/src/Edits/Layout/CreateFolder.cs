@@ -4,8 +4,7 @@
 
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
-using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Layout;
@@ -27,7 +26,7 @@ public sealed record CreateFolder(FolderId Folder, LayoutPosition At, string Nam
     SceneEditValidation ISceneEdit.Validate(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var layout = scope.Scene.ExplorerLayout ?? [];
+        var layout = scope.Layout;
         if (scope.CheckScope(SceneLayout.ScopeOf(layout, this.At).Scope) is { IsValid: false } refused)
         {
             return refused;
@@ -43,7 +42,7 @@ public sealed record CreateFolder(FolderId Folder, LayoutPosition At, string Nam
     SceneEditApplication ISceneEdit.Apply(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var layout = SceneLayout.Of(scope.Scene);
+        var layout = scope.Layout;
         SceneLayout.RequireContainer(layout, this.At).Insert(
             this.At.Index,
             new ExplorerEntryData { Type = SceneLayout.FolderType, FolderId = this.Folder, Name = this.Name.Trim(), IsExpanded = this.IsExpanded, Children = [] });

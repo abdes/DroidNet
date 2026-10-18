@@ -97,7 +97,7 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
 
     private async Task<ProjectValidationResult?> ValidateContentRootsAsync(
         string projectRoot,
-        Oxygen.Editor.World.IProjectInfo projectInfo,
+        Oxygen.Editor.Projects.IProjectInfo projectInfo,
         CancellationToken cancellationToken)
     {
         try
@@ -126,7 +126,7 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
 
     private async Task<ProjectValidationResult?> ValidateAuthoringMountsAsync(
         string projectRoot,
-        Oxygen.Editor.World.IProjectInfo projectInfo,
+        Oxygen.Editor.Projects.IProjectInfo projectInfo,
         CancellationToken cancellationToken)
     {
         foreach (var mount in projectInfo.AuthoringMounts)
@@ -169,7 +169,7 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
 
     private async Task<ProjectValidationResult?> ValidateLocalFolderMountsAsync(
         string projectRoot,
-        Oxygen.Editor.World.IProjectInfo projectInfo,
+        Oxygen.Editor.Projects.IProjectInfo projectInfo,
         CancellationToken cancellationToken)
     {
         foreach (var mount in projectInfo.LocalFolderMounts)

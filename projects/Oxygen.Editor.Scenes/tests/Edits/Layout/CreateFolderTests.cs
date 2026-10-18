@@ -6,8 +6,8 @@ using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
-using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits.Layout;
@@ -36,13 +36,13 @@ public sealed class CreateFolderTests
         ArgumentNullException.ThrowIfNull(at);
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var folder = FolderId.New();
-        var entriesBefore = LayoutQuery.EntryCount(fixture.Scene);
+        var entriesBefore = LayoutQuery.EntryCount(fixture.Layout);
 
         var result = await fixture.Authoring.ExecuteAsync(new CreateFolder(folder, at, "New")).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(folder)).Should().Be(at);
-        _ = LayoutQuery.EntryCount(fixture.Scene).Should().Be(entriesBefore + 1);
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(folder)).Should().Be(at);
+        _ = LayoutQuery.EntryCount(fixture.Layout).Should().Be(entriesBefore + 1);
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.LayoutChanged());
     }
 
@@ -55,7 +55,7 @@ public sealed class CreateFolderTests
         var result = await fixture.Authoring.ExecuteAsync(new CreateFolder(folder, LayoutPosition.AtRoot(0), " New ")).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutQuery.Folder(fixture.Scene, folder)!.Name.Should().Be("New");
+        _ = LayoutQuery.Folder(fixture.Layout, folder)!.Name.Should().Be("New");
     }
 
     [TestMethod]
@@ -130,15 +130,15 @@ public sealed class CreateFolderTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build() with { ExplorerLayout = null }).ConfigureAwait(false);
         var before = fixture.Snapshot();
         var folder = FolderId.New();
-        var roots = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0));
+        var roots = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0));
 
         var result = await fixture.Authoring.ExecuteAsync(new CreateFolder(folder, LayoutPosition.AtRoot(0), "New")).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0)).Should().Equal(roots.Prepend(LayoutEntryId.Of(folder)));
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0)).Should().Equal(roots.Prepend(LayoutEntryId.Of(folder)));
 
         SceneAssert.Applied(await fixture.Authoring.UndoAsync().ConfigureAwait(false));
         _ = fixture.Snapshot().Document.Should().Be(before.Document);
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(folder)).Should().BeNull();
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(folder)).Should().BeNull();
     }
 }

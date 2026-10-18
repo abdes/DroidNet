@@ -53,7 +53,7 @@ public sealed class TransitiveLibraryTests
             LocalFolderMounts = materialLibraryMounted
                 ? [new("Materials", await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false)), new("Meshes", library.CookedRoot("Content"))]
                 : [new("Meshes", library.CookedRoot("Content"))],
-            CookedContentOrder = projectWins ? [] : [new(Oxygen.Editor.World.CookedContentSourceKind.ProjectOutput), new(Oxygen.Editor.World.CookedContentSourceKind.LocalFolder, "Materials"), new(Oxygen.Editor.World.CookedContentSourceKind.LocalFolder, "Meshes")],
+            CookedContentOrder = projectWins ? [] : [new(Oxygen.Editor.Projects.CookedContentSourceKind.ProjectOutput), new(Oxygen.Editor.Projects.CookedContentSourceKind.LocalFolder, "Materials"), new(Oxygen.Editor.Projects.CookedContentSourceKind.LocalFolder, "Meshes")],
         };
         consumer.Activate(context);
         AddGeometryNode(consumer, new("asset:///Content/Geometry/AuthoredCube.ogeo"), "Library mesh");

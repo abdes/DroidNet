@@ -8,7 +8,7 @@ using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
@@ -176,21 +176,9 @@ internal sealed partial class CookSourceAnalyzer(
             var sourcePath = snapshot is null ? input.SourceAbsolutePath : Path.Combine(snapshot.InputRoot, input.SourceRelativePath);
             var bytes = await CookSavedSourceReader.ReadAsync(documents, sourcePath, cancellationToken).ConfigureAwait(false);
             managed.Add(new(input.AssetUri, input.SourceAbsolutePath, input.SourceRelativePath, Convert.ToHexString(SHA256.HashData(bytes))));
-            var project = new Project(new ProjectInfo(
-                operation.Project.ProjectId,
-                operation.Project.Name,
-                operation.Project.Category,
-                operation.Project.ProjectRoot,
-                operation.Project.Thumbnail)
-            {
-                AuthoringMounts = [.. operation.Project.AuthoringMounts],
-                LocalFolderMounts = [.. operation.Project.LocalFolderMounts],
-            })
-            { Name = operation.Project.Name };
-
             var stream = new MemoryStream(bytes, writable: false);
             await using var lifetime = stream.ConfigureAwait(false);
-            var scene = await new SceneSerializer(project).DeserializeAsync(stream).ConfigureAwait(false);
+            var scene = await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
 
             // A scene's name is its file name, whatever the file says; a scene a relocation renamed keeps its old name
             // inside the file until it is saved again.

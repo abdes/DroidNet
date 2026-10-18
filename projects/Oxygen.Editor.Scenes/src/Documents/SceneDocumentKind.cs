@@ -5,21 +5,22 @@
 using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Documents;
 
 /// <summary>The scene document kind: opens <c>.oscene.json</c> files as scenes of a project.</summary>
-/// <param name="project">The project that every scene this kind decodes belongs to.</param>
+/// <param name="project">The project that every scene this kind decodes is opened in.</param>
 /// <param name="interaction">The nodes hidden and locked in the editor, if the editor keeps them.</param>
 /// <param name="redirects">The session's asset renames and moves, if the editor tracks them.</param>
 public sealed class SceneDocumentKind(
-    IProject project,
+    ProjectContext project,
     ISceneNodeInteraction? interaction = null,
     IAssetRedirects? redirects = null) : IDocumentKind
 {
@@ -39,12 +40,13 @@ public sealed class SceneDocumentKind(
         ArgumentNullException.ThrowIfNull(file);
         ArgumentNullException.ThrowIfNull(context);
 
-        Scene scene;
+        SceneFileData data;
         try
         {
             var stream = new MemoryStream(content.ToArray(), writable: false);
             await using var lifetime = stream.ConfigureAwait(true);
-            scene = await new SceneSerializer(project).DeserializeAsync(stream).ConfigureAwait(true);
+            data = await JsonSerializer.DeserializeAsync(stream, SceneFileJsonContext.Default.SceneFileData, cancellationToken).ConfigureAwait(true)
+                ?? throw new JsonException("The file holds no scene.");
         }
         catch (JsonException exception)
         {
@@ -52,13 +54,15 @@ public sealed class SceneDocumentKind(
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        var scene = Scene.CreateAndHydrate(data);
+        var layout = data.ExplorerLayout ?? [];
         var nodeIds = new HashSet<NodeId>();
         if (scene.AllNodes.Any(node => node.Id.IsEmpty || !nodeIds.Add(node.Id)))
         {
             return DocumentDecodeResult.Failed($"'{Path.GetFileName(file.Path)}' has nodes with missing or duplicate identities.");
         }
 
-        if (!IsLayoutValid(scene.ExplorerLayout, nodeIds, [], []))
+        if (!IsLayoutValid(layout, nodeIds, [], []))
         {
             return DocumentDecodeResult.Failed($"'{Path.GetFileName(file.Path)}' has an explorer layout with duplicate or foreign identities.");
         }
@@ -66,8 +70,8 @@ public sealed class SceneDocumentKind(
         scene.Name = SceneContent.NameOf(file.Path);
 
         // Every node gets an explorer entry now, so edits always find one and their reverts restore it exactly.
-        SceneLayout.Complete(scene);
-        return DocumentDecodeResult.Decoded(new SceneContent(scene, context, interaction, redirects));
+        SceneLayout.Complete(scene, layout);
+        return DocumentDecodeResult.Decoded(new SceneContent(scene, layout, project, context, interaction, redirects));
     }
 
     private static bool IsLayoutValid(IEnumerable<ExplorerEntryData>? entries, HashSet<NodeId> nodeIds, HashSet<FolderId> folderIds, HashSet<NodeId> layoutNodeIds)

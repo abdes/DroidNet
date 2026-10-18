@@ -5,7 +5,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Oxygen.Editor.World.Utils;
+namespace Oxygen.Editor.Projects;
 
 /// <summary>
 /// A custom JSON converter for <see cref="Category"/>.

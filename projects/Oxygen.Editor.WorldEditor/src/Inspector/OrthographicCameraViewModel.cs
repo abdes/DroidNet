@@ -7,6 +7,7 @@ using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Managed.Core;
+using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.World.Inspector;
 

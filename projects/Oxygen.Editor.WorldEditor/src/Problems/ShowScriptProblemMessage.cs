@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 
-using Oxygen.Editor.World.Scripting;
+
+using Oxygen.Editor.Scripting;
 
 namespace Oxygen.Editor.World.Problems;
 

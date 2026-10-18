@@ -5,6 +5,7 @@
 using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
 using Oxygen.Editor.ContentBrowser.Scripts;
+using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Problems;
 using Oxygen.Editor.World.Scripting;
 
@@ -41,7 +42,7 @@ public partial class WorkspaceViewModel
     }
 
     // A script slot's badge brings Problems forward at its problem; saves do not, so the code editor keeps focus.
-    private void ShowProblem(Scripting.ScriptProblem problem)
+    private void ShowProblem(ScriptProblem problem)
     {
         _ = this.problems?.Select(problem);
         if (DroidNet.Docking.Dockable.FromId(ProblemsDockId) is { } dock)

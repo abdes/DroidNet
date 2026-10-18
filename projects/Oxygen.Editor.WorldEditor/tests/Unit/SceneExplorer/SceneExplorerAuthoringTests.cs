@@ -11,6 +11,7 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer;
@@ -44,7 +45,7 @@ public sealed partial class SceneExplorerAuthoringTests
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         await explorer.CreateFolderCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
 
-        _ = scene.ExplorerLayout.Should().ContainSingle(entry => entry.FolderId != null && entry.Name == "New Folder");
+        _ = harness.Layout.Should().ContainSingle(entry => entry.FolderId != null && entry.Name == "New Folder");
         _ = harness.History.UndoStack.Should().ContainSingle();
     }
 
@@ -52,7 +53,7 @@ public sealed partial class SceneExplorerAuthoringTests
     public void RenameSceneRoot_AdapterPublishesLabelChangesUntilDetached()
     {
         using var harness = new AuthoringHarness(out var scene, out _);
-        var adapter = new SceneAdapter(scene);
+        var adapter = new SceneAdapter(scene, harness.Layout);
         var notifications = new List<string?>();
         adapter.PropertyChanged += (_, args) => notifications.Add(args.PropertyName);
 
@@ -102,12 +103,11 @@ public sealed partial class SceneExplorerAuthoringTests
     [TestMethod]
     public void BuildSelectionContext_ClassifiesRowKindsAndPrimary()
     {
-        var project = new Project(new ProjectInfo("Sel", Category.Games, "H:/SelTests", "preview.png")) { Name = "Sel" };
-        var scene = new Scene(project) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Node" };
         var nodeAdapter = new SceneNodeAdapter(node);
         var folderAdapter = new FolderAdapter(FolderId.New(), "Folder");
-        var sceneAdapter = new SceneAdapter(scene) { IsRoot = true };
+        var sceneAdapter = new SceneAdapter(scene, []) { IsRoot = true };
 
         _ = SceneExplorerViewModel.BuildSelectionContext([nodeAdapter]).Kind.Should().Be(SceneSelectionKind.Node);
         _ = SceneExplorerViewModel.BuildSelectionContext([folderAdapter]).Kind.Should().Be(SceneSelectionKind.Folder);
@@ -146,8 +146,8 @@ public sealed partial class SceneExplorerAuthoringTests
 
         public AuthoringHarness(out Scene scene, out SceneNode node)
         {
-            var project = new Project(new ProjectInfo("Authoring", Category.Games, "H:/AuthoringTreeTests", "preview.png")) { Name = "Authoring" };
-            var built = new Scene(project) { Name = "Scene" };
+            var project = new Project(new ProjectInfo("Authoring", Category.Games, "H:/AuthoringTreeTests", "preview.png"));
+            var built = new Scene { Name = "Scene" };
             var builtNode = new SceneNode(built) { Name = "Node" };
             built.RootNodes.Add(builtNode);
 
@@ -174,6 +174,9 @@ public sealed partial class SceneExplorerAuthoringTests
         /// <summary>Gets the history of the harness's first scene.</summary>
         public HistoryKeeper History => this.openDocuments[0].Document.History;
 
+        /// <summary>Gets the explorer layout of the harness's first scene.</summary>
+        public IList<ExplorerEntryData> Layout => this.openDocuments[0].Layout;
+
         public void Dispose()
         {
             foreach (var tab in this.openDocuments)
@@ -184,7 +187,7 @@ public sealed partial class SceneExplorerAuthoringTests
 
         public Scene AddScene(string name)
         {
-            var added = new Scene(this.scene.Project) { Name = name };
+            var added = new Scene { Name = name };
             var metadata = SceneTabs.Open(added);
             added = metadata.Scene;
             this.openDocuments.Add(metadata);

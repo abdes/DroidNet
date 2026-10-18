@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Controls;
-using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;
@@ -113,7 +113,7 @@ public sealed class SceneExplorerProjection
             }
         }
 
-        this.RebuildLayoutDomain(sceneAdapter.AttachedObject.ExplorerLayout);
+        this.RebuildLayoutDomain(sceneAdapter.Layout);
     }
 
     /// <summary>Clears both indexes, the authored layout domain and detaches all tracked adapters.</summary>

@@ -13,7 +13,7 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Player;
 using Oxygen.Editor.Scenes.Documents;
-using Oxygen.Editor.World.Scripting;
+using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;

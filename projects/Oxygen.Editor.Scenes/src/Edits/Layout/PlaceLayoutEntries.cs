@@ -33,7 +33,7 @@ public sealed record PlaceLayoutEntries : ISceneEdit
     SceneEditValidation ISceneEdit.Validate(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var layout = scope.Scene.ExplorerLayout ?? [];
+        var layout = scope.Layout;
         var moved = this.Places.Select(static place => place.Entry).ToHashSet();
         foreach (var place in this.Places)
         {
@@ -56,7 +56,7 @@ public sealed record PlaceLayoutEntries : ISceneEdit
     SceneEditApplication ISceneEdit.Apply(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var layout = SceneLayout.Of(scope.Scene);
+        var layout = scope.Layout;
         var before = this.Places.Select(place => place with { At = SceneLayout.PositionOf(layout, place.Entry)! }).ToArray();
         SceneLayout.Place(layout, [.. this.Places.Select(place => (SceneLayout.Find(layout, place.Entry)!.Value.Entry, place.At))]);
 

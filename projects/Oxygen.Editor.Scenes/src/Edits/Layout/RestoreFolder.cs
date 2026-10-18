@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
-using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Layout;
@@ -48,7 +48,7 @@ public sealed record RestoreFolder : ISceneEdit
     SceneEditValidation ISceneEdit.Validate(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var layout = scope.Scene.ExplorerLayout ?? [];
+        var layout = scope.Layout;
         if (scope.CheckScope(SceneLayout.ScopeOf(layout, this.At).Scope) is { IsValid: false } refused)
         {
             return refused;
@@ -71,7 +71,7 @@ public sealed record RestoreFolder : ISceneEdit
     SceneEditApplication ISceneEdit.Apply(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var layout = SceneLayout.Of(scope.Scene);
+        var layout = scope.Layout;
         var container = SceneLayout.RequireContainer(layout, this.At);
         var folder = SerializationCopies.Copy(this.Entry) with { Children = [] };
         for (var i = 0; i < this.Children.Count; i++)

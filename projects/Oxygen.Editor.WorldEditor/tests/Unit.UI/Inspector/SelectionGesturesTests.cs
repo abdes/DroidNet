@@ -9,6 +9,7 @@ using DroidNet.Controls;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.TestSupport;

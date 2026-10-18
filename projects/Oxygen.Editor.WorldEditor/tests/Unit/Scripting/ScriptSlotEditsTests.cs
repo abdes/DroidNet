@@ -5,7 +5,7 @@
 using System.Collections.Immutable;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentBrowser.Scripts;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Scripting;
 using Oxygen.Managed.Core;
 

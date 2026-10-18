@@ -10,6 +10,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\src\Oxygen.Editor.ProjectBrowser.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.World\src\Oxygen.Editor.World.csproj" />
     </ItemGroup>
 
     <ItemGroup>

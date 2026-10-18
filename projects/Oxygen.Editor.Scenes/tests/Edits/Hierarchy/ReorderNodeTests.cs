@@ -7,6 +7,7 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
@@ -30,8 +31,8 @@ public sealed class ReorderNodeTests
 
         SceneAssert.Applied(result);
         _ = fixture.Node(SampleScene.A).Children.Select(static node => node.Id).Should().Equal(SampleScene.A2, SampleScene.A1);
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.UnderNode(SampleScene.A, 0)).Should().StartWith(LayoutEntryId.Of(SampleScene.A2));
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.A2)).Should().Be(LayoutPosition.UnderNode(SampleScene.A, 0));
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.UnderNode(SampleScene.A, 0)).Should().StartWith(LayoutEntryId.Of(SampleScene.A2));
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.A2)).Should().Be(LayoutPosition.UnderNode(SampleScene.A, 0));
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.NodesPlaced([SampleScene.A2]), new SceneChange.LayoutChanged());
     }
 
@@ -107,7 +108,7 @@ public sealed class ReorderNodeTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var siblings = fixture.Node(SampleScene.A).Children.Count;
-        var entries = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.UnderNode(SampleScene.A, 0)).Count;
+        var entries = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.UnderNode(SampleScene.A, 0)).Count;
         var count = inLayout ? entries : siblings;
         var bad = offsetFromCount < 0 ? offsetFromCount : count + offsetFromCount;
         var edit = new ReorderNode(

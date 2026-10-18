@@ -8,6 +8,7 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
@@ -47,7 +48,7 @@ public sealed class InsertNodesTests
         var inserted = fixture.Node(node.Id);
         _ = (inserted.Parent?.Id).Should().Be(row.Parent);
         _ = SiblingsOf(fixture, row.Parent).IndexOf(inserted).Should().Be(at.Index);
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(node.Id)).Should().Be(layout);
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(node.Id)).Should().Be(layout);
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.NodesAdded([node.Id]), new SceneChange.LayoutChanged());
     }
 
@@ -104,7 +105,7 @@ public sealed class InsertNodesTests
         var insert = new NodeInsert(
             NewNode("New"),
             new NodePosition(SampleScene.A, fixture.Node(SampleScene.A).Children.Count),
-            LayoutPosition.UnderNode(SampleScene.A, LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.UnderNode(SampleScene.A, 0)).Count));
+            LayoutPosition.UnderNode(SampleScene.A, LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.UnderNode(SampleScene.A, 0)).Count));
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(new InsertNodes([insert])).ConfigureAwait(false);
@@ -153,11 +154,11 @@ public sealed class InsertNodesTests
         var result = await fixture.Authoring.ExecuteAsync(new InsertNodes([insert])).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        var folder = LayoutQuery.Folder(fixture.Scene, nested);
+        var folder = LayoutQuery.Folder(fixture.Layout, nested);
         _ = folder.Should().NotBeNull();
         _ = folder!.Name.Should().Be("Nested");
         _ = folder.IsExpanded.Should().BeFalse();
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(nested)).Should().Be(LayoutPosition.UnderNode(node.Id, 0));
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(nested)).Should().Be(LayoutPosition.UnderNode(node.Id, 0));
     }
 
     [TestMethod]
@@ -216,7 +217,7 @@ public sealed class InsertNodesTests
     private static NodePosition RootEndAt(AuthoringFixture fixture) => new(Parent: null, fixture.Scene.RootNodes.Count);
 
     private static LayoutPosition RootEndLayout(AuthoringFixture fixture)
-        => LayoutPosition.AtRoot(LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0)).Count);
+        => LayoutPosition.AtRoot(LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0)).Count);
 
     private static ObservableCollection<SceneNode> SiblingsOf(AuthoringFixture fixture, NodeId? parent)
         => parent is { } id ? fixture.Node(id).Children : fixture.Scene.RootNodes;
@@ -229,6 +230,6 @@ public sealed class InsertNodesTests
         var container = row.Folder is { } folder
             ? LayoutPosition.InFolder(folder, 0)
             : row.Parent is { } node ? LayoutPosition.UnderNode(node, 0) : LayoutPosition.AtRoot(0);
-        return container with { Index = row.AtStart ? 0 : LayoutScopes.EntriesOf(fixture.Scene, container).Count };
+        return container with { Index = row.AtStart ? 0 : LayoutScopes.EntriesOf(fixture.Layout, container).Count };
     }
 }

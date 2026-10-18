@@ -4,7 +4,7 @@
 
 using System.Numerics;
 using System.Text.Json;
-using Oxygen.Editor.World;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -115,7 +115,7 @@ public static class SampleScene
     /// Builds a new copy of the sample scene's data.
     /// </summary>
     /// <returns>The scene data.</returns>
-    public static SceneData Build() => Builder().Build();
+    public static SceneFileData Build() => Builder().Build();
 
     /// <summary>
     /// Gets a builder that holds the sample scene, for a test that needs a variant of it.

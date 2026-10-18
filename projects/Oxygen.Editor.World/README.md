@@ -1,57 +1,71 @@
 # Oxygen.Editor.World
 
-## Overview
+The editor's scene model: a scene, its node hierarchy, the components on each
+node, the override slots, and the data records a scene file is written as. It
+has no UI, no engine and no file system: it can be built, edited, saved and
+compared in memory, in a unit test, without a viewport.
 
-**Oxygen.Editor.World** is the domain model for game world entities in Oxygen Editor. It defines scenes, hierarchical nodes, and extensible component-based entities, supporting property change notification and robust JSON serialization.
+A scene does not know where it is stored, which project opened it or how the
+Scene Explorer arranges it. Whoever holds the scene knows that.
 
-**Key attributes:**
+**At a glance**
 
-- Managed scene authoring model with no direct WinUI or native interop project reference
-- In-memory authoring state with observable properties and stream-based JSON serialization
+- **Scene → nodes → components.** A scene holds a tree of nodes; every node has
+  a transform and any other components.
+- **Override slots** replace default values on a node, a geometry, or one LOD or
+  submesh of it.
+- **Data records are the file format.** The model dehydrates to records and
+  hydrates from them; JSON only ever sees the records.
+- **Edits live elsewhere.** `Oxygen.Editor.Scenes` changes open scenes, with
+  undo, dirty state and change notifications.
 
-### Authoring boundary
+## Where it sits
 
-[Oxygen.Editor.World.csproj](src/Oxygen.Editor.World.csproj) depends on managed
-asset/core utilities and resources, while UI, document history, and runtime
-orchestration belong to their respective modules. This separation lets scene
-data and serialization be exercised without creating a viewport or engine
-context.
+World is at the bottom of the editor's scene stack. The modules above it read
+and change the model; World knows none of them.
 
-The model remains the authoring source of truth; the live engine is a projection
-of it. [SceneSerializer](src/Serialization/SceneSerializer.cs) handles the data
-format, while project/document services own file locations and durable saves.
-The [scene command service](../Oxygen.Editor.WorldEditor/src/Documents/Commands/SceneDocumentCommandService.cs)
-coordinates authoring edits, history, dirty state, and sync intent. Property
-notifications or direct model mutation alone do not establish those guarantees.
+```mermaid
+flowchart BT
+    core["Oxygen.Managed.Core<br/>identities, observable base"]
+    assets["Oxygen.Managed.Assets<br/>asset references"]
+    world["<b>Oxygen.Editor.World</b><br/>scene model"]
+    scenes["Oxygen.Editor.Scenes<br/>documents, edits, layout"]
+    cook["Oxygen.Editor.ContentPipeline<br/>cooking"]
+    preview["Oxygen.Editor.LivePreview<br/>engine preview"]
+    ui["Oxygen.Editor.WorldEditor<br/>Explorer, inspector, viewport"]
 
-Preserve this boundary when adding components. The owning contract is the
-[editor architecture](../../design/editor/ARCHITECTURE.md); end-to-end feature
-and validation requirements are in
-[documents and commands](../../design/editor/lld/documents-and-commands.md).
+    core --> world
+    assets --> world
+    world --> scenes
+    world --> cook
+    world --> preview
+    scenes --> ui
+    preview --> ui
 
-## Purpose
+    classDef focus stroke-width:3px
+    class world focus
+```
 
-This module provides:
+| Concern                                                                | Module                                                 |
+| ---------------------------------------------------------------------- | ------------------------------------------------------ |
+| Projects, mount points and project settings                            | `Oxygen.Editor.Projects`                               |
+| Scene documents, edits, undo, dirty state, Explorer folders and layout | `Oxygen.Editor.Scenes`                                 |
+| Cooking scenes into engine descriptors                                 | `Oxygen.Editor.ContentPipeline`                        |
+| Showing a scene in the engine while it is edited                       | `Oxygen.Editor.LivePreview`                            |
+| Script problems; script analysis and tooling                           | `Oxygen.Editor.Scripting`, `Oxygen.Editor.WorldEditor` |
+| Scene Explorer, inspector and viewport UI                              | `Oxygen.Editor.WorldEditor`                            |
 
-- **World Entities:** Scene, SceneNode, Transform, and extensible component hierarchy
-- **Hierarchical Composition:** Parent-child trees of nodes, with circular reference protection
-- **Component Pattern:** Extensible, polymorphic components (Transform, Geometry, Camera, etc.)
-- **Property Overrides via Slots:** Flexible override system using slots, supporting global, component-level, and targeted overrides (e.g., per LOD/submesh)
-- **Observability:** `INotifyPropertyChanged` for UI/data binding and runtime sync
-- **Serialization:** JSON-based, with type discriminators and round-trip support
+## Source layout
 
-## Technology Stack
+| Folder               | Contents                                                                                                                                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/` (root)        | `Scene`, `SceneNode`, their `GameObject` base, `SceneNodeFlags`, the hierarchy queries in `SceneNodeExtensions`, `IPersistent<TData>` and `OverridableProperty<T>`                             |
+| `src/Components/`    | The components a node carries: transform, geometry, perspective and orthographic cameras, directional, point and spot lights, local fog volume and scripting, plus `LightValidation`           |
+| `src/Slots/`         | The override slots (`RenderingSlot`, `LightingSlot`, `MaterialsSlot`, `LevelOfDetailSlot`) and the LOD policies                                                                                |
+| `src/Serialization/` | The data records a scene is written as (`SceneData`, `SceneNodeData`, one record per component and slot), the source-generated `SceneJsonContext` and `SceneSerializer`; see its [README][ser] |
+| `src/Utils/`         | The vector and quaternion JSON converters, `TransformConverter` (engine transform and Euler-angle conversions) and `SceneTraversal`                                                            |
 
-| Technology | Version | Purpose |
-| --- | --- | --- |
-| .NET | 9.0 (Windows 10.0.26100.0) | Target framework |
-| C# | 13 (preview, nullable enabled) | Language |
-| Microsoft.Extensions.Logging | Latest | Logging abstractions |
-| System.Numerics | Built-in | Vector3 for Transform |
-
-## Architecture
-
-### Domain Model Structure
+## The model
 
 ```mermaid
 ---
@@ -60,470 +74,401 @@ config:
     hideEmptyMembersBox: true
 ---
 classDiagram
+    direction TB
+
     class GameObject {
+        <<abstract>>
+        Name
+        OverrideSlots
+    }
+    class Scene {
+        SceneId Id
+        RootNodes
+        Environment
+        References
+        StartingCamera
+        StartingInputContexts
+    }
+    class SceneNode {
+        NodeId Id
+        Parent
+        Children
+        Components
+        IsActive
+        Flags
+    }
+    class GameComponent {
+        <<abstract>>
+        ComponentId Id
+        Name
+        Node
+    }
+    class OverrideSlot {
         <<abstract>>
     }
 
-    class Scene {
-        <<root container>>
-    }
-
-    class SceneNode {
-        <<hierarchy node>>
-    }
-
-    class GameComponent {
-        <<component base>>
-    }
-
-    class Transform {
-        <<spatial data>>
-    }
-
-    class GeometryComponent
-    class CameraComponent
-    class OrthographicCamera
-    class PerspectiveCamera
-
     GameObject <|-- Scene
     GameObject <|-- SceneNode
-    GameComponent <|-- Transform
-    GameComponent <|-- GeometryComponent
-    GameComponent <|-- CameraComponent
-    CameraComponent <|-- OrthographicCamera
-    CameraComponent <|-- PerspectiveCamera
-
-    Scene "1" --> "many" SceneNode : contains
-    SceneNode "1" --> "many" GameComponent : has
-    SceneNode --> SceneNode : children
+    Scene "1" *-- "*" SceneNode : RootNodes
+    SceneNode "1" *-- "*" SceneNode : Children
+    SceneNode "1" *-- "1..*" GameComponent : Components
+    GameObject "1" *-- "*" OverrideSlot : OverrideSlots
 ```
 
-### Key Classes
-
-| Class | Purpose | Features |
-| --- | --- | --- |
-| `GameObject` | Base for all entities | `INotifyPropertyChanged`, `Id`, `Name`, validation, override slots |
-| `Scene` | Root container | RootNodes, AllNodes, project reference, JSON |
-| `SceneNode` | Hierarchical entity | Components, flags, parent/child, override slots, circular protection |
-| `GameComponent` | Base for components | `INotifyPropertyChanged`, Node reference, polymorphic serialization, override slots |
-| `Transform` | Spatial component | LocalPosition, LocalRotation, LocalScale |
-| `GeometryComponent` | Geometry asset reference | AssetReference, targeted overrides |
-| `CameraComponent` | Camera base | Near/Far plane, concrete types |
-| `OrthographicCamera` | Orthographic camera | OrthographicSize, Near/Far plane |
-| `PerspectiveCamera` | Perspective camera | FieldOfView, AspectRatio, Near/Far plane |
-| `Category` | Project categorization | Enum-style, not for nodes/entities |
-
-## Core Concepts
-
-### GameObject Base Class
-
-All entities inherit from `GameObject`:
-
-- Unique `Guid Id` (init-only)
-- Observable properties: `INotifyPropertyChanged` + `INotifyPropertyChanging`
-- Name validation: required, non-empty string
-- Override slots: for property overrides (global/component/targeted)
-
-### Scene Hierarchy
-
-```text
-Scene
-├── SceneNode ("Player")
-│   ├── Transform
-│   ├── GeometryComponent
-│   └── CameraComponent
-├── SceneNode ("Enemy")
-│   ├── Transform
-│   └── SceneNode ("Weapon")
-│       └── Transform
-└── SceneNode ("Camera")
-    └── OrthographicCamera
-```
-
-- `Scene.RootNodes`: Collection of root-level nodes
-- `Scene.AllNodes`: Flattened node tree
-- `SceneNode.Components`: Always includes Transform; supports others
-- `SceneNode.Flags`: Compact enum for visibility, shadow, selection, static, etc.
-- Parent/child relationships, circular reference protection
-
-### Component System
-
-- Entity-Component pattern: each `SceneNode` has a collection of `GameComponent`
-- **Transform** is mandatory
-- Components are polymorphic (`[JsonDerivedType]`), registered for serialization
-- Components reference their owning node
-- Override slots: component-level and targeted (e.g., for geometry LODs/submeshes)
-
-#### Extensibility
-
-Add new components by subclassing `GameComponent` and registering with serializer:
-
-```csharp
-public partial class MeshRenderer : GameComponent
-{
-    public string MeshPath { get; set; } = string.Empty;
-    // Register in static constructor
-}
-```
-
-Register:
-
-```csharp
-[JsonDerivedType(typeof(MeshRenderer), "MeshRenderer")]
-public abstract partial class GameComponent : ScopedObservableObject, INamed, IPersistent<ComponentData>
-```
-
-Add to node:
-
-```csharp
-node.Components.Add(new MeshRenderer { MeshPath = "models/character.glb" });
-```
-
-### Property Change Notifications
-
-- All domain objects implement `INotifyPropertyChanged`
-- Used for UI binding, runtime sync, dirty tracking
-
-```csharp
-private Vector3 localPosition;
-public Vector3 LocalPosition
-{
-    get => this.localPosition;
-    set => _ = this.SetProperty(ref this.localPosition, value);
-}
-```
-
-### Slots System
-
-The Slots system provides a flexible, extensible mechanism for property overrides at multiple levels of the world model. Slots are observable containers for overridable properties, enabling fine-grained control over rendering, materials, LOD, and lighting.
-
-| Concept | Description |
-| --- | --- |
-| **`OverrideSlot`** | Abstract base for all slot types. Supports property change notification and serialization. Can be attached to `GameObject` (global), `GameComponent` (component-level), or `GeometryOverrideTarget` (targeted overrides). |
-| **`OverridableProperty<T>`** | Value type representing a property with a default and optional override value. Used within slots to encapsulate override semantics. |
-| **Slot Types** | See table below for built-in slot types. |
-| **Targeted Overrides** | `GeometryOverrideTarget` allows slots to be scoped to specific LODs/submeshes for per-part customization. |
-| **Usage Patterns** | Slots are hydrated/dehydrated for persistence. Factories and registration patterns ensure extensibility. Query or create slots using `GetOrCreateSlot<T>()`. |
-
-#### Built-in Slot Types
-
-| Slot Type | Purpose/Overrides | Typical Scope |
-| --- | --- | --- |
-| `LevelOfDetailSlot` | LOD selection policy (distance, fixed, screen space error) | GeometryComponent |
-| `LightingSlot` | Shadow casting/receiving | GeometryComponent, GameObject |
-| `RenderingSlot` | Visibility, rendering flags | GeometryComponent, GameObject |
-| `MaterialsSlot` | Material assignment | GeometryOverrideTarget |
-
-#### Example Usage
-
-```csharp
-// Attach a material override to a specific submesh
-var target = new GeometryOverrideTarget { LodIndex = 0, SubmeshIndex = 2 };
-var matSlot = new MaterialsSlot();
-matSlot.Material.Uri = new Uri("assets/materials/metal.mat");
-target.OverrideSlots.Add(matSlot);
-```
-
-Slots enable designers and tools to override properties at any level of the scene graph, supporting advanced workflows like per-object rendering tweaks, dynamic LOD, and context-sensitive material assignment.
-
-### SceneNode LINQ Extensions
-
-The module provides LINQ-style extension methods for traversing and querying scene node hierarchies:
-
-- `DescendantsAndSelf()`: Enumerates the node and all its descendants (depth-first).
-- `Descendants()`: Enumerates all descendant nodes.
-- `AncestorsAndSelf()`: Enumerates the node and all its ancestors (closest parent first).
-- `Ancestors()`: Enumerates all ancestor nodes.
-- `FindByPath(scene, path)`: Finds a node by a path expression (supports exact names, `*`, and `**` wildcards).
-
-These extensions simplify tree navigation, path-based queries, and hierarchical operations on scenes and nodes.
-
-## JSON Serialization
-
-### Scene Format
-
-Scenes serialize to JSON with custom converters:
-
-- Circular references via `IProject` injection
-- Polymorphic components via `[JsonDerivedType]`
-- Required fields: Scene requires `IProject`, Node requires `Scene`
-
-#### Example Scene JSON
-
-```json
-{
-  "Name": "MainScene",
-  "Id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "RootNodes": [
-    {
-      "Name": "Player",
-      "Id": "550e8400-e29b-41d4-a716-446655440000",
-      "IsActive": true,
-      "Components": [
-        {
-          "$type": "Transform",
-          "Name": "Transform",
-          "LocalPosition": {
-            "x": 0.0,
-            "y": 1.0,
-            "z": 0.0
-          },
-          "LocalRotation": {
-            "x": 0.0,
-            "y": 0.0,
-            "z": 0.0,
-            "w": 1.0
-          },
-          "LocalScale": {
-            "x": 1.0,
-            "y": 1.0,
-            "z": 1.0
-          }
-        },
-        {
-          "$type": "GeometryComponent",
-          "Name": "PlayerMesh",
-          "GeometryUri": "asset:///Engine/Generated/BasicShapes/Cube",
-          "OverrideSlots": [
-            {
-              "$type": "RenderingSlot",
-              "IsVisible": { "Value": true }
-            }
-          ],
-          "TargetedOverrides": [
-            {
-              "LodIndex": 0,
-              "SubmeshIndex": 0,
-              "OverrideSlots": [
-                {
-                  "$type": "MaterialsSlot",
-                  "Material": { "Uri": "asset:///Engine/Generated/Materials/Default" }
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "$type": "PerspectiveCamera",
-          "Name": "PlayerCamera",
-          "NearPlane": 0.1,
-          "FarPlane": 1000.0
-        }
-      ],
-      "Children": [
-        {
-          "Name": "Weapon",
-          "Id": "c0a80101-0000-0000-0000-000000000001",
-          "IsActive": true,
-          "Components": [
-            {
-              "$type": "Transform",
-              "Name": "Transform",
-              "LocalPosition": {
-                "x": 0.5,
-                "y": 0.0,
-                "z": 0.0
-              },
-              "LocalRotation": {
-                "x": 0.0,
-                "y": 0.0,
-                "z": 0.0,
-                "w": 1.0
-              },
-              "LocalScale": {
-                "x": 1.0,
-                "y": 1.0,
-                "z": 1.0
-              }
-            },
-            {
-              "$type": "GeometryComponent",
-              "Name": "WeaponMesh",
-              "GeometryUri": "asset:///Engine/Generated/BasicShapes/Plane"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "Name": "Enemy",
-      "Id": "550e8400-e29b-41d4-a716-446655440001",
-      "IsActive": true,
-      "Components": [
-        {
-          "$type": "Transform",
-          "Name": "Transform",
-          "LocalPosition": {
-            "x": 10.0,
-            "y": 0.0,
-            "z": 0.0
-          },
-          "LocalRotation": {
-            "x": 0.0,
-            "y": 0.0,
-            "z": 0.0,
-            "w": 1.0
-          },
-          "LocalScale": {
-            "x": 1.0,
-            "y": 1.0,
-            "z": 1.0
-          }
-        },
-        {
-          "$type": "GeometryComponent",
-          "Name": "EnemyMesh",
-          "GeometryUri": "asset:///Engine/Generated/BasicShapes/Sphere"
-        }
-      ]
-    },
-    {
-      "Name": "Camera",
-      "Id": "550e8400-e29b-41d4-a716-446655440002",
-      "IsActive": true,
-      "Components": [
-        {
-          "$type": "Transform",
-          "Name": "Transform",
-          "LocalPosition": {
-            "x": 0.0,
-            "y": 5.0,
-            "z": -10.0
-          },
-          "LocalRotation": {
-            "x": 0.0,
-            "y": 0.0,
-            "z": 0.0,
-            "w": 1.0
-          },
-          "LocalScale": {
-            "x": 1.0,
-            "y": 1.0,
-            "z": 1.0
-          }
-        },
-        {
-          "$type": "OrthographicCamera",
-          "Name": "MainCamera",
-          "NearPlane": 0.1,
-          "FarPlane": 1000.0,
-          "OrthographicSize": 10.0
-        }
-      ]
-    }
-  ]
-}
-```
-
-#### Scene Graph
+The components and slots each have their own small hierarchy:
 
 ```mermaid
-graph TD
-  MainScene[MainScene]
-  Player[Player]
-  Enemy[Enemy]
-  Camera[Camera]
-  Weapon[Weapon]
+---
+config:
+  class:
+    hideEmptyMembersBox: true
+---
+classDiagram
+    direction LR
 
-  MainScene --> Player
-  MainScene --> Enemy
-  MainScene --> Camera
-  Player --> Weapon
+    GameComponent <|-- TransformComponent
+    GameComponent <|-- GeometryComponent
+    GameComponent <|-- CameraComponent
+    GameComponent <|-- LightComponent
+    GameComponent <|-- LocalFogVolumeComponent
+    GameComponent <|-- ScriptingComponent
+    CameraComponent <|-- PerspectiveCamera
+    CameraComponent <|-- OrthographicCamera
+    LightComponent <|-- DirectionalLightComponent
+    LightComponent <|-- PointLightComponent
+    LightComponent <|-- SpotLightComponent
 
-  PlayerMesh["GeometryComponent: PlayerMesh<br>OverrideSlots: RenderingSlot(IsVisible=true)<br>TargetedOverrides: MaterialsSlot(Lod=0,Submesh=2)"]
-  Player --> PlayerMesh
-  PlayerCamera[CameraComponent: PlayerCamera]
-  Player --> PlayerCamera
-  PlayerTransform[Transform]
-  Player --> PlayerTransform
-
-  WeaponMesh[GeometryComponent: WeaponMesh]
-  Weapon --> WeaponMesh
-  WeaponTransform[Transform]
-  Weapon --> WeaponTransform
-
-  EnemyMesh[GeometryComponent: EnemyMesh]
-  Enemy --> EnemyMesh
-  EnemyTransform[Transform]
-  Enemy --> EnemyTransform
-
-  MainCamera[OrthographicCamera: MainCamera]
-  Camera --> MainCamera
-  CameraTransform[Transform]
-  Camera --> CameraTransform
-
-  %% Styling
-  classDef gameobject stroke:#1976d2,stroke-width:3px;
-  classDef gamecomponent stroke:#388e3c,stroke-width:3px;
-  class MainScene,Player,Enemy,Camera,Weapon gameobject;
-  class PlayerMesh,PlayerCamera,PlayerTransform,WeaponMesh,WeaponTransform,EnemyMesh,EnemyTransform,MainCamera,CameraTransform gamecomponent;
+    GeometryComponent "1" *-- "*" OverrideSlot : OverrideSlots
+    GeometryComponent "1" *-- "*" GeometryOverrideTarget : TargetedOverrides
+    GeometryOverrideTarget "1" *-- "*" OverrideSlot : OverrideSlots
+    OverrideSlot <|-- RenderingSlot
+    OverrideSlot <|-- LightingSlot
+    OverrideSlot <|-- MaterialsSlot
+    OverrideSlot <|-- LevelOfDetailSlot
 ```
 
-### Custom JSON Converters
+A small scene, as the Scene Explorer would show it with its components:
 
-- `Scene.SceneJsonConverter`: Requires `IProject` for deserialization
-- `SceneNode.SceneNodeConverter`: Requires `Scene`, ensures Transform is present
-- `GameComponent.Vector3JsonConverter`: Serializes `System.Numerics.Vector3` as `{x, y, z}`
+```text
+Scene "Courtyard"
+├── SceneNode "Sun"
+│   ├── TransformComponent
+│   └── DirectionalLightComponent      (drives the primary atmosphere light)
+├── SceneNode "Fountain"
+│   ├── TransformComponent
+│   ├── GeometryComponent              (MaterialsSlot targeted at LOD 0, submesh 1)
+│   └── SceneNode "Water"
+│       ├── TransformComponent
+│       └── LocalFogVolumeComponent
+└── SceneNode "Player"
+    ├── TransformComponent
+    ├── PerspectiveCamera              (the scene's StartingCamera)
+    └── ScriptingComponent
+```
 
-## Design Patterns
+### Scene
 
-- **Observable:** All entities are reactive (`INotifyPropertyChanged`)
-- **Composite:** SceneNode trees (parent/child, descendants/ancestors)
-- **Component:** Behavior via composition, not inheritance
-- **Immutable Identity:** `Id` is `init`-only, stable across lifecycle
+`Scene` holds:
+
+- `Id`, a `SceneId` written in the file, and `Name`.
+- `RootNodes`, the top of the hierarchy; `AllNodes` walks the whole hierarchy in
+  order.
+- `Environment`: sky atmosphere, sky sphere, sky light, fog, post process and
+  background.
+- `References`: the scripts, input actions, physics sidecars and extra native
+  assets the scene needs at run time.
+- `StartingCamera`, the camera node the scene starts viewing through, and
+  `StartingInputContexts`, the input mapping contexts active when it starts.
+  With no starting camera, `EffectiveStartingCamera` is the first camera in
+  hierarchy order.
+
+The scene-level values change only as a whole, through `SetEnvironment`,
+`SetReferences`, `SetStartingCamera` and `SetStartingInputContexts`. Each raises
+a change notification only when the value differs.
+
+### SceneNode
+
+A `SceneNode` belongs to one scene for its whole life and has:
+
+- `Id`, a `NodeId` written in the file, and `Name`.
+- `Parent` and `Children`. `SetParent`, `AddChild` and `RemoveChild` keep both
+  sides in step and refuse a parent that would make a cycle.
+- `Components`, which always holds exactly one `TransformComponent`.
+  `AddComponent` and `RemoveComponent` set and clear each component's `Node`.
+- `IsActive` and the flags: `IsVisible`, `CastsShadows`, `ReceivesShadows`,
+  `IsRayCastingSelectable`, `IgnoreParentTransform` and `IsStatic`. `Flags`
+  reads and writes them together as a `SceneNodeFlags` value.
+- `OverrideSlots`, which apply to every component of the node.
+
+`Descendants`, `Ancestors`, `DescendantsAndSelf`, `AncestorsAndSelf`,
+`HierarchyPath` and `Scene.FindByPath` query the hierarchy. `FindByPath` accepts
+exact names and the `*` and `**` wildcards.
+
+### Components
+
+Every component derives from `GameComponent`, has a `ComponentId` and a name,
+and knows its `Node`. The transform reports `IsLocked`, so it cannot be removed.
+
+| Component                                                                | Holds                                                                                                      |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `TransformComponent`                                                     | Local position, rotation and scale                                                                         |
+| `GeometryComponent`                                                      | The geometry asset reference, component-level slots and slots targeted at one LOD or submesh               |
+| `PerspectiveCamera`, `OrthographicCamera`                                | Clip planes and exposure (aperture, shutter rate, ISO), plus field of view or orthographic size            |
+| `DirectionalLightComponent`, `PointLightComponent`, `SpotLightComponent` | Color, intensity, shadows and exposure compensation; a directional light can drive one atmosphere light    |
+| `LocalFogVolumeComponent`                                                | Fog extinction, falloff, albedo, emission and sort priority                                                |
+| `ScriptingComponent`                                                     | Script slots: the script asset, the execution order and the parameter values that differ from the defaults |
+
+`LightValidation` checks light values and the scene-wide light rules: at most
+one light per node and one directional light per atmosphere light.
+
+### Override slots
+
+#### Why slots exist
+
+A geometry asset is shared. Every node that shows the same mesh gets that mesh's
+own values: the material on each of its material slots, and its rendering and
+LOD defaults. A level designer often wants _this_ crate painted red while every
+other crate keeps the material it was imported with. Changing the mesh asset
+would repaint every crate; copying the mesh would lose the link to it.
+
+An override slot solves this. It records, on one scene instance, the values that
+differ from what the asset supplies, and nothing else:
+
+- **The asset stays untouched.** An override changes one node's instance. The
+  shared mesh and material assets never change.
+- **Only the intent is stored.** The file records what was overridden, not the
+  asset's defaults. When the asset changes later, every value the scene did not
+  override follows it.
+- **Clearing restores the asset's value.** Removing an override brings back what
+  the mesh supplies. Choosing the engine's default material is a separate,
+  explicit assignment, not a clear.
+
+#### Material overrides follow the engine's slot identity
+
+A mesh's material slots belong to the engine. Its geometry inventory gives each
+slot an opaque `MaterialSlotId`, says which LODs and submeshes the slot binds,
+and carries a layout revision. A `MaterialsSlot` holds the `Material` to use and
+a `MaterialSlotTarget` naming the slot it replaces:
+
+| Target field     | Purpose                                                                                        |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| `GeometryUri`    | The geometry whose inventory owns the slot                                                     |
+| `SlotId`         | The engine's identity of the slot; names, list order and indices are for display only          |
+| `LayoutRevision` | The inventory revision seen when the override was chosen, so stale assignments can be detected |
+
+Because the engine maps the slot to every LOD and submesh it binds, one override
+covers all of them. The editor never derives a slot from a name or an index, so
+a reimport that reorders or renames slots cannot silently move an override to
+another part of the mesh.
+
+```mermaid
+flowchart LR
+    subgraph asset["Shared mesh asset"]
+        direction TB
+        a1["<b>Crate.geometry, slot A</b><br/>id 3f2c…<br/>default: Wood<br/>LODs 0–2, submesh 0"]
+        a2["<b>Crate.geometry, slot B</b><br/>id 91be…<br/>default: Metal<br/>LODs 0–2, submesh 1"]
+    end
+
+    subgraph instance["Scene instance"]
+        o2["<b>Node 'Red crate'</b><br/>GeometryComponent<br/>MaterialsSlot<br/>target: Crate.geometry, id 91be…, rev 7<br/>material: RedPaint"]
+    end
+
+    subgraph result["Rendered for this node"]
+        direction TB
+        r1["Slot A → Wood"]
+        r2["Slot B → RedPaint"]
+    end
+
+    a1 --> r1
+    a2 -. "replaced" .-> r2
+    o2 --> r2
+```
+
+What each module does with a material override:
+
+| Module                          | Role                                                                                                                                        |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor.Scenes`          | `SetMaterialSlot` sets or clears it after checking the slot against the current inventory; `SetGeometry` keeps those the new mesh still has |
+| `Oxygen.Editor.LivePreview`     | Sends it to the engine with its slot id and layout revision                                                                                 |
+| `Oxygen.Editor.ContentPipeline` | Writes it into the scene descriptor; an override with no matching geometry or slot id fails the scene's cook                                |
+| `Oxygen.Editor.WorldEditor`     | Lists the mesh's slots in the inspector and offers Reassign or Clear for overrides whose slot no longer resolves                            |
+
+An override whose slot no longer exists after a reimport is kept, with its
+material and slot context, until it is reassigned or cleared. It blocks only the
+cook of the scenes that hold it. The full identity and reimport contract is in
+[content-pipeline.md §20][slot-identity].
+
+#### Where slots attach
+
+Slots attach at three scopes, from the broadest to the narrowest:
+
+```mermaid
+flowchart TB
+    nodeScope["<b>Node</b> · SceneNode.OverrideSlots<br/>every component of the node"]
+    geometryScope["<b>Geometry</b> · GeometryComponent.OverrideSlots<br/>one geometry instance"]
+    targetScope["<b>LOD or submesh</b> · GeometryOverrideTarget.OverrideSlots<br/>chosen by LodIndex and SubmeshIndex, where -1 means all"]
+
+    nodeScope --> geometryScope --> targetScope
+```
+
+Material overrides live on the geometry scope. They do not need the narrowest
+scope: the engine's slot identity already says which LODs and submeshes are
+affected.
+
+#### Slot types
+
+A slot type groups overridable values that belong together. Except in
+`MaterialsSlot`, whose presence is the override, each value is an
+`OverridableProperty<T>`:
+
+| State          | `IsOverridden` | `EffectiveValue` | Written to the file |
+| -------------- | -------------- | ---------------- | ------------------- |
+| Not overridden | `false`        | `DefaultValue`   | Nothing             |
+| Overridden     | `true`         | `OverrideValue`  | The override        |
+
+`WithOverride` and `ClearOverride` return a new value; the slot raises the
+change notification when the value is replaced.
+
+| Slot                | Overrides                                                   | Used today                                              |
+| ------------------- | ----------------------------------------------------------- | ------------------------------------------------------- |
+| `MaterialsSlot`     | The material of one engine material slot                    | Yes, on the geometry scope, by every module above       |
+| `RenderingSlot`     | Visibility                                                  | Stored and round-tripped; nothing authors or applies it |
+| `LightingSlot`      | Shadow casting and receiving                                | Stored and round-tripped; nothing authors or applies it |
+| `LevelOfDetailSlot` | The LOD policy: fixed, by distance or by screen-space error | Stored and round-tripped; nothing authors or applies it |
+
+Node visibility and shadows come from the node's own flags (`IsVisible`,
+`CastsShadows`, `ReceivesShadows`), not from `RenderingSlot` or `LightingSlot`.
+The node scope and the LOD-or-submesh scope are likewise stored but not
+authored; asset reference tracking still looks in them for materials.
+
+`GetOrCreateSlot<T>()` returns a node's slot of a type, adding it if missing.
+
+## Persistence
+
+The model never goes to JSON directly. It dehydrates to data records, and the
+records are what is written. Scenes saves and opens the file; the cook only
+reads it:
+
+```mermaid
+flowchart TB
+    subgraph world["Oxygen.Editor.World"]
+        direction LR
+        model["<b>Scene model</b><br/>Scene, SceneNode,<br/>components, slots"]
+        records["<b>Data records</b><br/>SceneData, SceneNodeData,<br/>ComponentData, OverrideSlotData"]
+        model -- "Dehydrate()" --> records
+        records -- "CreateAndHydrate()" --> model
+    end
+
+    subgraph scenes["Oxygen.Editor.Scenes"]
+        fileData["<b>SceneFileData</b><br/>SceneData + ExplorerLayout"]
+    end
+
+    file[("<b>.oscene.json</b>")]
+
+    subgraph pipeline["Oxygen.Editor.ContentPipeline"]
+        cook["<b>Cook</b><br/>SceneData through SceneSerializer;<br/>ExplorerLayout ignored"]
+    end
+
+    records <--> fileData
+    fileData <-- "save / open" --> file
+    file -- "read" --> cook
+```
+
+Each persistent type implements `IPersistent<TData>`: `Dehydrate()` returns its
+data record and `Hydrate(data)` restores it. `Scene.CreateAndHydrate`,
+`SceneNode.CreateAndHydrate`, `GameComponent.CreateAndHydrate` and
+`OverrideSlot.CreateAndHydrate` create the right type from a record. Hydration
+suppresses change notifications.
+
+`SceneJsonContext` serializes the records with the source generator, writes
+vectors and quaternions as `{ "X": … }` objects, and omits null values.
+Components and slots carry a `$type` discriminator. Identities are written as
+GUID strings.
+
+`SceneData` has these top-level properties:
+
+| Property                | Written                |
+| ----------------------- | ---------------------- |
+| `Id`, `Name`            | Always                 |
+| `RootNodes`             | Always                 |
+| `Environment`           | Always                 |
+| `References`            | When the scene has any |
+| `StartingCamera`        | When one is authored   |
+| `StartingInputContexts` | When the scene has any |
+
+`Oxygen.Editor.Scenes` reads and writes scene files. Its file record extends
+`SceneData` with the Explorer layout, so readers of `SceneData`, such as the
+cook, ignore it. `SceneSerializer` reads and writes a bare `SceneData` stream;
+the cook and the tests use it.
+
+### What hydration rejects
+
+| Problem                                          | Result                                                                           |
+| ------------------------------------------------ | -------------------------------------------------------------------------------- |
+| A node without exactly one transform             | `JsonException`                                                                  |
+| Lights that fail `LightValidation`               | `ArgumentException` when hydrating, `InvalidOperationException` when dehydrating |
+| Component identities empty or repeated in a node | Not rejected: they are replaced with new identities                              |
+
+## Changing a scene
+
+Setting a property on the model changes the model and raises
+`INotifyPropertyChanged`; it does nothing else. Editor code changes an open
+scene through the edits of `Oxygen.Editor.Scenes`, which add undo, the dirty
+state and the change stream that the UI and Live Preview follow:
+
+```mermaid
+sequenceDiagram
+    participant UI as WorldEditor UI
+    participant Authoring as Scenes: SceneAuthoring
+    participant Model as World: Scene model
+    participant Followers as UI and Live Preview
+
+    UI->>Authoring: ExecuteAsync(edit)
+    Authoring->>Model: apply the edit
+    Authoring->>Authoring: record undo
+    Authoring-->>Followers: scene changes
+    Authoring-->>UI: SceneEditResult
+```
+
+The model is not thread-safe. Its owner uses it from one thread at a time, and
+notifications are raised on the thread that made the change.
+
+## Adding a component
+
+1. Add the component under `src/Components/`, derived from `GameComponent`, with
+   `Hydrate` and `Dehydrate`. Its static constructor registers how it is created
+   from its record with `Register<TData>`.
+2. Add its record under `src/Serialization/`, derived from `ComponentData`, and
+   declare it on `ComponentData` with `[JsonDerivedType]` and on
+   `SceneJsonContext` with `[JsonSerializable]`.
+3. Run its static constructor in `GameComponent.EnsureBuiltInFactories` and in
+   `SceneSerializer`, so hydration finds its factory.
+4. Add round-trip tests in `tests/`.
+
+The edits, the inspector, the cook and Live Preview each support the component
+in their own module.
 
 ## Dependencies
 
-- **No project references** (pure domain model)
-- NuGet: `Microsoft.Extensions.Logging.Abstractions`
-- Framework: `System.Numerics` (Vector3, Quaternion)
+- `Oxygen.Managed.Core`: the identity types and `ScopedObservableObject`.
+- `Oxygen.Managed.Assets`: asset references and asset URIs.
 
-## Thread Safety
+## Tests
 
-⚠️ **Not thread-safe** — domain models are single-threaded.
-Property change events fire on the calling thread; synchronizers must handle cross-thread marshaling.
+[tests/](tests/) holds the unit tests: scene and node behavior, identities in
+JSON, the starting camera and input contexts, components, slots, vector
+serialization and the transform conversions.
 
-## Extensibility
+## Related documentation
 
-### Adding New Components
-
-1. **Define Component Class**:
-
-   ```csharp
-   public partial class MeshRenderer : GameComponent
-   {
-       public string MeshPath { get; set; } = string.Empty;
-   }
-   ```
-
-2. **Register with JSON Serializer**:
-
-   ```csharp
-   [JsonDerivedType(typeof(MeshRenderer), "MeshRenderer")]
-   public abstract partial class GameComponent : ScopedObservableObject, INamed, IPersistent<ComponentData>
-   ```
-
-3. **Add to SceneNode**:
-
-   ```csharp
-   node.Components.Add(new MeshRenderer { MeshPath = "models/character.glb" });
-   ```
-
-## Testing
-
-Unit tests should cover:
-
-- Property change notifications (events fire)
-- JSON round-tripping (serialize/deserialize)
-- Component lifecycle (add/remove, hydrate/dehydrate)
-- Transform math (Vector3/Quaternion operations)
-- Validation (name requirements, required properties)
-
-## Related Documentation
-
-- [Oxygen.Editor.Runtime](../Oxygen.Editor.Runtime/README.md): Synchronizes world models with engine
-- [Oxygen.Editor.Projects](../Oxygen.Editor.Projects/): Manages workspace and project files
+- [Scene authoring model](../../design/editor/lld/scene-authoring-model.md)
+- [Scenes module](../../design/editor/review/scenes-module.md)
+- [Editor architecture](../../design/editor/ARCHITECTURE.md)
 
 ## License
 
-Distributed under the MIT License. See [LICENSE](../../LICENSE) or [opensource.org/licenses/MIT](https://opensource.org/licenses/MIT).
+Distributed under the MIT License. See [LICENSE](../../LICENSE) or
+[opensource.org/licenses/MIT](https://opensource.org/licenses/MIT).
+
+[ser]: src/Serialization/README.md
+[slot-identity]: ../../design/editor/lld/content-pipeline.md#20-canonical-material-slot-identity-and-reimport

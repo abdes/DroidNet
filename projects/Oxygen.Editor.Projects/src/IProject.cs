@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.ComponentModel;
-
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.Projects;
 
 /// <summary>
 /// Represents a project within the Oxygen Editor.
@@ -13,7 +11,7 @@ namespace Oxygen.Editor.World;
 /// The <see cref="IProject"/> interface defines the structure of a project within the Oxygen Editor. A project's scenes
 /// are its scene files.
 /// </remarks>
-public interface IProject : INotifyPropertyChanging, INotifyPropertyChanged
+public interface IProject
 {
     /// <summary>
     /// Gets the project information.

@@ -13,7 +13,7 @@ using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -118,7 +118,7 @@ public sealed class PropertyScenarioTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var node = SceneNodeTemplates.Empty(fixture.Scene);
-        _ = await fixture.Authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(fixture.Scene, node)])).ConfigureAwait(false);
+        _ = await fixture.Authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(fixture.Scene, fixture.Layout, node)])).ConfigureAwait(false);
         var drag = await fixture.Authoring.BeginGestureAsync([node.Id], [SceneProperties.Transform.PositionX.Id], "Drag").ConfigureAwait(false);
         _ = await drag.PreviewAsync(MoveX(node.Id, 1f)).ConfigureAwait(false);
 

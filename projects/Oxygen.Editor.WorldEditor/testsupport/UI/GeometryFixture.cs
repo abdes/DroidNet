@@ -6,8 +6,7 @@ using System.Reactive.Linq;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Status;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
@@ -18,9 +17,6 @@ internal sealed class GeometryFixture : IDisposable
 {
     public GeometryFixture()
     {
-        var info = new ProjectInfo("Geometry", Category.Games, "C:/Geometry", "preview.png");
-        _ = Mock.Get(this.Authoring.Scene.Project).SetupGet(value => value.ProjectInfo).Returns(info);
-        this.Authoring.Projects.Activate(ProjectContext.FromProjectInfo(info));
         this.Geometry = new()
         {
             Name = "Geometry",

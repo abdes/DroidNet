@@ -5,6 +5,7 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.World.Inspector.Scripting;
 

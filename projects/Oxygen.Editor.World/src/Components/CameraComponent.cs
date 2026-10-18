@@ -11,7 +11,7 @@ namespace Oxygen.Editor.World.Components;
 /// Camera domain objects implement Hydrate/Dehydrate via <see cref="ComponentData"/> and are created
 /// by factories registered on concrete DTO types (see <c>PerspectiveCamera</c> and <c>OrthographicCamera</c>).
 /// </summary>
-public abstract partial class CameraComponent : GameComponent
+public abstract class CameraComponent : GameComponent
 {
     /// <summary>Default authored aperture, matching the native scene contract.</summary>
     public const float DefaultApertureF = 11f;
@@ -53,7 +53,7 @@ public abstract partial class CameraComponent : GameComponent
         get => this.apertureF;
         set
         {
-            ValidatePhysicalValue(value, nameof(ApertureF));
+            ValidatePhysicalValue(value, nameof(this.ApertureF));
             _ = this.SetProperty(ref this.apertureF, value);
         }
     }
@@ -64,7 +64,7 @@ public abstract partial class CameraComponent : GameComponent
         get => this.shutterRate;
         set
         {
-            ValidatePhysicalValue(value, nameof(ShutterRate));
+            ValidatePhysicalValue(value, nameof(this.ShutterRate));
             _ = this.SetProperty(ref this.shutterRate, value);
         }
     }
@@ -75,7 +75,7 @@ public abstract partial class CameraComponent : GameComponent
         get => this.iso;
         set
         {
-            ValidatePhysicalValue(value, nameof(Iso));
+            ValidatePhysicalValue(value, nameof(this.Iso));
             _ = this.SetProperty(ref this.iso, value);
         }
     }
@@ -85,9 +85,9 @@ public abstract partial class CameraComponent : GameComponent
     {
         if (data is CameraComponentData cameraData)
         {
-            ValidatePhysicalValue(cameraData.ApertureF, nameof(ApertureF));
-            ValidatePhysicalValue(cameraData.ShutterRate, nameof(ShutterRate));
-            ValidatePhysicalValue(cameraData.Iso, nameof(Iso));
+            ValidatePhysicalValue(cameraData.ApertureF, nameof(this.ApertureF));
+            ValidatePhysicalValue(cameraData.ShutterRate, nameof(this.ShutterRate));
+            ValidatePhysicalValue(cameraData.Iso, nameof(this.Iso));
         }
 
         base.Hydrate(data);

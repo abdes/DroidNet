@@ -20,14 +20,14 @@ public sealed partial class PlaySectionView
     public PlaySectionView() => this.InitializeComponent();
 
     /// <summary>Expands the section and brings one of its fields into view with focus.</summary>
-    /// <param name="propertyPath">A <see cref="ScenePlayPropertyPaths"/> path.</param>
+    /// <param name="propertyPath">A <see cref="SceneStartingPropertyPaths"/> path.</param>
     /// <returns>Whether the path names a field of this section.</returns>
     internal bool FocusField(string propertyPath)
     {
         FrameworkElement? field = propertyPath switch
         {
-            ScenePlayPropertyPaths.StartingCamera => this.StartingCameraPicker,
-            ScenePlayPropertyPaths.StartingInputContexts => this.StartingInputContexts,
+            SceneStartingPropertyPaths.StartingCamera => this.StartingCameraPicker,
+            SceneStartingPropertyPaths.StartingInputContexts => this.StartingInputContexts,
             _ => null,
         };
         if (field is null)

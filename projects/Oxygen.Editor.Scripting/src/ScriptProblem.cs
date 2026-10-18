@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.World.Scripting;
+namespace Oxygen.Editor.Scripting;
 
 /// <summary>
 /// One problem the engine analyzer found in a script.

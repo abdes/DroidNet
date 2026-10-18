@@ -54,7 +54,7 @@ public partial class MaterialsSlot : OverrideSlot
         set
         {
             ArgumentNullException.ThrowIfNull(value);
-            this.SetProperty(ref this.target, value);
+            _ = this.SetProperty(ref this.target, value);
         }
     }
 

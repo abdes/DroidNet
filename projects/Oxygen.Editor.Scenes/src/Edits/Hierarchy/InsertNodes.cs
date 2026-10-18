@@ -7,6 +7,7 @@ using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -52,7 +53,7 @@ public sealed record InsertNodes : ISceneEdit
     {
         ArgumentNullException.ThrowIfNull(scope);
         var scene = scope.Scene;
-        var layout = SceneLayout.Of(scene);
+        var layout = scope.Layout;
         var nodes = this.Inserts.Select(insert => (Insert: insert, Node: SceneNode.CreateAndHydrate(scene, SerializationCopies.Copy(insert.Node)))).ToArray();
         foreach (var (insert, node) in nodes.OrderBy(static pair => pair.Insert.At.Index))
         {
@@ -83,7 +84,7 @@ public sealed record InsertNodes : ISceneEdit
 
         var nodeIds = scope.Scene.AllNodes.Select(static node => node.Id).ToHashSet();
         var componentIds = scope.Scene.AllNodes.SelectMany(static node => node.Components).Select(static component => component.Id).ToHashSet();
-        var layout = scope.Scene.ExplorerLayout ?? [];
+        var layout = scope.Layout;
         foreach (var insert in this.Inserts)
         {
             var (nodes, components) = SceneGraph.IdsOf(insert.Node);

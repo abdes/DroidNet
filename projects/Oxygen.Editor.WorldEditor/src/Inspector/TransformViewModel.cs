@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Editor.World.Utils;
 

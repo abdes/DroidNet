@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Controls;
-using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;
@@ -18,10 +18,13 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
 
     /// <summary>Initializes a new instance of the <see cref="SceneAdapter"/> class.</summary>
     /// <param name="scene">The scene to present.</param>
-    public SceneAdapter(Scene scene)
+    /// <param name="layout">The scene's explorer layout, which places its rows.</param>
+    public SceneAdapter(Scene scene, IList<ExplorerEntryData> layout)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(layout);
         this.AttachedObject = scene;
+        this.Layout = layout;
         scene.PropertyChanged += this.OnScenePropertyChanged;
     }
 
@@ -34,6 +37,9 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
 
     /// <inheritdoc />
     public Scene AttachedObject { get; }
+
+    /// <summary>Gets the scene's explorer layout: the folders and node entries the rows follow.</summary>
+    public IList<ExplorerEntryData> Layout { get; }
 
     /// <summary>Gets a value indicating whether the tree uses the authored explorer layout.</summary>
     internal bool UseLayoutAdapters { get; init; }
@@ -125,7 +131,7 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
         bool preserveNodeExpansion = false,
         ISet<FolderId>? transientlyExpandedFolderIds = null)
     {
-        var layout = this.AttachedObject.ExplorerLayout;
+        var layout = this.Layout;
         var seenNodeIds = new HashSet<NodeId>();
         var seenFolderIds = new HashSet<FolderId>();
 

@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using System.Numerics;
 using Oxygen.Editor.ContentBrowser.Scripts;
+using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.World.Scripting;
 

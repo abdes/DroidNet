@@ -5,7 +5,7 @@
 using System.Numerics;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.World.Components;
 
 /// <summary>
 /// Authored directional light component.
@@ -105,7 +105,7 @@ public sealed partial class DirectionalLightComponent : LightComponent
         set => _ = this.SetProperty(ref this.atmosphereSlot, value);
     }
 
-    /// <summary>Gets or sets whether surface atmosphere transmittance is evaluated per pixel.</summary>
+    /// <summary>Gets or sets a value indicating whether surface atmosphere transmittance is evaluated per pixel.</summary>
     public bool UsePerPixelAtmosphereTransmittance
     {
         get => this.usePerPixelAtmosphereTransmittance;

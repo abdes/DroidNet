@@ -4,8 +4,8 @@
 
 using System.Text.Json;
 using AwesomeAssertions;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 
@@ -24,7 +24,7 @@ public sealed class TestSupportTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
 
         _ = fixture.Scene.AllNodes.Select(static node => node.Id).Should().Equal(SampleScene.AllNodes);
-        _ = Outline(fixture.Scene, fixture.Scene.ExplorerLayout!).Should().Be(
+        _ = Outline(fixture.Scene, fixture.Layout).Should().Be(
             "A(A1(A11) AF+(A2)) F+(B G-()) Cam Ortho Sun Moon Lamp Spot Fog Mesh Script");
         _ = fixture.Scene.AllNodes.Single(static node => node.Id == SampleScene.A11).Parent!.Id.Should().Be(SampleScene.A1);
         _ = fixture.Scene.AllNodes.Single(static node => node.Id == SampleScene.A2).Parent!.Id.Should().Be(SampleScene.A);
@@ -32,8 +32,8 @@ public sealed class TestSupportTests
 
     [TestMethod]
     public void SampleScene_BuildsTheSameDocumentEachTime()
-        => JsonSerializer.Serialize(SampleScene.Build(), SceneJsonContext.Default.SceneData)
-            .Should().Be(JsonSerializer.Serialize(SampleScene.Build(), SceneJsonContext.Default.SceneData));
+        => JsonSerializer.Serialize(SampleScene.Build(), SceneFileJsonContext.Default.SceneFileData)
+            .Should().Be(JsonSerializer.Serialize(SampleScene.Build(), SceneFileJsonContext.Default.SceneFileData));
 
     [TestMethod]
     public async Task BuilderWithout_DropsSubtreeAndItsLayout()
@@ -41,7 +41,7 @@ public sealed class TestSupportTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Builder().Without(SampleScene.A1).Build()).ConfigureAwait(false);
 
         _ = fixture.Scene.AllNodes.Select(static node => node.Id).Should().NotContain([SampleScene.A1, SampleScene.A11]);
-        _ = Outline(fixture.Scene, fixture.Scene.ExplorerLayout!).Should().StartWith("A(AF+(A2)) F+(B G-())");
+        _ = Outline(fixture.Scene, fixture.Layout).Should().StartWith("A(AF+(A2)) F+(B G-())");
     }
 
     [TestMethod]

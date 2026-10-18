@@ -16,19 +16,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    </ItemGroup>
-
-    <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <!-- Reference the runtime resources project so the generator sees the ResourceExtensions symbol -->
-        <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
-        <!-- Add generator as an analyzer (development time only) -->
-        <ProjectReference Include="$(ProjectsRoot)\Resources.Generator\src\Resources.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     </ItemGroup>
 
 </Project>

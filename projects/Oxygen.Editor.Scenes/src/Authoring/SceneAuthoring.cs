@@ -8,6 +8,7 @@ using DroidNet.TimeMachine;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Scenes.Changes;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Scenes.Authoring;
@@ -36,15 +37,17 @@ public sealed partial class SceneAuthoring : IDisposable
     /// <summary>Initializes a new instance of the <see cref="SceneAuthoring"/> class.</summary>
     /// <param name="document">The document's identity and history.</param>
     /// <param name="scene">The document's scene.</param>
+    /// <param name="layout">The scene's explorer layout, with an entry for every node.</param>
     /// <param name="interaction">The nodes hidden and locked in the editor, if the editor keeps them.</param>
     /// <param name="redirects">The session's asset renames and moves, if the editor tracks them.</param>
-    internal SceneAuthoring(DocumentDecodeContext document, Scene scene, ISceneNodeInteraction? interaction, IAssetRedirects? redirects)
+    internal SceneAuthoring(DocumentDecodeContext document, Scene scene, IList<ExplorerEntryData> layout, ISceneNodeInteraction? interaction, IAssetRedirects? redirects)
     {
         this.Document = document.Document;
         this.history = document.History;
         this.Scene = scene;
+        this.Layout = layout;
         this.context = SynchronizationContext.Current;
-        this.scope = new SceneEditScope(scene, interaction, redirects);
+        this.scope = new SceneEditScope(scene, layout, interaction, redirects);
     }
 
     /// <summary>Occurs on the scene thread after each edit, replay, preview and relocation, naming what changed.</summary>
@@ -55,6 +58,10 @@ public sealed partial class SceneAuthoring : IDisposable
 
     /// <summary>Gets the scene, for views and queries to read; only edits change it.</summary>
     public Scene Scene { get; }
+
+    /// <summary>Gets the scene's explorer layout, for views and queries to read; only edits change it.</summary>
+    /// <remarks>The layout is editor-only: it is saved in the scene file, and the engine never sees it.</remarks>
+    public IList<ExplorerEntryData> Layout { get; }
 
     /// <summary>Gets a value indicating whether the authoring is retired: the scene was closed or replaced by a reload.</summary>
     public bool IsRetired { get; private set; }

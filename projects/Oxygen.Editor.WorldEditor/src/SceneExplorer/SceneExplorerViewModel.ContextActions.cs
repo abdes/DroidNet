@@ -9,17 +9,18 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
 using DroidNet.Controls.Menus;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.EditorView;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;
@@ -195,6 +196,7 @@ public partial class SceneExplorerViewModel
         if (this.CurrentAuthoring() is not { } authoring
             || SceneClipboard.Capture(
                 authoring.Scene,
+                authoring.Layout,
                 [.. items.OfType<SceneNodeAdapter>().Select(static row => row.AttachedObject.Id)],
                 [.. items.OfType<FolderAdapter>().Select(static row => row.Id)]) is not { } payload)
         {
@@ -532,7 +534,7 @@ public partial class SceneExplorerViewModel
             }
 
             var asChild = kind == SceneExplorerCommandKind.PasteAsChild;
-            if (!payload.TryPaste(context.Authoring.Scene, this.PasteTargetOf(context, asChild), this.clipboardIsCut, preserveWorld: asChild, out _, out var refused))
+            if (!payload.TryPaste(context.Authoring.Scene, context.Authoring.Layout, this.PasteTargetOf(context, asChild), this.clipboardIsCut, preserveWorld: asChild, out _, out var refused))
             {
                 return refused.Message;
             }
@@ -604,12 +606,12 @@ public partial class SceneExplorerViewModel
                 var node = SceneNodeTemplates.Empty(scene, this.GetNextEntityName());
                 var folder = (target as FolderAdapter)?.Id;
                 NodeId? parent = (target as SceneNodeAdapter)?.AttachedObject.Id;
-                if (folder is { } inFolder && LayoutScopes.TryScopeOf(scene, LayoutEntryId.Of(inFolder), out var folderScope))
+                if (folder is { } inFolder && LayoutScopes.TryScopeOf(authoring.Layout, LayoutEntryId.Of(inFolder), out var folderScope))
                 {
                     parent = folderScope;
                 }
 
-                result = await authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(scene, node, parent, folder)])).ConfigureAwait(true);
+                result = await authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(scene, authoring.Layout, node, parent, folder)])).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.NewFolder:
                 var container = (target is SceneNodeAdapter ? target.Parent : target) switch
@@ -618,7 +620,7 @@ public partial class SceneExplorerViewModel
                     SceneNodeAdapter nodeRow => LayoutPosition.UnderNode(nodeRow.AttachedObject.Id, 0),
                     _ => LayoutPosition.AtRoot(0),
                 };
-                result = await authoring.ExecuteAsync(new CreateFolder(FolderId.New(), LayoutScopes.EndOf(scene, container), "New Folder")).ConfigureAwait(true);
+                result = await authoring.ExecuteAsync(new CreateFolder(FolderId.New(), LayoutScopes.EndOf(authoring.Layout, container), "New Folder")).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.Rename:
                 this.RenameRequested?.Invoke(this, new RenameRequestedEventArgs(target ?? context.Anchor!));
@@ -630,7 +632,7 @@ public partial class SceneExplorerViewModel
                 await this.CutItemsAsync(context.Targets).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.Delete:
-                result = await authoring.ExecuteAsync(DeleteEdit(scene, nodes, folders)).ConfigureAwait(true);
+                result = await authoring.ExecuteAsync(DeleteEdit(authoring.Layout, nodes, folders)).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.Paste:
             case SceneExplorerCommandKind.PasteAsChild:
@@ -735,13 +737,13 @@ public partial class SceneExplorerViewModel
     }
 
     // Deleting folders deletes what they hold: their nodes first, then the folders, innermost first.
-    private static SceneEditBatch DeleteEdit(Scene scene, IReadOnlyList<NodeId> nodes, IReadOnlyList<FolderId> folders)
+    private static SceneEditBatch DeleteEdit(IList<ExplorerEntryData> layout, IReadOnlyList<NodeId> nodes, IReadOnlyList<FolderId> folders)
     {
         var heldNodes = new List<NodeId>(nodes);
         var heldFolders = new List<FolderId>();
         void Collect(FolderId folder)
         {
-            foreach (var entry in LayoutScopes.EntriesOf(scene, LayoutPosition.InFolder(folder, 0)))
+            foreach (var entry in LayoutScopes.EntriesOf(layout, LayoutPosition.InFolder(folder, 0)))
             {
                 if (entry.Folder is { } inner)
                 {
@@ -773,7 +775,7 @@ public partial class SceneExplorerViewModel
 
     // The entries go right after the folder, in the folder's own container.
     private static Task<SceneEditResult> OutOfFolderAsync(SceneAuthoring authoring, IReadOnlyList<NodeId> nodes, FolderId folder)
-        => LayoutScopes.PositionOf(authoring.Scene, LayoutEntryId.Of(folder)) is { } place
+        => LayoutScopes.PositionOf(authoring.Layout, LayoutEntryId.Of(folder)) is { } place
             ? authoring.ExecuteAsync(new MoveLayoutEntries([.. nodes.Select(LayoutEntryId.Of)], place with { Index = place.Index + 1 }))
             : Task.FromResult(new SceneEditResult(SceneEditOutcome.Invalid, [SceneDiagnostic.Error(SceneEditCodes.FolderMissing, "The folder no longer exists.")]));
 
@@ -788,7 +790,7 @@ public partial class SceneExplorerViewModel
         var isCut = this.clipboardIsCut;
         var clipboardVersion = this.clipboardGeneration;
         if (this.explorerClipboard is not { } payload
-            || !payload.TryPaste(context.Authoring.Scene, this.PasteTargetOf(context, asChild), isCut, preserveWorld: asChild, out var paste, out var refused))
+            || !payload.TryPaste(context.Authoring.Scene, context.Authoring.Layout, this.PasteTargetOf(context, asChild), isCut, preserveWorld: asChild, out var paste, out var refused))
         {
             return null;
         }

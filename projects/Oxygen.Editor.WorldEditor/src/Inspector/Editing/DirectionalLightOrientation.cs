@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Utils;
 
 namespace Oxygen.Editor.World.Inspector.Editing;

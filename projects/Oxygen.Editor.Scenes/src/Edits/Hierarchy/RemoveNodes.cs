@@ -44,7 +44,7 @@ public sealed record RemoveNodes : ISceneEdit
     {
         ArgumentNullException.ThrowIfNull(scope);
         var scene = scope.Scene;
-        var layout = SceneLayout.Of(scene);
+        var layout = scope.Layout;
         var nodes = SceneGraph.TopLevel(scope, this.Roots);
 
         // Every place is captured before anything moves, so the revert puts them all back exactly.

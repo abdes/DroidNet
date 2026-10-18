@@ -6,7 +6,7 @@ using System.Collections.ObjectModel;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.World.Components;
 
 /// <summary>
 /// Represents a targeted override for specific LODs and/or submeshes within a geometry asset.

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
@@ -67,7 +68,7 @@ public sealed class MaterialKeyPriorityTests
 
     private async Task VerifySharedProjectConsumersAsync(CookWorkspace consumer, CookWorkspace materials, ContentPipelineService service, ContentPipelineService materialProducer)
     {
-        var second = new Scene(consumer.Project) { Name = "Project material" };
+        var second = new Scene { Name = "Project material" };
         var node = new SceneNode(second) { Name = "Project cube" };
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")) };
         geometry.OverrideSlots.Add(await CreateBuiltinMaterialSlotAsync(
@@ -77,7 +78,7 @@ public sealed class MaterialKeyPriorityTests
         var stream = File.Create(Path.Combine(consumer.Root, "Content/Scenes/Project.oscene.json"));
         await using (stream.ConfigureAwait(false))
         {
-            await new SceneSerializer(consumer.Project).SerializeAsync(stream, second).ConfigureAwait(false);
+            await SceneSerializer.SerializeAsync(stream, second).ConfigureAwait(false);
         }
 
         var folder = new Uri("asset:///Content/Scenes");

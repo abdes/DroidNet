@@ -9,9 +9,9 @@ using Moq;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Play;
 using Oxygen.Editor.World.Problems;
-using Oxygen.Editor.World.Scripting;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
@@ -136,7 +136,7 @@ public sealed partial class ProblemsViewModelTests : IDisposable
         {
             ProjectId = Guid.Empty,
             Name = "Test",
-            Category = Oxygen.Editor.World.Category.Games,
+            Category = Oxygen.Editor.Projects.Category.Games,
             ProjectRoot = @"C:\Project",
             AuthoringMounts = [],
             LocalFolderMounts = [],

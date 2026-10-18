@@ -27,8 +27,8 @@ public sealed class RemoveNodesTests
 
         SceneAssert.Applied(result);
         _ = fixture.Scene.AllNodes.Select(static node => node.Id).Should().NotContain([SampleScene.A, SampleScene.A1, SampleScene.A11, SampleScene.A2]);
-        _ = LayoutScopes.PositionOf(fixture.Scene, LayoutEntryId.Of(SampleScene.A)).Should().BeNull();
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.AF).Should().BeNull();
+        _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.A)).Should().BeNull();
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.AF).Should().BeNull();
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.NodesRemoved([SampleScene.A]), new SceneChange.LayoutChanged());
     }
 
@@ -36,16 +36,16 @@ public sealed class RemoveNodesTests
     public async Task Undo_RestoresPositionsLayoutAndExpandedState()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        LayoutQuery.Folder(fixture.Scene, SampleScene.AF)!.IsExpanded = false;
+        LayoutQuery.Folder(fixture.Layout, SampleScene.AF)!.IsExpanded = false;
         var rootBefore = fixture.Scene.RootNodes.Select(static node => node.Id).ToList();
-        var layoutBefore = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0));
+        var layoutBefore = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0));
 
         _ = await SceneAssert.RoundTripAsync(fixture, new RemoveNodes([SampleScene.A])).ConfigureAwait(false);
 
         _ = fixture.Scene.RootNodes.Select(static node => node.Id).Should().Equal(rootBefore);
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0)).Should().Equal(layoutBefore);
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.UnderNode(SampleScene.A, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.A1), LayoutEntryId.Of(SampleScene.AF));
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.AF)!.IsExpanded.Should().BeFalse();
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0)).Should().Equal(layoutBefore);
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.UnderNode(SampleScene.A, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.A1), LayoutEntryId.Of(SampleScene.AF));
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.AF)!.IsExpanded.Should().BeFalse();
     }
 
     [TestMethod]
@@ -71,13 +71,13 @@ public sealed class RemoveNodesTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var rootBefore = fixture.Scene.RootNodes.Select(static node => node.Id).ToList();
-        var layoutBefore = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0));
+        var layoutBefore = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0));
 
         _ = await SceneAssert.RoundTripAsync(fixture, new RemoveNodes([SampleScene.B, SampleScene.Cam])).ConfigureAwait(false);
 
         _ = fixture.Scene.RootNodes.Select(static node => node.Id).Should().Equal(rootBefore);
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.AtRoot(0)).Should().Equal(layoutBefore);
-        _ = LayoutScopes.EntriesOf(fixture.Scene, LayoutPosition.InFolder(SampleScene.F, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.B), LayoutEntryId.Of(SampleScene.G));
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0)).Should().Equal(layoutBefore);
+        _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(SampleScene.F, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.B), LayoutEntryId.Of(SampleScene.G));
     }
 
     [TestMethod]
@@ -117,7 +117,7 @@ public sealed class RemoveNodesTests
         SceneAssert.Applied(result);
         _ = fixture.History.UndoStack.Should().ContainSingle();
         _ = fixture.Scene.AllNodes.Select(static node => node.Id).Should().NotContain(SampleScene.Cam);
-        _ = LayoutQuery.Folder(fixture.Scene, SampleScene.F).Should().BeNull();
+        _ = LayoutQuery.Folder(fixture.Layout, SampleScene.F).Should().BeNull();
 
         // The single entry undoes both.
         SceneAssert.Applied(await fixture.Authoring.UndoAsync().ConfigureAwait(false));

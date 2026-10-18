@@ -5,6 +5,7 @@
 using System.Numerics;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -113,16 +114,17 @@ public static class SceneNodeTemplates
 
     /// <summary>Builds the insert that appends a new node: last among its parent's children, last in its explorer place.</summary>
     /// <param name="scene">The scene.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <param name="node">The node's data.</param>
     /// <param name="parent">The parent, or <see langword="null"/> for a root node.</param>
     /// <param name="folder">The folder its entry goes in, in the parent's scope; the scope's own list when <see langword="null"/>.</param>
     /// <returns>The insert.</returns>
-    public static NodeInsert Append(Scene scene, SceneNodeData node, NodeId? parent = null, FolderId? folder = null)
+    public static NodeInsert Append(Scene scene, IList<ExplorerEntryData> layout, SceneNodeData node, NodeId? parent = null, FolderId? folder = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(layout);
         var parentNode = parent is { } id ? scene.AllNodes.First(candidate => candidate.Id == id) : null;
         var siblings = parentNode?.Children.Count ?? scene.RootNodes.Count;
-        var layout = scene.ExplorerLayout ?? [];
         var place = folder is { } inFolder
             ? LayoutPosition.InFolder(inFolder, 0)
             : parent is { } underNode ? LayoutPosition.UnderNode(underNode, 0) : LayoutPosition.AtRoot(0);

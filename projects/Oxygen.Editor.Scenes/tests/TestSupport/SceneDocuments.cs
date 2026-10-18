@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
-using Moq;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Scenes.Documents;
-using Oxygen.Editor.World;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 
@@ -23,7 +22,7 @@ public sealed partial class SceneDocuments : IDisposable
     /// </summary>
     public SceneDocuments()
     {
-        this.Open = new OpenDocuments([new SceneDocumentKind(Mock.Of<IProject>(), this.Interaction, this.Redirects)], this.Files);
+        this.Open = new OpenDocuments([new SceneDocumentKind(FakeMaterialSlotProvider.Project, this.Interaction, this.Redirects)], this.Files);
     }
 
     /// <summary>Gets the open documents.</summary>
@@ -57,7 +56,7 @@ public sealed partial class SceneDocuments : IDisposable
     {
         ArgumentNullException.ThrowIfNull(data);
         var file = FileOf(data.Name);
-        this.Files.Put(file.Path, JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData));
+        this.Files.Put(file.Path, JsonSerializer.SerializeToUtf8Bytes(data as SceneFileData ?? new SceneFileData(data, explorerLayout: null), SceneFileJsonContext.Default.SceneFileData));
         return file;
     }
 

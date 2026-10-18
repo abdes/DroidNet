@@ -6,6 +6,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -30,11 +31,11 @@ public sealed partial class SceneDescriptorGeneratorTests
     public async Task AuthoredStartingCameraCooksAsItsNodeIndex()
     {
         using var workspace = new DescriptorWorkspace();
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         _ = AddNode(scene, "Ground", camera: false);
         _ = AddNode(scene, "Overview", camera: true);
         var gameplay = AddNode(scene, "Gameplay", camera: true);
-        scene.SetPlay(scene.Play with { StartingCamera = gameplay.Id });
+        scene.SetStartingCamera(gameplay.Id);
 
         using var descriptor = await this.GenerateDescriptorAsync(workspace, scene).ConfigureAwait(false);
 
@@ -48,14 +49,14 @@ public sealed partial class SceneDescriptorGeneratorTests
     public async Task UnsetStartingCameraCooksTheFirstCameraInHierarchyOrder()
     {
         using var workspace = new DescriptorWorkspace();
-        var empty = CreateScene(workspace.Project);
+        var empty = CreateScene();
         _ = AddNode(empty, "Ground", camera: false);
         using (var none = await this.GenerateDescriptorAsync(workspace, empty).ConfigureAwait(false))
         {
             _ = none.RootElement.TryGetProperty("starting_camera", out _).Should().BeFalse();
         }
 
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         var rig = AddNode(scene, "Rig", camera: false);
         var nested = new SceneNode(scene) { Name = "Nested" };
         _ = nested.AddComponent(new PerspectiveCamera { Name = "Camera" });
@@ -74,9 +75,9 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         var camera = AddNode(scene, "Gameplay", camera: true);
-        scene.SetPlay(scene.Play with { StartingCamera = camera.Id });
+        scene.SetStartingCamera(camera.Id);
         _ = scene.RootNodes.Remove(camera);
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
 
@@ -85,7 +86,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var issue = result.Diagnostics.Should().ContainSingle().Which;
         _ = issue.Severity.Should().Be(DiagnosticSeverity.Error);
         _ = issue.AffectedEntity!.SceneId.Should().Be(scene.Id);
-        _ = issue.SuggestedAction!.Payload["PropertyPath"].Should().Be(ScenePlayPropertyPaths.StartingCamera);
+        _ = issue.SuggestedAction!.Payload["PropertyPath"].Should().Be(SceneStartingPropertyPaths.StartingCamera);
         _ = File.Exists(result.DescriptorPath).Should().BeFalse();
     }
 
@@ -97,17 +98,14 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         WriteInputFile(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         _ = AddNode(scene, "Camera", camera: true);
-        scene.SetPlay(scene.Play with
-        {
-            StartingInputContexts =
-            [
-                new StartingInputContextData(new Uri("asset:///Content/Input/Menu.oimap")),
-                new StartingInputContextData(new Uri("asset:///Content/Input/Gameplay.oimap")),
-                new StartingInputContextData(new Uri("asset:///Content/Input/Overlay.oimap"), Priority: 7),
-            ],
-        });
+        scene.SetStartingInputContexts(
+        [
+            new StartingInputContextData(new Uri("asset:///Content/Input/Menu.oimap")),
+            new StartingInputContextData(new Uri("asset:///Content/Input/Gameplay.oimap")),
+            new StartingInputContextData(new Uri("asset:///Content/Input/Overlay.oimap"), Priority: 7),
+        ]);
         File.WriteAllText(
             Path.Combine(workspace.Root, "Content", "Input", "Overlay.input.json"),
             """{ "contexts": [ { "name": "Overlay", "priority": 1, "mappings": [] } ] }""");
@@ -131,16 +129,16 @@ public sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         WriteInputFile(workspace);
-        var scene = CreateScene(workspace.Project);
+        var scene = CreateScene();
         _ = AddNode(scene, "Camera", camera: true);
-        scene.SetPlay(scene.Play with { StartingInputContexts = [new StartingInputContextData(new Uri("asset:///Content/Input/Vehicle.oimap"))] });
+        scene.SetStartingInputContexts([new StartingInputContextData(new Uri("asset:///Content/Input/Vehicle.oimap"))]);
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
 
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var issue = result.Diagnostics.Should().ContainSingle().Which;
         _ = issue.Message.Should().Contain("Vehicle");
-        _ = issue.SuggestedAction!.Payload["PropertyPath"].Should().Be(ScenePlayPropertyPaths.StartingInputContexts);
+        _ = issue.SuggestedAction!.Payload["PropertyPath"].Should().Be(SceneStartingPropertyPaths.StartingInputContexts);
         _ = File.Exists(result.DescriptorPath).Should().BeFalse();
     }
 

@@ -7,6 +7,7 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
@@ -45,17 +46,19 @@ public sealed record SceneClipboard
 
     /// <summary>Captures selected nodes and folders. A selected item inside another selected item goes with it.</summary>
     /// <param name="scene">The scene.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <param name="nodes">The selected nodes; missing ids are skipped.</param>
     /// <param name="folders">The selected folders; missing ids are skipped.</param>
     /// <returns>The clipboard, or <see langword="null"/> when nothing selected exists.</returns>
-    public static SceneClipboard? Capture(Scene scene, IReadOnlyCollection<NodeId> nodes, IReadOnlyCollection<FolderId> folders)
+    public static SceneClipboard? Capture(Scene scene, IList<ExplorerEntryData> layout, IReadOnlyCollection<NodeId> nodes, IReadOnlyCollection<FolderId> folders)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(nodes);
         ArgumentNullException.ThrowIfNull(folders);
         var selected = nodes.Select(LayoutEntryId.Of).Concat(folders.Select(LayoutEntryId.Of)).ToHashSet();
         var entries = new List<ExplorerEntryData>();
-        Collect(scene.ExplorerLayout ?? [], selected, entries);
+        Collect(layout, selected, entries);
         if (entries.Count == 0)
         {
             return null;
@@ -77,6 +80,7 @@ public sealed record SceneClipboard
 
     /// <summary>Builds the batch that pastes the clipboard.</summary>
     /// <param name="scene">The scene to paste into.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <param name="target">Where the items go.</param>
     /// <param name="cut">Whether to move the captured items rather than insert copies.</param>
     /// <param name="preserveWorld">Whether the items keep their world transforms rather than their local ones.</param>
@@ -85,6 +89,7 @@ public sealed record SceneClipboard
     /// <returns>Whether the batch was built.</returns>
     public bool TryPaste(
         Scene scene,
+        IList<ExplorerEntryData> layout,
         PasteTarget target,
         bool cut,
         bool preserveWorld,
@@ -92,9 +97,9 @@ public sealed record SceneClipboard
         [NotNullWhen(false)] out SceneDiagnostic? error)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(target);
         edit = null;
-        var layout = scene.ExplorerLayout ?? [];
         error = Destination(scene, layout, target, out var scope, out var destination);
         if (error is not null)
         {
@@ -102,7 +107,7 @@ public sealed record SceneClipboard
         }
 
         var edits = new List<ISceneEdit>();
-        error = cut ? this.CutItems(layout, out var items) : this.CopyItems(scene, destination, preserveWorld, edits, out items);
+        error = cut ? this.CutItems(layout, out var items) : this.CopyItems(scene, layout, destination, preserveWorld, edits, out items);
         if (error is not null)
         {
             return false;
@@ -260,7 +265,7 @@ public sealed record SceneClipboard
     }
 
     // A copy creates its folders at the target and inserts its nodes at the root; the batch then moves them in place.
-    private SceneDiagnostic? CopyItems(Scene scene, LayoutPosition destination, bool preserveWorld, List<ISceneEdit> edits, out List<ExplorerEntryData> items)
+    private SceneDiagnostic? CopyItems(Scene scene, IList<ExplorerEntryData> layout, LayoutPosition destination, bool preserveWorld, List<ISceneEdit> edits, out List<ExplorerEntryData> items)
     {
         items = [];
         if (preserveWorld && this.WorldNodes is null)
@@ -272,7 +277,7 @@ public sealed record SceneClipboard
         items = this.Entries.Select(entry => SceneNodeCopies.RemapEntry(entry, copies.Ids)).ToList();
         var data = copies.Roots.ToDictionary(static root => root.Id);
         var rootNodes = scene.RootNodes.Count;
-        var rootEntries = (scene.ExplorerLayout ?? []).Count;
+        var rootEntries = layout.Count;
         var inserts = new List<NodeInsert>();
         foreach (var entry in NodeEntries(items))
         {

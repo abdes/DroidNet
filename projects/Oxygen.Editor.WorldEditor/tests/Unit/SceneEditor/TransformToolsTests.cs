@@ -12,6 +12,7 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.SceneEditor;
@@ -145,7 +146,7 @@ public sealed class TransformToolsTests
     [TestMethod]
     public void HelperEdits_ChangeOnlyTheDraggedLightValue()
     {
-        var scene = new Scene(new Mock<IProject>().Object) { Name = "Scene" };
+        var scene = new Scene { Name = "Scene" };
         var spot = new SceneNode(scene) { Name = "Spot" };
         _ = spot.AddComponent(new SpotLightComponent { Name = "Spot" });
         var point = new SceneNode(scene) { Name = "Point" };

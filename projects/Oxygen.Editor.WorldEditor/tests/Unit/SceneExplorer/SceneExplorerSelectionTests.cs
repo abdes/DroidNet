@@ -12,6 +12,7 @@ using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
@@ -321,7 +322,7 @@ public sealed partial class SceneExplorerSelectionTests
                 },
             ],
         };
-        scene.SetExplorerLayout([outer]);
+        harness.TabOf(scene).ReplaceLayout([outer]);
         harness.SelectionService.Publish(
             harness.DocumentIdOf(scene),
             new SceneSelectionContext(SceneSelectionKind.Folder, [], [innerId], PrimaryNodeId: null, innerId),
@@ -341,7 +342,7 @@ public sealed partial class SceneExplorerSelectionTests
     public async Task ProjectionRebuild_PreservesSelectionRevealWithoutAuthoringFolderExpansion()
     {
         using var harness = new SelectionHarness(out var scene, out _, out var folderId);
-        var entry = scene.ExplorerLayout!.Single(value => value.FolderId == folderId);
+        var entry = harness.TabOf(scene).Layout.Single(value => value.FolderId == folderId);
         entry.IsExpanded = false;
         var nodeId = entry.Children!.Single().NodeId!.Value;
         using var explorer = harness.Build();
@@ -398,8 +399,8 @@ public sealed partial class SceneExplorerSelectionTests
 
         public SelectionHarness(out Scene scene, out SceneNode freeNode, out FolderId folderId)
         {
-            var project = new Project(new ProjectInfo("Selection", Category.Games, "H:/SelectionTests", "preview.png")) { Name = "Selection" };
-            scene = new Scene(project) { Name = "Scene A" };
+            var project = new Project(new ProjectInfo("Selection", Category.Games, "H:/SelectionTests", "preview.png"));
+            scene = new Scene { Name = "Scene A" };
             this.sceneA = scene;
 
             var folderNode = new SceneNode(scene) { Name = "InFolder" };
@@ -408,25 +409,25 @@ public sealed partial class SceneExplorerSelectionTests
             scene.RootNodes.Add(freeNode);
 
             folderId = FolderId.New();
-            scene.SetExplorerLayout(
-                [
-                    new ExplorerEntryData
-                    {
-                        Type = "Folder",
-                        FolderId = folderId,
-                        Name = "Group",
-                        IsExpanded = true,
-                        Children = [new ExplorerEntryData { Type = "Node", NodeId = folderNode.Id }],
-                    },
-                    new ExplorerEntryData { Type = "Node", NodeId = freeNode.Id },
-                ]);
+            IList<ExplorerEntryData> layout =
+            [
+                new ExplorerEntryData
+                {
+                    Type = "Folder",
+                    FolderId = folderId,
+                    Name = "Group",
+                    IsExpanded = true,
+                    Children = [new ExplorerEntryData { Type = "Node", NodeId = folderNode.Id }],
+                },
+                new ExplorerEntryData { Type = "Node", NodeId = freeNode.Id },
+            ];
 
             var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
             _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
             this.Manager = manager;
 
             var documents = new TestDocumentArea();
-            var metadata = SceneTabs.Open(scene);
+            var metadata = SceneTabs.Open(scene, layout: layout);
             scene = metadata.Scene;
             freeNode = metadata.NodeOf(freeNode);
             this.sceneA = scene;
@@ -461,7 +462,7 @@ public sealed partial class SceneExplorerSelectionTests
 
         public Scene AddScene(string name)
         {
-            var added = new Scene(this.sceneA.Project) { Name = name };
+            var added = new Scene { Name = name };
             var metadata = SceneTabs.Open(added);
             added = metadata.Scene;
             this.openDocuments.Add(metadata);
@@ -485,11 +486,19 @@ public sealed partial class SceneExplorerSelectionTests
         /// <param name="parent">The node's parent, or <see langword="null"/> for a root node.</param>
         /// <returns>The edit's result.</returns>
         public Task<SceneEditResult> Insert(Scene scene, SceneNodeData node, NodeId? parent = null)
-            => this.openDocuments.Single(tab => ReferenceEquals(tab.Scene, scene)).Authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(scene, node, parent)]));
+        {
+            var tab = this.TabOf(scene);
+            return tab.Authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(scene, tab.Layout, node, parent)]));
+        }
 
         /// <summary>Gets the identity of the document that edits a scene of the harness.</summary>
         /// <param name="scene">The scene.</param>
         /// <returns>The document's identity.</returns>
-        public DocumentId DocumentIdOf(Scene scene) => this.openDocuments.Single(tab => ReferenceEquals(tab.Scene, scene)).DocumentId;
+        public DocumentId DocumentIdOf(Scene scene) => this.TabOf(scene).DocumentId;
+
+        /// <summary>Gets the document that edits a scene of the harness.</summary>
+        /// <param name="scene">The scene.</param>
+        /// <returns>The document's tab.</returns>
+        public SceneTab TabOf(Scene scene) => this.openDocuments.Single(tab => ReferenceEquals(tab.Scene, scene));
     }
 }

@@ -23,7 +23,7 @@ internal sealed partial class CatalogWorkloadServices : IDisposable
     public CatalogWorkloadServices(NativeSceneFixture fixture, IContentPipelineProcessRunner? processRunner = null)
     {
         this.Projects = fixture.Projects;
-        this.Projects.Activate(ProjectContext.FromProject(fixture.Source.Project) with { AuthoringMounts = [new("Content", "Content")] });
+        this.Projects.Activate(fixture.Projects.ActiveProject! with { AuthoringMounts = [new("Content", "Content")] });
         var files = new NativeAtomicFileStore(new RealFileSystem());
         this.Runs = new ContentCookCoordinator(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), processRunner ?? new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);

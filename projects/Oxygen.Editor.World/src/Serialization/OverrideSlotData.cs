@@ -14,6 +14,4 @@ namespace Oxygen.Editor.World.Serialization;
 [JsonDerivedType(typeof(LightingSlotData), "LightingSlot")]
 [JsonDerivedType(typeof(MaterialsSlotData), "MaterialsSlot")]
 [JsonDerivedType(typeof(LevelOfDetailSlotData), "LevelOfDetailSlot")]
-public abstract record OverrideSlotData
-{
-}
+public abstract record OverrideSlotData;

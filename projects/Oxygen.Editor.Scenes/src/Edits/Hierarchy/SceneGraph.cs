@@ -5,7 +5,9 @@
 using System.Collections.ObjectModel;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -28,14 +30,15 @@ internal static class SceneGraph
 
     /// <summary>Gets a node's full placement: graph place, local transform and layout place.</summary>
     /// <param name="scene">The scene.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <param name="node">The node.</param>
     /// <returns>The placement.</returns>
-    public static NodePlacementState PlacementOf(Scene scene, SceneNode node)
+    public static NodePlacementState PlacementOf(Scene scene, IList<ExplorerEntryData> layout, SceneNode node)
         => new(
             node.Id,
             PositionOf(scene, node),
             LocalOf(node),
-            SceneLayout.PositionOf(SceneLayout.Of(scene), LayoutEntryId.Of(node.Id)) ?? LayoutPosition.AtRoot(0));
+            SceneLayout.PositionOf(layout, LayoutEntryId.Of(node.Id)) ?? LayoutPosition.AtRoot(0));
 
     /// <summary>Gets a node's local transform.</summary>
     /// <param name="node">The node.</param>

@@ -36,7 +36,10 @@ public sealed class QuaternionJsonConverter : JsonConverter<Quaternion>
             }
 
             var propName = reader.GetString();
-            reader.Read();
+            if (!reader.Read())
+            {
+                throw new JsonException("Unexpected end when reading Quaternion");
+            }
 
             switch (propName)
             {

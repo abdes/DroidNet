@@ -4,8 +4,8 @@
 
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Layout;
@@ -45,7 +45,7 @@ public sealed record MoveLayoutEntries : ISceneEdit
     SceneEditValidation ISceneEdit.Validate(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var layout = scope.Scene.ExplorerLayout ?? [];
+        var layout = scope.Layout;
         if (scope.CheckScope(SceneLayout.ScopeOf(layout, this.To).Scope) is { IsValid: false } refused)
         {
             return refused;
@@ -59,7 +59,7 @@ public sealed record MoveLayoutEntries : ISceneEdit
     SceneEditApplication ISceneEdit.Apply(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var layout = SceneLayout.Of(scope.Scene);
+        var layout = scope.Layout;
         var before = this.Entries.Select(id => new LayoutEntryPosition(id, SceneLayout.PositionOf(layout, id)!)).ToArray();
         var moved = this.Entries.Select(id => SceneLayout.Find(layout, id)!.Value).ToArray();
         foreach (var (entry, list) in moved)

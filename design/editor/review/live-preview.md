@@ -184,10 +184,10 @@ From the LLDs and the module architecture, unchanged:
 6. **Play is in LivePreview.** It covers both runtimes, the embedded engine and
    the player, with `IRuntimeProblemSource` as the domain contract Problems
    reads. `ScriptProblem` and `ScriptProblemSeverity` move from the Content
-   Browser to `World` (pulled forward from S1.8) so LivePreview and Problems use
-   them without referencing UI. Player log output is raised on `PlaySession`
-   (`LogReceived`), which the workspace bridges to `OutputLogBuffer` until the
-   `Output` module lands in S1.12.
+   Browser to the new `Oxygen.Editor.Scripting` module (pulled forward from
+   S1.8) so LivePreview and Problems use them without referencing UI. Player log
+   output is raised on `PlaySession` (`LogReceived`), which the workspace
+   bridges to `OutputLogBuffer` until the `Output` module lands in S1.12.
 7. **Content demand follows the scene change stream.** It demands every
    reference (`SceneAssetReferences.Runtime`, covering both `OverrideSlots` and
    `TargetedOverrides`) on open and on `Document.ContentReplaced`, then follows
@@ -409,8 +409,8 @@ mapping across all eight `EngineComponentId` values. It is built from
 
 | Project          | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| World            | `ScriptProblem` and `ScriptProblemSeverity` moved from the Content Browser (pulled forward from S1.8)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Content Browser  | Uses `ScriptProblem` and `ScriptProblemSeverity` from `World`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Scripting (new)  | `ScriptProblem` and `ScriptProblemSeverity` moved from the Content Browser (pulled forward from S1.8)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Content Browser  | Uses `ScriptProblem` and `ScriptProblemSeverity` from `Scripting`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Scenes           | `Engine/` deleted; `SceneEngineFields`, the `Engine` initializers and every command key argument removed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Schemas          | `PropertyDescriptor.Engine`, `EngineCommandKey` and `EngineFieldMapping` removed; the descriptor and `ValidationResult` constructors lose the key                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Material Editor  | Command key arguments removed from `MaterialDescriptors`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -466,13 +466,13 @@ Each step builds the touched projects and runs their tests, filtered to the
 changed code; steps that change what the editor shows end with the reviewer's
 editor build.
 
-1. **Prerequisites in World and Runtime.** Move `ScriptProblem` and
-   `ScriptProblemSeverity` from the Content Browser to `World`; move
-   `EngineInteropExceptionPolicy` and `RuntimeOperationResults` to `Runtime`;
-   key Runtime's surface APIs by `SurfaceOwnerId`; rename `IEngineSettings` to
-   `IEngineStartupSettings`, move logging verbosity into it, read it in
-   `NativeEngineSession.Initialize`, and rebind the scene editor's verbosity
-   control.
+1. **Prerequisites in Scripting and Runtime.** Move `ScriptProblem` and
+   `ScriptProblemSeverity` from the Content Browser to
+   `Oxygen.Editor.Scripting`; move `EngineInteropExceptionPolicy` and
+   `RuntimeOperationResults` to `Runtime`; key Runtime's surface APIs by
+   `SurfaceOwnerId`; rename `IEngineSettings` to `IEngineStartupSettings`, move
+   logging verbosity into it, read it in `NativeEngineSession.Initialize`, and
+   rebind the scene editor's verbosity control.
 2. **Create and move core.** Create `Oxygen.Editor.LivePreview` and its test
    projects; `git mv` of `Scenes/src/Engine`, `SceneEngineSync*` and its
    helpers, `AssetRuntimeStatusSource`, `WorkspacePublicationPreview`, and

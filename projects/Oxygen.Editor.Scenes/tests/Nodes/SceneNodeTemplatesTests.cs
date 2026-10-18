@@ -8,7 +8,7 @@ using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.Scenes.Tests.Nodes;
@@ -130,7 +130,7 @@ public sealed class SceneNodeTemplatesTests
         ArgumentNullException.ThrowIfNull(row);
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var node = SceneNodeTemplates.Empty(fixture.Scene, "Appended");
-        var insert = SceneNodeTemplates.Append(fixture.Scene, node, row.Parent, row.Folder);
+        var insert = SceneNodeTemplates.Append(fixture.Scene, fixture.Layout, node, row.Parent, row.Folder);
         var container = row.Folder is { } folder
             ? LayoutPosition.InFolder(folder, 0)
             : row.Parent is { } parent ? LayoutPosition.UnderNode(parent, 0) : LayoutPosition.AtRoot(0);
@@ -140,7 +140,7 @@ public sealed class SceneNodeTemplatesTests
         SceneAssert.Applied(result);
         var siblings = row.Parent is { } owner ? fixture.Node(owner).Children : fixture.Scene.RootNodes;
         _ = siblings[^1].Id.Should().Be(node.Id);
-        _ = LayoutScopes.EntriesOf(fixture.Scene, container)[^1].Should().Be(LayoutEntryId.Of(node.Id));
+        _ = LayoutScopes.EntriesOf(fixture.Layout, container)[^1].Should().Be(LayoutEntryId.Of(node.Id));
     }
 
     // Created nodes are new: no id of the node or its components is the scene's, and none is empty.

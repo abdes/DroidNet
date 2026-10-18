@@ -5,7 +5,6 @@
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets.Model;
@@ -69,8 +68,8 @@ public static class SceneComponents
                 Name = "Geometry",
                 Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
             },
-            PerspectiveCamera => new World.PerspectiveCamera { Name = "Perspective Camera" },
-            OrthographicCamera => new World.OrthographicCamera { Name = "Orthographic Camera" },
+            PerspectiveCamera => new PerspectiveCamera { Name = "Perspective Camera" },
+            OrthographicCamera => new OrthographicCamera { Name = "Orthographic Camera" },
             DirectionalLight => new DirectionalLightComponent { Name = "Directional Light", CastsShadows = true, AtmosphereSlot = AtmosphereLightSlot.None },
             PointLight => new PointLightComponent { Name = "Point Light", LuminousFluxLumens = 1_600f, Range = 10f },
             SpotLight => new SpotLightComponent { Name = "Spot Light", LuminousFluxLumens = 1_600f, Range = 15f },
@@ -87,8 +86,8 @@ public static class SceneComponents
         => component switch
         {
             GeometryComponent => Geometry,
-            World.PerspectiveCamera => PerspectiveCamera,
-            World.OrthographicCamera => OrthographicCamera,
+            World.Components.PerspectiveCamera => PerspectiveCamera,
+            World.Components.OrthographicCamera => OrthographicCamera,
             DirectionalLightComponent => DirectionalLight,
             PointLightComponent => PointLight,
             SpotLightComponent => SpotLight,

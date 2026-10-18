@@ -7,7 +7,6 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Projects;
 
@@ -124,7 +123,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         }
 
         var previousProject = this.CurrentProject;
-        var project = new Project(projectInfo) { Name = projectInfo.Name };
+        var project = new Project(projectInfo);
         return Task.FromResult<ProjectLoadSnapshot?>(new(this, project, previousProject));
     }
 

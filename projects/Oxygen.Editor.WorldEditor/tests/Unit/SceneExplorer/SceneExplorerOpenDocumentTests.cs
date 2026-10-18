@@ -14,6 +14,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer;
@@ -31,8 +32,8 @@ public sealed class SceneExplorerOpenDocumentTests
     [TestMethod]
     public async Task CommitRenameAsync_RenamesTheNodeInOneUndoStep()
     {
-        var project = new Project(new ProjectInfo("Rename", Category.Games, "H:/RenameTreeTests", "preview.png")) { Name = "Rename" };
-        var scene = new Scene(project) { Name = "Scene" };
+        var project = new Project(new ProjectInfo("Rename", Category.Games, "H:/RenameTreeTests", "preview.png"));
+        var scene = new Scene { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Original" };
         scene.RootNodes.Add(node);
         using var metadata = SceneTabs.Open(scene);
@@ -57,8 +58,8 @@ public sealed class SceneExplorerOpenDocumentTests
     [TestMethod]
     public async Task CommitRenameAsync_EmptyNameFailsAndChangesNothing()
     {
-        var project = new Project(new ProjectInfo("Rename", Category.Games, "H:/RenameTreeTests", "preview.png")) { Name = "Rename" };
-        var scene = new Scene(project) { Name = "Scene" };
+        var project = new Project(new ProjectInfo("Rename", Category.Games, "H:/RenameTreeTests", "preview.png"));
+        var scene = new Scene { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Original" };
         scene.RootNodes.Add(node);
         using var metadata = SceneTabs.Open(scene);
@@ -83,8 +84,8 @@ public sealed class SceneExplorerOpenDocumentTests
     [TestMethod]
     public async Task CommitRenameAsync_UnchangedNameRecordsNothing()
     {
-        var project = new Project(new ProjectInfo("Rename", Category.Games, "H:/RenameTreeTests", "preview.png")) { Name = "Rename" };
-        var scene = new Scene(project) { Name = "Scene" };
+        var project = new Project(new ProjectInfo("Rename", Category.Games, "H:/RenameTreeTests", "preview.png"));
+        var scene = new Scene { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Original" };
         scene.RootNodes.Add(node);
         using var metadata = SceneTabs.Open(scene);
@@ -109,12 +110,12 @@ public sealed class SceneExplorerOpenDocumentTests
     [TestMethod]
     public async Task ReloadReplacesTreeAdaptersWithoutRequiringRuntime()
     {
-        var project = new Project(new ProjectInfo("Reload", Category.Games, "H:/ReloadTreeTests", "preview.png")) { Name = "Reload" };
-        var original = new Scene(project) { Name = "Scene" };
+        var project = new Project(new ProjectInfo("Reload", Category.Games, "H:/ReloadTreeTests", "preview.png"));
+        var original = new Scene { Name = "Scene" };
         var originalNode = new SceneNode(original) { Name = "Original node" };
         original.RootNodes.Add(originalNode);
         using var metadata = SceneTabs.Open(original);
-        var replacement = Scene.CreateAndHydrate(project, original.Dehydrate());
+        var replacement = Scene.CreateAndHydrate(original.Dehydrate());
         replacement.RootNodes[0].Name = "Reloaded node";
         metadata.WriteFile(replacement);
         original = metadata.Scene;
@@ -148,9 +149,9 @@ public sealed class SceneExplorerOpenDocumentTests
     [TestMethod]
     public async Task SwitchingBackToAnOpenScenePreservesUnsavedModelAndAvoidsDiskReload()
     {
-        var project = new Project(new ProjectInfo("Open scenes", Category.Games, "H:/OpenSceneTests", "preview.png")) { Name = "Open scenes" };
-        var first = new Scene(project) { Name = "First" };
-        var second = new Scene(project) { Name = "Second" };
+        var project = new Project(new ProjectInfo("Open scenes", Category.Games, "H:/OpenSceneTests", "preview.png"));
+        var first = new Scene { Name = "First" };
+        var second = new Scene { Name = "Second" };
         var node = new SceneNode(first) { Name = "Unsaved node" };
         node.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(9, 8, 7);
         first.RootNodes.Add(node);

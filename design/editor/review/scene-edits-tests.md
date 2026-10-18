@@ -71,55 +71,56 @@ tests/
 
 ### 2.1 Test classes
 
-| Folder              | Class                          | Kind       | Task  |
-| ------------------- | ------------------------------ | ---------- | ----- |
-| `Authoring/`        | `SceneAuthoringTests`          | unit       | 5     |
-|                     | `UndoRedoTests`                | unit       | 5     |
-|                     | `SceneEditBatchTests`          | unit       | 5     |
-|                     | `ChangeStreamTests`            | unit       | 5     |
-|                     | `SceneThreadTests`             | functional | 5     |
-|                     | `SceneGestureTests`            | unit       | 8     |
-| `Edits/`            | `EditContractTests`            | unit       | 5..13 |
-| `PropertyRules/`    | `TransformRulesTests`          | unit       | 8     |
-|                     | `PerspectiveCameraRulesTests`  | unit       | 8     |
-|                     | `OrthographicCameraRulesTests` | unit       | 8     |
-|                     | `DirectionalLightRulesTests`   | unit       | 8     |
-|                     | `LocalLightRulesTests`         | unit       | 8     |
-|                     | `LocalFogVolumeRulesTests`     | unit       | 8     |
-|                     | `NodeRenderingRulesTests`      | unit       | 8     |
-|                     | `SceneEnvironmentRulesTests`   | unit       | 8     |
-| `Edits/Properties/` | `SetPropertiesTests`           | unit       | 8     |
-|                     | `SetScenePropertiesTests`      | unit       | 8     |
-| `Edits/Components/` | `AddComponentTests`            | unit       | 9     |
-|                     | `RemoveComponentTests`         | unit       | 9     |
-| `Edits/Layout/`     | `CreateFolderTests`            | unit       | 10    |
-|                     | `RemoveFolderTests`            | unit       | 10    |
-|                     | `RestoreFolderTests`           | unit       | 10    |
-|                     | `RenameFolderTests`            | unit       | 10    |
-|                     | `MoveLayoutEntriesTests`       | unit       | 10    |
-|                     | `LayoutScopesTests`            | unit       | 10    |
-| `Edits/Hierarchy/`  | `InsertNodesTests`             | unit       | 11    |
-|                     | `RemoveNodesTests`             | unit       | 11    |
-|                     | `RenameNodeTests`              | unit       | 11    |
-|                     | `ReparentNodesTests`           | unit       | 11    |
-|                     | `ReorderNodeTests`             | unit       | 11    |
-|                     | `PlaceNodesTests`              | unit       | 11    |
-| `Nodes/`            | `SceneComponentsTests`         | unit       | 9     |
-|                     | `SceneNodeTemplatesTests`      | unit       | 11    |
-|                     | `SceneNodeCopiesTests`         | unit       | 12    |
-|                     | `SceneClipboardTests`          | unit       | 12    |
-| `Edits/Assets/`     | `SetGeometryTests`             | unit       | 13    |
-|                     | `SetMaterialSlotTests`         | unit       | 13    |
-|                     | `MaterialSlotInventoryTests`   | unit       | 13    |
-|                     | `RemoveMaterialSlotsTests`     | unit       | 13    |
-| `Edits/Settings/`   | `SetScenePlayTests`            | unit       | 7     |
-|                     | `SetSceneReferencesTests`      | unit       | 7     |
-|                     | `SetScriptSlotsTests`          | unit       | 7     |
-| `Edits/EditorView/` | `SetEditorHiddenTests`         | unit       | 7     |
-| `Documents/`        | `SceneContentTests`            | functional | 5     |
-|                     | `SceneRelocationTests`         | functional | 6     |
-| `Scenarios/`        | `HierarchyScenarioTests`       | functional | 12    |
-|                     | `PropertyScenarioTests`        | functional | 8     |
+| Folder              | Class                           | Kind       | Task  |
+| ------------------- | ------------------------------- | ---------- | ----- |
+| `Authoring/`        | `SceneAuthoringTests`           | unit       | 5     |
+|                     | `UndoRedoTests`                 | unit       | 5     |
+|                     | `SceneEditBatchTests`           | unit       | 5     |
+|                     | `ChangeStreamTests`             | unit       | 5     |
+|                     | `SceneThreadTests`              | functional | 5     |
+|                     | `SceneGestureTests`             | unit       | 8     |
+| `Edits/`            | `EditContractTests`             | unit       | 5..13 |
+| `PropertyRules/`    | `TransformRulesTests`           | unit       | 8     |
+|                     | `PerspectiveCameraRulesTests`   | unit       | 8     |
+|                     | `OrthographicCameraRulesTests`  | unit       | 8     |
+|                     | `DirectionalLightRulesTests`    | unit       | 8     |
+|                     | `LocalLightRulesTests`          | unit       | 8     |
+|                     | `LocalFogVolumeRulesTests`      | unit       | 8     |
+|                     | `NodeRenderingRulesTests`       | unit       | 8     |
+|                     | `SceneEnvironmentRulesTests`    | unit       | 8     |
+| `Edits/Properties/` | `SetPropertiesTests`            | unit       | 8     |
+|                     | `SetScenePropertiesTests`       | unit       | 8     |
+| `Edits/Components/` | `AddComponentTests`             | unit       | 9     |
+|                     | `RemoveComponentTests`          | unit       | 9     |
+| `Edits/Layout/`     | `CreateFolderTests`             | unit       | 10    |
+|                     | `RemoveFolderTests`             | unit       | 10    |
+|                     | `RestoreFolderTests`            | unit       | 10    |
+|                     | `RenameFolderTests`             | unit       | 10    |
+|                     | `MoveLayoutEntriesTests`        | unit       | 10    |
+|                     | `LayoutScopesTests`             | unit       | 10    |
+| `Edits/Hierarchy/`  | `InsertNodesTests`              | unit       | 11    |
+|                     | `RemoveNodesTests`              | unit       | 11    |
+|                     | `RenameNodeTests`               | unit       | 11    |
+|                     | `ReparentNodesTests`            | unit       | 11    |
+|                     | `ReorderNodeTests`              | unit       | 11    |
+|                     | `PlaceNodesTests`               | unit       | 11    |
+| `Nodes/`            | `SceneComponentsTests`          | unit       | 9     |
+|                     | `SceneNodeTemplatesTests`       | unit       | 11    |
+|                     | `SceneNodeCopiesTests`          | unit       | 12    |
+|                     | `SceneClipboardTests`           | unit       | 12    |
+| `Edits/Assets/`     | `SetGeometryTests`              | unit       | 13    |
+|                     | `SetMaterialSlotTests`          | unit       | 13    |
+|                     | `MaterialSlotInventoryTests`    | unit       | 13    |
+|                     | `RemoveMaterialSlotsTests`      | unit       | 13    |
+| `Edits/Settings/`   | `SetStartingCameraTests`        | unit       | 4     |
+|                     | `SetStartingInputContextsTests` | unit       | 5     |
+|                     | `SetSceneReferencesTests`       | unit       | 7     |
+|                     | `SetScriptSlotsTests`           | unit       | 7     |
+| `Edits/EditorView/` | `SetEditorHiddenTests`          | unit       | 7     |
+| `Documents/`        | `SceneContentTests`             | functional | 5     |
+|                     | `SceneRelocationTests`          | functional | 6     |
+| `Scenarios/`        | `HierarchyScenarioTests`        | functional | 12    |
+|                     | `PropertyScenarioTests`         | functional | 8     |
 
 `EditContractTests` gains the rows of each edit when its task lands. A scenario
 that needs an edit of a later task lands with that task.
@@ -308,8 +309,7 @@ assertions of its own.
 **Moq** (`Mock.Of<T>(…)`) when the port is a precondition that returns a fixed
 value or only has to exist, and the test never reads it back:
 
-- `IProject`: stored by the scene, never called by Scenes.
-- `IProjectManagerService`: `CurrentProject` returns that project.
+- `IProjectManagerService`: `CurrentProject` returns a project.
 - `ISceneDocumentCommandService`: required by `SceneDocumentKind` until task 14,
   never called by the new code.
 
@@ -1021,15 +1021,20 @@ removed cut node); cycles and locks are the built batch's to refuse.
 
 ## 12. Settings and editor view (task 7)
 
-### `SetScenePlayTests`
+### `SetStartingCameraTests`
 
-- **PY-01** `CameraAndContexts_SetAndRaiseScenePlayChanged`.
-- **PY-02** `StartingNodeNotACamera_IsInvalid` [`PlayCameraInvalid`].
-- **PY-03** `StartingCameraMissing_IsInvalid` [`PlayCameraInvalid`].
-- **PY-04** `RepeatedInputContext_IsInvalid` [`EntryDuplicate`].
-- **PY-05** `NullContextEntry_IsInvalid` [`EntryMissing`].
-- **PY-06** `ContextNotAnInputAsset_IsInvalid` [`AssetReferenceInvalid`].
-- **PY-07** `EquivalentSettings_AppliesWithoutAnEntry` (3.2).
+- **SC-01** `Camera_SetsAndRaisesStartingCameraChanged`.
+- **SC-02** `StartingNodeNotACamera_IsInvalid` [`StartingCameraInvalid`].
+- **SC-03** `StartingCameraMissing_IsInvalid` [`StartingCameraInvalid`].
+- **SC-04** `SameCamera_AppliesWithoutAnEntry` (3.2).
+
+### `SetStartingInputContextsTests`
+
+- **SI-01** `Contexts_SetAndRaiseStartingInputContextsChanged`.
+- **SI-02** `RepeatedInputContext_IsInvalid` [`EntryDuplicate`].
+- **SI-03** `NullContextEntry_IsInvalid` [`EntryMissing`].
+- **SI-04** `ContextNotAnInputAsset_IsInvalid` [`AssetReferenceInvalid`].
+- **SI-05** `EquivalentContexts_ApplyWithoutAnEntry` (3.2).
 
 ### `SetSceneReferencesTests`
 

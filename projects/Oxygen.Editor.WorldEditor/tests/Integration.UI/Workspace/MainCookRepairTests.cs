@@ -105,7 +105,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         var actions = new Mock<ICookingWorkspaceActions>();
         _ = actions.Setup(value => value.GoToPropertyAsync(It.IsAny<CookRunSnapshot>(), It.IsAny<DiagnosticRecord>())).Returns<CookRunSnapshot, DiagnosticRecord>((run, issue) =>
         {
-            _ = run.ProjectId.Should().Be(fixture.Source.Project.ProjectInfo.Id);
+            _ = run.ProjectId.Should().Be(fixture.Projects.ActiveProject!.ProjectId);
             fixture.Model.RequestFieldFocus(issue.SuggestedAction!.Payload["PropertyPath"]);
             return Task.FromResult(true);
         });

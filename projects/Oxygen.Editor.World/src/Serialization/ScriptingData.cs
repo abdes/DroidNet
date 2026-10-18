@@ -7,6 +7,8 @@ using System.Text.Json.Serialization;
 
 namespace Oxygen.Editor.World.Serialization;
 
+#pragma warning disable SA1402 // File may only contain a single type
+
 /// <summary>Persisted state of a node's scripting component: its script slots, in order.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ScriptingData : ComponentData
@@ -49,3 +51,5 @@ public sealed record ScriptValueData
     /// <summary>Gets the value.</summary>
     public required JsonElement Value { get; init; }
 }
+
+#pragma warning restore SA1402 // File may only contain a single type

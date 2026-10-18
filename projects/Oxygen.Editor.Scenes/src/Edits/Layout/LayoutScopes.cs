@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Layout;
@@ -15,62 +15,62 @@ namespace Oxygen.Editor.Scenes.Edits.Layout;
 public static class LayoutScopes
 {
     /// <summary>Gets the scope of a layout place.</summary>
-    /// <param name="scene">The scene.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <param name="position">The place.</param>
     /// <param name="scope">The node whose children the place groups, or <see langword="null"/> for the root.</param>
     /// <returns>Whether the place's container is in the layout.</returns>
-    public static bool TryScopeOf(Scene scene, LayoutPosition position, out NodeId? scope)
+    public static bool TryScopeOf(IList<ExplorerEntryData> layout, LayoutPosition position, out NodeId? scope)
     {
-        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(position);
-        (var found, scope) = SceneLayout.ScopeOf(scene.ExplorerLayout ?? [], position);
+        (var found, scope) = SceneLayout.ScopeOf(layout, position);
         return found || (position.Folder is null && position.Node is null);
     }
 
     /// <summary>Gets the scope a layout entry lives in.</summary>
-    /// <param name="scene">The scene.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <param name="entry">The entry.</param>
     /// <param name="scope">The node whose children the entry groups, or <see langword="null"/> for the root.</param>
     /// <returns>Whether the entry is in the layout.</returns>
-    public static bool TryScopeOf(Scene scene, LayoutEntryId entry, out NodeId? scope)
+    public static bool TryScopeOf(IList<ExplorerEntryData> layout, LayoutEntryId entry, out NodeId? scope)
     {
-        ArgumentNullException.ThrowIfNull(scene);
-        (var found, scope) = SceneLayout.ScopeOfEntry(scene.ExplorerLayout ?? [], entry);
+        ArgumentNullException.ThrowIfNull(layout);
+        (var found, scope) = SceneLayout.ScopeOfEntry(layout, entry);
         return found;
     }
 
     /// <summary>Gets where a layout entry is.</summary>
-    /// <param name="scene">The scene.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <param name="entry">The entry.</param>
     /// <returns>Its place, or <see langword="null"/> when the layout has no such entry.</returns>
-    public static LayoutPosition? PositionOf(Scene scene, LayoutEntryId entry)
+    public static LayoutPosition? PositionOf(IList<ExplorerEntryData> layout, LayoutEntryId entry)
     {
-        ArgumentNullException.ThrowIfNull(scene);
-        return SceneLayout.PositionOf(scene.ExplorerLayout ?? [], entry);
+        ArgumentNullException.ThrowIfNull(layout);
+        return SceneLayout.PositionOf(layout, entry);
     }
 
     /// <summary>Gets the entries of a container, in order.</summary>
-    /// <param name="scene">The scene.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <param name="container">Any place in the container; its index is ignored.</param>
     /// <returns>The entries; empty when the layout has no such container.</returns>
-    public static IReadOnlyList<LayoutEntryId> EntriesOf(Scene scene, LayoutPosition container)
+    public static IReadOnlyList<LayoutEntryId> EntriesOf(IList<ExplorerEntryData> layout, LayoutPosition container)
     {
-        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(container);
-        return [.. (SceneLayout.ContainerOf(scene.ExplorerLayout ?? [], container) ?? []).Select(SceneLayout.IdOf)];
+        return [.. (SceneLayout.ContainerOf(layout, container) ?? []).Select(SceneLayout.IdOf)];
     }
 
     /// <summary>Gets the place after the last entry of a container, as a move of some of its entries counts it.</summary>
     /// <remarks>A move takes its index after the moved entries left their places, so entries that move out do not count.</remarks>
-    /// <param name="scene">The scene.</param>
+    /// <param name="layout">The scene's explorer layout.</param>
     /// <param name="container">Any place in the container; its index is ignored.</param>
     /// <param name="moving">The entries about to move, if any.</param>
     /// <returns>The place at the container's end.</returns>
-    public static LayoutPosition EndOf(Scene scene, LayoutPosition container, IEnumerable<LayoutEntryId>? moving = null)
+    public static LayoutPosition EndOf(IList<ExplorerEntryData> layout, LayoutPosition container, IEnumerable<LayoutEntryId>? moving = null)
     {
-        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(container);
         var leaving = moving?.ToHashSet() ?? [];
-        return container with { Index = EntriesOf(scene, container).Count(entry => !leaving.Contains(entry)) };
+        return container with { Index = EntriesOf(layout, container).Count(entry => !leaving.Contains(entry)) };
     }
 }

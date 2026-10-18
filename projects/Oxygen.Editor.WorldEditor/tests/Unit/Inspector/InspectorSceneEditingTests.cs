@@ -5,11 +5,10 @@
 using System.Numerics;
 using AwesomeAssertions;
 using DroidNet.Controls;
-using Moq;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.TestSupport;
@@ -300,7 +299,7 @@ public sealed class InspectorSceneEditingTests
         play.SelectedCamera = play.CameraChoices.Single(choice => choice.Id == second.Id);
         await play.Pending.ConfigureAwait(false);
 
-        _ = tab.Scene.Play.StartingCamera.Should().Be(second.Id);
+        _ = tab.Scene.StartingCamera.Should().Be(second.Id);
         _ = play.ShowsAutomaticCamera.Should().BeFalse("a chosen camera needs no explanation");
         _ = await tab.Authoring.UndoAsync().ConfigureAwait(false);
         _ = play.SelectedCamera!.Id.Should().BeNull();
@@ -340,7 +339,7 @@ public sealed class InspectorSceneEditingTests
         var scene = CreateScene();
         var camera = CameraNode(scene, 60);
         scene.RootNodes.Add(camera);
-        scene.SetPlay(new ScenePlayData { StartingCamera = camera.Id });
+        scene.SetStartingCamera(camera.Id);
         _ = scene.RootNodes.Remove(camera);
         using var editor = new EnvironmentViewModel();
 
@@ -356,7 +355,7 @@ public sealed class InspectorSceneEditingTests
     public async Task PlaySection_PriorityShowsTheContextsOwnUntilOverriddenAndRowsFollowThePriority()
     {
         var scene = CreateScene();
-        scene.SetPlay(new ScenePlayData { StartingInputContexts = [new StartingInputContextData(GameplayContext), new StartingInputContextData(MenuContext)] });
+        scene.SetStartingInputContexts([new StartingInputContextData(GameplayContext), new StartingInputContextData(MenuContext)]);
         using var tab = SceneTabs.Open(scene);
         using var editor = new EnvironmentViewModel(() => tab.Authoring, inputContextSource: uri => uri == GameplayContext ? new InputContextSource(IsProjectContext: true, DeclaredPriority: 3) : InputContextSource.External);
         editor.SetScene(tab.Scene);
@@ -367,12 +366,12 @@ public sealed class InspectorSceneEditingTests
 
         gameplay.Priority = 8;
         await editor.Play.Pending.ConfigureAwait(false);
-        _ = tab.Scene.Play.StartingInputContexts[0].Priority.Should().Be(8);
+        _ = tab.Scene.StartingInputContexts[0].Priority.Should().Be(8);
         _ = gameplay.IsOverridden.Should().BeTrue();
 
         gameplay.Priority = 3;
         await editor.Play.Pending.ConfigureAwait(false);
-        _ = tab.Scene.Play.StartingInputContexts[0].Priority.Should().BeNull("typing the context's own priority follows it again");
+        _ = tab.Scene.StartingInputContexts[0].Priority.Should().BeNull("typing the context's own priority follows it again");
 
         var menu = editor.Play.Contexts[1];
         menu.Priority = 5;
@@ -384,7 +383,7 @@ public sealed class InspectorSceneEditingTests
     public void PlaySection_AContextNoInputFileDeclaresIsMissingAndOnlyRemovable()
     {
         var scene = CreateScene();
-        scene.SetPlay(new ScenePlayData { StartingInputContexts = [new StartingInputContextData(GameplayContext), new StartingInputContextData(MenuContext)] });
+        scene.SetStartingInputContexts([new StartingInputContextData(GameplayContext), new StartingInputContextData(MenuContext)]);
         using var editor = new EnvironmentViewModel(
             inputContextSource: uri => uri == GameplayContext
                 ? new InputContextSource(IsProjectContext: true, DeclaredPriority: null)
@@ -411,25 +410,23 @@ public sealed class InspectorSceneEditingTests
 
         secondToggle.IsChecked = true;
         await secondToggle.Pending.ConfigureAwait(false);
-        _ = tab.Scene.Play.StartingCamera.Should().Be(second.Id);
+        _ = tab.Scene.StartingCamera.Should().Be(second.Id);
         _ = (firstToggle.IsAutomatic, secondToggle.IsChecked).Should().Be((false, true));
 
         firstToggle.IsChecked = true;
         await firstToggle.Pending.ConfigureAwait(false);
-        _ = tab.Scene.Play.StartingCamera.Should().Be(first.Id);
+        _ = tab.Scene.StartingCamera.Should().Be(first.Id);
         _ = (firstToggle.IsChecked, secondToggle.IsChecked).Should().Be((true, false));
 
         firstToggle.IsChecked = false;
         await firstToggle.Pending.ConfigureAwait(false);
-        _ = tab.Scene.Play.StartingCamera.Should().BeNull();
+        _ = tab.Scene.StartingCamera.Should().BeNull();
         _ = firstToggle.IsAutomatic.Should().BeTrue();
     }
 
     private static Scene CreateScene()
     {
-        var project = new Mock<IProject>();
-        _ = project.SetupGet(value => value.ProjectInfo).Returns(new ProjectInfo("Inspector editing", Category.Games, Path.GetTempPath()));
-        return new Scene(project.Object) { Name = "Inspector Scene" };
+        return new Scene { Name = "Inspector Scene" };
     }
 
     private static SceneNode CameraNode(Scene scene, float fieldOfView)

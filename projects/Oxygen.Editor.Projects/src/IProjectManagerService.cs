@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Storage;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Projects;
 
