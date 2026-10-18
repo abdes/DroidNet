@@ -1684,6 +1684,7 @@ auto AssetLoader::RegisterConsoleBindings(
     .min_value = std::nullopt,
     .max_value = std::nullopt,
   });
+  UpdateTelemetrySummaryCVar();
 }
 
 auto AssetLoader::RegisterCommands(
@@ -1725,13 +1726,13 @@ auto AssetLoader::RegisterCommands(
                  const commands::CommandContext&) -> commands::CommandResult {
       const auto& scope = args.GetString("scope");
       const auto stats = GetTelemetryStats();
-      LOG_SCOPE_F(INFO, "AssetLoader Telemetry (%s)", scope.c_str());
+      LOG_SCOPE_F(INFO, "AssetLoader Telemetry ({})", scope);
       auto log_kv = [](const std::string_view key, const auto& value) -> void {
         LOG_F(INFO, "{:<30}: {}", key, value);
       };
       auto log_typed
         = [&](const char* label, const TypedLoadTelemetry& counters) -> void {
-        LOG_SCOPE_F(INFO, "%s", label);
+        LOG_SCOPE_F(INFO, "{}", label);
         for (const auto idx : ::enum_as_index<TypedLoadMetric>) {
           const auto metric = idx.to_enum();
           log_kv(nostd::to_string(metric), counters.at(metric));
@@ -1818,6 +1819,7 @@ auto AssetLoader::RegisterCommands(
           + stats.buffer_resources.at(TypedLoadMetric::kRequests)
           + stats.script_resources.at(TypedLoadMetric::kRequests)
           + stats.physics_resources.at(TypedLoadMetric::kRequests));
+      UpdateTelemetrySummaryCVar();
       return commands::CommandResult {
         .status = commands::ExecutionStatus::kOk,
         .output = output,
@@ -1855,7 +1857,6 @@ auto AssetLoader::ApplyConsoleCVars(const console::Console& console) -> void
     && telemetry_enabled != telemetry_stats_.telemetry_enabled) {
     SetTelemetryEnabled(telemetry_enabled);
   }
-  UpdateTelemetrySummaryCVar();
 }
 
 auto AssetLoader::BindResourceRefToKey(const internal::ResourceRef& ref)
