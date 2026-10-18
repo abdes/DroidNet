@@ -288,31 +288,45 @@ inline auto IsResourceTypeId(const oxygen::TypeId type_id) -> bool
 } // namespace
 
 namespace {
-auto ReadInputMappingContextAssetDesc(
-  const internal::IContentSource& source, const oxygen::data::AssetKey& key)
-  -> std::optional<oxygen::data::pak::input::InputMappingContextAssetDesc>
+//! A mounted input context's descriptor and name.
+struct MountedInputContextDesc {
+  oxygen::data::pak::input::InputMappingContextAssetDesc desc {};
+  std::string name;
+};
+
+auto ReadInputMappingContextAssetDesc(const internal::IContentSource& source,
+  const oxygen::data::AssetKey& key) -> std::optional<MountedInputContextDesc>
 {
   auto desc_reader = source.CreateAssetDescriptorReader(key);
   if (!desc_reader) {
     return std::nullopt;
   }
 
+  const auto base_pos = desc_reader->Position();
   auto blob = desc_reader->ReadBlob(
     sizeof(oxygen::data::pak::input::InputMappingContextAssetDesc));
-  if (!blob
+  if (!base_pos || !blob
     || blob->size()
       < sizeof(oxygen::data::pak::input::InputMappingContextAssetDesc)) {
     return std::nullopt;
   }
 
-  oxygen::data::pak::input::InputMappingContextAssetDesc desc {};
-  std::memcpy(&desc, blob->data(), sizeof(desc));
-  if (static_cast<oxygen::data::AssetType>(desc.header.asset_type)
+  auto result = MountedInputContextDesc {};
+  std::memcpy(&result.desc, blob->data(), sizeof(result.desc));
+  if (static_cast<oxygen::data::AssetType>(result.desc.header.asset_type)
     != oxygen::data::AssetType::kInputMappingContext) {
     return std::nullopt;
   }
+  try {
+    result.name = oxygen::content::loaders::ResolveDescriptorString(
+      oxygen::content::loaders::ReadDescriptorStrings(
+        *desc_reader, *base_pos, result.desc.header),
+      result.desc.header.name_offset, "input context name");
+  } catch (const std::runtime_error&) {
+    return std::nullopt;
+  }
 
-  return desc;
+  return result;
 }
 } // namespace
 
@@ -1603,19 +1617,17 @@ auto AssetLoader::EnumerateMountedInputContexts() const
         continue;
       }
 
-      const auto desc_opt
-        = ReadInputMappingContextAssetDesc(*source, *asset_key_opt);
-      if (!desc_opt.has_value()) {
+      auto mounted = ReadInputMappingContextAssetDesc(*source, *asset_key_opt);
+      if (!mounted.has_value()) {
         continue;
       }
 
       IAssetLoader::MountedInputContextEntry entry {};
       entry.asset_key = *asset_key_opt;
       entry.source_key = source_key;
-      const auto name = std::span(desc_opt->header.name);
-      entry.name.assign(name.begin(), std::ranges::find(name, '\0'));
-      entry.flags = desc_opt->flags;
-      entry.default_priority = desc_opt->default_priority;
+      entry.name = std::move(mounted->name);
+      entry.flags = mounted->desc.flags;
+      entry.default_priority = mounted->desc.default_priority;
       contexts.push_back(std::move(entry));
     }
   }
@@ -1896,7 +1908,9 @@ auto AssetLoader::GetHydratedScriptSlots(const data::SceneAsset& scene_asset,
       .params = {},
     };
     try {
-      hydrated.params = scene_asset.ReadScriptParameters(slot_record);
+      hydrated.params = data::DecodeScriptParameters(
+        scene_asset.ReadScriptParameters(slot_record),
+        scene_asset.GetStrings());
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "failed to read script parameters: {}", ex.what());
     }

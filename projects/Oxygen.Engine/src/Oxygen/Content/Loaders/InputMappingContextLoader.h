@@ -26,21 +26,6 @@ namespace oxygen::content::loaders {
 
 namespace detail {
 
-  inline auto ValidateStringOffset(
-    const std::span<const char> string_table, const uint32_t offset) -> void
-  {
-    if (offset >= string_table.size()) {
-      throw std::runtime_error("input mapping slot_name_offset out of bounds");
-    }
-    const auto begin
-      = string_table.begin() + static_cast<std::ptrdiff_t>(offset);
-    const auto it = std::find(begin, string_table.end(), '\0');
-    if (it == string_table.end()) {
-      throw std::runtime_error(
-        "input mapping slot name missing null terminator");
-    }
-  }
-
   inline auto ValidateTriggerType(const data::pak::input::InputTriggerType type)
     -> void
   {
@@ -108,8 +93,6 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
     = static_cast<size_t>(desc.triggers.count) * desc.triggers.entry_size;
   const auto trigger_aux_bytes
     = static_cast<size_t>(desc.trigger_aux.count) * desc.trigger_aux.entry_size;
-  const auto strings_bytes
-    = static_cast<size_t>(desc.strings.count) * desc.strings.entry_size;
 
   if (desc.mappings.count > 0
     && desc.mappings.entry_size
@@ -126,15 +109,17 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
       != sizeof(data::pak::input::InputTriggerAuxRecord)) {
     throw std::runtime_error("input trigger_aux entry_size mismatch");
   }
-  if (desc.strings.count > 0 && desc.strings.entry_size != sizeof(char)) {
-    throw std::runtime_error("input strings entry_size mismatch");
+  if (desc.header.strings.size == 0
+    || desc.header.strings.offset
+      < sizeof(data::pak::input::InputMappingContextAssetDesc)) {
+    throw std::runtime_error("input strings location is invalid");
   }
 
   size_t end = sizeof(data::pak::input::InputMappingContextAssetDesc);
   AddRangeEnd(end, desc.mappings.offset, mappings_bytes);
   AddRangeEnd(end, desc.triggers.offset, triggers_bytes);
   AddRangeEnd(end, desc.trigger_aux.offset, trigger_aux_bytes);
-  AddRangeEnd(end, desc.strings.offset, strings_bytes);
+  AddRangeEnd(end, desc.header.strings.offset, desc.header.strings.size);
 
   CheckLoaderResult(
     reader.Seek(base_pos), "input mapping context asset", "Seek(base)");
@@ -184,17 +169,20 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
       sizeof(data::pak::input::InputTriggerAuxRecord));
   }
 
-  std::vector<char> strings(strings_bytes, '\0');
-  if (strings_bytes > 0) {
-    std::memcpy(strings.data(),
-      payload.subspan(desc.strings.offset, strings_bytes).data(),
-      strings_bytes);
+  auto strings = data::DescriptorStrings {};
+  try {
+    strings
+      = data::DescriptorStrings::FromDescriptor(payload, desc.header.strings);
+  } catch (const std::invalid_argument& error) {
+    throw std::runtime_error(
+      fmt::format("input mapping context strings: {}", error.what()));
   }
-  const auto string_table
-    = std::span<const char>(strings.data(), strings.size());
+  auto name
+    = ResolveDescriptorString(strings, desc.header.name_offset, "asset name");
 
   for (const auto& mapping : mappings) {
-    detail::ValidateStringOffset(string_table, mapping.slot_name_offset);
+    static_cast<void>(ResolveDescriptorString(
+      strings, mapping.slot_name_offset, "input mapping slot name"));
     const auto trigger_end
       = mapping.trigger_start_index + mapping.trigger_count;
     if (trigger_end < mapping.trigger_start_index
@@ -262,10 +250,12 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
     }
   }
 
-  return std::make_unique<data::InputMappingContextAsset>(
+  auto asset = std::make_unique<data::InputMappingContextAsset>(
     context.current_asset_key, desc, std::move(mappings), std::move(triggers),
     std::move(trigger_aux), std::move(strings),
     data::SourceOrigin { context.source_key, context.source_instance });
+  asset->SetAssetName(std::move(name));
+  return asset;
 }
 
 static_assert(

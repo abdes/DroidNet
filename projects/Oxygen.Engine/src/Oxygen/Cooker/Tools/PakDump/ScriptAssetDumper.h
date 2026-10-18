@@ -51,7 +51,10 @@ public:
     ScriptAssetDesc desc {};
     std::memcpy(&desc, data->data(), sizeof(desc));
 
-    asset_dump_helpers::PrintAssetHeaderFields(desc.header, 4);
+    asset_dump_helpers::PrintAssetHeaderFields(desc.header,
+      asset_dump_helpers::DescriptorString(
+        *data, desc.header, desc.header.name_offset),
+      4);
     std::cout << "    --- Script Descriptor Fields ---\n";
     PrintUtils::Field(
       "Bytecode Reference", desc.bytecode_resource_index.get(), 8);
@@ -59,10 +62,8 @@ public:
     PrintUtils::Field("Flags",
       asset_dump_helpers::ToHexString(static_cast<uint32_t>(desc.flags)), 8);
     {
-      const auto* const path_begin = std::begin(desc.external_source_path);
-      const auto* const path_end = std::end(desc.external_source_path);
-      const auto* const path_nul = std::find(path_begin, path_end, '\0');
-      const std::string path(path_begin, path_nul);
+      const auto path = asset_dump_helpers::DescriptorString(
+        *data, desc.header, desc.external_source_path_offset);
       PrintUtils::Field(
         "External Source Path", path.empty() ? "<none>" : path, 8);
     }

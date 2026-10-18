@@ -244,7 +244,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsUsed)
   std::vector<std::uint32_t> indices { 0, 1 };
   auto material = MakeMaterial();
   oxygen::data::pak::geometry::SubMeshDesc desc {
-    .name = {},
+    .name_offset = 0,
     .material_asset_key = {},
     .slot_id
     = oxygen::data::MaterialSlotId::FromStableIdentity("SubMeshTest/bounds"),
@@ -307,7 +307,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsMatchExpected)
   std::vector<std::uint32_t> indices { 0, 1, 2 };
   auto material = MakeMaterial();
   oxygen::data::pak::geometry::SubMeshDesc desc {
-    .name = {},
+    .name_offset = 0,
     .material_asset_key = {},
     .slot_id
     = oxygen::data::MaterialSlotId::FromStableIdentity("SubMeshTest/bounds"),

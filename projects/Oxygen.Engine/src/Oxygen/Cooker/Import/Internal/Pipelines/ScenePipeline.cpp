@@ -29,7 +29,6 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -229,7 +228,8 @@ namespace {
 
     SceneAssetDesc desc {};
     desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
-    util::TruncateAndNullTerminate(std::span(desc.header.name), scene_name);
+    auto strings = build.strings;
+    desc.header.name_offset = strings.Add(scene_name);
     desc.header.version = data::pak::world::kSceneAssetVersion;
     desc.header.content_hash = {};
     desc.nodes.offset = sizeof(SceneAssetDesc);
@@ -301,11 +301,10 @@ namespace {
     }
     const auto nodes_bytes = std::as_bytes(std::span(build.nodes));
 
-    desc.scene_strings.offset
+    desc.header.strings.offset
       = static_cast<data::pak::core::StringTableOffsetT>(
         sizeof(SceneAssetDesc) + nodes_bytes.size());
-    desc.scene_strings.size
-      = static_cast<data::pak::core::StringTableSizeT>(build.strings.size());
+    desc.header.strings.size = strings.Size();
 
     struct ComponentTablePayload {
       SceneComponentTableDesc desc {};
@@ -371,8 +370,8 @@ namespace {
     std::vector<SceneComponentTableDesc> component_directory;
 
     if (!component_tables.empty()) {
-      size_t payload_cursor = static_cast<size_t>(desc.scene_strings.offset)
-        + desc.scene_strings.size;
+      size_t payload_cursor = static_cast<size_t>(desc.header.strings.offset)
+        + desc.header.strings.size;
       desc.component_table_directory_offset = payload_cursor;
       desc.component_table_count
         = static_cast<uint32_t>(component_tables.size());
@@ -407,8 +406,7 @@ namespace {
       return outcome;
     }
 
-    if (auto result = writer.WriteBlob(std::span(build.strings));
-      !result.has_value()) {
+    if (auto result = writer.WriteBlob(strings.Bytes()); !result.has_value()) {
       diagnostics.push_back(MakeErrorDiagnostic("scene.serialize_failed",
         "Failed to write string table", source_id, {}));
       return outcome;

@@ -37,6 +37,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -91,12 +92,6 @@ auto ComputeExpectedBrowsePayloadSize(
     + (static_cast<uint64_t>(entries.size())
       * sizeof(core::PakBrowseIndexEntry))
     + string_bytes;
-}
-
-template <typename T> auto BytesOf(const T& value) -> std::vector<std::byte>
-{
-  const auto bytes = std::as_bytes(std::span { &value, 1U });
-  return { bytes.begin(), bytes.end() };
 }
 
 //! Reads the payload bytes that `pak_path` stores for physics resource
@@ -164,16 +159,17 @@ auto WriteLayeredPhysicsSources(
   shape.material_asset_key = material_key;
   shape.cooked_shape_ref.payload_asset_key = payload_key;
   shape.cooked_shape_ref.payload_type = physics::ShapePayloadType::kConvex;
-  const auto shape_bytes = BytesOf(shape);
+  const auto shape_bytes = data::MakeDescriptorBytes(shape);
+  const auto material_bytes = data::MakeDescriptorBytes(material);
   sources.assets = std::array {
     AssetSpec {
       .key = material_key,
       .asset_type = data::AssetType::kPhysicsMaterial,
       .descriptor_relpath = "Material.opmat",
       .virtual_path = "/Game/Material.opmat",
-      .descriptor_size = sizeof(material),
-      .descriptor_sha = oxygen::base::ComputeSha256(BytesOf(material)),
-      .descriptor_payload = BytesOf(material),
+      .descriptor_size = material_bytes.size(),
+      .descriptor_sha = oxygen::base::ComputeSha256(material_bytes),
+      .descriptor_payload = material_bytes,
       .references = {},
     },
     AssetSpec {
@@ -181,7 +177,7 @@ auto WriteLayeredPhysicsSources(
       .asset_type = data::AssetType::kCollisionShape,
       .descriptor_relpath = "Shape.ocshape",
       .virtual_path = "/Game/Shape.ocshape",
-      .descriptor_size = sizeof(shape),
+      .descriptor_size = shape_bytes.size(),
       .descriptor_sha = oxygen::base::ComputeSha256(shape_bytes),
       .descriptor_payload = shape_bytes,
       .references = data::AssetReferences::Create({},
@@ -842,7 +838,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, LayeredPhysicsPayloadUsesWinningSourceInPatch)
 
   // Only the shape changes. Its payload owner has no emitted descriptor.
   sources.shape.is_sensor = physics::kShapeIsSensorTrue;
-  const auto shape_bytes = BytesOf(sources.shape);
+  const auto shape_bytes = data::MakeDescriptorBytes(sources.shape);
   sources.assets.at(1).descriptor_payload = shape_bytes;
   sources.assets.at(1).descriptor_sha
     = oxygen::base::ComputeSha256(shape_bytes);

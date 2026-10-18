@@ -55,49 +55,6 @@ namespace {
     });
   }
 
-  class StringTableBuilder final {
-  public:
-    StringTableBuilder()
-      : bytes_ { std::byte { 0 } }
-    {
-      offsets_.insert_or_assign(
-        std::string {}, data::pak::core::StringTableOffsetT { 0 });
-    }
-
-    [[nodiscard]] auto Add(std::string_view value)
-      -> data::pak::core::StringTableOffsetT
-    {
-      if (value.empty()) {
-        return data::pak::core::StringTableOffsetT { 0 };
-      }
-
-      if (const auto it = offsets_.find(std::string(value));
-        it != offsets_.end()) {
-        return it->second;
-      }
-
-      const auto offset
-        = static_cast<data::pak::core::StringTableOffsetT>(bytes_.size());
-      bytes_.reserve(bytes_.size() + value.size() + 1U);
-      for (const auto ch : value) {
-        bytes_.push_back(static_cast<std::byte>(ch));
-      }
-      bytes_.push_back(std::byte { 0 });
-      offsets_.insert_or_assign(std::string(value), offset);
-      return offset;
-    }
-
-    [[nodiscard]] auto Build() && -> std::vector<std::byte>
-    {
-      return std::move(bytes_);
-    }
-
-  private:
-    std::vector<std::byte> bytes_;
-    std::unordered_map<std::string, data::pak::core::StringTableOffsetT>
-      offsets_;
-  };
-
   auto GetSceneDescriptorValidator() -> json_validator&
   {
     static auto validator = [] -> json_validator {
@@ -135,16 +92,14 @@ namespace {
     const auto version_it = descriptor_doc.find("version");
     const auto invalid_version = version_it == descriptor_doc.end()
       || !version_it->is_number_unsigned()
-      || version_it->get<uint64_t>() != data::pak::world::kSceneAssetVersion;
+      || version_it->get<uint64_t>() != kSceneDescriptorVersion;
     if (!invalid_version) {
       return true;
     }
 
     AddDiagnostic(context, ImportSeverity::kError,
       "scene.descriptor.recook_required",
-      "Scene descriptor version "
-        + std::to_string(
-          static_cast<uint32_t>(data::pak::world::kSceneAssetVersion))
+      "Scene descriptor version " + std::to_string(kSceneDescriptorVersion)
         + " is required; update the authored descriptor and re-cook the scene "
           "content.");
     return false;
@@ -603,7 +558,7 @@ namespace {
     const auto& nodes_doc = descriptor_doc.at("nodes");
     const auto node_count = static_cast<uint32_t>(nodes_doc.size());
 
-    auto string_table = StringTableBuilder {};
+    auto& string_table = prepared.build.strings;
     prepared.build.nodes.reserve(nodes_doc.size());
 
     for (size_t node_i = 0; node_i < nodes_doc.size(); ++node_i) {
@@ -654,8 +609,6 @@ namespace {
 
       prepared.build.nodes.push_back(node_record);
     }
-
-    prepared.build.strings = std::move(string_table).Build();
 
     if (descriptor_doc.contains("starting_camera")) {
       const auto camera = descriptor_doc.at("starting_camera").get<uint32_t>();

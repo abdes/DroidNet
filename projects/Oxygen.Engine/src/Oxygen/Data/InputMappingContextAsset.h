@@ -14,6 +14,7 @@
 
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Data/Asset.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/api_export.h>
 
@@ -28,7 +29,7 @@ public:
     std::vector<pak::input::InputActionMappingRecord> mappings = {},
     std::vector<pak::input::InputTriggerRecord> triggers = {},
     std::vector<pak::input::InputTriggerAuxRecord> trigger_aux = {},
-    std::vector<char> strings = {}, SourceOrigin source_origin = {});
+    DescriptorStrings strings = {}, SourceOrigin source_origin = {});
 
   ~InputMappingContextAsset() override = default;
 
@@ -70,20 +71,20 @@ public:
     return trigger_aux_;
   }
 
-  [[nodiscard]] auto GetStringTable() const noexcept -> std::span<const char>
+  //! Resolves a string of the descriptor's string table, such as a slot name.
+  [[nodiscard]] auto TryGetString(
+    const pak::core::StringTableOffsetT offset) const noexcept
+    -> std::optional<std::string_view>
   {
-    return strings_;
+    return strings_.TryGet(offset);
   }
-
-  [[nodiscard]] OXGN_DATA_API auto TryGetString(uint32_t offset) const noexcept
-    -> std::optional<std::string_view>;
 
 private:
   pak::input::InputMappingContextAssetDesc desc_ {};
   std::vector<pak::input::InputActionMappingRecord> mappings_;
   std::vector<pak::input::InputTriggerRecord> triggers_;
   std::vector<pak::input::InputTriggerAuxRecord> trigger_aux_;
-  std::vector<char> strings_;
+  DescriptorStrings strings_;
 };
 
 } // namespace oxygen::data

@@ -43,6 +43,8 @@ public:
 
   struct WorkItem final {
     std::string source_id;
+    //! The asset name, stored in the descriptor string table.
+    std::string name;
     data::pak::physics::PhysicsMaterialAssetDesc descriptor {};
     std::function<void()> on_started;
     std::function<void()> on_finished;

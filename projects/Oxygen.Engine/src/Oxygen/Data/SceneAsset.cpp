@@ -218,12 +218,7 @@ auto SceneAsset::GetNode(pak::world::SceneNodeIndexT index) const noexcept
 auto SceneAsset::GetNodeName(const pak::world::NodeRecord& node) const noexcept
   -> std::string_view
 {
-  if (node.scene_name_offset >= string_table_.size()) {
-    return {};
-  }
-
-  const auto tail = string_table_.substr(node.scene_name_offset);
-  return tail.substr(0, tail.find('\0'));
+  return strings_.TryGet(node.scene_name_offset).value_or(std::string_view {});
 }
 
 // Calling this on a scene without nodes is a caller bug; the checked access
@@ -268,6 +263,22 @@ auto SceneAsset::ParseAndValidate() -> void
   size_t payload_end = sizeof(pak::world::SceneAssetDesc);
   std::unordered_set<std::uint32_t> camera_nodes;
 
+  // Validate String Table
+  try {
+    strings_ = DescriptorStrings::FromDescriptor(data_, desc_.header.strings);
+  } catch (const std::invalid_argument& error) {
+    throw std::runtime_error(
+      std::string("SceneAsset string table is invalid: ") + error.what());
+  }
+  const auto name = strings_.TryGet(desc_.header.name_offset);
+  if (!name) {
+    throw std::runtime_error("SceneAsset name offset out of range");
+  }
+  SetAssetName(std::string { *name });
+  payload_end = (std::max)(payload_end,
+    static_cast<size_t>(desc_.header.strings.offset)
+      + desc_.header.strings.size);
+
   // Validate Node Table
   if (desc_.nodes.count > 0) {
     const size_t nodes_bytes
@@ -292,34 +303,12 @@ auto SceneAsset::ParseAndValidate() -> void
       if (record.parent_index >= desc_.nodes.count) {
         throw std::runtime_error("SceneAsset parent_index out of range");
       }
-      if (record.scene_name_offset != 0
-        && record.scene_name_offset >= desc_.scene_strings.size) {
+      if (!strings_.TryGet(record.scene_name_offset)) {
         throw std::runtime_error("SceneAsset node name offset out of range");
       }
     }
 
     payload_end = (std::max)(payload_end, desc_.nodes.offset + nodes_bytes);
-  }
-
-  // Validate String Table
-  if (desc_.scene_strings.size > 0) {
-    if (!range_ok(
-          desc_.scene_strings.offset, desc_.scene_strings.size, data_.size())) {
-      throw std::runtime_error("SceneAsset string table out of bounds");
-    }
-
-    // Minimal runtime-safety invariant: offset 0 must refer to empty string.
-    const auto bytes
-      = data_.subspan(desc_.scene_strings.offset, desc_.scene_strings.size);
-    if (!bytes.empty()
-      && oxygen::base::CheckedAt(bytes, 0) != std::byte { 0 }) {
-      throw std::runtime_error(
-        "SceneAsset string table must start with a NUL byte");
-    }
-
-    payload_end = (std::max)(payload_end,
-      static_cast<size_t>(
-        desc_.scene_strings.offset + desc_.scene_strings.size));
   }
 
   // Validate Component Directory
@@ -481,21 +470,10 @@ auto SceneAsset::ParseAndValidate() -> void
     throw std::runtime_error("SceneAsset starting camera is not a camera node");
   }
 
-  // Cache node and string table views.
+  // Reset the node cache.
   node_count_ = desc_.nodes.count;
   nodes_cache_valid_ = false;
   nodes_cache_.clear();
-
-  string_table_ = {};
-  if (desc_.scene_strings.size != 0U) {
-    const auto strings
-      = data_.subspan(desc_.scene_strings.offset, desc_.scene_strings.size);
-    // The string table is a byte blob of NUL-terminated UTF-8 names.
-    // NOLINTBEGIN(*-reinterpret-cast)
-    string_table_
-      = { reinterpret_cast<const char*>(strings.data()), strings.size() };
-    // NOLINTEND(*-reinterpret-cast)
-  }
 
   if (desc_.script_slots.count != 0U) {
     const auto slots_size = uint64_t { desc_.script_slots.count }

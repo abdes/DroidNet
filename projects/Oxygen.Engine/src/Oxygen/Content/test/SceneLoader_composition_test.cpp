@@ -20,6 +20,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceOrigin.h>
@@ -100,6 +101,12 @@ auto MakeComposedScene(const CompositionInput& input) -> std::vector<std::byte>
   descriptor.starting_camera = input.starting_camera;
   auto offset
     = descriptor.nodes.offset + (kNodeCount * sizeof(world::NodeRecord));
+  const auto strings = oxygen::data::DescriptorStringsBuilder {};
+  descriptor.header.strings = {
+    .offset = static_cast<oxygen::data::pak::core::StringTableOffsetT>(offset),
+    .size = strings.Size(),
+  };
+  offset += strings.Size();
   descriptor.component_table_directory_offset = offset;
   descriptor.component_table_count = static_cast<uint32_t>(tables.size());
   offset += tables.size() * sizeof(world::SceneComponentTableDesc);
@@ -115,6 +122,8 @@ auto MakeComposedScene(const CompositionInput& input) -> std::vector<std::byte>
     node.parent_index = 0U;
     Append(bytes, node);
   }
+  const auto table_bytes = strings.Bytes();
+  bytes.insert(bytes.end(), table_bytes.begin(), table_bytes.end());
   AppendTable(bytes, tables);
   AppendTable(bytes, cameras);
   AppendTable(bytes, input.instances);

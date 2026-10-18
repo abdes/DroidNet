@@ -125,13 +125,6 @@ namespace {
         "`vec3`, `vec4`, `asset` and `node`.",
     },
     {
-      .code = DiagnosticCode::kInvalidParamName,
-      .title = "invalid parameter name",
-      .explanation
-      = "Parameter names are stored in cooked slots with a fixed capacity. "
-        "Use a shorter name.",
-    },
-    {
       .code = DiagnosticCode::kDuplicateParam,
       .title = "a parameter is declared twice",
       .explanation
@@ -158,13 +151,6 @@ namespace {
       .explanation
       = "An `asset` parameter needs a `kind` naming the asset type it accepts, "
         "such as `material` or `input_action`.",
-    },
-    {
-      .code = DiagnosticCode::kValueTooLong,
-      .title = "a declaration string is too long",
-      .explanation
-      = "Cooked parameter values have a fixed capacity. Shorten the string "
-        "default or option.",
     },
     {
       .code = DiagnosticCode::kInvalidRange,

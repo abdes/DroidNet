@@ -24,6 +24,7 @@
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Data/BuiltinGeometry.h>
 #include <Oxygen/Data/MaterialSlotId.h>
@@ -319,7 +320,9 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     const auto mesh_desc
       = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, mesh_offset);
     EXPECT_TRUE(mesh_desc.IsProcedural());
-    EXPECT_STREQ(mesh_desc.name, "Capsule/Capsule");
+    EXPECT_EQ(
+      oxygen::content::test::ReadDescriptorString(bytes, mesh_desc.name_offset),
+      "Capsule/Capsule");
     EXPECT_EQ(mesh_desc.info.procedural.params_size, 16U);
     EXPECT_EQ(ReadStructAt<uint32_t>(bytes, params_offset),
       test_case.hemisphere_segments);
@@ -495,7 +498,9 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   const auto mesh_desc = ReadStructAt<data::pak::geometry::MeshDesc>(
     descriptor_bytes, mesh_offset);
   EXPECT_TRUE(mesh_desc.IsProcedural());
-  EXPECT_STREQ(mesh_desc.name, "IcoSphere/SoftBall");
+  EXPECT_EQ(oxygen::content::test::ReadDescriptorString(
+              descriptor_bytes, mesh_desc.name_offset),
+    "IcoSphere/SoftBall");
   EXPECT_EQ(mesh_desc.info.procedural.params_size, sizeof(uint32_t));
   EXPECT_EQ(ReadStructAt<uint32_t>(descriptor_bytes, params_offset), 2U);
 

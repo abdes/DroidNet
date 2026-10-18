@@ -140,8 +140,8 @@ namespace detail {
 
   // Handles loading and generation for procedural meshes
   inline auto LoadProceduralMeshBuffers(serio::AnyReader& reader,
-    data::pak::geometry::MeshDesc& desc, std::vector<data::Vertex>& vertices,
-    std::vector<uint32_t>& indices) -> void
+    data::pak::geometry::MeshDesc& desc, const std::string& name,
+    std::vector<data::Vertex>& vertices, std::vector<uint32_t>& indices) -> void
   {
     // Access union field via desc.info.procedural
     auto& info = desc.info.procedural;
@@ -168,13 +168,13 @@ namespace detail {
     }
 
     // Use GenerateMeshBuffers to get vertices/indices
-    auto mesh_opt = data::GenerateMeshBuffers(
-      desc.name, std::span<const std::byte>(param_blob));
+    auto mesh_opt
+      = data::GenerateMeshBuffers(name, std::span<const std::byte>(param_blob));
     if (!mesh_opt || mesh_opt->first.empty() || mesh_opt->second.empty()) {
       throw std::runtime_error(fmt::format(
         "Failed to generate procedural mesh '{}': unsupported generator or "
         "invalid parameters",
-        desc.name));
+        name));
     }
     std::tie(vertices, indices) = std::move(*mesh_opt);
   }
@@ -334,17 +334,14 @@ namespace detail {
     LOG_SCOPE_F(1, "Sub-Mesh");
 
     using oxygen::data::AssetKey;
-    using oxygen::data::pak::core::kMaxNameSize;
     using oxygen::data::pak::geometry::SubMeshDesc;
 
     SubMeshDesc desc;
 
-    // name
-    std::span submesh_name_span(
-      reinterpret_cast<std::byte*>(desc.name), kMaxNameSize);
-    auto submesh_name_result = desc_reader.ReadBlobInto(submesh_name_span);
-    CheckResult(submesh_name_result, "sm.name");
-    LOG_F(2, "name           : {}", desc.name);
+    // name_offset
+    auto submesh_name_result = desc_reader.ReadInto(desc.name_offset);
+    CheckResult(submesh_name_result, "sm.name_offset");
+    LOG_F(2, "name offset    : {}", desc.name_offset);
 
     // material_asset_key
     auto mat_key_result
@@ -396,8 +393,8 @@ namespace detail {
 
 } // namespace detail
 
-inline auto LoadMesh(LoaderContext context, const data::LodIndex lod)
-  -> std::unique_ptr<data::Mesh>
+inline auto LoadMesh(LoaderContext context, const data::LodIndex lod,
+  const data::DescriptorStrings& strings) -> std::unique_ptr<data::Mesh>
 {
   LOG_SCOPE_F(1, "Mesh");
   LOG_F(2, "offline mode    : {}", context.work_offline ? "yes" : "no");
@@ -410,15 +407,15 @@ inline auto LoadMesh(LoaderContext context, const data::LodIndex lod)
   using oxygen::data::MeshBuilder;
   using oxygen::data::MeshType;
   using oxygen::data::Vertex;
-  using oxygen::data::pak::core::kMaxNameSize;
   using oxygen::data::pak::geometry::MeshDesc;
 
   // Read MeshDesc fields one by one
   MeshDesc desc;
-  std::span name_span(reinterpret_cast<std::byte*>(desc.name), kMaxNameSize);
-  auto name_result = reader.ReadBlobInto(name_span);
-  detail::CheckResult(name_result, "m.name");
-  LOG_F(2, "name            : {}", desc.name);
+  auto name_result = reader.ReadInto(desc.name_offset);
+  detail::CheckResult(name_result, "m.name_offset");
+  const auto name
+    = ResolveDescriptorString(strings, desc.name_offset, "mesh name");
+  LOG_F(2, "name            : {}", name);
 
   // mesh_type (must be read before union)
   auto mesh_type_result = reader.ReadInto<uint8_t>(desc.mesh_type);
@@ -449,14 +446,11 @@ inline auto LoadMesh(LoaderContext context, const data::LodIndex lod)
       = detail::LoadSkinnedMeshBuffers(context, desc);
   } else if (desc.IsProcedural()) {
     // For procedural meshes, generate vertex/index data (owned data)
-    detail::LoadProceduralMeshBuffers(reader, desc, vertices, indices);
+    detail::LoadProceduralMeshBuffers(reader, desc, name, vertices, indices);
   } else {
     throw std::runtime_error(fmt::format(
       "unsupported mesh type: {}", static_cast<int>(desc.mesh_type)));
   }
-
-  std::string name(
-    desc.name, std::find(desc.name, desc.name + kMaxNameSize, '\0'));
 
   MeshBuilder builder(lod, name);
   builder.WithDescriptor(desc);
@@ -481,14 +475,8 @@ inline auto LoadMesh(LoaderContext context, const data::LodIndex lod)
     }
     total_read_views += sm_desc.mesh_view_count;
 
-    std::string sm_name;
-    if (auto nul
-      = std::find(std::begin(sm_desc.name), std::end(sm_desc.name), '\0');
-      nul != std::end(sm_desc.name)) {
-      sm_name.assign(sm_desc.name, nul);
-    } else {
-      sm_name.assign(sm_desc.name, sm_desc.name + kMaxNameSize);
-    }
+    auto sm_name
+      = ResolveDescriptorString(strings, sm_desc.name_offset, "submesh name");
 
     // Resolve the material asset key to a MaterialAsset
     std::shared_ptr<const MaterialAsset> material;
@@ -541,6 +529,8 @@ inline auto LoadGeometryAsset(LoaderContext context)
   GeometryAssetDesc desc;
 
   auto pack = reader.ScopedAlignment(1);
+  const auto descriptor_start = reader.Position();
+  detail::CheckResult(descriptor_start, "g.position");
 
   // header (use header loader from Helpers.h)
   LoadAssetHeader(reader, desc.header);
@@ -549,6 +539,8 @@ inline auto LoadGeometryAsset(LoaderContext context)
     || desc.header.version != data::pak::geometry::kGeometryAssetVersion) {
     throw std::runtime_error("Geometry version requires recooking");
   }
+  const auto strings
+    = ReadDescriptorStrings(reader, *descriptor_start, desc.header);
 
   // lod_count
   auto lod_count_result = reader.ReadInto<uint32_t>(desc.lod_count);
@@ -565,9 +557,10 @@ inline auto LoadGeometryAsset(LoaderContext context)
   // Read LOD meshes
   std::vector<std::shared_ptr<Mesh>> lod_meshes;
   for (uint32_t i = 0; i < desc.lod_count; ++i) {
-    auto mesh = LoadMesh(context, data::LodIndex { i });
+    auto mesh = LoadMesh(context, data::LodIndex { i }, strings);
     lod_meshes.push_back(std::move(mesh));
   }
+  SkipDescriptorStrings(reader, *descriptor_start, desc.header);
 
   if (context.asset_references) {
     std::vector<data::ResourceReferenceUse> resources;
@@ -633,9 +626,13 @@ inline auto LoadGeometryAsset(LoaderContext context)
   }
 
   // Construct and return GeometryAsset with LOD meshes
-  return std::make_unique<data::GeometryAsset>(context.current_asset_key,
-    std::move(desc), std::move(lod_meshes),
+  const auto name_offset = desc.header.name_offset;
+  auto geometry = std::make_unique<data::GeometryAsset>(
+    context.current_asset_key, std::move(desc), std::move(lod_meshes),
     data::SourceOrigin { context.source_key, context.source_instance });
+  geometry->SetAssetName(
+    ResolveDescriptorString(strings, name_offset, "asset name"));
+  return geometry;
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadGeometryAsset)>);

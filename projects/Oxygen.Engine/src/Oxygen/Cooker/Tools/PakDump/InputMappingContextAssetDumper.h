@@ -56,7 +56,10 @@ public:
     InputMappingContextAssetDesc desc {};
     std::memcpy(&desc, data->data(), sizeof(desc));
 
-    asset_dump_helpers::PrintAssetHeaderFields(desc.header, 4);
+    asset_dump_helpers::PrintAssetHeaderFields(desc.header,
+      asset_dump_helpers::DescriptorString(
+        *data, desc.header, desc.header.name_offset),
+      4);
     std::cout << "    --- Input Mapping Context Descriptor Fields ---\n";
     PrintUtils::Field("Flags", nostd::to_string(desc.flags), 8);
     PrintUtils::Field("Mappings Count", desc.mappings.count, 8);
@@ -64,7 +67,6 @@ public:
     PrintUtils::Field(
       "Triggers Count", static_cast<uint32_t>(desc.triggers.count), 8);
     PrintUtils::Field("Trigger Aux Count", desc.trigger_aux.count, 8);
-    PrintUtils::Field("String Table Bytes", desc.strings.count, 8);
 
     const auto ParseTable
       = [&](const oxygen::data::pak::input::InputDataTable& table,
@@ -104,26 +106,10 @@ public:
       = ParseTable(desc.triggers, sizeof(InputTriggerRecord), "Triggers");
     const auto aux_ok = ParseTable(
       desc.trigger_aux, sizeof(InputTriggerAuxRecord), "TriggerAux");
-    const auto strings_offset = static_cast<size_t>(desc.strings.offset);
-    const auto strings_size = static_cast<size_t>(desc.strings.count);
-    const auto strings_ok = strings_size == 0
-      || (strings_offset <= data->size() && strings_size <= data->size()
-        && strings_offset <= data->size() - strings_size);
-    if (!strings_ok) {
-      PrintUtils::Field(
-        "Warning", "String table payload exceeds descriptor", 8);
-    }
 
     if (!ctx.verbose) {
       std::cout << "\n";
       co_return;
-    }
-
-    std::string_view strings {};
-    if (strings_ok && strings_size > 0) {
-      strings = std::string_view(
-        reinterpret_cast<const char*>(data->data() + strings_offset),
-        strings_size);
     }
 
     if (mappings_ok && desc.mappings.count > 0) {
@@ -138,14 +124,11 @@ public:
           + i * sizeof(InputActionMappingRecord);
         std::memcpy(&record, data->data() + record_offset, sizeof(record));
 
-        const auto slot_name = asset_dump_helpers::TryGetSceneString(
-          strings, record.slot_name_offset);
+        const auto slot_name = asset_dump_helpers::DescriptorString(
+          *data, desc.header, record.slot_name_offset);
         std::cout << "      [" << i << "] action="
                   << oxygen::data::to_string(record.action_asset_key)
-                  << " slot='"
-                  << (slot_name.empty() ? std::string_view { "<invalid>" }
-                                        : slot_name)
-                  << "'\n";
+                  << " slot='" << slot_name << "'\n";
         PrintUtils::Field("Trigger Range",
           fmt::format("[{}, {}]", record.trigger_start_index,
             record.trigger_start_index + record.trigger_count),

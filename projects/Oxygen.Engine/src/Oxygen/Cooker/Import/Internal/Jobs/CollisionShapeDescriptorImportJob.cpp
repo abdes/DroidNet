@@ -40,7 +40,6 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/CollisionShapeImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -845,10 +844,6 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     descriptor.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kCollisionShape);
     descriptor.header.version = phys::kCollisionShapeAssetVersion;
-    const auto shape_name
-      = std::filesystem::path(target->relpath).stem().string();
-    util::TruncateAndNullTerminate(
-      descriptor.header.name, sizeof(descriptor.header.name), shape_name);
 
     shape_type
       = ParseShapeType(descriptor_doc.at("shape_type").get<std::string>());
@@ -941,6 +936,7 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
   auto item = CollisionShapeImportPipeline::WorkItem {
     .source_id = target->virtual_path,
+    .name = std::filesystem::path(target->relpath).stem().string(),
     .descriptor = descriptor,
     .compound_children = std::move(compound_children),
     .on_started = {},

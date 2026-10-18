@@ -22,6 +22,7 @@
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/api_export.h>
@@ -194,6 +195,12 @@ public:
   */
   OXGN_DATA_NDAPI auto GetNodeName(
     const pak::world::NodeRecord& node) const noexcept -> std::string_view;
+
+  //! The descriptor's string table, for node names and slot parameter strings.
+  [[nodiscard]] auto GetStrings() const noexcept -> const DescriptorStrings&
+  {
+    return strings_;
+  }
 
   //! Returns the first root (index 0). Requires a nonempty GetNodes() span.
   OXGN_DATA_NDAPI auto GetRootNode() const noexcept
@@ -389,8 +396,8 @@ private:
   mutable std::vector<pak::world::NodeRecord> nodes_cache_;
   mutable bool nodes_cache_valid_ { false };
 
-  //! Views the descriptor's string table.
-  std::string_view string_table_;
+  //! The descriptor's string table.
+  DescriptorStrings strings_;
 
   // Component directory cache (type -> {ptr, count})
   struct ComponentTableEntry {

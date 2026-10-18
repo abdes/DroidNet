@@ -48,7 +48,10 @@ public:
     CollisionShapeAssetDesc shape {};
     std::memcpy(&shape, data->data(), sizeof(shape));
 
-    asset_dump_helpers::PrintAssetHeaderFields(shape.header, 4);
+    asset_dump_helpers::PrintAssetHeaderFields(shape.header,
+      asset_dump_helpers::DescriptorString(
+        *data, shape.header, shape.header.name_offset),
+      4);
 
     std::cout << "    --- Collision Shape Fields ---\n";
     PrintUtils::Field("Shape Type", static_cast<uint32_t>(shape.shape_type), 8);

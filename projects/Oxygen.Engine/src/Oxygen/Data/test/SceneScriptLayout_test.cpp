@@ -37,10 +37,10 @@ protected:
       .count = 1U,
       .entry_size = sizeof(node_),
     };
-    descriptor_.scene_strings.offset = sizeof(descriptor_) + sizeof(node_);
-    descriptor_.scene_strings.size = 1U;
+    descriptor_.header.strings.offset = sizeof(descriptor_) + sizeof(node_);
+    descriptor_.header.strings.size = sizeof(kStrings);
     descriptor_.component_table_directory_offset
-      = descriptor_.scene_strings.offset + 1U;
+      = descriptor_.header.strings.offset + sizeof(kStrings);
     descriptor_.component_table_count = 1U;
     table_.component_type
       = static_cast<uint32_t>(data::ComponentType::kScripting);
@@ -66,7 +66,7 @@ protected:
       slot.params_array_offset = offset;
       offset += sizeof(script::ScriptParamRecord);
       auto& parameter = parameters_.at(i);
-      parameter.key[0] = 'v';
+      parameter.key_offset = kKeyOffset;
       parameter.type = script::ScriptParamType::kInt32;
       parameter.value.as_int32 = static_cast<int32_t>(i);
     }
@@ -82,7 +82,7 @@ protected:
     };
     append(descriptor_);
     append(node_);
-    result.push_back(std::byte { 0 });
+    append(kStrings);
     append(table_);
     append(component_);
     append(slots_);
@@ -90,6 +90,10 @@ protected:
     append(environment_);
     return result;
   }
+
+  //! The descriptor string table: the empty string and the key "v".
+  static constexpr std::array<char, 3> kStrings { '\0', 'v', '\0' };
+  static constexpr data::pak::core::StringTableOffsetT kKeyOffset = 1U;
 
   world::SceneAssetDesc descriptor_ {};
   world::NodeRecord node_ {};

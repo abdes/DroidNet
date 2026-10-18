@@ -29,6 +29,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
@@ -39,6 +40,7 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -89,6 +91,12 @@ namespace {
       .first_vertex = 0,
       .vertex_count = 3,
     };
+    const auto strings = data::DescriptorStringsBuilder {};
+    descriptor.header.strings = {
+      .offset
+      = sizeof(descriptor) + sizeof(mesh) + sizeof(submesh) + sizeof(view),
+      .size = strings.Size(),
+    };
     const auto write = [&writer](const auto& record) -> auto {
       ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span(&record, 1))));
     };
@@ -96,6 +104,7 @@ namespace {
     write(mesh);
     write(submesh);
     write(view);
+    ASSERT_TRUE(writer.WriteBlob(strings.Bytes()));
     ASSERT_TRUE(writer.Flush());
   }
 
@@ -108,7 +117,7 @@ namespace {
       std::string_view job_name = "DemoScene") -> ImportRequest
     {
       auto document = nlohmann::json::parse(descriptor_json);
-      document.emplace("version", data::pak::world::kSceneAssetVersion);
+      document.emplace("version", internal::kSceneDescriptorVersion);
       auto request = ImportRequest {};
       request.source_path = "inline://scene-descriptor";
       request.job_name = std::string(job_name);

@@ -127,7 +127,8 @@ public:
       data::pak::scripting::ScriptSlotFlags::kNone,
     };
     int32_t execution_order { 0 };
-    std::vector<data::pak::scripting::ScriptParamRecord> params;
+    //! The slot's parameter overrides, decoded with the scene's strings.
+    data::ScriptParameters params;
   };
 
   IAssetLoader() = default;

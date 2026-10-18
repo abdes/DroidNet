@@ -53,10 +53,6 @@ namespace {
     pak::render::MaterialAssetDesc desc {};
     desc.header.asset_type
       = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
-    constexpr std::size_t kMaxName = sizeof(desc.header.name) - 1U;
-    const auto name_length = (std::min)(kMaxName, std::strlen(name));
-    std::memcpy(desc.header.name, name, name_length);
-    desc.header.name[name_length] = '\0';
     desc.header.version = pak::render::kMaterialAssetVersion;
     desc.material_domain
       = static_cast<uint8_t>(oxygen::data::MaterialDomain::kOpaque);
@@ -65,10 +61,12 @@ namespace {
     desc.base_color[2] = 0.5F;
     desc.base_color[3] = 1.0F;
 
-    return std::make_shared<const oxygen::data::MaterialAsset>(
+    auto material = std::make_shared<oxygen::data::MaterialAsset>(
       oxygen::data::AssetKey::FromVirtualPath(
         "/Tests/SceneSync/" + std::string(name) + ".omat"),
       desc, std::vector<oxygen::data::ShaderReference> {});
+    material->SetAssetName(name);
+    return material;
   }
 
   auto BuildSingleSubmeshGeometry(const char* geometry_name,

@@ -38,9 +38,6 @@ namespace oxygen::scripting::test {
 
 namespace {
 
-  using data::pak::scripting::ScriptParamRecord;
-  using data::pak::scripting::ScriptParamType;
-
   //! Records `oxygen.events.test_probe(text)` calls in C++, so hooks that run
   //! after the Lua state closes are still observable.
   class ProbeBindingPack final
@@ -84,13 +81,9 @@ namespace {
   };
 
   auto FloatDeclaration(const std::string_view key, const float value)
-    -> ScriptParamRecord
+    -> data::ScriptParameters::value_type
   {
-    ScriptParamRecord record {};
-    std::memcpy(std::data(record.key), key.data(), key.size());
-    record.type = ScriptParamType::kFloat;
-    record.value.as_float = value;
-    return record;
+    return { std::string { key }, value };
   }
 
   // Distinct content hashes keep each test's executables apart.
@@ -251,7 +244,8 @@ return script
 )lua",
     2);
   ASSERT_NE(executable, nullptr);
-  const auto declarations = std::array { FloatDeclaration("speed", 1.5F) };
+  const auto declarations
+    = data::ScriptParameters { FloatDeclaration("speed", 1.5F) };
   auto scene = std::make_shared<scene::Scene>("self", kDefaultSceneCapacity);
   auto node = scene->CreateNode("script-node");
   ASSERT_TRUE(node.AttachScripting());

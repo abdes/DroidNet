@@ -111,18 +111,6 @@ inline auto BuildExternalSourcePath(const ImportRequest& request)
   return TryMakeExternalPathRelativeToRoot(*source, *root);
 }
 
-template <size_t N>
-inline auto CopyNullTerminated(
-  const std::string_view src, const std::span<char, N> dst) -> bool
-{
-  if (src.size() >= dst.size()) {
-    return false;
-  }
-  std::ranges::fill(dst, '\0');
-  std::ranges::copy(src, dst.begin());
-  return true;
-}
-
 inline auto ComputeContentHash64(const std::span<const std::byte> bytes)
   -> uint64_t
 {

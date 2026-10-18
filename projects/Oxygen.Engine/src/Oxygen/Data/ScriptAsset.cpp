@@ -19,7 +19,6 @@
 #include <variant>
 #include <vector>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
@@ -29,20 +28,18 @@
 
 namespace oxygen::data {
 
-auto TryGetScriptParamKey(
-  const pak::scripting::ScriptParamRecord& record) noexcept
-  -> std::optional<std::string_view>
+auto TryGetScriptParamKey(const pak::scripting::ScriptParamRecord& record,
+  const DescriptorStrings& strings) noexcept -> std::optional<std::string_view>
 {
-  const auto* const begin = std::begin(record.key);
-  const auto* const nul = std::ranges::find(record.key, '\0');
-  if (nul == begin || nul == std::end(record.key)) {
+  const auto key = strings.TryGet(record.key_offset);
+  if (!key || key->empty()) {
     return std::nullopt;
   }
-  return std::string_view(begin, static_cast<size_t>(nul - begin));
+  return key;
 }
 
-auto ToScriptParam(const pak::scripting::ScriptParamRecord& record)
-  -> std::optional<ScriptParam>
+auto ToScriptParam(const pak::scripting::ScriptParamRecord& record,
+  const DescriptorStrings& strings) -> std::optional<ScriptParam>
 {
   using pak::scripting::ScriptParamType;
 
@@ -55,11 +52,11 @@ auto ToScriptParam(const pak::scripting::ScriptParamRecord& record)
   case ScriptParamType::kFloat:
     return value.as_float;
   case ScriptParamType::kString: {
-    const auto* const nul = std::ranges::find(value.as_string, '\0');
-    if (nul == std::end(value.as_string)) {
+    const auto text = strings.TryGet(value.as_string_offset);
+    if (!text) {
       return std::nullopt;
     }
-    return std::string(std::begin(value.as_string), nul);
+    return std::string { *text };
   }
   case ScriptParamType::kVec2:
     return Vec2(value.as_vec[0], value.as_vec[1]);
@@ -81,20 +78,51 @@ auto ToScriptParam(const pak::scripting::ScriptParamRecord& record)
   return std::nullopt;
 }
 
-auto MakeScriptParamRecord(const std::string_view key, const ScriptParam& value)
+auto DecodeScriptParameters(
+  const std::span<const pak::scripting::ScriptParamRecord> records,
+  const DescriptorStrings& strings) -> ScriptParameters
+{
+  auto params = ScriptParameters {};
+  params.reserve(records.size());
+  for (const auto& record : records) {
+    const auto key = TryGetScriptParamKey(record, strings);
+    if (!key) {
+      throw std::invalid_argument(
+        "script parameter declaration has an empty or invalid key");
+    }
+    auto value = ToScriptParam(record, strings);
+    if (!value) {
+      throw std::invalid_argument(
+        "script parameter '" + std::string(*key) + "' has an invalid value");
+    }
+    params.emplace_back(std::string(*key), std::move(*value));
+  }
+  return params;
+}
+
+auto MakeScriptParamRecord(const std::string_view key, const ScriptParam& value,
+  DescriptorStringsBuilder& strings)
   -> std::optional<pak::scripting::ScriptParamRecord>
 {
   using pak::scripting::ScriptParamType;
 
-  auto record = pak::scripting::ScriptParamRecord {};
-  if (key.empty() || key.size() >= std::size(record.key)) {
+  const auto holds_nul = [](const std::string_view text) -> bool {
+    return text.find('\0') != std::string_view::npos;
+  };
+  if (key.empty() || holds_nul(key)) {
     return std::nullopt;
   }
-  std::ranges::copy(key, std::begin(record.key));
+  if (const auto* text = std::get_if<std::string>(&value);
+    text != nullptr && holds_nul(*text)) {
+    return std::nullopt;
+  }
+
+  auto record = pak::scripting::ScriptParamRecord {};
+  record.key_offset = strings.Add(key);
 
   auto& out = record.value;
-  const auto fits = std::visit(
-    [&record, &out](const auto& v) -> bool {
+  std::visit(
+    [&record, &out, &strings](const auto& v) -> void {
       using T = std::decay_t<decltype(v)>;
       if constexpr (std::is_same_v<T, bool>) {
         record.type = ScriptParamType::kBool;
@@ -106,12 +134,8 @@ auto MakeScriptParamRecord(const std::string_view key, const ScriptParam& value)
         record.type = ScriptParamType::kFloat;
         out.as_float = v;
       } else if constexpr (std::is_same_v<T, std::string>) {
-        if (v.size() >= std::size(out.as_string)) {
-          return false;
-        }
         record.type = ScriptParamType::kString;
-        std::ranges::fill(out.as_string, '\0');
-        std::ranges::copy(v, std::begin(out.as_string));
+        out.as_string_offset = strings.Add(v);
       } else if constexpr (std::is_same_v<T, Vec2>) {
         record.type = ScriptParamType::kVec2;
         out.as_vec[0] = v.x;
@@ -134,12 +158,8 @@ auto MakeScriptParamRecord(const std::string_view key, const ScriptParam& value)
         record.type = ScriptParamType::kNode;
         out.as_node_index = v.node_index;
       }
-      return true;
     },
     value);
-  if (!fits) {
-    return std::nullopt;
-  }
   return record;
 }
 
@@ -147,54 +167,33 @@ static_assert(std::is_trivially_copyable_v<pak::scripting::ScriptAssetDesc>,
   "ScriptAssetDesc must be trivially copyable");
 
 ScriptAsset::ScriptAsset(AssetKey asset_key,
-  pak::scripting::ScriptAssetDesc desc,
-  std::span<const pak::scripting::ScriptParamRecord> declared_params,
-  SourceOrigin source_origin)
+  pak::scripting::ScriptAssetDesc desc, ScriptParameters declared_params,
+  std::string external_source_path, SourceOrigin source_origin)
   : Asset(asset_key, source_origin)
   , desc_(desc)
+  , external_source_path_(std::move(external_source_path))
 {
   params_.reserve(declared_params.size());
-  for (const auto& param : declared_params) {
-    const auto key = TryGetScriptParamKey(param);
-    if (!key) {
-      throw std::invalid_argument("script parameter declaration has an "
-                                  "empty or unterminated key");
-    }
-    if (HasParameter(*key)) {
+  for (auto& [key, value] : declared_params) {
+    if (key.empty()) {
       throw std::invalid_argument(
-        "script parameter '" + std::string(*key) + "' is declared twice");
+        "script parameter declaration has an empty key");
     }
-    auto value = ToScriptParam(param);
-    if (!value) {
+    if (HasParameter(key)) {
       throw std::invalid_argument(
-        "script parameter '" + std::string(*key) + "' has an invalid value");
+        "script parameter '" + key + "' is declared twice");
     }
-    params_.emplace_back(std::string(*key), std::move(*value));
+    params_.emplace_back(std::move(key), std::move(value));
   }
 }
 
-auto ScriptAsset::WithDeclarations(
-  const std::span<const pak::scripting::ScriptParamRecord> declared_params)
-  const -> std::shared_ptr<ScriptAsset>
+auto ScriptAsset::WithDeclarations(ScriptParameters declared_params) const
+  -> std::shared_ptr<ScriptAsset>
 {
-  return std::make_shared<ScriptAsset>(
-    GetAssetKey(), desc_, declared_params, GetSourceOrigin());
-}
-
-auto ScriptAsset::TryGetExternalSourcePath() const noexcept
-  -> std::optional<std::string_view>
-{
-  const auto* const begin = std::begin(desc_.external_source_path);
-  const auto* const end = std::end(desc_.external_source_path);
-  const auto* const nul = std::ranges::find(desc_.external_source_path, '\0');
-  if (nul == begin) {
-    return std::nullopt;
-  }
-  if (nul == end) {
-    LOG_F(WARNING, "script asset external_source_path is not null-terminated");
-    return std::nullopt;
-  }
-  return std::string_view(begin, static_cast<size_t>(nul - begin));
+  auto asset = std::make_shared<ScriptAsset>(GetAssetKey(), desc_,
+    std::move(declared_params), external_source_path_, GetSourceOrigin());
+  asset->SetAssetName(std::string { GetAssetName() });
+  return asset;
 }
 
 auto ScriptAsset::GetExternalSourcePath() const -> std::string_view

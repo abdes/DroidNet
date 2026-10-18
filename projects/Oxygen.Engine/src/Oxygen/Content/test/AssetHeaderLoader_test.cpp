@@ -4,16 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include <Oxygen/Content/Loaders/Helpers.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -38,12 +39,8 @@ NOLINT_TEST(LoadAssetHeaderBasic, ReturnsCorrectHeader)
   std::array<std::byte, sizeof(AssetHeader)> buffer {};
   auto* header = reinterpret_cast<AssetHeader*>(buffer.data());
   header->asset_type = 3;
-  {
-    constexpr char kTestName[] = "TestAsset";
-    std::fill(std::begin(header->name), std::end(header->name), '\0');
-    std::copy_n(kTestName, (std::min)(sizeof(header->name), sizeof(kTestName)),
-      header->name);
-  }
+  header->strings = { .offset = 200U, .size = 9U };
+  header->name_offset = 1U;
   header->version = 42;
   header->streaming_priority = 7;
   constexpr uint64_t kExpectedHashPrefix = 0x123456789ABCDEF0ULL;
@@ -61,7 +58,9 @@ NOLINT_TEST(LoadAssetHeaderBasic, ReturnsCorrectHeader)
 
   // Assert
   EXPECT_EQ(result.asset_type, 3);
-  EXPECT_TRUE(std::string_view(result.name).starts_with("TestAsset"));
+  EXPECT_EQ(result.strings.offset, 200U);
+  EXPECT_EQ(result.strings.size, 9U);
+  EXPECT_EQ(result.name_offset, 1U);
   EXPECT_EQ(result.version, 42);
   EXPECT_EQ(result.streaming_priority, 7);
   uint64_t hash_prefix = 0;
@@ -77,12 +76,6 @@ NOLINT_TEST(LoadAssetHeaderError, ThrowsOnInvalidAssetType)
   std::array<std::byte, sizeof(AssetHeader)> buffer {};
   auto* header = reinterpret_cast<AssetHeader*>(buffer.data());
   header->asset_type = 255; // Invalid (assuming kMaxAssetType < 255)
-  {
-    constexpr char kInvalidName[] = "InvalidType";
-    std::fill(std::begin(header->name), std::end(header->name), '\0');
-    std::copy_n(kInvalidName,
-      (std::min)(sizeof(header->name), sizeof(kInvalidName)), header->name);
-  }
 
   MemoryStream stream(std::span<std::byte>(buffer.data(), buffer.size()));
   Reader reader(stream);
@@ -93,32 +86,87 @@ NOLINT_TEST(LoadAssetHeaderError, ThrowsOnInvalidAssetType)
     std::runtime_error);
 }
 
-//! Scenario: LoadAssetHeader logs warning if name is not null-terminated
-NOLINT_TEST(LoadAssetHeaderEdge, WarnsIfNameNotNullTerminated)
+//=== Descriptor String Table Tests ===------------------------------------//
+
+//! A header followed by `strings`, as a descriptor with no other records.
+auto MakeDescriptor(const oxygen::data::DescriptorStringsBuilder& strings)
+  -> std::vector<std::byte>
+{
+  auto header = AssetHeader {};
+  header.asset_type = 1;
+  return oxygen::data::MakeDescriptorBytes(header, strings);
+}
+
+//! Scenario: names longer than 63 bytes and non-ASCII names resolve whole.
+NOLINT_TEST(DescriptorStrings, ResolvesLongAndNonAsciiNames)
 {
   // Arrange
-  std::array<std::byte, sizeof(AssetHeader)> buffer {};
-  auto* header = reinterpret_cast<AssetHeader*>(buffer.data());
-  // Fill name with non-null chars
-  for (size_t i = 0; i < oxygen::data::pak::core::kMaxNameSize; ++i) {
-    header->name[i] = 'A';
-  }
-  header->asset_type = 1;
-
-  MemoryStream stream(std::span<std::byte>(buffer.data(), buffer.size()));
+  const auto long_name = std::string(200, 'n');
+  const auto unicode_name = std::string("Caf\xC3\xA9");
+  auto strings = oxygen::data::DescriptorStringsBuilder {};
+  const auto long_offset = strings.Add(long_name);
+  const auto unicode_offset = strings.Add(unicode_name);
+  auto bytes = MakeDescriptor(strings);
+  MemoryStream stream { std::span<std::byte>(bytes) };
   Reader reader(stream);
+  auto header = AssetHeader {};
+  oxygen::content::loaders::LoadAssetHeader(reader, header);
 
   // Act
-  // Should not throw, but should log a warning (not checked here)
-  AssetHeader result;
-  oxygen::content::loaders::LoadAssetHeader(reader, result);
+  const auto table
+    = oxygen::content::loaders::ReadDescriptorStrings(reader, 0U, header);
 
   // Assert
-  EXPECT_EQ(result.asset_type, 1);
-  // Name will not be null-terminated, so string_view will be full buffer
-  std::string_view name_view(
-    result.name, oxygen::data::pak::core::kMaxNameSize);
-  EXPECT_EQ(name_view.find('\0'), std::string_view::npos);
+  EXPECT_EQ(oxygen::content::loaders::ResolveDescriptorString(
+              table, long_offset, "name"),
+    long_name);
+  EXPECT_EQ(oxygen::content::loaders::ResolveDescriptorString(
+              table, unicode_offset, "name"),
+    unicode_name);
+  EXPECT_EQ(
+    oxygen::content::loaders::ResolveDescriptorString(table, 0U, "name"),
+    std::string {});
+}
+
+//! Scenario: an offset outside the table is rejected, not truncated.
+NOLINT_TEST(DescriptorStrings, RejectsOffsetOutsideTable)
+{
+  // Arrange
+  auto strings = oxygen::data::DescriptorStringsBuilder {};
+  static_cast<void>(strings.Add("Name"));
+  auto bytes = MakeDescriptor(strings);
+  MemoryStream stream { std::span<std::byte>(bytes) };
+  Reader reader(stream);
+  auto header = AssetHeader {};
+  oxygen::content::loaders::LoadAssetHeader(reader, header);
+  const auto table
+    = oxygen::content::loaders::ReadDescriptorStrings(reader, 0U, header);
+
+  // Act & Assert
+  NOLINT_EXPECT_THROW(
+    static_cast<void>(oxygen::content::loaders::ResolveDescriptorString(
+      table, header.strings.size, "name")),
+    std::runtime_error);
+}
+
+//! Scenario: a table that does not end with NUL is rejected.
+NOLINT_TEST(DescriptorStrings, RejectsUnterminatedTable)
+{
+  // Arrange
+  auto strings = oxygen::data::DescriptorStringsBuilder {};
+  static_cast<void>(strings.Add("Name"));
+  auto bytes = MakeDescriptor(strings);
+  bytes.back() = std::byte { 'x' };
+  MemoryStream stream { std::span<std::byte>(bytes) };
+  Reader reader(stream);
+  auto header = AssetHeader {};
+  oxygen::content::loaders::LoadAssetHeader(reader, header);
+
+  // Act & Assert
+  NOLINT_EXPECT_THROW(
+    static_cast<void>(
+      oxygen::content::loaders::ReadDescriptorStrings(reader, 0U, header)),
+    std::runtime_error);
 }
 
 } // anonymous namespace

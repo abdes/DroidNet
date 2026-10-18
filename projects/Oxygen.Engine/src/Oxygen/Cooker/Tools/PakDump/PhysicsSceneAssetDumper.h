@@ -166,7 +166,10 @@ public:
     PhysicsSceneAssetDesc scene {};
     std::memcpy(&scene, data->data(), sizeof(scene));
 
-    asset_dump_helpers::PrintAssetHeaderFields(scene.header, 4);
+    asset_dump_helpers::PrintAssetHeaderFields(scene.header,
+      asset_dump_helpers::DescriptorString(
+        *data, scene.header, scene.header.name_offset),
+      4);
 
     std::cout << "    --- Physics Scene Sidecar Fields ---\n";
     PrintUtils::Field(

@@ -86,7 +86,7 @@ struct InputActionAssetDesc {
   InputActionAssetFlags flags = InputActionAssetFlags::kNone;
 };
 #pragma pack(pop)
-static_assert(sizeof(InputActionAssetDesc) == 108);
+static_assert(sizeof(InputActionAssetDesc) == 56);
 
 #pragma pack(push, 1)
 struct InputMappingContextAssetDesc {
@@ -96,15 +96,16 @@ struct InputMappingContextAssetDesc {
   InputDataTable mappings = {};
   InputDataTable triggers = {};
   InputDataTable trigger_aux = {};
-  InputDataTable strings = {};
 };
+// Followed by the mapping, trigger and trigger aux tables, then the descriptor
+// string table, which holds the slot names.
 #pragma pack(pop)
-static_assert(sizeof(InputMappingContextAssetDesc) == 175);
+static_assert(sizeof(InputMappingContextAssetDesc) == 107);
 
 #pragma pack(push, 1)
 struct InputActionMappingRecord {
   AssetKey action_asset_key = {};
-  uint32_t slot_name_offset = 0;
+  core::StringTableOffsetT slot_name_offset = 0; // Descriptor string table
   uint32_t trigger_start_index = 0;
   uint32_t trigger_count = 0;
   InputMappingFlags flags = InputMappingFlags::kNone;

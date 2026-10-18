@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <span>
 #include <stdexcept>
 #include <vector>
@@ -14,6 +15,7 @@
 
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
@@ -35,6 +37,23 @@ protected:
     const auto result = writer.WriteBlob(std::span<const std::byte>(
       reinterpret_cast<const std::byte*>(&value), sizeof(T)));
     ASSERT_TRUE(result) << result.error().message();
+  }
+
+  //! Ends the descriptor written so far with an empty string table and
+  //! records its location in the descriptor's header.
+  static auto WriteEmptyStringTable(Writer& writer, MockStream& stream) -> void
+  {
+    const auto end = writer.Position();
+    ASSERT_TRUE(end);
+    const auto strings = data::DescriptorStringsBuilder {};
+    ASSERT_TRUE(writer.WriteBlob(strings.Bytes()));
+    const auto table = data::pak::core::DescriptorStringTable {
+      .offset = static_cast<data::pak::core::StringTableOffsetT>(*end),
+      .size = strings.Size(),
+    };
+    ASSERT_TRUE(stream.Seek(offsetof(data::pak::core::AssetHeader, strings)));
+    ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span { &table, 1U })));
+    ASSERT_TRUE(stream.SeekEnd());
   }
 };
 
@@ -166,6 +185,7 @@ protected:
     WriteAs(writer_, desc);
     WriteAs(writer_, entry);
     WriteAs(writer_, record);
+    WriteEmptyStringTable(writer_, stream_);
     ASSERT_TRUE(writer_.Flush()) << "Flush failed";
   }
 

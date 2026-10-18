@@ -22,6 +22,7 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -50,7 +51,7 @@ auto WriteMaterialSource(const std::filesystem::path& root,
   writer.SetSourceKey(source);
   writer.WriteAssetDescriptor(key, data::AssetType::kMaterial,
     "/test/Surface.omat", "Surface.omat",
-    std::as_bytes(std::span(&descriptor, 1U)));
+    data::MakeDescriptorBytes(descriptor));
   static_cast<void>(writer.Finish());
   return source;
 }
@@ -91,8 +92,8 @@ auto WriteTexturedMaterialSource(const std::filesystem::path& root,
   writer.WriteFile(data::loose_cooked::FileKind::kTexturesData, "textures.data",
     std::as_bytes(std::span(payload)));
   writer.WriteAssetDescriptor(key, data::AssetType::kMaterial,
-    "/test/Surface.omat", "Surface.omat",
-    std::as_bytes(std::span(&material, 1U)), references);
+    "/test/Surface.omat", "Surface.omat", data::MakeDescriptorBytes(material),
+    references);
   static_cast<void>(writer.Finish());
   return source;
 }

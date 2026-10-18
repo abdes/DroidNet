@@ -270,8 +270,6 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
   oxygen::data::pak::render::MaterialAssetDesc desc {};
-  constexpr const char* kName = "AlphaTest";
-  std::memcpy(std::data(desc.header.name), kName, std::strlen(kName));
   desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
   desc.material_domain = static_cast<std::uint8_t>(domain);
   desc.flags = oxygen::data::pak::render::kMaterialFlag_AlphaTest;
@@ -283,8 +281,10 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
     0.5F,
   };
 
-  return std::make_shared<const oxygen::data::MaterialAsset>(
+  auto material = std::make_shared<oxygen::data::MaterialAsset>(
     oxygen::data::AssetKey {}, desc);
+  material->SetAssetName("AlphaTest");
+  return material;
 }
 
 [[nodiscard]] auto MakeMaterial(const oxygen::data::MaterialDomain domain,
@@ -293,9 +293,6 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
   oxygen::data::pak::render::MaterialAssetDesc desc {};
-  const auto copy_count
-    = (std::min)(name.size(), sizeof(desc.header.name) - 1U);
-  std::memcpy(std::data(desc.header.name), name.data(), copy_count);
   desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
   desc.material_domain = static_cast<std::uint8_t>(domain);
   desc.flags = flags;
@@ -304,8 +301,10 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
   desc.base_color[2] = 1.0F;
   desc.base_color[3] = 1.0F;
 
-  return std::make_shared<const oxygen::data::MaterialAsset>(
+  auto material = std::make_shared<oxygen::data::MaterialAsset>(
     oxygen::data::AssetKey {}, desc);
+  material->SetAssetName(std::string { name });
+  return material;
 }
 
 class DrawMetadataEmitterTest : public testing::Test {

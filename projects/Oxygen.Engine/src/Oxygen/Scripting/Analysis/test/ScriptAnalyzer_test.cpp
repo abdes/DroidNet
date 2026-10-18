@@ -298,16 +298,15 @@ NOLINT_TEST_F(ScriptAnalyzerTest, ParameterShapeIsChecked)
     Codes(unknown_type), ElementsAre(DiagnosticCode::kUnknownParamType));
 }
 
-//! Names longer than the cooked key capacity and repeated names are rejected.
+//! Repeated names are rejected; a name has no length limit.
 NOLINT_TEST_F(ScriptAnalyzerTest, ParameterNamesAreChecked)
 {
-  const auto long_name = AnalyzeParams("    "
-    + std::string(ScriptAnalyzer::kMaxParamNameBytes + 1, 'a')
-    + " = oxygen.param.bool {},");
+  const auto long_name = AnalyzeParams(
+    "    " + std::string(200, 'a') + " = oxygen.param.bool {},");
   const auto duplicate = AnalyzeParams("    a = oxygen.param.bool {},\n"
                                        "    a = oxygen.param.int {},");
 
-  EXPECT_THAT(Codes(long_name), ElementsAre(DiagnosticCode::kInvalidParamName));
+  EXPECT_THAT(Codes(long_name), IsEmpty());
   ASSERT_THAT(Codes(duplicate), ElementsAre(DiagnosticCode::kDuplicateParam));
   EXPECT_THAT(duplicate.diagnostics.front().labels, SizeIs(2));
 }
@@ -360,17 +359,17 @@ NOLINT_TEST_F(ScriptAnalyzerTest, AssetKindIsRequired)
   EXPECT_THAT(Codes(unknown), ElementsAre(DiagnosticCode::kInvalidAssetKind));
 }
 
-//! Strings must fit the cooked value capacity.
-NOLINT_TEST_F(ScriptAnalyzerTest, LongStringsAreRejected)
+//! String defaults and options have no length limit.
+NOLINT_TEST_F(ScriptAnalyzerTest, LongStringsAreAccepted)
 {
-  const auto text = std::string(ScriptAnalyzer::kMaxStringValueBytes + 1, 'x');
+  const auto text = std::string(200, 'x');
   const auto long_default = AnalyzeParams(
     "    s = oxygen.param.string { default = \"" + text + "\" },");
   const auto long_option = AnalyzeParams(
     "    s = oxygen.param.string { options = { \"" + text + "\" } },");
 
-  EXPECT_THAT(Codes(long_default), ElementsAre(DiagnosticCode::kValueTooLong));
-  EXPECT_THAT(Codes(long_option), ElementsAre(DiagnosticCode::kValueTooLong));
+  EXPECT_THAT(Codes(long_default), IsEmpty());
+  EXPECT_THAT(Codes(long_option), IsEmpty());
 }
 
 //! Ranges, steps and options must agree with each other and the default.

@@ -463,18 +463,16 @@ auto AssetLoader::BindDependenciesAsync(data::SceneAsset& asset,
     for (const auto& slot : slots) {
       static_cast<void>(co_await BindAssetAsync<data::ScriptAsset>(
         slot.script_asset_key, asset, bindings, request));
-      for (const auto& param : slot.params) {
-        if (param.type == data::pak::scripting::ScriptParamType::kAsset) {
-          co_await BindScriptParamAssetAsync(
-            param.value.as_asset, asset, bindings, request);
+      for (const auto& value : slot.params | std::views::values) {
+        if (const auto* param = std::get_if<data::ScriptAssetParam>(&value)) {
+          co_await BindScriptParamAssetAsync(*param, asset, bindings, request);
         }
       }
     }
   }
 }
 
-auto AssetLoader::BindScriptParamAssetAsync(
-  const data::pak::scripting::ScriptAssetParamValue& value,
+auto AssetLoader::BindScriptParamAssetAsync(const data::ScriptAssetParam& value,
   data::SceneAsset& asset, internal::ContentBindingBuilder& bindings,
   LoadRequest request) -> co::Co<>
 {

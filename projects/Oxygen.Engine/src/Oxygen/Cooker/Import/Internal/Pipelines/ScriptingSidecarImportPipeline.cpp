@@ -53,6 +53,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -82,18 +83,6 @@ namespace {
         .target_scene_missing_code = "script.sidecar.target_scene_missing",
       };
 
-  template <size_t N>
-  auto CopyNullTerminated(const std::string_view src, std::span<char, N> dst)
-    -> bool
-  {
-    if (src.size() >= dst.size()) {
-      return false;
-    }
-    std::ranges::fill(dst, '\0');
-    std::ranges::copy(src, dst.begin());
-    return true;
-  }
-
   auto AddDiagnostic(ImportSession& session, const ImportRequest& request,
     const ImportSeverity severity, std::string code, std::string message)
     -> void
@@ -121,8 +110,12 @@ namespace {
 
   //! One parsed override; asset values are resolved against the cooked
   //! contexts after parsing.
+  //! A script parameter with its strings; the record's string offsets are
+  //! assigned when it is written into a descriptor's string table.
   struct SidecarParam final {
     data::pak::scripting::ScriptParamRecord record = {};
+    std::string key;
+    std::string string_value;
     std::string asset_virtual_path;
   };
 
@@ -136,7 +129,7 @@ namespace {
 
   //! Parameter declarations of each script a sidecar references.
   using ScriptDeclarationMap
-    = std::map<data::AssetKey, std::vector<script::ScriptParamRecord>>;
+    = std::map<data::AssetKey, std::vector<SidecarParam>>;
 
   struct SidecarDocument final {
     std::vector<SidecarBindingRow> rows;
@@ -145,14 +138,36 @@ namespace {
   struct SlotWithParams final {
     std::string slot_id;
     data::pak::scripting::ScriptSlotRecord slot = {};
-    std::vector<data::pak::scripting::ScriptParamRecord> params;
+    std::vector<SidecarParam> params;
   };
 
   struct SceneScriptData final {
     std::vector<script::ScriptingComponentRecord> components;
     std::vector<data::pak::scripting::ScriptSlotRecord> slots;
-    std::vector<data::pak::scripting::ScriptParamRecord> params;
+    std::vector<SidecarParam> params;
   };
+
+  //! Decodes a cooked record with the string table of its descriptor.
+  /*!
+   @return The parameter, or nullopt when its key or value is not in the table.
+  */
+  auto DecodeParam(const data::pak::scripting::ScriptParamRecord& record,
+    const data::DescriptorStrings& strings) -> std::optional<SidecarParam>
+  {
+    const auto key = data::TryGetScriptParamKey(record, strings);
+    if (!key) {
+      return std::nullopt;
+    }
+    auto param = SidecarParam { .record = record, .key = std::string { *key } };
+    if (record.type == data::pak::scripting::ScriptParamType::kString) {
+      const auto value = strings.TryGet(record.value.as_string_offset);
+      if (!value) {
+        return std::nullopt;
+      }
+      param.string_value = std::string { *value };
+    }
+    return param;
+  }
 
   [[nodiscard]] auto MakeBindingIdentity(
     const uint32_t node_index, const std::string_view slot_id) -> std::string
@@ -220,10 +235,9 @@ namespace {
       error = "string param requires string value";
       return false;
     }
-    const auto text = value.get<std::string>();
-    if (!CopyNullTerminated(text, std::span { out.value.as_string })) {
-      error = "string param exceeds ScriptParamRecord::value.as_string "
-              "capacity";
+    param.string_value = value.get<std::string>();
+    if (param.string_value.find('\0') != std::string::npos) {
+      error = "string param value holds a NUL character";
       return false;
     }
     out.type = ScriptParamType::kString;
@@ -390,10 +404,11 @@ namespace {
       error = "Param key must not be empty";
       return false;
     }
-    if (!CopyNullTerminated(key, std::span { out.record.key })) {
-      error = "Param key exceeds ScriptParamRecord::key capacity";
+    if (key.find('\0') != std::string::npos) {
+      error = "Param key holds a NUL character";
       return false;
     }
+    out.key = key;
 
     const auto type = param.at("type").get<std::string>();
     const auto& value = param.at("value");
@@ -514,15 +529,14 @@ namespace {
               "script.sidecar.param_invalid", std::move(error), param_path);
             continue;
           }
-          const auto key = data::TryGetScriptParamKey(parsed_param.record);
           const auto duplicate = std::ranges::any_of(
-            row.params, [&key](const SidecarParam& existing) -> bool {
-              return data::TryGetScriptParamKey(existing.record) == key;
+            row.params, [&parsed_param](const SidecarParam& existing) -> bool {
+              return existing.key == parsed_param.key;
             });
           if (duplicate) {
             AddDiagnosticAtPath(session, request, ImportSeverity::kError,
               "script.sidecar.param_duplicate",
-              "Parameter '" + std::string(key.value_or(""))
+              "Parameter '" + parsed_param.key
                 + "' is overridden twice in one slot",
               param_path + ".key");
             continue;
@@ -628,9 +642,10 @@ namespace {
         return false;
       }
 
-      scene_string_size_
-        = static_cast<uint64_t>(source_desc_.scene_strings.size);
-      if (!RangeOk(source_desc_.scene_strings.offset, scene_string_size_)) {
+      try {
+        source_strings_ = data::DescriptorStrings::FromDescriptor(
+          source_descriptor_, source_desc_.header.strings);
+      } catch (const std::invalid_argument&) {
         error = "Scene string table range is invalid";
         return false;
       }
@@ -639,7 +654,8 @@ namespace {
       payload_end_ = (std::max)(payload_end_,
         source_desc_.nodes.offset + node_table_size_);
       payload_end_ = (std::max)(payload_end_,
-        source_desc_.scene_strings.offset + scene_string_size_);
+        uint64_t { source_desc_.header.strings.offset }
+          + source_desc_.header.strings.size);
       return true;
     }
 
@@ -745,14 +761,35 @@ namespace {
       desc.nodes.offset = sizeof(world::SceneAssetDesc);
       const auto scene_strings_offset
         = uint64_t { desc.nodes.offset } + node_table_size_;
-      using SceneStringOffsetT = decltype(desc.scene_strings.offset);
       if (scene_strings_offset
-        > std::numeric_limits<SceneStringOffsetT>::max()) {
+        > std::numeric_limits<data::pak::core::StringTableOffsetT>::max()) {
         error = "Scene string table offset overflow";
         return false;
       }
-      desc.scene_strings.offset
-        = static_cast<SceneStringOffsetT>(scene_strings_offset);
+
+      // The slot parameters' strings join the scene's string table; existing
+      // strings keep their offsets.
+      auto strings = data::DescriptorStringsBuilder { source_strings_ };
+      auto params = std::vector<script::ScriptParamRecord> {};
+      params.reserve(scripts_->params.size());
+      try {
+        for (const auto& param : scripts_->params) {
+          auto record = param.record;
+          record.key_offset = strings.Add(param.key);
+          if (record.type == script::ScriptParamType::kString) {
+            record.value.as_string_offset = strings.Add(param.string_value);
+          }
+          params.push_back(record);
+        }
+      } catch (const std::length_error&) {
+        error = "Scene string table exceeds the format limit";
+        return false;
+      }
+      desc.header.strings = {
+        .offset = static_cast<data::pak::core::StringTableOffsetT>(
+          scene_strings_offset),
+        .size = strings.Size(),
+      };
       desc.component_table_directory_offset = 0;
       desc.component_table_count = 0;
 
@@ -764,9 +801,7 @@ namespace {
       append_bytes(
         source.subspan(static_cast<size_t>(source_desc_.nodes.offset),
           static_cast<size_t>(node_table_size_)));
-      append_bytes(
-        source.subspan(static_cast<size_t>(source_desc_.scene_strings.offset),
-          static_cast<size_t>(scene_string_size_)));
+      append_bytes(strings.Bytes());
 
       if (!component_payloads_.empty()) {
         desc.component_table_directory_offset = out.size();
@@ -819,7 +854,7 @@ namespace {
           }
         }
         append_bytes(std::as_bytes(std::span(slots)));
-        append_bytes(std::as_bytes(std::span(scripts_->params)));
+        append_bytes(std::as_bytes(std::span(params)));
       }
       append_bytes(trailing_bytes_);
 
@@ -832,8 +867,8 @@ namespace {
     observer_ptr<const SceneScriptData> scripts_;
     size_t environment_offset_;
     world::SceneAssetDesc source_desc_ {};
+    data::DescriptorStrings source_strings_;
     uint64_t node_table_size_ = 0;
-    uint64_t scene_string_size_ = 0;
     uint64_t payload_end_ = 0;
     std::vector<ComponentPayload> component_payloads_;
     std::vector<std::byte> trailing_bytes_;
@@ -873,7 +908,7 @@ namespace {
 
   //! Reads the parameter declarations of a cooked script descriptor.
   auto DecodeScriptDeclarations(std::span<const std::byte> bytes)
-    -> std::optional<std::vector<script::ScriptParamRecord>>
+    -> std::optional<std::vector<SidecarParam>>
   {
     if (bytes.size() < sizeof(script::ScriptAssetDesc)) {
       return std::nullopt;
@@ -886,8 +921,16 @@ namespace {
       return std::nullopt;
     }
 
+    auto strings = data::DescriptorStrings {};
+    try {
+      strings
+        = data::DescriptorStrings::FromDescriptor(bytes, desc.header.strings);
+    } catch (const std::invalid_argument&) {
+      return std::nullopt;
+    }
+
     const auto& table = desc.params;
-    auto declarations = std::vector<script::ScriptParamRecord> {};
+    auto declarations = std::vector<SidecarParam> {};
     if (table.count == 0U) {
       return declarations;
     }
@@ -897,14 +940,16 @@ namespace {
         < table.count) {
       return std::nullopt;
     }
-    declarations.resize(table.count);
-    std::memcpy(declarations.data(), bytes.subspan(table.offset).data(),
-      declarations.size() * sizeof(script::ScriptParamRecord));
-    if (!std::ranges::all_of(
-          declarations, [](const script::ScriptParamRecord& record) -> bool {
-            return data::TryGetScriptParamKey(record).has_value();
-          })) {
-      return std::nullopt;
+    auto records = std::vector<script::ScriptParamRecord>(table.count);
+    std::memcpy(records.data(), bytes.subspan(table.offset).data(),
+      records.size() * sizeof(script::ScriptParamRecord));
+    declarations.reserve(records.size());
+    for (const auto& record : records) {
+      auto declaration = DecodeParam(record, strings);
+      if (!declaration) {
+        return std::nullopt;
+      }
+      declarations.push_back(std::move(*declaration));
     }
     return declarations;
   }
@@ -976,10 +1021,19 @@ namespace {
       auto& slots = bindings[component.node_index];
       for (const auto& slot : scene.ReadScriptSlots(
              component.slot_start_index, component.slot_count)) {
+        auto params = std::vector<SidecarParam> {};
+        for (const auto& record : scene.ReadScriptParameters(slot)) {
+          auto param = DecodeParam(record, scene.GetStrings());
+          if (!param) {
+            throw std::runtime_error(
+              "scene script parameter has an invalid key or value");
+          }
+          params.push_back(std::move(*param));
+        }
         slots.push_back({
           .slot_id = {},
           .slot = slot,
-          .params = scene.ReadScriptParameters(slot),
+          .params = std::move(params),
         });
       }
     }
@@ -1170,21 +1224,19 @@ namespace {
     //! Checks each override of `row` against the script's declarations and
     //! resolves asset values; reports every violation at its JSON path.
     auto ValidateOverrides(const SidecarBindingRow& row,
-      const std::string& object_path,
-      std::span<const script::ScriptParamRecord> declared)
-      -> std::optional<std::vector<script::ScriptParamRecord>>
+      const std::string& object_path, std::span<const SidecarParam> declared)
+      -> std::optional<std::vector<SidecarParam>>
     {
-      auto records = std::vector<script::ScriptParamRecord> {};
+      auto records = std::vector<SidecarParam> {};
       auto valid = true;
       for (size_t j = 0; j < row.params.size(); ++j) {
         const auto& param = row.params.at(j);
         const auto param_path
           = object_path + ".params[" + std::to_string(j) + "]";
-        const auto key
-          = std::string(data::TryGetScriptParamKey(param.record).value_or(""));
+        const auto& key = param.key;
         const auto declaration = std::ranges::find_if(
-          declared, [&key](const script::ScriptParamRecord& record) -> bool {
-            return data::TryGetScriptParamKey(record) == key;
+          declared, [&key](const SidecarParam& declared_param) -> bool {
+            return declared_param.key == key;
           });
         if (declaration == declared.end()) {
           AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
@@ -1195,11 +1247,11 @@ namespace {
           valid = false;
           continue;
         }
-        if (declaration->type != param.record.type) {
+        if (declaration->record.type != param.record.type) {
           AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
             "script.sidecar.param_type_mismatch",
             "Parameter '" + key + "' is declared "
-              + std::string(script::to_string(declaration->type))
+              + std::string(script::to_string(declaration->record.type))
               + " but the override is "
               + std::string(script::to_string(param.record.type)),
             param_path + ".type");
@@ -1207,10 +1259,12 @@ namespace {
           continue;
         }
 
-        auto record = param.record;
+        auto resolved = param;
+        auto& record = resolved.record;
         if (record.type == script::ScriptParamType::kAsset) {
           const auto asset = ResolveAssetParam(param, key,
-            declaration->value.as_asset.asset_type, param_path + ".value");
+            declaration->record.value.as_asset.asset_type,
+            param_path + ".value");
           if (!asset) {
             valid = false;
             continue;
@@ -1226,7 +1280,7 @@ namespace {
           valid = false;
           continue;
         }
-        records.push_back(record);
+        records.push_back(std::move(resolved));
       }
       if (!valid) {
         return std::nullopt;
@@ -1339,9 +1393,9 @@ namespace {
       BuildBindingsByNodeFromComponents(scene) | std::views::values) {
       for (const auto& slot : slots) {
         for (const auto& param : slot.params) {
-          if (param.type == script::ScriptParamType::kAsset
-            && !component_keys.contains(param.value.as_asset.key)) {
-            keys.insert(param.value.as_asset.key);
+          if (param.record.type == script::ScriptParamType::kAsset
+            && !component_keys.contains(param.record.value.as_asset.key)) {
+            keys.insert(param.record.value.as_asset.key);
           }
         }
       }
@@ -1373,10 +1427,10 @@ namespace {
         references.AddAsset(slot.script_asset_key, data::AssetType::kScript);
       }
       for (const auto& param : scripts.params) {
-        if (param.type == script::ScriptParamType::kAsset
-          && !param.value.as_asset.key.IsNil()) {
-          references.AddAsset(
-            param.value.as_asset.key, param.value.as_asset.asset_type);
+        const auto& value = param.record.value;
+        if (param.record.type == script::ScriptParamType::kAsset
+          && !value.as_asset.key.IsNil()) {
+          references.AddAsset(value.as_asset.key, value.as_asset.asset_type);
         }
       }
       co_await session.AssetEmitter().EmitSync(scene_state.scene_key,

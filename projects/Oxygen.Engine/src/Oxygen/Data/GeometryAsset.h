@@ -183,12 +183,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(SubMesh)
   OXYGEN_DEFAULT_MOVABLE(SubMesh)
 
-  //! Returns the submesh name as a string view (for debugging/tools).
-  /*!
-    Returns the asset name from the descriptor as a string view. The name is
-    guaranteed not to exceed pak::core::kMaxNameSize. This is primarily for
-    debugging and tools, not for runtime use.
-  */
+  //! Returns the submesh name (for debugging/tools, not for runtime use).
   auto GetName() const noexcept -> std::string_view { return name_; }
 
   //! Returns the minimum corner of the submesh's axis-aligned bounding box.
@@ -514,12 +509,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(Mesh)
   OXYGEN_DEFAULT_MOVABLE(Mesh)
 
-  //! Returns the mesh name as a string view (for debugging/tools).
-  /*!
-    Returns the asset name from the descriptor as a string view. The name is
-    guaranteed not to exceed pak::core::kMaxNameSize. This is primarily for
-    debugging and tools, not for runtime use.
-  */
+  //! Returns the mesh name (for debugging/tools, not for runtime use).
   auto GetName() const noexcept -> std::string_view { return name_; }
 
   //! Returns a span of all vertices.

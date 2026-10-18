@@ -40,7 +40,6 @@ inline auto LoadMaterialAsset(LoaderContext context)
   using data::ResourceReferenceIndex;
   using data::ShaderReference;
   using data::Unorm16;
-  using data::pak::core::kMaxNameSize;
   using data::pak::render::MaterialAssetDesc;
   using data::pak::render::ShaderReferenceDesc;
   using oxygen::ShaderType;
@@ -56,6 +55,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
   };
 
   auto pack = reader.ScopedAlignment(1);
+  const auto descriptor_start = reader.Position();
+  check_result(descriptor_start, "MaterialAssetDesc position");
 
   // Read MaterialAssetDesc field-by-field to avoid
   // std::has_unique_object_representations issues with float fields
@@ -71,6 +72,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
         "unsupported MaterialAssetDesc descriptor version");
     }
   }
+  const auto strings
+    = ReadDescriptorStrings(reader, *descriptor_start, desc.header);
 
   // -- Read MaterialAssetDesc specific fields
 
@@ -337,7 +340,12 @@ inline auto LoadMaterialAsset(LoaderContext context)
     if ((shader_stage_bits & (1U << i)) != 0) {
       auto shader_result = reader.Read<ShaderReferenceDesc>();
       check_result(shader_result, "ShaderReferenceDesc");
-      shader_refs.emplace_back(shader_result.value());
+      try {
+        shader_refs.emplace_back(shader_result.value(), strings);
+      } catch (const std::invalid_argument& error) {
+        throw std::runtime_error(
+          fmt::format("ShaderReferenceDesc string: {}", error.what()));
+      }
       const auto expected_stage = static_cast<ShaderType>(i);
       if (shader_refs.back().GetShaderType() != expected_stage) {
         throw std::runtime_error(
@@ -349,6 +357,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
         shader_refs.back().GetShaderSourceHash());
     }
   }
+
+  SkipDescriptorStrings(reader, *descriptor_start, desc.header);
 
   const auto texture_references = std::array {
     desc.base_color_texture,
@@ -410,6 +420,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
     = std::make_unique<data::MaterialAsset>(context.current_asset_key, desc,
       std::move(shader_refs), std::vector<ResourceKey> {},
       data::SourceOrigin { context.source_key, context.source_instance });
+  material_asset->SetAssetName(
+    ResolveDescriptorString(strings, desc.header.name_offset, "asset name"));
 
   return material_asset;
 }

@@ -29,22 +29,6 @@ inline auto MakeFirstByteAssetKey(const std::uint8_t seed) -> data::AssetKey
   return data::AssetKey::FromBytes(bytes);
 }
 
-//! Builds a scene string table: a leading NUL followed by NUL-terminated text.
-struct SceneStringTableBuilder final {
-  std::vector<std::byte> bytes { std::byte { 0 } };
-
-  auto Add(std::string_view text) -> data::pak::core::StringTableOffsetT
-  {
-    const auto offset
-      = static_cast<data::pak::core::StringTableOffsetT>(bytes.size());
-    for (const char c : text) {
-      bytes.push_back(std::byte { static_cast<unsigned char>(c) });
-    }
-    bytes.push_back(std::byte { 0 });
-    return offset;
-  }
-};
-
 //! Scene adapter that returns a prepared `SceneBuild`.
 struct FakeSceneAdapter final {
   content::import::SceneBuild build;
@@ -67,10 +51,8 @@ struct FakeSceneAdapter final {
 inline auto MakeMinimalSceneBuild(const std::string_view name)
   -> content::import::SceneBuild
 {
-  SceneStringTableBuilder strings;
-  const auto name_offset = strings.Add(name);
-
   content::import::SceneBuild build;
+  const auto name_offset = build.strings.Add(name);
   build.nodes.push_back(data::pak::world::NodeRecord {
     .node_id = MakeFirstByteAssetKey(1U),
     .scene_name_offset = name_offset,
@@ -80,7 +62,6 @@ inline auto MakeMinimalSceneBuild(const std::string_view name)
     .rotation = { 0.0F, 0.0F, 0.0F, 1.0F },
     .scale = { 1.0F, 1.0F, 1.0F },
   });
-  build.strings = std::move(strings.bytes);
   return build;
 }
 

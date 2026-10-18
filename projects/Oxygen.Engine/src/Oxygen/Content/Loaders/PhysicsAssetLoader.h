@@ -24,6 +24,8 @@ inline auto LoadPhysicsMaterialDescriptor(const LoaderContext& context)
   -> data::pak::physics::PhysicsMaterialAssetDesc
 {
   data::pak::physics::PhysicsMaterialAssetDesc descriptor {};
+  const auto base_pos = context.desc_reader->Position();
+  CheckLoaderResult(base_pos, "physics material", "position");
   const auto bytes = context.desc_reader->ReadBlob(sizeof(descriptor));
   CheckLoaderResult(bytes, "physics material", "descriptor");
   std::memcpy(&descriptor, bytes->data(), sizeof(descriptor));
@@ -34,6 +36,10 @@ inline auto LoadPhysicsMaterialDescriptor(const LoaderContext& context)
     throw std::runtime_error(
       "Physics material descriptor type/version is invalid");
   }
+  static_cast<void>(ResolveDescriptorString(
+    ReadDescriptorStrings(*context.desc_reader, *base_pos, descriptor.header),
+    descriptor.header.name_offset, "asset name"));
+  SkipDescriptorStrings(*context.desc_reader, *base_pos, descriptor.header);
   context.ValidateReferences({}, {});
   return descriptor;
 }
@@ -45,6 +51,8 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
   auto& reader = *context.desc_reader;
   const auto packed = reader.ScopedAlignment(1U);
   physics::CollisionShapeAssetDesc descriptor {};
+  const auto base_pos = reader.Position();
+  CheckLoaderResult(base_pos, "collision shape", "position");
   const auto bytes = reader.ReadBlob(sizeof(descriptor));
   CheckLoaderResult(bytes, "collision shape", "descriptor");
   std::memcpy(&descriptor, bytes->data(), sizeof(descriptor));
@@ -54,6 +62,9 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
     throw std::runtime_error(
       "Collision shape descriptor type/version is invalid");
   }
+  static_cast<void>(ResolveDescriptorString(
+    ReadDescriptorStrings(reader, *base_pos, descriptor.header),
+    descriptor.header.name_offset, "asset name"));
   if (descriptor.material_asset_key.IsNil()) {
     throw std::runtime_error("Collision shape requires a physics material key");
   }
@@ -127,6 +138,7 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
       }
     }
   }
+  SkipDescriptorStrings(reader, *base_pos, descriptor.header);
   context.ValidateReferences({}, keys);
   return descriptor;
 }

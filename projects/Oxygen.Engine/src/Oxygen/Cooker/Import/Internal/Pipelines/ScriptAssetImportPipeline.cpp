@@ -40,6 +40,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -85,6 +86,8 @@ namespace {
     AssetReferenceBuilder references;
     //! Declared parameters, written after the descriptor.
     std::vector<ScriptParamRecord> params;
+    //! The descriptor string table, written after the parameters.
+    data::DescriptorStringsBuilder strings;
   };
 
   [[nodiscard]] auto IsStopRequested(const std::stop_token& token) noexcept
@@ -122,8 +125,8 @@ namespace {
     return true;
   }
 
-  auto InitScriptDescriptorContext(ImportSession& session,
-    const ImportRequest& request, ScriptDescriptorContext& context) -> bool
+  auto InitScriptDescriptorContext(
+    const ImportRequest& request, ScriptDescriptorContext& context) -> void
   {
     const auto script_name
       = script_import::DeriveScriptName(request.source_path);
@@ -132,28 +135,18 @@ namespace {
     const auto virtual_path
       = request.loose_cooked_layout.ScriptVirtualPath(script_name);
 
-    static_cast<void>(request);
     const auto key = oxygen::data::AssetKey::FromVirtualPath(virtual_path);
 
     auto descriptor = ScriptAssetDesc {};
     descriptor.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
     descriptor.header.version = data::pak::scripting::kScriptAssetVersion;
     descriptor.flags = ScriptAssetFlags::kNone;
-
-    const auto name_span
-      = std::span<char, sizeof(descriptor.header.name)>(descriptor.header.name);
-    if (!script_import::CopyNullTerminated(script_name, name_span)) {
-      script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.name_too_long",
-        "Derived script name exceeds ScriptAssetDesc::header.name capacity");
-      return false;
-    }
+    descriptor.header.name_offset = context.strings.Add(script_name);
 
     context.key = key;
     context.virtual_path = virtual_path;
     context.descriptor_relpath = descriptor_relpath;
     context.descriptor = descriptor;
-    return true;
   }
 
   auto ToImportSeverity(const scripting::DiagnosticSeverity severity)
@@ -200,12 +193,12 @@ namespace {
     context.params.reserve(analysis.declarations.size());
     for (const auto& declaration : analysis.declarations) {
       auto record = data::MakeScriptParamRecord(
-        declaration.name, declaration.default_value);
+        declaration.name, declaration.default_value, context.strings);
       if (!record) {
         script_import::AddDiagnostic(session, request, ImportSeverity::kError,
           "script.asset.declaration_unencodable",
           "Parameter '" + declaration.name
-            + "' does not fit ScriptParamRecord");
+            + "' has an empty name or holds a NUL byte");
         return false;
       }
       context.params.push_back(*record);
@@ -431,8 +424,9 @@ namespace {
   }
 
   auto ConfigureExternalSource(ImportSession& session,
-    const ImportRequest& request, ScriptAssetDesc& desc) -> bool
+    const ImportRequest& request, ScriptDescriptorContext& context) -> bool
   {
+    auto& desc = context.descriptor;
     desc.flags = ScriptAssetFlags::kAllowExternalSource;
     const auto external_source_path
       = script_import::BuildExternalSourcePath(request);
@@ -442,16 +436,8 @@ namespace {
         "External scripts require a source_root containing the source file");
       return false;
     }
-    const auto external_path_span
-      = std::span<char, sizeof(desc.external_source_path)>(
-        desc.external_source_path);
-    if (!script_import::CopyNullTerminated(
-          *external_source_path, external_path_span)) {
-      script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.external_path_too_long",
-        "External script source path exceeds ScriptAssetDesc capacity");
-      return false;
-    }
+    desc.external_source_path_offset
+      = context.strings.Add(*external_source_path);
     return true;
   }
 
@@ -473,6 +459,7 @@ namespace {
         context.params.data(),
         context.params.size() * sizeof(ScriptParamRecord));
     }
+    data::AppendDescriptorStrings(bytes, context.strings);
 
     try {
       session.AssetEmitter().Emit(context.key, AssetType::kScript,
@@ -664,9 +651,7 @@ auto ScriptAssetImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   }
 
   auto descriptor_context = ScriptDescriptorContext {};
-  if (!InitScriptDescriptorContext(*session, req, descriptor_context)) {
-    co_return false;
-  }
+  InitScriptDescriptorContext(req, descriptor_context);
   if (!AnalyzeDeclarations(
         *session, req, item.source_bytes, descriptor_context)) {
     co_return false;
@@ -691,8 +676,7 @@ auto ScriptAssetImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     if (!appended) {
       co_return false;
     }
-  } else if (!ConfigureExternalSource(
-               *session, req, descriptor_context.descriptor)) {
+  } else if (!ConfigureExternalSource(*session, req, descriptor_context)) {
     co_return false;
   }
 

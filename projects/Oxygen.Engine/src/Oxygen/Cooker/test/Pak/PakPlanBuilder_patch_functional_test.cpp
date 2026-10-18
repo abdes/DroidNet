@@ -38,6 +38,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -827,8 +828,7 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
   material.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
   material.header.version = render::kMaterialAssetVersion;
   const auto material_bytes = [&] -> std::vector<std::byte> {
-    const auto bytes = std::as_bytes(std::span { &material, 1U });
-    return { bytes.begin(), bytes.end() };
+    return data::MakeDescriptorBytes(material);
   };
   auto original_bytes = material_bytes();
   auto assets = std::array {

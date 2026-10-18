@@ -13,6 +13,7 @@
 #include <cstring>
 #include <filesystem>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -27,6 +28,7 @@
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -38,22 +40,23 @@ namespace {
   using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::ReadBytes;
   using oxygen::cooker::test::WriteBytes;
-  constexpr uint16_t kBufferSidecarVersion = 2;
 
+  // The cooker-internal `.obuf` sidecar layout (version 3), mirrored to read
+  // the cooked output.
 #pragma pack(push, 1)
   struct BufferSidecarHeader final {
     char magic[4] = { 'O', 'B', 'U', 'F' };
-    uint16_t version = kBufferSidecarVersion;
+    uint16_t version = 3;
     uint16_t reserved = 0;
     data::pak::core::ResourceIndexT resource_index
       = data::pak::core::kNoResourceIndex;
     data::pak::core::BufferResourceDesc descriptor {};
     uint32_t view_count = 0;
-    uint32_t reserved_views = 0;
+    uint32_t strings_size = 0;
   };
 
   struct BufferSidecarViewEntry final {
-    char name[data::pak::core::kMaxNameSize] = {};
+    uint32_t name_offset = 0;
     uint64_t byte_offset = 0;
     uint64_t byte_length = 0;
     uint64_t element_offset = 0;
@@ -61,13 +64,62 @@ namespace {
   };
 #pragma pack(pop)
 
-  [[nodiscard]] auto DecodeFixedName(const char* raw_name) -> std::string
+  struct SidecarView final {
+    std::string name;
+    uint64_t byte_offset = 0;
+    uint64_t byte_length = 0;
+    uint64_t element_offset = 0;
+    uint64_t element_count = 0;
+  };
+
+  struct Sidecar final {
+    data::pak::core::ResourceIndexT resource_index
+      = data::pak::core::kNoResourceIndex;
+    data::pak::core::BufferResourceDesc descriptor {};
+    std::vector<SidecarView> views;
+  };
+
+  //! Reads a cooked buffer sidecar; throws when it is not version 3.
+  auto ParseSidecar(const std::vector<std::byte>& bytes) -> Sidecar
   {
-    size_t len = 0;
-    while (len < data::pak::core::kMaxNameSize && raw_name[len] != '\0') {
-      ++len;
+    auto header = BufferSidecarHeader {};
+    if (bytes.size() < sizeof(header)) {
+      throw std::runtime_error("buffer sidecar is truncated");
     }
-    return { raw_name, len };
+    std::memcpy(&header, bytes.data(), sizeof(header));
+    if (std::string_view(std::data(header.magic), 4U) != "OBUF"
+      || header.version != 3U) {
+      throw std::runtime_error("buffer sidecar magic or version is wrong");
+    }
+    const auto entries_size
+      = size_t { header.view_count } * sizeof(BufferSidecarViewEntry);
+    if (bytes.size() != sizeof(header) + entries_size + header.strings_size) {
+      throw std::runtime_error("buffer sidecar size is wrong");
+    }
+    const auto table = std::span(bytes).subspan(sizeof(header) + entries_size);
+    auto chars = std::vector<char>(table.size());
+    std::memcpy(chars.data(), table.data(), table.size());
+    const auto strings = data::DescriptorStrings { std::move(chars) };
+
+    auto sidecar = Sidecar {
+      .resource_index = header.resource_index,
+      .descriptor = header.descriptor,
+      .views = {},
+    };
+    for (uint32_t i = 0; i < header.view_count; ++i) {
+      auto entry = BufferSidecarViewEntry {};
+      std::memcpy(&entry,
+        bytes.data() + sizeof(header) + (i * sizeof(BufferSidecarViewEntry)),
+        sizeof(entry));
+      sidecar.views.push_back({
+        .name = std::string { strings.Get(entry.name_offset) },
+        .byte_offset = entry.byte_offset,
+        .byte_length = entry.byte_length,
+        .element_offset = entry.element_offset,
+        .element_count = entry.element_count,
+      });
+    }
+    return sidecar;
   }
 
   class BufferContainerImportJobTest : public ImportServiceTest { };
@@ -178,30 +230,16 @@ namespace {
     EXPECT_TRUE(std::filesystem::exists(
       cooked_root / std::filesystem::path { kBuffersTableRelPath }));
 
-    const auto sidecar_bytes
-      = ReadBytes(cooked_root / std::filesystem::path { kSidecarRelPath });
-    ASSERT_GE(sidecar_bytes.size(), sizeof(BufferSidecarHeader));
-
-    auto sidecar = BufferSidecarHeader {};
-    std::memcpy(&sidecar, sidecar_bytes.data(), sizeof(sidecar));
-
-    EXPECT_EQ(sidecar.magic[0], 'O');
-    EXPECT_EQ(sidecar.magic[1], 'B');
-    EXPECT_EQ(sidecar.magic[2], 'U');
-    EXPECT_EQ(sidecar.magic[3], 'F');
-    EXPECT_EQ(sidecar.version, kBufferSidecarVersion);
+    const auto sidecar = ParseSidecar(
+      ReadBytes(cooked_root / std::filesystem::path { kSidecarRelPath }));
     EXPECT_NE(sidecar.resource_index, data::pak::core::kNoResourceIndex);
     EXPECT_EQ(sidecar.descriptor.usage_flags, 3U);
     EXPECT_EQ(sidecar.descriptor.element_stride, 16U);
     EXPECT_EQ(sidecar.descriptor.size_bytes, buffer_bytes.size());
-    ASSERT_EQ(sidecar.view_count, 1U);
+    ASSERT_EQ(sidecar.views.size(), 1U);
 
-    const auto views_offset = sizeof(BufferSidecarHeader);
-    ASSERT_GE(sidecar_bytes.size(),
-      views_offset + sizeof(BufferSidecarViewEntry) * sidecar.view_count);
-    auto view0 = BufferSidecarViewEntry {};
-    std::memcpy(&view0, sidecar_bytes.data() + views_offset, sizeof(view0));
-    EXPECT_EQ(DecodeFixedName(view0.name), "__all__");
+    const auto& view0 = sidecar.views.at(0);
+    EXPECT_EQ(view0.name, "__all__");
     EXPECT_EQ(view0.byte_offset, 0U);
     EXPECT_EQ(view0.byte_length, buffer_bytes.size());
     EXPECT_EQ(view0.element_offset, 0U);
@@ -291,29 +329,19 @@ namespace {
 
     constexpr auto kSidecarRelPath
       = std::string_view { "Resources/Buffers/mesh_indices.obuf" };
-    const auto sidecar_bytes
-      = ReadBytes(cooked_root / std::filesystem::path { kSidecarRelPath });
-    ASSERT_GE(sidecar_bytes.size(), sizeof(BufferSidecarHeader));
+    const auto sidecar = ParseSidecar(
+      ReadBytes(cooked_root / std::filesystem::path { kSidecarRelPath }));
+    ASSERT_EQ(sidecar.views.size(), 2U);
 
-    auto sidecar = BufferSidecarHeader {};
-    std::memcpy(&sidecar, sidecar_bytes.data(), sizeof(sidecar));
-    ASSERT_EQ(sidecar.view_count, 2U);
-
-    const auto views_offset = sizeof(BufferSidecarHeader);
-    auto view0 = BufferSidecarViewEntry {};
-    auto view1 = BufferSidecarViewEntry {};
-    std::memcpy(&view0, sidecar_bytes.data() + views_offset, sizeof(view0));
-    std::memcpy(&view1,
-      sidecar_bytes.data() + views_offset + sizeof(BufferSidecarViewEntry),
-      sizeof(view1));
-
-    EXPECT_EQ(DecodeFixedName(view0.name), "__all__");
+    const auto& view0 = sidecar.views.at(0);
+    const auto& view1 = sidecar.views.at(1);
+    EXPECT_EQ(view0.name, "__all__");
     EXPECT_EQ(view0.byte_offset, 0U);
     EXPECT_EQ(view0.byte_length, buffer_bytes.size());
     EXPECT_EQ(view0.element_offset, 0U);
     EXPECT_EQ(view0.element_count, buffer_bytes.size() / 4U);
 
-    EXPECT_EQ(DecodeFixedName(view1.name), "lod0");
+    EXPECT_EQ(view1.name, "lod0");
     EXPECT_EQ(view1.byte_offset, 0U);
     EXPECT_EQ(view1.byte_length, 16U);
     EXPECT_EQ(view1.element_offset, 0U);

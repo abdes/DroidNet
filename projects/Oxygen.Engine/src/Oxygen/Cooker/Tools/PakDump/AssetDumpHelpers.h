@@ -26,6 +26,7 @@
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::pakdump::asset_dump_helpers {
@@ -82,11 +83,30 @@ inline auto PrintAssetDescriptorHexPreview(
     (std::min)(data.size(), ctx.max_data_bytes), ctx.max_data_bytes);
 }
 
-inline auto PrintAssetHeaderFields(
-  const oxygen::data::pak::core::AssetHeader& h, const int indent = 8) -> void
+//! Resolves a string of a descriptor's string table, for display.
+[[nodiscard]] inline auto DescriptorString(const std::vector<std::byte>& data,
+  const oxygen::data::pak::core::AssetHeader& header,
+  const oxygen::data::pak::core::StringTableOffsetT offset) -> std::string
 {
-  PrintUtils::Field(
-    "Name", std::string(h.name, strnlen(h.name, sizeof(h.name))), indent);
+  try {
+    const auto strings
+      = oxygen::data::DescriptorStrings::FromDescriptor(data, header.strings);
+    if (const auto value = strings.TryGet(offset)) {
+      return std::string { *value };
+    }
+  } catch (const std::invalid_argument&) {
+    return "<invalid string table>";
+  }
+  return fmt::format("<invalid string offset {}>", offset);
+}
+
+inline auto PrintAssetHeaderFields(
+  const oxygen::data::pak::core::AssetHeader& h, const std::string_view name,
+  const int indent = 8) -> void
+{
+  PrintUtils::Field("Name", std::string { name }, indent);
+  PrintUtils::Field("String Table",
+    fmt::format("{} bytes at {}", h.strings.size, h.strings.offset), indent);
   PrintUtils::Field("Format Version", static_cast<int>(h.version), indent);
   PrintUtils::Field(
     "Streaming Priority", static_cast<int>(h.streaming_priority), indent);
@@ -127,18 +147,6 @@ inline auto PrintAssetHeaderFields(
   }
   std::memcpy(out, data.data() + offset, struct_size);
   return true;
-}
-
-[[nodiscard]] inline auto TryGetSceneString(
-  std::string_view string_table, const uint32_t offset) -> std::string_view
-{
-  if (offset >= string_table.size()) {
-    return {};
-  }
-  const auto* start = string_table.data() + offset;
-  const size_t max_len = string_table.size() - offset;
-  const size_t len = strnlen(start, max_len);
-  return { start, len };
 }
 
 inline auto PrintAssetMetadata(

@@ -13,6 +13,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/LoaderFunctions.h>
+#include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/InputActionAsset.h>
@@ -39,6 +40,8 @@ inline auto LoadInputActionAsset(const LoaderContext& context)
   };
 
   auto pack = reader.ScopedAlignment(1);
+  const auto base_pos = reader.Position();
+  check_result(base_pos, "Position(base)");
 
   auto desc_blob
     = reader.ReadBlob(sizeof(data::pak::input::InputActionAssetDesc));
@@ -62,9 +65,15 @@ inline auto LoadInputActionAsset(const LoaderContext& context)
   }
 
   context.ValidateReferences({}, {});
+  const auto strings = ReadDescriptorStrings(reader, *base_pos, desc.header);
+  SkipDescriptorStrings(reader, *base_pos, desc.header);
 
-  return std::make_unique<data::InputActionAsset>(context.current_asset_key,
-    desc, data::SourceOrigin { context.source_key, context.source_instance });
+  auto asset
+    = std::make_unique<data::InputActionAsset>(context.current_asset_key, desc,
+      data::SourceOrigin { context.source_key, context.source_instance });
+  asset->SetAssetName(
+    ResolveDescriptorString(strings, desc.header.name_offset, "asset name"));
+  return asset;
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadInputActionAsset)>);

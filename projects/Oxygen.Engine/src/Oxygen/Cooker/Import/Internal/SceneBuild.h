@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <vector>
 
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::import {
@@ -23,7 +24,8 @@ struct SceneEnvironmentSystem {
 //! Intermediate scene build data produced by adapters.
 struct SceneBuild final {
   std::vector<data::pak::world::NodeRecord> nodes;
-  std::vector<std::byte> strings;
+  //! The scene descriptor's string table; node names are offsets into it.
+  data::DescriptorStringsBuilder strings;
 
   std::vector<data::pak::world::RenderableRecord> renderables;
   std::vector<data::pak::world::MaterialOverrideRecord> material_overrides;

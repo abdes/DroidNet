@@ -28,6 +28,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -50,6 +51,15 @@ namespace {
       std::memcpy(&desc, bytes.data(), sizeof(desc));
     }
     return desc;
+  }
+
+  //! The external source path a cooked script descriptor records.
+  auto ReadExternalSourcePath(const std::filesystem::path& descriptor_path)
+    -> std::string
+  {
+    const auto bytes = ReadBytes(descriptor_path);
+    return oxygen::content::test::ReadDescriptorString(
+      bytes, ReadScriptDescriptor(descriptor_path).external_source_path_offset);
   }
 
   auto FindFileRelPathByKind(const lc::Inspection& inspection,
@@ -233,7 +243,7 @@ namespace {
       = std::filesystem::relative(source_path, cooked_root.parent_path())
           .lexically_normal()
           .generic_string();
-    const auto actual_external_path = FixedString(desc.external_source_path);
+    const auto actual_external_path = ReadExternalSourcePath(descriptor_path);
     EXPECT_EQ(actual_external_path, expected_external_path);
   }
 
@@ -267,7 +277,7 @@ namespace {
     const auto desc = ReadScriptDescriptor(descriptor_path);
     EXPECT_EQ((desc.flags & ScriptAssetFlags::kAllowExternalSource),
       ScriptAssetFlags::kAllowExternalSource);
-    EXPECT_EQ(FixedString(desc.external_source_path),
+    EXPECT_EQ(ReadExternalSourcePath(descriptor_path),
       "scenes/physics_domains/relative_source.lua");
 
     std::filesystem::remove_all(test_root, ec);
@@ -303,7 +313,7 @@ namespace {
     const auto desc = ReadScriptDescriptor(descriptor_path);
     EXPECT_EQ((desc.flags & ScriptAssetFlags::kAllowExternalSource),
       ScriptAssetFlags::kAllowExternalSource);
-    EXPECT_EQ(FixedString(desc.external_source_path),
+    EXPECT_EQ(ReadExternalSourcePath(descriptor_path),
       "scenes/multi-script/relative_cooked_root.lua");
 
     std::filesystem::remove_all(test_root, ec);
@@ -475,7 +485,9 @@ namespace {
     EXPECT_NE(desc.bytecode_resource_index, kNoResourceReference);
     EXPECT_EQ(desc.source_resource_index, kNoResourceReference);
     EXPECT_EQ(desc.flags, ScriptAssetFlags::kAllowExternalSource);
-    EXPECT_FALSE(FixedString(desc.external_source_path).empty());
+    EXPECT_FALSE(
+      ReadExternalSourcePath(cooked_root / "Scripts" / "combo.oscript")
+        .empty());
   }
 
   //! Declared parameters cook after the descriptor with their types,
@@ -515,21 +527,29 @@ return Orbit
     ASSERT_EQ(desc.params.count, 3U);
     EXPECT_EQ(desc.params.offset, sizeof(ScriptAssetDesc));
     EXPECT_EQ(desc.params.entry_size, sizeof(ScriptParamRecord));
+    EXPECT_EQ(desc.header.strings.offset,
+      sizeof(ScriptAssetDesc) + (3U * sizeof(ScriptParamRecord)));
     ASSERT_EQ(
-      bytes.size(), sizeof(ScriptAssetDesc) + (3U * sizeof(ScriptParamRecord)));
+      bytes.size(), desc.header.strings.offset + desc.header.strings.size);
     auto params = std::vector<ScriptParamRecord>(3U);
     std::memcpy(params.data(),
       std::span(bytes).subspan(sizeof(ScriptAssetDesc)).data(),
       params.size() * sizeof(ScriptParamRecord));
 
-    EXPECT_EQ(FixedString(params.at(0).key), "speed");
+    EXPECT_EQ(oxygen::content::test::ReadDescriptorString(
+                bytes, params.at(0).key_offset),
+      "speed");
     EXPECT_EQ(params.at(0).type, ScriptParamType::kFloat);
     EXPECT_FLOAT_EQ(params.at(0).value.as_float, kSpeedDefault);
-    EXPECT_EQ(FixedString(params.at(1).key), "orb");
+    EXPECT_EQ(oxygen::content::test::ReadDescriptorString(
+                bytes, params.at(1).key_offset),
+      "orb");
     EXPECT_EQ(params.at(1).type, ScriptParamType::kAsset);
     EXPECT_EQ(params.at(1).value.as_asset.asset_type, AssetType::kMaterial);
     EXPECT_TRUE(params.at(1).value.as_asset.key.IsNil());
-    EXPECT_EQ(FixedString(params.at(2).key), "target");
+    EXPECT_EQ(oxygen::content::test::ReadDescriptorString(
+                bytes, params.at(2).key_offset),
+      "target");
     EXPECT_EQ(params.at(2).type, ScriptParamType::kNode);
     EXPECT_EQ(
       params.at(2).value.as_node_index, data::pak::scripting::kUnsetNodeParam);

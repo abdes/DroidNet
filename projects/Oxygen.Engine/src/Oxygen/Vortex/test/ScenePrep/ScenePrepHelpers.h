@@ -48,7 +48,7 @@ namespace pak = oxygen::data::pak;
   -> oxygen::data::pak::geometry::SubMeshDesc
 {
   oxygen::data::pak::geometry::SubMeshDesc desc {
-    .name = {},
+    .name_offset = 0,
     .material_asset_key = {},
     // Cooked descriptors always declare their material slot.
     .slot_id = oxygen::data::MaterialSlotId::Generate(),

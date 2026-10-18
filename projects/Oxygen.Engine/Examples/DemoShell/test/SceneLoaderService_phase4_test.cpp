@@ -40,6 +40,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/InputActionAsset.h>
@@ -134,10 +135,10 @@ namespace {
     desc.nodes.entry_size = sizeof(pakw::NodeRecord);
     const auto nodes_bytes
       = static_cast<size_t>(node_count) * sizeof(pakw::NodeRecord);
-    desc.scene_strings.offset
+    desc.header.strings.offset
       = static_cast<data::pak::core::StringTableOffsetT>(
         desc.nodes.offset + static_cast<data::pak::core::OffsetT>(nodes_bytes));
-    desc.scene_strings.size = 1;
+    desc.header.strings.size = 1;
 
     auto bytes = std::vector<std::byte> {};
     AppendRecord(bytes, desc);
@@ -167,13 +168,13 @@ namespace {
 
     constexpr auto strings = std::string_view("\0Root\0FogNode\0", 14);
     const auto nodes_bytes = sizeof(root) + sizeof(fog_node);
-    desc.scene_strings.offset
+    desc.header.strings.offset
       = static_cast<data::pak::core::StringTableOffsetT>(
         desc.nodes.offset + nodes_bytes);
-    desc.scene_strings.size
+    desc.header.strings.size
       = static_cast<data::pak::core::StringTableSizeT>(strings.size());
     desc.component_table_directory_offset
-      = desc.scene_strings.offset + desc.scene_strings.size;
+      = desc.header.strings.offset + desc.header.strings.size;
     desc.component_table_count = 1U;
 
     auto table_desc = pakw::SceneComponentTableDesc {};
@@ -223,8 +224,8 @@ namespace {
     nodes.at(2).node_flags = pakw::kSceneNodeFlag_Visible;
     nodes.at(2).inherited_flags = pakw::kSceneNodeFlag_ReceivesShadows;
     constexpr auto strings = std::string_view("\0Root\0Inherited\0Local\0", 22);
-    descriptor.scene_strings.offset = sizeof(descriptor) + sizeof(nodes);
-    descriptor.scene_strings.size = static_cast<uint32_t>(strings.size());
+    descriptor.header.strings.offset = sizeof(descriptor) + sizeof(nodes);
+    descriptor.header.strings.size = static_cast<uint32_t>(strings.size());
     auto bytes = std::vector<std::byte> {};
     AppendRecord(bytes, descriptor);
     AppendRecord(bytes, nodes);
@@ -251,13 +252,13 @@ namespace {
 
     constexpr auto strings = std::string_view("\0Root\0SunNode\0", 14);
     const auto nodes_bytes = sizeof(root) + sizeof(sun_node);
-    desc.scene_strings.offset
+    desc.header.strings.offset
       = static_cast<data::pak::core::StringTableOffsetT>(
         desc.nodes.offset + nodes_bytes);
-    desc.scene_strings.size
+    desc.header.strings.size
       = static_cast<data::pak::core::StringTableSizeT>(strings.size());
     desc.component_table_directory_offset
-      = desc.scene_strings.offset + desc.scene_strings.size;
+      = desc.header.strings.offset + desc.header.strings.size;
     desc.component_table_count = 1U;
 
     auto table_desc = pakw::SceneComponentTableDesc {};
@@ -321,13 +322,13 @@ namespace {
     mesh_node.parent_index = 0;
     mesh_node.scene_name_offset = kSecondNameOffset;
     constexpr auto strings = std::string_view("\0Root\0MeshNode\0", 15);
-    desc.scene_strings = {
+    desc.header.strings = {
       .offset = static_cast<data::pak::core::StringTableOffsetT>(
         desc.nodes.offset + sizeof(root) + sizeof(mesh_node)),
       .size = static_cast<data::pak::core::StringTableSizeT>(strings.size()),
     };
     desc.component_table_directory_offset
-      = desc.scene_strings.offset + desc.scene_strings.size;
+      = desc.header.strings.offset + desc.header.strings.size;
     desc.component_table_count = 2;
     const auto record_offset = desc.component_table_directory_offset
       + (2 * sizeof(pakw::SceneComponentTableDesc));
@@ -469,9 +470,7 @@ namespace {
     desc.component_table_count = 0;
     desc.component_table_directory_offset = 0;
 
-    auto bytes = std::vector<std::byte>(sizeof(desc));
-    std::memcpy(bytes.data(), &desc, sizeof(desc));
-    return bytes;
+    return data::MakeDescriptorBytes(desc);
   }
 
   class SceneLoaderTestAssetLoader final : public content::IAssetLoader {

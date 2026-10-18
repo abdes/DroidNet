@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Testing/GTest.h>
@@ -173,7 +174,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   material_desc.header.version = data::pak::render::kMaterialAssetVersion;
   writer.WriteAssetDescriptor(library_key, data::AssetType::kMaterial,
     "/.cooked/Materials/new.omat", "Materials/new.omat",
-    std::as_bytes(std::span(&material_desc, 1)), {});
+    data::MakeDescriptorBytes(material_desc), {});
   static_cast<void>(writer.Finish());
   WriteText(cooked_root / "Materials/new.omat", "new material");
   for (const auto own_wins : { true, false }) {

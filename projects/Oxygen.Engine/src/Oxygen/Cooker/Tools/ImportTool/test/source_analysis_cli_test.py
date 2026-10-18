@@ -3,7 +3,6 @@
 import json
 import hashlib
 import os
-import re
 from pathlib import Path
 import subprocess
 import sys
@@ -14,13 +13,15 @@ import zlib
 
 
 IMPORT_TOOL = Path(sys.argv.pop(1)).resolve()
-_VERSIONS = Path(__file__).resolve().parents[4] / "Data" / "PakFormatVersions.inc"
-SCENE_VERSION = int(
-    re.search(
-        r"OXDAT_ASSET_VERSION\(kSceneAssetVersion,\s*\w+,\s*\w+,\s*(\d+)\)",
-        _VERSIONS.read_text(encoding="utf-8"),
-    ).group(1)
+_SCENE_SCHEMA = (
+    Path(__file__).resolve().parents[3]
+    / "Import"
+    / "Schemas"
+    / "oxygen.scene-descriptor.schema.json"
 )
+SCENE_VERSION: int = json.loads(_SCENE_SCHEMA.read_text(encoding="utf-8"))[
+    "properties"
+]["version"]["const"]
 EMPTY_SCENE = json.dumps({"version": SCENE_VERSION, "name": "Empty", "nodes": []})
 
 

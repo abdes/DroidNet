@@ -7,7 +7,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <optional>
@@ -24,6 +23,7 @@
 #include <Oxygen/Content/Loaders/InputActionLoader.h>
 #include <Oxygen/Content/Loaders/InputMappingContextLoader.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Serio/Reader.h>
@@ -103,12 +103,14 @@ NOLINT_TEST_F(InputLoadersTest, LoadInputActionAssetValidDescriptorParses)
   InputActionAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
   desc.header.version = oxygen::data::pak::input::kInputActionAssetVersion;
-  std::snprintf(desc.header.name, sizeof(desc.header.name), "%s", "Accel");
   desc.value_type = 2;
   desc.flags = InputActionAssetFlags::kConsumesInput
     | InputActionAssetFlags::kCumulativeAccumulation;
+  const auto strings = oxygen::data::DescriptorStringsBuilder {};
+  desc.header.strings = { .offset = sizeof(desc), .size = strings.Size() };
 
   WriteBlob(desc);
+  ASSERT_TRUE(writer_.WriteBlob(strings.Bytes()));
   ASSERT_TRUE(writer_.Flush());
 
   auto context = MakeParseOnlyContext();
@@ -151,7 +153,6 @@ NOLINT_TEST_F(InputLoadersTest,
     = static_cast<uint8_t>(AssetType::kInputMappingContext);
   desc.header.version
     = oxygen::data::pak::input::kInputMappingContextAssetVersion;
-  std::snprintf(desc.header.name, sizeof(desc.header.name), "%s", "Gameplay");
 
   desc.mappings.offset = kDescSize;
   desc.mappings.count = 1;
@@ -162,11 +163,11 @@ NOLINT_TEST_F(InputLoadersTest,
   desc.trigger_aux.offset = kDescSize + kMappingSize + kTriggerSize;
   desc.trigger_aux.count = 1;
   desc.trigger_aux.entry_size = static_cast<uint32_t>(kAuxSize);
-  desc.strings.offset = kDescSize + kMappingSize + kTriggerSize + kAuxSize;
+  desc.header.strings.offset
+    = kDescSize + kMappingSize + kTriggerSize + kAuxSize;
 
   static constexpr char kStrings[] = "\0Keyboard.PageUp\0";
-  desc.strings.count = static_cast<uint32_t>(sizeof(kStrings) - 1);
-  desc.strings.entry_size = 1;
+  desc.header.strings.size = static_cast<uint32_t>(sizeof(kStrings) - 1);
 
   InputActionMappingRecord mapping {};
   mapping.action_asset_key = action_a;
@@ -261,9 +262,8 @@ NOLINT_TEST_F(
   desc.trigger_aux.count = 0;
   desc.trigger_aux.entry_size
     = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-  desc.strings.offset = desc.trigger_aux.offset;
-  desc.strings.count = 2;
-  desc.strings.entry_size = 1;
+  desc.header.strings.offset = desc.trigger_aux.offset;
+  desc.header.strings.size = 2;
 
   InputActionMappingRecord mapping {};
   mapping.slot_name_offset = 1;
@@ -314,9 +314,8 @@ NOLINT_TEST_F(
   desc.trigger_aux.count = 0;
   desc.trigger_aux.entry_size
     = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-  desc.strings.offset = desc.trigger_aux.offset;
-  desc.strings.count = 2;
-  desc.strings.entry_size = 1;
+  desc.header.strings.offset = desc.trigger_aux.offset;
+  desc.header.strings.size = 2;
 
   InputActionMappingRecord mapping {};
   mapping.slot_name_offset = 5; // out of bounds for 2-byte string table
@@ -362,9 +361,8 @@ NOLINT_TEST_F(
   desc.trigger_aux.count = 0;
   desc.trigger_aux.entry_size
     = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-  desc.strings.offset = desc.trigger_aux.offset;
-  desc.strings.count = 2;
-  desc.strings.entry_size = 1;
+  desc.header.strings.offset = desc.trigger_aux.offset;
+  desc.header.strings.size = 2;
 
   InputActionMappingRecord mapping {};
   mapping.slot_name_offset = 1;
@@ -413,9 +411,8 @@ NOLINT_TEST_F(
   desc.trigger_aux.count = 0;
   desc.trigger_aux.entry_size
     = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-  desc.strings.offset = desc.trigger_aux.offset;
-  desc.strings.count = 2;
-  desc.strings.entry_size = 1;
+  desc.header.strings.offset = desc.trigger_aux.offset;
+  desc.header.strings.size = 2;
 
   InputActionMappingRecord mapping {};
   mapping.slot_name_offset = 1;
@@ -453,9 +450,8 @@ NOLINT_TEST_F(
     = static_cast<uint8_t>(AssetType::kInputMappingContext);
   desc.header.version
     = oxygen::data::pak::input::kInputMappingContextAssetVersion;
-  desc.strings.offset = sizeof(InputMappingContextAssetDesc);
-  desc.strings.count = 1;
-  desc.strings.entry_size = 1;
+  desc.header.strings.offset = sizeof(InputMappingContextAssetDesc);
+  desc.header.strings.size = 1;
 
   static constexpr char kStrings[] = "\0";
   WriteBlob(desc);
@@ -484,9 +480,8 @@ NOLINT_TEST_F(InputLoadersTest, LoadInputMappingContextAssetReservedFlagsThrow)
   desc.header.version
     = oxygen::data::pak::input::kInputMappingContextAssetVersion;
   desc.flags = static_cast<InputMappingContextFlags>(1U);
-  desc.strings.offset = sizeof(InputMappingContextAssetDesc);
-  desc.strings.count = 1;
-  desc.strings.entry_size = 1;
+  desc.header.strings.offset = sizeof(InputMappingContextAssetDesc);
+  desc.header.strings.size = 1;
 
   static constexpr char kStrings[] = "\0";
   WriteBlob(desc);

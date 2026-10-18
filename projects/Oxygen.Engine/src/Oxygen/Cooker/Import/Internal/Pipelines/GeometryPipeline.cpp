@@ -356,6 +356,24 @@ auto GeometryPipeline::FinalizeDescriptor(
     }
   }
 
+  // The descriptor string table follows the meshes; records keep their sizes,
+  // so it keeps its offset.
+  const auto& strings = asset_desc.header.strings;
+  const auto strings_position = writer.Position();
+  if (!strings_position || *strings_position != strings.offset
+    || strings.offset > input_copy.size()
+    || strings.size != input_copy.size() - strings.offset) {
+    diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
+      "Geometry descriptor string table does not follow its meshes", "", ""));
+    co_return std::nullopt;
+  }
+  if (!writer.WriteBlob(std::span<const std::byte>(input_copy)
+          .subspan(strings.offset, strings.size))) {
+    diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
+      "Failed to write geometry descriptor string table", "", ""));
+    co_return std::nullopt;
+  }
+
   const auto output_span = output_stream.Data();
   std::vector output_bytes(output_span.begin(), output_span.end());
 

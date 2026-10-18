@@ -33,6 +33,7 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -1737,6 +1738,11 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest, HydratesAuthoredMieAbsorption)
   auto descriptor = world::SceneAssetDesc {};
   descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
   descriptor.header.version = world::kSceneAssetVersion;
+  const auto strings = data::DescriptorStringsBuilder {};
+  descriptor.header.strings = {
+    .offset = sizeof(descriptor),
+    .size = strings.Size(),
+  };
   auto atmosphere = world::SkyAtmosphereEnvironmentRecord {};
   atmosphere.mie_absorption_rgb[0] = 1.1e-6F;
   atmosphere.mie_absorption_rgb[1] = 2.2e-6F;
@@ -1750,6 +1756,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest, HydratesAuthoredMieAbsorption)
   serio::Writer writer(stream);
   const auto packed = writer.ScopedAlignment(1);
   ASSERT_TRUE(writer.Write(descriptor));
+  ASSERT_TRUE(writer.WriteBlob(strings.Bytes()));
   ASSERT_TRUE(writer.Write(block));
   ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span(&atmosphere, 1))));
   const auto asset = data::SceneAsset(data::AssetKey {}, stream.Data());
@@ -1768,6 +1775,11 @@ NOLINT_TEST_F(
   auto descriptor = world::SceneAssetDesc {};
   descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
   descriptor.header.version = world::kSceneAssetVersion;
+  const auto strings = data::DescriptorStringsBuilder {};
+  descriptor.header.strings = {
+    .offset = sizeof(descriptor),
+    .size = strings.Size(),
+  };
   auto post = world::PostProcessVolumeEnvironmentRecord {};
   post.tone_mapper = engine::ToneMapper::kReinhard;
   post.exposure_mode = engine::ExposureMode::kManualCamera;
@@ -1821,6 +1833,7 @@ NOLINT_TEST_F(
   serio::Writer writer(stream);
   const auto packed = writer.ScopedAlignment(1);
   ASSERT_TRUE(writer.Write(descriptor));
+  ASSERT_TRUE(writer.WriteBlob(strings.Bytes()));
   ASSERT_TRUE(writer.Write(block));
   ASSERT_TRUE(serio::Store(writer, post));
   for (const auto& key : keys) {

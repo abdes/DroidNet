@@ -16,6 +16,7 @@
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -35,7 +36,7 @@ NOLINT_TEST_F(ValidationTest, ValidateRootValidSucceeds)
   writer.WriteAssetDescriptor(
     oxygen::data::AssetKey::FromVirtualPath("/Content/test.omat"),
     oxygen::data::AssetType::kMaterial, "/Content/test.omat", "test.omat",
-    std::as_bytes(std::span { &descriptor, 1 }), {});
+    oxygen::data::MakeDescriptorBytes(descriptor), {});
   static_cast<void>(writer.Finish());
   EXPECT_NO_THROW({ ValidateRoot(TempDir()); });
 }

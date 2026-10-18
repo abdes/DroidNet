@@ -39,13 +39,13 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -131,18 +131,6 @@ namespace {
 
       context.mounts.push_back(std::move(mount));
     }
-  }
-
-  auto ValidateAndCopyName(ImportSession& session, const ImportRequest& request,
-    const std::string_view source_name, const std::span<char> dest,
-    std::string_view code, std::string_view message, std::string object_path)
-    -> void
-  {
-    if (source_name.size() >= dest.size()) {
-      AddDiagnostic(session, request, ImportSeverity::kWarning,
-        std::string(code), std::string(message), std::move(object_path));
-    }
-    util::TruncateAndNullTerminate(dest, source_name);
   }
 
   template <typename T>
@@ -540,10 +528,8 @@ namespace {
     asset_desc.lod_count = static_cast<uint32_t>(lod_count);
     std::ranges::copy(root_bounds.min, std::begin(asset_desc.bounding_box_min));
     std::ranges::copy(root_bounds.max, std::begin(asset_desc.bounding_box_max));
-    ValidateAndCopyName(context.session, context.request,
-      prepared.geometry_name, std::span(asset_desc.header.name),
-      "geometry.descriptor.name_truncated",
-      "Geometry name truncated to fit descriptor limit", "name");
+    auto strings = data::DescriptorStringsBuilder {};
+    asset_desc.header.name_offset = strings.Add(prepared.geometry_name);
 
     if (!WritePod(writer, asset_desc)) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
@@ -559,9 +545,7 @@ namespace {
       const auto lod_path = "lods[" + std::to_string(lod_i) + "]";
       const auto& lod_bounds = lod.bounds;
       auto mesh_desc = data::pak::geometry::MeshDesc {};
-      ValidateAndCopyName(context.session, context.request, lod.name,
-        std::span(mesh_desc.name), "geometry.descriptor.lod_name_truncated",
-        "LOD name truncated to fit descriptor limit", lod_path + ".name");
+      mesh_desc.name_offset = strings.Add(lod.name);
 
       auto mesh_bindings = MeshBufferBindings {};
       std::span<const std::byte> procedural_blob;
@@ -678,10 +662,8 @@ namespace {
           = std::get<internal::GeometrySource::Procedural>(lod.mesh);
         const auto& procedural_name = procedural.name;
         procedural_blob = procedural.parameters;
-        ValidateAndCopyName(context.session, context.request, procedural_name,
-          std::span(mesh_desc.name), "geometry.procedural.name_truncated",
-          "Procedural mesh name truncated to fit descriptor limit",
-          lod_path + ".procedural.mesh_name");
+        // A procedural mesh's name is its generator identity.
+        mesh_desc.name_offset = strings.Add(procedural_name);
 
         mesh_desc.info.procedural.params_size
           = static_cast<uint32_t>(procedural_blob.size());
@@ -751,11 +733,7 @@ namespace {
         auto submesh_desc = data::pak::geometry::SubMeshDesc {};
         submesh_desc.slot_id = submesh.slot_id;
         const auto& submesh_name = submesh.name;
-        ValidateAndCopyName(context.session, context.request, submesh_name,
-          std::span(submesh_desc.name),
-          "geometry.descriptor.submesh_name_truncated",
-          "Submesh name truncated to fit descriptor limit",
-          submesh_path + ".name");
+        submesh_desc.name_offset = strings.Add(submesh_name);
 
         const auto& material_ref = submesh.material;
         const auto material_key = ResolveMaterialKeyByVirtualPath(
@@ -821,6 +799,7 @@ namespace {
 
     const auto bytes = output_stream.Data();
     prepared.descriptor_bytes.assign(bytes.begin(), bytes.end());
+    data::AppendDescriptorStrings(prepared.descriptor_bytes, strings);
     co_return prepared;
   }
 

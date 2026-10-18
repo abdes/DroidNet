@@ -22,7 +22,8 @@ Mesh optimization may combine ranges of the same declaration; equal material
 keys cannot merge distinct declarations. glTF primitives using the same material
 index share a declaration; distinct material indices remain distinct even when
 their payloads match. Unassigned primitives use a separate default declaration.
-FBX retains its mesh-local declarations before resolving global material references.
+FBX retains its mesh-local declarations before resolving global material
+references.
 
 The native importer allocates opaque SlotIds from a versioned retained geometry
 namespace and durable declaration identity, or the complete source-layout
@@ -35,49 +36,49 @@ Adapters compute `source_layout_witness` before coordinate conversion or mesh
 optimization and carry the digest in the work item. glTF hashes decoded source
 POSITION accessors, original index connectivity and index presence, primitive
 modes and source material declarations. FBX hashes source control points,
-polygon boundaries/connectivity and mesh-local declaration ownership. Its existing
-handedness probe runs with no target axes or units; the adapter captures digests
-from that probe before releasing it and loading the converted scene. No additional
-parse or retained DOM is introduced. Retained storage is 32 bytes per FBX mesh;
-hashing scans the source geometry once. The glTF cache similarly hashes each
-source mesh once even when it produces several bake variants.
+polygon boundaries/connectivity and mesh-local declaration ownership. Its
+existing handedness probe runs with no target axes or units; the adapter
+captures digests from that probe before releasing it and loading the converted
+scene. No additional parse or retained DOM is introduced. Retained storage is 32
+bytes per FBX mesh; hashing scans the source geometry once. The glTF cache
+similarly hashes each source mesh once even when it produces several bake
+variants.
 
 Producer unit conversion, attribute generation and transform baking do not enter
 the raw witness. Identity still includes the geometry key and source anchor:
 changing bake or material-binding policy can split/rename output variants and
 therefore change their geometry identities and SlotIds. Equal raw witnesses do
-not alias distinct output geometry. Unassigned surfaces use a dedicated declaration
-sentinel, independent of the number of imported material payloads.
+not alias distinct output geometry. Unassigned surfaces use a dedicated
+declaration sentinel, independent of the number of imported material payloads.
 
-Retained import settings own provenance. Cooking returns candidate provenance
-to the publication owner and never overwrites source settings itself. The owner
+Retained import settings own provenance. Cooking returns candidate provenance to
+the publication owner and never overwrites source settings itself. The owner
 commits provenance and compatible geometry/scene outputs together. Runtime
 geometry stores SlotIds and bindings, not source witnesses.
 
-The built-in catalog's slot inventory describes its authored `asset_uri` and
-the exact native runtime geometry. Its separate `virtual_path` and descriptor
-describe the cooked contribution. Both preserve the same semantic SlotIds;
-scene cooking resolves them against the contribution and records its current
-layout revision. Live edits validate the authored geometry's own revision.
+The built-in catalog's slot inventory describes its authored `asset_uri` and the
+exact native runtime geometry. Its separate `virtual_path` and descriptor
+describe the cooked contribution. Both preserve the same semantic SlotIds; scene
+cooking resolves them against the contribution and records its current layout
+revision. Live edits validate the authored geometry's own revision.
 
 UE5.7 reference: `Engine/Classes/Engine/StaticMesh.h` separates imported slot
 names from material objects; `UnrealEd/Private/Fbx/FbxStaticMeshImport.cpp`
 restores imported assignments by name. Oxygen retains opaque identity because
 duplicate names are valid and must remain independently editable.
 
-**Status:** Complete Design (Phase 5)
-**Date:** 2026-01-15
-**Parent:** [async_import_pipeline_v2.md](async_import_pipeline_v2.md)
+**Status:** Complete Design (Phase 5) **Date:** 2026-01-15 **Parent:**
+[async_import_pipeline_v2.md](async_import_pipeline_v2.md)
 
 ---
 
 ## Overview
 
 This document specifies the **GeometryPipeline** used by async imports to
-finalize geometry _descriptors_ produced by the mesh build stage. The heavy
-mesh cooking (vertex/index expansion, attribute policy application, tangent
-and normal generation, and creation of buffer payloads and raw descriptor
-bytes) is performed by the **MeshBuildPipeline**. The `GeometryPipeline` is a
+finalize geometry _descriptors_ produced by the mesh build stage. The heavy mesh
+cooking (vertex/index expansion, attribute policy application, tangent and
+normal generation, and creation of buffer payloads and raw descriptor bytes) is
+performed by the **MeshBuildPipeline**. The `GeometryPipeline` is a
 descriptor-finalization stage that patches buffer indices, applies resolved
 material keys, and computes the geometry descriptor `content_hash` once all
 buffer indices are known.
@@ -85,8 +86,8 @@ buffer indices are known.
 Core properties:
 
 - **Descriptor finalizer**: patches buffer indices into serialized
-  `GeometryAssetDesc`/`MeshDesc` blobs, applies material key patches, and
-  writes the finalized descriptor bytes.
+  `GeometryAssetDesc`/`MeshDesc` blobs, applies material key patches, and writes
+  the finalized descriptor bytes.
 - **No I/O**: does not write files or emit buffers – it produces finalized
   descriptor bytes; `BufferEmitter` / `AssetEmitter` still perform writes.
 - **Job-scoped**: created per job and started in the job’s child nursery.
@@ -102,22 +103,23 @@ Core properties:
 ## Alignment With Current Architecture
 
 The pipeline-agnostic concurrency and lifetime model is defined in the parent
-document [design/async_import_pipeline_v2.md](design/async_import_pipeline_v2.md)
-under **Concurrency, Ownership, and Lifetime (Definitive)**.
+document
+[design/async_import_pipeline_v2.md](design/async_import_pipeline_v2.md) under
+**Concurrency, Ownership, and Lifetime (Definitive)**.
 
 ### Pipeline vs Emitter Responsibilities
 
 - **MeshBuildPipeline**: performs CPU-bound mesh cooking. It produces cooked
-  buffer payloads and the _initial_ geometry descriptor bytes (with
-  placeholder indices) plus a table of per-submesh material patch offsets.
+  buffer payloads and the _initial_ geometry descriptor bytes (with placeholder
+  indices) plus a table of per-submesh material patch offsets.
 - **GeometryPipeline**: finalizes the geometry descriptor by patching buffer
   bindings (indices), applying resolved material keys at the recorded byte
-  offsets, and computing the descriptor-level `content_hash` (on the
-  ThreadPool) if enabled.
+  offsets, and computing the descriptor-level `content_hash` (on the ThreadPool)
+  if enabled.
 - **BufferEmitter**: assigns stable buffer indices, writes `buffers.data` and
   `buffers.table`, and makes the binding indices available for finalization.
-- **AssetEmitter**: writes `.ogeo` geometry descriptor files using the
-  finalized descriptor bytes produced by `GeometryPipeline`.
+- **AssetEmitter**: writes `.ogeo` geometry descriptor files using the finalized
+  descriptor bytes produced by `GeometryPipeline`.
 
 ---
 
@@ -134,8 +136,8 @@ morph, or other deformation semantics, and for non-invertible transforms.
 Both glTF and FBX adapters must use a common deterministic variant plan for mesh
 work emission and scene geometry-key assignment. A source mesh may produce an
 unbaked variant and several baked variants. Equal local transforms with equal
-material bindings share a variant; distinct transforms produce distinct variants.
-The first referencing source-node ordinal names a baked variant using
+material bindings share a variant; distinct transforms produce distinct
+variants. The first referencing source-node ordinal names a baked variant using
 `<mesh>__baked_<ordinal>` before the normal naming service resolves collisions.
 The unbaked variant retains the source mesh name; additional material-binding
 variants use `<mesh>__material_<ordinal>`. Output order is source-mesh order,
@@ -146,9 +148,9 @@ identities; no cooked index or already-published identity is patched in place.
 MeshBuildPipeline owns applying the bake after attribute generation and before
 bounds/descriptor generation: positions use the affine transform, normals use
 inverse transpose, and tangent directions use the linear transform. Negative
-baked determinants reverse triangle indices exactly once to preserve the authored
-exterior. Retained node transforms do not change shared mesh winding; the runtime
-renderer owns their determinant correction.
+baked determinants reverse triangle indices exactly once to preserve the
+authored exterior. Retained node transforms do not change shared mesh winding;
+the runtime renderer owns their determinant correction.
 
 Required proof: fast variant and adapter tests for enabled/disabled baking,
 positive and reflected transforms, shared equal/distinct transforms, retained
@@ -166,8 +168,8 @@ Validation recorded on 2026-09-15:
   static-content validation, source inspection, and the default-baking Tabuleiro
   and light-extras imports. Evidence:
   `DroidNet/artifacts/sidedness-import-regression-gltf.{log,xml}`.
-- The FBX test executable passed **2/2 tests in 1.428 seconds**, covering the full
-  Dino scene and light custom properties. Evidence:
+- The FBX test executable passed **2/2 tests in 1.428 seconds**, covering the
+  full Dino scene and light custom properties. Evidence:
   `DroidNet/artifacts/sidedness-import-regression-fbx.{log,xml}`.
 - `MeshTransformBake_test.cpp` uses the public async import service with tiny
   sources and reads the published scene/geometry descriptors and buffer tables.
@@ -184,10 +186,9 @@ prove the published geometry and scene contracts.
 
 ### WorkItem (GeometryPipeline)
 
-GeometryPipeline receives _finalization_ work items produced by the planner
-once the mesh has been cooked by `MeshBuildPipeline` and buffer indices have
-been assigned. A GeometryPipeline work item contains the following logical
-fields:
+GeometryPipeline receives _finalization_ work items produced by the planner once
+the mesh has been cooked by `MeshBuildPipeline` and buffer indices have been
+assigned. A GeometryPipeline work item contains the following logical fields:
 
 - `source_id`: a correlation string (used for diagnostics and lookup).
 - `cooked`: the `CookedGeometryPayload` produced by `MeshBuildPipeline`. This
@@ -195,8 +196,8 @@ fields:
   per-submesh material patch offsets and the cooked buffer payloads for each
   LOD.
 - `bindings`: a vector of buffer bindings (one binding per LOD) that supplies
-  the concrete resource indices to patch into the serialized `MeshDesc`
-  blobs (vertex/index/joint buffers).
+  the concrete resource indices to patch into the serialized `MeshDesc` blobs
+  (vertex/index/joint buffers).
 - `material_patches`: a compact list of `{material_key_offset, key}` entries
   indicating absolute byte offsets (from payload start) where `data::AssetKey`
   values must be overwritten with the resolved keys.
@@ -231,8 +232,8 @@ A completed GeometryPipeline work item produces a `WorkResult` that contains:
 
 Notes:
 
-- The planner must ensure that buffer indices are available (via `bindings`)
-  and that material keys to write at the recorded offsets are provided.
+- The planner must ensure that buffer indices are available (via `bindings`) and
+  that material keys to write at the recorded offsets are provided.
 - `MeshBuildPipeline` is responsible for recording the per-submesh material
   patch offsets while serializing the initial descriptor; `GeometryPipeline`
   uses those offsets to write `data::AssetKey` values directly into the
@@ -242,12 +243,11 @@ Notes:
 
 ## Public API (Pattern)
 
-The implemented `GeometryPipeline` exposes the usual pipeline control
-functions and a public helper for descriptor finalization:
+The implemented `GeometryPipeline` exposes the usual pipeline control functions
+and a public helper for descriptor finalization:
 
-- `Config` — configuration with `queue_capacity` (default 32),
-  `worker_count` (default 1 in the implementation), and
-  `with_content_hashing` (default true).
+- `Config` — configuration with `queue_capacity` (default 32), `worker_count`
+  (default 1 in the implementation), and `with_content_hashing` (default true).
 - `GeometryPipeline(co::ThreadPool&, Config)` — create the pipeline.
 - `Start(co::Nursery&)` — starts worker coroutines.
 - `Submit(WorkItem)` / `TrySubmit(WorkItem)` — submit work (blocking / non-
@@ -278,15 +278,17 @@ For each work item the worker performs:
 1. Check cancellation; if canceled, report a cancelled `WorkResult` and
    continue.
 2. Invoke `on_started()` (if provided).
-3. Call `FinalizeDescriptorBytes(bindings, cooked.descriptor_bytes,
-material_patches, diagnostics)` which:
-   - Validates the supplied descriptor bytes and reads the header (`GeometryAssetDesc`).
+3. Call
+   `FinalizeDescriptorBytes(bindings, cooked.descriptor_bytes, material_patches, diagnostics)`
+   which:
+   - Validates the supplied descriptor bytes and reads the header
+     (`GeometryAssetDesc`).
    - Verifies `lod_count` matches `bindings.size()`.
-   - Iterates each `MeshDesc` and, depending on `mesh_type`, patches the
-     mesh blob with the concrete resource indices supplied in the matching
-     `bindings` entry (standard/procedural/skinned support). Skinned blobs
-     are patched with vertex/index/joint buffer indices and any auxiliary
-     indices (e.g., `inverse_bind_buffer`, `joint_remap_buffer`) when present.
+   - Iterates each `MeshDesc` and, depending on `mesh_type`, patches the mesh
+     blob with the concrete resource indices supplied in the matching `bindings`
+     entry (standard/procedural/skinned support). Skinned blobs are patched with
+     vertex/index/joint buffer indices and any auxiliary indices (e.g.,
+     `inverse_bind_buffer`, `joint_remap_buffer`) when present.
    - Writes submesh descriptors and mesh views verbatim.
    - Applies all material key patches by seeking to each recorded absolute
      offset and writing the `data::AssetKey` value. Offsets outside the
@@ -303,8 +305,8 @@ material_patches, diagnostics)` which:
    diagnostics, `telemetry` (e.g., `cook_duration`) and the `success` flag.
 7. Invoke `on_finished()` if provided.
 
-All errors are reported as `ImportDiagnostic` entries; no exceptions cross
-async boundaries.
+All errors are reported as `ImportDiagnostic` entries; no exceptions cross async
+boundaries.
 
 ---
 
@@ -329,26 +331,26 @@ async boundaries.
 
 5. **Submesh + view layout**
    - Construct `SubMeshDesc` and `MeshViewDesc` entries (tight ranges).
-   - **Spatial split.** A static submesh with more than
-     `kMaxMeshViewTriangles` (4096) triangles is split into several views:
+   - **Spatial split.** A static submesh with more than `kMaxMeshViewTriangles`
+     (4096) triangles is split into several views:
      1. Order its triangles by the 30-bit Morton code of their centroids,
-        quantized within the submesh bounds. The sort is stable, so equal
-        codes keep source order.
+        quantized within the submesh bounds. The sort is stable, so equal codes
+        keep source order.
      2. Cut the ordered triangles into consecutive runs of at most 4096.
      3. Make each run one view, with tight local bounds.
 
      Vertices are already expanded one per index (stage 2), so reordering
-     triangles moves their vertices with them. Each run is one contiguous
-     index range and one contiguous vertex range.
+     triangles moves their vertices with them. Each run is one contiguous index
+     range and one contiguous vertex range.
 
    - **Why views.** Each view is one draw and one
      [occlusion culling unit](../../../../../design/vortex/lld/occlusion.md#21-culling-units-and-records),
      so a large mesh is culled in parts.
-   - **Not split.** Skinned and morphed submeshes stay one view: deformation
-     can move triangles outside a run's bind-pose bounds.
+   - **Not split.** Skinned and morphed submeshes stay one view: deformation can
+     move triangles outside a run's bind-pose bounds.
    - **Unchanged by the split.** The output is deterministic for the same
-     source. Submeshes, slots and material ranges are unchanged; only the
-     view table grows.
+     source. Submeshes, slots and material ranges are unchanged; only the view
+     table grows.
 
 6. **Buffer payloads**
    - Build `CookedBufferPayload`s for vertex/index buffers and optional
@@ -439,7 +441,8 @@ resource indices for the mesh buffers as well as any auxiliary skinning tables
 required by runtime. In practice the skinned blob contains at least:
 
 - `vertex_buffer`, `index_buffer`, `joint_index_buffer`, `joint_weight_buffer`;
-- optional auxiliary indices such as `inverse_bind_buffer` and `joint_remap_buffer`;
+- optional auxiliary indices such as `inverse_bind_buffer` and
+  `joint_remap_buffer`;
 - per-mesh bounding box values (min/max).
 
 The finalizer patches these resource indices from the supplied `bindings` and
@@ -453,23 +456,22 @@ Buffers are emitted via `BufferEmitter` using `CookedBufferPayload`:
 - Vertex buffer alignment = `sizeof(Vertex)`
 - Index buffer alignment = `alignof(uint32_t)`
 - Skinned meshes emit joint index/weight buffers (alignment = 16 bytes)
-- `content_hash` must be populated for every buffer payload by
-  `BufferPipeline` on the ThreadPool
+- `content_hash` must be populated for every buffer payload by `BufferPipeline`
+  on the ThreadPool
 
 ---
 
 ## Feature Completion Requirements
 
-- **Attribute policies**: `normal_policy` and `tangent_policy` are fully honored,
-  with diagnostics when prerequisites are missing.
+- **Attribute policies**: `normal_policy` and `tangent_policy` are fully
+  honored, with diagnostics when prerequisites are missing.
 - **LOD support**: all authored LODs are serialized in order.
 - **Mesh types**: `kStandard`, `kSkinned`, and `kProcedural` are supported. Mesh
   types without a defined blob must emit a diagnostic and be skipped or coerced
   to `kStandard` per job policy.
-- **Header metadata**: `header.version` and `header.content_hash` are
-  populated; `GeometryPipeline` computes `header.content_hash` on the
-  `co::ThreadPool` after buffer indices are patched (when
-  `with_content_hashing` is enabled).
+- **Header metadata**: `header.version` and `header.content_hash` are populated;
+  `GeometryPipeline` computes `header.content_hash` on the `co::ThreadPool`
+  after buffer indices are patched (when `with_content_hashing` is enabled).
 - **Attribute mask**: missing attributes are reflected via
   `header.variant_flags` (union-of-LOD attributes).
 - **Failure policy**: no geometry fallback is allowed. Any failure produces
@@ -477,10 +479,10 @@ Buffers are emitted via `BufferEmitter` using `CookedBufferPayload`:
 
 ### Importer/Orchestrator Responsibilities
 
-- Mesh name resolution and disambiguation
-  (`BuildMeshName`, `DisambiguateMeshName`, `NamespaceImportedAssetName`).
-- Effective material key resolution
-  (`BuildEffectiveMaterialKeys`, default material fallback).
+- Mesh name resolution and disambiguation (`BuildMeshName`,
+  `DisambiguateMeshName`, `NamespaceImportedAssetName`).
+- Effective material key resolution (`BuildEffectiveMaterialKeys`, default
+  material fallback).
 - Import content flags (geometry/scene/materials).
 - LOD construction (ordering and naming), plus mesh-type selection.
 - Diagnostics enrichment and policy decisions (e.g., abort vs continue).
@@ -505,9 +507,8 @@ Adapters are responsible for **source acquisition**, **naming**, and
     `scene_path::mesh_name::prim_2`).
   - `source_key`: stable pointer or hash of the source mesh/primitive.
 - **Naming** (must be resolved before submission)
-  - `mesh_name`, `storage_mesh_name` computed via
-    `BuildMeshName` / `DisambiguateMeshName` /
-    `NamespaceImportedAssetName`.
+  - `mesh_name`, `storage_mesh_name` computed via `BuildMeshName` /
+    `DisambiguateMeshName` / `NamespaceImportedAssetName`.
 - **LOD Construction**
   - LOD order is importer-defined; `lods[0]` is highest detail.
   - `MeshLod::source_owner` must keep source data alive.
@@ -517,8 +518,8 @@ Adapters are responsible for **source acquisition**, **naming**, and
   - `want_textures` and `has_material_textures` set from importer material
     analysis to drive UV diagnostics.
 - **Coordinate Conversion**
-  - Adapter declares source space and sets `ImportRequest.options.coordinate`
-    to achieve the engine contract (right-handed, Z-up, forward = -Y).
+  - Adapter declares source space and sets `ImportRequest.options.coordinate` to
+    achieve the engine contract (right-handed, Z-up, forward = -Y).
 - **Diagnostics**
   - Emit `ImportDiagnostic` for unsupported topology, missing attributes,
     invalid indices, and any lossy conversions (e.g., joint trimming).
@@ -557,8 +558,8 @@ coverage.
 - **Topology**
   - Accept triangle-list primitives only; emit diagnostic for other modes.
 - **Indices**
-  - Convert index buffers to `uint32_t`; if missing, generate sequential
-    indices for triangle-list primitives and emit a warning diagnostic.
+  - Convert index buffers to `uint32_t`; if missing, generate sequential indices
+    for triangle-list primitives and emit a warning diagnostic.
 - **Attributes**
   - Required: `POSITION`.
   - Optional: `NORMAL`, `TEXCOORD_0`, `COLOR_0`.
@@ -570,8 +571,8 @@ coverage.
 - **Materials**
   - Map `cgltf_material` to `material_keys`; null material uses
     `default_material_key`.
-  - Set `has_material_textures` when any bound texture exists
-    (base color, normal, metallic-roughness, occlusion, emissive).
+  - Set `has_material_textures` when any bound texture exists (base color,
+    normal, metallic-roughness, occlusion, emissive).
 - **LODs**
   - Map LODs explicitly when the importer provides authored LOD ordering.
   - Otherwise emit a single `LOD0` per primitive.
@@ -579,7 +580,6 @@ coverage.
 ### Adapter Outputs and Post-Processing
 
 - Adapters must preserve `source_owner` lifetimes for all `MeshSource` data.
-- Any name truncation required for packed descriptors must emit diagnostics.
 - Adapters should attach `object_path` (scene node path) to diagnostics for
   precise tooling feedback.
 
@@ -718,8 +718,8 @@ concept GeometryAdapter = requires(T adapter,
 
 ## Cancellation Semantics
 
-Pipeline must honor `WorkItem.stop_token`. Cancellation returns
-`success=false` without partial outputs.
+Pipeline must honor `WorkItem.stop_token`. Cancellation returns `success=false`
+without partial outputs.
 
 ---
 
@@ -766,9 +766,9 @@ Rules:
 
 This conversion policy is **pluggable** by design. The pipeline exposes a
 `CoordinateConversionPolicy` interface (or equivalent) that the importer
-supplies per job. The policy must define deterministic transforms for
-positions, normals, tangents, and bitangents, and must re-normalize directions
-after conversion.
+supplies per job. The policy must define deterministic transforms for positions,
+normals, tangents, and bitangents, and must re-normalize directions after
+conversion.
 
 Diagnostics:
 
@@ -790,7 +790,8 @@ invalid data. Use conservative defaults aligned with common engine practices:
 - Buffer payload sizes must be ≤ `kDataBlobMaxSize` and respect alignment
   (`sizeof(Vertex)`, `alignof(uint32_t)`, and 16-byte alignment for skinning
   buffers).
-- Names must fit `kMaxNameSize` (truncate with diagnostic if oversized).
+- Names are stored whole in the descriptor string table; they are never
+  truncated.
 
 ---
 

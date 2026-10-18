@@ -108,8 +108,16 @@ inline auto LoadScriptAsset(const LoaderContext& context)
   };
   context.ValidateReferences(resource_uses, {});
 
+  const auto strings = ReadDescriptorStrings(reader, *base_pos, desc.header);
   const auto declared_params
     = detail::ReadScriptParamDeclarations(reader, *base_pos, desc.params);
+  SkipDescriptorStrings(reader, *base_pos, desc.header);
+  auto params = data::ScriptParameters {};
+  try {
+    params = data::DecodeScriptParameters(declared_params, strings);
+  } catch (const std::invalid_argument& error) {
+    throw std::runtime_error(error.what());
+  }
 
   if (!context.parse_only) {
     if (!context.dependency_collector) {
@@ -142,9 +150,14 @@ inline auto LoadScriptAsset(const LoaderContext& context)
     }
   }
 
-  return std::make_unique<data::ScriptAsset>(context.current_asset_key, desc,
-    declared_params,
+  auto script = std::make_unique<data::ScriptAsset>(context.current_asset_key,
+    desc, std::move(params),
+    ResolveDescriptorString(
+      strings, desc.external_source_path_offset, "external source path"),
     data::SourceOrigin { context.source_key, context.source_instance });
+  script->SetAssetName(
+    ResolveDescriptorString(strings, desc.header.name_offset, "asset name"));
+  return script;
 }
 
 //! Loader for script resources (bytecode or source blobs).

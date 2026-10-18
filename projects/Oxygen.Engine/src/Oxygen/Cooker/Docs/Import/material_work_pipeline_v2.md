@@ -16,11 +16,11 @@ same compiled RGB input. The pipeline rejects non-finite, negative or
 out-of-range factors and writes float32 channels without clamping or binary16
 conversion.
 
-`MaterialAssetDesc` version 3 is 363 packed bytes. Native readers accept only the
-current version. Recook maintained content and update fixture writers together;
-do not add old-format branches or managed binary writers. This storage change
-adds six bytes per material and leaves Vortex's float32 GPU constants, shaders
-and captured-sky IBL contract unchanged.
+`MaterialAssetDesc` version 3 is 363 packed bytes. Native readers accept only
+the current version. Recook maintained content and update fixture writers
+together; do not add old-format branches or managed binary writers. This storage
+change adds six bytes per material and leaves Vortex's float32 GPU constants,
+shaders and captured-sky IBL contract unchanged.
 
 ---
 
@@ -45,8 +45,9 @@ Core properties:
 ## Alignment With Current Architecture
 
 The pipeline-agnostic concurrency and lifetime model is defined in the parent
-document [design/async_import_pipeline_v2.md](design/async_import_pipeline_v2.md)
-under **Concurrency, Ownership, and Lifetime (Definitive)**.
+document
+[design/async_import_pipeline_v2.md](design/async_import_pipeline_v2.md) under
+**Concurrency, Ownership, and Lifetime (Definitive)**.
 
 ### Pipeline vs Emitter Responsibilities
 
@@ -152,21 +153,20 @@ Notes:
   orchestrator using `BuildMaterialName` and `NamespaceImportedAssetName`.
 - `storage_material_name` is used for virtual paths and descriptor relpaths.
 - `material_domain` uses `oxygen::data::MaterialDomain`.
-- `textures.*.index` must be final texture indices from `TextureEmitter`.
-  The planner must ensure these dependencies are ready before submission.
-  For textures, index `0` refers to the fallback texture
-  (`kFallbackResourceIndex`). Use `assigned=false` to indicate a truly missing
-  texture slot; `assigned=true` means the slot should be sampled (including
-  placeholder or fallback).
+- `textures.*.index` must be final texture indices from `TextureEmitter`. The
+  planner must ensure these dependencies are ready before submission. For
+  textures, index `0` refers to the fallback texture (`kFallbackResourceIndex`).
+  Use `assigned=false` to indicate a truly missing texture slot; `assigned=true`
+  means the slot should be sampled (including placeholder or fallback).
 - `textures.*.uv_set` refers to the source UV set. If `uv_set != 0`, the
   orchestrator must remap geometry UVs to set 0 or bake textures accordingly.
 - `textures.*.uv_transform` comes from source material transforms (glTF or FBX).
   When assigned textures have differing transforms the pipeline currently
   selects the _first assigned_ texture's transform and writes it into the
   descriptor (it logs an informational message when multiple transforms are
-  present). Support for per-slot baking or multi-UV-set descriptors is a
-  future enhancement (the orchestrator may still choose to bake textures to
-  achieve a single transform if desired).
+  present). Support for per-slot baking or multi-UV-set descriptors is a future
+  enhancement (the orchestrator may still choose to bake textures to achieve a
+  single transform if desired).
 - `shader_requests` is optional; when empty, the pipeline synthesizes default
   stage bindings for the requested `material_domain` and flags.
 - `orm_policy` controls `kMaterialFlag_GltfOrmPacked`.
@@ -240,10 +240,8 @@ For each work item:
 
 1. Check cancellation; if canceled, return `success=false`.
 2. Compute material identity:
-   - `virtual_path = request.loose_cooked_layout.MaterialVirtualPath(
- storage_material_name)`
-   - `descriptor_relpath = request.loose_cooked_layout.MaterialDescriptorRelPath(
- storage_material_name)`
+   - `virtual_path = request.loose_cooked_layout.MaterialVirtualPath(  storage_material_name)`
+   - `descriptor_relpath = request.loose_cooked_layout.MaterialDescriptorRelPath(  storage_material_name)`
    - `material_key = xxHash3-128(canonical virtual_path)`
 3. Normalize scalar inputs:
    - Apply `roughness_as_glossiness` inversion first
@@ -330,8 +328,9 @@ The pipeline is defined as two stages with explicit parallelization boundaries:
 ## Cooked Output Contract (PAK v7)
 
 The enclosing PAK container and the material descriptor have independent
-versions. `kMaterialAssetVersion` is the sole native descriptor-version authority;
-increment it when changing the material layout. The current value is 3.
+versions. `kMaterialAssetVersion` is the sole native descriptor-version
+authority; increment it when changing the material layout. The current value
+is 3.
 
 ### Material Descriptor (`.omat`)
 
@@ -351,14 +350,14 @@ Key requirements:
   successful materials and must emit a diagnostic)
 - `header.version = kMaterialAssetVersion`
 - `header.content_hash` is computed on the ThreadPool after dependencies are
-  ready **only when hashing is enabled** and is non-zero when payload bytes
-  are non-empty
+  ready **only when hashing is enabled** and is non-zero when payload bytes are
+  non-empty
 
 ### UV Transform Fields
 
-`MaterialAssetDesc` stores the default per-material UV transform
-(global, applied to all slots) in explicit fields. The pipeline must
-**always** write these values; identity means “no transform.”
+`MaterialAssetDesc` stores the default per-material UV transform (global,
+applied to all slots) in explicit fields. The pipeline must **always** write
+these values; identity means “no transform.”
 
 ```text
 struct MaterialAssetDesc {
@@ -387,11 +386,11 @@ Planned evolution to full multi-UV support includes the following options and
 considerations:
 
 - Descriptor changes: add per-slot `uv_set` and `uv_transform` fields (or an
-  extension), so materials can express different transforms and UV sets
-  without remapping geometry.
+  extension), so materials can express different transforms and UV sets without
+  remapping geometry.
 - Shader/Loader changes: ensure shaders can sample with an arbitrary UV set
-  index, and loaders can supply additional vertex attribute bindings when
-  a `uv_set != 0` is used by the material descriptor.
+  index, and loaders can supply additional vertex attribute bindings when a
+  `uv_set != 0` is used by the material descriptor.
 - Orchestrator migration: provide an option to either bake transforms into
   textures (existing compatibility path) or emit descriptors with per-slot
   transforms when the pipeline and runtime support them.
@@ -401,8 +400,8 @@ considerations:
 
 These items should be specified and prioritized when multi-UV content
 requirements arise (e.g., authoring tools or glTF models that reference
-`TEXCOORD1+`). Future work should also include tests that validate
-per-slot transform serialization, loader consumption, and rendering parity.
+`TEXCOORD1+`). Future work should also include tests that validate per-slot
+transform serialization, loader consumption, and rendering parity.
 
 Renderer convention:
 
@@ -425,8 +424,8 @@ the PAK format:
 - Full PBR Tier 1/2 fields: emissive, specular, sheen, clearcoat, transmission,
   thickness, IOR, and attenuation.
 - Asset header metadata: `version`, `streaming_priority`, `content_hash`,
-  `variant_flags` (`content_hash` computed on the ThreadPool after
-  dependencies are ready **only when hashing is enabled**).
+  `variant_flags` (`content_hash` computed on the ThreadPool after dependencies
+  are ready **only when hashing is enabled**).
 - UV transform and UV set handling via the extension above or baking.
 
 ---
@@ -467,7 +466,8 @@ Importer/orchestrator responsibilities:
   - `KHR_materials_sheen` → `sheen_color_factor` + `sheen_color_texture`
   - `KHR_materials_clearcoat` → `clearcoat_factor`, `clearcoat_roughness`,
     `clearcoat_texture`, `clearcoat_normal_texture`
-  - `KHR_materials_transmission` → `transmission_factor` + `transmission_texture`
+  - `KHR_materials_transmission` → `transmission_factor` +
+    `transmission_texture`
   - `KHR_materials_volume` → `thickness_factor`, `attenuation_color`,
     `attenuation_distance`, `thickness_texture`
 - **FBX**:
@@ -489,8 +489,8 @@ Importer/orchestrator responsibilities:
 
 ## Cancellation Semantics
 
-Pipeline must honor `WorkItem.stop_token`. Cancellation returns
-`success=false` without partial outputs.
+Pipeline must honor `WorkItem.stop_token`. Cancellation returns `success=false`
+without partial outputs.
 
 ---
 
@@ -525,13 +525,12 @@ The pipeline must validate inputs and emit diagnostics for out-of-range or
 invalid data. Conservative defaults aligned with common engine practice:
 
 - Shader stage count must be 1..32; all `shader_type` values must be unique.
-- `ShaderReferenceDesc` fields must be null-terminated and fit their fixed
-  sizes (`source_path` 120, `entry_point` 32, `defines` 256); if too long,
-  truncate and emit a warning diagnostic.
+- `ShaderReferenceDesc` strings (`source_path`, `entry_point`, `defines`) are
+  stored whole in the descriptor string table; they are never truncated.
 - `MaterialTextureBinding.index` must fit `ResourceIndexT`; if out of range,
   emit a blocking error.
-- `MaterialAlphaMode::kMasked` requires `alpha_cutoff` in [0,1]; clamp and
-  emit a warning when out of range.
+- `MaterialAlphaMode::kMasked` requires `alpha_cutoff` in [0,1]; clamp and emit
+  a warning when out of range.
 - `OrmPolicy::kForcePacked` requires `metallic` and `roughness` to be
   `assigned=true` and to share identical `source_id`, `uv_set`, and
   `uv_transform`; otherwise emit a blocking error (diagnostic code

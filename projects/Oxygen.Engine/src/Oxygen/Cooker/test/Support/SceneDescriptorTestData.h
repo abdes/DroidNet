@@ -10,7 +10,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 
 namespace oxygen::content::import::test {
 
@@ -20,7 +20,7 @@ inline auto MakeCurrentSceneDescriptor(const std::string_view text)
   -> nlohmann::json
 {
   auto descriptor = nlohmann::json::parse(text);
-  descriptor["version"] = data::pak::world::kSceneAssetVersion;
+  descriptor["version"] = internal::kSceneDescriptorVersion;
   return descriptor;
 }
 

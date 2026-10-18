@@ -49,6 +49,8 @@
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
+#include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
@@ -920,6 +922,7 @@ NOLINT_TEST_F(
 struct SlotBinding {
   oxygen::data::pak::geometry::SubMeshDesc submesh {};
   oxygen::data::pak::geometry::MeshViewDesc view {};
+  std::string name;
 };
 
 struct ImportedMaterials {
@@ -1081,6 +1084,10 @@ protected:
         error_ = "Failed to read submesh/view for slot " + std::to_string(slot);
         return;
       }
+      binding.name = oxygen::content::test::ReadDescriptorString(
+        oxygen::cooker::test::ReadBytes(imported.cooked_root
+          / std::filesystem::path(geometry_entry->descriptor_relpath)),
+        binding.submesh.name_offset);
     }
   }
   static inline std::unique_ptr<oxygen::cooker::test::ScopedTempDir> temp_;
@@ -1124,8 +1131,7 @@ NOLINT_TEST_F(
   for (size_t slot = 0; slot < bound_keys.size(); ++slot) {
     SCOPED_TRACE(slot);
     const auto& submesh = imported.slots.at(slot).submesh;
-    EXPECT_EQ(
-      std::string_view(std::data(submesh.name)), expected_slot_names.at(slot));
+    EXPECT_EQ(imported.slots.at(slot).name, expected_slot_names.at(slot));
     EXPECT_FALSE(submesh.slot_id.IsNil());
     slot_ids.at(slot) = submesh.slot_id;
     EXPECT_EQ(imported.slots.at(slot).view.index_count, 3U);

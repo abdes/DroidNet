@@ -1,7 +1,6 @@
 # Geometry Cooking Architecture Specification
 
-**Date:** 2026-03-02
-**Status:** Design / Specification
+**Date:** 2026-03-02 **Status:** Design / Specification
 
 ## 0. Status Tracking
 
@@ -13,8 +12,9 @@ Current implementation status snapshot:
 1. Implemented: `GeometryDescriptorImportJob`, `GeometryPipeline`,
    `BuildGeometryDescriptorRequest`, `AsyncImportService` routing for
    `geometry_descriptor` payload presence, and `BatchCommand` manifest wiring.
-2. Implemented: JSON-descriptor-driven import path (`type: "geometry-descriptor"`)
-   with full schema validation at both request-build time and job execution.
+2. Implemented: JSON-descriptor-driven import path
+   (`type: "geometry-descriptor"`) with full schema validation at both
+   request-build time and job execution.
 3. Implemented: Inline buffer cooking path — the job optionally cooks buffer
    chunks (vertex, index, skinning) declared in its own `buffers` array via
    `BufferPipeline` before descriptor finalization begins.
@@ -24,20 +24,20 @@ Current implementation status snapshot:
 5. Implemented: Loose-cooked emission (`.ogeo` descriptors) via
    `AssetEmitter::Emit` with `AssetType::kGeometry` routing.
 6. Implemented: Buffer sidecar dependency resolution via `.obuf` sidecar file
-   reads (`ResolveBufferSidecarByVirtualPath`), with `container.index.bin`
-   index inspection for multi-mount cooked roots.
+   reads (`ResolveBufferSidecarByVirtualPath`), with `container.index.bin` index
+   inspection for multi-mount cooked roots.
 7. Implemented: Material asset key resolution via virtual path →
    `ResolveMaterialKeyByVirtualPath`, using mounted `container.index.bin`
    entries or deterministic key synthesis for unindexed mounts.
 8. Implemented: Procedural mesh support — `BuildProceduralParamBlob` encodes
-   typed generator parameters; `GenerateMeshBuffers` produces vertex/index
-   data at cook time to derive vertex and index counts for descriptor fields.
+   typed generator parameters; `GenerateMeshBuffers` produces vertex/index data
+   at cook time to derive vertex and index counts for descriptor fields.
 9. Implemented: Skinned mesh support — four skinning buffer references
    (`joint_index_ref`, `joint_weight_ref`, `inverse_bind_ref`,
    `joint_remap_ref`) plus optional `skeleton_ref` resolved to `AssetKey`.
-10. Implemented: Runtime `LoadGeometryAsset` reads `GeometryAssetDesc` field
-    by field (`ScopedAlignment(1)`), dispatches per-LOD `LoadMesh`, and
-    registers all buffer and material `AssetKey` dependencies as async resource
+10. Implemented: Runtime `LoadGeometryAsset` reads `GeometryAssetDesc` field by
+    field (`ScopedAlignment(1)`), dispatches per-LOD `LoadMesh`, and registers
+    all buffer and material `AssetKey` dependencies as async resource
     dependencies.
 11. Implemented: `GeometryAsset` runtime data container with LOD meshes,
     submesh/material associations, and MeshView accessors.
@@ -58,19 +58,19 @@ In scope:
 2. Three mesh types per LOD: `standard` (static), `skinned` (skeletal), and
    `procedural` (generator-driven).
 3. Inline buffer cooking: vertex, index, and skinning buffers declared in the
-   geometry descriptor's `buffers` array are cooked via `BufferPipeline` as
-   part of the same import job.
+   geometry descriptor's `buffers` array are cooked via `BufferPipeline` as part
+   of the same import job.
 4. External buffer dependency resolution via virtual path → `.obuf` sidecar.
 5. Material dependency resolution: each submesh has exactly one `material_ref`
    (canonical virtual path to a `.omat` file) resolved to an `AssetKey`.
-6. LOD hierarchy: 1–8 LODs, each with 1–N submeshes, each submesh with 1–N
-   mesh views.
+6. LOD hierarchy: 1–8 LODs, each with 1–N submeshes, each submesh with 1–N mesh
+   views.
 7. Descriptor finalization: `GeometryPipeline::FinalizeDescriptorBytes` patches
    `ResourceIndexT` placeholders and material `AssetKey` fields; optionally
    hashes the full byte span.
 8. Loose-cooked descriptor emission (`.ogeo`) via `LooseCookedLayout`.
-9. Binary format: `GeometryAssetDesc` (131 bytes) +
-   `MeshDesc[lod_count]` (145 bytes each, variable tail) in
+9. Binary format: `GeometryAssetDesc` (79 bytes) + `MeshDesc[lod_count]` (85
+   bytes each, variable tail) + the descriptor string table, in
    `PakFormat_geometry.h`.
 10. Runtime loading via `LoadGeometryAsset` and `GeometryAsset`.
 11. Manifest batch orchestration with buffer and material dependency ordering.
@@ -99,20 +99,20 @@ Out of scope:
    `GeometryDescriptorImportJob`.
 4. The only pipeline class for geometry descriptor finalization is
    `GeometryPipeline`.
-5. All binary serialization/deserialization MUST use `oxygen::serio`
-   (no raw byte arithmetic for new logic).
+5. All binary serialization/deserialization MUST use `oxygen::serio` (no raw
+   byte arithmetic for new logic).
 6. Buffer resource indices in the serialized descriptor MUST be initialized to
    `kNoResourceIndex` in `PrepareGeometryDescriptor` and patched by
    `GeometryPipeline::FinalizeDescriptorBytes` using `MeshBufferBindings`. No
    resource index value must be hard-coded into the pre-built descriptor bytes.
 7. Material `AssetKey` fields in `SubMeshDesc` are embedded during
-   `PrepareGeometryDescriptor` (resolved at cook time) and are NOT re-patched
-   by `FinalizeDescriptorBytes` unless supplied as `MaterialKeyPatch` entries.
-8. Content hashing uses the full finalized byte span (all struct types) and
-   MUST NOT be computed when `with_content_hashing` is false.
+   `PrepareGeometryDescriptor` (resolved at cook time) and are NOT re-patched by
+   `FinalizeDescriptorBytes` unless supplied as `MaterialKeyPatch` entries.
+8. Content hashing uses the full finalized byte span (all struct types) and MUST
+   NOT be computed when `with_content_hashing` is false.
 9. `GeometryAssetDesc`, `MeshDesc`, `SubMeshDesc`, and `MeshViewDesc` binary
-   layouts MUST NOT be modified without incrementing `kGeometryAssetVersion`
-   and updating the `static_assert(sizeof(...))` guards.
+   layouts MUST NOT be modified without incrementing `kGeometryAssetVersion` and
+   updating the `static_assert(sizeof(...))` guards.
 10. Runtime content code MUST NOT depend on demo/example code.
 11. Schema MUST be validated twice: once in `BuildGeometryDescriptorRequest`
     (tooling path) and once inside `GeometryDescriptorImportJob::ExecuteAsync`
@@ -124,8 +124,8 @@ Out of scope:
     be treated as absent or missing.
 14. Procedural mesh parameter blobs MUST be serialized with `ScopedAlignment(1)`
     using `serio::Writer`. `GenerateMeshBuffers` is called only to derive
-    vertex/index counts at cook time; it is executed again at runtime for
-    actual buffer population.
+    vertex/index counts at cook time; it is executed again at runtime for actual
+    buffer population.
 15. `kImplicitBufferViewName` (`"__all__"`) is the only valid `view_ref` for
     procedural submesh views. Any other value MUST be rejected at cook time.
 
@@ -169,8 +169,8 @@ One import entry point exists:
 1. **Descriptor-driven import** (`type: "geometry-descriptor"` manifest) — a
    JSON document that fully specifies one geometry import job, including LOD
    structure, buffer source URIs or virtual-path references, and material
-   virtual paths. This is the only path. There is no standalone
-   `texture`-style CLI command for geometry.
+   virtual paths. This is the only path. There is no standalone `texture`-style
+   CLI command for geometry.
 
 The descriptor-only constraint exists because geometry cooking requires:
 
@@ -262,10 +262,10 @@ Architectural split:
 1. The import job owns: inline buffer cooking (optional), descriptor byte
    assembly, buffer sidecar resolution, material key resolution, and final
    emission.
-2. `GeometryPipeline::FinalizeDescriptorBytes` is a self-contained utility
-   that patches a pre-built descriptor byte stream with live resource indices
-   and optionally hashes it. It does not maintain queued pipeline state for
-   the descriptor-driven path (it is used inline, not via Submit/Collect).
+2. `GeometryPipeline::FinalizeDescriptorBytes` is a self-contained utility that
+   patches a pre-built descriptor byte stream with live resource indices and
+   optionally hashes it. It does not maintain queued pipeline state for the
+   descriptor-driven path (it is used inline, not via Submit/Collect).
 3. Runtime loading reads the descriptor field-by-field (packed alignment=1),
    creates buffer resource dependencies asynchronously, and registers submesh
    material `AssetKey` dependencies — no cooking at load time.
@@ -278,7 +278,8 @@ Architectural split:
 
 ### 6.1 Import / Cooker Classes
 
-1. **Tooling-Facing Settings (DTO):** `oxygen::content::import::GeometryDescriptorImportSettings`
+1. **Tooling-Facing Settings (DTO):**
+   `oxygen::content::import::GeometryDescriptorImportSettings`
    - file: `src/Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h`
    - role: tooling-facing DTO for one geometry descriptor import job request.
      Contains `descriptor_path` (path to `.geometry.json`), `cooked_root`
@@ -287,7 +288,8 @@ Architectural split:
    - note: This DTO is never passed to the pipeline directly. It is only
      consumed by `BuildGeometryDescriptorRequest`.
 
-2. **Request Builder:** `oxygen::content::import::internal::BuildGeometryDescriptorRequest(...)`
+2. **Request Builder:**
+   `oxygen::content::import::internal::BuildGeometryDescriptorRequest(...)`
    - files:
      - `src/Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h`
      - `src/Oxygen/Cooker/Import/Internal/GeometryDescriptorImportRequestBuilder.cpp`
@@ -304,13 +306,13 @@ Architectural split:
      - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
    - role: async coroutine job that (1) re-parses and re-validates the embedded
      descriptor JSON, (2) optionally cooks inline buffers via `BufferPipeline`
-     and caches their emitted sidecars, (3) calls `PrepareGeometryDescriptor`
-     to build the binary descriptor with placeholder resource indices,
-     (4) calls `GeometryPipeline::FinalizeDescriptorBytes` to patch indices and
-     hash, (5) emits the `.ogeo` file via `AssetEmitter`.
-   - stages: `ReParseDescriptor` → `ValidateSchema` → `LoadMountedInspections`
-     → `CookInlineBuffers` (if `buffers` present) → `PrepareGeometryDescriptor`
-     → `FinalizeDescriptorBytes` → `EmitAsset` → `FinalizeSession`.
+     and caches their emitted sidecars, (3) calls `PrepareGeometryDescriptor` to
+     build the binary descriptor with placeholder resource indices, (4) calls
+     `GeometryPipeline::FinalizeDescriptorBytes` to patch indices and hash, (5)
+     emits the `.ogeo` file via `AssetEmitter`.
+   - stages: `ReParseDescriptor` → `ValidateSchema` → `LoadMountedInspections` →
+     `CookInlineBuffers` (if `buffers` present) → `PrepareGeometryDescriptor` →
+     `FinalizeDescriptorBytes` → `EmitAsset` → `FinalizeSession`.
 
 4. **Pipeline:** `oxygen::content::import::GeometryPipeline`
    - files:
@@ -328,10 +330,10 @@ Architectural split:
 5. **Pipeline Types - Bindings:** `oxygen::content::import::MeshBufferBindings`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h`
    - fields: `vertex_buffer`, `index_buffer`, `joint_index_buffer`,
-     `joint_weight_buffer`, `inverse_bind_buffer`, `joint_remap_buffer`
-     (all `ResourceIndexT`, default `kNoResourceIndex`).
-   - role: carries the resolved buffer resource indices for one LOD from the
-     job to `FinalizeDescriptorBytes`.
+     `joint_weight_buffer`, `inverse_bind_buffer`, `joint_remap_buffer` (all
+     `ResourceIndexT`, default `kNoResourceIndex`).
+   - role: carries the resolved buffer resource indices for one LOD from the job
+     to `FinalizeDescriptorBytes`.
 
 6. **Pipeline Types - Stream View:** `oxygen::content::import::MeshStreamView`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h`
@@ -340,37 +342,40 @@ Architectural split:
 
 7. **Pipeline Types - Triangle Mesh:** `oxygen::content::import::TriangleMesh`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h`
-   - fields: `mesh_type`, `MeshStreamView streams`,
-     `inverse_bind_matrices`, `joint_remap`, `indices`, `ranges`, optional
-     `bounds`.
+   - fields: `mesh_type`, `MeshStreamView streams`, `inverse_bind_matrices`,
+     `joint_remap`, `indices`, `ranges`, optional `bounds`.
 
 8. **Pipeline Types - Triangle Range:** `oxygen::content::import::TriangleRange`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h`
    - fields: `material_slot`, `first_index`, `index_count`.
 
-9. **Pipeline Types - Material Patch:** `oxygen::content::import::GeometryPipeline::MaterialKeyPatch`
+9. **Pipeline Types - Material Patch:**
+   `oxygen::content::import::GeometryPipeline::MaterialKeyPatch`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h`
    - fields: `material_key_offset` (`DataBlobSizeT`), `key` (`AssetKey`).
 
-10. **Internal Helper - Buffer Sidecar Resolution:** `ResolveBufferSidecarByVirtualPath`
-    - file: `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
+10. **Internal Helper - Buffer Sidecar Resolution:**
+    `ResolveBufferSidecarByVirtualPath`
+    - file:
+      `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
     - role: async coroutine. Validates canonical virtual path (no `..`, no
-      `//`), checks in-memory `buffer_cache` first, then strips mount root to
-      a rel-path, searches all `MountedInspection` roots in reverse order.
-      Reads and parses the `.obuf` sidecar file via
-      `ParseBufferDescriptorSidecar` to obtain `ResourceIndexT`, buffer
-      descriptor, and named views. Caches and returns a
-      `ResolvedBufferSidecar`. Emits `geometry.buffer.sidecar_ambiguous` if
-      multiple candidate files are found.
+      `//`), checks in-memory `buffer_cache` first, then strips mount root to a
+      rel-path, searches all `MountedInspection` roots in reverse order. Reads
+      and parses the `.obuf` sidecar file via `ParseBufferDescriptorSidecar` to
+      obtain `ResourceIndexT`, buffer descriptor, and named views. Caches and
+      returns a `ResolvedBufferSidecar`. Emits
+      `geometry.buffer.sidecar_ambiguous` if multiple candidate files are found.
 
-11. **Internal Helper - Material Key Resolution:** `ResolveMaterialKeyByVirtualPath`
-    - file: `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
+11. **Internal Helper - Material Key Resolution:**
+    `ResolveMaterialKeyByVirtualPath`
+    - file:
+      `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
     - role: synchronous. Validates canonical virtual path, checks in-memory
-      `material_cache` first, then searches each `MountedInspection` that has
-      a loaded `container.index.bin` for an asset matching `virtual_path` with
-      `AssetType::kMaterial`. Falls back to deterministic `AssetKey`
-      synthesis from the virtual path if the `.omat` file exists on disk but
-      the index is unavailable (only when `asset_key_policy` is
+      `material_cache` first, then searches each `MountedInspection` that has a
+      loaded `container.index.bin` for an asset matching `virtual_path` with
+      `AssetType::kMaterial`. Falls back to deterministic `AssetKey` synthesis
+      from the virtual path if the `.omat` file exists on disk but the index is
+      unavailable (only when `asset_key_policy` is
       `kDeterministicFromVirtualPath`). Emits `geometry.material.type_mismatch`
       if the index entry exists but refers to a non-material asset.
 
@@ -439,8 +444,8 @@ Schema target files:
 }
 ```
 
-Valid top-level keys for `type: "geometry-descriptor"`:
-`id`, `type`, `source`, `name`, `content_hashing`, `depends_on`.
+Valid top-level keys for `type: "geometry-descriptor"`: `id`, `type`, `source`,
+`name`, `content_hashing`, `depends_on`.
 
 The `source` field must point to a file conforming to
 `oxygen.geometry-descriptor.schema.json` (Section 7.2).
@@ -455,9 +460,10 @@ The `source` field must point to a file conforming to
 3. Geometry jobs are dispatched only when all predecessor buffer and material
    jobs have succeeded (i.e., their `.obuf` and `.omat` sidecar files are on
    disk).
-4. Failed predecessor jobs cause all transitive dependents to be skipped with
-   a diagnostic code (propagated via the session).
-5. The execution node per job is `GeometryDescriptorImportJob → GeometryPipeline`.
+4. Failed predecessor jobs cause all transitive dependents to be skipped with a
+   diagnostic code (propagated via the session).
+5. The execution node per job is
+   `GeometryDescriptorImportJob → GeometryPipeline`.
 
 #### 7.1.3 Manifest Defaults
 
@@ -476,8 +482,8 @@ Manifest-level defaults reduce per-job verbosity:
 }
 ```
 
-Manifest defaults for `geometry_descriptor` support:
-`output` (cooked root), `name` (job name override).
+Manifest defaults for `geometry_descriptor` support: `output` (cooked root),
+`name` (job name override).
 
 #### 7.1.4 Concurrency Configuration
 
@@ -500,7 +506,8 @@ Defaults: geometry `workers=1`, `queue_capacity=16`; buffer `workers=2`,
 
 ### 7.2 Geometry Descriptor Source JSON (`*.geometry.json`)
 
-Schema: `src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json`
+Schema:
+`src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json`
 
 JSON Schema draft-07, `additionalProperties: false` at all levels.
 
@@ -571,8 +578,8 @@ Top-level validation rules:
 1. Unknown top-level fields are rejected (`additionalProperties: false`).
 2. `source` is implicit (provided by manifest); it does not appear inside the
    descriptor JSON itself.
-3. All buffer `virtual_path` and submesh `material_ref` values must be
-   canonical virtual paths (see Sections 7.2.3 and 7.2.6).
+3. All buffer `virtual_path` and submesh `material_ref` values must be canonical
+   virtual paths (see Sections 7.2.3 and 7.2.6).
 4. `identifier` values: 1–63 characters, matching
    `^[A-Za-z0-9_][A-Za-z0-9_.-]{0,62}$`.
 
@@ -583,8 +590,8 @@ Top-level validation rules:
 ```
 
 Both `min` and `max` are required. All-zero vectors are valid. Bounds are
-pre-computed by tooling and stored in `GeometryAssetDesc`, `MeshDesc`
-(per-LOD), and `SubMeshDesc` (per-submesh) fields.
+pre-computed by tooling and stored in `GeometryAssetDesc`, `MeshDesc` (per-LOD),
+and `SubMeshDesc` (per-submesh) fields.
 
 #### 7.2.3 `buffer_descriptor` (in `buffers` array)
 
@@ -666,8 +673,8 @@ Exactly one pair must be provided: either `byte_offset`+`byte_length` or
 | `name`     | No       | `identifier`    | View debug name                                                        |
 | `bounds`   | No       | `bounds3`       | View-level local AABB (defaults to the submesh bounds if absent)       |
 
-`view_ref` resolves against the named `buffer_view_descriptor` entries in the
-VB and IB sidecars. `"__all__"` is the only valid selector for procedural LODs
+`view_ref` resolves against the named `buffer_view_descriptor` entries in the VB
+and IB sidecars. `"__all__"` is the only valid selector for procedural LODs
 (covers the entire generated buffer).
 
 #### 7.2.6 `procedural_descriptor`
@@ -722,8 +729,9 @@ and the helper `PrepareGeometryDescriptor`.
 
 ### 8.2 `PrepareGeometryDescriptor` Stages
 
-Produces `PreparedGeometryDescriptor` (raw descriptor bytes + `MeshBufferBindings[]`).
-Serialization uses `serio::Writer` with `ScopedAlignment(1)`.
+Produces `PreparedGeometryDescriptor` (raw descriptor bytes +
+`MeshBufferBindings[]`). Serialization uses `serio::Writer` with
+`ScopedAlignment(1)`.
 
 | Step | Action                                                                                                                                                                                                                                                                                                  |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -751,51 +759,62 @@ Serialization uses `serio::Writer` with `ScopedAlignment(1)`.
 1. Parse `GeometryAssetDesc` from `descriptor_bytes`.
 2. Verify `bindings.size() == asset_desc.lod_count`.
 3. Zero `asset_desc.header.content_hash`, re-write `GeometryAssetDesc`.
-4. For each LOD: read `MeshDesc`; patch buffer resource index fields (`vertex_buffer`, `index_buffer`, and skinning fields) from `bindings[i]`, skipping `kNoResourceIndex` entries; re-write `MeshDesc`. Forward over any procedural param blob. Forward over `SubMeshDesc[]` and `MeshViewDesc[]`.
-5. Apply any `MaterialKeyPatch` entries by writing `AssetKey` at the specified byte offset.
-6. If `config_.with_content_hashing`: compute `XXH3_64bits` (or engine hash) over the finalized byte span on the thread pool; patch `content_hash` at its fixed offset in the re-written `GeometryAssetDesc.header`.
+4. For each LOD: read `MeshDesc`; patch buffer resource index fields
+   (`vertex_buffer`, `index_buffer`, and skinning fields) from `bindings[i]`,
+   skipping `kNoResourceIndex` entries; re-write `MeshDesc`. Forward over any
+   procedural param blob. Forward over `SubMeshDesc[]` and `MeshViewDesc[]`.
+5. Apply any `MaterialKeyPatch` entries by writing `AssetKey` at the specified
+   byte offset.
+6. If `config_.with_content_hashing`: compute `XXH3_64bits` (or engine hash)
+   over the finalized byte span on the thread pool; patch `content_hash` at its
+   fixed offset in the re-written `GeometryAssetDesc.header`.
 
 ---
 
 ## 9. Binary Format
 
-### 9.1 `AssetHeader` (103 bytes, `PakFormat_core.h`)
+### 9.1 `AssetHeader` (51 bytes, `PakFormat_core.h`)
 
 ```cpp
 #pragma pack(push, 1)
 struct AssetHeader {
   uint8_t asset_type = 0;              // AssetType::kGeometry
-  char name[64] = {};                  // null-terminated geometry name
+  DescriptorStringTable strings = {};  // {offset, size} of the string table
+  StringTableOffsetT name_offset = 0;  // geometry name
   uint8_t version = 0;                 // kGeometryAssetVersion
   uint8_t streaming_priority = 0;      // 0 = highest
   ContentHashDigest content_hash = {}; // SHA-256, set by finalization
   uint32_t variant_flags = 0;          // geometry attribute mask
 };
 #pragma pack(pop)
-static_assert(sizeof(AssetHeader) == 103);
+static_assert(sizeof(AssetHeader) == 51);
 ```
 
-### 9.2 `GeometryAssetDesc` (131 bytes, `PakFormat_geometry.h`)
+The geometry, LOD and submesh names are offsets into the descriptor's string
+table: NUL-terminated UTF-8 strings after the last record, starting with the
+empty string at offset 0. Names have no length limit and are never truncated.
+
+### 9.2 `GeometryAssetDesc` (79 bytes, `PakFormat_geometry.h`)
 
 ```cpp
 #pragma pack(push, 1)
 struct GeometryAssetDesc {
-  AssetHeader header;             // 103 bytes; asset_type = kGeometry
+  AssetHeader header;             // 51 bytes; asset_type = kGeometry
   uint32_t lod_count = 0;         // Number of MeshDesc entries following
   float bounding_box_min[3] = {}; // AABB min (pre-computed by tooling)
   float bounding_box_max[3] = {}; // AABB max (pre-computed by tooling)
 };
-// Followed by: MeshDesc meshes[lod_count];
+// Followed by: MeshDesc meshes[lod_count]; then the string table.
 #pragma pack(pop)
-static_assert(sizeof(GeometryAssetDesc) == 131);
+static_assert(sizeof(GeometryAssetDesc) == 79);
 ```
 
-### 9.3 `MeshDesc` (145 bytes + optional tail, `PakFormat_geometry.h`)
+### 9.3 `MeshDesc` (85 bytes + optional tail, `PakFormat_geometry.h`)
 
 ```cpp
 #pragma pack(push, 1)
 struct MeshDesc {
-  char     name[64]          = {};  // null-terminated LOD name
+  StringTableOffsetT name_offset = 0;  // LOD name
   uint8_t  mesh_type         = 0;   // MeshType enum value
   uint32_t submesh_count     = 0;   // number of SubMeshDesc following
   uint32_t mesh_view_count   = 0;   // total MeshViewDesc in all submeshes
@@ -809,25 +828,26 @@ struct MeshDesc {
 //   [procedural only] uint8_t param_blob[info.procedural.params_size];
 //   SubMeshDesc submeshes[submesh_count];
 #pragma pack(pop)
-static_assert(sizeof(MeshDesc) == 145);
+static_assert(sizeof(MeshDesc) == 85);
 ```
 
 Each union arm is padded to 72 bytes:
 
 - `StandardMeshInfo`: `vertex_buffer` + `index_buffer` + `bounding_box_min[3]`
   - `bounding_box_max[3]`, then reserved bytes.
-- `SkinnedMeshInfo`: 6 × `ResourceReferenceIndex` + `AssetKey
-skeleton_asset_key` + `joint_count` (uint16) + `influences_per_vertex`
-  (uint16) + `flags` (uint32) + `bounding_box_min[3]` + `bounding_box_max[3]`.
+- `SkinnedMeshInfo`: 6 × `ResourceReferenceIndex` +
+  `AssetKey skeleton_asset_key` + `joint_count` (uint16) +
+  `influences_per_vertex` (uint16) + `flags` (uint32) + `bounding_box_min[3]` +
+  `bounding_box_max[3]`.
 - `ProceduralMeshInfo`: `params_size` (uint32), the size of the parameter blob
   immediately following `MeshDesc`, then reserved bytes.
 
-### 9.4 `SubMeshDesc` (124 bytes, `PakFormat_geometry.h`)
+### 9.4 `SubMeshDesc` (64 bytes, `PakFormat_geometry.h`)
 
 ```cpp
 #pragma pack(push, 1)
 struct SubMeshDesc {
-  char           name[64]            = {}; // null-terminated submesh name
+  StringTableOffsetT name_offset     = 0;  // submesh name
   AssetKey       material_asset_key;       // material (embedded at cook)
   MaterialSlotId slot_id;                  // semantic slot identity
   uint32_t       mesh_view_count     = 0;  // number of MeshViewDesc following
@@ -836,7 +856,7 @@ struct SubMeshDesc {
 };
 // Followed by: MeshViewDesc mesh_views[mesh_view_count];
 #pragma pack(pop)
-static_assert(sizeof(SubMeshDesc) == 124);
+static_assert(sizeof(SubMeshDesc) == 64);
 ```
 
 ### 9.5 `MeshViewDesc` (40 bytes, `PakFormat_geometry.h`)
@@ -862,32 +882,33 @@ so it carries its own bounds. The view bounds are:
 - **Model imports.** Computed tightly from the view's triangles; the
   [geometry pipeline](../../src/Oxygen/Cooker/Docs/Import/geometry_work_pipeline_v2.md#mesh-build-performed-by-meshbuildpipeline)
   splits large submeshes into spatially coherent views.
-- **Geometry descriptors.** The authored `submesh_view.bounds`, else the
-  submesh bounds. That is conservative: authored views are never split.
+- **Geometry descriptors.** The authored `submesh_view.bounds`, else the submesh
+  bounds. That is conservative: authored views are never split.
 - **Procedural LODs.** The submesh bounds.
 
 The view bounds must lie inside the submesh bounds. Adding them increments
-`kGeometryAssetVersion` from 3 to 4 (constraint 9); geometry cooked at version
-3 is re-cooked.
+`kGeometryAssetVersion` from 3 to 4 (constraint 9); geometry cooked at version 3
+is re-cooked.
 
 ### 9.6 Full `.ogeo` File Layout
 
 ```text
-GeometryAssetDesc                       131 bytes
-  MeshDesc[0]                           145 bytes
+GeometryAssetDesc                       79 bytes
+  MeshDesc[0]                           85 bytes
     [if procedural] param_blob          params_size bytes
-    SubMeshDesc[0]                      124 bytes
+    SubMeshDesc[0]                      64 bytes
       MeshViewDesc[0]                   40 bytes
       MeshViewDesc[...]
     SubMeshDesc[...]
-  MeshDesc[1]                           145 bytes
+  MeshDesc[1]                           85 bytes
     ...
   MeshDesc[lod_count - 1]
+String table                            header.strings.size bytes
 ```
 
 Buffer `ResourceIndexT` fields within `MeshDesc.info.standard/skinned` and
-`SubMeshDesc.material_asset_key` are fully resolved values at the time the
-file is written.
+`SubMeshDesc.material_asset_key` are fully resolved values at the time the file
+is written.
 
 ### 9.7 Loose Cooked Layout
 
@@ -904,18 +925,18 @@ Key layout constants:
 | `kGeometryDescriptorExtension` | `".ogeo"`    | File extension for geometry descriptors |
 | `kGeometryDirName`             | `"Geometry"` | Subfolder under cooked root             |
 
-Virtual path for runtime mounting:
-`GeometryVirtualPath(name)` = `<virtual_mount_root>/Geometry/<name>.ogeo`
+Virtual path for runtime mounting: `GeometryVirtualPath(name)` =
+`<virtual_mount_root>/Geometry/<name>.ogeo`
 
-Relative path for file emission:
-`GeometryDescriptorRelPath(name)` = `Geometry/<name>.ogeo`
+Relative path for file emission: `GeometryDescriptorRelPath(name)` =
+`Geometry/<name>.ogeo`
 
 ---
 
 ## 10. Error Taxonomy
 
-Geometry import errors are surfaced as diagnostics in `ImportReport` and as
-log messages written to `error_stream`. Error codes follow the pattern
+Geometry import errors are surfaced as diagnostics in `ImportReport` and as log
+messages written to `error_stream`. Error codes follow the pattern
 `geometry.<category>.<key>`:
 
 | Category   | Code Pattern                                   | Key Causes                                                  |
@@ -928,9 +949,6 @@ log messages written to `error_stream`. Error codes follow the pattern
 | Schema     | `geometry.descriptor.lod_count_invalid`        | `lods` array is empty or exceeds 8 entries                  |
 | Schema     | `geometry.descriptor.serialize_failed`         | `serio::Writer` write error during descriptor build         |
 | Schema     | `geometry.descriptor.view_count_overflow`      | Total mesh view count exceeds `uint32_t` range              |
-| Schema     | `geometry.descriptor.name_truncated`           | Asset or LOD name exceeds `kMaxNameSize` (warning)          |
-| Schema     | `geometry.descriptor.lod_name_truncated`       | LOD name exceeds `kMaxNameSize` (warning)                   |
-| Schema     | `geometry.descriptor.submesh_name_truncated`   | Submesh name exceeds `kMaxNameSize` (warning)               |
 | I/O        | `geometry.descriptor.index_load_failed`        | `container.index.bin` could not be loaded                   |
 | Buffer     | `geometry.buffer.virtual_path_invalid`         | Non-canonical virtual path in `vb_ref`/`ib_ref`             |
 | Buffer     | `geometry.buffer.virtual_path_unmounted`       | Virtual path outside all mounted cooked roots               |
@@ -951,7 +969,6 @@ log messages written to `error_stream`. Error codes follow the pattern
 | Procedural | `geometry.procedural.params_invalid`           | `BuildProceduralParamBlob` failed to encode params          |
 | Procedural | `geometry.procedural.generation_failed`        | `GenerateMeshBuffers` rejected descriptor params            |
 | Procedural | `geometry.procedural.mesh_too_large`           | Generated vertex/index count exceeds `uint32_t`             |
-| Procedural | `geometry.procedural.name_truncated`           | Procedural mesh name truncated (warning)                    |
 | Procedural | `geometry.procedural.view_ref_invalid`         | Procedural `view_ref` is not `"__all__"`                    |
 | Skinning   | `geometry.skinning.skeleton_missing`           | `skeleton_ref` could not be resolved to an `AssetKey`       |
 | Asset      | `geometry.asset.virtual_path_invalid`          | Non-canonical virtual path in `skeleton_ref`                |
@@ -963,8 +980,8 @@ log messages written to `error_stream`. Error codes follow the pattern
 
 ## 11. Runtime Bootstrap
 
-Geometry assets are load-on-demand resources referenced by `AssetKey` from
-scene nodes. There is no geometry enumeration at startup.
+Geometry assets are load-on-demand resources referenced by `AssetKey` from scene
+nodes. There is no geometry enumeration at startup.
 
 Runtime load sequence:
 
@@ -986,34 +1003,36 @@ Runtime load sequence:
      buffer indices as async resource dependencies; calls
      `dependency_collector->AddAssetDependency(info.skeleton_asset_key)` when
      non-zero.
-   - **Procedural mesh**: reads `ProceduralMeshInfo.params_size`; skips
-     union padding; reads `param_blob`; calls `GenerateMeshBuffers(name, blob)`
-     at load time to produce `vertices` and `indices` in memory (no GPU buffers
+   - **Procedural mesh**: reads `ProceduralMeshInfo.params_size`; skips union
+     padding; reads `param_blob`; calls `GenerateMeshBuffers(name, blob)` at
+     load time to produce `vertices` and `indices` in memory (no GPU buffers
      registered as dependencies).
    - For each submesh: reads `SubMeshDesc` (including `material_asset_key`);
-     calls `dependency_collector->AddAssetDependency(sm_desc.material_asset_key)`
-     when non-zero; creates default material placeholder.
+     calls
+     `dependency_collector->AddAssetDependency(sm_desc.material_asset_key)` when
+     non-zero; creates default material placeholder.
    - For each submesh view: reads `MeshViewDesc`.
    - Builds `Mesh` via `MeshBuilder`.
-6. `std::make_unique<data::GeometryAsset>(context.current_asset_key, desc, lod_meshes)` is returned.
+6. `std::make_unique<data::GeometryAsset>(context.current_asset_key, desc, lod_meshes)`
+   is returned.
 7. Buffer `ResourceKey` and material `AssetKey` dependencies are resolved and
    published asynchronously; `SubMesh::SetMaterial` is called once the material
    `AssetKey` dependency is satisfied.
 
 Key contracts:
 
-1. `GeometryAsset` does not own GPU handles. Vertex/index buffer upload and
-   GPU resource creation are the renderer's responsibility via the resolved
+1. `GeometryAsset` does not own GPU handles. Vertex/index buffer upload and GPU
+   resource creation are the renderer's responsibility via the resolved
    `BufferResource` dependencies.
 2. `content_hash` is used for deduplication during incremental imports.
 3. Procedural mesh geometry is fully regenerated at load time; no GPU buffers
    are registered as resource dependencies for procedural LODs.
 4. `parse_only` mode reads all descriptor fields and builds the asset graph
-   without allocating vertex/index memory (standard/skinned) or resolving
-   buffer dependencies.
+   without allocating vertex/index memory (standard/skinned) or resolving buffer
+   dependencies.
 5. The buffer resource indices in `MeshDesc.info.standard/skinned` carry the
    fully resolved `ResourceIndexT` values written by `FinalizeDescriptorBytes`.
    The runtime does NOT re-derive these; it reads them directly from the file.
 6. `kNoResourceIndex` sentinel values in buffer fields are skipped by both
-   `AddResourceDependency` and the renderer; they indicate an absent or
-   optional buffer slot.
+   `AddResourceDependency` and the renderer; they indicate an absent or optional
+   buffer slot.

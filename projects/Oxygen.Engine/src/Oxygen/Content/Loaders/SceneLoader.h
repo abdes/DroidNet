@@ -27,8 +27,10 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
@@ -53,22 +55,6 @@ namespace detail {
       throw std::runtime_error(std::string(what) + " decode failed");
     }
     return record;
-  }
-
-  inline auto ValidateStringOffset(
-    const std::span<const std::byte> string_table,
-    const oxygen::data::pak::core::StringTableOffsetT offset) -> void
-  {
-    if (offset >= string_table.size()) {
-      throw std::runtime_error("scene asset node name offset out of bounds");
-    }
-
-    const auto tail = string_table.subspan(offset);
-    const auto it = std::ranges::find(tail, std::byte { 0 });
-    if (it == tail.end()) {
-      throw std::runtime_error(
-        "scene asset string table entry missing NUL terminator");
-    }
   }
 
   template <typename RecordT>
@@ -314,7 +300,11 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     AddRangeEnd(end, desc.nodes.offset, bytes);
   }
 
-  AddRangeEnd(end, desc.scene_strings.offset, desc.scene_strings.size);
+  if (desc.header.strings.size == 0
+    || desc.header.strings.offset < sizeof(data::pak::world::SceneAssetDesc)) {
+    throw std::runtime_error("scene asset string table location is invalid");
+  }
+  AddRangeEnd(end, desc.header.strings.offset, desc.header.strings.size);
 
   // Read the component directory entries (if any) to validate and extend end.
   std::vector<data::pak::world::SceneComponentTableDesc> tables;
@@ -425,14 +415,16 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   // Full validation (loader responsibility).
   const auto bytes_span = std::span<const std::byte>(bytes);
 
-  auto string_table = std::span<const std::byte> {};
-  if (desc.scene_strings.size > 0) {
-    string_table
-      = bytes_span.subspan(desc.scene_strings.offset, desc.scene_strings.size);
-    if (string_table.front() != std::byte { 0 }) {
-      throw std::runtime_error("scene asset string table must start with NUL");
-    }
+  auto strings = data::DescriptorStrings {};
+  try {
+    strings = data::DescriptorStrings::FromDescriptor(
+      bytes_span, desc.header.strings);
+  } catch (const std::invalid_argument& error) {
+    throw std::runtime_error(
+      fmt::format("scene asset string table: {}", error.what()));
   }
+  static_cast<void>(
+    ResolveDescriptorString(strings, desc.header.name_offset, "scene name"));
   for (uint32_t index = 0; index < desc.nodes.count; ++index) {
     const auto node = detail::ReadPackedRecord<data::pak::world::NodeRecord>(
       bytes_span.subspan(desc.nodes.offset
@@ -445,9 +437,8 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     if (node.parent_index >= desc.nodes.count) {
       throw std::runtime_error("scene asset parent_index out of range");
     }
-    if (node.scene_name_offset != 0) {
-      detail::ValidateStringOffset(string_table, node.scene_name_offset);
-    }
+    static_cast<void>(ResolveDescriptorString(
+      strings, node.scene_name_offset, "scene node name"));
   }
 
   // Validate known component tables and (optionally) collect dependencies.
@@ -573,6 +564,11 @@ inline auto LoadSceneAsset(const LoaderContext& context)
                 slot.params_array_offset + (size_t { p } * sizeof(ParamRecord)),
                 sizeof(ParamRecord)),
               "scene script parameter");
+            if (!data::TryGetScriptParamKey(param, strings)
+              || !data::ToScriptParam(param, strings)) {
+              throw std::runtime_error(
+                "scene script parameter has an invalid key or value");
+            }
             if (param.type == data::pak::scripting::ScriptParamType::kAsset
               && !param.value.as_asset.key.IsNil()) {
               param_asset_deps.insert_or_assign(

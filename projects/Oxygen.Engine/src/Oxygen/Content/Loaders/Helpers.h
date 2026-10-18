@@ -6,14 +6,19 @@
 
 #pragma once
 
+#include <cstring>
 #include <iterator>
+#include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
@@ -138,15 +143,9 @@ inline auto LoadAssetHeader(
   LOG_F(1, "asset type         : {}",
     nostd::to_string(static_cast<AssetType>(asset_type)));
 
-  // Check that name contains a null terminator
-  const auto& name = header.name;
-  if (std::ranges::find(name, '\0') == std::end(name)) {
-    // We let it go, because the name getter will handle this case and return a
-    // valid std::string_view. But we log a warning to help debugging.
-    LOG_F(WARNING, "-fishy- on name not null-terminated");
-  }
-  std::string_view name_view(name, data::pak::core::kMaxNameSize);
-  LOG_F(1, "asset name         : {}", name_view);
+  LOG_F(1, "string table       : {} bytes at {}", header.strings.size,
+    header.strings.offset);
+  LOG_F(1, "name offset        : {}", header.name_offset);
 
   LOG_F(1, "format version     : {}", header.version);
   LOG_F(1, "variant flags      : 0x{:08X}", header.variant_flags);
@@ -157,6 +156,74 @@ inline auto LoadAssetHeader(
     fmt::format_to(std::back_inserter(content_hash_hex), "{:02X}", byte);
   }
   LOG_F(1, "content hash       : {}", content_hash_hex);
+}
+
+//! Reads the string table of the descriptor that starts at `descriptor_start`.
+/*!
+ Leaves the reader where it was.
+
+ @throw std::runtime_error when the table cannot be read or is malformed.
+*/
+inline auto ReadDescriptorStrings(serio::AnyReader& reader,
+  const size_t descriptor_start, const data::pak::core::AssetHeader& header)
+  -> data::DescriptorStrings
+{
+  const auto& table = header.strings;
+  if (table.size == 0 || table.offset < sizeof(data::pak::core::AssetHeader)) {
+    throw std::runtime_error("descriptor string table location is invalid");
+  }
+  const auto position = reader.Position();
+  CheckLoaderResult(position, "descriptor", "position");
+  CheckLoaderResult(reader.Seek(descriptor_start + table.offset), "descriptor",
+    "string table offset");
+  auto bytes = reader.ReadBlob(table.size);
+  CheckLoaderResult(bytes, "descriptor", "string table");
+  CheckLoaderResult(reader.Seek(*position), "descriptor", "position");
+
+  auto chars = std::vector<char>(table.size);
+  std::memcpy(chars.data(), bytes->data(), table.size);
+  try {
+    return data::DescriptorStrings { std::move(chars) };
+  } catch (const std::invalid_argument& error) {
+    throw std::runtime_error(error.what());
+  }
+}
+
+//! Moves past the string table that follows a descriptor's records.
+/*!
+ Loaders consume their whole descriptor. A descriptor whose string table
+ follows its records calls this after reading them.
+
+ @throw std::runtime_error when the records do not end where the table starts.
+*/
+inline auto SkipDescriptorStrings(serio::AnyReader& reader,
+  const size_t descriptor_start, const data::pak::core::AssetHeader& header)
+  -> void
+{
+  const auto position = reader.Position();
+  CheckLoaderResult(position, "descriptor", "position");
+  if (*position != descriptor_start + header.strings.offset) {
+    throw std::runtime_error(
+      "descriptor records do not end where its string table starts");
+  }
+  CheckLoaderResult(
+    reader.Forward(header.strings.size), "descriptor", "string table");
+}
+
+//! Resolves a string of a descriptor's string table.
+/*!
+ @throw std::runtime_error naming `field` when the offset is not in the table.
+*/
+inline auto ResolveDescriptorString(const data::DescriptorStrings& strings,
+  const data::pak::core::StringTableOffsetT offset, const char* field)
+  -> std::string
+{
+  const auto value = strings.TryGet(offset);
+  if (!value) {
+    throw std::runtime_error(
+      fmt::format("{} offset {} is outside the string table", field, offset));
+  }
+  return std::string { *value };
 }
 
 } // namespace oxygen::content::loaders

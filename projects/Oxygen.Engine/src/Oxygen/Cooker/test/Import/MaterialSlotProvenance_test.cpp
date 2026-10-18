@@ -21,7 +21,6 @@
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSlotAllocation.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/test/Support/SourceLayoutTestSupport.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -238,15 +237,6 @@ NOLINT_TEST(MaterialSlotProvenanceTest, EmptySourceRecordRoundTrips)
   const auto parsed = MaterialSlotProvenance::Parse(initial.Serialize());
   EXPECT_TRUE(parsed->Geometries().empty());
   EXPECT_EQ(parsed->SourceIdentity(), initial.SourceIdentity());
-}
-
-NOLINT_TEST(MaterialSlotProvenanceTest, SlotLabelTruncationKeepsValidUtf8)
-{
-  std::array<char, 5> buffer {};
-  const std::string label = "ab\xe2\x82\xac";
-  oxygen::content::import::util::TruncateAndNullTerminate(
-    buffer.data(), buffer.size(), label);
-  EXPECT_EQ(std::string(buffer.data()), "ab");
 }
 
 } // namespace

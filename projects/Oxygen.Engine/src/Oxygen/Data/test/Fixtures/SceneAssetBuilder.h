@@ -19,6 +19,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -44,10 +45,8 @@ public:
     auto node = pak::world::NodeRecord {};
     node.node_id = AssetKey::FromVirtualPath(
       "/test/node/" + std::to_string(index) + "/" + std::string(name));
-    node.scene_name_offset = static_cast<uint32_t>(strings_.size());
+    node.scene_name_offset = strings_.Add(name);
     node.parent_index = parent.value_or(index);
-    strings_.append(name);
-    strings_.push_back('\0');
     nodes_.push_back(node);
     return index;
   }
@@ -139,11 +138,11 @@ public:
       .entry_size = sizeof(NodeRecord),
     };
     offset += nodes_.size() * sizeof(NodeRecord);
-    desc.scene_strings = {
+    desc.header.strings = {
       .offset = static_cast<uint32_t>(offset),
-      .size = static_cast<uint32_t>(strings_.size()),
+      .size = strings_.Size(),
     };
-    offset += strings_.size();
+    offset += strings_.Size();
     desc.component_table_directory_offset = offset;
     desc.component_table_count = static_cast<uint32_t>(tables.size());
     offset += tables.size() * sizeof(SceneComponentTableDesc);
@@ -170,7 +169,7 @@ public:
     auto bytes = std::vector<std::byte> {};
     Append(bytes, std::as_bytes(std::span(&desc, 1)));
     Append(bytes, std::as_bytes(std::span(nodes_)));
-    Append(bytes, std::as_bytes(std::span(strings_)));
+    Append(bytes, strings_.Bytes());
     Append(bytes, std::as_bytes(std::span(directory)));
     for (const auto& table : tables) {
       Append(bytes, table.bytes);
@@ -212,8 +211,7 @@ private:
   }
 
   std::vector<pak::world::NodeRecord> nodes_;
-  // Offset 0 is the empty name.
-  std::string strings_ { std::string(1, '\0') };
+  DescriptorStringsBuilder strings_;
   std::vector<Table> tables_;
   std::vector<pak::scripting::ScriptingComponentRecord> scripting_;
   std::vector<pak::scripting::ScriptSlotRecord> slots_;

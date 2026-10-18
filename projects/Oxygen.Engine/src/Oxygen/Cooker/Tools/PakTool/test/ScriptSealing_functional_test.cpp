@@ -6,8 +6,8 @@
 
 // Covers: Tools/PakTool/ScriptSealing.cpp
 
+#include <algorithm>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -24,11 +24,13 @@
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/ScriptSealing.h>
+#include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -127,15 +129,15 @@ protected:
     descriptor.header.version
       = oxygen::data::pak::scripting::kScriptAssetVersion;
     descriptor.flags = ScriptAssetFlags::kAllowExternalSource;
-    ASSERT_LT(stored.size(), sizeof(descriptor.external_source_path));
-    std::memcpy(descriptor.external_source_path, stored.data(), stored.size());
+    auto strings = oxygen::data::DescriptorStringsBuilder {};
+    descriptor.external_source_path_offset = strings.Add(stored);
     LooseCookedWriter writer(cooked);
     const auto layout = LooseCookedLayout {};
     const auto virtual_path = layout.ScriptVirtualPath("rooted");
     writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(virtual_path),
       AssetType::kScript, virtual_path,
       layout.ScriptDescriptorRelPath("rooted"),
-      std::as_bytes(std::span { &descriptor, 1 }), {});
+      oxygen::data::MakeDescriptorBytes(descriptor, strings), {});
     static_cast<void>(writer.Finish());
     PakBuildRequest request {};
     request.mode = BuildMode::kFull;
@@ -179,8 +181,8 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
   descriptor.flags = ScriptAssetFlags::kAllowExternalSource;
   const auto stored_external_path
     = std::string("scenes/proc-cubes/proc_cubes.lua");
-  std::memcpy(descriptor.external_source_path, stored_external_path.data(),
-    stored_external_path.size());
+  auto strings = oxygen::data::DescriptorStringsBuilder {};
+  descriptor.external_source_path_offset = strings.Add(stored_external_path);
 
   auto writer = LooseCookedWriter(cooked_root);
   const auto source_key = SourceKey::FromString(kSourceKey);
@@ -189,7 +191,7 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
   writer.SetContentVersion(7);
   writer.WriteAssetDescriptor(script_key, AssetType::kScript,
     script_virtual_path, script_relpath,
-    std::as_bytes(std::span { &descriptor, 1 }), {});
+    oxygen::data::MakeDescriptorBytes(descriptor, strings), {});
   static_cast<void>(writer.Finish());
 
   auto request = PakBuildRequest {};
@@ -219,7 +221,12 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     staged_root / std::filesystem::path(script_relpath));
   EXPECT_NE(staged_descriptor.source_resource_index, kNoResourceReference);
   EXPECT_EQ(static_cast<uint32_t>(staged_descriptor.flags), 0U);
-  EXPECT_EQ(staged_descriptor.external_source_path[0], '\0');
+  EXPECT_EQ(staged_descriptor.external_source_path_offset, 0U);
+  // The sealed descriptor's string table no longer holds the external path.
+  const auto staged_bytes = oxygen::cooker::test::ReadBytes(
+    staged_root / std::filesystem::path(script_relpath));
+  const auto path_bytes = std::as_bytes(std::span(stored_external_path));
+  EXPECT_TRUE(std::ranges::search(staged_bytes, path_bytes).empty());
 
   const auto scripts_table_path
     = staged_root / std::filesystem::path(layout.ScriptsTableRelPath());
@@ -262,7 +269,8 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
       = oxygen::content::lc::LooseCookedIndex::LoadFromRoot(staged_root);
     const auto descriptor_size = staged_index.FindDescriptorSize(script_key);
     ASSERT_HAS_VALUE(descriptor_size);
-    EXPECT_EQ(descriptor_size.value_or(0U), sizeof(ScriptAssetDesc));
+    // The descriptor and its string table, which holds only the empty string.
+    EXPECT_EQ(descriptor_size.value_or(0U), sizeof(ScriptAssetDesc) + 1U);
     const auto file_relpath = staged_index.FindFileRelPath(
       oxygen::data::loose_cooked::FileKind::kScriptsTable);
     ASSERT_HAS_VALUE(file_relpath);

@@ -73,6 +73,13 @@ inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
 
   // Compute the full payload extent from the component table directory.
   size_t payload_end = sizeof(data::pak::physics::PhysicsSceneAssetDesc);
+  if (desc.header.strings.size == 0
+    || desc.header.strings.offset
+      < sizeof(data::pak::physics::PhysicsSceneAssetDesc)) {
+    throw std::runtime_error("physics scene string table location is invalid");
+  }
+  AddRangeEnd(
+    payload_end, desc.header.strings.offset, desc.header.strings.size);
 
   if (desc.component_table_count > 0) {
     const size_t dir_bytes = static_cast<size_t>(desc.component_table_count)
@@ -115,11 +122,21 @@ inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
   std::vector<std::byte> bytes = std::move(*blob_res);
 
   LOG_F(1, "physics scene asset payload: {} bytes", bytes.size());
+  auto name = std::string {};
+  try {
+    name = ResolveDescriptorString(
+      data::DescriptorStrings::FromDescriptor(bytes, desc.header.strings),
+      desc.header.name_offset, "asset name");
+  } catch (const std::invalid_argument& error) {
+    throw std::runtime_error(
+      fmt::format("physics scene string table: {}", error.what()));
+  }
 
   // Construct the in-memory asset (validates all ranges internally).
   auto asset = std::make_unique<data::PhysicsSceneAsset>(
     context.current_asset_key, std::move(bytes),
     data::SourceOrigin { context.source_key, context.source_instance });
+  asset->SetAssetName(std::move(name));
   if (context.asset_references) {
     namespace physics = data::pak::physics;
     std::vector<data::KeyReference> keys;

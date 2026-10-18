@@ -173,10 +173,8 @@ NOLINT_TEST_F(ScriptingAdvancedTest, FirstRootWinsPrecedence)
   oxygen::data::pak::scripting::ScriptAssetDesc desc {};
   desc.flags
     = oxygen::data::pak::scripting::ScriptAssetFlags::kAllowExternalSource;
-  const std::string p = "shared.lua";
-  std::ranges::copy(p.substr(0, sizeof(desc.external_source_path)),
-    &desc.external_source_path[0]); // NOLINT
-  oxygen::data::ScriptAsset asset(MakeAssetKey(1U), desc);
+  oxygen::data::ScriptAsset asset(
+    MakeAssetKey(1U), desc, oxygen::data::ScriptParameters {}, "shared.lua");
 
   auto result = resolver.Resolve({
     .asset = asset,
@@ -206,10 +204,8 @@ NOLINT_TEST_F(ScriptingAdvancedTest, ScriptingModuleExecutesResolvedSource)
   oxygen::data::pak::scripting::ScriptAssetDesc desc {};
   desc.flags
     = oxygen::data::pak::scripting::ScriptAssetFlags::kAllowExternalSource;
-  const std::string p = "module_test.lua";
-  std::ranges::copy(p.substr(0, sizeof(desc.external_source_path)),
-    &desc.external_source_path[0]); // NOLINT
-  oxygen::data::ScriptAsset asset(MakeAssetKey(1U), desc);
+  oxygen::data::ScriptAsset asset(MakeAssetKey(1U), desc,
+    oxygen::data::ScriptParameters {}, "module_test.lua");
 
   auto result = resolver.Resolve({
     .asset = asset,

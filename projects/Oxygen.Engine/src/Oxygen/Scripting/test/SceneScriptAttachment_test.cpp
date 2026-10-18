@@ -42,7 +42,6 @@ namespace {
   using data::ScriptAssetParam;
   using data::ScriptNodeParam;
   using data::pak::scripting::ScriptLanguage;
-  using data::pak::scripting::ScriptParamRecord;
   using data::pak::scripting::ScriptSlotRecord;
   using CompileState = scene::ScriptingComponent::Slot::CompileState;
   using State = SceneScriptSlotOutcome::State;
@@ -56,17 +55,16 @@ namespace {
   }
 
   auto Param(const std::string_view key, const data::ScriptParam& value)
-    -> ScriptParamRecord
+    -> data::ScriptParameters::value_type
   {
-    return data::MakeScriptParamRecord(key, value)
-      .value_or(ScriptParamRecord {});
+    return { std::string { key }, value };
   }
 
   //! A script asset declaring `speed` (float), `helper` (a script asset) and
   //! `target` (a node).
   auto MakeScript(const AssetKey& key) -> std::shared_ptr<data::ScriptAsset>
   {
-    const auto declarations = std::vector {
+    const auto declarations = data::ScriptParameters {
       Param("speed", 1.0F),
       Param("helper",
         ScriptAssetParam { .key = {}, .asset_type = data::AssetType::kScript }),
@@ -201,7 +199,7 @@ namespace {
     FakeScriptCompilationService compiler_;
   };
 
-  auto Slot(const AssetKey& script, std::vector<ScriptParamRecord> params = {})
+  auto Slot(const AssetKey& script, data::ScriptParameters params = {})
     -> content::IAssetLoader::HydratedScriptSlot
   {
     return {

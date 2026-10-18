@@ -24,6 +24,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -53,9 +54,14 @@ namespace oxygen::content::pak::test {
     .count = 2U,
     .entry_size = sizeof(data::pak::world::NodeRecord),
   };
-  desc.scene_strings.offset = sizeof(desc) + sizeof(nodes);
-  desc.scene_strings.size = 1U;
-  desc.component_table_directory_offset = desc.scene_strings.offset + 1U;
+  auto strings = data::DescriptorStringsBuilder {};
+  const auto key_offset = strings.Add("v");
+  desc.header.strings = {
+    .offset = sizeof(desc) + sizeof(nodes),
+    .size = strings.Size(),
+  };
+  desc.component_table_directory_offset
+    = desc.header.strings.offset + desc.header.strings.size;
   desc.component_table_count = 1U;
   auto table = data::pak::world::SceneComponentTableDesc {};
   table.component_type = static_cast<uint32_t>(data::ComponentType::kScripting);
@@ -84,7 +90,7 @@ namespace oxygen::content::pak::test {
       + (i * sizeof(data::pak::scripting::ScriptParamRecord));
     slot.params_count = 1U;
     auto& parameter = parameters.at(i);
-    parameter.key[0] = 'v';
+    parameter.key_offset = key_offset;
     parameter.type = data::pak::scripting::ScriptParamType::kInt32;
     parameter.value.as_int32 = (seed * 100) + static_cast<int32_t>(i);
   }
@@ -97,7 +103,8 @@ namespace oxygen::content::pak::test {
   };
   append(desc);
   append(nodes);
-  bytes.push_back(std::byte { 0 });
+  const auto table_bytes = strings.Bytes();
+  bytes.insert(bytes.end(), table_bytes.begin(), table_bytes.end());
   append(table);
   append(components);
   append(slots);
@@ -123,7 +130,9 @@ namespace oxygen::content::pak::test {
     script_desc.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kScript);
     script_desc.header.version = data::pak::scripting::kScriptAssetVersion;
-    const auto bytes = std::as_bytes(std::span(&script_desc, 1U));
+    const auto record = std::as_bytes(std::span(&script_desc, 1U));
+    auto bytes = std::vector<std::byte>(record.begin(), record.end());
+    data::AppendDescriptorStrings(bytes, data::DescriptorStringsBuilder {});
     const auto name
       = "Logic" + std::to_string(seed) + "-" + std::to_string(i) + ".oscript";
     assets.push_back({
@@ -133,7 +142,7 @@ namespace oxygen::content::pak::test {
       .virtual_path = "/Game/" + name,
       .descriptor_size = bytes.size(),
       .descriptor_sha = {},
-      .descriptor_payload = { bytes.begin(), bytes.end() },
+      .descriptor_payload = std::move(bytes),
       .references = {},
     });
   }
@@ -179,6 +188,11 @@ struct SceneMaskSources final {
   auto descriptor = world::SceneAssetDesc {};
   descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
   descriptor.header.version = world::kSceneAssetVersion;
+  const auto strings = data::DescriptorStringsBuilder {};
+  descriptor.header.strings = {
+    .offset = sizeof(descriptor),
+    .size = strings.Size(),
+  };
   const auto environment = world::SceneEnvironmentBlockHeader {
     .byte_size = sizeof(world::SceneEnvironmentBlockHeader) + sizeof(post),
     .systems_count = 1U,
@@ -187,6 +201,7 @@ struct SceneMaskSources final {
   serio::Writer scene_writer(scene_stream);
   const auto scene_packed = scene_writer.ScopedAlignment(1);
   require(scene_writer.Write(descriptor));
+  require(scene_writer.WriteBlob(strings.Bytes()));
   require(scene_writer.Write(environment));
   require(serio::Store(scene_writer, post));
   auto scene_bytes = std::vector<std::byte>(
@@ -258,6 +273,8 @@ struct SceneMaskSources final {
       material_writer.WriteBlob(std::as_bytes(std::span { &material, 1U })));
     auto material_bytes = std::vector<std::byte>(
       material_stream.Data().begin(), material_stream.Data().end());
+    data::AppendDescriptorStrings(
+      material_bytes, data::DescriptorStringsBuilder {});
     EnableDescriptorHash(material_bytes);
     const auto material_asset = AssetSpec {
       .key = MakeAssetKey(static_cast<uint8_t>(seed + 10U)),

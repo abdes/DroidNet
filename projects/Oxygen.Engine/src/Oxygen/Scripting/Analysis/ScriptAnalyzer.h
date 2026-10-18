@@ -103,11 +103,6 @@ struct ScriptAnalysis {
 */
 class ScriptAnalyzer final {
 public:
-  //! Largest parameter name, in bytes (ScriptParamRecord key capacity - 1).
-  static constexpr std::size_t kMaxParamNameBytes = 63;
-  //! Largest string default, in bytes (ScriptParamRecord value capacity - 1).
-  static constexpr std::size_t kMaxStringValueBytes = 59;
-
   //! Analyzes one script.
   OXGN_SCAN_NDAPI auto Analyze(const ScriptAnalysisRequest& request) const
     -> ScriptAnalysis;

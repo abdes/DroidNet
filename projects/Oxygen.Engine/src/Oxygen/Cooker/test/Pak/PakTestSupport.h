@@ -33,6 +33,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -149,8 +150,7 @@ inline auto EnableDescriptorHash(std::vector<std::byte>& bytes) -> void
   descriptor.target_scene_key = scene.key;
   const auto digest = oxygen::base::ComputeSha256(scene.descriptor_payload);
   std::ranges::copy(digest, std::begin(descriptor.target_scene_content_hash));
-  const auto view = std::as_bytes(std::span { &descriptor, 1U });
-  auto bytes = std::vector<std::byte>(view.begin(), view.end());
+  auto bytes = data::MakeDescriptorBytes(descriptor);
   EnableDescriptorHash(bytes);
   return AssetSpec {
     .key = MakeAssetKey(seed),

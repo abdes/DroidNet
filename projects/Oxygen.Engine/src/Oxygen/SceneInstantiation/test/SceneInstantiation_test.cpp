@@ -136,9 +136,10 @@ namespace {
   auto MakeContext(const AssetKey& key, const std::string_view name)
     -> std::shared_ptr<data::InputMappingContextAsset>
   {
-    auto desc = data::pak::input::InputMappingContextAssetDesc {};
-    std::ranges::copy(name, std::begin(desc.header.name));
-    return std::make_shared<data::InputMappingContextAsset>(key, desc);
+    auto context = std::make_shared<data::InputMappingContextAsset>(
+      key, data::pak::input::InputMappingContextAssetDesc {});
+    context->SetAssetName(std::string { name });
+    return context;
   }
 
   //! Serves the scenes and input contexts a test registers.

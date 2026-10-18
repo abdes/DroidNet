@@ -55,7 +55,10 @@ public:
     GeometryAssetDesc geo {};
     std::memcpy(&geo, data->data(), sizeof(geo));
 
-    asset_dump_helpers::PrintAssetHeaderFields(geo.header, 4);
+    asset_dump_helpers::PrintAssetHeaderFields(geo.header,
+      asset_dump_helpers::DescriptorString(
+        *data, geo.header, geo.header.name_offset),
+      4);
 
     std::cout << "    --- Geometry Descriptor Fields ---\n";
     PrintUtils::Field("LOD Count", geo.lod_count, 8);
@@ -89,8 +92,8 @@ public:
         break;
       }
 
-      const auto mesh_name = std::string(
-        mesh_desc.name, strnlen(mesh_desc.name, sizeof(mesh_desc.name)));
+      const auto mesh_name = asset_dump_helpers::DescriptorString(
+        *data, geo.header, mesh_desc.name_offset);
 
       const auto mesh_type
         = static_cast<MeshType>(static_cast<uint8_t>(mesh_desc.mesh_type));
@@ -186,8 +189,8 @@ public:
           break;
         }
 
-        const auto submesh_name = std::string(submesh_desc.name,
-          strnlen(submesh_desc.name, sizeof(submesh_desc.name)));
+        const auto submesh_name = asset_dump_helpers::DescriptorString(
+          *data, geo.header, submesh_desc.name_offset);
 
         std::cout << "        [" << sm << "] " << submesh_name << "\n";
         PrintUtils::Field("Material Key",

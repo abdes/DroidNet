@@ -83,10 +83,7 @@ struct MixedExposureBenchmarkScene {
     auto desc = data::pak::render::MaterialAssetDesc {};
     desc.header.asset_type
       = static_cast<std::uint8_t>(data::AssetType::kMaterial);
-    const auto count = std::min(name.size(), sizeof(desc.header.name) - 1U);
-    std::memcpy(std::data(desc.header.name), name.data(), count);
-    desc.header.name[count] = '\0';
-    desc.header.version = 1U;
+    desc.header.version = data::pak::render::kMaterialAssetVersion;
     desc.header.streaming_priority = 255U;
     desc.material_domain = static_cast<std::uint8_t>(domain);
     desc.flags = data::pak::render::kMaterialFlag_NoTextureSampling;
@@ -121,10 +118,12 @@ struct MixedExposureBenchmarkScene {
           const float channel) -> float { return emissive_scale * channel; });
       std::fill_n(std::begin(desc.base_color), 3, 0.0F);
     }
-    return std::make_shared<const data::MaterialAsset>(
+    auto material = std::make_shared<data::MaterialAsset>(
       data::AssetKey::FromVirtualPath("/Engine/Examples/MultiView/Materials/"
         + std::string { name, } + ".omat"),
       desc, std::vector<data::ShaderReference> {});
+    material->SetAssetName(std::string { name });
+    return material;
   };
   const auto surface
     = [&](const std::string_view name, const auto& mesh_data,

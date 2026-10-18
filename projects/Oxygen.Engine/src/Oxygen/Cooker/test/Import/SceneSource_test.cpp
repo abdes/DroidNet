@@ -28,7 +28,7 @@ namespace {
   auto MakeScene() -> json
   {
     return {
-      { "version", data::pak::world::kSceneAssetVersion },
+      { "version", internal::kSceneDescriptorVersion },
       { "name", "Scene.v2" },
       { "nodes", json::array() },
     };

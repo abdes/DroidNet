@@ -50,12 +50,10 @@ enum class DiagnosticCode : uint16_t {
   kUnknownField = 306,
   kParamNotDeclared = 307,
   kUnknownParamType = 308,
-  kInvalidParamName = 309,
   kDuplicateParam = 310,
   kDefaultTypeMismatch = 311,
   kFieldNotApplicable = 312,
   kInvalidAssetKind = 313,
-  kValueTooLong = 314,
   kInvalidRange = 315,
   kFieldTypeMismatch = 316,
 

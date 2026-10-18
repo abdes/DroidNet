@@ -32,6 +32,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
@@ -42,6 +43,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -224,7 +226,7 @@ namespace {
       });
     }
     const auto descriptor = json {
-      { "version", data::pak::world::kSceneAssetVersion },
+      { "version", internal::kSceneDescriptorVersion },
       { "name", scene_name },
       { "nodes", std::move(nodes) },
     };
@@ -570,7 +572,8 @@ namespace {
     descriptor.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kGeometry);
     descriptor.header.version = geometry::kGeometryAssetVersion;
-    std::memcpy(descriptor.header.name, "cloth", 5U);
+    auto strings = data::DescriptorStringsBuilder {};
+    descriptor.header.name_offset = strings.Add("cloth");
     descriptor.lod_count = 1U;
     descriptor.bounding_box_min[0] = -0.12F;
     descriptor.bounding_box_min[1] = -0.10F;
@@ -580,7 +583,7 @@ namespace {
     descriptor.bounding_box_max[2] = 0.14F;
 
     auto mesh = geometry::MeshDesc {};
-    std::memcpy(mesh.name, "cloth_lod0", 10U);
+    mesh.name_offset = strings.Add("cloth_lod0");
     mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
     mesh.submesh_count = 1U;
     mesh.mesh_view_count = 1U;
@@ -596,7 +599,7 @@ namespace {
     auto submesh = geometry::SubMeshDesc {};
     submesh.slot_id
       = data::MaterialSlotId::FromStableIdentity("PhysicsPhase3/cloth");
-    std::memcpy(submesh.name, "cloth_submesh", 13U);
+    submesh.name_offset = strings.Add("cloth_submesh");
     submesh.mesh_view_count = 1U;
     submesh.bounding_box_min[0] = descriptor.bounding_box_min[0];
     submesh.bounding_box_min[1] = descriptor.bounding_box_min[1];
@@ -624,6 +627,7 @@ namespace {
     append_pod(mesh);
     append_pod(submesh);
     append_pod(view);
+    data::AppendDescriptorStrings(descriptor_bytes, strings);
 
     auto table_entries = std::array<core::BufferResourceDesc, 3> {};
     table_entries.at(1).data_offset = 0U;

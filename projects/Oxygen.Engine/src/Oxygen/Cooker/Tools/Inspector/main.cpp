@@ -48,6 +48,7 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -588,14 +589,30 @@ auto RunDumpPhysics(const DumpResourceOptions& opts) -> int
   }
 }
 
-auto ReadFixedString(const std::span<const char> bytes) -> std::string
+auto ReadTableString(const oxygen::data::DescriptorStrings& strings,
+  const oxygen::data::pak::core::StringTableOffsetT offset) -> std::string
 {
-  const auto end = std::ranges::find(bytes, '\0');
-  return { bytes.begin(), end };
+  const auto value = strings.TryGet(offset);
+  return value ? std::string { *value } : std::string { "<invalid>" };
+}
+
+//! Resolves a string of the descriptor `bytes` start with.
+auto ReadDescriptorString(const std::span<const std::byte> bytes,
+  const oxygen::data::pak::core::AssetHeader& header,
+  const oxygen::data::pak::core::StringTableOffsetT offset) -> std::string
+{
+  try {
+    return ReadTableString(
+      oxygen::data::DescriptorStrings::FromDescriptor(bytes, header.strings),
+      offset);
+  } catch (const std::invalid_argument&) {
+    return "<invalid string table>";
+  }
 }
 
 auto FormatScriptParamValue(
-  const oxygen::data::pak::scripting::ScriptParamRecord& record) -> std::string
+  const oxygen::data::pak::scripting::ScriptParamRecord& record,
+  const oxygen::data::DescriptorStrings& strings) -> std::string
 {
   using oxygen::data::pak::scripting::ScriptParamType;
   switch (record.type) {
@@ -606,7 +623,8 @@ auto FormatScriptParamValue(
   case ScriptParamType::kFloat:
     return std::to_string(record.value.as_float);
   case ScriptParamType::kString:
-    return "\"" + ReadFixedString(record.value.as_string) + "\"";
+    return "\"" + ReadTableString(strings, record.value.as_string_offset)
+      + "\"";
   case ScriptParamType::kVec2:
     return fmt::format(
       "({}, {})", record.value.as_vec[0], record.value.as_vec[1]);
@@ -668,18 +686,6 @@ auto ReadStructAt(const std::vector<std::byte>& bytes, const size_t offset)
   return value;
 }
 
-auto ParseStringFromTable(
-  const std::span<const char> table, const uint32_t offset) -> std::string
-{
-  if (offset >= table.size()) {
-    return "<invalid>";
-  }
-
-  const auto rest = table.subspan(offset);
-  const auto end = std::ranges::find(rest, '\0');
-  return { rest.begin(), end };
-}
-
 auto RunDumpInputActions(const DumpInputOptions& opts) -> int
 {
   using oxygen::data::AssetType;
@@ -713,7 +719,9 @@ auto RunDumpInputActions(const DumpInputOptions& opts) -> int
         continue;
       }
 
-      std::cout << "  name='" << ReadFixedString(desc->header.name)
+      std::cout << "  name='"
+                << ReadDescriptorString(
+                     descriptor, desc->header, desc->header.name_offset)
                 << "' value_type=" << static_cast<uint32_t>(desc->value_type)
                 << " flags=" << nostd::to_string(desc->flags) << "\n";
     }
@@ -767,23 +775,14 @@ auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
         continue;
       }
 
-      std::cout << "  name='" << ReadFixedString(desc->header.name)
+      std::cout << "  name='"
+                << ReadDescriptorString(
+                     descriptor, desc->header, desc->header.name_offset)
                 << "' flags=" << nostd::to_string(desc->flags)
                 << " mappings=" << desc->mappings.count
                 << " triggers=" << desc->triggers.count
                 << " aux=" << desc->trigger_aux.count
-                << " strings=" << desc->strings.count << "\n";
-
-      auto string_storage = std::string {};
-      const auto string_off = static_cast<size_t>(desc->strings.offset);
-      const auto string_size = static_cast<size_t>(desc->strings.count);
-      if (string_size > 0 && string_off <= descriptor.size()
-        && string_size <= (descriptor.size() - string_off)) {
-        string_storage.resize(string_size);
-        std::memcpy(string_storage.data(),
-          std::span(descriptor).subspan(string_off).data(), string_size);
-      }
-      const auto string_table = std::span<const char>(string_storage);
+                << " strings=" << desc->header.strings.size << "\n";
 
       const auto mapping_count = static_cast<size_t>(desc->mappings.count);
       const auto mapping_start = static_cast<size_t>(desc->mappings.offset);
@@ -798,7 +797,8 @@ auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
 
         std::cout << "    mapping[" << i << "] action="
                   << oxygen::data::to_string(rec->action_asset_key) << " slot='"
-                  << ParseStringFromTable(string_table, rec->slot_name_offset)
+                  << ReadDescriptorString(
+                       descriptor, desc->header, rec->slot_name_offset)
                   << "' triggers=[" << rec->trigger_start_index << ","
                   << (rec->trigger_start_index + rec->trigger_count)
                   << ") flags=" << nostd::to_string(rec->flags) << "\n";
@@ -889,7 +889,9 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
           std::cout << "  ! failed to decode descriptor\n";
           continue;
         }
-        std::cout << "  name='" << ReadFixedString(desc->header.name)
+        std::cout << "  name='"
+                  << ReadDescriptorString(
+                       descriptor, desc->header, desc->header.name_offset)
                   << "' static_friction=" << desc->static_friction
                   << " dynamic_friction=" << desc->dynamic_friction
                   << " restitution=" << desc->restitution
@@ -910,7 +912,9 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
           std::cout << "  ! failed to decode descriptor\n";
           continue;
         }
-        std::cout << "  name='" << ReadFixedString(desc->header.name)
+        std::cout << "  name='"
+                  << ReadDescriptorString(
+                       descriptor, desc->header, desc->header.name_offset)
                   << "' shape_type=" << static_cast<uint32_t>(desc->shape_type)
                   << " local_pos=(" << desc->local_position[0] << ","
                   << desc->local_position[1] << "," << desc->local_position[2]
@@ -938,7 +942,9 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
         std::cout << "  ! failed to decode descriptor\n";
         continue;
       }
-      std::cout << "  name='" << ReadFixedString(desc->header.name)
+      std::cout << "  name='"
+                << ReadDescriptorString(
+                     descriptor, desc->header, desc->header.name_offset)
                 << "' target_scene_key="
                 << oxygen::data::to_string(desc->target_scene_key)
                 << " target_node_count=" << desc->target_node_count
@@ -1019,8 +1025,12 @@ auto RunDumpSceneScripts(
                     << " flags=" << static_cast<uint32_t>(slot.flags) << "\n";
           if (mode == ScriptDumpMode::kParameters) {
             for (const auto& parameter : scene.ReadScriptParameters(slot)) {
-              std::cout << "    " << ReadFixedString(parameter.key) << " = "
-                        << FormatScriptParamValue(parameter) << "\n";
+              std::cout << "    "
+                        << ReadTableString(
+                             scene.GetStrings(), parameter.key_offset)
+                        << " = "
+                        << FormatScriptParamValue(parameter, scene.GetStrings())
+                        << "\n";
             }
           }
         }

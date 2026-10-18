@@ -41,8 +41,7 @@ inline auto ToBytes(const std::string_view text) -> std::vector<uint8_t>
 }
 
 //! A script asset with the given parameter declarations.
-inline auto MakeScriptAsset(
-  std::span<const data::pak::scripting::ScriptParamRecord> declarations = {})
+inline auto MakeScriptAsset(const data::ScriptParameters& declarations = {})
   -> std::shared_ptr<const data::ScriptAsset>
 {
   return std::make_shared<data::ScriptAsset>(

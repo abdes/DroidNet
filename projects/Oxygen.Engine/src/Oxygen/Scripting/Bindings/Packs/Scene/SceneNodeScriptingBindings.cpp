@@ -4,11 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -328,16 +326,8 @@ namespace {
     desc.source_resource_index = data::kNoResourceReference;
     desc.flags = data::pak::scripting::ScriptAssetFlags::kAllowExternalSource;
 
-    auto path_span = std::span(desc.external_source_path);
-    auto writable = path_span.first(path_span.size() - 1);
-    const auto copy_len = std::min(writable.size(), len);
-    if (copy_len > 0U) {
-      std::memcpy(writable.data(), source, copy_len);
-    }
-    writable[copy_len] = '\0';
-
     auto asset = std::make_shared<data::ScriptAsset>(data::AssetKey {}, desc,
-      std::vector<data::pak::scripting::ScriptParamRecord> {});
+      data::ScriptParameters {}, std::string { source, len });
     lua_pushboolean(
       state, node->GetScripting().AddSlot(std::move(asset)) ? 1 : 0);
     CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");

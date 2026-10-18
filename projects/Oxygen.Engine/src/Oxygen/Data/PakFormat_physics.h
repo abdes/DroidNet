@@ -146,7 +146,7 @@ struct PhysicsMaterialAssetDesc {
   PhysicsCombineMode combine_mode_restitution = PhysicsCombineMode::kAverage;
 };
 #pragma pack(pop)
-static_assert(sizeof(PhysicsMaterialAssetDesc) == 121);
+static_assert(sizeof(PhysicsMaterialAssetDesc) == 69);
 static_assert(offsetof(PhysicsMaterialAssetDesc, static_friction)
   == sizeof(core::AssetHeader));
 static_assert(offsetof(PhysicsMaterialAssetDesc, dynamic_friction)
@@ -271,7 +271,7 @@ struct CollisionShapeAssetDesc {
   CookedShapePayloadRef cooked_shape_ref {};
 };
 #pragma pack(pop)
-static_assert(sizeof(CollisionShapeAssetDesc) == 277);
+static_assert(sizeof(CollisionShapeAssetDesc) == 225);
 static_assert(
   offsetof(CollisionShapeAssetDesc, shape_type) == sizeof(core::AssetHeader));
 static_assert(offsetof(CollisionShapeAssetDesc, is_sensor)
@@ -320,7 +320,7 @@ struct PhysicsSceneAssetDesc {
   uint8_t target_scene_content_hash[32] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(PhysicsSceneAssetDesc) == 167);
+static_assert(sizeof(PhysicsSceneAssetDesc) == 115);
 static_assert(offsetof(PhysicsSceneAssetDesc, target_scene_key)
   == sizeof(core::AssetHeader));
 static_assert(offsetof(PhysicsSceneAssetDesc, target_scene_content_hash)

@@ -4,39 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <cstddef>
-#include <span>
-#include <string_view>
+#include <string>
 
 #include <Oxygen/Data/ShaderReference.h>
 
 using oxygen::data::ShaderReference;
 
-namespace {
-
-auto NullTerminatedView(const std::span<const char> buffer) -> std::string_view
+ShaderReference::ShaderReference(const pak::render::ShaderReferenceDesc& desc,
+  const DescriptorStrings& strings)
+  : shader_type_(static_cast<ShaderType>(desc.shader_type))
+  , source_path_(strings.Get(desc.source_path_offset))
+  , entry_point_(strings.Get(desc.entry_point_offset))
+  , defines_(strings.Get(desc.defines_offset))
+  , shader_hash_(desc.shader_hash)
 {
-  const auto it = std::ranges::find(buffer, '\0');
-  if (it == buffer.end()) {
-    return { buffer.data(), buffer.size() };
-  }
-  return { buffer.data(), static_cast<size_t>(it - buffer.begin()) };
-}
-
-} // namespace
-
-auto ShaderReference::GetSourcePath() const noexcept -> std::string_view
-{
-  return NullTerminatedView(std::span<const char> { desc_.source_path });
-}
-
-auto ShaderReference::GetEntryPoint() const noexcept -> std::string_view
-{
-  return NullTerminatedView(std::span<const char> { desc_.entry_point });
-}
-
-auto ShaderReference::GetDefines() const noexcept -> std::string_view
-{
-  return NullTerminatedView(std::span<const char> { desc_.defines });
 }

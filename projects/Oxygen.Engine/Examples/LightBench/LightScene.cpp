@@ -575,10 +575,6 @@ auto LightScene::MakeSolidColorMaterial(std::string_view name, const Vec4& rgba,
   pak::render::MaterialAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
-  constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
-  const std::size_t n = (std::min)(maxn, name.size());
-  std::memcpy(std::begin(desc.header.name), name.data(), n);
-  desc.header.name[n] = '\0';
   desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(MaterialDomain::kOpaque);
@@ -595,8 +591,10 @@ auto LightScene::MakeSolidColorMaterial(std::string_view name, const Vec4& rgba,
   desc.ambient_occlusion = Unorm16 { 1.0F };
   const AssetKey asset_key = AssetKey::FromVirtualPath(
     "/Engine/Examples/LightBench/Materials/" + std::string(name) + ".omat");
-  return std::make_shared<const MaterialAsset>(
+  auto material = std::make_shared<MaterialAsset>(
     asset_key, desc, std::vector<ShaderReference> {});
+  material->SetAssetName(std::string { name });
+  return material;
 }
 
 } // namespace oxygen::examples::light_bench

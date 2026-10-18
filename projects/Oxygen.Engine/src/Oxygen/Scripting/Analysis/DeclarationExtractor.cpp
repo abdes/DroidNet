@@ -624,19 +624,6 @@ namespace {
   auto Extractor::ExtractParam(const std::string_view name,
     const Luau::Location& name_span, const Luau::AstExpr& value) -> void
   {
-    if (name.size() > ScriptAnalyzer::kMaxParamNameBytes) {
-      Add({
-        .code = DiagnosticCode::kInvalidParamName,
-        .message = fmt::format("parameter name is longer than {} bytes",
-          ScriptAnalyzer::kMaxParamNameBytes),
-        .location = name_span,
-        .label = fmt::format("{} bytes", name.size()),
-        .help = {},
-        .note = {},
-      });
-      return;
-    }
-
     const auto previous
       = std::ranges::find(declarations_, name, &ScriptParamDeclaration::name);
     const auto* const call = value.as<Luau::AstExprCall>();
@@ -844,19 +831,6 @@ namespace {
         return;
       }
       for (const auto& item : literal.items) {
-        if (item.text.size() > ScriptAnalyzer::kMaxStringValueBytes) {
-          Add({
-            .code = DiagnosticCode::kValueTooLong,
-            .message = fmt::format("option is longer than {} bytes",
-              ScriptAnalyzer::kMaxStringValueBytes),
-            .location = value.location,
-            .label
-            = fmt::format("`{}` has {} bytes", item.text, item.text.size()),
-            .help = {},
-            .note = {},
-          });
-          return;
-        }
         declaration.options.push_back(item.text);
       }
       return;
@@ -935,18 +909,6 @@ namespace {
     case ScriptParamType::kString:
       if (literal.kind != Literal::Kind::kString) {
         mismatch("a string");
-        return;
-      }
-      if (literal.text.size() > ScriptAnalyzer::kMaxStringValueBytes) {
-        Add({
-          .code = DiagnosticCode::kValueTooLong,
-          .message = fmt::format("string default is longer than {} bytes",
-            ScriptAnalyzer::kMaxStringValueBytes),
-          .location = location,
-          .label = fmt::format("{} bytes", literal.text.size()),
-          .help = {},
-          .note = {},
-        });
         return;
       }
       declaration.default_value = literal.text;

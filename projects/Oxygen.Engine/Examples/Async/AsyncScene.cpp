@@ -95,10 +95,6 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   pak::render::MaterialAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(
     oxygen::data::AssetType::kMaterial); // MaterialAsset (for tooling/debug)
-  const auto name_view = std::string_view(name);
-  auto destination = std::span(desc.header.name);
-  const auto name_size = std::min(destination.size() - 1U, name_view.size());
-  std::ranges::copy(name_view.substr(0, name_size), destination.begin());
   desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
@@ -116,8 +112,10 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   // Leave texture indices at default invalid (no textures)
   const d::AssetKey asset_key = d::AssetKey::FromVirtualPath(
     "/Engine/Examples/Async/Materials/" + std::string(name) + ".omat");
-  return std::make_shared<const d::MaterialAsset>(
+  auto material = std::make_shared<d::MaterialAsset>(
     asset_key, desc, std::vector<d::ShaderReference> {});
+  material->SetAssetName(std::string { name });
+  return material;
   // NOLINTEND(*-magic-numbers)
 };
 

@@ -42,22 +42,11 @@
 namespace oxygen::scripting {
 
 namespace {
-  using data::pak::scripting::ScriptParamRecord;
   using Slot = scene::SceneNode::Scripting::Slot;
   using State = SceneScriptSlotOutcome::State;
 
   constexpr auto kCompileMode
     = core::meta::scripting::ScriptCompileMode::kDebug;
-
-  auto ParamKey(const ScriptParamRecord& record)
-    -> std::optional<std::string_view>
-  {
-    const auto* const nul = std::ranges::find(record.key, '\0');
-    if (nul == std::end(record.key)) {
-      return std::nullopt;
-    }
-    return std::string_view(std::begin(record.key), nul);
-  }
 
   //! Attaches the slots of one node and records their outcomes.
   class NodeAttachment {
@@ -157,29 +146,23 @@ namespace {
     //! Applies the overrides that match a declaration and binds node
     //! parameters to the nodes created for their indexes.
     auto ApplyOverrides(SceneScriptSlotOutcome& outcome, const Slot& slot,
-      const data::ScriptAsset& script,
-      std::span<const ScriptParamRecord> params) -> void
+      const data::ScriptAsset& script, const data::ScriptParameters& params)
+      -> void
     {
       auto scripting = node_.GetScripting();
-      for (const auto& param : params) {
-        const auto key = ParamKey(param);
-        const auto value = data::ToScriptParam(param);
-        if (!key.has_value() || !value.has_value()) {
-          Reject(outcome, "a parameter override is malformed");
-          continue;
-        }
+      for (const auto& [key, value] : params) {
         if (auto rejection
-          = CheckParameterOverride(script, *key, *value, nodes_.size())) {
+          = CheckParameterOverride(script, key, value, nodes_.size())) {
           Reject(outcome, std::move(*rejection));
           continue;
         }
-        const auto* node = std::get_if<data::ScriptNodeParam>(&*value);
+        const auto* node = std::get_if<data::ScriptNodeParam>(&value);
         if (node != nullptr
           && node->node_index != data::pak::scripting::kUnsetNodeParam) {
           (void)scripting.BindNodeParameter(
-            slot, *key, base::CheckedAt(nodes_, node->node_index));
+            slot, key, base::CheckedAt(nodes_, node->node_index));
         }
-        (void)scripting.SetParameter(slot, *key, *value);
+        (void)scripting.SetParameter(slot, key, value);
       }
     }
 

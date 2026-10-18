@@ -56,14 +56,10 @@ return script
   {
     auto desc = ScriptAssetDesc {};
     desc.flags = ScriptAssetFlags::kAllowExternalSource;
-    std::ranges::copy(kScriptFile, std::begin(desc.external_source_path));
-    const auto declarations = std::vector {
-      data::MakeScriptParamRecord("speed", 1.0F)
-        .value_or(data::pak::scripting::ScriptParamRecord {}),
-    };
     return std::make_shared<data::ScriptAsset>(
       data::AssetKey::FromVirtualPath("/test/spin.oscript"), desc,
-      declarations);
+      data::ScriptParameters { { "speed", 1.0F } },
+      std::string { kScriptFile });
   }
 
   auto MakeExecutable() -> std::shared_ptr<const ScriptExecutable>

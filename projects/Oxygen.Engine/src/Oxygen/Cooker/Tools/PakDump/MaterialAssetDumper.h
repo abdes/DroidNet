@@ -61,7 +61,10 @@ public:
     MaterialAssetDesc mat {};
     std::memcpy(&mat, data->data(), sizeof(mat));
 
-    asset_dump_helpers::PrintAssetHeaderFields(mat.header, 4);
+    asset_dump_helpers::PrintAssetHeaderFields(mat.header,
+      asset_dump_helpers::DescriptorString(
+        *data, mat.header, mat.header.name_offset),
+      4);
 
     std::cout << "    --- Material Descriptor Fields ---\n";
 
@@ -193,16 +196,16 @@ public:
       PrintUtils::Field(
         "Shader Type", static_cast<int>(shader_ref.shader_type), 10);
       PrintUtils::Field("Source Path",
-        std::string(shader_ref.source_path,
-          strnlen(shader_ref.source_path, sizeof(shader_ref.source_path))),
+        asset_dump_helpers::DescriptorString(
+          *data, mat.header, shader_ref.source_path_offset),
         10);
       PrintUtils::Field("Entry Point",
-        std::string(shader_ref.entry_point,
-          strnlen(shader_ref.entry_point, sizeof(shader_ref.entry_point))),
+        asset_dump_helpers::DescriptorString(
+          *data, mat.header, shader_ref.entry_point_offset),
         10);
       PrintUtils::Field("Defines",
-        std::string(shader_ref.defines,
-          strnlen(shader_ref.defines, sizeof(shader_ref.defines))),
+        asset_dump_helpers::DescriptorString(
+          *data, mat.header, shader_ref.defines_offset),
         10);
       PrintUtils::Field("Shader Hash",
         asset_dump_helpers::ToHexString(shader_ref.shader_hash), 10);

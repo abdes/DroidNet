@@ -13,6 +13,7 @@
 #include <optional>
 #include <span>
 #include <stop_token>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -22,13 +23,12 @@
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsMaterialImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/Serio/MemoryStream.h>
-#include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::import {
 
@@ -53,19 +53,12 @@ namespace {
   }
 
   [[nodiscard]] auto SerializeDescriptor(
-    const data::pak::physics::PhysicsMaterialAssetDesc& descriptor)
-    -> std::vector<std::byte>
+    data::pak::physics::PhysicsMaterialAssetDesc descriptor,
+    const std::string_view name) -> std::vector<std::byte>
   {
-    auto stream = serio::MemoryStream {};
-    auto writer = serio::Writer(stream);
-    [[maybe_unused]] const auto pack = writer.ScopedAlignment(1);
-    [[maybe_unused]] const auto write = writer.WriteBlob(std::as_bytes(
-      std::span<const data::pak::physics::PhysicsMaterialAssetDesc, 1>(
-        &descriptor, 1)));
-    DCHECK_F(
-      write.has_value(), "Physics material descriptor serialization failed");
-    const auto bytes = stream.Data();
-    return { bytes.begin(), bytes.end() };
+    auto strings = data::DescriptorStringsBuilder {};
+    descriptor.header.name_offset = strings.Add(name);
+    return data::MakeDescriptorBytes(descriptor, strings);
   }
 
 } // namespace
@@ -203,7 +196,7 @@ auto PhysicsMaterialImportPipeline::Worker() -> co::Co<>
     }
 
     const auto cook_start = std::chrono::steady_clock::now();
-    auto descriptor_bytes = SerializeDescriptor(item.descriptor);
+    auto descriptor_bytes = SerializeDescriptor(item.descriptor, item.name);
     if (config_.with_content_hashing) {
       const auto content_hash
         = co_await ComputeContentHash(descriptor_bytes, item.stop_token);

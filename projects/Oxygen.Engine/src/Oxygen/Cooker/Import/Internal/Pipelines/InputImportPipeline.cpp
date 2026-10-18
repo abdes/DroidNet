@@ -16,9 +16,11 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <iterator>
 #include <limits>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -44,10 +46,10 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/OxCo/Co.h>
@@ -123,7 +125,8 @@ namespace {
     std::vector<InputActionMappingRecord> mappings;
     std::vector<InputTriggerRecord> triggers;
     std::vector<InputTriggerAuxRecord> trigger_aux;
-    std::vector<char> strings;
+    //! The descriptor string table, holding the slot names.
+    data::DescriptorStringsBuilder strings;
   };
 
   [[nodiscard]] auto IsStopRequested(const std::stop_token& token) noexcept
@@ -510,26 +513,35 @@ namespace {
     return known;
   }
 
+  //! A mounted input action's descriptor and name.
+  struct MountedActionDescriptor final {
+    InputActionAssetDesc desc {};
+    std::string name;
+  };
+
   auto TryReadInputActionDescriptor(const std::filesystem::path& path)
-    -> std::optional<InputActionAssetDesc>
+    -> std::optional<MountedActionDescriptor>
   {
     auto in = std::ifstream(path, std::ios::binary);
     if (!in) {
       return std::nullopt;
     }
-    auto desc = InputActionAssetDesc {};
-    in.read(reinterpret_cast<char*>(&desc),
-      static_cast<std::streamsize>(sizeof(desc)));
-    if (in.gcount() != static_cast<std::streamsize>(sizeof(desc))) {
+    const auto chars = std::vector<char>(
+      std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char> {});
+    const auto bytes = std::as_bytes(std::span(chars));
+    auto result = MountedActionDescriptor {};
+    if (bytes.size() < sizeof(result.desc)) {
       return std::nullopt;
     }
-    return desc;
-  }
-
-  [[nodiscard]] auto ExtractName(std::span<const char> chars) -> std::string
-  {
-    const auto it = std::find(chars.begin(), chars.end(), '\0');
-    return std::string(chars.begin(), it);
+    std::memcpy(&result.desc, bytes.data(), sizeof(result.desc));
+    try {
+      result.name = std::string { data::DescriptorStrings::FromDescriptor(
+        bytes, result.desc.header.strings)
+          .Get(result.desc.header.name_offset) };
+    } catch (const std::invalid_argument&) {
+      return std::nullopt;
+    }
+    return result;
   }
 
   auto BuildMountedActions(ImportSession& session, const ImportRequest& request)
@@ -572,17 +584,12 @@ namespace {
         }
         const auto descriptor_path
           = normalized / std::filesystem::path(entry.descriptor_relpath);
-        const auto desc = TryReadInputActionDescriptor(descriptor_path);
-        if (!desc.has_value()) {
-          continue;
-        }
-        const auto action_name = ExtractName(
-          std::span<const char>(desc->header.name, sizeof(desc->header.name)));
-        if (action_name.empty()) {
+        const auto action = TryReadInputActionDescriptor(descriptor_path);
+        if (!action.has_value() || action->name.empty()) {
           continue;
         }
         mounted.insert_or_assign(
-          action_name, std::pair { entry.key, desc->value_type });
+          action->name, std::pair { entry.key, action->desc.value_type });
       }
     }
     return mounted;
@@ -600,13 +607,13 @@ namespace {
   }
 
   auto SerializeAction(const DeclaredAction& action, const bool hashing)
-    -> std::optional<std::vector<std::byte>>
+    -> std::vector<std::byte>
   {
     auto desc = InputActionAssetDesc {};
     desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
     desc.header.version = data::pak::input::kInputActionAssetVersion;
-    util::TruncateAndNullTerminate(
-      desc.header.name, sizeof(desc.header.name), action.name);
+    auto strings = data::DescriptorStringsBuilder {};
+    desc.header.name_offset = strings.Add(action.name);
     desc.value_type = action.value_type;
     desc.flags = action.consumes_input ? InputActionAssetFlags::kConsumesInput
                                        : InputActionAssetFlags::kNone;
@@ -614,17 +621,7 @@ namespace {
       desc.flags |= InputActionAssetFlags::kCumulativeAccumulation;
     }
 
-    serio::MemoryStream stream;
-    serio::Writer writer(stream);
-    auto packed = writer.ScopedAlignment(1);
-    if (auto result = writer.WriteBlob(
-          std::as_bytes(std::span<const InputActionAssetDesc, 1>(&desc, 1)));
-      !result.has_value()) {
-      return std::nullopt;
-    }
-
-    const auto data = stream.Data();
-    auto bytes = std::vector<std::byte>(data.begin(), data.end());
+    auto bytes = data::MakeDescriptorBytes(desc, strings);
     if (hashing) {
       PatchContentHash(bytes, util::ComputeContentSha256(bytes));
     }
@@ -636,8 +633,7 @@ namespace {
   {
     if (context.mappings.size() > (std::numeric_limits<uint32_t>::max)()
       || context.triggers.size() > (std::numeric_limits<uint32_t>::max)()
-      || context.trigger_aux.size() > (std::numeric_limits<uint32_t>::max)()
-      || context.strings.size() > (std::numeric_limits<uint32_t>::max)()) {
+      || context.trigger_aux.size() > (std::numeric_limits<uint32_t>::max)()) {
       error = "context record table exceeds uint32 limits";
       return std::nullopt;
     }
@@ -646,8 +642,8 @@ namespace {
     desc.header.asset_type
       = static_cast<uint8_t>(AssetType::kInputMappingContext);
     desc.header.version = data::pak::input::kInputMappingContextAssetVersion;
-    util::TruncateAndNullTerminate(
-      desc.header.name, sizeof(desc.header.name), context.name);
+    auto strings = context.strings;
+    desc.header.name_offset = strings.Add(context.name);
     desc.flags = context.flags;
     desc.default_priority = context.default_priority;
 
@@ -662,10 +658,6 @@ namespace {
       + context.triggers.size() * sizeof(InputTriggerRecord);
     desc.trigger_aux.count = static_cast<uint32_t>(context.trigger_aux.size());
     desc.trigger_aux.entry_size = sizeof(InputTriggerAuxRecord);
-    desc.strings.offset = desc.trigger_aux.offset
-      + context.trigger_aux.size() * sizeof(InputTriggerAuxRecord);
-    desc.strings.count = static_cast<uint32_t>(context.strings.size());
-    desc.strings.entry_size = sizeof(char);
 
     serio::MemoryStream stream;
     serio::Writer writer(stream);
@@ -679,8 +671,6 @@ namespace {
       || !writer.WriteBlob(std::as_bytes(std::span(context.triggers)))
         .has_value()
       || !writer.WriteBlob(std::as_bytes(std::span(context.trigger_aux)))
-        .has_value()
-      || !writer.WriteBlob(std::as_bytes(std::span(context.strings)))
         .has_value()) {
       error = "failed writing context descriptor payload";
       return std::nullopt;
@@ -688,6 +678,7 @@ namespace {
 
     const auto data = stream.Data();
     auto bytes = std::vector<std::byte>(data.begin(), data.end());
+    data::AppendDescriptorStrings(bytes, strings);
     if (hashing) {
       PatchContentHash(bytes, util::ComputeContentSha256(bytes));
     }
@@ -1034,27 +1025,17 @@ namespace {
           context.name);
       context.key = MakeAssetKey(request, context.virtual_path);
 
-      auto slot_offsets = std::unordered_map<std::string, uint32_t> {};
       const auto intern_slot
         = [&](const std::string& slot_name) -> std::optional<uint32_t> {
-        if (const auto it = slot_offsets.find(slot_name);
-          it != slot_offsets.end()) {
-          return it->second;
-        }
-        if (context.strings.size()
-          > (std::numeric_limits<uint32_t>::max)() - (slot_name.size() + 1U)) {
+        try {
+          return context.strings.Add(slot_name);
+        } catch (const std::length_error&) {
           AddDiagnostic(session, request, ImportSeverity::kError,
             "input.context.string_table_overflow",
             "Input mapping context string table exceeded uint32 limits",
             "contexts." + context.name);
           return std::nullopt;
         }
-        const auto offset = static_cast<uint32_t>(context.strings.size());
-        context.strings.insert(
-          context.strings.end(), slot_name.begin(), slot_name.end());
-        context.strings.push_back('\0');
-        slot_offsets.emplace(slot_name, offset);
-        return offset;
       };
 
       bool build_ok = true;
@@ -1165,15 +1146,9 @@ namespace {
   {
     for (const auto& action : actions) {
       const auto bytes = SerializeAction(action, hashing);
-      if (!bytes.has_value()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "input.asset.serialize_failed",
-          "Failed to serialize input action '" + action.name + "'");
-        return false;
-      }
       try {
         session.AssetEmitter().Emit(action.key, AssetType::kInputAction,
-          action.virtual_path, action.descriptor_relpath, *bytes, {});
+          action.virtual_path, action.descriptor_relpath, bytes, {});
       } catch (const std::exception& ex) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "input.asset.descriptor_emit_failed", ex.what(),

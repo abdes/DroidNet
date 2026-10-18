@@ -88,24 +88,28 @@ static_assert(sizeof(ScriptAssetParamValue) == 17);
  value) and for a script slot's overrides. A `kNode` value is a node index of
  the scene that owns the slot. Declarations carry no node or asset default:
  their value is `kUnsetNodeParam`, or a nil key with the declared asset kind.
+
+ `key_offset` and a `kString` value's `as_string_offset` are offsets into the
+ string table of the descriptor that holds the record: the script descriptor
+ for declarations, the scene descriptor for slot overrides.
 */
 #pragma pack(push, 1)
 // NOLINTNEXTLINE(*-type-member-init) - MUST be initialized by users
 struct ScriptParamRecord {
-  char key[64]; // Parameter name (null-terminated)
+  core::StringTableOffsetT key_offset; // Parameter name
   ScriptParamType type = ScriptParamType::kNone;
   union {
     bool as_bool = false;
     int32_t as_int32;
     float as_float;
     float as_vec[4]; // Used for Vec2, Vec3, Vec4
-    char as_string[60]; // Maximum 59 chars + null terminator
+    core::StringTableOffsetT as_string_offset;
     ScriptAssetParamValue as_asset;
     world::SceneNodeIndexT as_node_index;
   } value;
 };
 #pragma pack(pop)
-static_assert(sizeof(ScriptParamRecord) == 128);
+static_assert(sizeof(ScriptParamRecord) == 25);
 
 //! Scripting component slot in a scene.
 #pragma pack(push, 1)
@@ -152,6 +156,8 @@ using ScriptDataTable = world::SceneDataTable;
  `params` locates the script's parameter declarations, one ScriptParamRecord
  per declared parameter, at a descriptor-relative offset after this struct.
  Authoring hints (range, unit, description, options, color) are not cooked.
+ `external_source_path_offset` is in the descriptor string table, which follows
+ the declarations; offset `0` (the empty string) means no external source.
 */
 #pragma pack(push, 1)
 struct ScriptAssetDesc {
@@ -159,11 +165,11 @@ struct ScriptAssetDesc {
   ResourceReferenceIndex bytecode_resource_index = kNoResourceReference;
   ResourceReferenceIndex source_resource_index = kNoResourceReference;
   ScriptAssetFlags flags = ScriptAssetFlags::kNone;
-  char external_source_path[120] = {}; // Null-terminated, null-padded
+  core::StringTableOffsetT external_source_path_offset = 0;
   ScriptDataTable params {};
 };
 #pragma pack(pop)
-static_assert(sizeof(ScriptAssetDesc) == 251);
+static_assert(sizeof(ScriptAssetDesc) == 83);
 
 } // namespace oxygen::data::pak::scripting
 

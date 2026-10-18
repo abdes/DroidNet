@@ -13,6 +13,7 @@
 #include <iterator>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -20,14 +21,13 @@
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
-#include <Oxygen/Serio/MemoryStream.h>
-#include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::test {
 
@@ -45,13 +45,6 @@ auto AppendRecord(std::vector<std::byte>& bytes, const T& record) -> void
   bytes.insert(bytes.end(), encoded.begin(), encoded.end());
 }
 
-inline auto SetName(const std::string_view name, const std::span<char> field)
-  -> void
-{
-  std::ranges::fill(field, '\0');
-  std::ranges::copy(name.substr(0U, field.size() - 1U), field.begin());
-}
-
 inline auto MaterialDescriptor(const std::string_view name,
   const MaterialVariant variant = MaterialVariant::kPlain) -> DescriptorFixture
 {
@@ -59,7 +52,8 @@ inline auto MaterialDescriptor(const std::string_view name,
   descriptor.header.asset_type
     = static_cast<uint8_t>(data::AssetType::kMaterial);
   descriptor.header.version = data::pak::render::kMaterialAssetVersion;
-  SetName(name, descriptor.header.name);
+  auto strings = data::DescriptorStringsBuilder {};
+  descriptor.header.name_offset = strings.Add(name);
   if (variant == MaterialVariant::kWithShader) {
     descriptor.shader_stages = 1U << static_cast<uint32_t>(ShaderType::kPixel);
   }
@@ -68,10 +62,11 @@ inline auto MaterialDescriptor(const std::string_view name,
   if (variant == MaterialVariant::kWithShader) {
     data::pak::render::ShaderReferenceDesc shader {};
     shader.shader_type = static_cast<uint8_t>(ShaderType::kPixel);
-    SetName("fixture.hlsl", shader.source_path);
-    SetName("PS", shader.entry_point);
+    shader.source_path_offset = strings.Add("fixture.hlsl");
+    shader.entry_point_offset = strings.Add("PS");
     AppendRecord(fixture.bytes, shader);
   }
+  data::AppendDescriptorStrings(fixture.bytes, strings);
   return fixture;
 }
 
@@ -103,9 +98,10 @@ inline auto GeometryDescriptor(const std::string_view name) -> DescriptorFixture
     = static_cast<uint8_t>(data::AssetType::kGeometry);
   descriptor.header.version = data::pak::geometry::kGeometryAssetVersion;
   descriptor.lod_count = 1U;
-  SetName(name, descriptor.header.name);
+  auto strings = data::DescriptorStringsBuilder {};
+  descriptor.header.name_offset = strings.Add(name);
   data::pak::geometry::MeshDesc mesh {};
-  SetName("Cube/Mesh", mesh.name);
+  mesh.name_offset = strings.Add("Cube/Mesh");
   mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kProcedural);
   mesh.info.procedural = {};
   mesh.submesh_count = 1U;
@@ -124,51 +120,57 @@ inline auto GeometryDescriptor(const std::string_view name) -> DescriptorFixture
   AppendRecord(fixture.bytes, mesh);
   AppendRecord(fixture.bytes, submesh);
   AppendRecord(fixture.bytes, view);
+  data::AppendDescriptorStrings(fixture.bytes, strings);
   return fixture;
 }
 
-inline auto SceneDescriptor(const std::string_view name,
-  const uint32_t string_bytes = 1U) -> DescriptorFixture
+//! A scene with no nodes; `padding` grows its string table, for size tests.
+inline auto SceneDescriptor(
+  const std::string_view name, const uint32_t padding = 0U) -> DescriptorFixture
 {
-  if (string_bytes == 0U) {
-    throw std::invalid_argument("Scene fixture needs a NUL string table entry");
-  }
   data::pak::world::SceneAssetDesc descriptor {};
   descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
   descriptor.header.version = data::pak::world::kSceneAssetVersion;
-  SetName(name, descriptor.header.name);
-  descriptor.scene_strings = {
+  auto strings = data::DescriptorStringsBuilder {};
+  descriptor.header.name_offset = strings.Add(name);
+  if (padding != 0U) {
+    static_cast<void>(strings.Add(std::string(padding, 'x')));
+  }
+  descriptor.header.strings = {
     .offset = sizeof(descriptor),
-    .size = string_bytes,
+    .size = strings.Size(),
   };
   data::pak::world::SceneEnvironmentBlockHeader environment {};
   environment.byte_size = sizeof(environment);
   DescriptorFixture fixture;
   AppendRecord(fixture.bytes, descriptor);
-  fixture.bytes.resize(fixture.bytes.size() + string_bytes, std::byte { 'x' });
-  fixture.bytes.at(sizeof(descriptor)) = std::byte {};
-  fixture.bytes.back() = std::byte {};
+  const auto table = strings.Bytes();
+  fixture.bytes.insert(fixture.bytes.end(), table.begin(), table.end());
   AppendRecord(fixture.bytes, environment);
   return fixture;
+}
+
+//! Resolves a string of the cooked descriptor `bytes` hold.
+/*!
+ @throw std::invalid_argument when the table or the offset is invalid.
+*/
+inline auto ReadDescriptorString(const std::span<const std::byte> bytes,
+  const data::pak::core::StringTableOffsetT offset) -> std::string
+{
+  if (bytes.size() < sizeof(data::pak::core::AssetHeader)) {
+    throw std::invalid_argument("descriptor is smaller than its header");
+  }
+  auto header = data::pak::core::AssetHeader {};
+  std::memcpy(&header, bytes.data(), sizeof(header));
+  return std::string {
+    data::DescriptorStrings::FromDescriptor(bytes, header.strings).Get(offset),
+  };
 }
 
 //! A minimal current-format scene for planner tests that do not need nodes.
 [[nodiscard]] inline auto MakeEmptySceneDescriptor() -> std::vector<std::byte>
 {
-  namespace world = data::pak::world;
-  auto descriptor = world::SceneAssetDesc {};
-  descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
-  descriptor.header.version = world::kSceneAssetVersion;
-  auto environment = world::SceneEnvironmentBlockHeader {};
-  environment.byte_size = sizeof(environment);
-  serio::MemoryStream stream;
-  serio::Writer writer(stream);
-  const auto packed = writer.ScopedAlignment(1);
-  if (!writer.Write(descriptor) || !writer.Write(environment)) {
-    throw std::runtime_error("Could not serialize current scene fixture");
-  }
-  const auto bytes = stream.Data();
-  return { bytes.begin(), bytes.end() };
+  return SceneDescriptor("Empty").bytes;
 }
 
 } // namespace oxygen::content::test

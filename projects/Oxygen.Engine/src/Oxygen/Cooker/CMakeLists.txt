@@ -261,7 +261,6 @@ set(
   "Import/Internal/Utils/JsonSchemaValidation.h"
   "Import/Internal/Utils/TextureReferenceResolver.cpp"
   "Import/Internal/Utils/TextureReferenceResolver.h"
-  "Import/Internal/Utils/StringUtils.h"
   "Import/Internal/Utils/VirtualPathResolution.h"
   "Import/Internal/WindowsFileReader.h"
   "Import/Internal/WindowsFileWriter.h"

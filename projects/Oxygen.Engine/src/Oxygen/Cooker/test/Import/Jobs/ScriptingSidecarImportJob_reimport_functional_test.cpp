@@ -404,9 +404,9 @@ namespace {
 
       const auto node_size = static_cast<uint64_t>(desc.nodes.count)
         * static_cast<uint64_t>(desc.nodes.entry_size);
-      const auto string_size = static_cast<uint64_t>(desc.scene_strings.size);
+      const auto string_size = static_cast<uint64_t>(desc.header.strings.size);
       if (!range_ok(desc.nodes.offset, node_size)
-        || !range_ok(desc.scene_strings.offset, string_size)) {
+        || !range_ok(desc.header.strings.offset, string_size)) {
         return std::nullopt;
       }
 
@@ -425,7 +425,7 @@ namespace {
       if (!strings.empty()) {
         std::memcpy(strings.data(),
           std::span(bytes)
-            .subspan(static_cast<size_t>(desc.scene_strings.offset))
+            .subspan(static_cast<size_t>(desc.header.strings.offset))
             .data(),
           strings.size());
       }
@@ -449,8 +449,12 @@ namespace {
     const auto core_after = ExtractCoreTables(after_scene_bytes);
     ASSERT_HAS_VALUE(core_after) << "Expected core after to be present";
 
+    // Nodes are untouched; the slot parameters' strings join the string
+    // table after the strings already there, which keep their offsets.
     EXPECT_EQ(core_before->first, core_after->first);
-    EXPECT_EQ(core_before->second, core_after->second);
+    ASSERT_GE(core_after->second.size(), core_before->second.size());
+    EXPECT_TRUE(std::ranges::equal(core_before->second,
+      std::span(core_after->second).first(core_before->second.size())));
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobReimportTest,

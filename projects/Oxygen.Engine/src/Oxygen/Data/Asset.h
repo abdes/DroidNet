@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -105,21 +106,19 @@ public:
     return static_cast<AssetType>(GetHeader().asset_type);
   }
 
-  //! Returns the asset name as a string view (for debugging/tools).
-  /*!
-    Returns the asset name from the header as a string view. The name is
-    guaranteed not to exceed `pak::core::kMaxNameSize`. This is primarily for
-    debugging
-    and tools, not for runtime use.
-  */
-  auto GetAssetName() const noexcept -> std::string_view
+  //! Install the name the descriptor's string table holds, during loading.
+  auto SetAssetName(std::string name) -> void
   {
-    const char* name = GetHeader().name;
-    std::size_t len = 0;
-    while (len < pak::core::kMaxNameSize && name[len] != '\0') {
-      ++len;
+    if (runtime_bindings_) {
+      throw std::logic_error("Published asset names are immutable");
     }
-    return { name, len };
+    name_ = std::move(name);
+  }
+
+  //! Returns the asset name (for debugging/tools, not an identity).
+  [[nodiscard]] auto GetAssetName() const noexcept -> std::string_view
+  {
+    return name_;
   }
 
   //! Returns the asset format version.
@@ -150,6 +149,7 @@ protected:
 private:
   AssetKey asset_key_;
   SourceOrigin source_origin_ {};
+  std::string name_;
   AssetReferences references_;
   std::shared_ptr<const AssetRuntimeBindings> runtime_bindings_ {};
 };

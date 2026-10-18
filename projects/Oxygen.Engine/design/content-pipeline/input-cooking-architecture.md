@@ -1,30 +1,45 @@
 # Input Cooking Architecture Specification (Job/Pipeline Locked)
 
-**Date:** 2026-03-02
-**Status:** Design / Specification
+**Date:** 2026-03-02 **Status:** Design / Specification
 
 ## 0. Status Tracking
 
-This document is the target architecture contract. Live implementation progress and explicit missing work are tracked in `design/content-pipeline/input-cooking-implementation-plan.md` (Section 4.1 and Section 11).
+This document is the target architecture contract. Live implementation progress
+and explicit missing work are tracked in
+`design/content-pipeline/input-cooking-implementation-plan.md` (Section 4.1 and
+Section 11).
 
 Current implementation status snapshot:
 
-1. Implemented: input request contracts, `InputImportJob`, `InputImportPipeline`, async routing, manifest `type: "input"` integration, and ImportTool input command wiring.
-2. Implemented: runtime `EnumerateMountedInputContexts()` + `HydrateInputContext()` APIs, including trigger hydration, slot alias normalization, and mounted-context metadata extraction.
-3. Implemented: scene-binding infrastructure removal in native tooling/runtime (`INPT` and `input_context_bindings` paths removed) and shipped input JSON schemas (`src/Oxygen/Cooker/Import/Schemas/oxygen.input*.schema.json`) with schema validation tests.
-4. Verification caveat: by execution policy, no local project build was run during this implementation pass.
+1. Implemented: input request contracts, `InputImportJob`,
+   `InputImportPipeline`, async routing, manifest `type: "input"` integration,
+   and ImportTool input command wiring.
+2. Implemented: runtime `EnumerateMountedInputContexts()` +
+   `HydrateInputContext()` APIs, including trigger hydration, slot alias
+   normalization, and mounted-context metadata extraction.
+3. Implemented: scene-binding infrastructure removal in native tooling/runtime
+   (`INPT` and `input_context_bindings` paths removed) and shipped input JSON
+   schemas (`src/Oxygen/Cooker/Import/Schemas/oxygen.input*.schema.json`) with
+   schema validation tests.
+4. Verification caveat: by execution policy, no local project build was run
+   during this implementation pass.
 
 ## 1. Scope
 
-This specification defines the authoritative architecture for importing, cooking, packaging, and runtime bootstrap of input assets in Oxygen.
+This specification defines the authoritative architecture for importing,
+cooking, packaging, and runtime bootstrap of input assets in Oxygen.
 
 In scope:
 
 1. `InputAction` and `InputMappingContext` import/cook integration.
 2. Loose-cooked descriptor emission (`.oiact`, `.oimap`).
-3. PAK/runtime compatibility validation using existing tooling through native Cooker and PakDump.
+3. PAK/runtime compatibility validation using existing tooling through native
+   Cooker and PakDump.
 4. Runtime bootstrap for default context activation.
-5. Full removal of scene-attached input-context binding infrastructure (`InputContextBindingRecord`, `InputContextBindingFlags`, `kInputContextBinding` component type, scene `INPT` component table handling, and all associated code paths).
+5. Full removal of scene-attached input-context binding infrastructure
+   (`InputContextBindingRecord`, `InputContextBindingFlags`,
+   `kInputContextBinding` component type, scene `INPT` component table handling,
+   and all associated code paths).
 
 Out of scope:
 
@@ -37,15 +52,19 @@ Out of scope:
 1. Import implementation must use `ImportJob -> Pipeline` architecture.
 2. No bypass path or ad-hoc inline runner.
 3. No scope reduction without explicit approval.
-4. New binary serialization/deserialization logic must use `oxygen::serio` (no raw byte arithmetic for new logic).
+4. New binary serialization/deserialization logic must use `oxygen::serio` (no
+   raw byte arithmetic for new logic).
 5. Runtime content code must not depend on demo/example code.
 6. Input import execution must use one job class only: `InputImportJob`.
-7. Input import execution must use one pipeline class only: `InputImportPipeline`.
-8. Mapping-context imports must carry explicit dependencies to the input actions they require.
+7. Input import execution must use one pipeline class only:
+   `InputImportPipeline`.
+8. Mapping-context imports must carry explicit dependencies to the input actions
+   they require.
 
 ## 3. Repository Analysis Snapshot (Pre-Implementation Baseline)
 
-The following facts were captured before implementation started and are retained as baseline context:
+The following facts were captured before implementation started and are retained
+as baseline context:
 
 | Fact                                                                      | Evidence                                                                                                                                                        |
 | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -65,12 +84,14 @@ Conclusion:
 
 ## 4. Decision
 
-Input mapping contexts are standalone assets. Scene component `INPT` is not authoritative for runtime behavior.
+Input mapping contexts are standalone assets. Scene component `INPT` is not
+authoritative for runtime behavior.
 
 A mapping-context descriptor carries one start-up value, its default priority.
 Which contexts start is a property of the scene: a scene lists its starting
 contexts with their priorities, and instantiating the scene adds and activates
-them ([scene start state](../runtime-core/scene-instantiation-and-player.md#scene-start-state)).
+them
+([scene start state](../runtime-core/scene-instantiation-and-player.md#scene-start-state)).
 Contexts carry no auto-load or auto-activate flag.
 
 ## 5. Target Architecture
@@ -109,7 +130,8 @@ Architectural split:
 
 1. `oxygen::content::import::InputImportSettings`
    - file: `src/Oxygen/Cooker/Import/InputImportSettings.h`
-   - role: tooling-facing DTO for one input import job request (orchestration-only fields).
+   - role: tooling-facing DTO for one input import job request
+     (orchestration-only fields).
 
 2. `oxygen::content::import::internal::BuildInputImportRequest(...)`
    - files:
@@ -121,13 +143,15 @@ Architectural split:
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Jobs/InputImportJob.h`
      - `src/Oxygen/Cooker/Import/Internal/Jobs/InputImportJob.cpp`
-   - role: request/session lifecycle, source loading, pipeline orchestration, finalize.
+   - role: request/session lifecycle, source loading, pipeline orchestration,
+     finalize.
 
 4. `oxygen::content::import::InputImportPipeline`
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h`
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.cpp`
-   - role: parse/validate/serialize/emit for `InputAction` and `InputMappingContext`.
+   - role: parse/validate/serialize/emit for `InputAction` and
+     `InputMappingContext`.
 
 ### Runtime
 
@@ -135,17 +159,24 @@ Architectural split:
    - files:
      - `src/Oxygen/Content/InputContextHydration.h`
      - `src/Oxygen/Content/Internal/InputContextHydration.cpp`
-   - role: free function — converts a binary `InputMappingContextAsset` into a live `InputMappingContext` by resolving action references, building trigger chains, and registering with `InputSystem`.
+   - role: free function — converts a binary `InputMappingContextAsset` into a
+     live `InputMappingContext` by resolving action references, building trigger
+     chains, and registering with `InputSystem`.
 
 2. `IAssetLoader::EnumerateMountedInputContexts()`
-   - file: `src/Oxygen/Content/IAssetLoader.h` (declaration), `src/Oxygen/Content/AssetLoader.cpp` (implementation)
-   - role: scan mounted sources for `kInputMappingContext` assets and return metadata entries. Mirrors existing `EnumerateMountedScenes()`.
+   - file: `src/Oxygen/Content/IAssetLoader.h` (declaration),
+     `src/Oxygen/Content/AssetLoader.cpp` (implementation)
+   - role: scan mounted sources for `kInputMappingContext` assets and return
+     metadata entries. Mirrors existing `EnumerateMountedScenes()`.
 
 ## 6.2 Changed Classes
 
 1. `ImportRequest`
-   - add top-level `InputPayload` marker (orchestration-only; presence signals input import routing).
-   - `InputImportKind` is NOT added to `ImportOptions` or `ImportRequest`. Document structure (standalone action vs. primary format) is determined solely inside `InputImportPipeline` from the source JSON structure.
+   - add top-level `InputPayload` marker (orchestration-only; presence signals
+     input import routing).
+   - `InputImportKind` is NOT added to `ImportOptions` or `ImportRequest`.
+     Document structure (standalone action vs. primary format) is determined
+     solely inside `InputImportPipeline` from the source JSON structure.
    - file: `src/Oxygen/Cooker/Import/ImportRequest.h`.
 
 2. `AsyncImportService`
@@ -158,14 +189,16 @@ Architectural split:
    - input jobs include explicit dependency edges (`id`, `depends_on`).
 
 4. ImportTool command surface
-   - add `InputCommand` and wire in `main.cpp`, `BatchCommand.cpp`, `ImportRunner.cpp`, README.
+   - add `InputCommand` and wire in `main.cpp`, `BatchCommand.cpp`,
+     `ImportRunner.cpp`, README.
 
 5. `SceneLoaderService`
    - remove `AttachInputMappings(const SceneAsset&)` entirely.
    - remove all scene-driven context activation code.
 
 6. `SceneLoader`
-   - remove scene `INPT` component table handling entirely (no compatibility parsing).
+   - remove scene `INPT` component table handling entirely (no compatibility
+     parsing).
 
 7. `PakFormat_input.h`
    - remove `InputContextBindingRecord` struct.
@@ -178,7 +211,8 @@ Architectural split:
    - remove `kInputContextBinding` component type.
 
 10. `ToStringConverters.cpp`
-    - remove `to_string(InputContextBindingFlags)` and `kInputContextBinding` case.
+    - remove `to_string(InputContextBindingFlags)` and `kInputContextBinding`
+      case.
 
 11. `PakFormatSerioLoaders.h`
     - remove `InputContextBindingRecord` serio loader.
@@ -187,10 +221,12 @@ Architectural split:
     - remove `kInputContextBinding` dump branch.
 
 13. `AssetLoader.cpp`
-    - remove `publish_scene_input_mapping_context_dependencies` and all call sites.
+    - remove `publish_scene_input_mapping_context_dependencies` and all call
+      sites.
 
 14. `IAssetLoader`
-    - add `EnumerateMountedInputContexts()` returning `std::vector<MountedInputContextEntry>`.
+    - add `EnumerateMountedInputContexts()` returning
+      `std::vector<MountedInputContextEntry>`.
     - mirrors existing `EnumerateMountedScenes()` pattern.
     - file: `src/Oxygen/Content/IAssetLoader.h`.
 
@@ -219,9 +255,12 @@ std::optional<InputPayload> input;
 
 Routing contract:
 
-1. `AsyncImportService` routes requests with `request.input` present to `InputImportJob`.
-2. No `InputImportKind` enum exists. Document structure is determined inside `InputImportPipeline` only.
-3. `ImportManifestJob::BuildRequest()` sets `request.input` when `job_type == "input"`.
+1. `AsyncImportService` routes requests with `request.input` present to
+   `InputImportJob`.
+2. No `InputImportKind` enum exists. Document structure is determined inside
+   `InputImportPipeline` only.
+3. `ImportManifestJob::BuildRequest()` sets `request.input` when
+   `job_type == "input"`.
 
 ## 7.2 Input Command (CLI Only)
 
@@ -236,11 +275,14 @@ CLI-only optional flags (NOT valid in manifest job objects):
 3. `--report` (report destination path)
 4. `--content-hashing` (content hashing toggle)
 
-These flags are consumed by the `InputCommand` CLI handler to build an `ImportRequest`. They do NOT appear in manifest `jobs[]` entries. Manifest input jobs use exactly: `id`, `type`, `source`, `depends_on`.
+These flags are consumed by the `InputCommand` CLI handler to build an
+`ImportRequest`. They do NOT appear in manifest `jobs[]` entries. Manifest input
+jobs use exactly: `id`, `type`, `source`, `depends_on`.
 
 ## 7.3 Manifest Contract (`ImportManifest`)
 
-This section defines manifest-mode import for input assets in ImportTool batch mode.
+This section defines manifest-mode import for input assets in ImportTool batch
+mode.
 
 Schema target files:
 
@@ -265,9 +307,11 @@ Schema deltas:
    - `depends_on`
 5. `job_item` conditional rules add:
    - if `type == "input"`: require `source`
-   - jobs whose source document references actions not declared inline must declare `depends_on` for predecessor jobs that produce those actions
+   - jobs whose source document references actions not declared inline must
+     declare `depends_on` for predecessor jobs that produce those actions
    - asset-semantic fields are invalid in manifest jobs:
-     - `type` (action type — `bool`/`axis1d`/`axis2d`; do not confuse with job `type: "input"`)
+     - `type` (action type — `bool`/`axis1d`/`axis2d`; do not confuse with job
+       `type: "input"`)
      - `consumes_input`
      - `priority`
      - `mappings`
@@ -305,33 +349,45 @@ Dependency example (file B references actions exported by file A):
 ]
 ```
 
-Both primary (`*.input.json`) and standalone action (`*.input-action.json`) files produce action assets. Unresolved action references are caught at pipeline parse time.
+Both primary (`*.input.json`) and standalone action (`*.input-action.json`)
+files produce action assets. Unresolved action references are caught at pipeline
+parse time.
 
 Validation invariants:
 
 1. `source` must be present for `type: "input"`.
-2. manifest jobs must not include input asset semantic fields (Section 7.3 delta #5 list).
-3. manifest jobs must not include orchestration-only CLI keys: `output`, `name`, `verbose`, `content_hashing`, `report`.
-4. allowed `input` job keys are exactly: `id`, `type`, `source`, `depends_on`. Any other key is rejected with diagnostic `input.manifest.key_not_allowed`.
+2. manifest jobs must not include input asset semantic fields (Section 7.3 delta
+   #5 list).
+3. manifest jobs must not include orchestration-only CLI keys: `output`, `name`,
+   `verbose`, `content_hashing`, `report`.
+4. allowed `input` job keys are exactly: `id`, `type`, `source`, `depends_on`.
+   Any other key is rejected with diagnostic `input.manifest.key_not_allowed`.
 5. `id` must be unique across all jobs in the manifest.
 6. every `depends_on` id must exist in the same manifest.
 7. no dependency cycles are allowed.
-8. (reserved — removed; both primary-format and standalone-action files produce action assets, so kind-level wrong-type checks are invalid. Unresolved action references are caught at pipeline parse time via `input.context.action_unresolved`.)
-9. `id` is required for all `input` jobs (diagnostic: `input.manifest.job_id_missing`).
+8. (reserved — removed; both primary-format and standalone-action files produce
+   action assets, so kind-level wrong-type checks are invalid. Unresolved action
+   references are caught at pipeline parse time via
+   `input.context.action_unresolved`.)
+9. `id` is required for all `input` jobs (diagnostic:
+   `input.manifest.job_id_missing`).
 
 Request mapping:
 
 1. `type=input` -> routed to `InputImportJob`.
 2. source JSON document structure is parsed only inside `InputImportPipeline`:
    - primary format (has `contexts` key) → emits N actions + M contexts.
-   - standalone action (has `name` + `type` at top level, no `contexts`) → emits 1 action.
+   - standalone action (has `name` + `type` at top level, no `contexts`) → emits
+     1 action.
 3. no asset kind or asset properties are stored in manifest job settings.
-4. output location and global toggles come from top-level/default orchestration config, not per-input job fields.
+4. output location and global toggles come from top-level/default orchestration
+   config, not per-input job fields.
 
 Cross-tool scope clarification:
 
 1. `ImportManifest` drives ImportTool/import pipeline only.
-2. Native import schemas define authoring inputs; no parallel Python packaging schema exists.
+2. Native import schemas define authoring inputs; no parallel Python packaging
+   schema exists.
 3. Both paths must serialize identical `InputMappingContextAssetDesc` semantics.
 
 ### 7.3.1 Dependency Scheduling Contract
@@ -340,12 +396,17 @@ Batch execution is dependency-aware:
 
 1. ImportTool builds a DAG from `id` + `depends_on`.
 2. Validation checks before dispatch:
-   - unique `id` values across all jobs (diagnostic: `input.manifest.job_id_duplicate`).
-   - every `depends_on` target exists in the manifest (diagnostic: `input.manifest.dep_missing_target`).
+   - unique `id` values across all jobs (diagnostic:
+     `input.manifest.job_id_duplicate`).
+   - every `depends_on` target exists in the manifest (diagnostic:
+     `input.manifest.dep_missing_target`).
    - no cycles in the dependency graph (diagnostic: `input.manifest.dep_cycle`).
 3. Jobs are dispatched only when all predecessors have succeeded.
-4. If a predecessor job fails, all transitive dependents are skipped with deterministic diagnostics (failure propagation). Skipped jobs report `input.import.skipped_predecessor_failed`.
-5. The execution node for each input job remains `InputImportJob -> InputImportPipeline`.
+4. If a predecessor job fails, all transitive dependents are skipped with
+   deterministic diagnostics (failure propagation). Skipped jobs report
+   `input.import.skipped_predecessor_failed`.
+5. The execution node for each input job remains
+   `InputImportJob -> InputImportPipeline`.
 
 ## 7.4 Input Source JSON Specification (Importer Input Files)
 
@@ -357,14 +418,19 @@ These are importer source documents, not ImportManifest job documents.
 
 ### 7.4.0 Authoring Model
 
-The input system uses two kinds of cooked assets internally (`InputActionAssetDesc`, `InputMappingContextAssetDesc`), but the authoring model is designed around a **single source file** that declares everything together.
+The input system uses two kinds of cooked assets internally
+(`InputActionAssetDesc`, `InputMappingContextAssetDesc`), but the authoring
+model is designed around a **single source file** that declares everything
+together.
 
 **One `*.input.json` file defines all actions and all mapping contexts.**
 
 A source JSON contains:
 
-1. A shared `actions` array that declares every action used by any context in the file.
-2. A `contexts` array that declares one or more mapping contexts, each with its own `mappings`.
+1. A shared `actions` array that declares every action used by any context in
+   the file.
+2. A `contexts` array that declares one or more mapping contexts, each with its
+   own `mappings`.
 
 One file = all actions + all contexts. No separate files needed.
 
@@ -373,19 +439,34 @@ Content/Input/
   PlayerInput.input.json    ← defines all actions (Move, Look, Jump, Sprint) + all contexts (Gameplay, Menu)
 ```
 
-The pipeline reads one source file and emits **multiple cooked assets**: one `InputActionAssetDesc` per declared action + one `InputMappingContextAssetDesc` per declared context.
+The pipeline reads one source file and emits **multiple cooked assets**: one
+`InputActionAssetDesc` per declared action + one `InputMappingContextAssetDesc`
+per declared context.
 
-**Action identity deduplication:** When multiple source files declare the same action (same `name` and `type`), the importer produces the same deterministic asset key (derived from the action name). The second import validates consistency and skips re-emission if the descriptor matches. If the same action name appears with conflicting `type` across files, the importer emits diagnostic `input.asset.action_conflict` and fails.
+**Action identity deduplication:** When multiple source files declare the same
+action (same `name` and `type`), the importer produces the same deterministic
+asset key (derived from the action name). The second import validates
+consistency and skips re-emission if the descriptor matches. If the same action
+name appears with conflicting `type` across files, the importer emits diagnostic
+`input.asset.action_conflict` and fails.
 
-**Standalone action files are also supported** for advanced use cases where an action must exist without any mapping context (`*.input-action.json`). But for typical authoring, everything lives in one file.
+**Standalone action files are also supported** for advanced use cases where an
+action must exist without any mapping context (`*.input-action.json`). But for
+typical authoring, everything lives in one file.
 
 Key authoring rules:
 
-1. **Actions are declared in the top-level `actions` array** and shared by all contexts in the file.
-2. **Mappings reference actions by name** using a plain string `"action": "Move"` field.
-3. **All binding/trigger/hardware configuration lives in `mappings`**, never in the action declaration.
-4. **One source file = one import job.** A single manifest job produces all action assets + all context assets.
-5. **Dependencies between jobs** are only needed when a file references an action that is NOT declared in its own `actions` array (i.e., it relies on an action from a different source file).
+1. **Actions are declared in the top-level `actions` array** and shared by all
+   contexts in the file.
+2. **Mappings reference actions by name** using a plain string
+   `"action": "Move"` field.
+3. **All binding/trigger/hardware configuration lives in `mappings`**, never in
+   the action declaration.
+4. **One source file = one import job.** A single manifest job produces all
+   action assets + all context assets.
+5. **Dependencies between jobs** are only needed when a file references an
+   action that is NOT declared in its own `actions` array (i.e., it relies on an
+   action from a different source file).
 
 Manifest example (typical — single self-contained file):
 
@@ -401,7 +482,8 @@ Manifest example (typical — single self-contained file):
 }
 ```
 
-Manifest example (split files — vehicle references actions from main input file):
+Manifest example (split files — vehicle references actions from main input
+file):
 
 ```json
 {
@@ -425,8 +507,10 @@ Manifest example (split files — vehicle references actions from main input fil
 
 Source files use specific extensions for automatic schema association:
 
-1. `*.input.json` — primary format (actions + contexts). Associated with `oxygen.input.schema.json`.
-2. `*.input-action.json` — standalone action (rare). Associated with `oxygen.input-action.schema.json`.
+1. `*.input.json` — primary format (actions + contexts). Associated with
+   `oxygen.input.schema.json`.
+2. `*.input-action.json` — standalone action (rare). Associated with
+   `oxygen.input-action.schema.json`.
 
 Editor workspace settings (VSCode example):
 
@@ -445,11 +529,15 @@ Editor workspace settings (VSCode example):
 }
 ```
 
-This gives authors immediate autocompletion, hover documentation, and real-time validation for every field, enum value, and slot name without any extension or plugin.
+This gives authors immediate autocompletion, hover documentation, and real-time
+validation for every field, enum value, and slot name without any extension or
+plugin.
 
 ### 7.4.2 Standalone Action Source JSON (Optional)
 
-Standalone action files are supported for advanced use cases where an action must exist without any mapping context. For typical authoring, actions are defined inline in the primary format (Section 7.4.3).
+Standalone action files are supported for advanced use cases where an action
+must exist without any mapping context. For typical authoring, actions are
+defined inline in the primary format (Section 7.4.3).
 
 Canonical document (`Move.input-action.json`):
 
@@ -464,7 +552,8 @@ Canonical document (`Move.input-action.json`):
 
 Field contract:
 
-1. `$schema`: optional string. Points to shipped JSON Schema for editor integration.
+1. `$schema`: optional string. Points to shipped JSON Schema for editor
+   integration.
 2. `name`: required string (1..63 UTF-8 bytes).
 3. `type`: required enum; `"bool"` / `"axis1d"` / `"axis2d"`.
 4. `consumes_input`: optional bool, default `false`.
@@ -475,11 +564,13 @@ Validation rules:
 2. `name` must be unique by asset identity in the mounted content view.
 3. `type` must map to engine `ActionValueType`.
 
-The pipeline infers this is a standalone action from the document structure (no `contexts` key).
+The pipeline infers this is a standalone action from the document structure (no
+`contexts` key).
 
 ### 7.4.3 Primary Source JSON (`*.input.json`)
 
-This is the primary authoring format. One file defines shared actions and one or more mapping contexts.
+This is the primary authoring format. One file defines shared actions and one or
+more mapping contexts.
 
 Canonical document (`PlayerInput.input.json`):
 
@@ -545,24 +636,31 @@ Canonical document (`PlayerInput.input.json`):
 }
 ```
 
-This single file produces 6 cooked assets: 4 action descriptors + 2 context descriptors.
+This single file produces 6 cooked assets: 4 action descriptors + 2 context
+descriptors.
 
 **Top-level field contract:**
 
-1. `$schema`: optional string. Points to shipped JSON Schema for editor integration.
-2. `actions`: optional array of action declarations (Section 7.4.3.1). Shared by all contexts in the file.
+1. `$schema`: optional string. Points to shipped JSON Schema for editor
+   integration.
+2. `actions`: optional array of action declarations (Section 7.4.3.1). Shared by
+   all contexts in the file.
 3. `contexts`: required array of context declarations (Section 7.4.3.3).
 
 **Top-level validation rules:**
 
 1. unknown top-level fields are rejected.
 2. `contexts` must contain at least one entry.
-3. all actions referenced in any context's `mappings` must resolve: either declared in this file's `actions` array, previously imported by a predecessor job, or present in mounted content.
+3. all actions referenced in any context's `mappings` must resolve: either
+   declared in this file's `actions` array, previously imported by a predecessor
+   job, or present in mounted content.
 
 **Document structure detection** (no `kind` field needed):
 
-1. If the document has a `contexts` key → primary format. Pipeline emits N actions + M contexts.
-2. If the document has no `contexts` key and has `name` + `type` at top level → standalone action. Pipeline emits 1 action.
+1. If the document has a `contexts` key → primary format. Pipeline emits N
+   actions + M contexts.
+2. If the document has no `contexts` key and has `name` + `type` at top level →
+   standalone action. Pipeline emits 1 action.
 3. Otherwise → rejected with `input.import.unknown_document_structure`.
 
 ### 7.4.3.1 Action Declaration
@@ -572,21 +670,25 @@ Each `actions[]` item:
 1. `name`: required string (1..63 UTF-8 bytes).
 2. `type`: required enum; `"bool"` / `"axis1d"` / `"axis2d"`.
 3. `consumes_input`: optional bool, default `false`.
-4. `description`: optional string. Ignored by pipeline, available for editor hover docs via JSON Schema.
+4. `description`: optional string. Ignored by pipeline, available for editor
+   hover docs via JSON Schema.
 
-Each action is emitted as a separate `InputActionAssetDesc` binary asset. The asset key is deterministically derived from the action name.
+Each action is emitted as a separate `InputActionAssetDesc` binary asset. The
+asset key is deterministically derived from the action name.
 
 Validation rules:
 
 1. unknown action fields are rejected.
 2. duplicate action names within the same `actions` array are rejected.
-3. if the same action name already exists in mounted content or inflight assets, `type` must match. Conflicting definitions emit `input.asset.action_conflict` and fail.
+3. if the same action name already exists in mounted content or inflight assets,
+   `type` must match. Conflicting definitions emit `input.asset.action_conflict`
+   and fail.
 
 Binary mapping:
 
 | JSON field       | Binary field (`InputActionAssetDesc`) | Mapping                                |
 | ---------------- | ------------------------------------- | -------------------------------------- |
-| `name`           | `name[64]`                            | UTF-8, null-terminated, max 63 bytes   |
+| `name`           | `header.name_offset`                  | UTF-8, in the descriptor string table  |
 | `type`           | `value_type`                          | `"bool"`→0, `"axis1d"`→1, `"axis2d"`→2 |
 | `consumes_input` | `flags`                               | `true` → `kConsumesInput` bit set      |
 
@@ -595,43 +697,52 @@ Binary mapping:
 Each `contexts[]` item:
 
 1. `name`: required string (1..63 UTF-8 bytes).
-2. `priority`: optional int32, default `0`; the priority used when a context
-   is activated without one.
+2. `priority`: optional int32, default `0`; the priority used when a context is
+   activated without one.
 3. `description`: optional string. Ignored by pipeline, for editor hover docs.
 4. `mappings`: required array (Section 7.4.3.4).
 
-Each context is emitted as a separate `InputMappingContextAssetDesc` binary asset.
+Each context is emitted as a separate `InputMappingContextAssetDesc` binary
+asset.
 
 Validation rules:
 
 1. unknown context fields are rejected.
 2. `priority` must be int32.
-3. context `name` must be unique within the file and by asset identity in mounted view.
+3. context `name` must be unique within the file and by asset identity in
+   mounted view.
 4. duplicate context names within the same `contexts` array are rejected.
 
 Binary mapping:
 
-| JSON field | Binary field (`InputMappingContextAssetDesc`) | Mapping                              |
-| ---------- | --------------------------------------------- | ------------------------------------ |
-| `name`     | `name[64]`                                    | UTF-8, null-terminated, max 63 bytes |
-| `priority` | `default_priority`                            | direct int32 copy                    |
+| JSON field | Binary field (`InputMappingContextAssetDesc`) | Mapping                               |
+| ---------- | --------------------------------------------- | ------------------------------------- |
+| `name`     | `header.name_offset`                          | UTF-8, in the descriptor string table |
+| `priority` | `default_priority`                            | direct int32 copy                     |
 
 ### 7.4.3.3 Mapping Record Contract
 
 Each `mappings[]` item:
 
-1. `action`: required string — action name to resolve against `actions` array, then mounted/inflight content.
-2. `slot`: required string — input slot name. Must match a registered `InputSlot` name (see Section 7.4.4).
-3. `trigger`: optional string — shorthand for a single trigger with default parameters. Mutually exclusive with `triggers`. Accepted values: any trigger type enum (Section 7.4.5).
-4. `triggers`: optional array — full trigger specification for multiple or parameterized triggers. Mutually exclusive with `trigger`. Default `[]`.
+1. `action`: required string — action name to resolve against `actions` array,
+   then mounted/inflight content.
+2. `slot`: required string — input slot name. Must match a registered
+   `InputSlot` name (see Section 7.4.4).
+3. `trigger`: optional string — shorthand for a single trigger with default
+   parameters. Mutually exclusive with `triggers`. Accepted values: any trigger
+   type enum (Section 7.4.5).
+4. `triggers`: optional array — full trigger specification for multiple or
+   parameterized triggers. Mutually exclusive with `trigger`. Default `[]`.
 5. `scale`: optional `[float, float]`, default `[1.0, 1.0]`.
 6. `bias`: optional `[float, float]`, default `[0.0, 0.0]`.
 
 Trigger resolution:
 
-1. if `trigger` (string) is present: expand to `[{ "type": <value>, "behavior": "implicit", "actuation_threshold": 0.5 }]`.
+1. if `trigger` (string) is present: expand to
+   `[{ "type": <value>, "behavior": "implicit", "actuation_threshold": 0.5 }]`.
 2. if `triggers` (array) is present: use as-is.
-3. if neither is present: mapping has zero triggers (always fires on input change).
+3. if neither is present: mapping has zero triggers (always fires on input
+   change).
 4. if both are present: reject with `input.context.trigger_ambiguous`.
 
 Validation rules:
@@ -646,47 +757,56 @@ Binary mapping:
 | JSON field | Binary field (`InputActionMappingRecord`) | Mapping                                 |
 | ---------- | ----------------------------------------- | --------------------------------------- |
 | `action`   | `action_asset_key`                        | resolved to `AssetKey` from action name |
-| `slot`     | `slot_name_offset`                        | string table offset                     |
+| `slot`     | `slot_name_offset`                        | descriptor string table offset          |
 | `scale`    | `scale[2]`                                | direct float copy                       |
 | `bias`     | `bias[2]`                                 | direct float copy                       |
 
 ### 7.4.4 Input Slot Names
 
-The `slot` field in mappings must match a registered input slot name from `InputSlots` ([Input.h](src/Oxygen/Platform/Input.h)). The JSON Schema enumerates all valid names for autocomplete.
+The `slot` field in mappings must match a registered input slot name from
+`InputSlots` ([Input.h](src/Oxygen/Platform/Input.h)). The JSON Schema
+enumerates all valid names for autocomplete.
 
 Available slot categories:
 
-**Mouse:**
-`MouseWheelUp`, `MouseWheelDown`, `MouseWheelLeft`, `MouseWheelRight`, `MouseWheelX`, `MouseWheelY`, `MouseWheelXY`, `LeftMouseButton`, `RightMouseButton`, `MiddleMouseButton`, `ThumbMouseButton1`, `ThumbMouseButton2`, `MouseX`, `MouseY`, `MouseXY`
+**Mouse:** `MouseWheelUp`, `MouseWheelDown`, `MouseWheelLeft`,
+`MouseWheelRight`, `MouseWheelX`, `MouseWheelY`, `MouseWheelXY`,
+`LeftMouseButton`, `RightMouseButton`, `MiddleMouseButton`, `ThumbMouseButton1`,
+`ThumbMouseButton2`, `MouseX`, `MouseY`, `MouseXY`
 
-**Keyboard — Special:**
-`None`, `AnyKey`, `BackSpace`, `Delete`, `Tab`, `Clear`, `Return`, `Pause`, `Escape`, `Space`
+**Keyboard — Special:** `None`, `AnyKey`, `BackSpace`, `Delete`, `Tab`, `Clear`,
+`Return`, `Pause`, `Escape`, `Space`
 
-**Keyboard — Keypad:**
-`Keypad0`..`Keypad9`, `KeypadPeriod`, `KeypadDivide`, `KeypadMultiply`, `KeypadMinus`, `KeypadPlus`, `KeypadEnter`, `KeypadEquals`
+**Keyboard — Keypad:** `Keypad0`..`Keypad9`, `KeypadPeriod`, `KeypadDivide`,
+`KeypadMultiply`, `KeypadMinus`, `KeypadPlus`, `KeypadEnter`, `KeypadEquals`
 
-**Keyboard — Navigation:**
-`UpArrow`, `DownArrow`, `LeftArrow`, `RightArrow`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`
+**Keyboard — Navigation:** `UpArrow`, `DownArrow`, `LeftArrow`, `RightArrow`,
+`Insert`, `Home`, `End`, `PageUp`, `PageDown`
 
-**Keyboard — Function:**
-`F1`..`F15`
+**Keyboard — Function:** `F1`..`F15`
 
-**Keyboard — Alpha:**
-`Alpha0`..`Alpha9`, `A`..`Z`
+**Keyboard — Alpha:** `Alpha0`..`Alpha9`, `A`..`Z`
 
-**Keyboard — Symbols:**
-`Exclaim`, `DoubleQuote`, `Hash`, `Dollar`, `Percent`, `Ampersand`, `Quote`, `LeftParen`, `RightParen`, `Asterisk`, `Plus`, `Comma`, `Minus`, `Period`, `Slash`, `Colon`, `Semicolon`, `Less`, `Equals`, `Greater`, `Question`, `At`, `LeftBracket`, `Backslash`, `RightBracket`, `Caret`, `Underscore`, `BackQuote`
+**Keyboard — Symbols:** `Exclaim`, `DoubleQuote`, `Hash`, `Dollar`, `Percent`,
+`Ampersand`, `Quote`, `LeftParen`, `RightParen`, `Asterisk`, `Plus`, `Comma`,
+`Minus`, `Period`, `Slash`, `Colon`, `Semicolon`, `Less`, `Equals`, `Greater`,
+`Question`, `At`, `LeftBracket`, `Backslash`, `RightBracket`, `Caret`,
+`Underscore`, `BackQuote`
 
-**Keyboard — Modifiers:**
-`NumLock`, `CapsLock`, `ScrollLock`, `RightShift`, `LeftShift`, `RightControl`, `LeftControl`, `RightAlt`, `LeftAlt`, `LeftMeta`, `RightMeta`, `Help`, `Print`, `SysReq`, `Menu`
+**Keyboard — Modifiers:** `NumLock`, `CapsLock`, `ScrollLock`, `RightShift`,
+`LeftShift`, `RightControl`, `LeftControl`, `RightAlt`, `LeftAlt`, `LeftMeta`,
+`RightMeta`, `Help`, `Print`, `SysReq`, `Menu`
 
-Note: Gamepad slot names are not yet registered in the engine. When gamepad support is added to `InputSlots`, the JSON Schema and this list will be extended accordingly.
+Note: Gamepad slot names are not yet registered in the engine. When gamepad
+support is added to `InputSlots`, the JSON Schema and this list will be extended
+accordingly.
 
 ### 7.4.5 Trigger Contract
 
 Each `triggers[]` item (or the expanded form of a `trigger` shorthand):
 
-1. `type`: required enum (must match `InputTriggerType` from `ActionTriggers.inc`):
+1. `type`: required enum (must match `InputTriggerType` from
+   `ActionTriggers.inc`):
    - `pressed` (kPressed = 0)
    - `released` (kReleased = 1)
    - `down` (kDown = 2)
@@ -697,7 +817,8 @@ Each `triggers[]` item (or the expanded form of a `trigger` shorthand):
    - `chord` (kChord = 7)
    - `action_chain` (kActionChain = 8)
    - `combo` (kCombo = 9)
-2. `behavior`: optional enum (`explicit`, `implicit`, `blocker`), default `implicit`.
+2. `behavior`: optional enum (`explicit`, `implicit`, `blocker`), default
+   `implicit`.
 3. `actuation_threshold`: optional float, default `0.5`.
 4. `hold_time`: optional float (seconds). Used by `hold`, `hold_and_release`.
 5. `interval`: optional float (seconds). Used by `pulse`.
@@ -733,7 +854,8 @@ Each `aux[]` item (used for combo step definitions):
 Validation rules:
 
 1. unknown aux fields are rejected.
-2. referenced action must resolve by name against actions array, then mounted/inflight content.
+2. referenced action must resolve by name against actions array, then
+   mounted/inflight content.
 
 Binary mapping:
 
@@ -746,8 +868,10 @@ Binary mapping:
 ### 7.4.7 Parsing Ownership
 
 1. `InputImportPipeline` owns source document parsing/validation.
-2. `InputImportJob` does not parse schema details; it orchestrates pipeline lifecycle only.
-3. diagnostics for source schema failures must use `input.context.*` and `input.asset.*` namespaces.
+2. `InputImportJob` does not parse schema details; it orchestrates pipeline
+   lifecycle only.
+3. diagnostics for source schema failures must use `input.context.*` and
+   `input.asset.*` namespaces.
 
 ## 7.5 JSON Schema Distribution
 
@@ -755,48 +879,60 @@ The engine ships JSON Schema files that provide real-time editor support:
 
 ### 7.5.1 Shipped Schema Files
 
-1. `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json` — primary format (actions + contexts).
-2. `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json` — standalone action format.
+1. `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json` — primary format
+   (actions + contexts).
+2. `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json` —
+   standalone action format.
 
 Schema features:
 
 1. `description` on every field — visible as hover documentation in editors.
-2. `enum` for all string enums — `type`, trigger `type`, `behavior`, `slot` — gives autocomplete in editors.
+2. `enum` for all string enums — `type`, trigger `type`, `behavior`, `slot` —
+   gives autocomplete in editors.
 3. `default` annotations — shows default values in editor tooltips.
-4. `additionalProperties: false` — rejects unknown fields and flags typos immediately.
-5. `if/then` for trigger-type-specific fields — validates that `hold_time` is only used with `hold`/`hold_and_release`, etc.
-6. Input slot enum is auto-generated from `InputSlots` class to stay in sync with the engine.
+4. `additionalProperties: false` — rejects unknown fields and flags typos
+   immediately.
+5. `if/then` for trigger-type-specific fields — validates that `hold_time` is
+   only used with `hold`/`hold_and_release`, etc.
+6. Input slot enum is auto-generated from `InputSlots` class to stay in sync
+   with the engine.
 
 ### 7.5.2 Schema Location Convention
 
-Schema files are shipped in the engine's `schemas/` directory at the repository root. Source files reference them via relative path:
+Schema files are shipped in the engine's `schemas/` directory at the repository
+root. Source files reference them via relative path:
 
 ```json
 { "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json" }
 ```
 
-For projects where content is in a subdirectory, adjust the relative path accordingly:
+For projects where content is in a subdirectory, adjust the relative path
+accordingly:
 
 ```json
 { "$schema": "../../src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json" }
 ```
 
-Alternatively, use workspace-level settings for automatic association (Section 7.4.1) and omit `$schema` from source files entirely.
+Alternatively, use workspace-level settings for automatic association (Section
+7.4.1) and omit `$schema` from source files entirely.
 
 ### 7.5.3 Schema Maintenance
 
-1. The input slot enum in the schema is generated from `InputSlots` registered names. When slots are added to the engine, the schema must be regenerated.
-2. When trigger types are added to `ActionTriggers.inc`, the trigger type enum in the schema must be updated.
-3. Schema version follows the engine's input system version. Breaking changes increment the version number.
+1. The input slot enum in the schema is generated from `InputSlots` registered
+   names. When slots are added to the engine, the schema must be regenerated.
+2. When trigger types are added to `ActionTriggers.inc`, the trigger type enum
+   in the schema must be updated.
+3. Schema version follows the engine's input system version. Breaking changes
+   increment the version number.
 
 ## 8. Binary Contract Changes
 
 ## 8.1 `InputMappingContextFlags`
 
 `InputMappingContextFlags` defines no flag: the field is reserved, cooked
-contexts store `kNone`, and the loader rejects a descriptor that sets a bit.
-The descriptor version is 2; version 1 descriptors carried start flags and
-must be recooked.
+contexts store `kNone`, and the loader rejects a descriptor that sets a bit. The
+descriptor version is 2; version 1 descriptors carried start flags and must be
+recooked.
 
 ## 8.2 `InputMappingContextAssetDesc`
 
@@ -811,15 +947,20 @@ Constraints:
 
 ## 8.3 `InputContextBindingRecord` — Removed
 
-This struct, its flags enum (`InputContextBindingFlags`), and the `kInputContextBinding` component type are fully removed from the codebase as part of this effort. No compatibility parsing is retained. All code paths that referenced scene-attached input context bindings are deleted.
+This struct, its flags enum (`InputContextBindingFlags`), and the
+`kInputContextBinding` component type are fully removed from the codebase as
+part of this effort. No compatibility parsing is retained. All code paths that
+referenced scene-attached input context bindings are deleted.
 
 ## 9. Runtime Context Lifecycle
 
-Input context lifecycle is **app-driven**, not scene-driven and not auto-bootstrapped.
+Input context lifecycle is **app-driven**, not scene-driven and not
+auto-bootstrapped.
 
 ### 9.1 Enumeration API
 
-`IAssetLoader` gains a new method that mirrors the existing `EnumerateMountedScenes()`:
+`IAssetLoader` gains a new method that mirrors the existing
+`EnumerateMountedScenes()`:
 
 ```cpp
 struct MountedInputContextEntry {
@@ -837,17 +978,22 @@ auto EnumerateMountedInputContexts() const
 Implementation (inside `AssetLoader` / `SceneCatalogQueryService` layer):
 
 1. iterate mounted sources from `ContentSourceRegistry`.
-2. for each source, iterate assets by index (`GetAssetCount`, `GetAssetKeyByIndex`).
-3. read `AssetHeader` from descriptor reader; filter `AssetType::kInputMappingContext`.
-4. decode the mapping-context descriptor header to extract `name`, `flags`, `default_priority`.
+2. for each source, iterate assets by index (`GetAssetCount`,
+   `GetAssetKeyByIndex`).
+3. read `AssetHeader` from descriptor reader; filter
+   `AssetType::kInputMappingContext`.
+4. decode the mapping-context descriptor header to extract `name`, `flags`,
+   `default_priority`.
 5. append entry to result vector.
 
-The caller receives a flat list of every mapping context known to the content system.
-No sorting, dedup, or activation is performed — those decisions belong to the application.
+The caller receives a flat list of every mapping context known to the content
+system. No sorting, dedup, or activation is performed — those decisions belong
+to the application.
 
 ### 9.2 Hydration Free Function
 
-A single free function converts a binary asset into a live `InputMappingContext`:
+A single free function converts a binary asset into a live
+`InputMappingContext`:
 
 ```cpp
 // src/Oxygen/Content/InputContextHydration.h
@@ -865,16 +1011,20 @@ auto HydrateInputContext(
 Responsibilities:
 
 1. read action references from the asset's mapping records.
-2. for each action reference, load the `InputActionAsset` via `IAssetLoader::GetInputActionAsset`.
-3. create `Action` objects and register them with `InputSystem::AddAction` (skip if already registered).
+2. for each action reference, load the `InputActionAsset` via
+   `IAssetLoader::GetInputActionAsset`.
+3. create `Action` objects and register them with `InputSystem::AddAction` (skip
+   if already registered).
 4. build trigger chains from the asset's trigger records.
 5. construct the `InputMappingContext` and return it.
 
-This function replaces the ~200-line inline hydration in `SceneLoaderService::AttachInputMappings`.
+This function replaces the ~200-line inline hydration in
+`SceneLoaderService::AttachInputMappings`.
 
 ### 9.3 Application-Driven Lifecycle
 
-The application (or a game-specific service) drives the full lifecycle using the enumeration API, hydration function, and existing `InputSystem` methods:
+The application (or a game-specific service) drives the full lifecycle using the
+enumeration API, hydration function, and existing `InputSystem` methods:
 
 ```text
 Enumerate  →  Hydrate  →  AddMappingContext  →  ActivateMappingContext
@@ -888,14 +1038,14 @@ Enumerate  →  Hydrate  →  AddMappingContext  →  ActivateMappingContext
 
 1. The scene lists them as starting input contexts, each with a priority.
 2. Scene instantiation loads each context, hydrates it with
-   `HydrateInputContext(asset, loader, input_system)`, adds it with its
-   priority and activates it.
+   `HydrateInputContext(asset, loader, input_system)`, adds it with its priority
+   and activates it.
 
 **Scenario B — Mode-switching contexts (e.g. camera orbit ↔ fly):**
 
 1. Scripts call `oxygen.input.activate_context(context)` and
-   `deactivate_context(context)` with a context asset reference; a context
-   not yet added is hydrated on first activation with its default priority.
+   `deactivate_context(context)` with a context asset reference; a context not
+   yet added is hydrated on first activation with its default priority.
 2. Application code can do the same through `InputSystem`.
 
 **Scenario C — On-demand contexts:**
@@ -916,9 +1066,13 @@ This reads `default_priority` from the `InputMappingContextAssetDesc` header.
 
 ### 9.5 Failure Behavior
 
-1. If a mapping-context descriptor cannot be decoded, `input.context.hydration_failed` is emitted and that context is skipped.
-2. If an action reference cannot be resolved during hydration, `input.context.action_unresolved` is emitted and that mapping entry is skipped.
-3. Enumeration and hydration failures do not halt processing of remaining contexts.
+1. If a mapping-context descriptor cannot be decoded,
+   `input.context.hydration_failed` is emitted and that context is skipped.
+2. If an action reference cannot be resolved during hydration,
+   `input.context.action_unresolved` is emitted and that mapping entry is
+   skipped.
+3. Enumeration and hydration failures do not halt processing of remaining
+   contexts.
 
 ## 10. Import Pipeline Behavior
 
@@ -939,16 +1093,18 @@ Responsibilities:
 1. parse source document.
 2. detect document structure (Section 7.4.3 detection rules).
 3. validate domain constraints.
-4. for primary format (has `contexts`):
-   a. extract action declarations from `actions` array, emit each as a separate `InputActionAssetDesc`.
-   b. iterate the `contexts` array, emit each as a separate `InputMappingContextAssetDesc`.
+4. for primary format (has `contexts`): a. extract action declarations from
+   `actions` array, emit each as a separate `InputActionAssetDesc`. b. iterate
+   the `contexts` array, emit each as a separate `InputMappingContextAssetDesc`.
    c. expand `trigger` shorthand strings to full trigger records.
-5. for standalone action format (no `contexts`):
-   a. emit one `InputActionAssetDesc`.
+5. for standalone action format (no `contexts`): a. emit one
+   `InputActionAssetDesc`.
 6. build descriptor bytes with `oxygen::serio::Writer`.
-7. emit descriptor(s) through `AssetEmitter` (one source file may produce N action assets + M context assets).
+7. emit descriptor(s) through `AssetEmitter` (one source file may produce N
+   action assets + M context assets).
 8. register loose index entries for all emitted assets.
-9. resolve `action` names in mappings against declared actions first, then mounted/inflight content.
+9. resolve `action` names in mappings against declared actions first, then
+   mounted/inflight content.
 
 Single-pipeline processing contract:
 
@@ -956,8 +1112,10 @@ Single-pipeline processing contract:
 2. It accepts both document structures:
    - standalone action (no `contexts` key — emits 1 asset)
    - primary format (has `contexts` — emits N+M assets)
-3. A single pipeline instance must process mixed workloads in one run (standalone action and primary format files interleaved).
-4. Dispatch to per-structure parse/serialize branches happens inside `InputImportPipeline`, not via separate pipeline classes.
+3. A single pipeline instance must process mixed workloads in one run
+   (standalone action and primary format files interleaved).
+4. Dispatch to per-structure parse/serialize branches happens inside
+   `InputImportPipeline`, not via separate pipeline classes.
 
 Per-structure validation:
 
@@ -966,11 +1124,13 @@ Per-structure validation:
    - `name` is unique in mounted view
 2. primary format:
    - `actions[]` declarations validated (name, type, no duplicates)
-   - action definitions checked for conflict against mounted/inflight (same name must have same type)
+   - action definitions checked for conflict against mounted/inflight (same name
+     must have same type)
    - `contexts[]` must contain at least one entry
    - context names unique within the file
    - each context's mapping/trigger/aux/slot ranges valid
-   - all `action` names in every context resolve (declared first, then mounted/inflight)
+   - all `action` names in every context resolve (declared first, then
+     mounted/inflight)
    - `trigger` shorthand and `triggers` array are mutually exclusive per mapping
 
 ## 11. Diagnostics Contract
@@ -986,20 +1146,25 @@ Stable diagnostic prefixes:
 Required diagnostics:
 
 1. `input.request.invalid_job_type`
-2. `input.context.action_unresolved` (action name not found in actions array or mounted content)
+2. `input.context.action_unresolved` (action name not found in actions array or
+   mounted content)
 3. `input.context.name_duplicate` (duplicate context names within one file)
-4. `input.context.trigger_ambiguous` (both `trigger` and `triggers` present on same mapping)
+4. `input.context.trigger_ambiguous` (both `trigger` and `triggers` present on
+   same mapping)
 5. `input.context.slot_unknown` (slot name not in registered InputSlots)
-6. `input.context.hydration_failed` (descriptor decode or construction error during hydration)
+6. `input.context.hydration_failed` (descriptor decode or construction error
+   during hydration)
 7. `input.asset.action_conflict` (same name, different type across files)
 8. `input.import.index_registration_failed`
-9. `input.import.unknown_document_structure` (source JSON matches neither primary nor standalone format)
+9. `input.import.unknown_document_structure` (source JSON matches neither
+   primary nor standalone format)
 10. `input.import.skipped_predecessor_failed`
 11. `input.manifest.job_id_missing`
 12. `input.manifest.job_id_duplicate`
 13. `input.manifest.dep_missing_target`
 14. `input.manifest.dep_cycle`
-15. `input.manifest.dep_wrong_type` (reserved — not emitted; kept for code stability)
+15. `input.manifest.dep_wrong_type` (reserved — not emitted; kept for code
+    stability)
 16. `input.manifest.key_not_allowed`
 
 ## 12. Current-format contract
@@ -1017,20 +1182,25 @@ Scene input binding records are not authored or emitted.
 2. Import:
    - input request builder tests.
    - job/pipeline end-to-end tests for action/context.
-   - mixed standalone-action and primary-format processing in single pipeline instance.
+   - mixed standalone-action and primary-format processing in single pipeline
+     instance.
    - `trigger` shorthand expansion (string → full trigger record).
    - document structure detection (primary vs. standalone vs. invalid).
    - slot name validation against registered `InputSlots`.
 3. Manifest:
-   - key whitelist enforcement (reject `output`, `name`, `verbose`, `content_hashing`, asset fields).
+   - key whitelist enforcement (reject `output`, `name`, `verbose`,
+     `content_hashing`, asset fields).
    - dependency DAG ordering, cycles, missing targets.
    - failure propagation (predecessor fail -> skip dependents).
 4. Runtime:
-   - `EnumerateMountedInputContexts` returns correct entries for mounted sources.
-   - `HydrateInputContext` resolves actions, builds triggers, returns live context.
+   - `EnumerateMountedInputContexts` returns correct entries for mounted
+     sources.
+   - `HydrateInputContext` resolves actions, builds triggers, returns live
+     context.
    - a scene's starting contexts are added and activated by instantiation.
 5. Compatibility checks:
-   - verify generated descriptors are consumable by existing runtime and existing tooling.
+   - verify generated descriptors are consumable by existing runtime and
+     existing tooling.
 6. Schema:
    - JSON Schema validates canonical examples without errors.
    - JSON Schema rejects unknown fields, invalid enum values.
@@ -1040,8 +1210,11 @@ Scene input binding records are not authored or emitted.
 ## 15. Acceptance Criteria
 
 1. Input import path is exclusively `InputImportJob -> InputImportPipeline`.
-2. All scene-bound context association infrastructure is fully removed (no struct, no enum, no component type, no parsing, no packing).
-3. `EnumerateMountedInputContexts` + `HydrateInputContext` provide a complete, app-driven context lifecycle (no implicit bootstrap service).
-4. Loose-cooked outputs are consistent with new ownership model and remain PAK-compatible.
+2. All scene-bound context association infrastructure is fully removed (no
+   struct, no enum, no component type, no parsing, no packing).
+3. `EnumerateMountedInputContexts` + `HydrateInputContext` provide a complete,
+   app-driven context lifecycle (no implicit bootstrap service).
+4. Loose-cooked outputs are consistent with new ownership model and remain
+   PAK-compatible.
 5. Runtime and tooling diagnostics are explicit and deterministic.
 6. Tests listed in Section 14 pass.

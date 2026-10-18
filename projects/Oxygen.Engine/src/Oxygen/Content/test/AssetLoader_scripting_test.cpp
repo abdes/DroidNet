@@ -31,6 +31,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -60,8 +61,7 @@ namespace {
 
 auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
   const oxygen::data::AssetKey& script_key,
-  std::span<const oxygen::data::pak::scripting::ScriptParamRecord> declarations
-  = {}) -> void
+  const oxygen::data::ScriptParameters& parameters = {}) -> void
 {
   using oxygen::data::AssetType;
   using oxygen::data::loose_cooked::FileKind;
@@ -75,8 +75,13 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
   script_desc.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
   script_desc.header.version
     = oxygen::data::pak::scripting::kScriptAssetVersion;
-  std::ranges::copy(
-    std::string_view { "Reload" }, std::begin(script_desc.header.name));
+  auto strings = oxygen::data::DescriptorStringsBuilder {};
+  script_desc.header.name_offset = strings.Add("Reload");
+  auto declarations = std::vector<ScriptParamRecord> {};
+  for (const auto& [key, value] : parameters) {
+    declarations.push_back(
+      oxygen::data::MakeScriptParamRecord(key, value, strings).value());
+  }
   script_desc.bytecode_resource_index
     = oxygen::data::ResourceReferenceIndex { 0U };
   script_desc.source_resource_index = oxygen::data::kNoResourceReference;
@@ -87,13 +92,11 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
       .entry_size = sizeof(ScriptParamRecord),
     };
   }
-  auto desc_bytes = std::vector<std::byte>(
-    sizeof(ScriptAssetDesc) + declarations.size_bytes());
+  const auto records = std::as_bytes(std::span(declarations));
+  auto desc_bytes = std::vector<std::byte>(sizeof(ScriptAssetDesc));
   std::memcpy(desc_bytes.data(), &script_desc, sizeof(script_desc));
-  if (!declarations.empty()) {
-    std::memcpy(std::span(desc_bytes).subspan(sizeof(ScriptAssetDesc)).data(),
-      declarations.data(), declarations.size_bytes());
-  }
+  desc_bytes.insert(desc_bytes.end(), records.begin(), records.end());
+  oxygen::data::AppendDescriptorStrings(desc_bytes, strings);
 
   const auto desc_rel = std::filesystem::path("Scripts") / "Reload.oscript";
 
@@ -157,13 +160,12 @@ auto WriteLooseCookedSceneWithScripting(
 
   SceneAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
-  std::ranges::copy(
-    std::string_view { "ScriptScene" }, std::begin(desc.header.name));
   desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
 
   const uint32_t offset_nodes = sizeof(SceneAssetDesc);
   const uint32_t offset_strings = offset_nodes + sizeof(NodeRecord);
-  static constexpr auto kStrings = std::to_array("\0root\0");
+  static constexpr auto kStrings = std::to_array("\0root\0helper\0");
+  constexpr uint32_t kHelperKeyOffset = 6U;
   const uint32_t strings_size = sizeof(kStrings) - 1;
   const uint32_t offset_dir = offset_strings + strings_size;
   const uint32_t offset_table = offset_dir + sizeof(SceneComponentTableDesc);
@@ -184,7 +186,7 @@ auto WriteLooseCookedSceneWithScripting(
   if (with_asset_param) {
     slot.params_array_offset = offset_params;
     slot.params_count = 1U;
-    std::ranges::copy(std::string_view { "helper" }, std::begin(param.key));
+    param.key_offset = kHelperKeyOffset;
     param.type = ScriptParamType::kAsset;
     param.value.as_asset = {
       .key = ParamScriptKey(),
@@ -195,8 +197,8 @@ auto WriteLooseCookedSceneWithScripting(
   desc.nodes.offset = offset_nodes;
   desc.nodes.count = 1;
   desc.nodes.entry_size = sizeof(NodeRecord);
-  desc.scene_strings.offset = offset_strings;
-  desc.scene_strings.size = strings_size;
+  desc.header.strings.offset = offset_strings;
+  desc.header.strings.size = strings_size;
   desc.component_table_directory_offset = offset_dir;
   desc.component_table_count = 1;
 
@@ -266,11 +268,11 @@ auto WriteLooseCookedSceneWithScripting(
   script.header.version = oxygen::data::pak::scripting::kScriptAssetVersion;
   writer.WriteAssetDescriptor(slot.script_asset_key, AssetType::kScript,
     "/test/scene-script.oscript", "scene-script.oscript",
-    std::as_bytes(std::span { &script, 1U }));
+    oxygen::data::MakeDescriptorBytes(script));
   if (with_asset_param) {
     writer.WriteAssetDescriptor(ParamScriptKey(), AssetType::kScript,
       "/test/param-script.oscript", "param-script.oscript",
-      std::as_bytes(std::span { &script, 1U }));
+      oxygen::data::MakeDescriptorBytes(script));
   }
   writer.WriteFile(FileKind::kScriptsTable,
     std::string(layout.resources_dir) + "/scripts.table", {});
@@ -382,25 +384,19 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
 NOLINT_TEST_F(AssetLoaderScriptingTest, ScriptAssetLoadsDeclaredParameters)
 {
   using oxygen::data::ScriptAssetParam;
-  using oxygen::data::pak::scripting::ScriptParamRecord;
-  using oxygen::data::pak::scripting::ScriptParamType;
 
   // Arrange
   const auto script_key
     = oxygen::data::AssetKey::FromVirtualPath("/test/Reload.oscript");
   const auto cooked_root = temp_dir_ / "loose_script_declarations";
   constexpr auto kSpeedDefault = 2.5F;
-  auto declarations = std::array<ScriptParamRecord, 2> {};
-  std::ranges::copy(
-    std::string_view { "speed" }, std::begin(declarations.at(0).key));
-  declarations.at(0).type = ScriptParamType::kFloat;
-  declarations.at(0).value.as_float = kSpeedDefault;
-  std::ranges::copy(
-    std::string_view { "orb" }, std::begin(declarations.at(1).key));
-  declarations.at(1).type = ScriptParamType::kAsset;
-  declarations.at(1).value.as_asset = {
-    .key = {},
-    .asset_type = oxygen::data::AssetType::kMaterial,
+  const auto declarations = oxygen::data::ScriptParameters {
+    { "speed", kSpeedDefault },
+    { "orb",
+      ScriptAssetParam {
+        .key = {},
+        .asset_type = oxygen::data::AssetType::kMaterial,
+      } },
   };
   WriteLooseCookedScriptAsset(cooked_root, script_key, declarations);
 

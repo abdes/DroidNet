@@ -44,6 +44,7 @@ class PhysicsSceneLoaderTypeTest
 NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadMinimalZeroBindingsSucceeds)
 {
   WriteAs(writer_, MakeMinimalDesc());
+  WriteEmptyStringTable(writer_, stream_);
   ASSERT_TRUE(writer_.Flush());
 
   auto asset = LoadPhysicsSceneAsset(MakeContext());
@@ -120,6 +121,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadMultipleBindingTypesSucceeds)
   WriteAs(writer_, collider_entry);
   WriteAs(writer_, rb);
   WriteAs(writer_, col);
+  WriteEmptyStringTable(writer_, stream_);
   ASSERT_TRUE(writer_.Flush());
 
   auto asset = LoadPhysicsSceneAsset(MakeContext());
@@ -224,6 +226,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
   WriteAs(writer_, joint);
   WriteAs(writer_, veh);
   WriteAs(writer_, agg);
+  WriteEmptyStringTable(writer_, stream_);
   ASSERT_TRUE(writer_.Flush());
 
   auto asset = LoadPhysicsSceneAsset(MakeContext());
@@ -376,6 +379,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadEntrySizeMismatchThrows)
     WriteAs(local_writer, entry);
     std::vector<std::byte> payload(entry.table.entry_size, std::byte { 0 });
     ASSERT_TRUE(local_writer.WriteBlob(std::span<const std::byte>(payload)));
+    WriteEmptyStringTable(local_writer, local_stream);
     ASSERT_TRUE(local_writer.Flush());
 
     ASSERT_TRUE(local_stream.Seek(0));
@@ -462,6 +466,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,
 NOLINT_TEST_F(PhysicsSceneLoaderTypeTest, LoadAssetTypeIsPhysicsScene)
 {
   WriteAs(writer_, MakeMinimalDesc());
+  WriteEmptyStringTable(writer_, stream_);
   ASSERT_TRUE(writer_.Flush());
 
   auto asset = LoadPhysicsSceneAsset(MakeContext());

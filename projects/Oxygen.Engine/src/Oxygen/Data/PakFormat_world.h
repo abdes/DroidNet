@@ -95,19 +95,6 @@ using SceneNodeTable = SceneDataTable;
 //! Scene component table descriptor (alias).
 using SceneComponentTable = SceneDataTable;
 
-//! Scene string table descriptor.
-/*!
- Describes the packed scene string table blob.
- Offsets are relative to the start of the scene descriptor payload.
-*/
-#pragma pack(push, 1)
-struct SceneStringTable {
-  core::StringTableOffsetT offset = 0;
-  core::StringTableSizeT size = 0;
-};
-#pragma pack(pop)
-static_assert(sizeof(SceneStringTable) == 8);
-
 //! Scene asset descriptor
 /*!
  Describes a scene (level) asset. As with all asset descriptors in this file,
@@ -117,8 +104,6 @@ static_assert(sizeof(SceneStringTable) == 8);
  followed by:
 
  - `NodeRecord nodes[nodes.count];` at `nodes.offset`
- - a packed, NUL-terminated UTF-8 scene string table blob described by
-   `scene_strings`
  - optional component tables (e.g. `RenderableRecord[]`) described by the
    component table directory at `component_table_directory_offset`
 
@@ -132,10 +117,9 @@ static_assert(sizeof(SceneStringTable) == 8);
  format version. Component tables declare their own `entry_size` via
  `SceneComponentTableDesc::table.entry_size`.
 
- Strings are stored back-to-back and sized to their actual length.
- `NodeRecord::scene_name_offset` is a byte offset into the scene string table.
- The scene string table MUST start with a single `\0` byte so that offset `0`
- refers to the empty string.
+ The descriptor string table (`header.strings`) follows the nodes.
+ `NodeRecord::scene_name_offset` and the slot parameter strings are byte offsets
+ into it.
 
  @note Scene graph indices have no sentinel values by contract. Indices are
    always valid for their type; out-of-range indices are treated as errors by
@@ -146,7 +130,6 @@ struct SceneAssetDesc {
   core::AssetHeader header;
 
   SceneNodeTable nodes = {};
-  SceneStringTable scene_strings = {};
 
   // Directory of component tables.
   // Points to an array of `SceneComponentTableDesc` entries.
@@ -159,7 +142,7 @@ struct SceneAssetDesc {
   SceneNodeIndexT starting_camera = kNoStartingCamera;
 };
 #pragma pack(pop)
-static_assert(sizeof(SceneAssetDesc) == 163);
+static_assert(sizeof(SceneAssetDesc) == 103);
 
 //! Scene component table directory entry.
 /*!
@@ -201,7 +184,7 @@ static_assert(sizeof(SceneComponentTableDesc) == 20);
 struct NodeRecord {
   AssetKey node_id; // Stable GUID for the node
   core::StringTableOffsetT scene_name_offset
-    = 0; // Offset into scene string table
+    = 0; // Offset into the descriptor string table
 
   SceneNodeIndexT parent_index = 0; // Index of parent node (or self if root)
 

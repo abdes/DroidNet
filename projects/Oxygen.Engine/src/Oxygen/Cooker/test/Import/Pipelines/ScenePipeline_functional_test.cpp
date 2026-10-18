@@ -41,7 +41,6 @@ namespace data = oxygen::data;
 using oxygen::cooker::test::FakeSceneAdapter;
 using oxygen::cooker::test::MakeFirstByteAssetKey;
 using oxygen::cooker::test::MakeMinimalSceneBuild;
-using oxygen::cooker::test::SceneStringTableBuilder;
 
 namespace {
 
@@ -212,11 +211,9 @@ NOLINT_TEST_F(ScenePipelineTest, CollectMinimalSceneBuildsDescriptor)
 
 NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
 {
-  SceneStringTableBuilder strings;
-  const auto root_offset = strings.Add("Root");
-  const auto child_offset = strings.Add("Child");
-
   SceneBuild build;
+  const auto root_offset = build.strings.Add("Root");
+  const auto child_offset = build.strings.Add("Child");
   build.nodes.push_back(data::pak::world::NodeRecord {
     .node_id = MakeFirstByteAssetKey(1U),
     .scene_name_offset = root_offset,
@@ -235,7 +232,6 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
     .rotation = { 0.0F, 0.0F, 0.0F, 1.0F },
     .scale = { 1.0F, 1.0F, 1.0F },
   });
-  build.strings = std::move(strings.bytes);
   build.renderables = {
     data::pak::world::RenderableRecord {
       .node_index = 1,
@@ -287,7 +283,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
   const auto desc = ReadSceneDesc(bytes);
   EXPECT_EQ(desc.component_table_count, 1U);
   EXPECT_EQ(desc.component_table_directory_offset,
-    desc.scene_strings.offset + desc.scene_strings.size);
+    desc.header.strings.offset + desc.header.strings.size);
 
   const auto entries = ReadComponentDirectory(bytes, desc);
   ASSERT_EQ(entries.size(), 1U);

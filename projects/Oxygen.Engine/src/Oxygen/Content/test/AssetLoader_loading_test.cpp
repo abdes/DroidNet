@@ -34,6 +34,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -92,8 +93,8 @@ auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
 
   SceneAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
-  std::ranges::copy(
-    std::string_view { "LooseScene" }, std::begin(desc.header.name));
+  auto strings = oxygen::data::DescriptorStringsBuilder {};
+  desc.header.name_offset = strings.Add("LooseScene");
   desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
 
   const auto rel_desc
@@ -102,7 +103,8 @@ auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
   oxygen::content::testing::LooseCookedTestWriter writer(cooked_root);
   writer.WriteAssetDescriptor(key, AssetType::kScene,
     std::string(layout.virtual_mount_root) + "/" + rel_desc.generic_string(),
-    rel_desc.generic_string(), std::as_bytes(std::span { &desc, 1U }));
+    rel_desc.generic_string(),
+    oxygen::data::MakeDescriptorBytes(desc, strings));
   static_cast<void>(writer.Finish());
 }
 
@@ -122,8 +124,8 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
   const auto action_rel_desc = std::filesystem::path("Input") / "Move.oiact";
   InputActionAssetDesc action_desc {};
   action_desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
-  std::ranges::copy(
-    std::string_view { "Move" }, std::begin(action_desc.header.name));
+  auto action_strings = oxygen::data::DescriptorStringsBuilder {};
+  action_desc.header.name_offset = action_strings.Add("Move");
   action_desc.header.version
     = oxygen::data::pak::input::kInputActionAssetVersion;
   action_desc.value_type = 0;
@@ -134,16 +136,14 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
   InputMappingContextAssetDesc context_desc {};
   context_desc.header.asset_type
     = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  std::ranges::copy(std::string_view { "HydratedContext" },
-    std::begin(context_desc.header.name));
+  auto context_strings = oxygen::data::DescriptorStringsBuilder {};
+  context_desc.header.name_offset = context_strings.Add("HydratedContext");
   context_desc.header.version
     = oxygen::data::pak::input::kInputMappingContextAssetVersion;
   context_desc.flags = InputMappingContextFlags::kNone;
   constexpr int32_t kInputPriority = 77;
   context_desc.default_priority = kInputPriority;
 
-  constexpr auto kSlotName = std::to_array("Space");
-  const auto strings_size = static_cast<uint32_t>(sizeof(kSlotName));
   context_desc.mappings.offset = sizeof(InputMappingContextAssetDesc);
   context_desc.mappings.count = 1;
   context_desc.mappings.entry_size = sizeof(InputActionMappingRecord);
@@ -156,13 +156,10 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
   context_desc.trigger_aux.count = 0;
   context_desc.trigger_aux.entry_size
     = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-  context_desc.strings.offset = context_desc.trigger_aux.offset;
-  context_desc.strings.count = strings_size;
-  context_desc.strings.entry_size = sizeof(char);
 
   InputActionMappingRecord mapping {};
   mapping.action_asset_key = action_key;
-  mapping.slot_name_offset = 0;
+  mapping.slot_name_offset = context_strings.Add("Space");
   mapping.trigger_start_index = 0;
   mapping.trigger_count = 1;
   mapping.scale[0] = 1.0F;
@@ -174,10 +171,8 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
   trigger.type = InputTriggerType::kPressed;
   trigger.actuation_threshold = 0.5F;
 
-  const auto context_blob_size
-    = static_cast<size_t>(context_desc.strings.offset)
-    + static_cast<size_t>(context_desc.strings.count);
-  std::vector<std::byte> context_blob(context_blob_size, std::byte { 0 });
+  std::vector<std::byte> context_blob(
+    context_desc.trigger_aux.offset, std::byte { 0 });
   std::memcpy(context_blob.data(), &context_desc, sizeof(context_desc));
   std::memcpy(
     std::span(context_blob).subspan(context_desc.mappings.offset).data(),
@@ -185,15 +180,13 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
   std::memcpy(
     std::span(context_blob).subspan(context_desc.triggers.offset).data(),
     &trigger, sizeof(trigger));
-  std::memcpy(
-    std::span(context_blob).subspan(context_desc.strings.offset).data(),
-    kSlotName.data(), kSlotName.size());
+  oxygen::data::AppendDescriptorStrings(context_blob, context_strings);
 
   oxygen::content::testing::LooseCookedTestWriter writer(cooked_root);
   writer.WriteAssetDescriptor(action_key, AssetType::kInputAction,
     "/Game/" + action_rel_desc.generic_string(),
     action_rel_desc.generic_string(),
-    std::as_bytes(std::span { &action_desc, 1U }));
+    oxygen::data::MakeDescriptorBytes(action_desc, action_strings));
   writer.WriteAssetDescriptor(context_key, AssetType::kInputMappingContext,
     "/Game/" + context_rel_desc.generic_string(),
     context_rel_desc.generic_string(), context_blob,

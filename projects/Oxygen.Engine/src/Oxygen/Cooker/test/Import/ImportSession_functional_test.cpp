@@ -47,6 +47,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
@@ -608,7 +609,7 @@ NOLINT_TEST_F(ImportSessionTest, CohortPublicationPreservesParticipantFailures)
     sessions.at(index)->AssetEmitter().Emit(
       oxygen::data::AssetKey::FromVirtualPath(virtual_path),
       oxygen::data::AssetType::kMaterial, virtual_path, relative,
-      std::as_bytes(std::span { &descriptor, 1 }), {});
+      oxygen::data::MakeDescriptorBytes(descriptor), {});
   }
   sessions.at(1)->AddDiagnostic({
     .severity = ImportSeverity::kError,

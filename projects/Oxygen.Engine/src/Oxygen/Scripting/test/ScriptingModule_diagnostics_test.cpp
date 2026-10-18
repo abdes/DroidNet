@@ -72,22 +72,21 @@ namespace {
     };
   }
 
-  auto MakeNamedScriptAsset(
-    std::span<const data::pak::scripting::ScriptParamRecord> declarations = {})
+  auto MakeNamedScriptAsset(const data::ScriptParameters& declarations = {})
     -> std::shared_ptr<const data::ScriptAsset>
   {
-    auto desc = data::pak::scripting::ScriptAssetDesc {};
-    std::ranges::copy(kScriptName, std::begin(desc.header.name));
-    return std::make_shared<data::ScriptAsset>(
-      data::AssetKey {}, desc, declarations);
+    auto script = std::make_shared<data::ScriptAsset>(data::AssetKey {},
+      data::pak::scripting::ScriptAssetDesc {}, declarations);
+    script->SetAssetName(std::string { kScriptName });
+    return script;
   }
 
   class ScriptDiagnosticsTest : public ScriptingModuleTest {
   protected:
     //! Builds a scene whose node `kNodeName` runs `source` in slot 0.
     auto MakeScene(const std::string_view source, const uint64_t hash,
-      std::span<const data::pak::scripting::ScriptParamRecord> declarations
-      = {}) -> std::shared_ptr<scene::Scene>
+      const data::ScriptParameters& declarations = {})
+      -> std::shared_ptr<scene::Scene>
     {
       auto scene = std::make_shared<scene::Scene>(
         "diagnostics", ScriptingModuleTest::kDefaultSceneCapacity);
@@ -176,12 +175,8 @@ NOLINT_TEST_F(ScriptDiagnosticsTest, UnsetNodeParameterGetsHelp)
   auto sources = std::make_shared<SourceTextCache>();
   sources->Add(std::string(kScriptName), std::string(kUnsetTargetScript));
   module.SetDiagnosticSources(sources);
-  const auto target = data::MakeScriptParamRecord(
-    "target", data::ScriptParam { data::ScriptNodeParam {} });
-  const auto declarations = target.has_value()
-    ? std::vector { *target }
-    : std::vector<data::pak::scripting::ScriptParamRecord> {};
-  ASSERT_EQ(declarations.size(), 1U);
+  const auto declarations
+    = data::ScriptParameters { { "target", data::ScriptNodeParam {} } };
   auto scene = MakeScene(kUnsetTargetScript, kUnsetTargetHash, declarations);
   ASSERT_NE(scene, nullptr);
   engine::FrameContext frame;

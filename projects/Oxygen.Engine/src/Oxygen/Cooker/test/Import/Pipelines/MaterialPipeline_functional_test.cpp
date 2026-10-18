@@ -25,6 +25,7 @@
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/PipelineHarness.h>
 #include <Oxygen/Core/Types/ShaderType.h>
@@ -128,14 +129,6 @@ auto ReadUvTransform(const data::pak::render::MaterialAssetDesc& desc)
 }
 
 using oxygen::cooker::test::HasDiagnosticCode;
-
-auto CountDiagnosticsWithCode(const std::vector<ImportDiagnostic>& diagnostics,
-  std::string_view code) -> size_t
-{
-  return static_cast<size_t>(
-    std::count_if(diagnostics.begin(), diagnostics.end(),
-      [&](const ImportDiagnostic& diag) -> bool { return diag.code == code; }));
-}
 
 auto ExpectedShaderStages(const std::vector<ShaderRequest>& requests)
   -> uint32_t
@@ -448,12 +441,15 @@ NOLINT_TEST_F(MaterialPipelineTest, CollectShaderStagesOrderedByBitIndex)
   EXPECT_EQ(refs.at(1).shader_type, static_cast<uint8_t>(ShaderType::kPixel));
 }
 
-NOLINT_TEST_F(MaterialPipelineTest, CollectOverlongShaderStringsEmitWarnings)
+NOLINT_TEST_F(MaterialPipelineTest, CollectLongShaderStringsStoredWhole)
 {
+  // Longer than the former 63-byte name fields, and not ASCII.
+  const auto source_path = "Shaders/\xC3\x89" + std::string(200, 's') + ".hlsl";
+  const auto entry_point = std::string(80, 'e');
+  const auto defines = std::string(300, 'd');
   auto item = MakeBaseItem();
   item.material.shader_requests = {
-    MakeShaderRequest(ShaderType::kVertex, std::string(200, 's'),
-      std::string(80, 'e'), std::string(300, 'd')),
+    MakeShaderRequest(ShaderType::kVertex, source_path, entry_point, defines),
   };
 
   const auto result
@@ -465,9 +461,21 @@ NOLINT_TEST_F(MaterialPipelineTest, CollectOverlongShaderStringsEmitWarnings)
       });
 
   ASSERT_TRUE(result.success);
-  EXPECT_EQ(CountDiagnosticsWithCode(
-              result.diagnostics, "material.shader_ref_truncated"),
-    3U);
+  ASSERT_HAS_VALUE(result.cooked)
+    << "Expected result.cooked to contain a value";
+  EXPECT_TRUE(result.diagnostics.empty());
+  const auto& bytes = result.cooked->descriptor_bytes;
+  const auto refs = ReadShaderRefs(bytes, 1U);
+  ASSERT_EQ(refs.size(), 1U);
+  EXPECT_EQ(
+    content::test::ReadDescriptorString(bytes, refs.at(0).source_path_offset),
+    source_path);
+  EXPECT_EQ(
+    content::test::ReadDescriptorString(bytes, refs.at(0).entry_point_offset),
+    entry_point);
+  EXPECT_EQ(
+    content::test::ReadDescriptorString(bytes, refs.at(0).defines_offset),
+    defines);
 }
 
 } // namespace

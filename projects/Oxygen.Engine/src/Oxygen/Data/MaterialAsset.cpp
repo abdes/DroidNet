@@ -6,11 +6,8 @@
 
 #pragma once
 
-#include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -99,12 +96,6 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     // Asset header - mark as procedural/default
     desc.header.asset_type
       = static_cast<uint8_t>(AssetType::kMaterial); // MaterialAsset type
-    // Safe string copy with null termination
-    constexpr const char* default_name = "Default";
-    std::size_t copy_len
-      = (std::min)(sizeof(desc.header.name) - 1, std::strlen(default_name));
-    std::memcpy(desc.header.name, default_name, copy_len);
-    desc.header.name[copy_len] = '\0';
     desc.header.version = pak::render::kMaterialAssetVersion;
     desc.header.streaming_priority = 255; // Lowest priority
     desc.header.content_hash = {}; // No specific content hash
@@ -136,8 +127,10 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     // shaders
     std::vector<ShaderReference> shader_refs {};
 
-    return std::make_shared<const MaterialAsset>(
+    auto material = std::make_shared<MaterialAsset>(
       kDefaultMaterialAssetKey, desc, std::move(shader_refs));
+    material->SetAssetName("Default");
+    return material;
   }();
 
   return kDefaultMaterial;
@@ -165,12 +158,6 @@ auto MaterialAsset::CreateDebug() -> std::shared_ptr<const MaterialAsset>
 
   // Copy the default and modify for debug use
   pak::render::MaterialAssetDesc debug_desc = material->desc_;
-  // Safe string copy with null termination
-  constexpr const char* debug_name = "Debug";
-  std::size_t copy_len
-    = (std::min)(sizeof(debug_desc.header.name) - 1, std::strlen(debug_name));
-  std::memcpy(debug_desc.header.name, debug_name, copy_len);
-  debug_desc.header.name[copy_len] = '\0';
 
   // Bright magenta color - highly visible for debugging
   debug_desc.base_color[0] = 1.0F; // R - full red
@@ -179,6 +166,8 @@ auto MaterialAsset::CreateDebug() -> std::shared_ptr<const MaterialAsset>
   debug_desc.base_color[3] = 1.0F; // A - fully opaque
   debug_desc.roughness = Unorm16 { 1.0F }; // Fully rough (no reflections)
 
-  return std::make_shared<const MaterialAsset>(
+  auto debug = std::make_shared<MaterialAsset>(
     kDebugMaterialAssetKey, debug_desc, std::vector<ShaderReference> {});
+  debug->SetAssetName("Debug");
+  return debug;
 }

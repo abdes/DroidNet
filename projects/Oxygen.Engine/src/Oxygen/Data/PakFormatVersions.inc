@@ -6,20 +6,20 @@
 
 // Authoritative current cooked-format versions. Native producers, readers and
 // tools consume this catalog; readers accept these versions only.
-OXDAT_FORMAT_VERSION(kPakVersion, uint16_t, 8)
+OXDAT_FORMAT_VERSION(kPakVersion, uint16_t, 9)
 OXDAT_FORMAT_VERSION(kPakCatalogVersion, uint32_t, 2)
 OXDAT_FORMAT_VERSION(kLooseCookedIndexVersion, uint16_t, 3)
-OXDAT_ASSET_VERSION(kMaterialAssetVersion, kMaterial, material, 4)
-OXDAT_ASSET_VERSION(kGeometryAssetVersion, kGeometry, geometry, 4)
-OXDAT_ASSET_VERSION(kSceneAssetVersion, kScene, scene, 13)
-OXDAT_ASSET_VERSION(kScriptAssetVersion, kScript, script, 3)
-OXDAT_ASSET_VERSION(kInputActionAssetVersion, kInputAction, input_action, 1)
+OXDAT_ASSET_VERSION(kMaterialAssetVersion, kMaterial, material, 5)
+OXDAT_ASSET_VERSION(kGeometryAssetVersion, kGeometry, geometry, 5)
+OXDAT_ASSET_VERSION(kSceneAssetVersion, kScene, scene, 14)
+OXDAT_ASSET_VERSION(kScriptAssetVersion, kScript, script, 4)
+OXDAT_ASSET_VERSION(kInputActionAssetVersion, kInputAction, input_action, 2)
 OXDAT_ASSET_VERSION(kInputMappingContextAssetVersion, kInputMappingContext,
-  input_mapping_context, 2)
+  input_mapping_context, 3)
 OXDAT_ASSET_VERSION(
-  kPhysicsMaterialAssetVersion, kPhysicsMaterial, physics_material, 1)
+  kPhysicsMaterialAssetVersion, kPhysicsMaterial, physics_material, 2)
 OXDAT_ASSET_VERSION(
-  kCollisionShapeAssetVersion, kCollisionShape, collision_shape, 1)
-OXDAT_ASSET_VERSION(kPhysicsSceneAssetVersion, kPhysicsScene, physics_scene, 1)
+  kCollisionShapeAssetVersion, kCollisionShape, collision_shape, 2)
+OXDAT_ASSET_VERSION(kPhysicsSceneAssetVersion, kPhysicsScene, physics_scene, 2)
 OXDAT_FORMAT_VERSION(kBrowseIndexVersion, uint32_t, 1)
 OXDAT_FORMAT_VERSION(kExposureExtensionVersion, uint32_t, 1)

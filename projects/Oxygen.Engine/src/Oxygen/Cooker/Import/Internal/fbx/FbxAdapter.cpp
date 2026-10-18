@@ -1174,17 +1174,6 @@ namespace {
     const void* source_node = nullptr;
   };
 
-  [[nodiscard]] auto AppendString(std::vector<std::byte>& strings,
-    const std::string_view value) -> data::pak::core::StringTableOffsetT
-  {
-    const auto offset
-      = static_cast<data::pak::core::StringTableOffsetT>(strings.size());
-    const auto bytes = std::as_bytes(std::span(value.data(), value.size()));
-    strings.insert(strings.end(), bytes.begin(), bytes.end());
-    strings.push_back(std::byte { 0 });
-    return offset;
-  }
-
   [[nodiscard]] auto MakeNodeKey(const std::string_view node_virtual_path)
     -> data::AssetKey
   {
@@ -2816,7 +2805,6 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   SceneBuild build;
   build.flags = data::pak::world::SceneAssetFlags::kModelScene;
   build.nodes.reserve(pruned_nodes.size());
-  build.strings.push_back(std::byte { 0 });
 
   const auto scene_name = request.GetSceneName();
   const auto virtual_path
@@ -2841,7 +2829,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
 
     NodeRecord rec {};
     rec.node_id = MakeNodeKey(std::string(virtual_path) + "/" + name);
-    rec.scene_name_offset = AppendString(build.strings, name);
+    rec.scene_name_offset = build.strings.Add(name);
     rec.parent_index = node.parent_index;
     rec.node_flags = detail::BuildImportedNodeFlags(
       node.visible, node.has_renderable, node.has_light);

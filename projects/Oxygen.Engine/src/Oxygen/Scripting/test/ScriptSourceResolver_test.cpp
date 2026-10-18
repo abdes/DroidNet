@@ -71,15 +71,8 @@ namespace {
     desc.bytecode_resource_index = indices.bytecode_index;
     desc.source_resource_index = indices.source_index;
     desc.flags = flags;
-    if (!external_source.empty()) {
-      auto path_span = std::span(desc.external_source_path);
-      auto writable = path_span.first(path_span.size() - 1);
-      const auto src_view = external_source | std::views::take(writable.size());
-      const auto out_it = std::ranges::copy(src_view, writable.begin()).out;
-      *out_it = '\0';
-    }
     return std::make_shared<data::ScriptAsset>(MakeAssetKey(1U), desc,
-      std::vector<data::pak::scripting::ScriptParamRecord> {});
+      data::ScriptParameters {}, std::string { external_source });
   }
 
   auto MakeScriptResource(const std::vector<uint8_t>& bytes,

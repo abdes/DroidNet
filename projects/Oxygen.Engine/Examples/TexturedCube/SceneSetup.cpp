@@ -55,11 +55,6 @@ auto MakeMaterial(const char* name, const glm::vec4& rgba,
   desc.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
 
-  constexpr std::size_t maxn = std::size(desc.header.name) - 1;
-  const std::size_t n = std::min(maxn, std::strlen(name));
-  std::copy_n(name, n, std::begin(desc.header.name));
-  desc.header.name[n] = '\0';
-
   desc.header.version = pak::render::kMaterialAssetVersion;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
@@ -101,12 +96,16 @@ auto MakeMaterial(const char* name, const glm::vec4& rgba,
   if (base_color_texture_key != static_cast<c::ResourceKey>(0)) {
     std::vector<c::ResourceKey> texture_keys;
     texture_keys.push_back(base_color_texture_key);
-    return std::make_shared<const d::MaterialAsset>(asset_key, desc,
+    auto material = std::make_shared<d::MaterialAsset>(asset_key, desc,
       std::vector<d::ShaderReference> {}, std::move(texture_keys));
+    material->SetAssetName(name);
+    return material;
   }
 
-  return std::make_shared<const d::MaterialAsset>(
+  auto material = std::make_shared<d::MaterialAsset>(
     asset_key, desc, std::vector<d::ShaderReference> {});
+  material->SetAssetName(name);
+  return material;
 }
 
 auto BuildSphereGeometry(

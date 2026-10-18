@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -104,9 +103,6 @@ auto CreateGeometry(const oxygen::data::BuiltinGeometryIdentity& identity)
   auto descriptor = pak::geometry::GeometryAssetDesc {};
   descriptor.header.asset_type = static_cast<uint8_t>(AssetType::kGeometry);
   descriptor.header.version = pak::geometry::kGeometryAssetVersion;
-  const auto name_size
-    = (std::min)(name.size(), sizeof(descriptor.header.name) - 1);
-  std::memcpy(descriptor.header.name, name.data(), name_size);
   descriptor.lod_count = 1;
   const auto minimum = mesh->BoundingBoxMin();
   const auto maximum = mesh->BoundingBoxMax();
@@ -117,9 +113,11 @@ auto CreateGeometry(const oxygen::data::BuiltinGeometryIdentity& identity)
 
   auto meshes = std::vector<std::shared_ptr<Mesh>> {};
   meshes.emplace_back(std::move(mesh));
-  return std::make_shared<const GeometryAsset>(
+  auto geometry = std::make_shared<GeometryAsset>(
     AssetKey::FromVirtualPath(identity.asset_uri), descriptor,
     std::move(meshes));
+  geometry->SetAssetName(std::move(name));
+  return geometry;
 }
 
 } // namespace

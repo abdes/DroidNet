@@ -29,6 +29,7 @@
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
@@ -79,9 +80,9 @@ auto WriteSceneRoot(
   descriptor.nodes.count = 1U;
   descriptor.nodes.entry_size = sizeof(world::NodeRecord);
   constexpr auto strings = std::array { '\0', 'R', 'o', 'o', 't', '\0' };
-  descriptor.scene_strings.offset
+  descriptor.header.strings.offset
     = sizeof(descriptor) + sizeof(world::NodeRecord);
-  descriptor.scene_strings.size
+  descriptor.header.strings.size
     = static_cast<oxygen::data::pak::core::StringTableSizeT>(strings.size());
   auto node = world::NodeRecord {};
   node.node_id = oxygen::data::AssetKey::FromVirtualPath("/Content/Nodes/Root");
@@ -115,10 +116,9 @@ auto WriteMaterialRoot(const std::filesystem::path& root, const uint8_t version)
   descriptor.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
   descriptor.header.version = version;
-  const auto bytes = std::as_bytes(std::span(&descriptor, 1));
   WriteDescriptorRoot(root, "/Content/Materials/Inspection.omat",
     oxygen::data::AssetType::kMaterial, "Materials/Inspection.omat",
-    { bytes.begin(), bytes.end() });
+    oxygen::data::MakeDescriptorBytes(descriptor));
 }
 
 class InspectorRootValidationTest

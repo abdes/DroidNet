@@ -53,8 +53,9 @@ inline auto Load(AnyReader& reader, data::pak::core::AssetHeader& header)
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(header.asset_type));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { header.name })));
+  CHECK_RESULT(reader.ReadInto(header.strings.offset));
+  CHECK_RESULT(reader.ReadInto(header.strings.size));
+  CHECK_RESULT(reader.ReadInto(header.name_offset));
   CHECK_RESULT(reader.ReadInto(header.version));
   CHECK_RESULT(reader.ReadInto(header.streaming_priority));
   CHECK_RESULT(reader.ReadBlobInto(
@@ -228,12 +229,9 @@ inline auto Load(AnyReader& reader,
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(desc.shader_type));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { desc.source_path })));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { desc.entry_point })));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { desc.defines })));
+  CHECK_RESULT(reader.ReadInto(desc.source_path_offset));
+  CHECK_RESULT(reader.ReadInto(desc.entry_point_offset));
+  CHECK_RESULT(reader.ReadInto(desc.defines_offset));
   CHECK_RESULT(reader.ReadInto(desc.shader_hash));
   return {};
 }
@@ -268,17 +266,6 @@ inline auto Load(AnyReader& reader, data::pak::world::SceneDataTable& table)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::world::SceneStringTable& table)
-  -> Result<void>
-{
-  auto pack = reader.ScopedAlignment(1);
-
-  CHECK_RESULT(reader.ReadInto(table.offset));
-  CHECK_RESULT(reader.ReadInto(table.size));
-
-  return {};
-}
-
 inline auto Load(AnyReader& reader, data::pak::world::SceneAssetDesc& desc)
   -> Result<void>
 {
@@ -286,7 +273,6 @@ inline auto Load(AnyReader& reader, data::pak::world::SceneAssetDesc& desc)
 
   CHECK_RESULT(reader.ReadInto(desc.header));
   CHECK_RESULT(reader.ReadInto(desc.nodes));
-  CHECK_RESULT(reader.ReadInto(desc.scene_strings));
   CHECK_RESULT(reader.ReadInto(desc.component_table_directory_offset));
   CHECK_RESULT(reader.ReadInto(desc.component_table_count));
   CHECK_RESULT(reader.ReadInto(desc.script_slots));
@@ -473,14 +459,12 @@ inline auto Load(AnyReader& reader,
   data::pak::scripting::ScriptParamRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span(record.key))));
+  CHECK_RESULT(reader.ReadInto(record.key_offset));
   CHECK_RESULT(reader.ReadInto(record.type));
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { &record.value, 1 })));
   using data::pak::scripting::ScriptParamType;
-  if (record.type > ScriptParamType::kNode
-    || std::ranges::find(record.key, '\0') == std::end(record.key)) {
+  if (record.type > ScriptParamType::kNode || record.key_offset == 0) {
     return Err(std::errc::invalid_argument);
   }
   if (record.type == ScriptParamType::kAsset
@@ -492,11 +476,6 @@ inline auto Load(AnyReader& reader,
     && std::to_integer<uint8_t>(
          std::as_bytes(std::span { &record.value, 1 }).front())
       > 1U) {
-    return Err(std::errc::invalid_argument);
-  }
-  if (record.type == ScriptParamType::kString
-    && std::ranges::find(record.value.as_string, '\0')
-      == std::end(record.value.as_string)) {
     return Err(std::errc::invalid_argument);
   }
   return {};

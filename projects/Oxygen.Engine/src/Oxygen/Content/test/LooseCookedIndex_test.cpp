@@ -15,6 +15,7 @@
 #include <ios>
 #include <iterator>
 #include <ostream>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -28,6 +29,7 @@
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -54,6 +56,14 @@ auto WriteObject(std::ostream& out, const T& value) -> void
 {
   const auto bytes = std::bit_cast<std::array<char, sizeof(T)>>(value);
   out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+}
+
+auto WriteBytes(std::ostream& out, const std::span<const std::byte> bytes)
+  -> void
+{
+  for (const auto byte : bytes) {
+    out.put(static_cast<char>(byte));
+  }
 }
 
 auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
@@ -991,7 +1001,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootTableWithoutDataThrows)
       = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
     std::ofstream out(
       cooked_root / layout.materials_subdir / material_file, std::ios::binary);
-    WriteObject(out, material_desc);
+    WriteBytes(out, oxygen::data::MakeDescriptorBytes(material_desc));
   }
 
   // Build index string table.
@@ -1031,7 +1041,8 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootTableWithoutDataThrows)
   asset_entry.descriptor_relpath_offset = off_desc;
   asset_entry.virtual_path_offset = off_vpath;
   asset_entry.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
-  asset_entry.descriptor_size = sizeof(MaterialAssetDesc);
+  asset_entry.descriptor_size
+    = oxygen::data::MakeDescriptorBytes(material_desc).size();
 
   FileRecord tex_table_record {};
   tex_table_record.kind = FileKind::kTexturesTable;
@@ -1472,7 +1483,7 @@ NOLINT_TEST_F(
       = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
     std::ofstream out(
       cooked_root / layout.materials_subdir / material_file, std::ios::binary);
-    WriteObject(out, material_desc);
+    WriteBytes(out, oxygen::data::MakeDescriptorBytes(material_desc));
   }
 
   std::string strings;
@@ -1508,7 +1519,8 @@ NOLINT_TEST_F(
   entry.descriptor_relpath_offset = off_desc;
   entry.virtual_path_offset = off_vpath;
   entry.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
-  entry.descriptor_size = sizeof(MaterialAssetDesc);
+  entry.descriptor_size
+    = oxygen::data::MakeDescriptorBytes(material_desc).size();
   entry.descriptor_sha256[0] = 0x01; // Non-zero, intentionally incorrect
 
   {

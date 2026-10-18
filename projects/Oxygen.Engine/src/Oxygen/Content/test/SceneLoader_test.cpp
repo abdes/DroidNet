@@ -22,6 +22,7 @@
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h> // IWYU pragma: keep
@@ -60,16 +61,21 @@ auto MakeSceneWithFlagRecord(const SceneFlagInput input)
   constexpr float kTranslation = 3.5F;
   node.translation[0] = kTranslation;
   node.scale[2] = 2.0F;
+  const auto strings = oxygen::data::DescriptorStringsBuilder {};
+  descriptor.header.strings = {
+    .offset = sizeof(descriptor) + sizeof(node),
+    .size = strings.Size(),
+  };
   auto environment = world::SceneEnvironmentBlockHeader {};
   environment.byte_size = sizeof(environment);
-  auto bytes = std::vector<std::byte>(
-    sizeof(descriptor) + sizeof(node) + sizeof(environment));
+  auto bytes = std::vector<std::byte>(sizeof(descriptor) + sizeof(node));
   std::memcpy(bytes.data(), &descriptor, sizeof(descriptor));
   std::memcpy(
     std::span(bytes).subspan(sizeof(descriptor)).data(), &node, sizeof(node));
-  std::memcpy(
-    std::span(bytes).subspan(sizeof(descriptor) + sizeof(node)).data(),
-    &environment, sizeof(environment));
+  const auto table = strings.Bytes();
+  bytes.insert(bytes.end(), table.begin(), table.end());
+  const auto environment_bytes = std::as_bytes(std::span { &environment, 1U });
+  bytes.insert(bytes.end(), environment_bytes.begin(), environment_bytes.end());
   return bytes;
 }
 
@@ -98,7 +104,7 @@ NOLINT_TEST(SceneFlagRecordTest, LoaderPreservesFlagModesAndFollowingTransform)
 }
 
 NOLINT_TEST(
-  SceneFlagRecordTest, RejectsUnknownAndAmbiguousFlagsWithoutStringTable)
+  SceneFlagRecordTest, RejectsUnknownAndAmbiguousFlagsWithEmptyStringTable)
 {
   namespace world = oxygen::data::pak::world;
   for (const auto [values, inherited] : std::array {
@@ -120,7 +126,8 @@ NOLINT_TEST(
   }
 }
 
-NOLINT_TEST(SceneFlagRecordTest, RejectsInvalidNodeReferencesWithoutStringTable)
+NOLINT_TEST(
+  SceneFlagRecordTest, RejectsInvalidNodeReferencesWithEmptyStringTable)
 {
   namespace world = oxygen::data::pak::world;
   for (const auto [parent, name] :
@@ -163,6 +170,11 @@ auto MakeExposureScene() -> std::vector<std::byte>
   descriptor.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kScene);
   descriptor.header.version = world::kSceneAssetVersion;
+  const auto strings = oxygen::data::DescriptorStringsBuilder {};
+  descriptor.header.strings = {
+    .offset = sizeof(descriptor),
+    .size = strings.Size(),
+  };
   auto post = world::PostProcessVolumeEnvironmentRecord {};
   post.curve_key_count = 2U;
   post.header.record_size
@@ -190,9 +202,9 @@ auto MakeExposureScene() -> std::vector<std::byte>
     .metered_ev = 12.0F,
     .compensation_ev = -0.5F,
   };
-  if (!writer.Write(descriptor) || !writer.Write(environment)
-    || !writer.Write(post) || !writer.Write(kLowKey)
-    || !writer.Write(kHighKey)) {
+  if (!writer.Write(descriptor) || !writer.WriteBlob(strings.Bytes())
+    || !writer.Write(environment) || !writer.Write(post)
+    || !writer.Write(kLowKey) || !writer.Write(kHighKey)) {
     throw std::runtime_error("Could not write scene exposure test fixture");
   }
   const auto bytes = stream.Data();
@@ -223,7 +235,8 @@ NOLINT_TEST(SceneExposureRecordTest, RejectsObsoleteAndMalformedLayouts)
 {
   namespace world = oxygen::data::pak::world;
   using Record = world::PostProcessVolumeEnvironmentRecord;
-  constexpr auto kRecordStart = sizeof(world::SceneAssetDesc)
+  // The exposure scene's string table holds only the empty string.
+  constexpr auto kRecordStart = sizeof(world::SceneAssetDesc) + 1U
     + sizeof(world::SceneEnvironmentBlockHeader);
   // These are independent wire offsets: the retired prefix, unsupported
   // extension, mismatched/over-limit counts, and each reserved word.
@@ -355,12 +368,12 @@ protected:
       .count = 1,
       .entry_size = sizeof(NodeRecord),
     };
-    desc.scene_strings = {
+    desc.header.strings = {
       .offset = sizeof(desc) + sizeof(NodeRecord),
       .size = static_cast<uint32_t>(strings.size()),
     };
     desc.component_table_directory_offset
-      = desc.scene_strings.offset + strings.size();
+      = desc.header.strings.offset + strings.size();
     desc.component_table_count = table_count;
     const auto renderable_offset = desc.component_table_directory_offset
       + (table_count

@@ -75,8 +75,6 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   // Arrange: write cooked scene descriptor bytes.
   SceneAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
-  std::ranges::copy(
-    std::string_view { "TestScene" }, std::begin(desc.header.name));
   desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
 
   desc.nodes.offset = sizeof(SceneAssetDesc);
@@ -84,8 +82,8 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   desc.nodes.entry_size = sizeof(NodeRecord);
 
   static constexpr auto kStrings = std::to_array("\0root\0");
-  desc.scene_strings.offset = sizeof(SceneAssetDesc) + sizeof(NodeRecord);
-  desc.scene_strings.size = sizeof(kStrings) - 1;
+  desc.header.strings.offset = sizeof(SceneAssetDesc) + sizeof(NodeRecord);
+  desc.header.strings.size = sizeof(kStrings) - 1;
 
   NodeRecord node {};
   node.node_id = scene_key;
@@ -94,20 +92,20 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   node.node_flags = 0;
 
   const size_t total_size
-    = static_cast<size_t>(desc.scene_strings.offset + desc.scene_strings.size)
+    = static_cast<size_t>(desc.header.strings.offset + desc.header.strings.size)
     + sizeof(SceneEnvironmentBlockHeader);
   std::vector<std::byte> bytes(total_size);
   std::memcpy(bytes.data(), &desc, sizeof(desc));
   std::memcpy(
     std::span(bytes).subspan(desc.nodes.offset).data(), &node, sizeof(node));
-  std::memcpy(std::span(bytes).subspan(desc.scene_strings.offset).data(),
+  std::memcpy(std::span(bytes).subspan(desc.header.strings.offset).data(),
     kStrings.data(), kStrings.size() - 1);
 
   SceneEnvironmentBlockHeader env_header {};
   env_header.byte_size = sizeof(SceneEnvironmentBlockHeader);
   env_header.systems_count = 0;
   std::memcpy(std::span(bytes)
-                .subspan(desc.scene_strings.offset + desc.scene_strings.size)
+                .subspan(desc.header.strings.offset + desc.header.strings.size)
                 .data(),
     &env_header, sizeof(env_header));
 
@@ -214,10 +212,10 @@ NOLINT_TEST(
     .count = 1U,
     .entry_size = sizeof(world::NodeRecord),
   };
-  descriptor.scene_strings.offset
+  descriptor.header.strings.offset
     = sizeof(descriptor) + sizeof(world::NodeRecord);
-  descriptor.scene_strings.size = 1U;
-  const auto environment_offset = descriptor.scene_strings.offset + 1U;
+  descriptor.header.strings.size = 1U;
+  const auto environment_offset = descriptor.header.strings.offset + 1U;
   world::SceneEnvironmentBlockHeader environment {};
   constexpr uint32_t kRetiredSkyLightRecordSize = 92U;
   environment.byte_size = sizeof(environment) + kRetiredSkyLightRecordSize;

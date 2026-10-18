@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -26,6 +25,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
@@ -35,11 +35,10 @@ namespace {
 
   using oxygen::Format;
   using oxygen::data::pak::core::BufferResourceDesc;
-  using oxygen::data::pak::core::kMaxNameSize;
   using oxygen::data::pak::core::ResourceIndexT;
   using oxygen::graphics::detail::GetFormatInfo;
 
-  constexpr uint16_t kBufferSidecarVersion = 2;
+  constexpr uint16_t kBufferSidecarVersion = 3;
 
 #pragma pack(push, 1)
   struct BufferSidecarHeader final {
@@ -49,11 +48,13 @@ namespace {
     ResourceIndexT resource_index = oxygen::data::pak::core::kNoResourceIndex;
     BufferResourceDesc descriptor {};
     uint32_t view_count = 0;
-    uint32_t reserved_views = 0;
+    //! Size of the string table that follows the view entries.
+    uint32_t strings_size = 0;
   };
 
   struct BufferSidecarViewEntry final {
-    char name[kMaxNameSize] = {};
+    //! View name, in the string table that follows the view entries.
+    uint32_t name_offset = 0;
     uint64_t byte_offset = 0;
     uint64_t byte_length = 0;
     uint64_t element_offset = 0;
@@ -72,28 +73,6 @@ namespace {
       .message = std::move(message),
       .object_path = std::move(object_path),
     });
-  }
-
-  [[nodiscard]] auto DecodeFixedName(const char* raw_name) -> std::string
-  {
-    size_t length = 0;
-    while (length < kMaxNameSize && raw_name[length] != '\0') {
-      ++length;
-    }
-    return std::string(raw_name, length);
-  }
-
-  [[nodiscard]] auto EncodeFixedName(const std::string_view name)
-    -> std::array<char, kMaxNameSize>
-  {
-    auto encoded = std::array<char, kMaxNameSize> {};
-    if (name.empty()) {
-      return encoded;
-    }
-    const auto copy_len = (std::min)(name.size(), kMaxNameSize - 1U);
-    std::memcpy(encoded.data(), name.data(), copy_len);
-    encoded[copy_len] = '\0';
-    return encoded;
   }
 
   [[nodiscard]] auto WillMultiplyOverflow(
@@ -352,30 +331,31 @@ auto SerializeBufferDescriptorSidecar(const ResourceIndexT resource_index,
 {
   const auto final_views = EnsureImplicitAllView(views, descriptor);
 
+  auto strings = data::DescriptorStringsBuilder {};
+  auto entries = std::vector<BufferSidecarViewEntry> {};
+  entries.reserve(final_views.size());
+  for (const auto& view : final_views) {
+    entries.push_back(BufferSidecarViewEntry {
+      .name_offset = strings.Add(view.name),
+      .byte_offset = view.byte_offset,
+      .byte_length = view.byte_length,
+      .element_offset = view.element_offset,
+      .element_count = view.element_count,
+    });
+  }
+
   auto header = BufferSidecarHeader {};
   header.resource_index = resource_index;
   header.descriptor = descriptor;
-  header.view_count = static_cast<uint32_t>(final_views.size());
+  header.view_count = static_cast<uint32_t>(entries.size());
+  header.strings_size = strings.Size();
 
-  const auto payload_size = sizeof(BufferSidecarHeader)
-    + final_views.size() * sizeof(BufferSidecarViewEntry);
-  auto bytes = std::vector<std::byte>(payload_size);
-  auto* write_ptr = bytes.data();
-  std::memcpy(write_ptr, &header, sizeof(BufferSidecarHeader));
-  write_ptr += sizeof(BufferSidecarHeader);
-
-  for (const auto& view : final_views) {
-    auto entry = BufferSidecarViewEntry {};
-    const auto encoded_name = EncodeFixedName(view.name);
-    std::memcpy(entry.name, encoded_name.data(), encoded_name.size());
-    entry.byte_offset = view.byte_offset;
-    entry.byte_length = view.byte_length;
-    entry.element_offset = view.element_offset;
-    entry.element_count = view.element_count;
-    std::memcpy(write_ptr, &entry, sizeof(BufferSidecarViewEntry));
-    write_ptr += sizeof(BufferSidecarViewEntry);
-  }
-
+  const auto entries_bytes = std::as_bytes(std::span(entries));
+  const auto strings_bytes = strings.Bytes();
+  auto bytes = std::vector<std::byte>(sizeof(BufferSidecarHeader));
+  std::memcpy(bytes.data(), &header, sizeof(BufferSidecarHeader));
+  bytes.insert(bytes.end(), entries_bytes.begin(), entries_bytes.end());
+  bytes.insert(bytes.end(), strings_bytes.begin(), strings_bytes.end());
   return bytes;
 }
 
@@ -402,10 +382,24 @@ auto ParseBufferDescriptorSidecar(const std::span<const std::byte> bytes,
     return false;
   }
 
-  const auto expected_size = sizeof(BufferSidecarHeader)
-    + static_cast<size_t>(header.view_count) * sizeof(BufferSidecarViewEntry);
-  if (bytes.size() < expected_size) {
+  const auto entries_size
+    = static_cast<size_t>(header.view_count) * sizeof(BufferSidecarViewEntry);
+  const auto expected_size
+    = sizeof(BufferSidecarHeader) + entries_size + header.strings_size;
+  if (bytes.size() != expected_size) {
     error_message = "Buffer descriptor view table is truncated";
+    return false;
+  }
+
+  auto strings = data::DescriptorStrings {};
+  try {
+    const auto table
+      = bytes.subspan(sizeof(BufferSidecarHeader) + entries_size);
+    auto chars = std::vector<char>(table.size());
+    std::memcpy(chars.data(), table.data(), table.size());
+    strings = data::DescriptorStrings { std::move(chars) };
+  } catch (const std::invalid_argument&) {
+    error_message = "Buffer descriptor string table is invalid";
     return false;
   }
 
@@ -420,11 +414,12 @@ auto ParseBufferDescriptorSidecar(const std::span<const std::byte> bytes,
     std::memcpy(&entry, read_ptr, sizeof(BufferSidecarViewEntry));
     read_ptr += sizeof(BufferSidecarViewEntry);
 
-    auto name = DecodeFixedName(entry.name);
-    if (name.empty()) {
+    const auto name_view = strings.TryGet(entry.name_offset);
+    if (!name_view || name_view->empty()) {
       error_message = "Buffer descriptor contains an empty view name";
       return false;
     }
+    auto name = std::string { *name_view };
     if (!seen_names.insert(name).second) {
       error_message = "Buffer descriptor contains duplicate view names";
       return false;

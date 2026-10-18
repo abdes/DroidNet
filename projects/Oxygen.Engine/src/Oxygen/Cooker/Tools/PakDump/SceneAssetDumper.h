@@ -78,7 +78,8 @@ public:
       co_return;
     }
 
-    asset_dump_helpers::PrintAssetHeaderFields(scene->GetHeader(), 4);
+    asset_dump_helpers::PrintAssetHeaderFields(
+      scene->GetHeader(), scene->GetAssetName(), 4);
 
     const auto nodes_span = scene->GetNodes();
     const uint32_t node_count = static_cast<uint32_t>(nodes_span.size());

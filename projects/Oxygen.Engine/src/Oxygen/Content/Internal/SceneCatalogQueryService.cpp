@@ -6,18 +6,18 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <cstring>
-#include <optional>
 #include <span>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/Internal/SceneCatalogQueryService.h>
+#include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -26,20 +26,33 @@ namespace oxygen::content::internal {
 
 namespace {
 
-  auto ReadAssetHeader(const IContentSource& source, const data::AssetKey& key)
-    -> std::optional<data::pak::core::AssetHeader>
+  //! The scene's name.
+  /*!
+   A scene whose descriptor cannot be read is still listed, with an empty name
+   and a warning, so loading it reports why instead of the scene vanishing.
+  */
+  auto ReadSceneName(const IContentSource& source, const data::AssetKey& key)
+    -> std::string
   {
     auto desc_reader = source.CreateAssetDescriptorReader(key);
     if (!desc_reader) {
-      return std::nullopt;
+      LOG_F(
+        WARNING, "scene {} has no readable descriptor", data::to_string(key));
+      return {};
     }
-    auto blob = desc_reader->ReadBlob(sizeof(data::pak::core::AssetHeader));
-    if (!blob || blob->size() < sizeof(data::pak::core::AssetHeader)) {
-      return std::nullopt;
+    try {
+      const auto base_pos = desc_reader->Position();
+      loaders::CheckLoaderResult(base_pos, "scene", "position");
+      auto header = data::pak::core::AssetHeader {};
+      loaders::LoadAssetHeader(*desc_reader, header);
+      return loaders::ResolveDescriptorString(
+        loaders::ReadDescriptorStrings(*desc_reader, *base_pos, header),
+        header.name_offset, "scene name");
+    } catch (const std::runtime_error& error) {
+      LOG_F(WARNING, "scene {} name is unreadable: {}", data::to_string(key),
+        error.what());
+      return {};
     }
-    data::pak::core::AssetHeader header {};
-    std::memcpy(&header, blob->data(), sizeof(header));
-    return header;
   }
 
 } // namespace
@@ -80,25 +93,13 @@ auto SceneCatalogQueryService::EnumerateMountedScenes(
         continue;
       }
 
-      const auto header_opt = ReadAssetHeader(*source, *scene_key_opt);
-      if (!header_opt.has_value()) {
-        continue;
-      }
-
-      if (static_cast<data::AssetType>(header_opt->asset_type)
-        != data::AssetType::kScene) {
-        continue;
-      }
-
       IAssetLoader::MountedSceneEntry scene_entry {};
       scene_entry.scene_key = *scene_key_opt;
       scene_entry.source_key = source_key;
       scene_entry.source_id = source_id;
       scene_entry.source_kind = source_kind;
       scene_entry.source_path = source_path;
-      const auto name = std::span(header_opt->name);
-      scene_entry.display_name.assign(
-        name.begin(), std::ranges::find(name, '\0'));
+      scene_entry.display_name = ReadSceneName(*source, *scene_key_opt);
 
       if (const auto vpath = source->ResolveVirtualPath(*scene_key_opt);
         vpath.has_value()) {

@@ -221,10 +221,6 @@ auto MakeSolidColorMaterial(
 
   pak::render::MaterialAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(d::AssetType::kMaterial);
-  constexpr std::size_t kMaxName = sizeof(desc.header.name) - 1;
-  const auto stored = name.substr(0, (std::min)(kMaxName, name.size()));
-  std::ranges::copy(stored, std::data(desc.header.name));
-  desc.header.name[stored.size()] = '\0';
   desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(spec.domain);
@@ -249,9 +245,11 @@ auto MakeSolidColorMaterial(
   desc.emissive_factor[2] = spec.emissive.b;
   const auto key = d::AssetKey::FromVirtualPath(
     "/Engine/Examples/VortexBasic/Materials/" + std::string(name) + ".omat");
-  return std::make_shared<const d::MaterialAsset>(key, desc,
+  auto material = std::make_shared<d::MaterialAsset>(key, desc,
     std::vector<d::ShaderReference> {},
     std::vector<oxygen::content::ResourceKey> { {}, spec.normal_map });
+  material->SetAssetName(std::string { name });
+  return material;
   // NOLINTEND(*-magic-numbers)
 }
 

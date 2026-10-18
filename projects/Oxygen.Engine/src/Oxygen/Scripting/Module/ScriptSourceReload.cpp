@@ -222,16 +222,13 @@ auto ScriptSourceReload::Reload(const std::shared_ptr<scene::Scene>& scene,
     }
     return false;
   }
-  auto declarations = std::vector<data::pak::scripting::ScriptParamRecord> {};
+  auto declarations = data::ScriptParameters {};
   declarations.reserve(analysis.declarations.size());
   for (const auto& declaration : analysis.declarations) {
-    if (const auto record = data::MakeScriptParamRecord(
-          declaration.name, declaration.default_value)) {
-      declarations.push_back(*record);
-    }
+    declarations.emplace_back(declaration.name, declaration.default_value);
   }
   const std::shared_ptr<const data::ScriptAsset> reloaded
-    = asset->WithDeclarations(declarations);
+    = asset->WithDeclarations(std::move(declarations));
 
   const auto compile_key
     = ComputeScriptCompileKey(asset->GetAssetKey(), source, kCompileMode);

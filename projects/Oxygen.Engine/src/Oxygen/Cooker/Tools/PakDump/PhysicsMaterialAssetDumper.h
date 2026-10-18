@@ -47,7 +47,10 @@ public:
     PhysicsMaterialAssetDesc mat {};
     std::memcpy(&mat, data->data(), sizeof(mat));
 
-    asset_dump_helpers::PrintAssetHeaderFields(mat.header, 4);
+    asset_dump_helpers::PrintAssetHeaderFields(mat.header,
+      asset_dump_helpers::DescriptorString(
+        *data, mat.header, mat.header.name_offset),
+      4);
 
     std::cout << "    --- Physics Material Fields ---\n";
     PrintUtils::Field("Static Friction", mat.static_friction, 8);

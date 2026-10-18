@@ -38,6 +38,7 @@
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
@@ -216,7 +217,7 @@ private:
     session.AssetEmitter().Emit(
       oxygen::data::AssetKey::FromVirtualPath("/Content/test.omat"),
       oxygen::data::AssetType::kMaterial, "/Content/test.omat", "test.omat",
-      std::as_bytes(std::span { &descriptor, 1 }), {});
+      oxygen::data::MakeDescriptorBytes(descriptor), {});
     co_return co_await session.Finalize();
   }
   ProducerState& state_;

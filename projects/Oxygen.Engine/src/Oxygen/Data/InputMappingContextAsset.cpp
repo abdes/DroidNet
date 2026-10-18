@@ -4,12 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <cstddef>
 #include <cstdint>
-#include <iterator>
-#include <optional>
-#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -38,7 +33,7 @@ InputMappingContextAsset::InputMappingContextAsset(AssetKey asset_key,
   std::vector<pak::input::InputActionMappingRecord> mappings,
   std::vector<pak::input::InputTriggerRecord> triggers,
   std::vector<pak::input::InputTriggerAuxRecord> trigger_aux,
-  std::vector<char> strings, SourceOrigin source_origin)
+  DescriptorStrings strings, SourceOrigin source_origin)
   : Asset(asset_key, source_origin)
   , desc_(desc)
   , mappings_(std::move(mappings))
@@ -46,22 +41,6 @@ InputMappingContextAsset::InputMappingContextAsset(AssetKey asset_key,
   , trigger_aux_(std::move(trigger_aux))
   , strings_(std::move(strings))
 {
-}
-
-auto InputMappingContextAsset::TryGetString(
-  const uint32_t offset) const noexcept -> std::optional<std::string_view>
-{
-  if (offset >= strings_.size()) {
-    return std::nullopt;
-  }
-  const auto begin = strings_.begin() + static_cast<std::ptrdiff_t>(offset);
-  const auto end = strings_.end();
-  const auto nul = std::ranges::find(begin, end, '\0');
-  if (nul == end) {
-    return std::nullopt;
-  }
-  return std::string_view(
-    &(*begin), static_cast<size_t>(std::distance(begin, nul)));
 }
 
 } // namespace oxygen::data

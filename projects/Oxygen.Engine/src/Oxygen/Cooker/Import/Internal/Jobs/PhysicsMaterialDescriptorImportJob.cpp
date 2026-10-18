@@ -29,7 +29,6 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/PhysicsMaterialDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsMaterialImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -262,8 +261,6 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   descriptor.header.version = data::pak::physics::kPhysicsMaterialAssetVersion;
   const auto material_name
     = std::filesystem::path(target->relpath).stem().string();
-  util::TruncateAndNullTerminate(
-    descriptor.header.name, sizeof(descriptor.header.name), material_name);
 
   if (descriptor_doc.contains("static_friction")) {
     descriptor.static_friction
@@ -298,6 +295,7 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   auto item = PhysicsMaterialImportPipeline::WorkItem {
     .source_id = target->virtual_path,
+    .name = material_name,
     .descriptor = descriptor,
     .on_started = {},
     .on_finished = {},

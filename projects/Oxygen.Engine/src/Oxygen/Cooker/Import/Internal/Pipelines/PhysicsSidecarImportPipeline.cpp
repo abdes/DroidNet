@@ -76,7 +76,6 @@
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
@@ -87,6 +86,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
@@ -2127,15 +2127,6 @@ namespace {
     return true;
   }
 
-  [[nodiscard]] auto DecodeFixedName(const char* raw_name) -> std::string
-  {
-    auto length = size_t { 0 };
-    while (length < data::pak::core::kMaxNameSize && raw_name[length] != '\0') {
-      ++length;
-    }
-    return { raw_name, length };
-  }
-
   auto ParseGeometryTopologyInput(std::span<const std::byte> descriptor_bytes,
     const data::AssetReferences& references, SoftBodyGeometryTopologyInput& out,
     std::string& error) -> bool
@@ -2179,7 +2170,16 @@ namespace {
       out.index_buffer = index->value_or(data::pak::core::kNoResourceIndex);
     } else if (mesh_type == MeshType::kProcedural) {
       out.kind = SoftBodyGeometryTopologyInput::Kind::kProcedural;
-      out.procedural_name = DecodeFixedName(mesh_desc.name);
+      try {
+        out.procedural_name = std::string {
+          data::DescriptorStrings::FromDescriptor(
+            descriptor_bytes, asset_desc.header.strings)
+            .Get(mesh_desc.name_offset),
+        };
+      } catch (const std::invalid_argument&) {
+        error = "geometry descriptor procedural mesh name is invalid";
+        return false;
+      }
       const auto params_size
         = static_cast<size_t>(mesh_desc.info.procedural.params_size);
       if (offset > descriptor_bytes.size()
@@ -3280,8 +3280,8 @@ namespace {
     desc.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kPhysicsScene);
     desc.header.version = phys::kPhysicsSceneAssetVersion;
-    util::TruncateAndNullTerminate(
-      desc.header.name, sizeof(desc.header.name), sidecar_name);
+    auto strings = data::DescriptorStringsBuilder {};
+    desc.header.name_offset = strings.Add(sidecar_name);
     desc.target_scene_key = scene_state.scene_key;
     desc.target_node_count = scene_state.node_count;
     const auto scene_hash
@@ -3359,6 +3359,7 @@ namespace {
 
     const auto stream_data = stream.Data();
     auto bytes = std::vector<std::byte>(stream_data.begin(), stream_data.end());
+    data::AppendDescriptorStrings(bytes, strings);
     if (hashing_enabled) {
       PatchContentHash(bytes, util::ComputeContentSha256(bytes));
     }

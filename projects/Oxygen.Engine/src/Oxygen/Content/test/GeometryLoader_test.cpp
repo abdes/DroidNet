@@ -18,6 +18,7 @@
 
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -66,9 +67,9 @@ protected:
       = static_cast<uint8_t>(oxygen::data::AssetType::kGeometry);
     desc.header.version = overrides.version;
     desc.lod_count = 1;
+    auto strings = oxygen::data::DescriptorStringsBuilder {};
     MeshDesc mesh {};
-    ASSERT_LT(recipe_name.size(), sizeof(mesh.name));
-    std::ranges::copy(recipe_name, std::begin(mesh.name));
+    mesh.name_offset = strings.Add(recipe_name);
     mesh.mesh_type = static_cast<uint8_t>(oxygen::data::MeshType::kProcedural);
     mesh.submesh_count = 1;
     mesh.mesh_view_count = 1;
@@ -86,6 +87,12 @@ protected:
       .vertex_count = kCubeVertexCount,
     };
     view.bounding_box_max[0] = overrides.view_max_x;
+    desc.header.strings = {
+      .offset
+      = static_cast<oxygen::data::pak::core::StringTableOffsetT>(sizeof(desc)
+        + sizeof(mesh) + parameters.size() + sizeof(submesh) + sizeof(view)),
+      .size = strings.Size(),
+    };
     auto packed = desc_writer_.ScopedAlignment(1);
     WriteBlob(desc);
     WriteBlob(mesh);
@@ -94,6 +101,7 @@ protected:
     }
     WriteBlob(submesh);
     WriteBlob(view);
+    ASSERT_TRUE(desc_writer_.WriteBlob(strings.Bytes()));
   }
 };
 
@@ -109,11 +117,17 @@ NOLINT_TEST_F(
 
   MeshDesc mesh {};
   mesh.mesh_type = kInvalidMeshType;
+  const auto strings = oxygen::data::DescriptorStringsBuilder {};
+  desc.header.strings = {
+    .offset = sizeof(desc) + sizeof(mesh),
+    .size = strings.Size(),
+  };
 
   {
     auto packed = desc_writer_.ScopedAlignment(1);
     WriteBlob(desc);
     WriteBlob(mesh);
+    ASSERT_TRUE(desc_writer_.WriteBlob(strings.Bytes()));
   }
 
   const auto context = MakeLoaderContext(false, false);
@@ -230,6 +244,12 @@ NOLINT_TEST_F(
     .first_vertex = 0,
     .vertex_count = 3,
   };
+  const auto strings = oxygen::data::DescriptorStringsBuilder {};
+  desc.header.strings = {
+    .offset
+    = sizeof(desc) + sizeof(mesh) + (2U * (sizeof(submesh) + sizeof(view))),
+    .size = strings.Size(),
+  };
   {
     auto packed = desc_writer_.ScopedAlignment(1);
     WriteBlob(desc);
@@ -238,6 +258,7 @@ NOLINT_TEST_F(
     WriteBlob(view);
     WriteBlob(submesh);
     WriteBlob(view);
+    ASSERT_TRUE(desc_writer_.WriteBlob(strings.Bytes()));
   }
   auto context = MakeLoaderContext(true, true);
   const auto collector

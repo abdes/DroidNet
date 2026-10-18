@@ -34,6 +34,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MaterialSlotInventory.h>
@@ -162,6 +163,7 @@ auto GeometryAsset(const GeometryFixture& fixture) -> AssetSpec
   descriptor.lod_count = 2;
   auto bytes = std::vector<std::byte> {};
   AppendRecord(bytes, descriptor);
+  auto strings = oxygen::data::DescriptorStringsBuilder {};
   const auto material = AssetKey::FromVirtualPath(kSharedMaterialPath);
   for (uint32_t lod = 0; lod < descriptor.lod_count; ++lod) {
     auto mesh = geometry::MeshDesc {};
@@ -176,8 +178,7 @@ auto GeometryAsset(const GeometryFixture& fixture) -> AssetSpec
     for (uint32_t submesh_index = 0; submesh_index < mesh.submesh_count;
       ++submesh_index) {
       auto submesh = geometry::SubMeshDesc {};
-      constexpr auto label = "Surface";
-      std::memcpy(submesh.name, label, std::strlen(label));
+      submesh.name_offset = strings.Add("Surface");
       submesh.slot_id = submesh_index == 0 ? fixture.first_slot : SlotId(2);
       submesh.material_asset_key
         = lod == 1 && submesh_index == 0 ? AssetKey {} : material;
@@ -192,6 +193,7 @@ auto GeometryAsset(const GeometryFixture& fixture) -> AssetSpec
       AppendRecord(bytes, view);
     }
   }
+  oxygen::data::AppendDescriptorStrings(bytes, strings);
   auto references = AssetReferences::Create(
     {
       {
@@ -261,12 +263,12 @@ auto WriteOverrideScene(const std::filesystem::path& root,
     .count = 1,
     .entry_size = sizeof(world::NodeRecord),
   };
-  descriptor.scene_strings = {
+  descriptor.header.strings = {
     .offset = sizeof(descriptor) + sizeof(world::NodeRecord),
     .size = 1,
   };
   descriptor.component_table_directory_offset
-    = descriptor.scene_strings.offset + 1;
+    = descriptor.header.strings.offset + 1;
   descriptor.component_table_count = 2;
   const auto records_offset = descriptor.component_table_directory_offset
     + (2 * sizeof(world::SceneComponentTableDesc));

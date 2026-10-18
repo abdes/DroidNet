@@ -7,11 +7,13 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/api_export.h>
 
@@ -28,10 +30,12 @@ namespace oxygen::data {
 class ShaderReference : public oxygen::Object {
   OXYGEN_TYPED(ShaderReference)
 public:
-  explicit ShaderReference(pak::render::ShaderReferenceDesc desc)
-    : desc_(std::move(desc))
-  {
-  }
+  //! Resolves a cooked reference's strings in its material's string table.
+  /*!
+   @throw std::invalid_argument when a string offset is not in `strings`.
+  */
+  OXGN_DATA_API ShaderReference(const pak::render::ShaderReferenceDesc& desc,
+    const DescriptorStrings& strings);
 
   ~ShaderReference() override = default;
 
@@ -39,19 +43,28 @@ public:
   OXYGEN_DEFAULT_MOVABLE(ShaderReference)
 
   //! Returns the canonical shader source path.
-  OXGN_DATA_NDAPI auto GetSourcePath() const noexcept -> std::string_view;
+  [[nodiscard]] auto GetSourcePath() const noexcept -> std::string_view
+  {
+    return source_path_;
+  }
 
   //! Returns the shader entry point.
-  OXGN_DATA_NDAPI auto GetEntryPoint() const noexcept -> std::string_view;
+  [[nodiscard]] auto GetEntryPoint() const noexcept -> std::string_view
+  {
+    return entry_point_;
+  }
 
   //! Returns the canonical defines string (may be empty).
-  OXGN_DATA_NDAPI auto GetDefines() const noexcept -> std::string_view;
+  [[nodiscard]] auto GetDefines() const noexcept -> std::string_view
+  {
+    return defines_;
+  }
 
-  //! Returns the shader type (aka. the pipeline stage at which the shadershould
-  //! be used).
+  //! Returns the shader type (aka. the pipeline stage at which the shader
+  //! should be used).
   [[nodiscard]] auto GetShaderType() const noexcept -> ShaderType
   {
-    return static_cast<ShaderType>(desc_.shader_type);
+    return shader_type_;
   }
 
   //! Returns the shader source hash for validation.
@@ -61,11 +74,15 @@ public:
   */
   [[nodiscard]] auto GetShaderSourceHash() const noexcept -> uint64_t
   {
-    return desc_.shader_hash;
+    return shader_hash_;
   }
 
 private:
-  pak::render::ShaderReferenceDesc desc_ {};
+  ShaderType shader_type_ {};
+  std::string source_path_;
+  std::string entry_point_;
+  std::string defines_;
+  uint64_t shader_hash_ = 0;
 };
 
 } // namespace oxygen::data

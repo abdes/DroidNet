@@ -22,6 +22,13 @@
 
 namespace oxygen::content::import::internal {
 
+//! Version of the authored scene descriptor (`oxygen.scene-descriptor` schema).
+/*!
+ Independent of the cooked `data::pak::world::kSceneAssetVersion`: a cooked
+ layout change recooks content without changing authored descriptors.
+*/
+inline constexpr uint32_t kSceneDescriptorVersion = 13;
+
 //! A scene's source values and symbolic dependencies, before cooked linking.
 struct SceneSource final {
   struct MaterialAssignment final {

@@ -31,6 +31,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -239,11 +240,11 @@ NOLINT_TEST_F(
   data::pak::physics::PhysicsSceneAssetDesc physics_desc {};
   physics_desc.header.asset_type
     = static_cast<uint8_t>(data::AssetType::kPhysicsScene);
-  physics_desc.header.version = 1U;
+  physics_desc.header.version = data::pak::physics::kPhysicsSceneAssetVersion;
   physics_desc.target_scene_key = scene_key;
   const auto hash = oxygen::base::ComputeSha256(scene_bytes);
   std::ranges::copy(hash, std::begin(physics_desc.target_scene_content_hash));
-  const auto physics_desc_bytes = std::as_bytes(std::span(&physics_desc, 1U));
+  const auto physics_desc_bytes = data::MakeDescriptorBytes(physics_desc);
 
   const auto physics_key = MakeAssetKey(0xA1U);
   const auto assets = std::array<paktest::AssetSpec, 2> {

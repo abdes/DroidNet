@@ -46,6 +46,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -106,9 +107,9 @@ namespace {
     descriptor.nodes.count = 1U;
     descriptor.nodes.entry_size = sizeof(NodeRecord);
     const auto strings = std::array { '\0', 'r', '\0' };
-    descriptor.scene_strings.offset
+    descriptor.header.strings.offset
       = sizeof(SceneAssetDesc) + sizeof(NodeRecord);
-    descriptor.scene_strings.size
+    descriptor.header.strings.size
       = static_cast<data::pak::core::StringTableSizeT>(strings.size());
     std::array<SceneComponentTableDesc, 2> tables {};
     RenderableRecord renderable {};
@@ -116,7 +117,7 @@ namespace {
     if (!material.IsNil()) {
       descriptor.component_table_count = static_cast<uint32_t>(tables.size());
       descriptor.component_table_directory_offset
-        = descriptor.scene_strings.offset + strings.size();
+        = descriptor.header.strings.offset + strings.size();
       tables.at(0).component_type
         = static_cast<uint32_t>(data::ComponentType::kRenderable);
       tables.at(0).table.offset
@@ -207,16 +208,15 @@ namespace {
         = static_cast<uint8_t>(data::AssetType::kGeometry);
       geometry.header.version = data::pak::geometry::kGeometryAssetVersion;
       geometry.lod_count = 1U;
+      auto strings = data::DescriptorStringsBuilder {};
       data::pak::geometry::MeshDesc mesh {};
-      std::ranges::copy(
-        std::string_view { "Cube/Mesh" }, std::begin(mesh.name));
+      mesh.name_offset = strings.Add("Cube/Mesh");
       mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kProcedural);
       mesh.info.procedural = {};
       mesh.submesh_count = 1U;
       mesh.mesh_view_count = 1U;
       data::pak::geometry::SubMeshDesc submesh {};
-      std::ranges::copy(
-        std::string_view { "fixture" }, std::begin(submesh.name));
+      submesh.name_offset = strings.Add("fixture");
       submesh.slot_id
         = data::MaterialSlotId::FromStableIdentity("generation-test-slot");
       submesh.material_asset_key = recipe.scene_material;
@@ -236,6 +236,7 @@ namespace {
       append(mesh);
       append(submesh);
       append(view);
+      data::AppendDescriptorStrings(geometry_bytes, strings);
       writer.WriteAssetDescriptor(geometry_key, data::AssetType::kGeometry,
         "/test/bound-cube.ogeo", "bound-cube.ogeo", geometry_bytes,
         data::AssetReferences::Create({},
@@ -259,7 +260,7 @@ namespace {
       material.emissive_factor[0] = recipe.emission;
       writer.WriteAssetDescriptor(recipe.material, data::AssetType::kMaterial,
         "/test/material.omat", "material.omat",
-        std::as_bytes(std::span { &material, 1U }));
+        data::MakeDescriptorBytes(material));
     }
     {
       const auto script_key = recipe.script.IsNil()
@@ -272,7 +273,7 @@ namespace {
       descriptor.bytecode_resource_index = data::ResourceReferenceIndex { 0U };
       writer.WriteAssetDescriptor(script_key, data::AssetType::kScript,
         "/test/reload.oscript", "reload.oscript",
-        std::as_bytes(std::span { &descriptor, 1U }),
+        data::MakeDescriptorBytes(descriptor),
         data::AssetReferences::Create(
           {
             {
@@ -674,7 +675,7 @@ namespace {
     LooseCookedTestWriter writer(geometry_root);
     writer.WriteAssetDescriptor(geometry_key, data::AssetType::kGeometry,
       "/test/geometry.ogeo", "geometry.ogeo",
-      std::as_bytes(std::span { &geometry_desc, 1U }));
+      data::MakeDescriptorBytes(geometry_desc));
     static_cast<void>(writer.Finish());
     static_cast<void>(WriteGeneration(
       material_root, { .material = MaterialKey(), .emission = 2.0F }));
@@ -997,7 +998,7 @@ namespace {
       descriptor.target_scene_key = target;
       writer.WriteAssetDescriptor(sidecar_key, data::AssetType::kPhysicsScene,
         "/test/scene.opscene", "scene.opscene",
-        std::as_bytes(std::span { &descriptor, 1U }));
+        data::MakeDescriptorBytes(descriptor));
       static_cast<void>(writer.Finish());
     };
     const auto base = temp_dir_ / "base";
@@ -1038,7 +1039,7 @@ namespace {
       descriptor.target_scene_key = SceneKey();
       writer.WriteAssetDescriptor(sidecar_key, data::AssetType::kPhysicsScene,
         "/test/scene.opscene", "scene.opscene",
-        std::as_bytes(std::span { &descriptor, 1U }));
+        data::MakeDescriptorBytes(descriptor));
       static_cast<void>(writer.Finish());
     }
     // A patch pak with no assets whose catalog deletes the sidecar.

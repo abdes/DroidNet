@@ -31,6 +31,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -82,6 +83,7 @@ namespace {
     append(descriptor);
     append(table);
     append(body);
+    data::AppendDescriptorStrings(bytes, data::DescriptorStringsBuilder {});
     LooseCookedTestWriter writer(root);
     writer.SetSourceKey(data::SourceKey { Uuid::Generate() });
     writer.WriteAssetDescriptor(kSidecar, data::AssetType::kPhysicsScene,
@@ -138,8 +140,7 @@ namespace {
       .payload_type = physics::ShapePayloadType::kConvex,
     };
     writer.WriteAssetDescriptor(kShape, data::AssetType::kCollisionShape,
-      "/test/shape.oshape", "shape.oshape",
-      std::as_bytes(std::span(&shape, 1U)),
+      "/test/shape.oshape", "shape.oshape", data::MakeDescriptorBytes(shape),
       data::AssetReferences::Create({},
         {
           {
@@ -162,7 +163,7 @@ namespace {
       material.restitution = static_cast<float>(payload) / 10.0F;
       writer.WriteAssetDescriptor(kMaterial, data::AssetType::kPhysicsMaterial,
         "/test/material.opmat", "material.opmat",
-        std::as_bytes(std::span(&material, 1U)));
+        data::MakeDescriptorBytes(material));
     }
     const std::array data { static_cast<std::byte>(payload) };
     physics::PhysicsResourceDesc resource {};

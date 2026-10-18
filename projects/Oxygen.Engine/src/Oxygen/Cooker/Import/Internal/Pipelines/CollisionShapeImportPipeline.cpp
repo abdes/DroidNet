@@ -13,6 +13,7 @@
 #include <optional>
 #include <span>
 #include <stop_token>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -22,6 +23,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/CollisionShapeImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/OxCo/Co.h>
@@ -54,10 +56,13 @@ namespace {
 
   [[nodiscard]] auto SerializeDescriptor(
     data::pak::physics::CollisionShapeAssetDesc descriptor,
+    const std::string_view name,
     const std::vector<data::pak::physics::CompoundShapeChildDesc>& children)
     -> std::vector<std::byte>
   {
     using data::pak::physics::ShapeType;
+    auto strings = data::DescriptorStringsBuilder {};
+    descriptor.header.name_offset = strings.Add(name);
     if (descriptor.shape_type == ShapeType::kCompound) {
       descriptor.shape_params.compound.child_count
         = static_cast<uint32_t>(children.size());
@@ -79,8 +84,10 @@ namespace {
       DCHECK_F(child_write.has_value(),
         "Collision shape compound children serialization failed");
     }
-    const auto bytes = stream.Data();
-    return { bytes.begin(), bytes.end() };
+    const auto data = stream.Data();
+    auto bytes = std::vector<std::byte> { data.begin(), data.end() };
+    data::AppendDescriptorStrings(bytes, strings);
+    return bytes;
   }
 
 } // namespace
@@ -219,7 +226,7 @@ auto CollisionShapeImportPipeline::Worker() -> co::Co<>
 
     const auto cook_start = std::chrono::steady_clock::now();
     auto descriptor_bytes
-      = SerializeDescriptor(item.descriptor, item.compound_children);
+      = SerializeDescriptor(item.descriptor, item.name, item.compound_children);
     if (config_.with_content_hashing) {
       const auto content_hash
         = co_await ComputeContentHash(descriptor_bytes, item.stop_token);

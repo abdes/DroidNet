@@ -1,7 +1,6 @@
 # Material Cooking Architecture Specification
 
-**Date:** 2026-03-02
-**Status:** Design / Specification
+**Date:** 2026-03-02 **Status:** Design / Specification
 
 ## 0. Status Tracking
 
@@ -13,11 +12,12 @@ Current implementation status snapshot:
 1. Implemented: `MaterialDescriptorImportJob`, `MaterialPipeline`,
    `BuildMaterialDescriptorRequest`, `AsyncImportService` routing for
    `material_descriptor` tuning presence, and `BatchCommand` manifest wiring.
-2. Implemented: JSON-descriptor-driven import path (`type: "material-descriptor"`)
-   with full schema validation at both request-build time and job execution.
+2. Implemented: JSON-descriptor-driven import path
+   (`type: "material-descriptor"`) with full schema validation at both
+   request-build time and job execution.
 3. Implemented: `MaterialPipeline` async pipeline with ORM packing resolution,
-   scalar normalization, UV transform extraction, shader synthesis, and
-   content hashing.
+   scalar normalization, UV transform extraction, shader synthesis, and content
+   hashing.
 4. Implemented: Loose-cooked emission (`.omat` descriptors) via
    `AssetEmitter::Emit` with `AssetType::kMaterial` routing.
 5. Implemented: Texture dependency resolution via `.otex` sidecar file reads
@@ -32,13 +32,13 @@ Current implementation status snapshot:
 
 ## 1. Scope
 
-This specification defines the authoritative architecture for importing, cooking,
-packaging, and runtime loading of material assets in Oxygen.
+This specification defines the authoritative architecture for importing,
+cooking, packaging, and runtime loading of material assets in Oxygen.
 
 In scope:
 
-1. JSON-descriptor-driven imports (`*.material.json` via `type:
-"material-descriptor"`) — the only import entry point for materials.
+1. JSON-descriptor-driven imports (`*.material.json` via
+   `type: "material-descriptor"`) — the only import entry point for materials.
 2. PBR parameter cooking: scalar normalization, domain/alpha-mode resolution,
    ORM packing policy.
 3. Texture slot binding via virtual path → `.otex` sidecar resolution →
@@ -46,8 +46,8 @@ In scope:
 4. Shader reference cooking: explicit shader stage arrays or synthesized
    defaults.
 5. Loose-cooked descriptor emission (`.omat`) via `LooseCookedLayout`.
-6. Binary format: `MaterialAssetDesc` (384 bytes) + `ShaderReferenceDesc[]`
-   (424 bytes each) in `PakFormat_render.h`.
+6. Binary format: `MaterialAssetDesc` (311 bytes) + `ShaderReferenceDesc[]` (21
+   bytes each) + the descriptor string table, in `PakFormat_render.h`.
 7. Runtime loading via `MaterialLoader` and `MaterialAsset`.
 8. Manifest batch orchestration with texture dependency ordering.
 
@@ -69,8 +69,8 @@ Out of scope:
 3. The only job class for material descriptor imports is
    `MaterialDescriptorImportJob`.
 4. The only pipeline class for material cooking is `MaterialPipeline`.
-5. All binary serialization/deserialization MUST use `oxygen::serio`
-   (no raw byte arithmetic for new logic).
+5. All binary serialization/deserialization MUST use `oxygen::serio` (no raw
+   byte arithmetic for new logic).
 6. ORM packing state MUST be expressed via `OrmPolicy` and stored in
    `kMaterialFlag_GltfOrmPacked` — no hard-coded channel assumptions in cooking
    stages.
@@ -81,8 +81,8 @@ Out of scope:
    modified without incrementing `kMaterialAssetVersion` and updating the
    `static_assert(sizeof(...))` guards.
 9. Runtime content code MUST NOT depend on demo/example code.
-10. Texture index `0` is reserved. `kMaterialFlag_NoTextureSampling` MUST be
-    set when all 12 texture slots carry `kNoResourceIndex`, and cleared when at
+10. Texture index `0` is reserved. `kMaterialFlag_NoTextureSampling` MUST be set
+    when all 12 texture slots carry `kNoResourceIndex`, and cleared when at
     least one slot is assigned. The flag is the authoritative indicator, not
     index value zero.
 11. Schema MUST be validated twice: once in `BuildMaterialDescriptorRequest`
@@ -93,20 +93,20 @@ Out of scope:
 
 The following facts were confirmed during the documentation pass:
 
-| Fact                                           | Evidence                                                                                                                                                  |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Material import is descriptor-only             | No `MaterialCommand.cpp` in `ImportTool`; no `ImportFormat::kMaterial`; routing discriminant is `request.material_descriptor.has_value()`                 |
-| Route discriminant is request payload presence | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`const bool is_material_descriptor_request = request.material_descriptor.has_value()`)                 |
-| Manifest job type exists                       | `src/Oxygen/Cooker/Import/ImportManifest.cpp`: `if (job_type == "material-descriptor")`                                                                   |
-| Schema is embedded                             | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kMaterialDescriptorSchema`)                                                                 |
-| Binary format is locked                        | `src/Oxygen/Data/PakFormat_render.h` (`MaterialAssetDesc`, `static_assert(sizeof(...))==384)`, `ShaderReferenceDesc`, `static_assert(sizeof(...))==424)`) |
-| Loose cooked layout for materials              | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`kMaterialDescriptorExtension = ".omat"`, `MaterialDescriptorRelPath()`, `MaterialVirtualPath()`)          |
-| Texture sidecar reader exists                  | `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp` (`TextureSidecarFile`, `ResolveTextureIndexFromVirtualPath`)                     |
-| Runtime loader for materials exists            | `src/Oxygen/Content/Loaders/MaterialLoader.h` (`LoadMaterialAsset`)                                                                                       |
-| Runtime material asset container               | `src/Oxygen/Data/MaterialAsset.h` (`MaterialAsset`)                                                                                                       |
-| Shader defaults are synthesized                | `MaterialPipeline.cpp` (`BuildDefaultShaderRequests`)                                                                                                     |
-| Example material descriptor                    | `Examples/TexturedCube/WoodFloor007/woodfloor007.material.json`                                                                                           |
-| JSON schema shipped                            | `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`                                                                                 |
+| Fact                                           | Evidence                                                                                                                                                 |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Material import is descriptor-only             | No `MaterialCommand.cpp` in `ImportTool`; no `ImportFormat::kMaterial`; routing discriminant is `request.material_descriptor.has_value()`                |
+| Route discriminant is request payload presence | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`const bool is_material_descriptor_request = request.material_descriptor.has_value()`)                |
+| Manifest job type exists                       | `src/Oxygen/Cooker/Import/ImportManifest.cpp`: `if (job_type == "material-descriptor")`                                                                  |
+| Schema is embedded                             | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kMaterialDescriptorSchema`)                                                                |
+| Binary format is locked                        | `src/Oxygen/Data/PakFormat_render.h` (`MaterialAssetDesc`, `static_assert(sizeof(...))==311)`, `ShaderReferenceDesc`, `static_assert(sizeof(...))==21)`) |
+| Loose cooked layout for materials              | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`kMaterialDescriptorExtension = ".omat"`, `MaterialDescriptorRelPath()`, `MaterialVirtualPath()`)         |
+| Texture sidecar reader exists                  | `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp` (`TextureSidecarFile`, `ResolveTextureIndexFromVirtualPath`)                    |
+| Runtime loader for materials exists            | `src/Oxygen/Content/Loaders/MaterialLoader.h` (`LoadMaterialAsset`)                                                                                      |
+| Runtime material asset container               | `src/Oxygen/Data/MaterialAsset.h` (`MaterialAsset`)                                                                                                      |
+| Shader defaults are synthesized                | `MaterialPipeline.cpp` (`BuildDefaultShaderRequests`)                                                                                                    |
+| Example material descriptor                    | `Examples/TexturedCube/WoodFloor007/woodfloor007.material.json`                                                                                          |
+| JSON schema shipped                            | `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`                                                                                |
 
 ## 4. Decision
 
@@ -114,13 +114,14 @@ Materials are **resource-kind assets** (not first-class scene assets). They are
 referenced by index from geometry via `MaterialAssetDesc`. A material bundles
 PBR scalars, texture slot bindings (indices into the global texture table), and
 shader references (source paths + compilation metadata) into a single
-fixed-size descriptor.
+descriptor: a fixed-size record, the shader references and a string table that
+holds the name and the shader strings.
 
 One import entry point exists:
 
 1. **Descriptor-driven import** (`type: "material-descriptor"` manifest) — a
-   JSON document that fully describes one material import job. This is the
-   only path. There is no standalone `texture`-style CLI command for materials.
+   JSON document that fully describes one material import job. This is the only
+   path. There is no standalone `texture`-style CLI command for materials.
 
 The descriptor-only constraint exists because material cooking requires:
 
@@ -182,8 +183,8 @@ Architectural split:
 
 1. Import path owns descriptor production, texture index resolution, shader
    reference validation, and ORM packing.
-2. `MaterialPipeline` is a reusable async cooking unit; it is a
-   bounded-channel producer/consumer coroutine pipeline.
+2. `MaterialPipeline` is a reusable async cooking unit; it is a bounded-channel
+   producer/consumer coroutine pipeline.
 3. Runtime loading reads `MaterialAssetDesc` (packed) from the `.omat` file,
    reconstructs shader references, and registers texture slot indices as async
    resource dependencies — no cooking at load time.
@@ -226,10 +227,10 @@ Architectural split:
      - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.h`
      - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
    - role: async coroutine job that re-parses and re-validates the embedded
-     descriptor JSON, resolves all texture virtual paths to `ResourceIndexT`
-     by reading `.otex` sidecar files, builds a `MaterialPipeline::WorkItem`,
-     creates and drives a `MaterialPipeline`, and emits the cooked `.omat`
-     file via `AssetEmitter`.
+     descriptor JSON, resolves all texture virtual paths to `ResourceIndexT` by
+     reading `.otex` sidecar files, builds a `MaterialPipeline::WorkItem`,
+     creates and drives a `MaterialPipeline`, and emits the cooked `.omat` file
+     via `AssetEmitter`.
    - stages: `ResolveTextures` → `BuildWorkItem` → `SubmitToPipeline` →
      `CollectResult` → `EmitAsset` → `FinalizeSession`.
 
@@ -239,9 +240,9 @@ Architectural split:
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h`
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.cpp`
-   - role: bounded-channel producer/consumer async cooking pipeline.
-     Accepts `WorkItem` objects, offloads CPU work to a `co::ThreadPool`, and
-     returns `WorkResult` objects.
+   - role: bounded-channel producer/consumer async cooking pipeline. Accepts
+     `WorkItem` objects, offloads CPU work to a `co::ThreadPool`, and returns
+     `WorkResult` objects.
    - pipeline stages (per work item, all in `BuildMaterialPayload`):
      1. Initialize `MaterialAssetDesc` header (`asset_type=kMaterial`,
         `version=kMaterialAssetVersion`, `name=material_name`).
@@ -250,26 +251,25 @@ Architectural split:
         `MaterialDomain`, sets `kMaterialFlag_AlphaTest` for masked.
      4. `ApplyMaterialInputs` — normalizes PBR scalars (clamp, Unorm16,
         HalfFloat encoding, `roughness_as_glossiness` inversion).
-     5. `ResolveOrmPacked` — for `kAuto`, enables ORM if metallic and
-        roughness share same `source_id` + uv_set; for `kForcePacked`,
-        errors if incompatible; for `kForceSeparate`, always returns
-        `std::nullopt`.
-     6. `HasAnyAssignedTextures` — clears `kMaterialFlag_NoTextureSampling`
-        if any slot has `assigned=true`.
-     7. `AssignTextureIndices` — fills all 12 `*_texture` fields; if ORM
-        packed, `metallic_texture = roughness_texture = orm_index`.
-     8. `BuildMaterialUvTransformDesc` — extracts UV scale/offset/rotation
-        from the first assigned binding's `uv_transform`.
-     9. `BuildShaderReferences` — validates shader stages (unique types,
-        1..32 count, non-empty paths), sorts ascending by `shader_type`,
-        fills `ShaderReferenceDesc[N]`, computes `shader_stages` bitfield.
-     10. `SerializeMaterialDescriptor` — packs `MaterialAssetDesc` (384 bytes)
-         followed by `ShaderReferenceDesc[]` to a `MemoryStream`.
+     5. `ResolveOrmPacked` — for `kAuto`, enables ORM if metallic and roughness
+        share same `source_id` + uv_set; for `kForcePacked`, errors if
+        incompatible; for `kForceSeparate`, always returns `std::nullopt`.
+     6. `HasAnyAssignedTextures` — clears `kMaterialFlag_NoTextureSampling` if
+        any slot has `assigned=true`.
+     7. `AssignTextureIndices` — fills all 12 `*_texture` fields; if ORM packed,
+        `metallic_texture = roughness_texture = orm_index`.
+     8. `BuildMaterialUvTransformDesc` — extracts UV scale/offset/rotation from
+        the first assigned binding's `uv_transform`.
+     9. `BuildShaderReferences` — validates shader stages (unique types, 1..32
+        count, non-empty paths), sorts ascending by `shader_type`, fills
+        `ShaderReferenceDesc[N]`, computes `shader_stages` bitfield.
+     10. `SerializeMaterialDescriptor` — packs `MaterialAssetDesc` (311 bytes),
+         `ShaderReferenceDesc[]` and the string table to a `MemoryStream`.
      11. `ComputeContentHashOnThreadPool` (optional) — hashes full serialized
          span on thread pool.
      12. `PatchContentHash` — patches `header.content_hash` at fixed offset.
-   - note: `MaterialPipeline` does NOT emit cooked files; only `AssetEmitter`
-     in `MaterialDescriptorImportJob::ExecuteAsync` writes the `.omat` file.
+   - note: `MaterialPipeline` does NOT emit cooked files; only `AssetEmitter` in
+     `MaterialDescriptorImportJob::ExecuteAsync` writes the `.omat` file.
    - config: default `queue_capacity=64`, `worker_count=2` (from
      `ImportConcurrency::material`).
 
@@ -305,9 +305,10 @@ Architectural split:
 **Texture Sidecar Resolution (Internal):**
 
 1. `ResolveTextureIndexFromVirtualPath` (free function, anonymous namespace)
-   - file: `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
-   - role: async coroutine. Validates canonical virtual path (no `..`, no
-     `//`), strips mount root to a rel-path, searches `cooked_root` and
+   - file:
+     `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
+   - role: async coroutine. Validates canonical virtual path (no `..`, no `//`),
+     strips mount root to a rel-path, searches `cooked_root` and
      `cooked_context_roots` in reverse-priority order, falls back to hashed
      variant lookup (`<name>_<16hexchars>.otex`), reads `TextureSidecarFile`
      binary (`magic="OTEX"`, version, `resource_index`), returns
@@ -332,8 +333,8 @@ request.material_descriptor.has_value() == true → MaterialDescriptorImportJob
 
 Unlike textures, there is no `ImportFormat` enum value for materials. The
 discriminant is the presence of the top-level
-`ImportRequest::material_descriptor` payload. This means material descriptor requests bypass all file
-extension detection and format routing logic.
+`ImportRequest::material_descriptor` payload. This means material descriptor
+requests bypass all file extension detection and format routing logic.
 
 ---
 
@@ -341,8 +342,8 @@ extension detection and format routing logic.
 
 ### 7.1 Manifest Contract (`ImportManifest`)
 
-Materials are only importable via a manifest. There is no standalone
-ImportTool CLI command for materials.
+Materials are only importable via a manifest. There is no standalone ImportTool
+CLI command for materials.
 
 Schema target files:
 
@@ -367,8 +368,8 @@ Schema target files:
 }
 ```
 
-Valid top-level keys for `type: "material-descriptor"`:
-`id`, `type`, `source`, `name`, `content_hashing`, `depends_on`.
+Valid top-level keys for `type: "material-descriptor"`: `id`, `type`, `source`,
+`name`, `content_hashing`, `depends_on`.
 
 The `source` field must point to a file conforming to
 `oxygen.material-descriptor.schema.json` (Section 7.2).
@@ -384,7 +385,8 @@ The `source` field must point to a file conforming to
    succeeded (i.e., their `.otex` sidecar files are on disk).
 4. Failed predecessor jobs cause all transitive dependents to be skipped with
    diagnostic `material.import.skipped_predecessor_failed`.
-5. The execution node per job is `MaterialDescriptorImportJob → MaterialPipeline`.
+5. The execution node per job is
+   `MaterialDescriptorImportJob → MaterialPipeline`.
 
 #### 7.1.3 Manifest Defaults
 
@@ -404,8 +406,8 @@ Manifest-level defaults reduce per-job verbosity:
 }
 ```
 
-Manifest defaults for `material_descriptor` support:
-`output` (cooked root), `name` (job name override).
+Manifest defaults for `material_descriptor` support: `output` (cooked root),
+`name` (job name override).
 
 #### 7.1.4 Concurrency Configuration
 
@@ -426,7 +428,8 @@ Default: `workers=2`, `queue_capacity=64`.
 
 ### 7.2 Material Descriptor Source JSON (`*.material.json`)
 
-Schema: `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`
+Schema:
+`src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`
 
 JSON Schema draft-07, `additionalProperties: false` at all levels.
 
@@ -482,8 +485,8 @@ Top-level validation rules:
 1. Unknown top-level fields are rejected (`additionalProperties: false`).
 2. `source` is implicit (provided by manifest); it does not appear inside the
    descriptor JSON itself.
-3. All `textures[slot].virtual_path` values must be canonical virtual paths
-   (see Section 7.2.6).
+3. All `textures[slot].virtual_path` values must be canonical virtual paths (see
+   Section 7.2.6).
 4. If `shaders` is present, each entry must have `stage`, `source_path`, and
    `entry_point`.
 
@@ -648,7 +651,7 @@ All material cooking stages execute within `BuildMaterialPayload` in the
 | 7    | `AssignTextureIndices`           | Fills 12 `*_texture` `ResourceIndexT` fields; handles ORM shared index                             |
 | 8    | `BuildMaterialUvTransformDesc`   | Writes first assigned binding's UV scale/offset/rotation to descriptor                             |
 | 9    | `BuildShaderReferences`          | Validates, deduplicates, sorts, encodes `ShaderReferenceDesc[]`; computes `shader_stages` bitfield |
-| 10   | `SerializeMaterialDescriptor`    | Packed write: `MaterialAssetDesc` (384 B) + `ShaderReferenceDesc[N]` (424 B × N)                   |
+| 10   | `SerializeMaterialDescriptor`    | Packed write: `MaterialAssetDesc` (311 B) + `ShaderReferenceDesc[N]` (21 B × N) + string table     |
 | 11   | `ComputeContentHashOnThreadPool` | Hashes full byte span on thread pool (when enabled)                                                |
 | 12   | `PatchContentHash`               | Patches `header.content_hash` field at fixed byte offset in serialized output                      |
 
@@ -658,32 +661,42 @@ All stages cooperatively support cancellation via `work_item.stop_token`.
 
 ## 9. Binary Format
 
-### 9.1 `AssetHeader` (95 bytes, `PakFormat_core.h`)
+### 9.1 `AssetHeader` (51 bytes, `PakFormat_core.h`)
 
 ```cpp
 #pragma pack(push, 1)
+struct DescriptorStringTable {
+  StringTableOffsetT offset = 0;     // From the descriptor start
+  StringTableSizeT   size   = 0;
+};
+
 struct AssetHeader {
   uint8_t  asset_type      = 0;      // AssetType::kMaterial
-  char     name[64]        = {};     // Asset name (debug/tools)
-  uint8_t  version         = 0;      // kMaterialAssetVersion = 2
+  DescriptorStringTable strings = {}; // The descriptor's string table
+  StringTableOffsetT name_offset = 0; // Asset name (debug/tools)
+  uint8_t  version         = 0;      // kMaterialAssetVersion
   uint8_t  streaming_priority = 0;
-  uint64_t content_hash    = 0;      // SHA-256 first 8 bytes of payload
+  ContentHashDigest content_hash = {}; // Full SHA-256 of the descriptor
   uint32_t variant_flags   = 0;
-  uint8_t  reserved[16]   = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(AssetHeader) == 95);
+static_assert(sizeof(AssetHeader) == 51);
 ```
 
-### 9.2 `MaterialAssetDesc` (384 bytes, `PakFormat_render.h`)
+Every string of the descriptor (the asset name and the three shader strings) is
+an offset into one string table: NUL-terminated UTF-8 strings, starting with the
+empty string at offset 0. Strings have no length limit and are never truncated.
+
+### 9.2 `MaterialAssetDesc` (311 bytes, `PakFormat_render.h`)
 
 All materials stored in loose cooked containers and in PAK files share this
-fixed-size descriptor. Written as a single `.omat` file.
+layout. Written as a single `.omat` file: the record, the shader references,
+then the string table.
 
 ```cpp
 #pragma pack(push, 1)
 struct MaterialAssetDesc {
-  AssetHeader header;            // 95 bytes
+  AssetHeader header;            // 51 bytes
 
   uint8_t  material_domain;     // MaterialDomain enum
   uint32_t flags;               // Bitfield (see Section 9.4)
@@ -691,29 +704,30 @@ struct MaterialAssetDesc {
 
   // Core PBR scalars
   float    base_color[4];       // RGBA [0,1]
-  float    normal_scale;        // ≥0
+  float    normal_scale;        // >=0
   Unorm16  metalness;
   Unorm16  roughness;
   Unorm16  ambient_occlusion;
 
-  // Core texture references (kNoResourceIndex = unassigned)
-  ResourceIndexT base_color_texture;
-  ResourceIndexT normal_texture;
-  ResourceIndexT metallic_texture;
-  ResourceIndexT roughness_texture;
-  ResourceIndexT ambient_occlusion_texture;
+  // Core texture references (kNoResourceReference = unassigned); indices
+  // into the descriptor's resource references
+  ResourceReferenceIndex base_color_texture;
+  ResourceReferenceIndex normal_texture;
+  ResourceReferenceIndex metallic_texture;
+  ResourceReferenceIndex roughness_texture;
+  ResourceReferenceIndex ambient_occlusion_texture;
 
   // Tier 1/2 texture references
-  ResourceIndexT emissive_texture;
-  ResourceIndexT specular_texture;
-  ResourceIndexT sheen_color_texture;
-  ResourceIndexT clearcoat_texture;
-  ResourceIndexT clearcoat_normal_texture;
-  ResourceIndexT transmission_texture;
-  ResourceIndexT thickness_texture;
+  ResourceReferenceIndex emissive_texture;
+  ResourceReferenceIndex specular_texture;
+  ResourceReferenceIndex sheen_color_texture;
+  ResourceReferenceIndex clearcoat_texture;
+  ResourceReferenceIndex clearcoat_normal_texture;
+  ResourceReferenceIndex transmission_texture;
+  ResourceReferenceIndex thickness_texture;
 
   // Tier 1/2 scalars
-  HalfFloat emissive_factor[3];
+  float     emissive_factor[3];
   Unorm16   alpha_cutoff;
   float     ior;
   Unorm16   specular_factor;
@@ -744,30 +758,28 @@ struct MaterialAssetDesc {
   float    grid_axis_color_x[4];
   float    grid_axis_color_y[4];
   float    grid_origin_color[4];
-
-  uint8_t  reserved[35];
 };
 #pragma pack(pop)
-static_assert(sizeof(MaterialAssetDesc) == 384);
+static_assert(sizeof(MaterialAssetDesc) == 311);
 ```
 
-Immediately following the `MaterialAssetDesc` in the `.omat` file is an array
-of `ShaderReferenceDesc` entries in ascending set-bit order of `shader_stages`.
+Immediately following the `MaterialAssetDesc` in the `.omat` file is an array of
+`ShaderReferenceDesc` entries in ascending set-bit order of `shader_stages`,
+then the string table.
 
-### 9.3 `ShaderReferenceDesc` (424 bytes, `PakFormat_render.h`)
+### 9.3 `ShaderReferenceDesc` (21 bytes, `PakFormat_render.h`)
 
 ```cpp
 #pragma pack(push, 1)
 struct ShaderReferenceDesc {
-  uint8_t shader_type   = 0;        // ShaderType enum value
-  uint8_t reserved0[7]  = {};
-  char    source_path[120] = {};    // Relative shader source path
-  char    entry_point[32]  = {};    // Shader entry point name
-  char    defines[256]     = {};    // Semicolon-delimited define string
-  uint64_t shader_hash     = 0;     // Optional precomputed hash
+  uint8_t shader_type = 0;                 // ShaderType enum value
+  StringTableOffsetT source_path_offset = 0; // Repo-relative source path
+  StringTableOffsetT entry_point_offset = 0; // Shader entry point name
+  StringTableOffsetT defines_offset = 0;     // Canonical defines; may be empty
+  uint64_t shader_hash = 0;                // Optional precomputed hash
 };
 #pragma pack(pop)
-static_assert(sizeof(ShaderReferenceDesc) == 424);
+static_assert(sizeof(ShaderReferenceDesc) == 21);
 ```
 
 The `shader_stages` bitfield in `MaterialAssetDesc` encodes which stage types
@@ -791,7 +803,7 @@ order (LSB first = lowest `ShaderType` value first).
 ```text
 <cooked_root>/
   Materials/
-    <material_name>.omat    ← MaterialAssetDesc (384 B) + ShaderReferenceDesc[]
+    <material_name>.omat    ← MaterialAssetDesc + ShaderReferenceDesc[] + strings
 ```
 
 Key layout constants:
@@ -801,18 +813,18 @@ Key layout constants:
 | `kMaterialDescriptorExtension` | `".omat"`     | File extension for material descriptors |
 | `kMaterialsDirName`            | `"Materials"` | Subfolder under cooked root             |
 
-Virtual path for runtime mounting:
-`MaterialVirtualPath(name)` = `<virtual_mount_root>/Materials/<name>.omat`
+Virtual path for runtime mounting: `MaterialVirtualPath(name)` =
+`<virtual_mount_root>/Materials/<name>.omat`
 
-Relative path for file emission:
-`MaterialDescriptorRelPath(name)` = `Materials/<name>.omat`
+Relative path for file emission: `MaterialDescriptorRelPath(name)` =
+`Materials/<name>.omat`
 
 ---
 
 ## 10. Error Taxonomy
 
-Material import errors are surfaced as diagnostics in `ImportReport` and as
-log messages written to `error_stream`. Error codes follow the pattern
+Material import errors are surfaced as diagnostics in `ImportReport` and as log
+messages written to `error_stream`. Error codes follow the pattern
 `material.<category>.<key>`:
 
 | Category     | Code Pattern                                   | Key Causes                                                             |
@@ -845,7 +857,9 @@ Runtime load sequence:
 3. `MaterialAssetDesc` is read field-by-field with `reader.ScopedAlignment(1)`
    (packed, no padding).
 4. `shader_stages` bitfield is read; `popcount(shader_stages)` determines how
-   many `ShaderReferenceDesc` entries follow, read in ascending bit order.
+   many `ShaderReferenceDesc` entries follow, read in ascending bit order. The
+   string table follows them; the loader resolves the name and the shader
+   strings from it and rejects offsets outside it.
 5. In non-parse-only mode, `context.dependency_collector->AddResourceDependency`
    is called for each of the 12 texture `ResourceIndexT` fields that are not
    `kNoResourceIndex`. This registers them as async load dependencies.
@@ -856,14 +870,13 @@ Runtime load sequence:
 
 Key contracts:
 
-1. `kMaterialFlag_NoTextureSampling` in `flags` tells the renderer whether
-   to sample any textures. The renderer MUST check this flag before indexing
-   the texture slots.
+1. `kMaterialFlag_NoTextureSampling` in `flags` tells the renderer whether to
+   sample any textures. The renderer MUST check this flag before indexing the
+   texture slots.
 2. `content_hash` is used for deduplication during incremental imports.
-3. `MaterialAsset` does not own GPU handles. Shader compilation and GPU
-   resource creation are the renderer's responsibility.
+3. `MaterialAsset` does not own GPU handles. Shader compilation and GPU resource
+   creation are the renderer's responsibility.
 4. The `shader_stages` bitfield is the authoritative count for
    `ShaderReferenceDesc[]` entries. Do NOT assume a fixed count.
-5. Shader references are source-path references only. DXIL blob compilation
-   is deferred to the renderer/shader system and is out of scope for the
-   cooker.
+5. Shader references are source-path references only. DXIL blob compilation is
+   deferred to the renderer/shader system and is out of scope for the cooker.

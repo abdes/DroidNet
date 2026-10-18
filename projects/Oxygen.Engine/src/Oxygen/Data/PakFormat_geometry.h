@@ -58,9 +58,9 @@ struct GeometryAssetDesc {
   float bounding_box_min[3] = {}; // AABB min coordinates
   float bounding_box_max[3] = {}; // AABB max coordinates
 };
-// Followed by: MeshDesc meshes[lod_count];
+// Followed by: MeshDesc meshes[lod_count], then the descriptor string table.
 #pragma pack(pop)
-static_assert(sizeof(GeometryAssetDesc) == 131);
+static_assert(sizeof(GeometryAssetDesc) == 79);
 
 //! Fields for a standard (static) mesh
 /*! Boundaries are required and must be pre-computed by tooling. All-zero
@@ -119,7 +119,7 @@ struct ProceduralMeshInfo {
 #pragma pack(pop)
 static_assert(sizeof(ProceduralMeshInfo) == 72);
 
-//! Mesh descriptor (104 bytes + SubMesh table)
+//! Mesh descriptor (85 bytes + SubMesh table)
 /*!
   Describes a single mesh LOD within a geometry asset. Each MeshDesc contains
   references to vertex and index buffers, a list of submeshes, and bounding
@@ -142,7 +142,8 @@ static_assert(sizeof(ProceduralMeshInfo) == 72);
 */
 #pragma pack(push, 1)
 struct MeshDesc {
-  char name[core::kMaxNameSize] = {};
+  //! Mesh name, in the geometry descriptor's string table.
+  core::StringTableOffsetT name_offset = 0;
   uint8_t mesh_type = 0; // MeshType enum value
   uint32_t submesh_count = 0; // Number of SubMeshes
   uint32_t mesh_view_count = 0; // Total number of MeshViews (all SubMeshes)
@@ -185,9 +186,9 @@ struct MeshDesc {
 //   the MeshInfo structure.
 // - SubMeshDesc submeshes[submesh_count];
 #pragma pack(pop)
-static_assert(sizeof(MeshDesc) == 145);
+static_assert(sizeof(MeshDesc) == 85);
 
-//! Sub-mesh descriptor (108 bytes + MeshView table)
+//! Sub-mesh descriptor (64 bytes + MeshView table)
 /*!
   Describes a logical partition of a mesh, typically corresponding to a region
   rendered with a single material. Each SubMeshDesc references a material asset
@@ -206,7 +207,8 @@ static_assert(sizeof(MeshDesc) == 145);
 */
 #pragma pack(push, 1)
 struct SubMeshDesc {
-  char name[core::kMaxNameSize] = {};
+  //! Submesh name, in the geometry descriptor's string table.
+  core::StringTableOffsetT name_offset = 0;
   AssetKey material_asset_key; // AssetKey reference to MaterialAsset
   MaterialSlotId slot_id; // Semantic declaration, shared only explicitly
   uint32_t mesh_view_count = 0; // Number of MeshViews in this SubMesh
@@ -215,7 +217,7 @@ struct SubMeshDesc {
 };
 // Followed by: MeshViewDesc mesh_views[mesh_view_count]
 #pragma pack(pop)
-static_assert(sizeof(SubMeshDesc) == 124);
+static_assert(sizeof(SubMeshDesc) == 64);
 
 //! Mesh view descriptor
 /*!

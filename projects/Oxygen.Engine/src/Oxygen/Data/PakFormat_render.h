@@ -76,23 +76,26 @@ inline constexpr float kMaxMaterialEmissiveFactor = 65504.0F;
   bytecode; only metadata and lookup information.
 
   - `shader_type`: Shader stage (ShaderType enum value).
-  - `source_path`: Canonical repo-relative shader source path (forward slashes,
-    normalized, no absolute paths).
-  - `entry_point`: Explicit entry point name.
-  - `defines`: Canonical defines string for compilation (sorted, unique names).
+  - `source_path_offset`: Canonical repo-relative shader source path (forward
+    slashes, normalized, no absolute paths).
+  - `entry_point_offset`: Explicit entry point name.
+  - `defines_offset`: Canonical defines string for compilation (sorted, unique
+    names); may be empty.
   - `shader_hash`: 64-bit hash of shader source for validation.
+
+  The three strings are offsets into the material descriptor's string table.
 */
 #pragma pack(push, 1)
 struct ShaderReferenceDesc {
   uint8_t shader_type = 0; // ShaderType enum value
-  char source_path[120] = {}; // Null-terminated, null-padded
-  char entry_point[32] = {}; // Null-terminated, null-padded
-  char defines[256] = {}; // Null-terminated, null-padded (may be empty)
+  core::StringTableOffsetT source_path_offset = 0;
+  core::StringTableOffsetT entry_point_offset = 0;
+  core::StringTableOffsetT defines_offset = 0;
 
   uint64_t shader_hash = 0; // Hash of source for validation
 };
 #pragma pack(pop)
-static_assert(sizeof(ShaderReferenceDesc) == 417);
+static_assert(sizeof(ShaderReferenceDesc) == 21);
 
 //! Material asset descriptor with explicit UV transform and
 //! procedural grid extensions.
@@ -183,8 +186,9 @@ struct MaterialAssetDesc {
 // - Array of ShaderReferenceDesc entries in ascending set-bit order of
 //   `shader_stages` (least-significant set bit first). Count is population
 //   count of `shader_stages`.
+// - The descriptor string table.
 #pragma pack(pop)
-static_assert(sizeof(MaterialAssetDesc) == 363);
+static_assert(sizeof(MaterialAssetDesc) == 311);
 
 //=== Texture Payload Structures ===-----------------------------------------//
 

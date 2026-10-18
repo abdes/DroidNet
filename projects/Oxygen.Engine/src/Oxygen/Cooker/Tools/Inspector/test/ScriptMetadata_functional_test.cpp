@@ -27,6 +27,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Testing/GTest.h>
@@ -42,10 +43,11 @@ using oxygen::data::ScriptParam;
 
 constexpr auto kScriptPath = "/Content/Scripts/Turret.oscript";
 
-auto Record(const std::string_view key, const ScriptParam& value)
+auto Record(const std::string_view key, const ScriptParam& value,
+  oxygen::data::DescriptorStringsBuilder& strings)
   -> scripting::ScriptParamRecord
 {
-  const auto record = oxygen::data::MakeScriptParamRecord(key, value);
+  const auto record = oxygen::data::MakeScriptParamRecord(key, value, strings);
   if (!record.has_value()) {
     throw std::runtime_error("Could not build a script parameter record");
   }
@@ -56,18 +58,20 @@ auto Record(const std::string_view key, const ScriptParam& value)
 auto ScriptAsset(const uint8_t version = scripting::kScriptAssetVersion)
   -> AssetSpec
 {
+  auto strings = oxygen::data::DescriptorStringsBuilder {};
   const auto declarations = std::array {
-    Record("speed", 2.5F),
-    Record("count", int32_t { 3 }),
-    Record("armed", true),
-    Record("mode", std::string("walk")),
-    Record("offset", oxygen::Vec3 { 1.0F, 2.0F, 3.0F }),
+    Record("speed", 2.5F, strings),
+    Record("count", int32_t { 3 }, strings),
+    Record("armed", true, strings),
+    Record("mode", std::string("walk"), strings),
+    Record("offset", oxygen::Vec3 { 1.0F, 2.0F, 3.0F }, strings),
     Record("fire",
       oxygen::data::ScriptAssetParam {
         .key = AssetKey {},
         .asset_type = AssetType::kInputAction,
-      }),
-    Record("target", oxygen::data::ScriptNodeParam {}),
+      },
+      strings),
+    Record("target", oxygen::data::ScriptNodeParam {}, strings),
   };
   auto descriptor = scripting::ScriptAssetDesc {};
   descriptor.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
@@ -82,6 +86,7 @@ auto ScriptAsset(const uint8_t version = scripting::kScriptAssetVersion)
   bytes.insert(bytes.end(), header.begin(), header.end());
   const auto records = std::as_bytes(std::span(declarations));
   bytes.insert(bytes.end(), records.begin(), records.end());
+  oxygen::data::AppendDescriptorStrings(bytes, strings);
   auto references = oxygen::data::AssetReferences::Create({}, {});
   return AssetSpec {
     .key = AssetKey::FromVirtualPath(kScriptPath),

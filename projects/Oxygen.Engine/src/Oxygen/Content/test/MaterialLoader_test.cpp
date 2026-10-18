@@ -29,6 +29,7 @@
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -50,14 +51,6 @@ using oxygen::base::CheckedAt;
 
 namespace {
 
-auto CopyTerminated(
-  const std::string_view text, const std::span<char> destination) -> void
-{
-  std::ranges::fill(destination, '\0');
-  std::ranges::copy(
-    text.substr(0, destination.size() - 1U), destination.begin());
-}
-
 //=== MaterialLoader Basic Functionality Tests ===----------------------------//
 
 //! Fixture for MaterialLoader basic serialization tests.
@@ -67,9 +60,16 @@ protected:
   using MaterialAssetDesc = oxygen::data::pak::render::MaterialAssetDesc;
   using ShaderReferenceDesc = oxygen::data::pak::render::ShaderReferenceDesc;
 
-  auto WriteMaterialDescriptor(const MaterialAssetDesc& desc,
+  //! Writes `desc`, its shader references and the fixture's string table.
+  auto WriteMaterialDescriptor(MaterialAssetDesc desc,
     std::span<const ShaderReferenceDesc> shader_refs = {}) -> void
   {
+    desc.header.strings = {
+      .offset = static_cast<oxygen::data::pak::core::StringTableOffsetT>(
+        sizeof(MaterialAssetDesc)
+        + (shader_refs.size() * sizeof(ShaderReferenceDesc))),
+      .size = strings_.Size(),
+    };
     auto pack = desc_writer_.ScopedAlignment(1);
     ASSERT_TRUE(desc_writer_.WriteBlob(
       std::as_bytes(std::span<const MaterialAssetDesc, 1>(&desc, 1))));
@@ -77,16 +77,16 @@ protected:
       ASSERT_TRUE(desc_writer_.WriteBlob(
         std::as_bytes(std::span<const ShaderReferenceDesc, 1>(&ref, 1))));
     }
+    ASSERT_TRUE(desc_writer_.WriteBlob(strings_.Bytes()));
     EXPECT_TRUE(desc_stream_.Seek(0));
   }
 
-  static auto MakeMaterialDescriptor(const std::string_view name)
-    -> MaterialAssetDesc
+  auto MakeMaterialDescriptor(const std::string_view name) -> MaterialAssetDesc
   {
     MaterialAssetDesc desc {};
     desc.header.asset_type
       = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
-    CopyTerminated(name, desc.header.name);
+    desc.header.name_offset = strings_.Add(name);
     desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
     desc.material_domain
       = static_cast<uint8_t>(oxygen::data::MaterialDomain::kOpaque);
@@ -99,15 +99,15 @@ protected:
     std::string_view defines;
   };
 
-  static auto MakeShaderReferenceDesc(oxygen::ShaderType shader_type,
+  auto MakeShaderReferenceDesc(oxygen::ShaderType shader_type,
     const ShaderSource source, uint64_t hash) -> ShaderReferenceDesc
   {
     ShaderReferenceDesc desc {};
     desc.shader_type = static_cast<uint8_t>(shader_type);
 
-    CopyTerminated(source.path, desc.source_path);
-    CopyTerminated(source.entry_point, desc.entry_point);
-    CopyTerminated(source.defines, desc.defines);
+    desc.source_path_offset = strings_.Add(source.path);
+    desc.entry_point_offset = strings_.Add(source.entry_point);
+    desc.defines_offset = strings_.Add(source.defines);
 
     desc.shader_hash = hash;
     return desc;
@@ -128,6 +128,9 @@ protected:
   {
     return MakeDecodeLoaderContext();
   }
+
+  //! The string table of the descriptor being built.
+  oxygen::data::DescriptorStringsBuilder strings_;
 };
 
 NOLINT_TEST_F(MaterialLoaderBasicTest, PreservesFloat32Emission)

@@ -31,6 +31,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -174,6 +175,12 @@ auto ValidateRoot(
 
     if (descriptor_size < min_size) {
       throw std::runtime_error("descriptor smaller than minimum expected size: "
+        + descriptor_path.generic_string());
+    }
+    if (!data::DescriptorStrings::IsValidLocation(
+          header.strings, descriptor_size)
+      || header.strings.offset < min_size) {
+      throw std::runtime_error("descriptor string table lies outside it: "
         + descriptor_path.generic_string());
     }
 

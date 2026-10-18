@@ -62,9 +62,6 @@ using ContentHashDigest = oxygen::base::Sha256Digest;
 
 //=== Constants ===-----------------------------------------------------------//
 
-//! Maximum asset name length including null terminator
-constexpr size_t kMaxNameSize = 64;
-
 //! Resource index constants (`kFallbackResourceIndex`, `kNoResourceIndex`) are
 //! sourced from `Oxygen/Core/Meta/Data/ResourceIndex.inc`.
 
@@ -353,6 +350,25 @@ struct TextureResourceDesc {
 #pragma pack(pop)
 static_assert(sizeof(TextureResourceDesc) == 39);
 
+//! A descriptor's string table.
+/*!
+ Every asset descriptor holds one string table: packed, NUL-terminated UTF-8
+ strings stored back to back. The table starts with a single `\0` byte, so
+ offset `0` is the empty string. `offset` is relative to the start of the
+ descriptor (its `AssetHeader`) and lies after the descriptor's fixed struct.
+
+ Every string a descriptor holds (the asset name, node and mesh names, script
+ parameter keys and values, shader paths) is a `StringTableOffsetT` into this
+ table. Strings have no size limit beyond the 32-bit table size.
+*/
+#pragma pack(push, 1)
+struct DescriptorStringTable {
+  StringTableOffsetT offset = 0;
+  StringTableSizeT size = 0;
+};
+#pragma pack(pop)
+static_assert(sizeof(DescriptorStringTable) == 8);
+
 //! Asset header.
 /*!
  Always the first field in every asset descriptor. Contains metadata about the
@@ -361,30 +377,31 @@ static_assert(sizeof(TextureResourceDesc) == 39);
 
  ### Notes
 
+ - `strings` locates the descriptor's string table; `name_offset` is the asset
+   name's offset in it. The name is a label for tools and logs, not an
+   identity.
  - The `streaming_priority` field is used to determine the order in which
    assets should be loaded. Lower values indicate higher priority.
  - The `asset_type` field is redundant with the directory entry, but is
    necessary for debugging and sanity checks.
  - The `content_hash` field is the full SHA-256 digest used to verify cooked
-
- artifact integrity.
- - The `variant_flags` field is a project-defined bitfield
- that can be used to
-   store additional metadata about the asset, such as its
- intended use or
+   artifact integrity.
+ - The `variant_flags` field is a project-defined bitfield that can be used to
+   store additional metadata about the asset, such as its intended use or
    compatibility with specific features.
 */
 #pragma pack(push, 1)
 struct AssetHeader {
   uint8_t asset_type = 0; // Redundant with directory for debugging
-  char name[kMaxNameSize] = {}; // Asset name for debugging/tools
+  DescriptorStringTable strings = {}; // The descriptor's string table
+  StringTableOffsetT name_offset = 0; // Asset name, for debugging/tools
   uint8_t version = 0; // Asset format version (up to 256 versions)
   uint8_t streaming_priority = 0; // Loading priority: 0=highest, 255=lowest
   ContentHashDigest content_hash = {}; // Full SHA-256 content integrity hash
   uint32_t variant_flags = 0; // Project-defined (not interpreted by engine)
 };
 #pragma pack(pop)
-static_assert(sizeof(AssetHeader) == 103);
+static_assert(sizeof(AssetHeader) == 51);
 
 } // namespace oxygen::data::pak::core
 

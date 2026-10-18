@@ -41,6 +41,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -77,6 +78,7 @@ namespace {
     ScriptAssetDesc descriptor {};
     //! Whole descriptor, including the parameter declarations after it.
     std::vector<std::byte> descriptor_bytes;
+    data::DescriptorStrings strings;
   };
 
   struct SealedLooseSourceResult {
@@ -206,19 +208,14 @@ namespace {
     return hash;
   }
 
-  [[nodiscard]] auto TryGetExternalSourcePath(const ScriptAssetDesc& descriptor)
-    -> std::optional<std::string_view>
+  [[nodiscard]] auto TryGetExternalSourcePath(const ScriptAssetDesc& descriptor,
+    const data::DescriptorStrings& strings) -> std::optional<std::string_view>
   {
-    const auto* const begin = std::begin(descriptor.external_source_path);
-    const auto* const end = std::end(descriptor.external_source_path);
-    const auto* const nul = std::find(begin, end, '\0');
-    if (nul == begin) {
+    const auto path = strings.TryGet(descriptor.external_source_path_offset);
+    if (!path || path->empty()) {
       return std::nullopt;
     }
-    if (nul == end) {
-      return std::nullopt;
-    }
-    return std::string_view(begin, static_cast<size_t>(nul - begin));
+    return path;
   }
 
   [[nodiscard]] auto ResolveExternalSourcePath(
@@ -406,6 +403,13 @@ namespace {
         != data::pak::scripting::kScriptAssetVersion) {
       return std::nullopt;
     }
+    auto strings = data::DescriptorStrings {};
+    try {
+      strings = data::DescriptorStrings::FromDescriptor(
+        *descriptor_bytes, descriptor.header.strings);
+    } catch (const std::invalid_argument&) {
+      return std::nullopt;
+    }
 
     return ScriptAssetPatchContext {
       .key = asset_entry.key,
@@ -414,6 +418,7 @@ namespace {
       .descriptor_path = descriptor_path,
       .descriptor = descriptor,
       .descriptor_bytes = *descriptor_bytes,
+      .strings = std::move(strings),
     };
   }
 
@@ -460,7 +465,70 @@ namespace {
     descriptor.flags
       = static_cast<ScriptAssetFlags>(static_cast<uint32_t>(descriptor.flags)
         & ~static_cast<uint32_t>(ScriptAssetFlags::kAllowExternalSource));
-    std::ranges::fill(descriptor.external_source_path, '\0');
+    descriptor.external_source_path_offset = 0;
+  }
+
+  //! The sealed descriptor: `descriptor`, the declarations and a string table
+  //! rebuilt without the external source path, which must not ship.
+  /*!
+   @return The bytes, or nullopt when the declarations or strings are invalid.
+  */
+  [[nodiscard]] auto BuildSealedDescriptor(
+    const ScriptAssetPatchContext& context, ScriptAssetDesc descriptor)
+    -> std::optional<std::vector<std::byte>>
+  {
+    using data::pak::scripting::ScriptParamRecord;
+    using data::pak::scripting::ScriptParamType;
+
+    const auto& table = descriptor.params;
+    const auto& bytes = context.descriptor_bytes;
+    const auto records_size
+      = size_t { table.count } * sizeof(ScriptParamRecord);
+    if (table.count != 0U
+      && (table.offset != sizeof(ScriptAssetDesc)
+        || records_size > bytes.size() - sizeof(ScriptAssetDesc))) {
+      return std::nullopt;
+    }
+    auto records = std::vector<ScriptParamRecord>(table.count);
+    std::memcpy(
+      records.data(), bytes.data() + sizeof(ScriptAssetDesc), records_size);
+
+    auto strings = data::DescriptorStringsBuilder {};
+    const auto copy = [&](const data::pak::core::StringTableOffsetT offset)
+      -> std::optional<data::pak::core::StringTableOffsetT> {
+      const auto text = context.strings.TryGet(offset);
+      if (!text) {
+        return std::nullopt;
+      }
+      return strings.Add(*text);
+    };
+    const auto name = copy(descriptor.header.name_offset);
+    if (!name) {
+      return std::nullopt;
+    }
+    descriptor.header.name_offset = *name;
+    for (auto& record : records) {
+      const auto key = copy(record.key_offset);
+      if (!key) {
+        return std::nullopt;
+      }
+      record.key_offset = *key;
+      if (record.type == ScriptParamType::kString) {
+        const auto value = copy(record.value.as_string_offset);
+        if (!value) {
+          return std::nullopt;
+        }
+        record.value.as_string_offset = *value;
+      }
+    }
+
+    const auto descriptor_bytes = std::as_bytes(std::span { &descriptor, 1U });
+    auto sealed = std::vector<std::byte>(
+      descriptor_bytes.begin(), descriptor_bytes.end());
+    const auto record_bytes = std::as_bytes(std::span(records));
+    sealed.insert(sealed.end(), record_bytes.begin(), record_bytes.end());
+    data::AppendDescriptorStrings(sealed, strings);
+    return sealed;
   }
 
   [[nodiscard]] auto RewriteStagedScriptDescriptor(
@@ -496,7 +564,8 @@ namespace {
     // their external source embedded.
     if (descriptor.source_resource_index == data::kNoResourceReference
       && descriptor.bytecode_resource_index == data::kNoResourceReference) {
-      const auto external_source = TryGetExternalSourcePath(descriptor);
+      const auto external_source
+        = TryGetExternalSourcePath(descriptor, context->strings);
       if (!external_source.has_value()) {
         return Result<std::optional<data::AssetReferences>,
           ScriptSealingError>::Err(ScriptSealingError {
@@ -555,9 +624,17 @@ namespace {
     }
 
     ClearExternalSourceContract(descriptor);
-    auto descriptor_bytes = context->descriptor_bytes;
-    std::memcpy(descriptor_bytes.data(), &descriptor, sizeof(descriptor));
-    if (!WriteFileBytes(context->descriptor_path, descriptor_bytes)) {
+    const auto descriptor_bytes = BuildSealedDescriptor(*context, descriptor);
+    if (!descriptor_bytes) {
+      return Result<std::optional<data::AssetReferences>,
+        ScriptSealingError>::Err(ScriptSealingError {
+        .error_code = "paktool.script_seal.script_descriptor_invalid",
+        .error_message = "Failed to parse staged script descriptor.",
+        .source_path = original_root,
+        .descriptor_path = context->descriptor_path,
+      });
+    }
+    if (!WriteFileBytes(context->descriptor_path, *descriptor_bytes)) {
       return Result<std::optional<data::AssetReferences>,
         ScriptSealingError>::Err(ScriptSealingError {
         .error_code = "paktool.script_seal.script_descriptor_write_failed",

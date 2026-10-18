@@ -35,7 +35,10 @@ public:
     }
 
     if (const auto header = asset_dump_helpers::TryReadAssetHeader(*data)) {
-      asset_dump_helpers::PrintAssetHeaderFields(*header, 4);
+      asset_dump_helpers::PrintAssetHeaderFields(*header,
+        asset_dump_helpers::DescriptorString(
+          *data, *header, header->name_offset),
+        4);
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);

@@ -33,12 +33,12 @@
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
 #include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
-#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/ThreadPool.h>
@@ -140,7 +140,7 @@ namespace {
       "base_color":{"virtual_path":"/.cooked/Textures/color.otex"},
       "thickness":{"virtual_path":"/.cooked/Textures/thickness.otex"}}})");
       const auto scene = WriteFile("scene.json",
-        R"({"version":)" + std::to_string(data::pak::world::kSceneAssetVersion)
+        R"({"version":)" + std::to_string(internal::kSceneDescriptorVersion)
           + R"(,"name":"Scene.v2","nodes":[{}],
       "renderables":[{"node":0,"geometry_ref":"/.cooked/Geometry/body.ogeo"}],
       "starting_input_contexts":[{"context_ref":"/.cooked/Input/Gameplay.oimap","priority":2}],

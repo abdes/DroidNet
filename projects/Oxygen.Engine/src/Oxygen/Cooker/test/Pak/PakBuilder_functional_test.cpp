@@ -25,6 +25,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -67,12 +68,12 @@ NOLINT_TEST_P(PakBuilderReferenceGraphTest, RejectsInvalidAssetReferenceGraph)
   descriptor.header.asset_type
     = static_cast<uint8_t>(data::AssetType::kMaterial);
   descriptor.header.version = data::pak::render::kMaterialAssetVersion;
-  const auto bytes = std::as_bytes(std::span(&descriptor, 1U));
+  const auto bytes = data::MakeDescriptorBytes(descriptor);
   auto script_descriptor = data::pak::scripting::ScriptAssetDesc {};
   script_descriptor.header.asset_type
     = static_cast<uint8_t>(data::AssetType::kScript);
   script_descriptor.header.version = data::pak::scripting::kScriptAssetVersion;
-  const auto script_bytes = std::as_bytes(std::span(&script_descriptor, 1U));
+  const auto script_bytes = data::MakeDescriptorBytes(script_descriptor);
   const auto owner_references = data::AssetReferences::Create({},
     {
       {
@@ -160,7 +161,7 @@ NOLINT_TEST_F(PakBuilderTest, SentinelTextureReferencesSurvivePackAndRepack)
   descriptor.header.version = render::kMaterialAssetVersion;
   descriptor.base_color_texture = data::ResourceReferenceIndex { 0U };
   descriptor.emissive_texture = data::ResourceReferenceIndex { 1U };
-  const auto descriptor_bytes = std::as_bytes(std::span(&descriptor, 1U));
+  const auto descriptor_bytes = data::MakeDescriptorBytes(descriptor);
   const auto loose_root = Path("loose");
   auto writer = content::import::LooseCookedWriter(loose_root);
   writer.SetSourceKey(MakeNonZeroSourceKey());

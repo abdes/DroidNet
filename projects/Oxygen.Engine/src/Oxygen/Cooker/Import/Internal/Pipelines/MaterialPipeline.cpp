@@ -28,11 +28,11 @@
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -45,13 +45,6 @@
 namespace oxygen::content::import {
 
 namespace {
-
-  constexpr size_t kShaderSourcePathMax
-    = sizeof(data::pak::render::ShaderReferenceDesc::source_path);
-  constexpr size_t kShaderEntryPointMax
-    = sizeof(data::pak::render::ShaderReferenceDesc::entry_point);
-  constexpr size_t kShaderDefinesMax
-    = sizeof(data::pak::render::ShaderReferenceDesc::defines);
 
   struct MaterialUvTransformDesc {
     float uv_scale[2] = { 1.0F, 1.0F };
@@ -152,25 +145,9 @@ namespace {
     return shaders;
   }
 
-  auto WriteShaderString(char* dst, const size_t dst_size,
-    std::string_view value, const char* field_name, std::string_view source_id,
-    std::string_view object_path, std::vector<ImportDiagnostic>& diagnostics)
-    -> void
-  {
-    util::TruncateAndNullTerminate(dst, dst_size, value);
-    if (value.size() >= dst_size) {
-      diagnostics.push_back(
-        MakeWarningDiagnostic("material.shader_ref_truncated",
-          std::string(field_name) + " truncated to "
-            + std::to_string(dst_size - 1) + " bytes",
-          source_id, object_path));
-    }
-  }
-
   [[nodiscard]] auto BuildShaderReferences(
-    std::vector<ShaderRequest> shader_requests, std::string_view source_id,
-    std::string_view object_path, std::vector<ImportDiagnostic>& diagnostics)
-    -> ShaderBuildResult
+    std::vector<ShaderRequest> shader_requests,
+    data::DescriptorStringsBuilder& strings) -> ShaderBuildResult
   {
     ShaderBuildResult result;
 
@@ -187,14 +164,9 @@ namespace {
     for (const auto& request : shader_requests) {
       data::pak::render::ShaderReferenceDesc ref {};
       ref.shader_type = request.shader_type;
-      WriteShaderString(ref.source_path, kShaderSourcePathMax,
-        request.source_path, "source_path", source_id, object_path,
-        diagnostics);
-      WriteShaderString(ref.entry_point, kShaderEntryPointMax,
-        request.entry_point, "entry_point", source_id, object_path,
-        diagnostics);
-      WriteShaderString(ref.defines, kShaderDefinesMax, request.defines,
-        "defines", source_id, object_path, diagnostics);
+      ref.source_path_offset = strings.Add(request.source_path);
+      ref.entry_point_offset = strings.Add(request.entry_point);
+      ref.defines_offset = strings.Add(request.defines);
       ref.shader_hash = request.shader_hash;
       result.shader_refs.push_back(ref);
     }
@@ -395,8 +367,8 @@ namespace {
 
   [[nodiscard]] auto SerializeMaterialDescriptor(
     const data::pak::render::MaterialAssetDesc& desc,
-    const std::vector<data::pak::render::ShaderReferenceDesc>& shader_refs)
-    -> std::vector<std::byte>
+    const std::vector<data::pak::render::ShaderReferenceDesc>& shader_refs,
+    const data::DescriptorStringsBuilder& strings) -> std::vector<std::byte>
   {
     serio::MemoryStream stream;
     serio::Writer writer(stream);
@@ -414,7 +386,9 @@ namespace {
     }
 
     const auto data = stream.Data();
-    return { data.begin(), data.end() };
+    auto bytes = std::vector<std::byte> { data.begin(), data.end() };
+    data::AppendDescriptorStrings(bytes, strings);
+    return bytes;
   }
 
   auto PatchContentHash(std::vector<std::byte>& bytes,
@@ -473,8 +447,8 @@ namespace {
     data::pak::render::MaterialAssetDesc desc {};
     desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
     desc.header.version = data::pak::render::kMaterialAssetVersion;
-    util::TruncateAndNullTerminate(
-      desc.header.name, std::size(desc.header.name), material.name);
+    auto strings = data::DescriptorStringsBuilder {};
+    desc.header.name_offset = strings.Add(material.name);
 
     desc.flags = data::pak::render::kMaterialFlag_NoTextureSampling;
     if (material.inputs.double_sided) {
@@ -531,8 +505,8 @@ namespace {
       shader_requests = BuildDefaultShaderRequests(resolved_domain, desc.flags);
     }
 
-    auto shader_build = BuildShaderReferences(
-      std::move(shader_requests), source_id, object_path, outcome.diagnostics);
+    auto shader_build
+      = BuildShaderReferences(std::move(shader_requests), strings);
     if (shader_build.has_error) {
       outcome.has_error = true;
       return outcome;
@@ -540,7 +514,8 @@ namespace {
 
     desc.shader_stages = shader_build.shader_stages;
 
-    outcome.bytes = SerializeMaterialDescriptor(desc, shader_build.shader_refs);
+    outcome.bytes
+      = SerializeMaterialDescriptor(desc, shader_build.shader_refs, strings);
     outcome.references = std::move(references).Build();
     outcome.has_error = HasErrorDiagnostic(outcome.diagnostics);
 

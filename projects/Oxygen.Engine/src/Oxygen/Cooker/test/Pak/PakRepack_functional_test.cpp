@@ -36,6 +36,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakCatalog.h>
@@ -121,7 +122,7 @@ NOLINT_TEST_F(
       request.output_pak_path, std::ios::binary | std::ios::in | std::ios::out);
     const auto offset
       = oxygen::base::CheckedAt(original.plan->Assets(), 0U).offset
-      + offsetof(core::AssetHeader, name);
+      + offsetof(core::AssetHeader, variant_flags);
     archive.seekp(static_cast<std::streamoff>(offset));
     archive.put('X');
     archive.flush();
@@ -232,7 +233,8 @@ NOLINT_TEST_F(PakRepackTest, RepackPreservesSceneBindings)
       ASSERT_HAS_VALUE(material_entry);
       auto material_reader = archive.CreateReader(*material_entry);
       auto material = render::MaterialAssetDesc {};
-      const auto material_payload = material_reader.ReadBlob(sizeof(material));
+      const auto material_payload
+        = material_reader.ReadBlob(material_entry->desc_size);
       ASSERT_HAS_VALUE(material_payload);
       ExpectDescriptorHash(*material_payload);
       std::memcpy(&material, material_payload->data(), sizeof(material));
@@ -352,12 +354,14 @@ NOLINT_TEST_F(PakRepackTest, BufferAndScriptReferencesSurvivePakRepacking)
       descriptor_bytes.begin(), descriptor_bytes.end());
     geometry_bytes.insert(
       geometry_bytes.end(), mesh_bytes.begin(), mesh_bytes.end());
+    data::AppendDescriptorStrings(
+      geometry_bytes, data::DescriptorStringsBuilder {});
     auto script_desc = script::ScriptAssetDesc {};
     script_desc.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kScript);
     script_desc.header.version = script::kScriptAssetVersion;
     script_desc.bytecode_resource_index = data::ResourceReferenceIndex { 0U };
-    const auto script_bytes = std::as_bytes(std::span { &script_desc, 1U });
+    const auto script_bytes = data::MakeDescriptorBytes(script_desc);
     constexpr uint8_t kScriptKeyOffset = 10U;
     const auto assets = std::array {
       AssetSpec {

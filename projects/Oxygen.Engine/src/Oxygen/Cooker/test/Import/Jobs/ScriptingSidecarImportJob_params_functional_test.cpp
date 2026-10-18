@@ -19,6 +19,7 @@
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -337,43 +338,50 @@ namespace {
 
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "script_sidecar_all_param_types";
-    constexpr auto kScriptSource = std::string_view { R"lua(
+    // The string key and value are longer than the former 63-byte fields, and
+    // the value is not ASCII.
+    const auto title_key = "title_" + std::string(70U, 'k');
+    const auto title_value = "agent \xC3\xA9 " + std::string(100U, 'v');
+    const auto script_source = std::string { R"lua(
 local Script = oxygen.script {
   params = {
     enabled = oxygen.param.bool {},
     lives = oxygen.param.int {},
     speed = oxygen.param.float {},
-    title = oxygen.param.string {},
+    )lua" }
+      + title_key + R"lua( = oxygen.param.string {},
     uv = oxygen.param.vec2 {},
     dir = oxygen.param.vec3 {},
     quat = oxygen.param.vec4 {},
   },
 }
 return Script
-)lua" };
+)lua";
     const auto cooked
-      = CookSceneWithScript(cooked_root, kScriptSource, "param_types.luau");
+      = CookSceneWithScript(cooked_root, script_source, "param_types.luau");
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
     ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
     ASSERT_HAS_VALUE(script_asset) << "Expected script asset to be present";
 
-    constexpr auto kParamsJson = R"([
+    auto params_json = nlohmann::json::parse(R"([
         { "key": "enabled", "type": "bool", "value": true },
         { "key": "lives", "type": "int32", "value": 42 },
         { "key": "speed", "type": "float", "value": 3.5 },
-        { "key": "title", "type": "string", "value": "agent" },
+        { "type": "string" },
         { "key": "uv", "type": "vec2", "value": [1.0, 2.0] },
         { "key": "dir", "type": "vec3", "value": [3.0, 4.0, 5.0] },
         { "key": "quat", "type": "vec4", "value": [6.0, 7.0, 8.0, 9.0] }
-      ])";
+      ])");
+    params_json.at(3)["key"] = title_key;
+    params_json.at(3)["value"] = title_value;
 
     const auto sidecar_source = cooked_root / "input" / "params_ok.json";
     WriteText(sidecar_source,
       MakeSidecarPayload(SidecarBindingSpec {
         .script_virtual_path = script_asset->virtual_path,
         .execution_order = 2,
-        .params = nlohmann::json::parse(kParamsJson),
+        .params = std::move(params_json),
       }));
 
     const auto report = Submit(MakeSidecarRequest(
@@ -406,7 +414,14 @@ return Script
     EXPECT_EQ(ParamAt(2).type, ScriptParamType::kFloat);
     EXPECT_FLOAT_EQ(ParamAt(2).value.as_float, 3.5F);
     EXPECT_EQ(ParamAt(3).type, ScriptParamType::kString);
-    EXPECT_EQ(FixedString(ParamAt(3).value.as_string), "agent");
+    const auto scene_bytes
+      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
+    EXPECT_EQ(oxygen::content::test::ReadDescriptorString(
+                scene_bytes, ParamAt(3).key_offset),
+      title_key);
+    EXPECT_EQ(oxygen::content::test::ReadDescriptorString(
+                scene_bytes, ParamAt(3).value.as_string_offset),
+      title_value);
     EXPECT_EQ(ParamAt(4).type, ScriptParamType::kVec2);
     EXPECT_FLOAT_EQ(ParamAt(4).value.as_vec[0], 1.0F);
     EXPECT_FLOAT_EQ(ParamAt(4).value.as_vec[1], 2.0F);
@@ -467,11 +482,7 @@ return Script
       RejectedParamCase { "OutOfRangeInt32Param", "int32_range",
         R"([ { "key": "bad", "type": "int32", "value": 2147483648 } ])" },
       RejectedParamCase { "InvalidVectorParamShape", "vec_shape",
-        R"([ { "key": "bad", "type": "vec3", "value": [1.0, 2.0] } ])" },
-      RejectedParamCase { "TooLongStringParam", "long_string",
-        std::string(
-          "[ { \"key\": \"name\", \"type\": \"string\", \"value\": \"")
-          + std::string(60U, 'x') + "\" } ]" }),
+        R"([ { "key": "bad", "type": "vec3", "value": [1.0, 2.0] } ])" }),
     [](const ::testing::TestParamInfo<RejectedParamCase>& info) -> std::string {
       return std::string(info.param.name);
     });

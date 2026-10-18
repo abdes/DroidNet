@@ -48,7 +48,10 @@ public:
     InputActionAssetDesc desc {};
     std::memcpy(&desc, data->data(), sizeof(desc));
 
-    asset_dump_helpers::PrintAssetHeaderFields(desc.header, 4);
+    asset_dump_helpers::PrintAssetHeaderFields(desc.header,
+      asset_dump_helpers::DescriptorString(
+        *data, desc.header, desc.header.name_offset),
+      4);
     std::cout << "    --- Input Action Descriptor Fields ---\n";
     PrintUtils::Field("Value Type", static_cast<uint32_t>(desc.value_type), 8);
     PrintUtils::Field("Flags", nostd::to_string(desc.flags), 8);

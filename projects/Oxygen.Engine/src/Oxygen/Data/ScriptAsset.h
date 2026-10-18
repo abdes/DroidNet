@@ -24,6 +24,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/api_export.h>
 
@@ -55,32 +56,51 @@ struct ScriptNodeParam {
 using ScriptParam = std::variant<bool, int32_t, float, Vec2, Vec3, Vec4,
   std::string, ScriptAssetParam, ScriptNodeParam>;
 
+//! Declared script parameters: each key and default value, in declaration
+//! order.
+using ScriptParameters = std::vector<std::pair<std::string, ScriptParam>>;
+
 //! Returns the key of a cooked script parameter record.
 /*!
- @return The key, or std::nullopt when it is empty or not null-terminated.
+ @param strings The string table of the descriptor that holds the record.
+ @return The key, or std::nullopt when it is empty or not in the table.
 */
 OXGN_DATA_NDAPI auto TryGetScriptParamKey(
-  const pak::scripting::ScriptParamRecord& record) noexcept
-  -> std::optional<std::string_view>;
+  const pak::scripting::ScriptParamRecord& record,
+  const DescriptorStrings& strings) noexcept -> std::optional<std::string_view>;
 
 //! Converts the value of a cooked script parameter record.
 /*!
+ @param strings The string table of the descriptor that holds the record.
  @return The value, or std::nullopt for `kNone`, an unknown type or a string
- that is not null-terminated.
+ that is not in the table.
 */
 OXGN_DATA_NDAPI auto ToScriptParam(
-  const pak::scripting::ScriptParamRecord& record)
-  -> std::optional<ScriptParam>;
+  const pak::scripting::ScriptParamRecord& record,
+  const DescriptorStrings& strings) -> std::optional<ScriptParam>;
+
+//! Decodes cooked parameter declarations.
+/*!
+ @param strings The string table of the descriptor that holds the records.
+ @throw std::invalid_argument if a declaration has an invalid key or value,
+   or repeats a key.
+*/
+OXGN_DATA_NDAPI auto DecodeScriptParameters(
+  std::span<const pak::scripting::ScriptParamRecord> records,
+  const DescriptorStrings& strings) -> ScriptParameters;
 
 //! Builds a cooked script parameter record from a key and a value.
 /*!
- The record type follows the alternative `value` holds.
+ The record type follows the alternative `value` holds. The key and a string
+ value are added to `strings`, the table of the descriptor that will hold the
+ record.
 
- @return The record, or std::nullopt when the key is empty or does not fit
- the record's key, or a string value does not fit its value.
+ @return The record, or std::nullopt when the key is empty, or the key or a
+ string value holds a NUL byte.
 */
 OXGN_DATA_NDAPI auto MakeScriptParamRecord(std::string_view key,
-  const ScriptParam& value) -> std::optional<pak::scripting::ScriptParamRecord>;
+  const ScriptParam& value, DescriptorStringsBuilder& strings)
+  -> std::optional<pak::scripting::ScriptParamRecord>;
 
 //! Script asset as stored in the PAK file asset directory.
 /*!
@@ -105,13 +125,13 @@ public:
   //! Constructs a ScriptAsset with descriptor, declared parameters, and
   //! resource metadata.
   /*!
-   @throw std::invalid_argument if a declaration has an invalid key or value,
-   or repeats a key.
+   @param external_source_path The external source path, empty when none.
+   @throw std::invalid_argument if a declaration has an empty key or repeats
+   a key.
   */
   OXGN_DATA_API ScriptAsset(AssetKey asset_key,
-    pak::scripting::ScriptAssetDesc desc,
-    std::span<const pak::scripting::ScriptParamRecord> declared_params = {},
-    SourceOrigin source_origin = {});
+    pak::scripting::ScriptAssetDesc desc, ScriptParameters declared_params = {},
+    std::string external_source_path = {}, SourceOrigin source_origin = {});
 
   ~ScriptAsset() override = default;
 
@@ -153,11 +173,17 @@ public:
       != 0U;
   }
 
-  //! Returns external source path when present and valid.
-  [[nodiscard]] OXGN_DATA_API auto TryGetExternalSourcePath() const noexcept
-    -> std::optional<std::string_view>;
+  //! Returns the external source path when present.
+  [[nodiscard]] auto TryGetExternalSourcePath() const noexcept
+    -> std::optional<std::string_view>
+  {
+    if (external_source_path_.empty()) {
+      return std::nullopt;
+    }
+    return std::string_view { external_source_path_ };
+  }
 
-  //! Returns external source path or throws when absent/invalid.
+  //! Returns external source path or throws when absent.
   [[nodiscard]] OXGN_DATA_API auto GetExternalSourcePath() const
     -> std::string_view;
 
@@ -168,16 +194,16 @@ public:
       || GetSourceResourceIndex() != kNoResourceReference;
   }
 
-  //! Returns the number of parameters this script declares.
   //! A copy of this asset that declares `declared_params` instead, as after
-  //! its source changed. The key, descriptor and source origin are kept.
+  //! its source changed. The key, descriptor, name, external source path and
+  //! source origin are kept.
   /*!
    @throw std::invalid_argument as the constructor.
   */
   [[nodiscard]] OXGN_DATA_API auto WithDeclarations(
-    std::span<const pak::scripting::ScriptParamRecord> declared_params) const
-    -> std::shared_ptr<ScriptAsset>;
+    ScriptParameters declared_params) const -> std::shared_ptr<ScriptAsset>;
 
+  //! Returns the number of parameters this script declares.
   [[nodiscard]] auto ParametersCount() const noexcept -> std::size_t
   {
     return params_.size();
@@ -212,7 +238,8 @@ public:
 
 private:
   pak::scripting::ScriptAssetDesc desc_ {};
-  std::vector<std::pair<std::string, ScriptParam>> params_;
+  ScriptParameters params_;
+  std::string external_source_path_;
 };
 
 } // namespace oxygen::data

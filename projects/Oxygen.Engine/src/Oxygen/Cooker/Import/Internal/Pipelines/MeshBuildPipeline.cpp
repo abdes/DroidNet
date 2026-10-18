@@ -42,13 +42,13 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline_tangents.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/Vertex.h>
@@ -90,6 +90,7 @@ namespace {
     std::vector<data::Vertex> vertices;
     std::vector<uint32_t> indices;
     std::vector<data::pak::geometry::SubMeshDesc> submeshes;
+    std::vector<std::string> submesh_names;
     std::vector<uint32_t> submesh_slots;
     std::vector<data::pak::geometry::MeshViewDesc> views;
     std::vector<glm::uvec4> joint_indices;
@@ -347,12 +348,8 @@ namespace {
       = static_cast<uint8_t>(data::AssetType::kGeometry);
     asset_desc.header.version = data::pak::geometry::kGeometryAssetVersion;
     asset_desc.header.variant_flags = attr_mask;
-    if (mesh_name.size() >= std::size(asset_desc.header.name)) {
-      diagnostics.push_back(MakeWarningDiagnostic("mesh.name_truncated",
-        "Mesh name truncated to fit descriptor limit", source_id, mesh_name));
-    }
-    util::TruncateAndNullTerminate(
-      std::span(asset_desc.header.name), mesh_name);
+    auto strings = data::DescriptorStringsBuilder {};
+    asset_desc.header.name_offset = strings.Add(mesh_name);
     asset_desc.lod_count = static_cast<uint32_t>(lods.size());
     std::ranges::copy(bounds.min, std::begin(asset_desc.bounding_box_min));
     std::ranges::copy(bounds.max, std::begin(asset_desc.bounding_box_max));
@@ -384,13 +381,7 @@ namespace {
         }
         return lod.lod_name;
       }();
-      if (name_view.size() >= std::size(mesh_desc.name)) {
-        const std::string path
-          = std::string(mesh_name) + "/" + std::string(name_view);
-        diagnostics.push_back(MakeWarningDiagnostic("mesh.lod_name_truncated",
-          "LOD name truncated to fit descriptor limit", source_id, path));
-      }
-      util::TruncateAndNullTerminate(std::span(mesh_desc.name), name_view);
+      mesh_desc.name_offset = strings.Add(name_view);
       mesh_desc.mesh_type = static_cast<uint8_t>(lod.mesh_type);
       mesh_desc.submesh_count = static_cast<uint32_t>(lod.submeshes.size());
       mesh_desc.mesh_view_count = static_cast<uint32_t>(lod.views.size());
@@ -427,16 +418,18 @@ namespace {
         return {};
       }
 
-      if (lod.submesh_slots.size() != lod.submeshes.size()) {
+      if (lod.submesh_slots.size() != lod.submeshes.size()
+        || lod.submesh_names.size() != lod.submeshes.size()) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
-          "Submesh slot list size does not match submesh count", source_id,
-          mesh_name));
+          "Submesh slot or name list size does not match submesh count",
+          source_id, mesh_name));
         return {};
       }
 
       size_t view_cursor = 0;
       for (size_t i = 0; i < lod.submeshes.size(); ++i) {
-        const auto& sm = lod.submeshes.at(i);
+        auto sm = lod.submeshes.at(i);
+        sm.name_offset = strings.Add(lod.submesh_names.at(i));
         const auto submesh_views
           = std::span(lod.views).subspan(view_cursor, sm.mesh_view_count);
         view_cursor += sm.mesh_view_count;
@@ -482,7 +475,9 @@ namespace {
     }
 
     const auto data = stream.Data();
-    return { data.begin(), data.end() };
+    auto bytes = std::vector<std::byte> { data.begin(), data.end() };
+    data::AppendDescriptorStrings(bytes, strings);
+    return bytes;
   }
 
   [[nodiscard]] auto ResolveGeometryKey(const ImportRequest& request,
@@ -752,6 +747,7 @@ namespace {
     const MaterialSlotGeometryProvenance& allocation,
     const std::map<uint32_t, std::string>& slot_names,
     std::vector<data::pak::geometry::SubMeshDesc>& submeshes,
+    std::vector<std::string>& submesh_names,
     std::vector<uint32_t>& submesh_slots,
     std::vector<data::pak::geometry::MeshViewDesc>& views,
     std::vector<uint32_t>& merged_indices) -> Bounds3
@@ -770,9 +766,11 @@ namespace {
     merged_indices.reserve(total_indices);
 
     submeshes.clear();
+    submesh_names.clear();
     views.clear();
     submesh_slots.clear();
     submeshes.reserve(buckets.size());
+    submesh_names.reserve(buckets.size());
     submesh_slots.reserve(buckets.size());
     views.reserve(buckets.size());
 
@@ -798,7 +796,6 @@ namespace {
         : "Slot " + std::to_string(bucket.source_slot);
 
       SubMeshDesc submesh {};
-      util::TruncateAndNullTerminate(std::span(submesh.name), name);
       submesh.material_asset_key = bucket.material_key;
       submesh.slot_id = allocation.allocations.at(bucket.source_slot);
       submesh.mesh_view_count
@@ -808,6 +805,7 @@ namespace {
       std::ranges::copy(
         submesh_bounds.max, std::begin(submesh.bounding_box_max));
       submeshes.push_back(submesh);
+      submesh_names.push_back(name);
       submesh_slots.push_back(bucket.scene_material_index);
 
       const auto bucket_indices = std::span(bucket.indices);
@@ -1051,8 +1049,8 @@ namespace {
     }
 
     const auto computed_bounds = BuildSubmeshDescriptors(lod.vertices, buckets,
-      allocation, item.material_slot_names, lod.submeshes, lod.submesh_slots,
-      lod.views, lod.indices);
+      allocation, item.material_slot_names, lod.submeshes, lod.submesh_names,
+      lod.submesh_slots, lod.views, lod.indices);
     DLOG_F(INFO, "Mesh '{}' LOD '{}' submesh_count={} view_count={}",
       item.mesh_name, lod.lod_name, lod.submeshes.size(), lod.views.size());
     std::size_t views_with_base_vertex = 0;

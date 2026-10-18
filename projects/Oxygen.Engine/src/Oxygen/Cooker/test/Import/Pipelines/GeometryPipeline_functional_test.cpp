@@ -35,6 +35,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
+#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/PipelineHarness.h>
 #include <Oxygen/Cooker/test/Support/SourceLayoutTestSupport.h>
@@ -382,16 +383,15 @@ namespace {
     EXPECT_EQ(view_desc.vertex_count, 3U);
   }
 
-  NOLINT_TEST_F(
-    GeometryPipelineTest, CollectWithLongNamesEmitsTruncationWarnings)
+  //! Names longer than 63 bytes and non-ASCII names are stored whole.
+  NOLINT_TEST_F(GeometryPipelineTest, CollectStoresLongNamesWhole)
   {
     const auto buffers = MakeTriangleMeshBuffers();
 
     auto item = MakeWorkItem(buffers);
-    item.mesh_name = std::string(data::pak::core::kMaxNameSize + 8, 'M');
+    item.mesh_name = std::string(200, 'M') + "\xC3\xA9";
     item.storage_mesh_name = item.mesh_name;
-    item.lods.front().lod_name
-      = std::string(data::pak::core::kMaxNameSize + 8, 'L');
+    const auto item_mesh_name = item.mesh_name;
 
     const auto result
       = RunPipelineOnce<MeshBuildPipeline>(loop_, std::move(item), pool_,
@@ -402,10 +402,18 @@ namespace {
         });
 
     ASSERT_TRUE(result.success);
-    EXPECT_TRUE(result.cooked.has_value());
-    EXPECT_TRUE(HasDiagnosticCode(result.diagnostics, "mesh.name_truncated"));
-    EXPECT_TRUE(
-      HasDiagnosticCode(result.diagnostics, "mesh.lod_name_truncated"));
+    ASSERT_TRUE(result.cooked.has_value());
+    const auto& bytes = result.cooked->descriptor_bytes;
+    const auto asset
+      = ReadStructAt<data::pak::geometry::GeometryAssetDesc>(bytes, 0);
+    const auto mesh = ReadStructAt<data::pak::geometry::MeshDesc>(
+      bytes, sizeof(data::pak::geometry::GeometryAssetDesc));
+    EXPECT_EQ(oxygen::content::test::ReadDescriptorString(
+                bytes, asset.header.name_offset),
+      item_mesh_name);
+    EXPECT_EQ(
+      oxygen::content::test::ReadDescriptorString(bytes, mesh.name_offset),
+      item_mesh_name);
   }
 
   NOLINT_TEST_F(
