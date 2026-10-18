@@ -76,7 +76,7 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="8.0.0" />
     <PackageVersion Include="Roslynator.Analyzers" Version="5.0.1" />
     <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="5.0.1" />
-    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.303" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.307" />
   </ItemGroup>
   <!-- Testing -->
   <ItemGroup>
