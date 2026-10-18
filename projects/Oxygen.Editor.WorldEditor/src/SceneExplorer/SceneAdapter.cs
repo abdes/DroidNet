@@ -242,8 +242,8 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
             return;
         }
 
-        // Case B: Scene Node
-        if (string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) && entry.NodeId.HasValue)
+        // Case B: Scene NodeValue
+        if (string.Equals(entry.Type, "NodeValue", StringComparison.OrdinalIgnoreCase) && entry.NodeId.HasValue)
         {
             // Claim the id before realizing so a duplicate layout entry cannot realize a second
             // adapter for the same node; a skipped entry must not recurse into its children either.

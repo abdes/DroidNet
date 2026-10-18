@@ -36,7 +36,7 @@ public sealed partial class SceneExplorerView
         this.contextValidationTimer.Tick += this.ContextValidationTimer_Tick;
     }
 
-    // Node fields elsewhere, such as script parameters in the inspector, accept nodes dragged from here.
+    // NodeValue fields elsewhere, such as script parameters in the inspector, accept nodes dragged from here.
     private static void ExplorerTree_ItemsDragStarting(object? sender, TreeItemsDragStartingEventArgs args)
         => SceneNodeDragData.Write(args.Data, args.Items.OfType<SceneNodeAdapter>().Select(static adapter => adapter.AttachedObject.Id));
 

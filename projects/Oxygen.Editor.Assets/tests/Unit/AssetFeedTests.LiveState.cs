@@ -66,7 +66,7 @@ public sealed partial class AssetFeedTests
         _ = reads.Should().Be(1);
     }
 
-    /// <summary>Asset, folder and project progress affects the correct rows and leaves previous output intact.</summary>
+    /// <summary>AssetValue, folder and project progress affects the correct rows and leaves previous output intact.</summary>
     /// <param name="kind">The explicit cook scope.</param>
     /// <param name="affected">How many rows belong to that scope.</param>
     /// <returns>The asynchronous cook-progress regression.</returns>

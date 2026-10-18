@@ -20,7 +20,7 @@ public sealed class SceneNodeComponentsTests
     public void AddComponent_SetsNodePropertyAndReturnsTrue()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene) { Name = "NodeValue" };
         var camera = new PerspectiveCamera { Name = "Camera" };
 
         var added = node.AddComponent(camera);
@@ -34,7 +34,7 @@ public sealed class SceneNodeComponentsTests
     public void AddComponent_WhenComponentAlreadyOnNode_ReturnsFalse()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene) { Name = "NodeValue" };
         var camera = new PerspectiveCamera { Name = "Camera" };
         _ = node.AddComponent(camera);
 
@@ -48,7 +48,7 @@ public sealed class SceneNodeComponentsTests
     public void RemoveComponent_ClearsNodePropertyAndReturnsTrue()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene) { Name = "NodeValue" };
         var camera = new PerspectiveCamera { Name = "Camera" };
         _ = node.AddComponent(camera);
 
@@ -63,7 +63,7 @@ public sealed class SceneNodeComponentsTests
     public void RemoveComponent_WhenComponentNotOnNode_ReturnsFalse()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene) { Name = "NodeValue" };
         var unattachedCamera = new PerspectiveCamera { Name = "Unattached" };
 
         var removed = node.RemoveComponent(unattachedCamera);
@@ -75,7 +75,7 @@ public sealed class SceneNodeComponentsTests
     public void AddComponent_And_RemoveComponent_WhenComponentNull_ThrowArgumentNullException()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene) { Name = "NodeValue" };
 
         Action addNull = () => node.AddComponent(null!);
         Action removeNull = () => node.RemoveComponent(null!);

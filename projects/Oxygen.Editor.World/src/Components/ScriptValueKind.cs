@@ -10,29 +10,29 @@ namespace Oxygen.Editor.World.Components;
 public enum ScriptValueKind
 {
     /// <summary>A boolean.</summary>
-    Bool,
+    BoolValue,
 
     /// <summary>A 32-bit integer.</summary>
-    Int32,
+    Int32Value,
 
     /// <summary>A 32-bit float.</summary>
-    Float,
+    FloatValue,
 
     /// <summary>A string.</summary>
-    String,
+    StringValue,
 
     /// <summary>Two floats.</summary>
-    Vec2,
+    Vec2Value,
 
     /// <summary>Three floats.</summary>
-    Vec3,
+    Vec3Value,
 
     /// <summary>Four floats.</summary>
-    Vec4,
+    Vec4Value,
 
     /// <summary>A reference to an asset.</summary>
-    Asset,
+    AssetValue,
 
     /// <summary>A reference to a node of the same scene.</summary>
-    Node,
+    NodeValue,
 }

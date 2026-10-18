@@ -109,7 +109,7 @@ internal static class SceneTestSupport
 
     private static SceneNode CreateCameraNode(Scene scene)
     {
-        var cameraNode = new SceneNode(scene) { Name = "Starting Camera Node" };
+        var cameraNode = new SceneNode(scene) { Name = "Starting Camera NodeValue" };
         var perspectiveCamera = new PerspectiveCamera
         {
             Name = "Main Camera",
@@ -130,7 +130,7 @@ internal static class SceneTestSupport
     {
         var heroNode = new SceneNode(scene)
         {
-            Name = "Hero Node",
+            Name = "Hero NodeValue",
             Flags = SceneNodeFlags.Visible | SceneNodeFlags.CastsShadows | SceneNodeFlags.ReceivesShadows,
         };
 
@@ -197,7 +197,7 @@ internal static class SceneTestSupport
 
     private static SceneNode CreateChildNode(Scene scene)
     {
-        var childNode = new SceneNode(scene) { Name = "Child Node" };
+        var childNode = new SceneNode(scene) { Name = "Child NodeValue" };
         _ = childNode.AddComponent(new OrthographicCamera
         {
             Name = "Minimap Camera",
@@ -215,7 +215,7 @@ internal static class SceneTestSupport
             Color = new Vector3(1f, 0.6f, 0.2f),
         });
 
-        var spotLightChild = new SceneNode(scene) { Name = "Spotlight Node" };
+        var spotLightChild = new SceneNode(scene) { Name = "Spotlight NodeValue" };
         _ = spotLightChild.AddComponent(new SpotLightComponent
         {
             Name = "Flashlight",

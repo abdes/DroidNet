@@ -49,17 +49,17 @@ public sealed record ScriptValue
     /// <summary>Creates a boolean value.</summary>
     /// <param name="value">The value.</param>
     /// <returns>The script value.</returns>
-    public static ScriptValue FromBool(bool value) => new(ScriptValueKind.Bool) { BoolValue = value };
+    public static ScriptValue FromBool(bool value) => new(ScriptValueKind.BoolValue) { BoolValue = value };
 
     /// <summary>Creates an integer value.</summary>
     /// <param name="value">The value.</param>
     /// <returns>The script value.</returns>
-    public static ScriptValue FromInt(int value) => new(ScriptValueKind.Int32) { IntValue = value };
+    public static ScriptValue FromInt(int value) => new(ScriptValueKind.Int32Value) { IntValue = value };
 
     /// <summary>Creates a float value.</summary>
     /// <param name="value">The value.</param>
     /// <returns>The script value.</returns>
-    public static ScriptValue FromFloat(float value) => new(ScriptValueKind.Float) { FloatValue = value };
+    public static ScriptValue FromFloat(float value) => new(ScriptValueKind.FloatValue) { FloatValue = value };
 
     /// <summary>Creates a string value.</summary>
     /// <param name="value">The value.</param>
@@ -67,35 +67,35 @@ public sealed record ScriptValue
     public static ScriptValue FromString(string value)
     {
         ArgumentNullException.ThrowIfNull(value);
-        return new(ScriptValueKind.String) { StringValue = value };
+        return new(ScriptValueKind.StringValue) { StringValue = value };
     }
 
     /// <summary>Creates a two-component vector value.</summary>
     /// <param name="value">The value.</param>
     /// <returns>The script value.</returns>
-    public static ScriptValue FromVector(Vector2 value) => new(ScriptValueKind.Vec2) { VectorValue = new(value, 0, 0) };
+    public static ScriptValue FromVector(Vector2 value) => new(ScriptValueKind.Vec2Value) { VectorValue = new(value, 0, 0) };
 
     /// <summary>Creates a three-component vector value.</summary>
     /// <param name="value">The value.</param>
     /// <returns>The script value.</returns>
-    public static ScriptValue FromVector(Vector3 value) => new(ScriptValueKind.Vec3) { VectorValue = new(value, 0) };
+    public static ScriptValue FromVector(Vector3 value) => new(ScriptValueKind.Vec3Value) { VectorValue = new(value, 0) };
 
     /// <summary>Creates a four-component vector value.</summary>
     /// <param name="value">The value.</param>
     /// <returns>The script value.</returns>
-    public static ScriptValue FromVector(Vector4 value) => new(ScriptValueKind.Vec4) { VectorValue = value };
+    public static ScriptValue FromVector(Vector4 value) => new(ScriptValueKind.Vec4Value) { VectorValue = value };
 
     /// <summary>Creates a vector value of the given kind from its components.</summary>
-    /// <param name="kind"><see cref="ScriptValueKind.Vec2"/>, <see cref="ScriptValueKind.Vec3"/> or
-    /// <see cref="ScriptValueKind.Vec4"/>.</param>
+    /// <param name="kind"><see cref="ScriptValueKind.Vec2Value"/>, <see cref="ScriptValueKind.Vec3Value"/> or
+    /// <see cref="ScriptValueKind.Vec4Value"/>.</param>
     /// <param name="value">The components; those past the vector size are ignored.</param>
     /// <returns>The script value.</returns>
     public static ScriptValue FromVector(ScriptValueKind kind, Vector4 value)
         => kind switch
         {
-            ScriptValueKind.Vec2 => FromVector(new Vector2(value.X, value.Y)),
-            ScriptValueKind.Vec3 => FromVector(new Vector3(value.X, value.Y, value.Z)),
-            ScriptValueKind.Vec4 => FromVector(value),
+            ScriptValueKind.Vec2Value => FromVector(new Vector2(value.X, value.Y)),
+            ScriptValueKind.Vec3Value => FromVector(new Vector3(value.X, value.Y, value.Z)),
+            ScriptValueKind.Vec4Value => FromVector(value),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not a vector kind."),
         };
 
@@ -105,14 +105,14 @@ public sealed record ScriptValue
     public static ScriptValue FromAsset(Uri asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        return new(ScriptValueKind.Asset) { AssetUri = asset };
+        return new(ScriptValueKind.AssetValue) { AssetUri = asset };
     }
 
     /// <summary>Creates a node reference value.</summary>
     /// <param name="node">The node identity.</param>
     /// <returns>The script value.</returns>
     public static ScriptValue FromNode(NodeId node)
-        => node.IsEmpty ? throw new ArgumentException("A node reference needs a node.", nameof(node)) : new(ScriptValueKind.Node) { NodeId = node };
+        => node.IsEmpty ? throw new ArgumentException("A node reference needs a node.", nameof(node)) : new(ScriptValueKind.NodeValue) { NodeId = node };
 
     /// <summary>Gets the number of vector components of a kind.</summary>
     /// <param name="kind">The kind.</param>
@@ -120,9 +120,9 @@ public sealed record ScriptValue
     public static int VectorSize(ScriptValueKind kind)
         => kind switch
         {
-            ScriptValueKind.Vec2 => 2,
-            ScriptValueKind.Vec3 => 3,
-            ScriptValueKind.Vec4 => 4,
+            ScriptValueKind.Vec2Value => 2,
+            ScriptValueKind.Vec3Value => 3,
+            ScriptValueKind.Vec4Value => 4,
             _ => 0,
         };
 
@@ -135,14 +135,14 @@ public sealed record ScriptValue
     public override string ToString()
         => this.Kind switch
         {
-            ScriptValueKind.Bool => this.BoolValue ? "true" : "false",
-            ScriptValueKind.Int32 => this.IntValue.ToString(CultureInfo.InvariantCulture),
-            ScriptValueKind.Float => this.FloatValue.ToString(CultureInfo.InvariantCulture),
-            ScriptValueKind.String => this.StringValue,
-            ScriptValueKind.Vec2 or ScriptValueKind.Vec3 or ScriptValueKind.Vec4
+            ScriptValueKind.BoolValue => this.BoolValue ? "true" : "false",
+            ScriptValueKind.Int32Value => this.IntValue.ToString(CultureInfo.InvariantCulture),
+            ScriptValueKind.FloatValue => this.FloatValue.ToString(CultureInfo.InvariantCulture),
+            ScriptValueKind.StringValue => this.StringValue,
+            ScriptValueKind.Vec2Value or ScriptValueKind.Vec3Value or ScriptValueKind.Vec4Value
                 => "(" + string.Join(", ", this.GetVectorComponents().Select(static component => component.ToString(CultureInfo.InvariantCulture))) + ")",
-            ScriptValueKind.Asset => this.AssetUri?.ToString() ?? string.Empty,
-            ScriptValueKind.Node => this.NodeId.ToString(),
+            ScriptValueKind.AssetValue => this.AssetUri?.ToString() ?? string.Empty,
+            ScriptValueKind.NodeValue => this.NodeId.ToString(),
             _ => string.Empty,
         };
 }

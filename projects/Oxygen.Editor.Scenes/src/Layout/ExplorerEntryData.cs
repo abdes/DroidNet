@@ -17,12 +17,12 @@ public record ExplorerEntryData
     private IList<ExplorerEntryData>? children;
 
     /// <summary>
-    /// Gets one of: "Node" or "Folder". Kept as a string for forward-compatibility.
+    /// Gets one of: "NodeValue" or "Folder". Kept as a string for forward-compatibility.
     /// </summary>
-    public string Type { get; init; } = "Node";
+    public string Type { get; init; } = "NodeValue";
 
     /// <summary>
-    /// Gets when Type == "Node", the referenced SceneNode Id.
+    /// Gets when Type == "NodeValue", the referenced SceneNode Id.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public NodeId? NodeId { get; init; }

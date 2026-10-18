@@ -73,7 +73,7 @@ public sealed partial class NativeLoopCleanupTests
     private async Task CheckNativeAssetFailureAsync(RuntimeCommandDispatcher commands)
     {
         var target = new RuntimeSceneTarget(commands.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
-        var activated = await commands.ActivateSceneAsync(Guid.NewGuid(), target, "Asset failures", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var activated = await commands.ActivateSceneAsync(Guid.NewGuid(), target, "AssetValue failures", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = activated.Status.Should().Be(RuntimeCommandStatus.Accepted);
         var nodeId = NodeId.New();
         var created = await commands.CreateNodeAsync(

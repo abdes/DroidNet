@@ -99,7 +99,7 @@ public sealed class SceneSerializerTests
 
     private static void AssertCameraNode(SceneNode cameraNode)
     {
-        _ = cameraNode.Name.Should().Be("Starting Camera Node");
+        _ = cameraNode.Name.Should().Be("Starting Camera NodeValue");
         var camera = cameraNode.Components.OfType<PerspectiveCamera>().Single();
         _ = camera.FieldOfView.Should().Be(75f);
         _ = camera.ApertureF.Should().Be(4f);
@@ -109,7 +109,7 @@ public sealed class SceneSerializerTests
 
     private static void AssertHeroNode(SceneNode heroNode)
     {
-        _ = heroNode.Name.Should().Be("Hero Node");
+        _ = heroNode.Name.Should().Be("Hero NodeValue");
         _ = heroNode.Flags.Should().HaveFlag(SceneNodeFlags.Visible | SceneNodeFlags.CastsShadows | SceneNodeFlags.ReceivesShadows);
 
         var sun = heroNode.Components.OfType<DirectionalLightComponent>().Single();
@@ -135,7 +135,7 @@ public sealed class SceneSerializerTests
 
     private static void AssertChildNode(SceneNode childNode)
     {
-        _ = childNode.Name.Should().Be("Child Node");
+        _ = childNode.Name.Should().Be("Child NodeValue");
         _ = childNode.Components.OfType<OrthographicCamera>().Should().ContainSingle();
         var pointLight = childNode.Components.OfType<PointLightComponent>().Single();
         _ = pointLight.LuminousFluxLumens.Should().Be(1200f);
@@ -148,7 +148,7 @@ public sealed class SceneSerializerTests
 
         _ = childNode.Children.Should().ContainSingle();
         var spotNode = childNode.Children[0];
-        _ = spotNode.Name.Should().Be("Spotlight Node");
+        _ = spotNode.Name.Should().Be("Spotlight NodeValue");
         var spotLight = spotNode.Components.OfType<SpotLightComponent>().Single();
         _ = spotLight.LuminousFluxLumens.Should().Be(1500f);
         _ = spotLight.Range.Should().Be(25f);

@@ -14,19 +14,19 @@ public enum SceneNodeFlags
     /// <summary>The default empty flag set.</summary>
     None = 0,
 
-    /// <summary>Node is visible (editor-local boolean).</summary>
+    /// <summary>NodeValue is visible (editor-local boolean).</summary>
     Visible = 1 << 0,
 
-    /// <summary>Node casts shadows.</summary>
+    /// <summary>NodeValue casts shadows.</summary>
     CastsShadows = 1 << 1,
 
-    /// <summary>Node receives shadows.</summary>
+    /// <summary>NodeValue receives shadows.</summary>
     ReceivesShadows = 1 << 2,
 
-    /// <summary>Node may be selected via ray-casting operations.</summary>
+    /// <summary>NodeValue may be selected via ray-casting operations.</summary>
     RayCastingSelectable = 1 << 3,
 
-    /// <summary>Node ignores parent transforms when computing world transform.</summary>
+    /// <summary>NodeValue ignores parent transforms when computing world transform.</summary>
     IgnoreParentTransform = 1 << 4,
 
     /// <summary>Hint that the node is static (editor/runtime optimization hint).</summary>

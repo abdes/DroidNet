@@ -47,14 +47,14 @@ public sealed partial class ScriptStaleValueViewModel : ObservableObject
     private static string Describe(ScriptSlotCardViewModel card, ScriptValue value)
         => value.Kind switch
         {
-            ScriptValueKind.Bool => value.BoolValue ? "true" : "false",
-            ScriptValueKind.Int32 => value.IntValue.ToString(CultureInfo.CurrentCulture),
-            ScriptValueKind.Float => value.FloatValue.ToString("0.###", CultureInfo.CurrentCulture),
-            ScriptValueKind.String => '"' + value.StringValue + '"',
-            ScriptValueKind.Vec2 or ScriptValueKind.Vec3 or ScriptValueKind.Vec4 => "("
+            ScriptValueKind.BoolValue => value.BoolValue ? "true" : "false",
+            ScriptValueKind.Int32Value => value.IntValue.ToString(CultureInfo.CurrentCulture),
+            ScriptValueKind.FloatValue => value.FloatValue.ToString("0.###", CultureInfo.CurrentCulture),
+            ScriptValueKind.StringValue => '"' + value.StringValue + '"',
+            ScriptValueKind.Vec2Value or ScriptValueKind.Vec3Value or ScriptValueKind.Vec4Value => "("
                 + string.Join(", ", value.GetVectorComponents().Select(static component => component.ToString("0.###", CultureInfo.CurrentCulture))) + ")",
-            ScriptValueKind.Asset => value.AssetUri is { } asset ? Path.GetFileNameWithoutExtension(Uri.UnescapeDataString(asset.AbsolutePath)) : "None",
-            ScriptValueKind.Node => card.Owner.DescribeNode(value.NodeId) ?? "Missing node",
+            ScriptValueKind.AssetValue => value.AssetUri is { } asset ? Path.GetFileNameWithoutExtension(Uri.UnescapeDataString(asset.AbsolutePath)) : "None",
+            ScriptValueKind.NodeValue => card.Owner.DescribeNode(value.NodeId) ?? "Missing node",
             _ => value.ToString(),
         };
 

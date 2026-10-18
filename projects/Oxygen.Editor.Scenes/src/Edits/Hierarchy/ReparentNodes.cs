@@ -53,7 +53,7 @@ public sealed record ReparentNodes : ISceneEdit
     public NodeId? After { get; }
 
     /// <inheritdoc/>
-    public string Label => this.Nodes.Count == 1 ? "Move Node" : $"Move {this.Nodes.Count} nodes";
+    public string Label => this.Nodes.Count == 1 ? "Move NodeValue" : $"Move {this.Nodes.Count} nodes";
 
     /// <inheritdoc/>
     public IReadOnlyCollection<NodeId> Targets

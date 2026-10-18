@@ -65,7 +65,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly SemaphoreSlim searchGate = new(1, 1);
     private readonly System.Threading.Lock searchLifetimeLock = new();
 
-    // Node-clipboard state: copied node identities plus whether they were cut (moved) rather than copied.
+    // NodeValue-clipboard state: copied node identities plus whether they were cut (moved) rather than copied.
     private readonly List<NodeId> clipboardNodeIds = [];
     private bool clipboardIsCut;
 

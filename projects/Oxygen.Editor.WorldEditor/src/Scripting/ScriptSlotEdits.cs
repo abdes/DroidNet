@@ -113,15 +113,15 @@ internal static class ScriptSlotEdits
     public static ScriptValueKind? ToValueKind(ScriptParameterKind kind)
         => kind switch
         {
-            ScriptParameterKind.Bool => ScriptValueKind.Bool,
-            ScriptParameterKind.Int32 => ScriptValueKind.Int32,
-            ScriptParameterKind.Float => ScriptValueKind.Float,
-            ScriptParameterKind.String => ScriptValueKind.String,
-            ScriptParameterKind.Vec2 => ScriptValueKind.Vec2,
-            ScriptParameterKind.Vec3 => ScriptValueKind.Vec3,
-            ScriptParameterKind.Vec4 => ScriptValueKind.Vec4,
-            ScriptParameterKind.Asset => ScriptValueKind.Asset,
-            ScriptParameterKind.Node => ScriptValueKind.Node,
+            ScriptParameterKind.Bool => ScriptValueKind.BoolValue,
+            ScriptParameterKind.Int32 => ScriptValueKind.Int32Value,
+            ScriptParameterKind.Float => ScriptValueKind.FloatValue,
+            ScriptParameterKind.String => ScriptValueKind.StringValue,
+            ScriptParameterKind.Vec2 => ScriptValueKind.Vec2Value,
+            ScriptParameterKind.Vec3 => ScriptValueKind.Vec3Value,
+            ScriptParameterKind.Vec4 => ScriptValueKind.Vec4Value,
+            ScriptParameterKind.Asset => ScriptValueKind.AssetValue,
+            ScriptParameterKind.Node => ScriptValueKind.NodeValue,
             _ => null,
         };
 

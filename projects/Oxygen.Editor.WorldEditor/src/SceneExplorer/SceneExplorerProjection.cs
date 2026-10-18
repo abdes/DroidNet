@@ -243,7 +243,7 @@ public sealed class SceneExplorerProjection
 
                     chain.RemoveAt(chain.Count - 1);
                 }
-                else if (string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) && entry.NodeId is { } nodeId)
+                else if (string.Equals(entry.Type, "NodeValue", StringComparison.OrdinalIgnoreCase) && entry.NodeId is { } nodeId)
                 {
                     if (!seenNodeIds.Add(nodeId))
                     {

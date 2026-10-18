@@ -149,7 +149,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
             new ExplorerEntryData
             {
                 Type = "Folder", FolderId = FolderId.New(), Name = "Group",
-                Children = [new ExplorerEntryData { Type = "Node", NodeId = node.Id }],
+                Children = [new ExplorerEntryData { Type = "NodeValue", NodeId = node.Id }],
             },
         ]);
         using var explorer = harness.Build();
@@ -299,7 +299,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         {
             var project = new Project(new ProjectInfo("Authoring", Category.Games, @"H:\AuthoringTreeTests", "preview.png"));
             var built = new Scene { Name = "Scene" };
-            var builtNode = new SceneNode(built) { Name = "Node" };
+            var builtNode = new SceneNode(built) { Name = "NodeValue" };
             built.RootNodes.Add(builtNode);
             build?.Invoke(built, builtNode);
             this.Manager = new Mock<IProjectManagerService>(MockBehavior.Strict);

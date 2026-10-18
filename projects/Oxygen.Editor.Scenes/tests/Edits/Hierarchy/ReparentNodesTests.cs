@@ -28,7 +28,7 @@ public sealed class ReparentNodesTests
 
     public static IEnumerable<TestDataRow<LockedParticipantCase>> LockedParticipants =>
     [
-        new(new LockedParticipantCase([SampleScene.Cam], SampleScene.B, After: null, Locked: SampleScene.Cam)) { DisplayName = "Node" },
+        new(new LockedParticipantCase([SampleScene.Cam], SampleScene.B, After: null, Locked: SampleScene.Cam)) { DisplayName = "NodeValue" },
         new(new LockedParticipantCase([SampleScene.A], SampleScene.B, After: null, Locked: SampleScene.A11)) { DisplayName = "Descendant" },
         new(new LockedParticipantCase([SampleScene.Cam], SampleScene.B, After: null, Locked: SampleScene.B)) { DisplayName = "Parent" },
         new(new LockedParticipantCase([SampleScene.Cam], Parent: null, After: SampleScene.Ortho, Locked: SampleScene.Ortho)) { DisplayName = "AfterSibling" },

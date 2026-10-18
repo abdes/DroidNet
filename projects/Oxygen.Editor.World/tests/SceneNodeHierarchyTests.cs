@@ -120,7 +120,7 @@ public sealed class SceneNodeHierarchyTests
     public void SetParent_Direct_Circular_Reference_Throws()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene) { Name = "NodeValue" };
 
         var act = () => node.AddChild(node);
 

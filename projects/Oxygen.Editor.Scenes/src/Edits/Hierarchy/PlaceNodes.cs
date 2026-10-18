@@ -25,7 +25,7 @@ public sealed record PlaceNodes : ISceneEdit
     public IReadOnlyList<NodePlacementState> Placements { get; }
 
     /// <inheritdoc/>
-    public string Label => this.Placements.Count == 1 ? "Move Node" : $"Move {this.Placements.Count} nodes";
+    public string Label => this.Placements.Count == 1 ? "Move NodeValue" : $"Move {this.Placements.Count} nodes";
 
     /// <inheritdoc/>
     public IReadOnlyCollection<NodeId> Targets => [.. this.Placements.Select(static placement => placement.Node)];

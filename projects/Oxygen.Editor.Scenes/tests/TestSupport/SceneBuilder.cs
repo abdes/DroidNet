@@ -63,7 +63,7 @@ public sealed class SceneBuilder
     {
         if (this.nodes.Exists(node => node.Id == nodeId))
         {
-            throw new ArgumentException($"Node {nodeId} is already added.", nameof(nodeId));
+            throw new ArgumentException($"NodeValue {nodeId} is already added.", nameof(nodeId));
         }
 
         if (parent is { } parentId && this.nodes.TrueForAll(node => node.Id != parentId))
@@ -113,7 +113,7 @@ public sealed class SceneBuilder
 
         if (underNode is { } nodeId && this.nodes.TrueForAll(node => node.Id != nodeId))
         {
-            throw new ArgumentException($"Node {nodeId} must be added before folder '{folderName}'.", nameof(underNode));
+            throw new ArgumentException($"NodeValue {nodeId} must be added before folder '{folderName}'.", nameof(underNode));
         }
 
         var scope = underNode;
@@ -136,7 +136,7 @@ public sealed class SceneBuilder
     {
         if (this.nodes.TrueForAll(node => node.Id != nodeId))
         {
-            throw new ArgumentException($"Node {nodeId} is not in the scene.", nameof(nodeId));
+            throw new ArgumentException($"NodeValue {nodeId} is not in the scene.", nameof(nodeId));
         }
 
         // Parents come before their children, so one pass in declaration order finds every descendant.
@@ -241,7 +241,7 @@ public sealed class SceneBuilder
     }
 
     private static ExplorerEntryData NodeEntry(NodeId nodeId, List<ExplorerEntryData> children)
-        => new() { Type = "Node", NodeId = nodeId, Children = children.Count == 0 ? null : children };
+        => new() { Type = "NodeValue", NodeId = nodeId, Children = children.Count == 0 ? null : children };
 
     private FolderSpec? FindFolder(FolderId folderId) => this.folders.Find(folder => folder.Id == folderId);
 

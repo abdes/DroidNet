@@ -20,7 +20,7 @@ public sealed class SceneNodeFlagsTests
     public void Flags_SetWritesEveryIndividualFlagProperty_AndGetComposesThem()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene) { Name = "NodeValue" };
 
         const SceneNodeFlags allFlags = SceneNodeFlags.Visible
             | SceneNodeFlags.CastsShadows
@@ -54,7 +54,7 @@ public sealed class SceneNodeFlagsTests
     public void Flags_EachPropertyRaisesPropertyChanged()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene) { Name = "NodeValue" };
         var recorder = new PropertyChangeRecorder(node);
 
         node.IsVisible = false;
@@ -78,7 +78,7 @@ public sealed class SceneNodeFlagsTests
         var scene = new Scene { Name = "Scene" };
         var node = new SceneNode(scene)
         {
-            Name = "Node",
+            Name = "NodeValue",
             Flags = SceneNodeFlags.None,
         };
 

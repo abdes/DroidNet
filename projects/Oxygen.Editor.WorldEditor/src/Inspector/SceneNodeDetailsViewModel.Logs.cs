@@ -24,7 +24,7 @@ public sealed partial class SceneNodeDetailsViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Node changed. Old={OldNodeName}, New={NewNodeName}")]
+        Message = "NodeValue changed. Old={OldNodeName}, New={NewNodeName}")]
     private static partial void LogNodeChanged(ILogger logger, string? OldNodeName, string? NewNodeName);
 
     [Conditional("DEBUG")]
@@ -33,7 +33,7 @@ public sealed partial class SceneNodeDetailsViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Trace,
-        Message = "Add component requested. TypeId={TypeId}, Node={NodeName}, VmCount={VmCount}, Selected={SelectedComponentName}")]
+        Message = "Add component requested. TypeId={TypeId}, NodeValue={NodeName}, VmCount={VmCount}, Selected={SelectedComponentName}")]
     private static partial void LogAddComponentRequested(ILogger logger, string typeId, string nodeName, int vmCount, string? selectedComponentName);
 
     [Conditional("DEBUG")]
@@ -52,7 +52,7 @@ public sealed partial class SceneNodeDetailsViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "ApplyAddComponent. Node={NodeName}, ComponentType={ComponentType}, ComponentName={ComponentName}, NodeComponentsBefore={NodeComponentsBefore}, VmCountBefore={VmCountBefore}")]
+        Message = "ApplyAddComponent. NodeValue={NodeName}, ComponentType={ComponentType}, ComponentName={ComponentName}, NodeComponentsBefore={NodeComponentsBefore}, VmCountBefore={VmCountBefore}")]
     private static partial void LogApplyAddComponent(ILogger logger, string nodeName, string componentType, string componentName, int nodeComponentsBefore, int vmCountBefore);
 
     [Conditional("DEBUG")]
@@ -72,7 +72,7 @@ public sealed partial class SceneNodeDetailsViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "ApplyDeleteComponent. Node={NodeName}, ComponentType={ComponentType}, ComponentName={ComponentName}, NodeComponentsBefore={NodeComponentsBefore}, VmCountBefore={VmCountBefore}, Selected={SelectedComponentName}")]
+        Message = "ApplyDeleteComponent. NodeValue={NodeName}, ComponentType={ComponentType}, ComponentName={ComponentName}, NodeComponentsBefore={NodeComponentsBefore}, VmCountBefore={VmCountBefore}, Selected={SelectedComponentName}")]
     private static partial void LogApplyDeleteComponent(ILogger logger, string nodeName, string componentType, string componentName, int nodeComponentsBefore, int vmCountBefore, string? selectedComponentName);
 
     [Conditional("DEBUG")]

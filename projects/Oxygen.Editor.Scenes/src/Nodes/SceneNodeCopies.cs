@@ -15,7 +15,7 @@ namespace Oxygen.Editor.Scenes.Nodes;
 /// <summary>Copies node subtrees as data with new node and component ids, for duplicates and the clipboard.</summary>
 /// <remarks>
 /// A node reference in a script slot that names a node copied in the same call follows the copy; any other reference is
-/// kept. Copied directional lights leave the atmosphere slot to their source. Asset references and material slot ids
+/// kept. Copied directional lights leave the atmosphere slot to their source. AssetValue references and material slot ids
 /// are kept.
 /// </remarks>
 public static class SceneNodeCopies
@@ -68,7 +68,7 @@ public static class SceneNodeCopies
         var graph = FinalPlaces(sources, source => SceneGraph.PositionOf(scene, source), static at => at.Index, static at => at.Parent, static (at, index) => at with { Index = index });
         var places = FinalPlaces(
             sources,
-            source => SceneLayout.PositionOf(layout, LayoutEntryId.Of(source.Id)) ?? throw new InvalidOperationException($"Node {source.Id} has no explorer entry."),
+            source => SceneLayout.PositionOf(layout, LayoutEntryId.Of(source.Id)) ?? throw new InvalidOperationException($"NodeValue {source.Id} has no explorer entry."),
             static at => at.Index,
             static at => (at.Folder, at.Node),
             static (at, index) => at with { Index = index });

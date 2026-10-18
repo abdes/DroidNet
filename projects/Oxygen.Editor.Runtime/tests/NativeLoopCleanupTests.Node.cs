@@ -71,7 +71,7 @@ public sealed partial class NativeLoopCleanupTests
     private async Task CheckNativeNodeAsync(RuntimeCommandDispatcher commands)
     {
         var target = new RuntimeSceneTarget(commands.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
-        _ = (await commands.ActivateSceneAsync(Guid.NewGuid(), target, "Node observation", this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        _ = (await commands.ActivateSceneAsync(Guid.NewGuid(), target, "NodeValue observation", this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
         var node = NodeId.New();
         _ = (await commands.CreateNodeAsync(new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeCreateNode("Observed", node, ParentId: null, InitializeWorldAsRoot: true)), this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
         void Send(RuntimeWorldCommand command)

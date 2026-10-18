@@ -417,9 +417,9 @@ public sealed partial class SceneExplorerSelectionTests
                     FolderId = folderId,
                     Name = "Group",
                     IsExpanded = true,
-                    Children = [new ExplorerEntryData { Type = "Node", NodeId = folderNode.Id }],
+                    Children = [new ExplorerEntryData { Type = "NodeValue", NodeId = folderNode.Id }],
                 },
-                new ExplorerEntryData { Type = "Node", NodeId = freeNode.Id },
+                new ExplorerEntryData { Type = "NodeValue", NodeId = freeNode.Id },
             ];
 
             var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);

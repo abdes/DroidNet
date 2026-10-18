@@ -490,11 +490,11 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     [RelayCommand]
     private void CopyMaterialUri()
-        => this.CopyText(this.MaterialUriText, "Asset URI copied");
+        => this.CopyText(this.MaterialUriText, "AssetValue URI copied");
 
     [RelayCommand]
     private void CopyMaterialGuid()
-        => this.CopyText(this.MaterialGuidText, "Asset GUID copied");
+        => this.CopyText(this.MaterialGuidText, "AssetValue GUID copied");
 
     private void CopyText(string text, string statusText)
     {

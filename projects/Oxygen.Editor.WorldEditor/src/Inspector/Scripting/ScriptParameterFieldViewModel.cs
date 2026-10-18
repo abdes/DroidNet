@@ -38,7 +38,7 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
         this.card = card;
         this.Parameter = parameter;
         this.Kind = ResolveKind(parameter);
-        this.Dimension = ScriptValue.VectorSize(ScriptSlotEdits.ToValueKind(parameter.Kind) ?? ScriptValueKind.Bool);
+        this.Dimension = ScriptValue.VectorSize(ScriptSlotEdits.ToValueKind(parameter.Kind) ?? ScriptValueKind.BoolValue);
     }
 
     /// <summary>Gets the declared parameter.</summary>
@@ -410,7 +410,7 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
                     this.BoolValue = shown?.BoolValue ?? false;
                     break;
                 case ScriptFieldKind.Number:
-                    this.NumberValue = shown?.Kind == ScriptValueKind.Int32 ? shown.IntValue : shown?.FloatValue ?? 0f;
+                    this.NumberValue = shown?.Kind == ScriptValueKind.Int32Value ? shown.IntValue : shown?.FloatValue ?? 0f;
                     break;
                 case ScriptFieldKind.Choice:
                     this.SelectedOption = shown?.StringValue is { } option && this.Options.Contains(option, StringComparer.Ordinal) ? option : null;

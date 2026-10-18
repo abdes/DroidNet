@@ -44,15 +44,15 @@ public sealed partial class ScriptingComponent : GameComponent
     public static string GetTypeName(ScriptValueKind kind)
         => kind switch
         {
-            ScriptValueKind.Bool => "bool",
-            ScriptValueKind.Int32 => "int32",
-            ScriptValueKind.Float => "float",
-            ScriptValueKind.String => "string",
-            ScriptValueKind.Vec2 => "vec2",
-            ScriptValueKind.Vec3 => "vec3",
-            ScriptValueKind.Vec4 => "vec4",
-            ScriptValueKind.Asset => "asset",
-            ScriptValueKind.Node => "node",
+            ScriptValueKind.BoolValue => "bool",
+            ScriptValueKind.Int32Value => "int32",
+            ScriptValueKind.FloatValue => "float",
+            ScriptValueKind.StringValue => "string",
+            ScriptValueKind.Vec2Value => "vec2",
+            ScriptValueKind.Vec3Value => "vec3",
+            ScriptValueKind.Vec4Value => "vec4",
+            ScriptValueKind.AssetValue => "asset",
+            ScriptValueKind.NodeValue => "node",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown script value kind."),
         };
 
@@ -124,9 +124,9 @@ public sealed partial class ScriptingComponent : GameComponent
                 "int32" => ScriptValue.FromInt(value.GetInt32()),
                 "float" => ScriptValue.FromFloat(value.GetSingle()),
                 "string" => ScriptValue.FromString(value.GetString() ?? throw new JsonException()),
-                "vec2" => ScriptValue.FromVector(ScriptValueKind.Vec2, ReadVector(value, 2)),
-                "vec3" => ScriptValue.FromVector(ScriptValueKind.Vec3, ReadVector(value, 3)),
-                "vec4" => ScriptValue.FromVector(ScriptValueKind.Vec4, ReadVector(value, 4)),
+                "vec2" => ScriptValue.FromVector(ScriptValueKind.Vec2Value, ReadVector(value, 2)),
+                "vec3" => ScriptValue.FromVector(ScriptValueKind.Vec3Value, ReadVector(value, 3)),
+                "vec4" => ScriptValue.FromVector(ScriptValueKind.Vec4Value, ReadVector(value, 4)),
                 "asset" => ScriptValue.FromAsset(new Uri(value.GetString() ?? throw new JsonException(), UriKind.Absolute)),
                 "node" => ScriptValue.FromNode(NodeId.FromValue(Guid.Parse(value.GetString() ?? throw new JsonException(), CultureInfo.InvariantCulture))),
                 _ => throw new JsonException(),
@@ -161,14 +161,14 @@ public sealed partial class ScriptingComponent : GameComponent
             Type = GetTypeName(value.Kind),
             Value = value.Kind switch
             {
-                ScriptValueKind.Bool => JsonSerializer.SerializeToElement(value.BoolValue, SceneJsonContext.Default.Boolean),
-                ScriptValueKind.Int32 => JsonSerializer.SerializeToElement(value.IntValue, SceneJsonContext.Default.Int32),
-                ScriptValueKind.Float => JsonSerializer.SerializeToElement(value.FloatValue, SceneJsonContext.Default.Single),
-                ScriptValueKind.String => JsonSerializer.SerializeToElement(value.StringValue, SceneJsonContext.Default.String),
-                ScriptValueKind.Vec2 or ScriptValueKind.Vec3 or ScriptValueKind.Vec4
+                ScriptValueKind.BoolValue => JsonSerializer.SerializeToElement(value.BoolValue, SceneJsonContext.Default.Boolean),
+                ScriptValueKind.Int32Value => JsonSerializer.SerializeToElement(value.IntValue, SceneJsonContext.Default.Int32),
+                ScriptValueKind.FloatValue => JsonSerializer.SerializeToElement(value.FloatValue, SceneJsonContext.Default.Single),
+                ScriptValueKind.StringValue => JsonSerializer.SerializeToElement(value.StringValue, SceneJsonContext.Default.String),
+                ScriptValueKind.Vec2Value or ScriptValueKind.Vec3Value or ScriptValueKind.Vec4Value
                     => JsonSerializer.SerializeToElement(value.GetVectorComponents(), SceneJsonContext.Default.SingleArray),
-                ScriptValueKind.Asset => JsonSerializer.SerializeToElement(value.AssetUri!.ToString(), SceneJsonContext.Default.String),
-                ScriptValueKind.Node => JsonSerializer.SerializeToElement(value.NodeId.ToString(), SceneJsonContext.Default.String),
+                ScriptValueKind.AssetValue => JsonSerializer.SerializeToElement(value.AssetUri!.ToString(), SceneJsonContext.Default.String),
+                ScriptValueKind.NodeValue => JsonSerializer.SerializeToElement(value.NodeId.ToString(), SceneJsonContext.Default.String),
                 _ => throw new InvalidOperationException($"Unknown script value kind {value.Kind}."),
             },
         };

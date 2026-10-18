@@ -24,12 +24,12 @@ public sealed class SceneAdapterLayoutTests
         parent.AddChild(child);
         IList<ExplorerEntryData> layout =
         [
-            new ExplorerEntryData { Type = "Node", NodeId = parent.Id },
+            new ExplorerEntryData { Type = "NodeValue", NodeId = parent.Id },
             new ExplorerEntryData
             {
-                Type = "Node",
+                Type = "NodeValue",
                 NodeId = parent.Id,
-                Children = [new ExplorerEntryData { Type = "Node", NodeId = child.Id }],
+                Children = [new ExplorerEntryData { Type = "NodeValue", NodeId = child.Id }],
             },
         ];
         var adapter = SceneAdapter.BuildLayoutTree(scene, layout);
@@ -98,13 +98,13 @@ public sealed class SceneAdapterLayoutTests
                         Type = "Folder",
                         FolderId = nestedFolderId,
                         Name = "Nested",
-                        Children = [new ExplorerEntryData { Type = "Node", NodeId = nodeB.Id }],
+                        Children = [new ExplorerEntryData { Type = "NodeValue", NodeId = nodeB.Id }],
                     },
-                    new ExplorerEntryData { Type = "Node", NodeId = nodeA.Id },
+                    new ExplorerEntryData { Type = "NodeValue", NodeId = nodeA.Id },
                 ],
             },
-            new ExplorerEntryData { Type = "Node", NodeId = NodeId.New() },
-            new ExplorerEntryData { Type = "Node", NodeId = nodeC.Id },
+            new ExplorerEntryData { Type = "NodeValue", NodeId = NodeId.New() },
+            new ExplorerEntryData { Type = "NodeValue", NodeId = nodeC.Id },
         ];
         var adapter = SceneAdapter.BuildLayoutTree(scene, layout);
 
@@ -129,7 +129,7 @@ public sealed class SceneAdapterLayoutTests
         var child = new SceneNode(scene) { Name = "Child" };
         scene.RootNodes.Add(parent);
         parent.AddChild(child);
-        var parentEntry = new ExplorerEntryData { Type = "Node", NodeId = parent.Id };
+        var parentEntry = new ExplorerEntryData { Type = "NodeValue", NodeId = parent.Id };
         IList<ExplorerEntryData> layout = [parentEntry];
         var adapter = SceneAdapter.BuildLayoutTree(scene, layout);
 
@@ -148,7 +148,7 @@ public sealed class SceneAdapterLayoutTests
         var child = new SceneNode(scene) { Name = "Child" };
         scene.RootNodes.Add(parent);
         parent.AddChild(child);
-        IList<ExplorerEntryData> layout = [new ExplorerEntryData { Type = "Node", NodeId = child.Id }];
+        IList<ExplorerEntryData> layout = [new ExplorerEntryData { Type = "NodeValue", NodeId = child.Id }];
         var adapter = SceneAdapter.BuildLayoutTree(scene, layout);
 
         _ = await adapter.Children.ConfigureAwait(false);

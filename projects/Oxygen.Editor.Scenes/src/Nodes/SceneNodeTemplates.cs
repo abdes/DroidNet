@@ -109,7 +109,7 @@ public static class SceneNodeTemplates
     /// <param name="name">The node's name.</param>
     /// <param name="placement">Where the node goes; the scene origin when <see langword="null"/>.</param>
     /// <returns>The node's data.</returns>
-    public static SceneNodeData Empty(Scene scene, string name = "Node", NodePlacement? placement = null)
+    public static SceneNodeData Empty(Scene scene, string name = "NodeValue", NodePlacement? placement = null)
         => Finish(new SceneNode(scene) { Name = name }, placement);
 
     /// <summary>Builds the insert that appends a new node: last among its parent's children, last in its explorer place.</summary>

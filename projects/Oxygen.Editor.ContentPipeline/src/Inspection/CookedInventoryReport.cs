@@ -124,7 +124,7 @@ public sealed class CookedInventoryReport
 
     /// <summary>Creates the existing inspection view from the same native verification.</summary>
     /// <param name="root">The physical root for diagnostics.</param>
-    /// <returns>Asset/file metadata and integrity diagnostics.</returns>
+    /// <returns>AssetValue/file metadata and integrity diagnostics.</returns>
     public CookInspectionResult ToInspection(string root) => new(root, this.IsValid, this.SourceKey,
         this.IsValid ? this.Assets.Select(static asset => new CookedAssetEntry(asset.VirtualPath,
             asset.Type switch { 1 => ContentCookAssetKind.Material, 2 => ContentCookAssetKind.Geometry, 3 => ContentCookAssetKind.Scene, _ => ContentCookAssetKind.Unknown })

@@ -126,7 +126,7 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
     }
 
     /// <summary>
-    /// Adds a content item (Node) to the layout.
+    /// Adds a content item (NodeValue) to the layout.
     /// </summary>
     public void AddContent(ITreeItem item)
     {

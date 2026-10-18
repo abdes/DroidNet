@@ -60,7 +60,7 @@ public partial class SceneEditorViewModel
             }
         });
 
-        // Selecting one camera node previews it in the focused pane; the selection also scopes Browse to Asset.
+        // Selecting one camera node previews it in the focused pane; the selection also scopes Browse to AssetValue.
         this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
         {
             var foreign = message.DocumentId is { } documentId

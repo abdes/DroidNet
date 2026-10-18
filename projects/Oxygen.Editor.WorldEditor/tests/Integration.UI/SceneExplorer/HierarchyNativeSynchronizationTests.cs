@@ -119,13 +119,13 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
         [
             new ExplorerEntryData
             {
-                Type = "Node",
+                Type = "NodeValue",
                 NodeId = source.Id,
-                Children = [new ExplorerEntryData { Type = "Node", NodeId = source.Children.Single().Id }],
+                Children = [new ExplorerEntryData { Type = "NodeValue", NodeId = source.Children.Single().Id }],
             },
             new ExplorerEntryData
             {
-                Type = "Node",
+                Type = "NodeValue",
                 NodeId = destination.Id,
                 Children =
                 [

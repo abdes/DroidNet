@@ -86,7 +86,7 @@ public sealed record SetScriptSlots(NodeId Node, ImmutableArray<ScriptSlot> Slot
                     return SceneDiagnostic.Error(SceneEditCodes.NameEmpty, "A script parameter value has no parameter name.");
                 }
 
-                if (value.Kind == ScriptValueKind.Asset && !AssetReferenceRules.IsAssetUri(value.AssetUri))
+                if (value.Kind == ScriptValueKind.AssetValue && !AssetReferenceRules.IsAssetUri(value.AssetUri))
                 {
                     return SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, $"Parameter '{name}' must reference an asset by its '{AssetUris.Scheme}' URI.");
                 }

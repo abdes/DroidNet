@@ -270,7 +270,7 @@ internal sealed partial class ScenePreview
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Node '{NodeName}' creation was not successful")]
+        Message = "NodeValue '{NodeName}' creation was not successful")]
     private static partial void LogNodeCreationNotSuccessful(ILogger logger, string nodeName);
 
     private void LogNodeCreationNotSuccessful(SceneNode node)

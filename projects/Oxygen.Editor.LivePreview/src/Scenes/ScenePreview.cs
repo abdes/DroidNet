@@ -102,7 +102,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                     SceneOperationKinds.EditGeometry,
                     Scope(scene, node, componentType: nameof(GeometryComponent)),
                     LiveSyncDiagnosticCodes.GeometryRejected,
-                    "Node has no geometry component to attach."));
+                    "NodeValue has no geometry component to attach."));
         }
 
         var scope = Scope(scene, node, componentType: nameof(GeometryComponent));
@@ -221,7 +221,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                     SceneOperationKinds.EditDirectionalLight,
                     Scope(scene, node, componentType: nameof(LightComponent)),
                     LiveSyncDiagnosticCodes.LightRejected,
-                    "Node has no light component to attach."))
+                    "NodeValue has no light component to attach."))
             : this.ExecuteNodeSyncAsync(
             scene,
             node,
@@ -268,7 +268,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                     SceneOperationKinds.EditLocalFogVolume,
                     Scope(scene, node, componentType: nameof(LocalFogVolumeComponent)),
                     LiveSyncDiagnosticCodes.LocalFogVolumeRejected,
-                    "Node has no local fog volume to attach."))
+                    "NodeValue has no local fog volume to attach."))
             : this.ExecuteNodeSyncAsync(
             scene,
             node,
@@ -316,7 +316,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                     SceneOperationKinds.EditPerspectiveCamera,
                     Scope(scene, node, componentType: nameof(CameraComponent)),
                     LiveSyncDiagnosticCodes.CameraRejected,
-                    "Node has no camera component to attach."));
+                    "NodeValue has no camera component to attach."));
         }
 
         var scope = Scope(scene, node, componentType: camera.GetType().Name, componentName: camera.Name);

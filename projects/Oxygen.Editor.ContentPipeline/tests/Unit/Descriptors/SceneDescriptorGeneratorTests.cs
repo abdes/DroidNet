@@ -804,7 +804,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        scene.RootNodes.Add(new SceneNode(scene) { Name = "Node" });
+        scene.RootNodes.Add(new SceneNode(scene) { Name = "NodeValue" });
         scene.SetEnvironment(scene.Environment with { SkyAtmosphere = new SkyAtmosphereEnvironmentData { AerialPerspectiveStartDepthMeters = value } });
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);

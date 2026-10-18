@@ -11,6 +11,6 @@ using System.Diagnostics.CodeAnalysis;
         "CA5392:Use DefaultDllImportSearchPaths attribute for P/Invokes",
         Justification = "external code, not under our control",
         Scope = "member",
-        Target = "~M:Microsoft.Windows.Foundation.UndockedRegFreeWinRTCS.NativeMethods.WindowsAppRuntime_EnsureIsLoaded~System.Int32")]
+        Target = "~M:Microsoft.Windows.Foundation.UndockedRegFreeWinRTCS.NativeMethods.WindowsAppRuntime_EnsureIsLoaded~System.Int32Value")]
 
 // @formatter:on

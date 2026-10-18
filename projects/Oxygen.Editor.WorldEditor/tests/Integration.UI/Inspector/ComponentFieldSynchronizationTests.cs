@@ -174,6 +174,6 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
             }).ConfigureAwait(true);
         }
 
-        throw new InvalidOperationException($"Node field {field.Field} was never realized after expanding every disclosure.");
+        throw new InvalidOperationException($"NodeValue field {field.Field} was never realized after expanding every disclosure.");
     }
 }

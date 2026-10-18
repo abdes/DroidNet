@@ -60,7 +60,7 @@ public sealed class AssetFeedWorkloadBenchmarks
         var cold = watch.Elapsed;
         _ = rows.Should().HaveCount(1000);
         _ = rows.Should().OnlyContain(static row => row.CookStatus != null && row.CookStatus.Freshness == AssetCookFreshness.NeedsCooking);
-        this.TestContext.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Asset feed: cold={cold.TotalMilliseconds:F2}ms; entries={rows.Count}; configuration={typeof(AssetFeed).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), inherit: false).Cast<System.Reflection.AssemblyConfigurationAttribute>().Single().Configuration}"));
+        this.TestContext.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"AssetValue feed: cold={cold.TotalMilliseconds:F2}ms; entries={rows.Count}; configuration={typeof(AssetFeed).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), inherit: false).Cast<System.Reflection.AssemblyConfigurationAttribute>().Single().Configuration}"));
         _ = cold.Should().BeLessThan(TimeSpan.FromSeconds(5));
         _ = runs.Runs.Should().BeEmpty();
         native.VerifyAdd(service => service.ObservationChanged += It.IsAny<EventHandler>(), Times.Once);

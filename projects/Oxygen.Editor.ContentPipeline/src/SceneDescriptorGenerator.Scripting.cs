@@ -67,13 +67,13 @@ public sealed partial class SceneDescriptorGenerator
                 {
                     object? cooked = value.Kind switch
                     {
-                        ScriptValueKind.Bool => value.BoolValue,
-                        ScriptValueKind.Int32 => value.IntValue,
-                        ScriptValueKind.Float => value.FloatValue,
-                        ScriptValueKind.String => value.StringValue,
-                        ScriptValueKind.Vec2 or ScriptValueKind.Vec3 or ScriptValueKind.Vec4 => value.GetVectorComponents(),
-                        ScriptValueKind.Asset => ToAssetVirtualPath(value.AssetUri!),
-                        ScriptValueKind.Node => nodeIndices.TryGetValue(value.NodeId, out var index) ? (uint)index : null,
+                        ScriptValueKind.BoolValue => value.BoolValue,
+                        ScriptValueKind.Int32Value => value.IntValue,
+                        ScriptValueKind.FloatValue => value.FloatValue,
+                        ScriptValueKind.StringValue => value.StringValue,
+                        ScriptValueKind.Vec2Value or ScriptValueKind.Vec3Value or ScriptValueKind.Vec4Value => value.GetVectorComponents(),
+                        ScriptValueKind.AssetValue => ToAssetVirtualPath(value.AssetUri!),
+                        ScriptValueKind.NodeValue => nodeIndices.TryGetValue(value.NodeId, out var index) ? (uint)index : null,
                         _ => null,
                     };
                     if (cooked is null)
@@ -82,7 +82,7 @@ public sealed partial class SceneDescriptorGenerator
                         continue;
                     }
 
-                    if (value.Kind == ScriptValueKind.Asset)
+                    if (value.Kind == ScriptValueKind.AssetValue)
                     {
                         references.Add(value.AssetUri!);
                     }
