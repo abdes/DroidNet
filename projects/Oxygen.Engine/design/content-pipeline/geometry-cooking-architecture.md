@@ -513,14 +513,14 @@ JSON Schema draft-07, `additionalProperties: false` at all levels.
 
 #### 7.2.1 Top-Level Field Contract
 
-| Field             | Required | Type                              | Description                                          |
-| ----------------- | -------- | --------------------------------- | ---------------------------------------------------- |
-| `name`            | Yes      | `string` (identifier, 1–63 chars) | Asset name used for output file naming               |
-| `bounds`          | Yes      | `bounds3`                         | AABB for the entire geometry                         |
-| `lods`            | Yes      | `array` (1–8 items)               | `lod_descriptor` entries (Section 7.2.4)             |
-| `$schema`         | No       | `string`                          | Points to shipped JSON Schema for editor integration |
-| `content_hashing` | No       | `bool`                            | Override global content hashing toggle               |
-| `buffers`         | No       | `array` (≥1 items)                | Inline `buffer_descriptor` entries (Section 7.2.3)   |
+| Field             | Required | Type                | Description                                          |
+| ----------------- | -------- | ------------------- | ---------------------------------------------------- |
+| `name`            | Yes      | `string` (name)     | Asset name used for output file naming               |
+| `bounds`          | Yes      | `bounds3`           | AABB for the entire geometry                         |
+| `lods`            | Yes      | `array` (1–8 items) | `lod_descriptor` entries (Section 7.2.4)             |
+| `$schema`         | No       | `string`            | Points to shipped JSON Schema for editor integration |
+| `content_hashing` | No       | `bool`              | Override global content hashing toggle               |
+| `buffers`         | No       | `array` (≥1 items)  | Inline `buffer_descriptor` entries (Section 7.2.3)   |
 
 Example (`woodfloor_tile.geometry.json`):
 
@@ -580,8 +580,10 @@ Top-level validation rules:
    descriptor JSON itself.
 3. All buffer `virtual_path` and submesh `material_ref` values must be canonical
    virtual paths (see Sections 7.2.3 and 7.2.6).
-4. `identifier` values: 1–63 characters, matching
-   `^[A-Za-z0-9_][A-Za-z0-9_.-]{0,62}$`.
+4. `name` values follow the segment rule of virtual paths, through the shared
+   `oxygen.name.schema.json#/definitions/segment`. The cooker checks what the
+   pattern cannot (NFC, unassigned code points, the 255-byte segment) on the
+   asset's virtual path and reports the rule's `vpath.*` code.
 
 #### 7.2.2 `bounds3` Type
 
@@ -615,11 +617,11 @@ Constraints:
 
 ##### 7.2.3.1 `buffer_view_descriptor`
 
-| Field                             | Required | Type                                   | Description                         |
-| --------------------------------- | -------- | -------------------------------------- | ----------------------------------- |
-| `name`                            | Yes      | `identifier` (must not be `"__all__"`) | View name for `view_ref` resolution |
-| `byte_offset`, `byte_length`      | Paired   | `integer ≥ 0` / `integer ≥ 1`          | Byte-addressed view range           |
-| `element_offset`, `element_count` | Paired   | `integer ≥ 0` / `integer ≥ 1`          | Element-addressed view range        |
+| Field                             | Required | Type                             | Description                         |
+| --------------------------------- | -------- | -------------------------------- | ----------------------------------- |
+| `name`                            | Yes      | `name` (must not be `"__all__"`) | View name for `view_ref` resolution |
+| `byte_offset`, `byte_length`      | Paired   | `integer ≥ 0` / `integer ≥ 1`    | Byte-addressed view range           |
+| `element_offset`, `element_count` | Paired   | `integer ≥ 0` / `integer ≥ 1`    | Element-addressed view range        |
 
 Exactly one pair must be provided: either `byte_offset`+`byte_length` or
 `element_offset`+`element_count`.
@@ -628,7 +630,7 @@ Exactly one pair must be provided: either `byte_offset`+`byte_length` or
 
 | Field        | Required    | Type                                          | Description                                                             |
 | ------------ | ----------- | --------------------------------------------- | ----------------------------------------------------------------------- |
-| `name`       | Yes         | `identifier`                                  | LOD name embedded in `MeshDesc`                                         |
+| `name`       | Yes         | `name`                                        | LOD name embedded in `MeshDesc`                                         |
 | `mesh_type`  | Yes         | `"standard"` \| `"skinned"` \| `"procedural"` | Determines variant                                                      |
 | `bounds`     | Yes         | `bounds3`                                     | LOD-level AABB                                                          |
 | `submeshes`  | Yes         | `array` (≥1 items)                            | `submesh_descriptor` entries (Section 7.2.5)                            |
@@ -662,7 +664,7 @@ Exactly one pair must be provided: either `byte_offset`+`byte_length` or
 | -------------- | -------- | --------------------- | ----------------------------------------------------------------- |
 | `material_ref` | Yes      | `canonical_omat_path` | Canonical virtual path to `.omat` material descriptor             |
 | `views`        | Yes      | `array` (≥1 items)    | `submesh_view` entries (Section 7.2.5.1)                          |
-| `name`         | No       | `identifier`          | Submesh name embedded in `SubMeshDesc` (auto-generated if absent) |
+| `name`         | No       | `name`                | Submesh name embedded in `SubMeshDesc` (auto-generated if absent) |
 | `bounds`       | No       | `bounds3`             | Submesh-level AABB (defaults to LOD bounds if absent)             |
 
 ##### 7.2.5.1 `submesh_view`
@@ -670,7 +672,7 @@ Exactly one pair must be provided: either `byte_offset`+`byte_length` or
 | Field      | Required | Type            | Description                                                            |
 | ---------- | -------- | --------------- | ---------------------------------------------------------------------- |
 | `view_ref` | Yes      | `view_selector` | Named buffer view identifier, or `"__all__"` (required for procedural) |
-| `name`     | No       | `identifier`    | View debug name                                                        |
+| `name`     | No       | `name`          | View debug name                                                        |
 | `bounds`   | No       | `bounds3`       | View-level local AABB (defaults to the submesh bounds if absent)       |
 
 `view_ref` resolves against the named `buffer_view_descriptor` entries in the VB
@@ -682,7 +684,7 @@ and IB sidecars. `"__all__"` is the only valid selector for procedural LODs
 | Field       | Required | Type          | Description                                                         |
 | ----------- | -------- | ------------- | ------------------------------------------------------------------- |
 | `generator` | Yes      | `string` enum | Generator type name (see table below)                               |
-| `mesh_name` | Yes      | `identifier`  | Logical mesh name used as `"Generator/MeshName"` in `MeshDesc.name` |
+| `mesh_name` | Yes      | `name`        | Logical mesh name used as `"Generator/MeshName"` in `MeshDesc.name` |
 | `params`    | No       | `object`      | Generator-specific parameters (see generator param tables)          |
 
 Valid `generator` values and associated param schemas:

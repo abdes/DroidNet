@@ -34,9 +34,7 @@
       "additionalProperties": false,
       "properties": {
         "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 63
+          "$ref": "oxygen.name.schema.json#/definitions/segment"
         },
         "type": {
           "type": "string",
@@ -433,9 +431,7 @@
       "additionalProperties": false,
       "properties": {
         "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 63
+          "$ref": "oxygen.name.schema.json#/definitions/segment"
         },
         "priority": {
           "type": "integer",

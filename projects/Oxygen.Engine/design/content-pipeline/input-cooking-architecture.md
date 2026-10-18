@@ -554,7 +554,7 @@ Field contract:
 
 1. `$schema`: optional string. Points to shipped JSON Schema for editor
    integration.
-2. `name`: required string (1..63 UTF-8 bytes).
+2. `name`: required name (the segment rule, `oxygen.name.schema.json`).
 3. `type`: required enum; `"bool"` / `"axis1d"` / `"axis2d"`.
 4. `consumes_input`: optional bool, default `false`.
 
@@ -667,7 +667,7 @@ descriptors.
 
 Each `actions[]` item:
 
-1. `name`: required string (1..63 UTF-8 bytes).
+1. `name`: required name (the segment rule, `oxygen.name.schema.json`).
 2. `type`: required enum; `"bool"` / `"axis1d"` / `"axis2d"`.
 3. `consumes_input`: optional bool, default `false`.
 4. `description`: optional string. Ignored by pipeline, available for editor
@@ -696,7 +696,7 @@ Binary mapping:
 
 Each `contexts[]` item:
 
-1. `name`: required string (1..63 UTF-8 bytes).
+1. `name`: required name (the segment rule, `oxygen.name.schema.json`).
 2. `priority`: optional int32, default `0`; the priority used when a context is
    activated without one.
 3. `description`: optional string. Ignored by pipeline, for editor hover docs.

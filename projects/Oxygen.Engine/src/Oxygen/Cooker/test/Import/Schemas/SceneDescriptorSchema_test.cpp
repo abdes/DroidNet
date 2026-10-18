@@ -54,6 +54,18 @@ NOLINT_TEST_P(SceneDescriptorSchemaCaseTest, ValidatesDocument)
 INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
   ::testing::Values(
     SchemaCase {
+      "AcceptsNameFollowingTheSegmentRule",
+      R"j({ "version": 13, "name": "Level 1.v2 (copy)", "nodes": [{}] })j",
+      true,
+      "",
+    },
+    SchemaCase {
+      "RejectsNameWithReservedCharacter",
+      R"j({ "version": 13, "name": "Level:1", "nodes": [{}] })j",
+      false,
+      "does not match regex pattern",
+    },
+    SchemaCase {
       "AcceptsCanonicalDocument",
       R"({ "version": 13,
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",

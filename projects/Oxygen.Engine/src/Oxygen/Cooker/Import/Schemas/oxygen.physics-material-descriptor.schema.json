@@ -8,7 +8,7 @@
       "type": "string"
     },
     "name": {
-      "$ref": "#/definitions/identifier"
+      "$ref": "oxygen.name.schema.json#/definitions/segment"
     },
     "content_hashing": {
       "type": "boolean"
@@ -40,12 +40,6 @@
     }
   },
   "definitions": {
-    "identifier": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 63,
-      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,62}$"
-    },
     "combine_mode": {
       "enum": ["average", "min", "max", "multiply"]
     },

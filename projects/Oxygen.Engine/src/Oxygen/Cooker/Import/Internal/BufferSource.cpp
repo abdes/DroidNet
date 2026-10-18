@@ -32,15 +32,12 @@ namespace {
   auto GetBufferEntryValidator() -> json_validator&
   {
     static auto validator = []() -> json_validator {
-      auto out = json_validator {};
       const auto root_schema = json::parse(kBufferContainerSchema);
-      auto item_schema = json {
+      return MakeJsonSchemaValidator(json {
         { "$schema", "http://json-schema.org/draft-07/schema#" },
         { "definitions", root_schema.at("definitions") },
         { "$ref", "#/definitions/buffer_descriptor" },
-      };
-      out.set_root_schema(item_schema);
-      return out;
+      });
     }();
     return validator;
   }

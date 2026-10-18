@@ -14,6 +14,9 @@ namespace Oxygen.Managed.Assets.Authoring.Materials;
 /// <summary>Reads the canonical engine material descriptor without legacy conversion.</summary>
 public static class MaterialSourceReader
 {
+    private const string MaterialSchemaFileName = "oxygen.material-descriptor.schema.json";
+    private const string NameSchemaFileName = "oxygen.name.schema.json";
+
     private static readonly Lazy<JsonSchema> Schema = new(LoadSchema);
 
     /// <summary>Reads schema-valid source while retaining all unedited native fields.</summary>
@@ -154,11 +157,21 @@ public static class MaterialSourceReader
 
     private static JsonSchema LoadSchema()
     {
-        using var stream = typeof(MaterialSourceReader).Assembly.GetManifestResourceStream(
-            "oxygen.material-descriptor.schema.json")
-            ?? throw new InvalidOperationException("The canonical material schema is missing.");
+        // The material schema references the shared name definition, embedded beside it.
+        var options = new BuildOptions();
+        options.SchemaRegistry.Fetch = static (uri, _) =>
+            string.Equals(Path.GetFileName(uri.LocalPath), NameSchemaFileName, StringComparison.Ordinal)
+                ? JsonSchema.FromText(ReadSchemaResource(NameSchemaFileName))
+                : null;
+        return JsonSchema.FromText(ReadSchemaResource(MaterialSchemaFileName), options);
+    }
+
+    private static string ReadSchemaResource(string fileName)
+    {
+        using var stream = typeof(MaterialSourceReader).Assembly.GetManifestResourceStream(fileName)
+            ?? throw new InvalidOperationException($"The engine schema '{fileName}' is missing.");
         using var reader = new StreamReader(stream);
-        return JsonSchema.FromText(reader.ReadToEnd());
+        return reader.ReadToEnd();
     }
 
     private static float Scalar(JsonElement parent, string name, float fallback)

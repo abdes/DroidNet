@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstddef>
 #include <exception>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -18,7 +19,38 @@
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
+
 namespace oxygen::content::import::internal {
+
+//! The file the import schemas reference for the shared name definition.
+inline constexpr std::string_view kNameSchemaFileName
+  = "oxygen.name.schema.json";
+
+//! A validator for an embedded import schema.
+/*!
+ The schema's references to `oxygen.name.schema.json` resolve to the embedded
+ shared name schema.
+
+ @throw std::invalid_argument when the schema references any other file.
+*/
+inline auto MakeJsonSchemaValidator(const nlohmann::json& schema)
+  -> nlohmann::json_schema::json_validator
+{
+  auto validator = nlohmann::json_schema::json_validator {
+    [](const nlohmann::json_uri& uri, nlohmann::json& loaded) -> void {
+      const auto path = std::string_view { uri.path() };
+      const auto file = path.substr(path.find_last_of('/') + 1);
+      if (file != kNameSchemaFileName) {
+        throw std::invalid_argument(
+          "unknown schema reference: " + uri.location());
+      }
+      loaded = nlohmann::json::parse(kNameSchema);
+    },
+  };
+  validator.set_root_schema(schema);
+  return validator;
+}
 
 struct JsonSchemaIssue final {
   std::string object_path;

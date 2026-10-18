@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Json.Schema;
 using Oxygen.Editor.ContentPipeline.Authoring;
+using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Scripting;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -18,7 +19,8 @@ public sealed class InputFileCheckTests
 {
     private const string Path = @"C:\Project\Content\Input\Player.input.json";
 
-    private static readonly JsonSchema Schema = JsonSchema.FromText(File.ReadAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "Schemas", "oxygen.input.schema.json")));
+    private static readonly JsonSchema Schema = EditorSchemaCatalog.LoadFromDirectory(System.IO.Path.Combine(AppContext.BaseDirectory, "Schemas"))
+        .GetValidationSchema("oxygen.input.schema.json");
 
     [TestMethod]
     public void TheNewInputFileTemplateChecksClean()

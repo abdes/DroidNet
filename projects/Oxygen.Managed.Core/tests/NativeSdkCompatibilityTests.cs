@@ -73,6 +73,7 @@ public sealed partial class NativeSdkCompatibilityTests
     [DataRow("oxygen.scene-descriptor.schema.json")]
     [DataRow("oxygen.source-analysis.schema.json")]
     [DataRow("oxygen.captured-inputs.schema.json")]
+    [DataRow("oxygen.name.schema.json")]
     public async Task CookingSchemaMismatchDoesNotBlockRuntime(string schemaFile)
     {
         using var fixture = new Fixture();

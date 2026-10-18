@@ -854,6 +854,14 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       ImportPhase::kFailed, 1.0F, "Geometry descriptor preparation failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
+  if (auto refused = internal::CheckAssetVirtualPath(Request(),
+        Request().loose_cooked_layout.GeometryVirtualPath(source->name),
+        "name")) {
+    session.AddDiagnostic(std::move(*refused));
+    ReportPhaseProgress(
+      ImportPhase::kFailed, 1.0F, "Geometry descriptor name refused");
+    co_return co_await FinalizeWithTelemetry(session);
+  }
 
   auto context = GeometryExecutionContext {
     .session = session,

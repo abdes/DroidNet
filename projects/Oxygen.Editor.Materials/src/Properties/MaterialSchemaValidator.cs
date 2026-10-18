@@ -69,8 +69,7 @@ public sealed class MaterialSchemaValidator
     /// <returns>The validation result.</returns>
     public MaterialValidationResult ValidateAgainstEngineSchema(JsonNode? materialJson)
     {
-        var json = this.catalog.GetEngineSchema(EngineSchemaFileName);
-        var schema = JsonSchema.FromText(json.ToJsonString());
+        var schema = this.catalog.GetValidationSchema(EngineSchemaFileName);
         var evaluation = schema.Evaluate(ToElement(materialJson), BuildOptions());
         return ToResult(evaluation, Source: "engine");
     }

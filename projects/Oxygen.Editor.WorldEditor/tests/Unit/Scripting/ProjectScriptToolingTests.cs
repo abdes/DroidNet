@@ -27,6 +27,7 @@ public sealed partial class ProjectScriptToolingTests : IDisposable
         File.WriteAllText(this.DefinitionsPath, "declare oxygen: any\n");
         File.WriteAllText(Path.Combine(this.root, "Sdk", "schemas", "oxygen.input.schema.json"), "{}");
         File.WriteAllText(Path.Combine(this.root, "Sdk", "schemas", "oxygen.input-action.schema.json"), "{}");
+        File.WriteAllText(Path.Combine(this.root, "Sdk", "schemas", "oxygen.name.schema.json"), "{}");
     }
 
     private string DefinitionsPath => Path.Combine(this.root, "Sdk", "oxygen.d.luau");
@@ -46,7 +47,8 @@ public sealed partial class ProjectScriptToolingTests : IDisposable
     {
         var changes = this.CreateTooling().Ensure(this.CreateProject());
 
-        _ = changes.Should().HaveCount(5);
+        _ = changes.Should().HaveCount(6);
+        _ = File.Exists(Path.Combine(this.ProjectRoot, "Types", "oxygen.name.schema.json")).Should().BeTrue();
         _ = File.ReadAllText(Path.Combine(this.ProjectRoot, ".luaurc")).Should().Contain("nonstrict");
         _ = File.ReadAllText(Path.Combine(this.ProjectRoot, "Types", "oxygen.d.luau")).Should().Be("declare oxygen: any\n");
         var settings = JsonNode.Parse(File.ReadAllText(Path.Combine(this.ProjectRoot, ".vscode", "settings.json")))!.AsObject();

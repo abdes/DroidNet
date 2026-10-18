@@ -1,7 +1,6 @@
 # Buffer Cooking Architecture Specification
 
-**Date:** 2026-03-02
-**Status:** Design / Specification
+**Date:** 2026-03-02 **Status:** Design / Specification
 
 ## 0. Status Tracking
 
@@ -10,12 +9,12 @@ import, cooking, packaging, and runtime loading in Oxygen.
 
 Current implementation status snapshot:
 
-1. Implemented: `BufferContainerImportJob`, `BufferPipeline`, `BufferImportSubmitter`,
-   `BuildBufferContainerRequest`, and `AsyncImportService` routing for
-   `buffer_container` payload presence.
-2. Implemented: JSON-descriptor-driven batch import path (`type:
-"buffer-container"`) with schema validation at both request-build time and
-   per-entry validation in `BufferImportSubmitter`.
+1. Implemented: `BufferContainerImportJob`, `BufferPipeline`,
+   `BufferImportSubmitter`, `BuildBufferContainerRequest`, and
+   `AsyncImportService` routing for `buffer_container` payload presence.
+2. Implemented: JSON-descriptor-driven batch import path
+   (`type: "buffer-container"`) with schema validation at both request-build
+   time and per-entry validation in `BufferImportSubmitter`.
 3. Implemented: `BufferPipeline` compute-only async pipeline (optional SHA-256
    content hashing only; no format conversion, no compression).
 4. Implemented: `BufferImportSubmitter` — reusable submitter shared between
@@ -23,8 +22,9 @@ Current implementation status snapshot:
    embedded buffer data.
 5. Implemented: `BufferDescriptorSidecar` — per-buffer `.obuf` sidecar files
    carrying `BufferResourceDesc` + named `BufferDescriptorView[]`.
-6. Implemented: Loose-cooked emission (`Buffers/<name>.obuf` sidecar, `buffers.table`,
-   `buffers.data`) via `BufferEmitter` and `ResourceDescriptorEmitter`.
+6. Implemented: Loose-cooked emission (`Buffers/<name>.obuf` sidecar,
+   `buffers.table`, `buffers.data`) via `BufferEmitter` and
+   `ResourceDescriptorEmitter`.
 7. Implemented: Runtime `LoadBufferResource` reads `BufferResourceDesc` from
    stream and loads raw byte payload from `buffers.data`.
 8. Verification caveat: by execution policy, no local project build was run
@@ -38,11 +38,11 @@ specific container format (geometry, FBX, glTF) is absent.
 
 In scope:
 
-1. Standalone buffer import via `type: "buffer-container"` manifest — raw
-   binary blobs packaged as GPU buffer resources without a containing scene or
-   geometry format.
-2. One buffer-container descriptor (`*.json`) → N named buffer resources,
-   each emitted as a separate `.obuf` sidecar entry in the loose cooked layout.
+1. Standalone buffer import via `type: "buffer-container"` manifest — raw binary
+   blobs packaged as GPU buffer resources without a containing scene or geometry
+   format.
+2. One buffer-container descriptor (`*.json`) → N named buffer resources, each
+   emitted as a separate `.obuf` sidecar entry in the loose cooked layout.
 3. Named sub-range views (`BufferDescriptorView`) within each buffer.
 4. Loose-cooked emission: `.obuf` sidecars, `buffers.table`, `buffers.data`.
 5. `BufferResourceDesc` binary format (32 bytes, `PakFormat_core.h`).
@@ -77,8 +77,8 @@ Out of scope:
    and MUST NOT be computed when `with_content_hashing` is false.
 8. `BufferResourceDesc` binary layout MUST NOT be modified without updating
    `static_assert(sizeof(BufferResourceDesc) == 32)`.
-9. Virtual paths in the descriptor MUST end in `.obuf` and MUST be canonical
-   (no `..`, no `//`, starts with `/`).
+9. Virtual paths in the descriptor MUST end in `.obuf` and MUST be canonical (no
+   `..`, no `//`, starts with `/`).
 10. `virtual_path` values MUST be globally unique within a container. Duplicate
     virtual paths are rejected as `buffer.container.virtual_path_duplicate`.
 11. The implicit view `__all__` (entire buffer range) MUST NOT be declared
@@ -118,8 +118,8 @@ referenced by index from geometry, materials, or compute dispatches via
 One import entry point exists for standalone buffer imports:
 
 1. **Buffer-container descriptor import** (`type: "buffer-container"` manifest)
-   — a JSON document that declares one or more raw binary buffer resources.
-   This is the only path for standalone buffer imports.
+   — a JSON document that declares one or more raw binary buffer resources. This
+   is the only path for standalone buffer imports.
 
 The buffer-container approach differs from textures and materials in a key way:
 a **single descriptor → N resources**. One container JSON encodes an arbitrary
@@ -131,11 +131,11 @@ standalone buffer-container imports and embedded buffer imports from scene
 import pipelines (geometry/FBX/glTF). Both paths deposit their buffer data
 through the same `BufferEmitter` → `buffers.table` / `buffers.data` output.
 
-The buffer pipeline (`BufferPipeline`) is intentionally minimal: it does
-nothing except optional SHA-256 content hashing. All format knowledge (element
-format, stride, usage flags) is carried as opaque metadata from the descriptor
-JSON into the `BufferResourceDesc` binary — the pipeline is purely a
-data-passthrough with an optional hash step.
+The buffer pipeline (`BufferPipeline`) is intentionally minimal: it does nothing
+except optional SHA-256 content hashing. All format knowledge (element format,
+stride, usage flags) is carried as opaque metadata from the descriptor JSON into
+the `BufferResourceDesc` binary — the pipeline is purely a data-passthrough with
+an optional hash step.
 
 ## 5. Target Architecture
 
@@ -192,8 +192,8 @@ Architectural split:
 1. The import path owns per-entry validation, source file reading, view spec
    normalization, and descriptor production. `BufferImportSubmitter` is the
    reusable core for these operations.
-2. `BufferPipeline` is a minimal async compute unit; it offloads content
-   hashing to a thread pool and returns `WorkResult` objects.
+2. `BufferPipeline` is a minimal async compute unit; it offloads content hashing
+   to a thread pool and returns `WorkResult` objects.
 3. `BufferEmitter` handles deduplication (same content hash → same
    `ResourceIndexT`) and writes `buffers.table` / `buffers.data`.
 4. `ResourceDescriptorEmitter` writes the per-buffer `.obuf` sidecar containing
@@ -224,13 +224,14 @@ Architectural split:
      - `src/Oxygen/Cooker/Import/Internal/BufferContainerImportRequestBuilder.cpp`
    - role: validate + normalize `BufferContainerImportSettings` into an
      `ImportRequest`. Loads the container JSON file, schema-validates it against
-     `kBufferContainerSchema`, resolves `job_name`, resolves `with_content_hashing`,
-     and stores `descriptor_doc->dump()` in
+     `kBufferContainerSchema`, resolves `job_name`, resolves
+     `with_content_hashing`, and stores `descriptor_doc->dump()` in
      `request.buffer_container.normalized_descriptor_json`.
    - note: The presence of `request.buffer_container` is the route discriminant
      that bypasses all format detection in `AsyncImportService`. This field is a
-     **top-level optional on `ImportRequest`** (not nested inside `ImportOptions`,
-     same pattern used by descriptor payloads like `request.material_descriptor`).
+     **top-level optional on `ImportRequest`** (not nested inside
+     `ImportOptions`, same pattern used by descriptor payloads like
+     `request.material_descriptor`).
 
 **Job:**
 
@@ -244,7 +245,8 @@ Architectural split:
    - stages: `ValidatePayload` → `ParseDescriptor` → `CreatePipeline` →
      `SubmitChunks` → `CollectAndEmit` → `FinalizeSession`.
    - note: The job re-parses the JSON for structure (not schema re-validate);
-     full per-entry schema validation occurs inside `BufferImportSubmitter::SubmitBufferChunks`.
+     full per-entry schema validation occurs inside
+     `BufferImportSubmitter::SubmitBufferChunks`.
 
 **Submitter (Reusable):**
 
@@ -260,19 +262,20 @@ Architectural split:
         virtual path uniqueness check, virtual path → rel-path mapping.
      2. Per valid entry: async file read via `IAsyncFileReader`.
      3. Source size cap check (≤ 4 GiB = `uint32_t::max`).
-     4. `NormalizeBufferViews` — validates and resolves `BufferDescriptorViewSpec[]`
-        against `BufferResourceDesc::size_bytes`.
+     4. `NormalizeBufferViews` — validates and resolves
+        `BufferDescriptorViewSpec[]` against `BufferResourceDesc::size_bytes`.
      5. Submits `BufferPipeline::WorkItem` per entry.
-     - Returns: `Submission { submitted_count, descriptor_relpath_by_source_id,
-descriptor_views_by_source_id }`.
+     - Returns:
+       `Submission { submitted_count, descriptor_relpath_by_source_id, descriptor_views_by_source_id }`.
    - `CollectAndEmit(pipeline, submission)`:
      1. Per submitted item: `pipeline.Collect()` → `WorkResult`.
      2. Calls `session.BufferEmitter().Emit(cooked, source_id)` →
         `emitted_index` (`ResourceIndexT`).
      3. Looks up `BufferResourceDesc` from `BufferEmitter::TryGetDescriptor`.
      4. Detects deduplication virtual path conflicts.
-     5. Calls `session.ResourceDescriptorEmitter().EmitBufferAtRelPath(relpath,
-emitted_index, descriptor, views)` → writes `.obuf` sidecar.
+     5. Calls
+        `session.ResourceDescriptorEmitter().EmitBufferAtRelPath(relpath, emitted_index, descriptor, views)`
+        → writes `.obuf` sidecar.
 
 **Pipeline:**
 
@@ -280,9 +283,9 @@ emitted_index, descriptor, views)` → writes `.obuf` sidecar.
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h`
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.cpp`
-   - role: bounded-channel producer/consumer async pipeline. Accepts
-     `WorkItem` objects, optionally offloads SHA-256 content hashing to a
-     `co::ThreadPool`, and returns `WorkResult` objects.
+   - role: bounded-channel producer/consumer async pipeline. Accepts `WorkItem`
+     objects, optionally offloads SHA-256 content hashing to a `co::ThreadPool`,
+     and returns `WorkResult` objects.
    - processing per work item:
      1. If `Config::with_content_hashing` and `cooked.content_hash == 0`:
         offload `SHA-256(cooked.data)` to thread pool and store result as first
@@ -290,16 +293,16 @@ emitted_index, descriptor, views)` → writes `.obuf` sidecar.
      2. No other processing; payload bytes are passed through unchanged.
    - config: default `queue_capacity=64`, `worker_count=2` (from
      `ImportConcurrency::buffer`).
-   - note: `BufferPipeline` is intentionally compute-minimal. It does NOT
-     parse, validate, decompress, convert, or transform buffer data.
+   - note: `BufferPipeline` is intentionally compute-minimal. It does NOT parse,
+     validate, decompress, convert, or transform buffer data.
 
 **Buffer View Types:**
 
 1. `oxygen::content::import::internal::BufferDescriptorViewSpec`
    - file: `src/Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h`
    - role: optionally-addressed view specification parsed from JSON. Fields
-     `byte_offset`, `byte_length`, `element_offset`, `element_count` may all
-     be `std::nullopt` before normalization.
+     `byte_offset`, `byte_length`, `element_offset`, `element_count` may all be
+     `std::nullopt` before normalization.
 
 2. `oxygen::content::import::internal::BufferDescriptorView`
    - file: `src/Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h`
@@ -309,16 +312,17 @@ emitted_index, descriptor, views)` → writes `.obuf` sidecar.
 3. `oxygen::content::import::internal::ParsedBufferDescriptorSidecar`
    - file: `src/Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h`
    - role: result of reading back a `.obuf` sidecar at runtime or import time.
-     Contains `resource_index`, `BufferResourceDesc`, and `vector<BufferDescriptorView>`.
+     Contains `resource_index`, `BufferResourceDesc`, and
+     `vector<BufferDescriptorView>`.
 
 **Cooked Payload:**
 
 1. `oxygen::content::import::CookedBufferPayload`
    - file: `src/Oxygen/Cooker/Import/BufferImportTypes.h`
-   - role: in-flight payload between `BufferImportSubmitter` and `BufferPipeline`.
-     Carries raw `data` bytes, `alignment`, `usage_flags`, `element_stride`,
-     `element_format`, and optionally pre-computed or pipeline-computed
-     `content_hash`.
+   - role: in-flight payload between `BufferImportSubmitter` and
+     `BufferPipeline`. Carries raw `data` bytes, `alignment`, `usage_flags`,
+     `element_stride`, `element_format`, and optionally pre-computed or
+     pipeline-computed `content_hash`.
 
 ### 6.2 Runtime Classes
 
@@ -369,8 +373,8 @@ Schema target files:
 }
 ```
 
-Valid top-level keys for `type: "buffer-container"`:
-`id`, `type`, `source`, `name`, `content_hashing`, `depends_on`.
+Valid top-level keys for `type: "buffer-container"`: `id`, `type`, `source`,
+`name`, `content_hashing`, `depends_on`.
 
 The `source` field must point to a file conforming to
 `oxygen.buffer-container.schema.json` (Section 7.2).
@@ -405,8 +409,8 @@ The `source` field must point to a file conforming to
 }
 ```
 
-Manifest defaults for `buffer_container` support:
-`output` (cooked root), `name` (job name override), `content_hashing`.
+Manifest defaults for `buffer_container` support: `output` (cooked root), `name`
+(job name override), `content_hashing`.
 
 #### 7.1.4 Concurrency Configuration
 
@@ -429,7 +433,9 @@ Default: `workers=2`, `queue_capacity=64`.
 
 Schema: `src/Oxygen/Cooker/Import/Schemas/oxygen.buffer-container.schema.json`
 
-JSON Schema draft-07, `additionalProperties: false` at all levels.
+JSON Schema draft-07, `additionalProperties: false` at all levels. Names follow
+the segment rule of virtual paths, through the shared
+`oxygen.name.schema.json#/definitions/segment`.
 
 **One container JSON → N named buffer resources.**
 
@@ -438,7 +444,7 @@ JSON Schema draft-07, `additionalProperties: false` at all levels.
 | Field             | Required | Type       | Description                                          |
 | ----------------- | -------- | ---------- | ---------------------------------------------------- |
 | `$schema`         | No       | `string`   | Points to shipped JSON Schema for editor integration |
-| `name`            | No       | identifier | Human-readable container name                        |
+| `name`            | No       | name       | Human-readable container name                        |
 | `content_hashing` | No       | `bool`     | Override global content hashing toggle               |
 | `buffers`         | **Yes**  | array (≥1) | Array of buffer descriptor entries (Section 7.2.2)   |
 
@@ -496,7 +502,8 @@ Schema mutual-exclusion rules:
 
 1. `element_format > 0` and `element_stride > 0` are mutually exclusive.
 2. If `element_stride == 0`, then `element_format` must be ≥ 1.
-3. `virtual_path` must match pattern `^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.obuf$`.
+3. `virtual_path` must match pattern
+   `^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.obuf$`.
 
 #### 7.2.3 `usage_flags` Values
 
@@ -514,8 +521,8 @@ Schema mutual-exclusion rules:
 | 9   | `0x200` | Immutable — never updated after creation           |
 
 Flags 7, 8, and 9 (update frequency) are mutually exclusive; if none are set,
-the engine defaults to Static. Role flags (bits 0–4) and CPU access flags
-(bits 5–6) may be combined freely.
+the engine defaults to Static. Role flags (bits 0–4) and CPU access flags (bits
+5–6) may be combined freely.
 
 #### 7.2.4 `views` — Named Sub-Range Views
 
@@ -534,25 +541,25 @@ the engine defaults to Static. Role flags (bits 0–4) and CPU access flags
 ]
 ```
 
-| Field            | Required           | Type                   | Description                                          |
-| ---------------- | ------------------ | ---------------------- | ---------------------------------------------------- |
-| `name`           | **Yes**            | identifier (≤63 chars) | View name for lookup at runtime or by external tools |
-| `byte_offset`    | Byte-addressing    | `uint` ≥0              | Start offset in bytes                                |
-| `byte_length`    | Byte-addressing    | `uint` ≥1              | Length in bytes                                      |
-| `element_offset` | Element-addressing | `uint` ≥0              | Start offset in elements                             |
-| `element_count`  | Element-addressing | `uint` ≥1              | Number of elements                                   |
+| Field            | Required           | Type      | Description                                          |
+| ---------------- | ------------------ | --------- | ---------------------------------------------------- |
+| `name`           | **Yes**            | name      | View name for lookup at runtime or by external tools |
+| `byte_offset`    | Byte-addressing    | `uint` ≥0 | Start offset in bytes                                |
+| `byte_length`    | Byte-addressing    | `uint` ≥1 | Length in bytes                                      |
+| `element_offset` | Element-addressing | `uint` ≥0 | Start offset in elements                             |
+| `element_count`  | Element-addressing | `uint` ≥1 | Number of elements                                   |
 
 Addressing mode rules:
 
 1. Either `byte_offset` + `byte_length` OR `element_offset` + `element_count`
    must be used — never both on the same view.
 2. `name` must be unique within the `views[]` array.
-3. The name `__all__` is _reserved_ — it MUST NOT appear in the descriptor;
-   it is automatically synthesized as the implicit full-buffer view.
+3. The name `__all__` is _reserved_ — it MUST NOT appear in the descriptor; it
+   is automatically synthesized as the implicit full-buffer view.
 
 `NormalizeBufferViews` converts element-based views to byte ranges using
-`element_stride` (or format-derived element size) and validates that all
-ranges fall within `[0, descriptor.size_bytes)`.
+`element_stride` (or format-derived element size) and validates that all ranges
+fall within `[0, descriptor.size_bytes)`.
 
 ---
 
@@ -565,10 +572,10 @@ ranges fall within `[0, descriptor.size_bytes)`.
 | Content hash | If `Config::with_content_hashing` is enabled and `cooked.content_hash == 0`: offload `SHA-256(cooked.data)` to thread pool; store first 8 bytes in `cooked.content_hash` |
 
 Unlike texture and material pipelines, buffer processing has no format
-conversion, compression, mip generation, or field-level encoding steps.
-All format semantics (`element_format`, `element_stride`, `usage_flags`) are
-opaque metadata that flow from the descriptor JSON directly into
-`BufferResourceDesc` without any pipeline transformation.
+conversion, compression, mip generation, or field-level encoding steps. All
+format semantics (`element_format`, `element_stride`, `usage_flags`) are opaque
+metadata that flow from the descriptor JSON directly into `BufferResourceDesc`
+without any pipeline transformation.
 
 All coroutines cooperatively check `work_item.stop_token` to support
 cancellation.
@@ -608,8 +615,8 @@ Buffer types:
 
 ### 9.2 `.obuf` Sidecar File Layout
 
-Each buffer resource is described by a sidecar binary file (`<name>.obuf`).
-The sidecar is produced by `SerializeBufferDescriptorSidecar` and consumed by
+Each buffer resource is described by a sidecar binary file (`<name>.obuf`). The
+sidecar is produced by `SerializeBufferDescriptorSidecar` and consumed by
 `ParseBufferDescriptorSidecar`.
 
 ```text
@@ -626,12 +633,12 @@ view array when serialized.
 ### 9.3 Payload Layout (inside `buffers.data`)
 
 Each buffer's payload is written sequentially by `BufferEmitter`. The
-`BufferResourceDesc::data_offset` field stores the absolute byte offset of
-each buffer's start in `buffers.data`.
+`BufferResourceDesc::data_offset` field stores the absolute byte offset of each
+buffer's start in `buffers.data`.
 
 There is no structured padding between buffers beyond the `alignment` value
-recorded in `CookedBufferPayload::alignment`; actual placement is determined
-by `BufferEmitter`.
+recorded in `CookedBufferPayload::alignment`; actual placement is determined by
+`BufferEmitter`.
 
 ### 9.4 Loose Cooked Layout
 
@@ -652,18 +659,18 @@ Key layout constants:
 | `buffers_table_file_name`    | `"buffers.table"` | Resource table filename            |
 | `buffers_data_file_name`     | `"buffers.data"`  | Raw payload filename               |
 
-Virtual path for runtime mounting:
-`BufferVirtualPath(name)` = `<virtual_mount_root>/Buffers/<name>.obuf`
+Virtual path for runtime mounting: `BufferVirtualPath(name)` =
+`<virtual_mount_root>/Buffers/<name>.obuf`
 
-Relative path for file emission:
-`BufferDescriptorRelPath(name)` = `Buffers/<name>.obuf`
+Relative path for file emission: `BufferDescriptorRelPath(name)` =
+`Buffers/<name>.obuf`
 
 ---
 
 ## 10. Error Taxonomy
 
-Buffer import errors are surfaced as diagnostics in `ImportReport` and as
-log messages written to `error_stream`. Error codes follow the pattern
+Buffer import errors are surfaced as diagnostics in `ImportReport` and as log
+messages written to `error_stream`. Error codes follow the pattern
 `buffer.<category>.<key>`:
 
 | Category     | Code Pattern                                   | Key Causes                                                             |
@@ -692,16 +699,16 @@ log messages written to `error_stream`. Error codes follow the pattern
 
 ## 11. Runtime Bootstrap
 
-Buffer resources are load-on-demand assets. There is no buffer enumeration
-at startup.
+Buffer resources are load-on-demand assets. There is no buffer enumeration at
+startup.
 
 Runtime load sequence:
 
 1. `AssetLoader` receives a buffer resource request (index or virtual path).
 2. `LoadBufferResource(context)` opens the `.obuf` sidecar from the mounted
    `Buffers/` directory.
-3. `BufferResourceDesc` is read with `reader.ScopedAlignment(1)` (packed,
-   no padding).
+3. `BufferResourceDesc` is read with `reader.ScopedAlignment(1)` (packed, no
+   padding).
 4. Raw bytes are read from `buffers.data` at `desc.data_offset` for
    `desc.size_bytes` bytes.
 5. `std::make_unique<data::BufferResource>(desc, data_buffer)` is returned.
@@ -714,9 +721,9 @@ Key contracts:
    re-reading the data file.
 3. `BufferResource` does not own a GPU handle. Buffer upload and GPU resource
    creation are the renderer's responsibility.
-4. Named views stored in the `.obuf` sidecar are available to tools and
-   geometry systems; the runtime `LoadBufferResource` loader does not parse
-   view data — it reads only `BufferResourceDesc`.
+4. Named views stored in the `.obuf` sidecar are available to tools and geometry
+   systems; the runtime `LoadBufferResource` loader does not parse view data —
+   it reads only `BufferResourceDesc`.
 5. Source file size is capped at `DataBlobSizeT::max` (4 GiB = `uint32_t::max`
    bytes). Files exceeding this limit are rejected during import with
    `buffer.container.source_too_large`.
@@ -727,8 +734,8 @@ Key contracts:
 
 `BufferImportSubmitter` is designed for reuse. When a scene (FBX/glTF) or
 geometry import pipeline processes embedded mesh data it needs to emit vertex
-and index buffers, it calls `BufferImportSubmitter` with the same call
-signature used by `BufferContainerImportJob`:
+and index buffers, it calls `BufferImportSubmitter` with the same call signature
+used by `BufferContainerImportJob`:
 
 ```text
 GeometryPipeline / ScenePipeline
@@ -737,9 +744,9 @@ GeometryPipeline / ScenePipeline
 ```
 
 The resulting `buffers.table` / `buffers.data` / `.obuf` sidecar files are
-identical whether the source was a standalone buffer-container descriptor or
-a geometry mesh embedded in an FBX/glTF scene. Geometry consumers reference
-buffer resources by `ResourceIndexT` stored in the geometry descriptor.
+identical whether the source was a standalone buffer-container descriptor or a
+geometry mesh embedded in an FBX/glTF scene. Geometry consumers reference buffer
+resources by `ResourceIndexT` stored in the geometry descriptor.
 
 Standalone buffer-container imports therefore provide a mechanism for
 pre-cooking raw binary GPU data independently of any geometry format, enabling:

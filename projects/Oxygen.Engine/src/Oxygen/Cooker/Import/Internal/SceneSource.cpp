@@ -57,11 +57,8 @@ namespace {
 
   auto GetSceneDescriptorValidator() -> json_validator&
   {
-    static auto validator = [] -> json_validator {
-      auto out = json_validator {};
-      out.set_root_schema(nlohmann::json::parse(kSceneDescriptorSchema));
-      return out;
-    }();
+    static auto validator
+      = MakeJsonSchemaValidator(nlohmann::json::parse(kSceneDescriptorSchema));
     return validator;
   }
 

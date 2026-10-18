@@ -8,7 +8,7 @@
       "type": "string"
     },
     "name": {
-      "$ref": "#/definitions/identifier"
+      "$ref": "oxygen.name.schema.json#/definitions/segment"
     },
     "content_hashing": {
       "type": "boolean"
@@ -34,12 +34,6 @@
   },
   "required": ["name", "bounds", "lods"],
   "definitions": {
-    "identifier": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 63,
-      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,62}$"
-    },
     "canonical_virtual_path": {
       "type": "string",
       "minLength": 1,
@@ -84,7 +78,7 @@
         {
           "allOf": [
             {
-              "$ref": "#/definitions/identifier"
+              "$ref": "oxygen.name.schema.json#/definitions/segment"
             },
             {
               "not": {
@@ -100,7 +94,7 @@
       "additionalProperties": false,
       "properties": {
         "name": {
-          "$ref": "#/definitions/identifier"
+          "$ref": "oxygen.name.schema.json#/definitions/segment"
         },
         "byte_offset": {
           "type": "integer",
@@ -527,7 +521,7 @@
           ]
         },
         "mesh_name": {
-          "$ref": "#/definitions/identifier"
+          "$ref": "oxygen.name.schema.json#/definitions/segment"
         },
         "params": {
           "type": "object"
@@ -713,7 +707,7 @@
       "additionalProperties": false,
       "properties": {
         "name": {
-          "$ref": "#/definitions/identifier"
+          "$ref": "oxygen.name.schema.json#/definitions/segment"
         },
         "view_ref": {
           "$ref": "#/definitions/view_selector"
@@ -734,7 +728,7 @@
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
         },
         "name": {
-          "$ref": "#/definitions/identifier"
+          "$ref": "oxygen.name.schema.json#/definitions/segment"
         },
         "material_ref": {
           "$ref": "#/definitions/canonical_omat_path"
@@ -757,7 +751,7 @@
       "additionalProperties": false,
       "properties": {
         "name": {
-          "$ref": "#/definitions/identifier"
+          "$ref": "oxygen.name.schema.json#/definitions/segment"
         },
         "mesh_type": {
           "type": "string",

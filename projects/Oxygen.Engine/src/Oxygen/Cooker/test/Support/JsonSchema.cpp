@@ -77,7 +77,14 @@ auto ValidateJson(const nlohmann::json& schema, const nlohmann::json& document)
   -> std::vector<std::string>
 {
   try {
-    auto validator = nlohmann::json_schema::json_validator {};
+    // A reference to another file names a sibling import schema.
+    auto validator = nlohmann::json_schema::json_validator {
+      [](const nlohmann::json_uri& uri, nlohmann::json& loaded) -> void {
+        const auto file
+          = std::filesystem::path { uri.path() }.filename().generic_string();
+        loaded = LoadSchema("Import/Schemas/" + file);
+      },
+    };
     validator.set_root_schema(schema);
     auto handler = CollectingErrorHandler {};
     [[maybe_unused]] auto _ = validator.validate(document, handler);

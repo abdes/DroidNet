@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Oxygen Name",
+  "description": "The name rule shared by every schema that names an asset or a part of one. A name becomes a segment of a virtual path, so it follows the engine's segment rule (Oxygen/Content/Docs/virtual_paths.md). This definition refuses what a pattern can express; the cooker checks the rest (NFC, unassigned code points, the 255-byte segment bound) and reports the rule's vpath.* code.",
+  "definitions": {
+    "segment": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?! )(?!.*[ .]$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\..*)?$)[^\\x00-\\x1F\\x7F\\\\/:*?\"<>|]+$",
+      "description": "Not empty; no leading or trailing space; no trailing dot (so not . or ..); not a Windows device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9, with or without an extension); no control characters; none of \\ / : * ? \" < > |."
+    }
+  }
+}

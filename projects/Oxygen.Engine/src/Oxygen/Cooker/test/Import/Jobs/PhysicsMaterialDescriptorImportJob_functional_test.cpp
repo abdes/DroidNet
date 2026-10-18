@@ -16,6 +16,8 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
@@ -130,6 +132,68 @@ namespace {
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
       report->diagnostics, "physics.material.schema_validation_failed"));
+  }
+
+  //! A physics material request named `name` in its descriptor.
+  auto MakeNamedRequest(const std::filesystem::path& cooked_root,
+    const std::string& name) -> ImportRequest
+  {
+    auto request = ImportRequest {};
+    request.source_path = cooked_root.parent_path() / "source_data" / "m.json";
+    request.cooked_root = cooked_root;
+    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
+    request.physics_material_descriptor
+      = ImportRequest::PhysicsMaterialDescriptorPayload {
+          .normalized_descriptor_json
+          = nlohmann::json { { "name", name } }.dump(),
+        };
+    return request;
+  }
+
+  NOLINT_TEST_F(PhysicsMaterialDescriptorImportJobTest,
+    NameFollowingTheSegmentRuleIsCookedAsSpelled)
+  {
+    const auto cooked_root = TempDir() / "segment_rule_name";
+    std::filesystem::create_directories(cooked_root);
+
+    const auto report
+      = Import(MakeNamedRequest(cooked_root, "Wet Ground.v2 (2)"));
+    ASSERT_HAS_VALUE(report);
+    EXPECT_TRUE(report->success);
+    EXPECT_TRUE(std::ranges::any_of(
+      report->outputs, [](const ImportOutputRecord& output) -> bool {
+        return output.path.ends_with("/Wet Ground.v2 (2).opmat");
+      }));
+  }
+
+  NOLINT_TEST_F(
+    PhysicsMaterialDescriptorImportJobTest, OverlongNameIsRefusedWithRuleCode)
+  {
+    const auto cooked_root = TempDir() / "overlong_name";
+    std::filesystem::create_directories(cooked_root);
+
+    // The schema cannot count bytes; the leaf exceeds the 255-byte segment.
+    const auto report
+      = Import(MakeNamedRequest(cooked_root, std::string(255U, 'x')));
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
+    EXPECT_TRUE(
+      HasDiagnosticCode(report->diagnostics, "vpath.segment.too_long"));
+  }
+
+  NOLINT_TEST_F(
+    PhysicsMaterialDescriptorImportJobTest, JobNameIsRefusedWithRuleCode)
+  {
+    const auto cooked_root = TempDir() / "refused_job_name";
+    std::filesystem::create_directories(cooked_root);
+
+    auto request = MakeNamedRequest(cooked_root, "ground");
+    request.job_name = "Ground:1";
+    const auto report = Import(std::move(request));
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report->diagnostics, "vpath.segment.reserved_character"));
   }
 
 } // namespace

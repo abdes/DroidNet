@@ -81,7 +81,9 @@ public sealed class AssetAuthoringTests : IDisposable
             .Should().BeNull();
         _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.Script, "jump", "/Elsewhere", token).ConfigureAwait(false))
             .Should().NotBeNull();
-        _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.InputFile, new string('a', AssetAuthoring.MaxNameLength + 1), "/Content/Player", token).ConfigureAwait(false))
+        _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.InputFile, new string('a', 64), "/Content/Player", token).ConfigureAwait(false))
+            .Should().BeNull();
+        _ = (await this.Authoring.ValidateAsync(this.Project, AuthoredAssetKind.InputFile, new string('a', 256), "/Content/Player", token).ConfigureAwait(false))
             .Should().NotBeNull();
     }
 

@@ -97,11 +97,8 @@ namespace {
 
   auto GetMaterialDescriptorValidator() -> json_validator&
   {
-    static auto validator = [] -> json_validator {
-      auto out = json_validator {};
-      out.set_root_schema(nlohmann::json::parse(kMaterialDescriptorSchema));
-      return out;
-    }();
+    static auto validator = internal::MakeJsonSchemaValidator(
+      nlohmann::json::parse(kMaterialDescriptorSchema));
     return validator;
   }
 

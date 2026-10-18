@@ -70,11 +70,8 @@ namespace {
 
   auto GetPhysicsMaterialDescriptorValidator() -> json_validator&
   {
-    static auto validator = []() -> json_validator {
-      auto out = json_validator {};
-      out.set_root_schema(json::parse(kPhysicsMaterialDescriptorSchema));
-      return out;
-    }();
+    static auto validator = internal::MakeJsonSchemaValidator(
+      json::parse(kPhysicsMaterialDescriptorSchema));
     return validator;
   }
 
@@ -151,10 +148,12 @@ namespace {
     }
 
     auto name = std::string {};
+    auto name_object_path = std::string {};
     if (request.job_name.has_value() && !request.job_name->empty()) {
       name = *request.job_name;
     } else if (descriptor_doc.contains("name")) {
       name = descriptor_doc.at("name").get<std::string>();
+      name_object_path = "name";
     } else {
       name = source_path.stem().string();
     }
@@ -166,6 +165,11 @@ namespace {
       = request.loose_cooked_layout.PhysicsMaterialDescriptorRelPath(name);
     target.virtual_path
       = request.loose_cooked_layout.PhysicsMaterialVirtualPath(name);
+    if (auto refused = internal::CheckAssetVirtualPath(
+          request, target.virtual_path, std::move(name_object_path))) {
+      session.AddDiagnostic(std::move(*refused));
+      return std::nullopt;
+    }
     return target;
   }
 

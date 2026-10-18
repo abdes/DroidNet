@@ -39,6 +39,13 @@ gives the refusal code.
 Any segment may contain dots: `Level.v2.oscene`, a folder `v1.2` and a container
 segment `Player.input` are valid.
 
+Every import schema that names an asset, or a part of one, references one
+definition of this rule:
+[`oxygen.name.schema.json`](../../Cooker/Import/Schemas/oxygen.name.schema.json).
+A pattern cannot express rules 2, 5, 6 and 9, nor the U+0080-U+009F controls of
+rule 3, so the cooker checks the asset's virtual path after the schema and
+reports the code above.
+
 ## Mount
 
 The first segment names the mount: an identifier, `[A-Za-z_][A-Za-z0-9_-]*`,

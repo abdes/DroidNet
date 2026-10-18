@@ -46,6 +46,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -157,22 +158,16 @@ namespace {
 
   auto PrimaryInputSchemaValidator() -> nlohmann::json_schema::json_validator&
   {
-    thread_local auto validator = [] -> nlohmann::json_schema::json_validator {
-      auto out = nlohmann::json_schema::json_validator {};
-      out.set_root_schema(json::parse(kInputSchema));
-      return out;
-    }();
+    thread_local auto validator
+      = internal::MakeJsonSchemaValidator(json::parse(kInputSchema));
     return validator;
   }
 
   auto StandaloneInputActionSchemaValidator()
     -> nlohmann::json_schema::json_validator&
   {
-    thread_local auto validator = [] -> nlohmann::json_schema::json_validator {
-      auto out = nlohmann::json_schema::json_validator {};
-      out.set_root_schema(json::parse(kInputActionSchema));
-      return out;
-    }();
+    thread_local auto validator
+      = internal::MakeJsonSchemaValidator(json::parse(kInputActionSchema));
     return validator;
   }
 
@@ -708,6 +703,12 @@ namespace {
       = [&](const json& node, const std::string& path) -> bool {
       auto action = DeclaredAction {};
       action.name = node.at("name").get<std::string>();
+      if (auto refused = internal::CheckAssetVirtualPath(request,
+            request.loose_cooked_layout.InputActionVirtualPath(action.name),
+            path + ".name")) {
+        session.AddDiagnostic(std::move(*refused));
+        return false;
+      }
       const auto parsed_type
         = ParseActionType(node.at("type").get<std::string>());
       if (!parsed_type.has_value()) {
@@ -924,6 +925,13 @@ namespace {
     const auto parse_context = [&](const json& node, const std::string& path,
                                  ContextSource& out_context) -> bool {
       out_context.name = node.at("name").get<std::string>();
+      if (auto refused = internal::CheckAssetVirtualPath(request,
+            request.loose_cooked_layout.InputMappingContextVirtualPath(
+              out_context.name),
+            path + ".name")) {
+        session.AddDiagnostic(std::move(*refused));
+        return false;
+      }
       if (node.contains("priority")) {
         out_context.default_priority = node.at("priority").get<int32_t>();
       }

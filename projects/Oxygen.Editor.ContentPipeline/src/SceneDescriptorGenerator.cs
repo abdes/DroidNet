@@ -175,7 +175,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         var descriptor = new NativeSceneDescriptor(
             Schema: string.Create(CultureInfo.InvariantCulture, $"oxygen.scene-descriptor.v{NativeSceneDescriptorVersion}"),
             Version: NativeSceneDescriptorVersion,
-            Name: ContentPipelinePaths.NormalizeSceneDescriptorName(Path.GetFileName(sceneInput.SourceRelativePath)),
+            Name: Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(sceneInput.SourceRelativePath)),
             Nodes: nodes,
             StartingCamera: startingCamera,
             StartingInputContexts: startingInputContexts,
@@ -448,10 +448,8 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
 
     private static string GetDerivedSceneDescriptorPath(ContentCookScope scope, ContentCookInput sceneInput)
     {
-        var name = Path.GetFileName(sceneInput.SourceRelativePath);
-        var normalized = ContentPipelinePaths.NormalizeSceneDescriptorName(name);
         var folder = Path.GetDirectoryName(sceneInput.SourceRelativePath) ?? string.Empty;
-        return Path.Combine(scope.PreparationRoot ?? scope.InputRoot, ".pipeline", "Scenes", folder, normalized + AssetFileTypes.SceneDescriptor);
+        return Path.Combine(scope.PreparationRoot ?? scope.InputRoot, ".pipeline", "Scenes", folder, Path.GetFileName(sceneInput.SourceRelativePath));
     }
 
     private static string? ResolveGeometryRef(Uri geometryUri, IReadOnlyList<ContentCookInput> generatedGeometryInputs)

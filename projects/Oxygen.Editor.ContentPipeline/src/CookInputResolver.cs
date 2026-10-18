@@ -90,11 +90,10 @@ internal static class CookInputResolver
 
         var location = FindAuthoringFile(project.FindByVirtualPath(nativePath + (kind == ContentCookAssetKind.ForeignSource ? string.Empty : ".json")));
         var relative = location is null ? null : Path.GetRelativePath(project.ProjectRoot, location.FilePath).Replace('\\', '/');
-        var outputPath = kind == ContentCookAssetKind.Scene ? ContentPipelinePaths.NormalizeSceneOutputPath(nativePath) : nativePath;
         return location is null || relative is null || Path.IsPathRooted(relative) || relative.StartsWith("../", StringComparison.Ordinal)
             || relative.Split('/')[0].ToUpperInvariant() is ".COOKED" or ".BUILD" or ".PIPELINE" or ".IMPORTED"
             ? throw new InvalidDataException($"Cook dependency '{uri}' does not resolve to a retained authoring file in this project.")
-            : new(kind == ContentCookAssetKind.ForeignSource ? uri : location.AssetUri, kind, location.MountName, relative, location.FilePath, kind == ContentCookAssetKind.ForeignSource ? null : outputPath, role);
+            : new(kind == ContentCookAssetKind.ForeignSource ? uri : location.AssetUri, kind, location.MountName, relative, location.FilePath, kind == ContentCookAssetKind.ForeignSource ? null : nativePath, role);
     }
 
     /// <summary>Resolves a script to its source: <c>/Content/Player/move.oscript</c> cooks from

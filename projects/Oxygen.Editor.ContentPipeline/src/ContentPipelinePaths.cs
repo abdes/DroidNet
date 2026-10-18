@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Text;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -54,53 +53,6 @@ public static class ContentPipelinePaths
     }
 
     /// <summary>
-    /// Normalizes a scene asset file name to a native scene descriptor identifier.
-    /// </summary>
-    /// <param name="sceneFileName">The scene source file name or path.</param>
-    /// <returns>A native descriptor identifier.</returns>
-    public static string NormalizeSceneDescriptorName(string sceneFileName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(sceneFileName);
-
-        var name = sceneFileName;
-        if (name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase))
-        {
-            name = name[..^AssetFileTypes.SceneDescriptor.Length];
-        }
-        else
-        {
-            name = Path.GetFileNameWithoutExtension(name);
-        }
-
-        var builder = new StringBuilder(capacity: Math.Min(name.Length, 63));
-        foreach (var ch in name)
-        {
-            builder.Append(IsIdentifierBody(ch) ? ch : '_');
-            if (builder.Length == 63)
-            {
-                break;
-            }
-        }
-
-        if (builder.Length == 0)
-        {
-            throw new ArgumentException("Scene descriptor name cannot be empty after normalization.", nameof(sceneFileName));
-        }
-
-        if (!IsIdentifierStart(builder[0]))
-        {
-            if (builder.Length == 63)
-            {
-                builder.Length = 62;
-            }
-
-            builder.Insert(0, '_');
-        }
-
-        return builder.ToString();
-    }
-
-    /// <summary>
     /// Creates the native virtual mount root for a project mount.
     /// </summary>
     /// <param name="mountName">The mount name.</param>
@@ -116,19 +68,7 @@ public static class ContentPipelinePaths
 
     /// <summary>Gets the virtual path a scene cooks to, which the runtime loads it by.</summary>
     /// <param name="sceneAssetUri">The scene's asset identity, such as <c>asset:///Content/Scenes/Level 1.oscene.json</c>.</param>
-    /// <returns>The cooked scene's virtual path, such as <c>/Content/Scenes/Level_1.oscene</c>.</returns>
+    /// <returns>The cooked scene's virtual path, such as <c>/Content/Scenes/Level 1.oscene</c>.</returns>
     public static string ToCookedScenePath(Uri sceneAssetUri)
-        => NormalizeSceneOutputPath(ToNativeDescriptorPath(sceneAssetUri, AssetFileTypes.Scene));
-
-    internal static string NormalizeSceneOutputPath(string virtualPath)
-    {
-        var separator = virtualPath.LastIndexOf('/');
-        return virtualPath[..(separator + 1)] + NormalizeSceneDescriptorName(virtualPath[(separator + 1)..]) + AssetFileTypes.Scene;
-    }
-
-    private static bool IsIdentifierStart(char ch)
-        => ch is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_';
-
-    private static bool IsIdentifierBody(char ch)
-        => IsIdentifierStart(ch) || ch == '.' || ch == '-';
+        => ToNativeDescriptorPath(sceneAssetUri, AssetFileTypes.Scene);
 }

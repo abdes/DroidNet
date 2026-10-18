@@ -27,6 +27,8 @@
     <ItemGroup>
         <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\oxygen.material-descriptor.schema.json"
                           LogicalName="oxygen.material-descriptor.schema.json" />
+        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\oxygen.name.schema.json"
+                          LogicalName="oxygen.name.schema.json" />
     </ItemGroup>
 
     <ItemGroup>

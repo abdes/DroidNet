@@ -8,12 +8,14 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 
 namespace oxygen::content::import::internal {
@@ -21,6 +23,33 @@ namespace oxygen::content::import::internal {
 inline auto IsCanonicalVirtualPath(const std::string_view virtual_path) -> bool
 {
   return oxygen::content::IsCanonicalVirtualPath(virtual_path);
+}
+
+//! The error refusing the virtual path an asset's name gives it.
+/*!
+ A name becomes the leaf of its asset's virtual path. The schemas refuse what a
+ pattern can express; this refuses the rest (NFC, unassigned code points, the
+ 255-byte segment bound) and names taken from a job or a file instead of a
+ schema. The diagnostic code is the rule's `vpath.*` code.
+
+ @return The diagnostic, or nothing when the path is accepted.
+*/
+inline auto CheckAssetVirtualPath(const ImportRequest& request,
+  const std::string_view virtual_path, std::string object_path)
+  -> std::optional<ImportDiagnostic>
+{
+  const auto error = oxygen::content::ValidateVirtualPath(virtual_path);
+  if (!error.has_value()) {
+    return std::nullopt;
+  }
+  return ImportDiagnostic {
+    .severity = ImportSeverity::kError,
+    .code = oxygen::content::to_string(*error),
+    .message = "The asset name gives a virtual path the engine refuses: "
+      + std::string(virtual_path),
+    .source_path = request.source_path.string(),
+    .object_path = std::move(object_path),
+  };
 }
 
 inline auto NormalizeVirtualMountRoot(std::string mount_root) -> std::string

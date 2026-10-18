@@ -8,8 +8,7 @@
       "type": "string"
     },
     "name": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "oxygen.name.schema.json#/definitions/segment"
     },
     "content_hashing": {
       "type": "boolean"

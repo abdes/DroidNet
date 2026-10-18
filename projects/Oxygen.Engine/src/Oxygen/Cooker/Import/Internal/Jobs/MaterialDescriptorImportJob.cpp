@@ -21,6 +21,7 @@
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/TextureReferenceResolver.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -106,6 +107,15 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   if (!prepared) {
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Material descriptor preparation failed");
+    co_return co_await FinalizeWithTelemetry(session);
+  }
+  if (auto refused
+    = internal::CheckAssetVirtualPath(Request(),
+      Request().loose_cooked_layout.MaterialVirtualPath(prepared->storage_name),
+      "name")) {
+    session.AddDiagnostic(std::move(*refused));
+    ReportPhaseProgress(
+      ImportPhase::kFailed, 1.0F, "Material descriptor name refused");
     co_return co_await FinalizeWithTelemetry(session);
   }
 

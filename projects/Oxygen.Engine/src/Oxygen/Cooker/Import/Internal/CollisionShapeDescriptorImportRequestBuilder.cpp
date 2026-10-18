@@ -34,11 +34,8 @@ namespace {
 
   auto GetCollisionShapeDescriptorValidator() -> json_validator&
   {
-    static auto validator = []() -> json_validator {
-      auto out = json_validator {};
-      out.set_root_schema(json::parse(kCollisionShapeDescriptorSchema));
-      return out;
-    }();
+    static auto validator
+      = MakeJsonSchemaValidator(json::parse(kCollisionShapeDescriptorSchema));
     return validator;
   }
 

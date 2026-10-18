@@ -22,9 +22,6 @@ namespace Oxygen.Editor.ContentPipeline.Authoring;
 public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileStore files, ILogger<AssetAuthoring>? logger = null)
     : IAssetAuthoring
 {
-    /// <summary>The longest accepted name: an input file's template names its mapping context after the file.</summary>
-    public const int MaxNameLength = 63;
-
     private readonly ILogger logger = (ILogger?)logger ?? NullLogger.Instance;
 
     /// <inheritdoc/>
@@ -124,11 +121,6 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
         if (VirtualPath.ValidateSegment(name + template.Extensions[0], VirtualPathRuleSet.Authored) is { } invalid)
         {
             return invalid.ToMessage();
-        }
-
-        if (name.Length > MaxNameLength)
-        {
-            return string.Create(CultureInfo.CurrentCulture, $"Use at most {MaxNameLength} characters.");
         }
 
         if (RelocationPaths.ToPhysical(project, folder) is not { } physical || RelocationPaths.ToVirtual(project, physical) is not { } normalized)

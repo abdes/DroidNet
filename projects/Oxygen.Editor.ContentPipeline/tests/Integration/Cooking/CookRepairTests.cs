@@ -47,15 +47,13 @@ public sealed class CookRepairTests
             AssertCookSucceeded(result);
             _ = result.IsPublished.Should().BeTrue();
             var root = workspace.CookedRoot("Content");
-            var cookedName = ContentPipelinePaths.NormalizeSceneDescriptorName(name);
-            var previousCookedName = ContentPipelinePaths.NormalizeSceneDescriptorName(previousName);
             var inventory = await api.ReadInventoryAsync(root, artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = inventory.IsValid.Should().BeTrue();
             _ = inventory.Assets.Select(static asset => asset.VirtualPath).Should()
-                .Contain($"/Content/Scenes/{cookedName}.oscene")
+                .Contain($"/Content/Scenes/{name}.oscene")
                 .And.Contain("/Content/Materials/Blue.omat")
-                .And.NotContain($"/Content/Scenes/{previousCookedName}.oscene");
-            _ = Directory.EnumerateFiles(root, $"{previousCookedName}.oscene", SearchOption.AllDirectories).Should().BeEmpty();
+                .And.NotContain($"/Content/Scenes/{previousName}.oscene");
+            _ = Directory.EnumerateFiles(root, $"{previousName}.oscene", SearchOption.AllDirectories).Should().BeEmpty();
             previousName = name;
         }
 

@@ -104,6 +104,15 @@ public sealed class EditorSchemaCatalog
     }
 
     /// <summary>
+    /// Returns the engine schema for the given file name, built for evaluation.
+    /// Its references to other engine schemas, such as the shared name
+    /// definition in <c>oxygen.name.schema.json</c>, resolve within the catalog.
+    /// </summary>
+    /// <param name="engineFileName">The engine schema file name.</param>
+    /// <returns>The built schema.</returns>
+    public JsonSchema GetValidationSchema(string engineFileName) => this.GetOrBuildEngineSchema(engineFileName);
+
+    /// <summary>
     /// Validates an instance against the engine schema for the given file name.
     /// </summary>
     /// <param name="engineFileName">The engine schema file name.</param>
@@ -165,7 +174,7 @@ public sealed class EditorSchemaCatalog
             }
 
             var schemaJson = CloneForValidation(this.GetEngineSchema(engineFileName));
-            schema = JsonSchema.FromText(schemaJson.ToJsonString());
+            schema = JsonSchema.FromText(schemaJson.ToJsonString(), this.CreateBuildOptions());
             this.builtEngineSchemas[engineFileName] = schema;
             return schema;
         }
@@ -188,14 +197,18 @@ public sealed class EditorSchemaCatalog
                 return schema;
             }
 
-            var resolver = new InMemorySchemaResolver(this.GetOrBuildEngineSchema);
-            var buildOptions = new BuildOptions();
-            buildOptions.SchemaRegistry.Fetch = resolver.Resolve;
-
-            schema = JsonSchema.FromText(CloneForValidation(overlay).ToJsonString(), buildOptions);
+            schema = JsonSchema.FromText(CloneForValidation(overlay).ToJsonString(), this.CreateBuildOptions());
             this.builtMergedSchemas[engineFileName] = schema;
             return schema;
         }
+    }
+
+    private BuildOptions CreateBuildOptions()
+    {
+        var resolver = new InMemorySchemaResolver(this.GetOrBuildEngineSchema);
+        var buildOptions = new BuildOptions();
+        buildOptions.SchemaRegistry.Fetch = resolver.Resolve;
+        return buildOptions;
     }
 
     private sealed class InMemorySchemaResolver(Func<string, JsonSchema> resolveByFileName)

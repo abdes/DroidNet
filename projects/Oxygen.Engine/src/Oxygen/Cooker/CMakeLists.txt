@@ -61,6 +61,8 @@ oxygen_embed_json_schemas(
   SCHEMAS
     kImportManifestSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
+    kNameSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.name.schema.json"
     kCapturedInputsSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.captured-inputs.schema.json"
     kBufferContainerSchema

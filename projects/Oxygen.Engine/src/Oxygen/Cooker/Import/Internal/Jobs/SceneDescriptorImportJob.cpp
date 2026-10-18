@@ -870,6 +870,13 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       ImportPhase::kFailed, 1.0F, "Scene descriptor preparation failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
+  if (auto refused = internal::CheckAssetVirtualPath(Request(),
+        Request().loose_cooked_layout.SceneVirtualPath(source->name), "name")) {
+    session.AddDiagnostic(std::move(*refused));
+    ReportPhaseProgress(
+      ImportPhase::kFailed, 1.0F, "Scene descriptor name refused");
+    co_return co_await FinalizeWithTelemetry(session);
+  }
 
   auto context = SceneDescriptorExecutionContext {
     .session = session,

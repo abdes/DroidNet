@@ -51,8 +51,8 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             _ = fixture.Runtime.ContentStatus.State.Should().Be(RuntimeContentState.Mounted);
             using (var publication = await scenario.Services.Publication.AcquireForMountAsync(scenario.Services.Projects.ActiveProject!, token).ConfigureAwait(true))
             {
-                _ = publication.ProjectOutputPaths.Should().Contain("/Content/Scenes/Small_Scene.oscene")
-                    .And.NotContain($"/Content/Scenes/{ContentPipelinePaths.NormalizeSceneDescriptorName(oldName)}.oscene");
+                _ = publication.ProjectOutputPaths.Should().Contain("/Content/Scenes/Small Scene.oscene")
+                    .And.NotContain($"/Content/Scenes/{oldName}.oscene");
             }
 
             foreach (var node in fixture.Source.RootNodes)

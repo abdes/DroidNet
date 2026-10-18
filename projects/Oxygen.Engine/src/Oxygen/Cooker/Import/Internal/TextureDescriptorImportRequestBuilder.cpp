@@ -52,11 +52,8 @@ namespace {
 
   auto GetTextureDescriptorValidator() -> json_validator&
   {
-    static auto validator = []() -> json_validator {
-      auto out = json_validator {};
-      out.set_root_schema(json::parse(kTextureDescriptorSchema));
-      return out;
-    }();
+    static auto validator = internal::MakeJsonSchemaValidator(
+      json::parse(kTextureDescriptorSchema));
     return validator;
   }
 

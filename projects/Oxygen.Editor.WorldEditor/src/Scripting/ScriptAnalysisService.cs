@@ -17,6 +17,7 @@ using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Scripting;
 using Oxygen.Interop.Scripting;
 using Oxygen.Managed.Assets;
@@ -344,9 +345,10 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
     {
         try
         {
-            return JsonSchema.FromText(File.ReadAllText(Path.Combine(this.paths.SchemaDirectory, fileName)));
+            // The catalog resolves the schema's reference to the shared name definition beside it.
+            return EditorSchemaCatalog.LoadFromDirectory(this.paths.SchemaDirectory).GetValidationSchema(fileName);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or JsonSchemaException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or KeyNotFoundException or System.Text.Json.JsonException or JsonSchemaException)
         {
             this.LogInputSchemaUnavailable(fileName, exception);
             return null;

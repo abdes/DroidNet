@@ -9,7 +9,7 @@
       "type": "string"
     },
     "name": {
-      "type": "string"
+      "$ref": "oxygen.name.schema.json#/definitions/segment"
     },
     "virtual_path": {
       "type": "string",

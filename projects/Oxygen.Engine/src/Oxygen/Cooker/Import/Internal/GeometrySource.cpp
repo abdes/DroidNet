@@ -51,11 +51,8 @@ namespace {
 
   auto GetGeometryDescriptorValidator() -> json_validator&
   {
-    static auto validator = [] -> json_validator {
-      auto out = json_validator {};
-      out.set_root_schema(json::parse(kGeometryDescriptorSchema));
-      return out;
-    }();
+    static auto validator
+      = MakeJsonSchemaValidator(json::parse(kGeometryDescriptorSchema));
     return validator;
   }
 

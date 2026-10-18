@@ -47,6 +47,9 @@ public sealed class ProjectScriptTooling(ScriptToolingPaths paths, IOperationRes
             CopyFromSdk(paths.DefinitionsPath, Path.Combine(root, TypesFolder, "oxygen.d.luau"), changes);
             CopyFromSdk(Path.Combine(paths.SchemaDirectory, "oxygen.input.schema.json"), Path.Combine(root, TypesFolder, "oxygen.input.schema.json"), changes);
             CopyFromSdk(Path.Combine(paths.SchemaDirectory, "oxygen.input-action.schema.json"), Path.Combine(root, TypesFolder, "oxygen.input-action.schema.json"), changes);
+
+            // Both input schemas reference the shared name definition beside them.
+            CopyFromSdk(Path.Combine(paths.SchemaDirectory, "oxygen.name.schema.json"), Path.Combine(root, TypesFolder, "oxygen.name.schema.json"), changes);
             this.MergeVsCodeSettings(Path.Combine(root, ".vscode", "settings.json"), changes);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

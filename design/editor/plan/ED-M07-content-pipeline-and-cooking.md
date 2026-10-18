@@ -4,7 +4,8 @@ Status: `accepted implementation plan`
 
 Milestone progress and recorded validation are maintained in
 [IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md). Section 11 records
-closed UI decisions and the new ED-M07B gap work separately from that validation.
+closed UI decisions and the new ED-M07B gap work separately from that
+validation.
 
 ## 1. Purpose
 
@@ -51,9 +52,9 @@ Implementation may not begin until these are reviewed and accepted:
 - `runtime-integration.md`
 - `diagnostics-operation-results.md`
 
-This plan deliberately includes a native API audit in ED-M07.1. The outcome
-must be recorded before coding ED-M07.2+ so editor code does not duplicate
-engine cooker behavior that is already available through `Oxygen.Cooker`.
+This plan deliberately includes a native API audit in ED-M07.1. The outcome must
+be recorded before coding ED-M07.2+ so editor code does not duplicate engine
+cooker behavior that is already available through `Oxygen.Cooker`.
 
 ## 4. Scope
 
@@ -208,27 +209,25 @@ Out of scope:
   - perspective cameras.
   - directional lights and sun/environment flags.
   - supported environment fields.
-- Normalize native descriptor `name` from the scene asset file stem:
-  - strip `.oscene.json`.
-  - replace invalid identifier characters with `_`.
-  - prefix `_` if the first character is invalid.
-  - truncate to 63 characters.
-  - fail descriptor generation if no valid identifier remains.
-- Emit environment data only as a complete engine-default payload with
-  supported editor overrides applied:
+- Set the native descriptor `name` to the scene asset file stem as spelled (the
+  file name without `.oscene.json`).
+- Emit environment data only as a complete engine-default payload with supported
+  editor overrides applied:
   - `AtmosphereEnabled` overlays `sky_atmosphere.enabled`.
   - `SunNodeId` is represented through the selected directional light's
     `is_sun_light` / `environment_contribution` fields.
   - exposure, tone, and background editor fields produce
     `OXE.CONTENTPIPELINE.SCENE.UnsupportedField` warnings in ED-M07.
-  - if complete native defaults are unavailable, omit `environment` rather
-    than emitting partial native environment subobjects.
+  - if complete native defaults are unavailable, omit `environment` rather than
+    emitting partial native environment subobjects.
 - Normalize authored asset URIs to native descriptor paths:
   - `asset:///<Mount>/<Path>.omat.json` -> `/<Mount>/<Path>.omat`
   - `asset:///<Mount>/<Path>.ogeo.json` -> `/<Mount>/<Path>.ogeo`
   - `asset:///<Mount>/<Path>.oscene.json` -> `/<Mount>/<Path>.oscene`
   - reject invalid scheme, mount, or extension combinations.
-- Empty-scene rejection was the M07 contract; [M08.1.4](ED-M08-runtime-parity-and-standalone-validation.md#m081--native-canonical-data-producers-and-primitives) supersedes it with genuine zero-node scene support.
+- Empty-scene rejection was the M07 contract;
+  [M08.1.4](ED-M08-runtime-parity-and-standalone-validation.md#m081--native-canonical-data-producers-and-primitives)
+  supersedes it with genuine zero-node scene support.
 - Unsupported ED-M04 or future scene fields produce warnings that name the
   field; they are not silently dropped.
 - Ensure generated descriptor path is derived/cache state, not authoring
@@ -239,8 +238,8 @@ Out of scope:
 - Implement `IProceduralGeometryDescriptorService`.
 - Resolve generated/basic shape geometry URIs used by editor scenes.
 - Produce deterministic derived descriptor inputs under
-  `<ProjectRoot>/.pipeline/Geometry` and add manifest `geometry-descriptor`
-  jobs for them.
+  `<ProjectRoot>/.pipeline/Geometry` and add manifest `geometry-descriptor` jobs
+  for them.
 - Fail scene cook if a renderable would otherwise cook with an invalid geometry
   key.
 - Add tests for the procedural geometry URIs emitted by the editor quick-add
@@ -263,12 +262,12 @@ Out of scope:
     supported importer exists for the selected file.
 - Generated manifest must validate against the native
   `oxygen.import-manifest.schema.json` contract before execution. ED-M07 uses a
-  managed schema-aligned validator for the accepted V0.1 manifest subset;
-  native request/builder construction is a secondary adapter check, not the
-  primary validation path.
-- Manifest serialization must use the native schema property names:
-  `version`, `output`, `layout`, `virtual_mount_root`, `jobs`, `id`, `type`,
-  `source`, `depends_on`, `name`.
+  managed schema-aligned validator for the accepted V0.1 manifest subset; native
+  request/builder construction is a secondary adapter check, not the primary
+  validation path.
+- Manifest serialization must use the native schema property names: `version`,
+  `output`, `layout`, `virtual_mount_root`, `jobs`, `id`, `type`, `source`,
+  `depends_on`, `name`.
 - For each authored mount, manifest `output` is
   `<ProjectRoot>/.cooked/<MountName>` and `layout.virtual_mount_root` is
   `/<MountName>`.
@@ -309,8 +308,8 @@ Out of scope:
 - Validate runs before mount and blocks mount on failure.
 - Catalog refresh updates Content Browser rows without editor restart.
 - Runtime mount refresh uses existing workspace/runtime path and frame-start
-  engine root synchronization, and mounts only the validated root(s) returned
-  by the successful cook/validate result.
+  engine root synchronization, and mounts only the validated root(s) returned by
+  the successful cook/validate result.
 - Mount failures are `AssetMount` diagnostics and do not rewrite cook result.
 
 ### ED-M07.9 - UI Integration
@@ -354,10 +353,10 @@ Likely touched:
 - `projects/Oxygen.Editor.ContentBrowser/src/...`
 - `projects/Oxygen.Editor.WorldEditor/src/...`
 - `projects/Oxygen.Editor.Runtime/src/Engine/...`
-- `projects/Oxygen.Editor.Projects/src/...` read-only service consumption;
-  no cook execution moves here.
-- `projects/Oxygen.Managed.Assets/src/...` only if a reusable primitive is missing and
-  belongs below editor workflows.
+- `projects/Oxygen.Editor.Projects/src/...` read-only service consumption; no
+  cook execution moves here.
+- `projects/Oxygen.Managed.Assets/src/...` only if a reusable primitive is
+  missing and belongs below editor workflows.
 - native `projects/Oxygen.Engine/src/Oxygen/Cooker/...` only if audit finds an
   engine API gap that must be closed at the source.
 
@@ -391,15 +390,16 @@ Source/test validation expected before user manual validation:
 
 1. Descriptor generation test maps transform, geometry URI, material URI,
    perspective camera, directional light, and supported environment fields.
-2. Historical M07 check: empty-scene rejection. Superseded by the M08.1.4 zero-node cook/load gate.
+2. Historical M07 check: empty-scene rejection. Superseded by the M08.1.4
+   zero-node cook/load gate.
 3. Procedural geometry resolver prevents invalid geometry keys.
 4. URI normalization maps authored `.omat.json`/`.ogeo.json` asset URIs to
    native `.omat`/`.ogeo` descriptor paths and rejects invalid inputs.
 5. Native scene descriptor name normalization handles scene file names with
    spaces and preserves the authored display name/path outside the descriptor
    identifier.
-6. Environment mapping emits full defaults plus supported overrides or omits
-   the block with unsupported-field warnings; it never emits partial native
+6. Environment mapping emits full defaults plus supported overrides or omits the
+   block with unsupported-field warnings; it never emits partial native
    environment subobjects.
 7. Manifest builder orders scene dependencies after material/geometry jobs.
 8. Manifest writer emits native schema property names and mount layout:
@@ -434,15 +434,16 @@ Before implementation starts:
 - mark this detailed plan checkbox only after plan review acceptance.
 - update the detailed plan tracker to point to this milestone plan.
 
-ED-M07 closes only after the user manually validates the scenarios in §9 and
-one validation ledger row is recorded.
+ED-M07 closes only after the user manually validates the scenarios in §9 and one
+validation ledger row is recorded.
 
 ## 11. Closed UI Scope And Follow-Up Ownership
 
-V0.1 uses the existing project mount/cook facts, scene inspector and runtime-session
-controls. There is no generic project-settings panel or project renderer-preset
-selector. Stale content is rebuilt with Cook Selected Asset, Cook Folder, Cook
-Current Scene or Cook Project; no separate stale-only batch scheduler is required.
+V0.1 uses the existing project mount/cook facts, scene inspector and
+runtime-session controls. There is no generic project-settings panel or project
+renderer-preset selector. Stale content is rebuilt with Cook Selected Asset,
+Cook Folder, Cook Current Scene or Cook Project; no separate stale-only batch
+scheduler is required.
 
 Content/result details expose copyable source/generated/cooked paths. Inspect
 and Validate serve cooked products. Dedicated Open Descriptor/Open Manifest
@@ -451,7 +452,7 @@ require manual generated-file repair. These are closed PRD section 8 decisions.
 
 Preserve ED-M07's recorded delivery and evidence. The concrete additional work
 is owned by [ED-M07B](./ED-M07B-safe-content-publication-and-compatibility.md):
-saved dependency snapshots, staging, preview pause/publication/rollback, complete
-native PostProcess/Background mappings, matched artifacts and portable import.
-ED-M08 owns actual standalone parity. Neither old warnings nor writing this plan
-establishes proof for those new gates.
+saved dependency snapshots, staging, preview pause/publication/rollback,
+complete native PostProcess/Background mappings, matched artifacts and portable
+import. ED-M08 owns actual standalone parity. Neither old warnings nor writing
+this plan establishes proof for those new gates.

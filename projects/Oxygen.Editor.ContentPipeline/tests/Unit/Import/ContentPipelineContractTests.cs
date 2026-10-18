@@ -111,14 +111,15 @@ public sealed class ContentPipelineContractTests
     }
 
     [TestMethod]
-    public void NormalizeSceneDescriptorName_ShouldProduceNativeIdentifier()
+    public void ToCookedScenePath_ShouldKeepTheSceneName()
     {
-        _ = ContentPipelinePaths.NormalizeSceneDescriptorName("Main Scene 01.oscene.json")
-            .Should().Be("Main_Scene_01");
-        _ = ContentPipelinePaths.NormalizeSceneDescriptorName("-starter scene.oscene.json")
-            .Should().Be("_-starter_scene");
-        _ = ContentPipelinePaths.NormalizeSceneDescriptorName(new string('A', 80) + ".oscene.json")
-            .Should().HaveLength(63);
+        var longName = new string('A', 80);
+        _ = ContentPipelinePaths.ToCookedScenePath(new Uri("asset:///Content/Scenes/Main%20Scene%2001.oscene.json"))
+            .Should().Be("/Content/Scenes/Main Scene 01.oscene");
+        _ = ContentPipelinePaths.ToCookedScenePath(new Uri("asset:///Content/Scenes/-starter.v2%20(1).oscene.json"))
+            .Should().Be("/Content/Scenes/-starter.v2 (1).oscene");
+        _ = ContentPipelinePaths.ToCookedScenePath(new Uri($"asset:///Content/Scenes/{longName}.oscene.json"))
+            .Should().Be($"/Content/Scenes/{longName}.oscene");
     }
 
     [TestMethod]
