@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Json.Schema;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
 
@@ -161,17 +162,16 @@ public sealed record NativeSceneImportSettings(
 
     private static void ValidatePaths(NativeSceneImportSettings settings)
     {
-        var paths = settings.Files.Append(settings.BundleRoot).Append(settings.OutputDirectory).Append(settings.PrimaryRelativePath);
-        if (paths.Any(static path => Path.IsPathRooted(path) || path.Split('/').Any(static part => string.IsNullOrEmpty(part)
+        // The source files are physical paths inside the retained bundle; the mount, output folder and name are
+        // virtual path segments, checked by the virtual path rules.
+        var files = settings.Files.Append(settings.BundleRoot).Append(settings.PrimaryRelativePath);
+        if (files.Any(static path => Path.IsPathRooted(path) || path.Split('/').Any(static part => string.IsNullOrEmpty(part)
                 || part is "." or ".." || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || part.EndsWith('.') || part.EndsWith(' ')))
             || settings.Files.ToHashSet(StringComparer.OrdinalIgnoreCase).Count != settings.Files.Length
             || !settings.Files.Contains(settings.PrimaryRelativePath, StringComparer.OrdinalIgnoreCase)
-            || string.IsNullOrWhiteSpace(settings.MountPoint) || settings.MountPoint is "." or ".."
-            || string.IsNullOrWhiteSpace(settings.Name) || settings.Name is "." or ".."
-            || settings.MountPoint.EndsWith('.') || settings.MountPoint.EndsWith(' ')
-            || settings.Name.EndsWith('.') || settings.Name.EndsWith(' ')
-            || settings.MountPoint.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
-            || settings.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            || VirtualPath.ValidateMountName(settings.MountPoint) is not null
+            || settings.OutputDirectory.Split('/').Append(settings.Name)
+                .Any(static segment => VirtualPath.ValidateSegment(segment, VirtualPathRuleSet.Authored) is not null))
         {
             throw new InvalidDataException("Native import settings require contained source paths, a unique output directory and valid names.");
         }

@@ -5,6 +5,7 @@
 using DroidNet.Storage;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -163,9 +164,9 @@ internal static class AssetRelocationPlanner
     private static void RequireValidTarget(AssetRelocationMove move, string[] segments, string source, string target, bool isDirectory)
     {
         var name = RelocationPaths.GetName(move.TargetPath);
-        if (RelocationPaths.ValidateName(name) is { } invalid)
+        if (VirtualPath.ValidateSegment(name, VirtualPathRuleSet.Authored) is { } invalid)
         {
-            throw new AssetRelocationException(invalid);
+            throw new AssetRelocationException(invalid.ToMessage());
         }
 
         if (isDirectory && segments.Length == 2 && RelocationPaths.ImportTypeFolders.Contains(segments[1], StringComparer.OrdinalIgnoreCase))
@@ -254,7 +255,7 @@ internal static class AssetRelocationPlanner
     private static void ValidateGroup(string group)
     {
         var segments = group.Replace('\\', '/').Split('/');
-        if (segments.Length == 0 || segments.Any(static segment => RelocationPaths.ValidateName(segment) is not null))
+        if (segments.Length == 0 || segments.Any(static segment => VirtualPath.ValidateSegment(segment, VirtualPathRuleSet.Authored) is not null))
         {
             throw new AssetRelocationException("Enter an output group such as 'Robot' or 'Vehicles/Car', without reserved characters.");
         }

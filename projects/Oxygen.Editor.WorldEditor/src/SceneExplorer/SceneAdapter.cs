@@ -48,7 +48,7 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
     internal IReadOnlyList<ITreeItem> RootItems => this.rootItemsCache;
 
     /// <inheritdoc />
-    public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
+    public override bool ValidateItemName(string name) => VirtualPath.ValidateSegment(name, VirtualPathRuleSet.Authored) is null;
 
     /// <summary>Releases the scene-name subscription when the tree is replaced or disposed.</summary>
     public void Detach() => this.AttachedObject.PropertyChanged -= this.OnScenePropertyChanged;

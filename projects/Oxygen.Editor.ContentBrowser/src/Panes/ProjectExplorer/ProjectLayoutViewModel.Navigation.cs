@@ -4,7 +4,7 @@
 
 using DroidNet.Controls;
 using DroidNet.Storage;
-using Oxygen.Managed.Assets.Filesystem;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 

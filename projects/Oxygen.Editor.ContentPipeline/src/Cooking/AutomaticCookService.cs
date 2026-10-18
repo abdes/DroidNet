@@ -144,7 +144,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
 
         var slash = path.IndexOf('/', 1);
         var mount = slash < 0 ? null : project.AuthoringMounts.FirstOrDefault(mount => !ProjectOutputFolders.Contains(mount)
-            && string.Equals(mount.Name, path[1..slash], StringComparison.OrdinalIgnoreCase));
+            && string.Equals(mount.Name, path[1..slash], StringComparison.Ordinal));
         if (mount is null)
         {
             return false;

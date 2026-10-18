@@ -23,4 +23,17 @@
         <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
     </ItemGroup>
 
+    <!--
+        Unicode tables of the virtual path rules: UnicodeTablesGenerator reads the pinned Unicode Character Database,
+        which the engine keeps in its source tree, at compile time. The compiler reruns it only when a file changes.
+    -->
+    <PropertyGroup>
+        <UnicodeDatabase>$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Content\Unicode\15.1.0</UnicodeDatabase>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Generators\src\Oxygen.Managed.Core.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <AdditionalFiles Include="$(UnicodeDatabase)\DerivedAge.txt;$(UnicodeDatabase)\CaseFolding.txt" Link="Unicode\%(Filename)%(Extension)" />
+    </ItemGroup>
+
 </Project>

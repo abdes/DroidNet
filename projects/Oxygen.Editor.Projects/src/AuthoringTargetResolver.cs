@@ -26,7 +26,7 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
         if (!string.IsNullOrWhiteSpace(selection?.LocalMountName))
         {
             var localMount = project.LocalFolderMounts.FirstOrDefault(
-                mount => string.Equals(mount.Name, selection.LocalMountName, StringComparison.OrdinalIgnoreCase));
+                mount => string.Equals(mount.Name, selection.LocalMountName, StringComparison.Ordinal));
             if (localMount is not null)
             {
                 var localRelativeSelection = GetLocalMountRelativeSelection(localMount.Name, selected);
@@ -109,7 +109,7 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
         foreach (var mount in project.AuthoringMounts)
         {
             first ??= mount;
-            if (string.Equals(mount.Name, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(mount.Name, Constants.ContentFolderName, StringComparison.Ordinal))
             {
                 return mount;
             }

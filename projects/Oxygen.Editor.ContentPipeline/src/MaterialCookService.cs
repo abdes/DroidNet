@@ -63,7 +63,7 @@ public sealed partial class MaterialCookService(
 
             var input = CookInputResolver.Resolve(project, request.MaterialSourceUri, ContentCookInputRole.Primary);
             return input.Kind == ContentCookAssetKind.Material
-                && string.Equals(input.MountName, request.MountName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(input.MountName, request.MountName, StringComparison.Ordinal)
                 && string.Equals(input.SourceAbsolutePath, Path.GetFullPath(Path.Combine(project.ProjectRoot, request.SourceRelativePath)), StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidDataException)

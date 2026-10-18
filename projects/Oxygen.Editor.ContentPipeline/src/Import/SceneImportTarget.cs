@@ -43,20 +43,19 @@ public sealed record SceneImportTarget(string MountName, string OutputDirectory)
             throw new ArgumentException("Choose a project content folder.", nameof(folder));
         }
 
+        ArgumentNullException.ThrowIfNull(name);
+        name = VirtualPath.NormalizeTypedName(name);
         var path = Uri.UnescapeDataString(folder.AbsolutePath).Trim('/');
         var parts = path.Split('/');
-        if (string.IsNullOrWhiteSpace(name) || name is "." or ".." || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
-            || name.EndsWith('.') || name.EndsWith(' ')
-            || parts.Any(static part => part is "" or "." or ".." || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || part.EndsWith('.') || part.EndsWith(' ')))
+        if (VirtualPath.ValidateMountName(parts[0]) is not null
+            || parts.Skip(1).Append(name).Any(static part => VirtualPath.ValidateSegment(part) is not null))
         {
             throw new ArgumentException("Use a valid model name and content folder.", nameof(name));
         }
 
-        var mount = project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.OrdinalIgnoreCase))
+        var mount = project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.Ordinal))
             ?? throw new ArgumentException("Choose an authoring folder, not built-in or cooked content.", nameof(folder));
-        if (parts.Skip(1).Any(static part => part.Equals("SourceMedia", StringComparison.OrdinalIgnoreCase)
-            || part.Equals(".cooked", StringComparison.OrdinalIgnoreCase) || part.Equals(".imported", StringComparison.OrdinalIgnoreCase)
-            || part.Equals(".build", StringComparison.OrdinalIgnoreCase) || part.Equals(".pipeline", StringComparison.OrdinalIgnoreCase)))
+        if (parts.Skip(1).Append(name).Any(VirtualPath.IsDerivedContent))
         {
             throw new ArgumentException("Choose a content destination outside source-media and generated folders.", nameof(folder));
         }

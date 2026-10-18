@@ -6,7 +6,7 @@ using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Text.Json;
-using Oxygen.Managed.Assets.Filesystem;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Authoring.Materials;
 
@@ -119,7 +119,7 @@ public sealed record MaterialSource
     /// <param name="virtualPath">The path.</param>
     /// <returns><see langword="true"/> when the engine accepts the path in a texture binding.</returns>
     public static bool IsTexturePath([NotNullWhen(true)] string? virtualPath)
-        => virtualPath is not null && VirtualPath.IsCanonicalAbsolute(virtualPath) && virtualPath.IndexOf('/', 1) >= 2;
+        => virtualPath is not null && VirtualPath.IsCanonical(virtualPath);
 
     /// <summary>Returns a copy of this material with one texture channel assigned or cleared.</summary>
     /// <param name="channel">One of <see cref="TextureChannels"/>.</param>

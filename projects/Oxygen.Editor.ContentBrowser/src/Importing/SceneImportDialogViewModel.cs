@@ -226,7 +226,7 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
         {
             var name = this.Name?.Trim() ?? string.Empty;
             _ = SceneImportTarget.Resolve(this.project, ToUri(this.DestinationFolder ?? string.Empty), name);
-            var content = this.project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase));
+            var content = this.project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal));
             if (!this.IsProjectSource() && content is not null && Directory.Exists(Path.Combine(this.project.ProjectRoot, content.RelativePath, "SourceMedia", "DCC", name)))
             {
                 this.HasCollision = true;

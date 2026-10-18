@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -108,7 +109,7 @@ internal static class CookInputResolver
         var stem = path.EndsWith(AssetFileTypes.Script, StringComparison.OrdinalIgnoreCase) ? path[..^AssetFileTypes.Script.Length]
             : ScriptSourceExtensions.FirstOrDefault(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) is { } source ? path[..^source.Length]
             : null;
-        if (stem is null || !ContentPipelinePaths.IsCanonicalVirtualPath(path))
+        if (stem is null || !VirtualPath.IsCanonical(path))
         {
             return null;
         }
@@ -134,7 +135,7 @@ internal static class CookInputResolver
     // and mapping contexts.
     private static ContentCookInput ResolveInputFile(ProjectContext project, Uri uri, string path, ContentCookInputRole role)
     {
-        if (!ContentPipelinePaths.IsCanonicalVirtualPath(path))
+        if (!VirtualPath.IsCanonical(path))
         {
             throw new InvalidDataException($"Input file '{uri}' is not a canonical virtual path.");
         }
@@ -157,5 +158,5 @@ internal static class CookInputResolver
         => location is { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } ? location : null;
 
     private static bool HasAuthoringMount(ProjectContext project, string name)
-        => project.AuthoringMounts.Any(mount => string.Equals(mount.Name, name, StringComparison.OrdinalIgnoreCase));
+        => project.AuthoringMounts.Any(mount => string.Equals(mount.Name, name, StringComparison.Ordinal));
 }

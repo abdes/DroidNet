@@ -62,7 +62,7 @@ internal sealed class ImportedSourceIndex
                 {
                     var settings = NativeSceneImportSettings.Parse(await readSettings(path, cancellationToken).ConfigureAwait(false));
                     if (string.Equals(settings.ResolveFile(project.ProjectRoot, settings.PrimaryRelativePath), primary, StringComparison.OrdinalIgnoreCase)
-                        && project.AuthoringMounts.Any(item => string.Equals(item.Name, settings.MountPoint, StringComparison.OrdinalIgnoreCase)))
+                        && project.AuthoringMounts.Any(item => string.Equals(item.Name, settings.MountPoint, StringComparison.Ordinal)))
                     {
                         var sourceRelative = Path.GetRelativePath(root, primary).Replace('\\', '/');
                         var sourceUri = new Uri(AssetUris.Scheme + ":///" + Uri.EscapeDataString(mount.Name) + "/" + string.Join('/', sourceRelative.Split('/').Select(Uri.EscapeDataString)));

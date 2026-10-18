@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
@@ -267,7 +268,7 @@ public sealed partial class ContentPipelineService
     {
         // A root reconstructed or vacated, that nothing in this cook goes into, leaves the publication.
         var dropped = repair.EmptyRoots.Union(repair.VacatedRoots)
-            .Where(mount => !graph.Assets.Any(input => string.Equals(input.MountName, mount, StringComparison.OrdinalIgnoreCase))).ToArray();
+            .Where(mount => !graph.Assets.Any(input => string.Equals(input.MountName, mount, StringComparison.Ordinal))).ToArray();
         var plan = CookIncrementalPlanner.CreatePlan(snapshot.BuildFingerprint, snapshot.Inputs, graph, previous, inventories, repair.EmptyRoots, repair.RemovedSources) with
         {
             DroppedRoots = [.. dropped],

@@ -31,7 +31,7 @@ public sealed partial class ContentPipelineService
             foreach (var input in remaining.Values.Where(input => !ready.Contains(input.AssetUri)))
             {
                 if (SourceDependencies(input, graph).All(uri => !remaining.TryGetValue(uri, out var dependency)
-                    || (ready.Contains(uri) && string.Equals(dependency.MountName, input.MountName, StringComparison.OrdinalIgnoreCase))))
+                    || (ready.Contains(uri) && string.Equals(dependency.MountName, input.MountName, StringComparison.Ordinal))))
                 {
                     _ = ready.Add(input.AssetUri);
                     expanded = true;

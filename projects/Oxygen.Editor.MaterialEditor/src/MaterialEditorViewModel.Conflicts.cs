@@ -6,6 +6,7 @@ using DroidNet.Controls;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.MaterialEditor;
 
@@ -37,10 +38,11 @@ public sealed partial class MaterialEditorViewModel
     /// <inheritdoc/>
     public Task<DocumentConflictResult> SaveCopyAsync(string name)
     {
-        var normalized = name.Trim();
-        if (string.IsNullOrWhiteSpace(normalized) || normalized.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || normalized.EndsWith('.'))
+        ArgumentNullException.ThrowIfNull(name);
+        var normalized = VirtualPath.NormalizeTypedName(name);
+        if (VirtualPath.ValidateSegment(normalized + AssetFileTypes.MaterialDescriptor, VirtualPathRuleSet.Authored) is { } invalid)
         {
-            return Task.FromResult(new DocumentConflictResult(Succeeded: false, "Enter a valid file name for the new copy."));
+            return Task.FromResult(new DocumentConflictResult(Succeeded: false, invalid.ToMessage()));
         }
 
         var target = new Uri(this.document.File.AssetUri, Uri.EscapeDataString(normalized) + AssetFileTypes.MaterialDescriptor);

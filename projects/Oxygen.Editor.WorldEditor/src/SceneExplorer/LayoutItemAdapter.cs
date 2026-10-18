@@ -6,7 +6,6 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using DroidNet.Controls;
 using Oxygen.Editor.Scenes.Edits.Layout;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 
@@ -112,7 +111,8 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
     /// </summary>
     protected virtual string DefaultIconGlyph => "\uE8B7"; // Default Folder Closed
 
-    public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
+    // A layout folder is a label inside the scene, not a file: like a node name, it only needs text.
+    public override bool ValidateItemName(string name) => !string.IsNullOrWhiteSpace(name);
 
     /// <summary>
     /// Adds a folder to the layout.

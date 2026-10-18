@@ -133,7 +133,7 @@ public sealed class AssetCookStatusTests
     public async Task DiagnosticNamesAnAssetInAFolderWithSpacesByItsVirtualPath(bool inProject)
     {
         using var project = new StatusProject();
-        var path = inProject ? "/Content/New folder (2)/Wet Rubber.omat.json" : "/Outside Folder/Wet Rubber.omat.json";
+        var path = inProject ? "/Content/New folder (2)/Wet Rubber.omat.json" : "/Outside/New folder (2)/Wet Rubber.omat.json";
         var uri = new Uri("asset://" + path);
 
         var statuses = await project.CreateReader().ReadAsync(project.Project, [uri], this.TestContext.CancellationToken).ConfigureAwait(false);

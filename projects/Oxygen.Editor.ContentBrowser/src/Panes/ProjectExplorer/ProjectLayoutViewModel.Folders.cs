@@ -10,6 +10,7 @@ using DroidNet.Controls.Menus;
 using DroidNet.Storage;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
@@ -37,16 +38,15 @@ public partial class ProjectLayoutViewModel
             return await base.CommitRenameAsync(item, newName).ConfigureAwait(true);
         }
 
-        var name = newName.Trim();
+        var name = VirtualPath.NormalizeTypedName(newName);
         if (string.Equals(name, folder.Label, StringComparison.Ordinal))
         {
             return TreeItemRenameResult.Success;
         }
 
-        var invalid = RelocationPaths.ValidateName(name);
-        if (invalid is not null || !folder.ValidateItemName(name))
+        if (VirtualPath.ValidateSegment(name, VirtualPathRuleSet.Authored) is { } invalid)
         {
-            return TreeItemRenameResult.Rejected(invalid ?? "Use a folder name without path separators or reserved characters.");
+            return TreeItemRenameResult.Rejected(invalid.ToMessage());
         }
 
         if (GetFolderRenameBlocker(folder, relocation is not null) is { } reason)
@@ -110,7 +110,7 @@ public partial class ProjectLayoutViewModel
                 ? TreeDropResult.Committed(request.Items) : TreeDropResult.Rejected;
         }
 
-        var moves = sources.Where(source => !string.Equals(RelocationPaths.GetParent(source), parent, StringComparison.OrdinalIgnoreCase))
+        var moves = sources.Where(source => !string.Equals(RelocationPaths.GetParent(source), parent, StringComparison.Ordinal))
             .Select(source => new AssetRelocationMove(source, RelocationPaths.Combine(parent, RelocationPaths.GetName(source)))).ToArray();
         return moves.Length != 0 && await relocation.RelocateAsync(new AssetRelocationRequest { Moves = moves }, "Move folders").ConfigureAwait(true) is { Succeeded: true }
             ? TreeDropResult.Committed(request.Items)

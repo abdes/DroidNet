@@ -12,6 +12,7 @@ using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Relocation;
 
@@ -118,7 +119,7 @@ public sealed partial class AssetRelocationWorkflow(
             return await this.CopyAsync(sources, targetFolder, "Paste").ConfigureAwait(true);
         }
 
-        var moves = sources.Where(path => !string.Equals(RelocationPaths.GetParent(path), targetFolder, StringComparison.OrdinalIgnoreCase))
+        var moves = sources.Where(path => !string.Equals(RelocationPaths.GetParent(path), targetFolder, StringComparison.Ordinal))
             .Select(path => new AssetRelocationMove(path, RelocationPaths.Combine(targetFolder, RelocationPaths.GetName(path)))).ToArray();
         return moves.Length == 0 ? null : await this.RelocateAsync(new AssetRelocationRequest { Moves = moves }, "Move").ConfigureAwait(true);
     }
@@ -203,9 +204,9 @@ public sealed partial class AssetRelocationWorkflow(
             DefaultButton = DialogButton.Primary,
             PrimaryAction = () =>
             {
-                var value = input.Text.Trim();
+                var value = VirtualPath.NormalizeTypedName(input.Text);
                 var segments = allowSeparators ? value.Replace('\\', '/').Split('/') : [value];
-                var invalid = segments.Select(RelocationPaths.ValidateName).FirstOrDefault(static reason => reason is not null);
+                var invalid = segments.Select(static segment => VirtualPath.ValidateSegment(segment, VirtualPathRuleSet.Authored)?.ToMessage()).FirstOrDefault(static reason => reason is not null);
                 error.Text = invalid ?? string.Empty;
                 error.Visibility = invalid is null ? Visibility.Collapsed : Visibility.Visible;
                 accepted = invalid is null ? string.Join('/', segments) : null;

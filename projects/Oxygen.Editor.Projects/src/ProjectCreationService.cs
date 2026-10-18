@@ -353,7 +353,7 @@ public sealed class ProjectCreationService(
         }
 
         if (!descriptor.AuthoringMounts.Any(static mount =>
-                string.Equals(mount.Name, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)
+                string.Equals(mount.Name, Constants.ContentFolderName, StringComparison.Ordinal)
                 && string.Equals(mount.RelativePath, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)))
         {
             throw new InvalidDataException("Project template AuthoringMounts must include Content -> Content.");
@@ -447,7 +447,7 @@ public sealed class ProjectCreationService(
         var mountName = assetPath[..slash];
         var mountRelativePath = NormalizeTemplatePath(assetPath[(slash + 1)..]);
         var mount = descriptor.AuthoringMounts.FirstOrDefault(mount =>
-            string.Equals(mount.Name, mountName, StringComparison.OrdinalIgnoreCase))
+            string.Equals(mount.Name, mountName, StringComparison.Ordinal))
             ?? throw new InvalidDataException($"Project template {fieldName} URI targets unknown authoring mount '{mountName}'.");
         var expectedRelativePath = NormalizeTemplatePath(Path.Combine(mount.RelativePath, mountRelativePath));
         if (!string.IsNullOrWhiteSpace(declaredRelativePath))

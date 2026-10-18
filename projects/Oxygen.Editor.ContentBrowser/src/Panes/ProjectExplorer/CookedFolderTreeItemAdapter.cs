@@ -29,7 +29,7 @@ public sealed class CookedFolderTreeItemAdapter : TreeItemAdapter
     }
 
     /// <summary>Gets the browser path without exposing generation storage.</summary>
-    public string VirtualPath => Oxygen.Managed.Assets.Filesystem.VirtualPath.Combine(this.mount.VirtualRootPath, this.nativePath);
+    public string VirtualPath => Oxygen.Managed.Core.VirtualPath.Combine(this.mount.VirtualRootPath, this.nativePath);
 
     /// <summary>Gets the same folder icon used by authored folders.</summary>
     public string IconGlyph => this.IsExpanded && this.folders.Count > 0 ? "\uE838" : "\uE8B7";

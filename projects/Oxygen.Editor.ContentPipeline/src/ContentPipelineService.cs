@@ -342,7 +342,7 @@ public sealed partial class ContentPipelineService(
         var slash = path.IndexOf('/', StringComparison.Ordinal);
         var mountName = slash <= 0 ? path : path[..slash];
         var mountRelativeFolder = slash <= 0 ? string.Empty : path[(slash + 1)..];
-        var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase))
+        var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.Ordinal))
                     ?? throw new InvalidOperationException($"Project does not declare authoring mount '{mountName}'.");
         if (ProjectOutputFolders.Contains(mount))
         {

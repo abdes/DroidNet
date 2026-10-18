@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Assets;
@@ -72,7 +71,7 @@ public sealed record SetSceneReferences : ISceneEdit
             return SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, typed);
         }
 
-        return references.ExtraAssets.FirstOrDefault(static path => string.IsNullOrWhiteSpace(path) || !ContentPipelinePaths.IsCanonicalVirtualPath(path)) is { } invalid
+        return references.ExtraAssets.FirstOrDefault(static path => string.IsNullOrWhiteSpace(path) || !VirtualPath.IsCanonical(path)) is { } invalid
             ? SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, $"Extra asset path '{invalid}' must be an absolute canonical virtual path.")
             : null;
     }

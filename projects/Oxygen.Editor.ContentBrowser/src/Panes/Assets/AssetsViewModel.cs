@@ -166,7 +166,7 @@ public partial class AssetsViewModel(
             var selected = this.GetSelectedFolderUri();
             var mount = project.AuthoringMounts.FirstOrDefault(mount => selected.AbsolutePath.StartsWith("/" + Uri.EscapeDataString(mount.Name) + "/", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(selected.AbsolutePath.Trim('/'), Uri.EscapeDataString(mount.Name), StringComparison.OrdinalIgnoreCase))
-                ?? project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase))
+                ?? project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal))
                 ?? project.AuthoringMounts[0];
             var destination = "/" + mount.Name;
 
@@ -289,9 +289,9 @@ public partial class AssetsViewModel(
         var selected = this.GetSelectedFolderUri();
         var parts = Uri.UnescapeDataString(selected.AbsolutePath).Trim('/').Split('/');
         var mountName = parts.Length > 0
-            ? project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.OrdinalIgnoreCase))?.Name
+            ? project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.Ordinal))?.Name
             : null;
-        mountName ??= project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase))?.Name
+        mountName ??= project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal))?.Name
             ?? (project.AuthoringMounts.Count > 0
                 ? project.AuthoringMounts[0].Name
                 : throw new InvalidOperationException("The project has no authoring mount for texture assets."));

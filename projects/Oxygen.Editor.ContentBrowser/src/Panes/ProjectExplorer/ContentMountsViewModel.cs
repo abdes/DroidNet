@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Dialogs;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
@@ -83,25 +84,34 @@ public sealed partial class ContentMountsViewModel : ObservableObject
     /// <summary>Gets a value indicating whether there is an error to show.</summary>
     public bool HasError => this.ErrorMessage.Length != 0;
 
-    /// <summary>Checks a proposed mount name: present, without separators, and unique among the remaining mounts.</summary>
+    /// <summary>
+    /// Checks a proposed mount name, unique among the remaining mounts, also when only the case differs. A project
+    /// or derived mount names the first segment of its virtual paths, so it follows the authored mount rule; a local
+    /// library is a label, since its virtual paths come from its own cooked index, and only needs text without
+    /// separators.
+    /// </summary>
     /// <param name="name">The proposed name.</param>
+    /// <param name="kind">The kind of mount the name is for.</param>
     /// <param name="except">The mount being renamed, if any.</param>
     /// <returns>The reason the name is refused, or null.</returns>
-    public string? ValidateName(string name, ContentMountRow? except = null)
+    public string? ValidateName(string name, ContentMountKind kind, ContentMountRow? except = null)
     {
+        ArgumentNullException.ThrowIfNull(name);
         var trimmed = name.Trim();
-        if (trimmed.Length == 0)
+        if (kind != ContentMountKind.LocalLibrary)
         {
-            return "Enter a mount name.";
+            if (VirtualPath.ValidateMountName(trimmed, VirtualPathRuleSet.Authored) is { } invalid)
+            {
+                return invalid.ToMessage();
+            }
+        }
+        else if (trimmed.Length == 0 || trimmed.IndexOfAny(['/', '\\', ':']) >= 0)
+        {
+            return "Enter a library name without slashes or a colon.";
         }
 
-        if (trimmed.IndexOfAny(['/', '\\', ':']) >= 0)
-        {
-            return "A mount name cannot contain slashes or a colon.";
-        }
-
-        return this.Mounts.Any(row => !ReferenceEquals(row, except) && string.Equals(row.Name, trimmed, StringComparison.OrdinalIgnoreCase))
-            ? "A mount with this name already exists."
+        return this.Mounts.Any(row => !ReferenceEquals(row, except) && VirtualPathComparer.CaseFolded.Equals(row.Name, trimmed))
+            ? "A mount with this name already exists, or differs from one only in case."
             : null;
     }
 
@@ -142,7 +152,7 @@ public sealed partial class ContentMountsViewModel : ObservableObject
                 return;
             }
 
-            if (this.ValidateName(kind) is { } conflict)
+            if (this.ValidateName(kind, ContentMountKind.Derived) is { } conflict)
             {
                 this.ErrorMessage = conflict;
                 return;
@@ -154,7 +164,7 @@ public sealed partial class ContentMountsViewModel : ObservableObject
         }
 
         var name = this.NewMountName.Trim();
-        if (this.ValidateName(name) is { } invalid)
+        if (this.ValidateName(name, ContentMountKind.LocalLibrary) is { } invalid)
         {
             this.ErrorMessage = invalid;
             return;

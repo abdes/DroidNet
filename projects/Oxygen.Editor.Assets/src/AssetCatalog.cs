@@ -9,7 +9,6 @@ using System.Text.Json;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;

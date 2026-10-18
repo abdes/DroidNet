@@ -274,8 +274,7 @@ internal sealed partial class CookSourceAnalyzer(
                     continue;
                 }
 
-                if (!Oxygen.Managed.Assets.Filesystem.VirtualPath.IsCanonicalAbsolute(virtualPath)
-                    || virtualPath.IndexOf('/', 1) < 2
+                if (!VirtualPath.IsCanonical(virtualPath)
                     || !virtualPath.EndsWith(AssetFileTypes.Texture, StringComparison.Ordinal))
                 {
                     diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, virtualPath, "path is not a canonical named texture", details: null));
@@ -333,7 +332,7 @@ internal sealed partial class CookSourceAnalyzer(
     private string? ResolveTextureDescriptorPath(string virtualPath)
     {
         var parts = virtualPath.TrimStart('/').Split('/');
-        var mount = operation.Project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.OrdinalIgnoreCase));
+        var mount = operation.Project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.Ordinal));
         if (mount is null || parts.Length < 2 || parts.Skip(1).Any(static part => part is "" or "." or ".."))
         {
             return null;

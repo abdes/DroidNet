@@ -111,15 +111,14 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     /// <inheritdoc />
     public override bool ValidateItemName(string name)
     {
-        if (!InputValidation.IsValidFileName(name))
+        if (VirtualPath.ValidateMountName(name, VirtualPathRuleSet.Authored) is not null)
         {
             return false;
         }
 
-        // Check for duplicate mount names.
-        // Note: If we are renaming an existing mount, the UI will call this with the new name.
-        // If the new name is the same as another mount's name, we should reject it.
-        return !this.virtualFolderMounts.ContainsKey(name);
+        // A name equal to another mount's, or differing from it only in case, is refused: on a case-insensitive file
+        // system the two would share their cooked folder.
+        return !this.virtualFolderMounts.Keys.Any(existing => VirtualPathComparer.CaseFolded.Equals(existing, name));
     }
 
     /// <summary>

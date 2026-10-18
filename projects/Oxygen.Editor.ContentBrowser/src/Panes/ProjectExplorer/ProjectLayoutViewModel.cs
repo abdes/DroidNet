@@ -21,7 +21,7 @@ using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Filesystem;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 

@@ -101,7 +101,7 @@ public sealed partial class ContentMountRow : ObservableObject
     /// <returns>Whether the rename finished.</returns>
     internal bool TryCommitRename()
     {
-        if (this.owner.ValidateName(this.NameDraft, this) is { } reason)
+        if (this.owner.ValidateName(this.NameDraft, this.Kind, this) is { } reason)
         {
             this.owner.ErrorMessage = reason;
             return false;

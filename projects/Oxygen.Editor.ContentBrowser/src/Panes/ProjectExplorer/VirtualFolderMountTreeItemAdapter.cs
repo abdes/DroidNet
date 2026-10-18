@@ -7,7 +7,6 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Controls;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
-using Oxygen.Managed.Assets.Filesystem;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
@@ -150,7 +149,7 @@ public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter,
     }
 
     /// <inheritdoc />
-    public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
+    public override bool ValidateItemName(string name) => VirtualPath.ValidateMountName(name, VirtualPathRuleSet.Authored) is null;
 
     /// <inheritdoc />
     public override bool Equals(ITreeItem? other)

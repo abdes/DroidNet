@@ -475,7 +475,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             var scripts = ResolveTypedReferences(references.Scripts, AssetFileTypes.Script);
             var inputActions = ResolveTypedReferences(references.InputActions, AssetFileTypes.InputAction);
             var physicsSidecars = ResolveTypedReferences(references.PhysicsSidecars, AssetFileTypes.PhysicsScene);
-            if (references.ExtraAssets.Any(static path => !ContentPipelinePaths.IsCanonicalVirtualPath(path)))
+            if (references.ExtraAssets.Any(static path => !VirtualPath.IsCanonical(path)))
             {
                 throw new InvalidDataException("Extra scene asset references must be absolute canonical virtual paths.");
             }

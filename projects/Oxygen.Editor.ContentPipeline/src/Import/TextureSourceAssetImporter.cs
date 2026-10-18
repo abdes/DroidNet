@@ -319,7 +319,7 @@ public readonly record struct CubeDescriptorInfo(bool StoresRadiance);
 /// <param name="Project">The project whose authoring mount receives the texture.</param>
 /// <param name="SourcePath">The selected image file.</param>
 /// <param name="DestinationFolder">The selected authoring folder URI.</param>
-/// <param name="Name">The unique texture asset name without file extensions.</param>
+/// <param name="Name">The unique texture asset name without file extensions, as typed; it is kept trimmed and in NFC.</param>
 /// <param name="Intent">The native texture semantic.</param>
 /// <param name="ColorSpace">The native decode color space.</param>
 /// <param name="Format">The native output format.</param>
@@ -332,6 +332,15 @@ public sealed record TextureSourceImportRequest(
     string ColorSpace,
     string Format)
 {
+    private readonly string name = VirtualPath.NormalizeTypedName(Name);
+
+    /// <summary>Gets the texture asset name, trimmed and in NFC as the virtual path rules require.</summary>
+    public string Name
+    {
+        get => this.name;
+        init => this.name = VirtualPath.NormalizeTypedName(value);
+    }
+
     /// <summary>Gets how the image becomes a cube texture, or null for a 2D texture.</summary>
     public TextureCubeImport? Cube { get; init; }
 }
@@ -383,13 +392,9 @@ public sealed record TextureSourceImportTarget(string MountName, string VirtualP
             throw new ArgumentException("Choose an existing PNG, JPEG, TGA, BMP or HDR image.", nameof(request));
         }
 
-        if (string.IsNullOrWhiteSpace(request.Name)
-            || request.Name is "." or ".."
-            || request.Name.EndsWith('.')
-            || request.Name.EndsWith(' ')
-            || request.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        if (Oxygen.Managed.Core.VirtualPath.ValidateSegment(request.Name + AssetFileTypes.TextureDescriptor, VirtualPathRuleSet.Authored) is { } invalidName)
         {
-            throw new ArgumentException("Use a valid texture asset name.", nameof(request));
+            throw new ArgumentException(invalidName.ToMessage(), nameof(request));
         }
 
         if (!TextureSourceAssetImporter.IsSupportedIntent(request.Intent)
@@ -413,16 +418,14 @@ public sealed record TextureSourceImportTarget(string MountName, string VirtualP
         }
 
         var parts = Uri.UnescapeDataString(folder.AbsolutePath).Trim('/').Split('/');
-        if (parts.Length == 0 || parts.Any(static part => part is "" or "." or ".." || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
+        if (Oxygen.Managed.Core.VirtualPath.ValidateMountName(parts[0]) is not null || parts.Skip(1).Any(static part => Oxygen.Managed.Core.VirtualPath.ValidateSegment(part) is not null))
         {
             throw new ArgumentException("Choose a valid project authoring folder.", nameof(request));
         }
 
-        var mount = request.Project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.OrdinalIgnoreCase))
+        var mount = request.Project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.Ordinal))
             ?? throw new ArgumentException("Choose a folder inside a project authoring mount.", nameof(request));
-        if (parts.Skip(1).Any(static part => part.Equals("SourceMedia", StringComparison.OrdinalIgnoreCase)
-            || part.Equals(".cooked", StringComparison.OrdinalIgnoreCase) || part.Equals(".imported", StringComparison.OrdinalIgnoreCase)
-            || part.Equals(".build", StringComparison.OrdinalIgnoreCase) || part.Equals(".pipeline", StringComparison.OrdinalIgnoreCase)))
+        if (parts.Skip(1).Any(Oxygen.Managed.Core.VirtualPath.IsDerivedContent))
         {
             throw new ArgumentException("Choose an authoring folder outside source-media and generated folders.", nameof(request));
         }

@@ -79,7 +79,7 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
     }
 
     /// <inheritdoc />
-    public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
+    public override bool ValidateItemName(string name) => VirtualPath.ValidateSegment(name, VirtualPathRuleSet.Authored) is null;
 
     /// <inheritdoc />
     // We return 1 to indicate that the item may have children and can be expanded.

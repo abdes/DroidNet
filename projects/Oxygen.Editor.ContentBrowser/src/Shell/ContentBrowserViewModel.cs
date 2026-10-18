@@ -293,7 +293,7 @@ public sealed partial class ContentBrowserViewModel(
 
         var root = normalized.Split('/')[0];
         var authoring = project?.AuthoringMounts.FirstOrDefault(mount =>
-            string.Equals(mount.Name, root, StringComparison.OrdinalIgnoreCase)
+            string.Equals(mount.Name, root, StringComparison.Ordinal)
             || string.Equals(mount.RelativePath.Replace('\\', '/').Trim('/'), root, StringComparison.OrdinalIgnoreCase));
         return authoring is not null && !ProjectLayoutViewModel.IsPersistedProjectRelativeVirtualMount(authoring)
             ? "Authoring source" : "Read-only source";

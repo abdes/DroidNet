@@ -106,7 +106,7 @@ public sealed partial class ContentPipelineService
 
         var mounts = project.AuthoringMounts.Where(mount => !ProjectOutputFolders.Contains(mount)
             && (path.Length == 0 || string.Equals(mountName, "Engine", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(mount.Name, mountName, StringComparison.OrdinalIgnoreCase))).ToArray();
+                || string.Equals(mount.Name, mountName, StringComparison.Ordinal))).ToArray();
         return mounts.Length == 0 ? throw new InvalidDataException("The inspection scope does not belong to a project content mount.")
             : mounts.Select(mount => new InspectionRoot(mount.Name, publication.FindProjectRoot(mount.Name), path, IsLocal: false)).ToArray();
     }
@@ -164,7 +164,7 @@ public sealed partial class ContentPipelineService
         var roots = (isModel ? [] : ordinary).ToDictionary(static root => root.Name, StringComparer.OrdinalIgnoreCase);
         foreach (var group in outputScopes.GroupBy(static path => path.Trim('/').Split('/')[0], StringComparer.OrdinalIgnoreCase))
         {
-            if (!project.AuthoringMounts.Any(mount => !ProjectOutputFolders.Contains(mount) && string.Equals(mount.Name, group.Key, StringComparison.OrdinalIgnoreCase)))
+            if (!project.AuthoringMounts.Any(mount => !ProjectOutputFolders.Contains(mount) && string.Equals(mount.Name, group.Key, StringComparison.Ordinal)))
             {
                 continue;
             }

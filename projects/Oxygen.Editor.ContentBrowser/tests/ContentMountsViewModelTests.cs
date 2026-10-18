@@ -7,6 +7,7 @@ using DroidNet.Aura.Dialogs;
 using Moq;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -52,10 +53,22 @@ public sealed class ContentMountsViewModelTests
         model.NewMountName = "studio library";
         model.NewMountPath = this.TestContext.TestRunDirectory!;
         model.AddMountCommand.Execute(parameter: null);
-        _ = model.ErrorMessage.Should().Be("A mount with this name already exists.");
+        _ = model.ErrorMessage.Should().Be("A mount with this name already exists, or differs from one only in case.");
         model.NewMountName = "Art/Props";
         model.AddMountCommand.Execute(parameter: null);
         _ = model.ErrorMessage.Should().Contain("slashes");
+    }
+
+    /// <summary>A project or derived mount names its virtual paths, so it follows the mount rule; a library is a label.</summary>
+    [TestMethod]
+    public void MountNamesFollowTheMountRuleAndLibrariesAreLabels()
+    {
+        var model = new ContentMountsViewModel(CreateProject(), Mock.Of<IDialogService>());
+
+        _ = model.ValidateName("Cooked Output", ContentMountKind.Derived).Should().Be(VirtualPathError.InvalidMountName.ToMessage());
+        _ = model.ValidateName(".published", ContentMountKind.Derived).Should().Be(VirtualPathError.InvalidMountName.ToMessage());
+        _ = model.ValidateName("Published", ContentMountKind.Derived).Should().BeNull();
+        _ = model.ValidateName("Prop library", ContentMountKind.LocalLibrary).Should().BeNull();
     }
 
     /// <summary>A rename is checked when it is accepted, and an unfinished one blocks Apply until it is valid.</summary>
@@ -69,7 +82,7 @@ public sealed class ContentMountsViewModelTests
         _ = cooked.IsRenaming.Should().BeTrue();
         cooked.NameDraft = "Content";
         _ = model.Validate().Should().BeFalse();
-        _ = model.ErrorMessage.Should().Be("A mount with this name already exists.");
+        _ = model.ErrorMessage.Should().Be("A mount with this name already exists, or differs from one only in case.");
 
         cooked.NameDraft = "Published";
         _ = model.Validate().Should().BeTrue();

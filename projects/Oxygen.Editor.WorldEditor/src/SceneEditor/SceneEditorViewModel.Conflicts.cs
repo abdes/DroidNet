@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using DryIoc;
-using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
@@ -35,9 +35,10 @@ public partial class SceneEditorViewModel
     /// <inheritdoc/>
     public Task<DocumentConflictResult> SaveCopyAsync(string name) => this.ResolveConflictAsync(async () =>
     {
-        var trimmed = name.Trim();
-        var invalid = RelocationPaths.ValidateName(trimmed);
-        var path = Path.Combine(Path.GetDirectoryName(this.Document.File.Path)!, trimmed + AssetFileTypes.SceneDescriptor);
+        var typed = VirtualPath.NormalizeTypedName(name);
+        var file = typed + AssetFileTypes.SceneDescriptor;
+        var invalid = VirtualPath.ValidateSegment(file, VirtualPathRuleSet.Authored)?.ToMessage();
+        var path = Path.Combine(Path.GetDirectoryName(this.Document.File.Path)!, file);
         var location = invalid is null
             ? this.container.Resolve<IProjectContextService>(IfUnresolved.ReturnDefault)?.ActiveProject?.FindByFilePath(path)
             : null;
@@ -48,7 +49,7 @@ public partial class SceneEditorViewModel
 
         var result = await this.Document.SaveCopyAsync(new DocumentFile(location.FilePath, location.AssetUri)).ConfigureAwait(true);
         return result.Succeeded
-            ? new(Succeeded: true, $"Saved “{trimmed}” as a separate scene. The original is still unsaved; keep it open or explicitly discard its changes.")
+            ? new(Succeeded: true, $"Saved “{typed}” as a separate scene. The original is still unsaved; keep it open or explicitly discard its changes.")
             : new(Succeeded: false, (result.Message ?? "The copy could not be saved.") + " Your original document is still open.");
     });
 

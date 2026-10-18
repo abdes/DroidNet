@@ -7,30 +7,25 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Relocation;
 
-/// <summary>Checks that the editor accepts exactly the names the engine can cook.</summary>
+/// <summary>Checks the path mapping relocation builds on: renames in NFC and case-sensitive identities.</summary>
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed class RelocationPathsTests
 {
-    /// <summary>Names made of the engine's segment characters are accepted.</summary>
-    /// <param name="name">The name.</param>
+    /// <summary>A typed name is trimmed and put in NFC; the extension is kept.</summary>
     [TestMethod]
-    [DataRow("New folder")]
-    [DataRow("New folder (2)")]
-    [DataRow("Wet Rubber (2).omat.json")]
-    [DataRow("Rock_01-b")]
-    public void EngineCookableNameIsAccepted(string name)
-        => _ = RelocationPaths.ValidateName(name).Should().BeNull();
+    public void RenameTrimsTheTypedNameAndPutsItInNfc()
+    {
+        var renamed = RelocationPaths.Rename("/Content/Materials/Red.omat.json", " Cafe\u0301 ", isFolder: false);
 
-    /// <summary>Names the engine cannot cook, or the file system cannot keep, are rejected.</summary>
-    /// <param name="name">The name.</param>
+        _ = renamed.Should().Be("/Content/Materials/Caf\u00E9.omat.json");
+    }
+
+    /// <summary>Identity is case-sensitive: a folder differing only in case does not contain a path.</summary>
     [TestMethod]
-    [DataRow("Rock&Roll")]
-    [DataRow("Rubber[2]")]
-    [DataRow("Café")]
-    [DataRow(" Leading")]
-    [DataRow("Trailing ")]
-    [DataRow(".hidden")]
-    public void NameTheEngineCannotCookIsRejected(string name)
-        => _ = RelocationPaths.ValidateName(name).Should().NotBeNull();
+    public void FolderDifferingOnlyInCaseDoesNotContainAPath()
+    {
+        _ = RelocationPaths.IsSameOrInside("/Content/Materials/Red.omat", "/Content/materials").Should().BeFalse();
+        _ = RelocationPaths.IsSameOrInside("/Content/Materials/Red.omat", "/Content/Materials").Should().BeTrue();
+    }
 }

@@ -1,259 +1,248 @@
 # Oxygen.Managed.Core
 
-**Oxygen.Managed.Core** provides core services and utilities for the Oxygen Editor, including path finding for Oxygen projects, application data management, and input validation. Part of the DroidNet ecosystem, this library abstracts file system operations and offers a domain-specific interface for managing Oxygen project and application directories.
+The vocabulary every other Oxygen managed module shares: the typed identities of
+scenes, nodes and components, the asset URI and the virtual path rules that name
+assets, the operation results and diagnostic codes that report what happened,
+and the checks that the native engine files the editor runs are the ones it was
+built against.
 
-## Technology Stack
+It holds contracts and rules, not features. It has no UI, no engine and no
+project: a module can name an asset, check a name a user typed or report a
+failure without depending on the module that owns it.
 
-- **.NET:** net9.0, net9.0-windows10.0.26100.0
-- **File System Abstraction:** Testably.Abstractions (for testability and cross-platform support)
-- **Dependencies:** DroidNet.Config (centralized configuration and path management)
-- **Testing:** MSTest 4.0, AwesomeAssertions, Moq
+**At a glance**
 
-## Project Architecture
+- **Typed identities.** `SceneId`, `NodeId` and `ComponentId` cannot be confused
+  with each other or with a bare `Guid`.
+- **Asset names.** `AssetUris` spells an asset's identity as a URI;
+  `VirtualPath` implements the engine's virtual path rules with the same refusal
+  codes, so the editor accepts exactly what the cooker accepts.
+- **Operation results.** `OperationResult` and `DiagnosticRecord`, with the
+  stable codes of every domain, are how modules report outcomes to the user.
+- **Native compatibility.** The editor verifies the installed engine SDK and its
+  own Interop build before it runs native code, and holds the verified files
+  until the native work is done.
 
-Oxygen.Managed.Core follows a layered, interface-driven architecture:
+## Where it sits
 
-```text
-Oxygen.Managed.Core
-├── Services/
-│   ├── IOxygenPathFinder (interface)
-│   └── OxygenPathFinder (implementation)
-├── InputValidation (static utilities)
-├── Constants (application constants)
-└── MathUtil (math helpers)
+Managed.Core is at the bottom of the managed stack. Every editor module and
+`Oxygen.Managed.Assets` reference it; it references only `DroidNet.Config`.
+
+```mermaid
+flowchart BT
+    config["DroidNet.Config<br/>path finding"]
+    core["<b>Oxygen.Managed.Core</b><br/>identities<br/>asset names<br/>results<br/>native checks"]
+    assets["Oxygen.Managed.Assets<br/>asset formats"]
+    world["Oxygen.Editor.World<br/>scene model"]
+    editor["Editor modules<br/>Projects, Scenes,<br/>ContentPipeline, ..."]
+    engine["Engine source tree<br/>Unicode data<br/>case table"]
+
+    config --> core
+    core --> assets
+    core --> world
+    core --> editor
+    assets --> editor
+    world --> editor
+    engine -. "data" .-> core
+
+    classDef focus stroke-width:3px
+    class core focus
 ```
 
-**Key Design Patterns:**
+The engine's source tree is read for data only: the Unicode database the rules
+are stated against, at compile time, and the case table, by the tests. The
+editor build needs no engine build.
 
-- **Abstraction over Implementation:** The `IOxygenPathFinder` interface allows dependency injection and testing without file system dependencies.
-- **Delegation:** `OxygenPathFinder` delegates to a parent `IPathFinder` for common platform-specific paths, composing functionality cleanly.
-- **File System Abstraction:** Uses `IFileSystem` from Testably.Abstractions for cross-platform compatibility and unit testability.
+## Source layout
 
-## Structured operation diagnostics
+| Folder               | Contents                                                                                                                                                 |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/` (root)        | The identities (`SceneId`, `NodeId`, `ComponentId`, `NodeHandle`), `AssetUris`, the virtual path rules, `ScopedObservableObject` and small shared values |
+| `src/Diagnostics/`   | `OperationResult`, `DiagnosticRecord`, their publishing and status contracts, and the diagnostic codes and operation kinds of each domain                |
+| `src/Compatibility/` | The native SDK and Interop verification: the artifact inventory, the verifier, the leases and the editor's compatibility service                         |
+| `src/Services/`      | `OxygenPathFinder`, the Oxygen project and state folders                                                                                                 |
+| `Generators/`        | `UnicodeTablesGenerator`, the source generator of the virtual path rules' Unicode tables, and its tests                                                  |
+| `testsupport/`       | `TemporaryNativeArtifacts`, linked into test projects that run native code against a private verification receipt                                        |
+| `tests/`             | The unit tests                                                                                                                                           |
 
-The [Diagnostics](src/Diagnostics) namespace supplies shared contracts for
-authoring, project, content-pipeline, and runtime operation results:
+## Identities
 
-- [OperationResult](src/Diagnostics/OperationResult.cs) carries correlation
-  identity, operation kind, status/severity, user-facing text, affected scope,
-  child diagnostics, and an optional action.
-- [DiagnosticRecord](src/Diagnostics/DiagnosticRecord.cs) identifies the failure
-  domain and stable code, with separate user-facing and technical details.
-- [IOperationResultPublisher](src/Diagnostics/IOperationResultPublisher.cs) and
-  [IOperationResultStore](src/Diagnostics/IOperationResultStore.cs) separate
-  producers from consumers and retained snapshots.
-- [OperationStatusReducer](src/Diagnostics/OperationStatusReducer.cs) and
-  [ExceptionDiagnosticAdapter](src/Diagnostics/ExceptionDiagnosticAdapter.cs)
-  centralize status reduction and exception conversion.
+A typed identity names one kind of thing and nothing else. `SceneId`, `NodeId`
+and `ComponentId` are `Guid`-backed record structs implementing
+`IGuidId<TSelf>`, so a node id can never be passed where a component id is
+expected. Their `Value` is read only where an id leaves typed code:
+serialization and the native boundary. `GuidIdJsonConverter<TId>` writes each as
+its plain `Guid` string, as a value and as a dictionary key, so files keep the
+form they had before the types existed.
 
-The editor host owns the concrete
-[OperationResultStore](../Oxygen.Editor/src/Diagnostics/OperationResultStore.cs).
-It retains a bounded current-session history (512 results by default), returns
-snapshot collections, and snapshots observers under its lock before notifying
-them outside the lock. Subscription disposal removes the observer.
+| Identity      | Identifies                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| `SceneId`     | A scene by its content: authored in the scene file, it follows the file; a copy gets a new one |
+| `NodeId`      | A node of a scene                                                                              |
+| `ComponentId` | A component of a node                                                                          |
+| `NodeHandle`  | A node inside the running engine: an opaque native value, `0` when invalid                     |
 
-Notification remains synchronous on the publishing thread. UI subscribers must
-dispatch UI work appropriately; the store is neither a durable audit log nor an
-asynchronous delivery queue. Preserve the separation between shared contracts
-here and host retention/presentation policy.
+## Naming assets
 
-[OperationStatusReducerTests](tests/OperationStatusReducerTests.cs) and
-[ExceptionDiagnosticAdapterTests](tests/ExceptionDiagnosticAdapterTests.cs)
-cover the shared result behavior. Native engine failures still require explicit
-propagation into these contracts; engine-loop supervision is tracked in
-[issue #6](https://github.com/abdes/DroidNet/issues/6).
-See the [diagnostics LLD](../../design/editor/lld/diagnostics-operation-results.md)
-for product presentation and correlation requirements.
+### Asset URIs
 
-## Artifact qualification
+An asset is identified by its virtual path, `/<mount>/<path>.<ext>`; the editor
+spells the same identity as an asset URI, `asset:///<mount>/<path>.<ext>`.
+`AssetUris` holds the scheme, the `Engine` and `Content` mounts and the
+`Generated` folder of engine built-ins, builds those URIs, and checks that a URI
+names an asset (`IsAssetUri`, `EnsureAssetUri`). Models that hold links to
+assets, such as a scene's geometry, check the form when the link is set.
 
-The `Compatibility` namespace verifies fixed Debug/Release qualification
-manifests against the host's required artifact inventory. It checks exact file
-hashes, sizes and schema identifiers, and returns Windows read leases that keep
-the verified files protected through native execution and drain. The host owns
-inventory discovery, explicit qualification/promotion and native startup policy.
-Verification never rewrites the accepted manifest.
+### Virtual path rules
 
-The resulting fingerprint depends on artifact content, schema identifiers and
-configuration. Installation paths, record ordering and qualification report
-revision do not change cook producer identity.
+The engine refuses to cook a name that would not be a valid file name in its
+loose cooked tree. `VirtualPath` implements the same rules as the engine's
+`Content/VirtualPath.h`, stated in the engine's
+[virtual path rules](../Oxygen.Engine/src/Oxygen/Content/Docs/virtual_paths.md):
+segments in NFC Unicode 15.1 without control or reserved characters, edge
+spaces, trailing dots or Windows device names, at most 255 bytes; mounts that
+are identifiers, with a leading dot reserved for the engine; and no limit on the
+length of a path. Every refusal is a `VirtualPathError` whose `ToCode()` is the
+code the engine returns for the same input, and whose `ToMessage()` tells a user
+what to change.
 
-## Getting Started
+```mermaid
+flowchart LR
+    ucd["<b>Unicode 15.1</b><br/>Content/Unicode"]
+    cases["<b>Case table</b><br/>VirtualPathCases.json"]
+    cpp["<b>Engine</b><br/>VirtualPath.h"]
+    cs["<b>Managed.Core</b><br/>VirtualPath"]
+    ctest["Content tests"]
+    cstest["Managed.Core tests"]
 
-### Prerequisites
-
-- .NET 9.0 SDK or later
-- The project targets Windows 10.0.26100.0 for WinUI compatibility (also provides a cross-platform net9.0 target)
-
-### Installation
-
-Reference the package from a project:
-
-```xml
-<ItemGroup>
-  <PackageReference Include="Oxygen.Managed.Core" Version="*" />
-</ItemGroup>
+    ucd --> cpp
+    ucd --> cs
+    cases --> ctest
+    cases --> cstest
+    ctest -.-> cpp
+    cstest -.-> cs
 ```
 
-### Basic Usage
+Both implementations build their Unicode tables from the same database, each in
+its own build (`UnicodeCodeGen` in the engine, `UnicodeTablesGenerator` here),
+and both test suites run the same case table, so neither can accept or refuse
+what the other does not.
 
-#### Path Finding for Oxygen Projects
+| Member                                             | Use                                                                                             |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `Validate(path, rules)`                            | A whole virtual path; `VirtualPathRuleSet.Authored` adds the derived content rule               |
+| `ValidateSegment(segment, rules)`                  | One file or folder name below a mount                                                           |
+| `ValidateMountName(mount, rules)`                  | A mount name; an authored mount refuses the leading dot the engine reserves                     |
+| `NormalizeTypedName(typed)`                        | A name a user typed, trimmed and in NFC, the form it is checked and used in                     |
+| `FoldCase(text)`, `VirtualPathComparer.CaseFolded` | Case-only siblings, which a case-insensitive file system holds in one file                      |
+| `IsDerivedContent(segment)`                        | Segments an authored path refuses: `.cooked`, `.imported`, `.build`, `.pipeline`, `SourceMedia` |
+
+Identity itself is case-sensitive, as the engine hashes the bytes as spelled;
+the case-folded comparer is for refusing a sibling, never for comparing
+identities.
 
 ```csharp
-using System.IO.Abstractions;
-using DroidNet.Config;
-using Oxygen.Managed.Core.Services;
-
-// Create a base path finder (from DroidNet.Config)
-var fileSystem = new FileSystem();
-var basePathFinder = new PathFinder(fileSystem, new PathFinderConfig
+var name = VirtualPath.NormalizeTypedName(typed);
+if (VirtualPath.ValidateSegment(name + ".omat.json", VirtualPathRuleSet.Authored) is { } error)
 {
-    Mode = "real",
-    ApplicationName = "OxygenEditor",
-    CompanyName = "Oxygen"
-});
-
-// Wrap it with Oxygen-specific functionality
-var pathFinder = new OxygenPathFinder(basePathFinder, fileSystem);
-
-// Use the paths
-Console.WriteLine($"Personal Projects: {pathFinder.PersonalProjects}");
-Console.WriteLine($"Local Projects: {pathFinder.LocalProjects}");
-Console.WriteLine($"State Database: {pathFinder.StateDatabasePath}");
-```
-
-#### File Name Validation
-
-```csharp
-using Oxygen.Managed.Core;
-
-// Validate file names (Windows-compatible)
-string fileName = "myScene.scene";
-bool isValid = InputValidation.IsValidFileName(fileName);
-
-if (!isValid)
-{
-    Console.WriteLine($"'{fileName}' contains invalid characters.");
+    return error.ToMessage();
 }
 
-// Invalid examples: CON, PRN, NUL, COM1, LPT1, etc. (reserved names)
-// Also rejects: <>:"/\|?* and control characters
-```
-
-## Project Structure
-
-```text
-src/
-  Oxygen.Managed.Core.csproj      - Main library project
-  Constants.cs                    - Application constants (Company, Application)
-  InputValidation.cs              - File name validation utilities
-  MathUtil.cs                     - Math helper functions
-  Services/
-    IOxygenPathFinder.cs          - Interface for Oxygen-specific paths
-    OxygenPathFinder.cs           - Implementation delegating to IPathFinder
-
-tests/
-  Oxygen.Managed.Core.Tests.csproj - Test project
-  InputValidationTests.cs          - Comprehensive file name validation tests
-  OxygenPathFinderTests.cs         - Path finder functionality tests
-```
-
-## Key Features
-
-- **Oxygen Project Path Management:** Provides dedicated paths for personal and local Oxygen projects
-- **Application State Management:** Manages the state database location for runtime state persistence
-- **Windows File Name Validation:** Validates file names against Windows reserved names and forbidden characters using regex
-- **File System Abstraction:** Uses `IFileSystem` for testability and cross-platform support
-- **Composite Path Finder:** Extends base path finding with Oxygen-specific directory structures
-
-## Development Workflow
-
-### Building
-
-Build the library and tests:
-
-```powershell
-# Build the main library
-MSBuild.exe projects\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj /t:Build /m /v:minimal
-
-# Build including tests
-MSBuild.exe projects\Oxygen.Managed.Core\tests\Oxygen.Managed.Core.Tests.csproj /t:Build /m /v:minimal
-```
-
-### Running Tests
-
-```powershell
-# Run all tests
-MSBuild.exe projects\Oxygen.Managed.Core\tests\Oxygen.Managed.Core.Tests.csproj /t:Test /m /v:minimal
-
-# Run with coverage reporting
-MSBuild.exe projects\Oxygen.Managed.Core\tests\Oxygen.Managed.Core.Tests.csproj /t:Test /m /v:minimal `
-  /p:CollectCoverage=true /p:CoverletOutputFormat=lcov
-```
-
-### Project-Specific Build
-
-For faster iteration, build just the project file:
-
-```powershell
-MSBuild.exe projects\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj /t:Build /m /v:minimal
-```
-
-## Coding Standards
-
-This project follows the DroidNet repository standards:
-
-- **Language:** C# 13 (preview features enabled)
-- **Nullable:** Reference types are non-nullable by default (`nullable enable`)
-- **Implicit Usings:** Enabled for cleaner code
-- **Access Modifiers:** Always explicit (`public`, `private`, etc.)
-- **Instance Members:** Use `this.` prefix for clarity
-- **Patterns:** Follow MVVM and DI conventions from `projects/Hosting/`
-
-See `.github/instructions/csharp_coding_style.instructions.md` for detailed style guidelines.
-
-## Testing
-
-Tests use **MSTest** with the AAA (Arrange-Act-Assert) pattern:
-
-```csharp
-[TestClass]
-public class MyTests
+if (existing.Contains(folder + "/" + name + ".omat.json", VirtualPathComparer.CaseFolded))
 {
-    [TestMethod]
-    [DataRow("validFileName.txt", true)]
-    [DataRow("invalid<name>.txt", false)]
-    public void IsValidFileName_ShouldValidateCorrectly(string fileName, bool expected)
-    {
-        // Arrange
-        // Act
-        var result = InputValidation.IsValidFileName(fileName);
-        // Assert
-        result.Should().Be(expected);
-    }
+    return "A file with this name already exists, or differs from one only in case.";
 }
 ```
 
-**Test Utilities & Frameworks:**
+## Operation results and diagnostics
 
-- **MSTest:** Test framework and attributes
-- **AwesomeAssertions:** Fluent assertion library for readable assertions
-- **Moq:** Mocking framework for dependency mocking
+Modules report the outcome of an operation, such as a cook, an import or a Play
+session, as an `OperationResult`: a correlation id, an operation kind, a status
+and severity, user-facing text, the affected scope, child `DiagnosticRecord`s
+and an optional primary action. A `DiagnosticRecord` names its failure domain
+and a stable code, with user-facing and technical details kept apart.
 
-See `projects/TestHelpers/` for shared testing utilities across the repository.
+| Contract                                             | Role                                                                                                                                                        |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IOperationResultPublisher`, `IOperationResultStore` | Separate the modules that produce results from those that read them                                                                                         |
+| `OperationStatusReducer`                             | Reduces child statuses to the status of the whole operation                                                                                                 |
+| `ExceptionDiagnosticAdapter`                         | Turns an exception into a diagnostic with a code instead of a stack trace                                                                                   |
+| `*DiagnosticCodes`, `*OperationKinds`                | The codes and kinds of each domain: project, scene, script, asset identity, mount, import and cook, content pipeline, live sync, runtime, Play and viewport |
 
-## Contributing
+Tests assert codes, not messages: a code is the contract, a message is
+presentation.
 
-When contributing to Oxygen.Managed.Core:
+The editor host owns the concrete store,
+[OperationResultStore](../Oxygen.Editor/src/Diagnostics/OperationResultStore.cs):
+a bounded history of the current session that notifies its observers
+synchronously on the publishing thread. See the
+[diagnostics LLD](../../design/editor/lld/diagnostics-operation-results.md) for
+presentation and correlation.
 
-1. Follow the C# coding standards (see `.github/instructions/csharp_coding_style.instructions.md`)
-2. Add tests for new functionality (MSTest with AAA pattern)
-3. Use explicit access modifiers and `this.` for instance members
-4. Prefer composition and small, well-justified API surfaces
-5. Run tests locally before committing with MSBuild.
+## Native compatibility
 
-For architectural questions or public API additions, reference design documents in `plan/` or contact the maintainers.
+The editor runs native code from two places: its Interop bridge, built against
+an installed engine SDK, and the SDK's own tools, such as the import tool and
+the player. Before any of it runs, the editor checks that the installed files
+are the ones the Interop build recorded.
+
+```mermaid
+sequenceDiagram
+    participant Host as Editor host
+    participant Service as Compatibility service
+    participant Verifier as Verifier
+    participant Native as Native work
+
+    Host->>Service: VerifyAsync
+    Service->>Verifier: receipt, inventory
+    Verifier->>Verifier: check every file
+    Verifier-->>Service: lease
+    Service-->>Host: result with lease
+    Host->>Native: run on leased files
+    Native-->>Host: done
+    Host->>Host: release lease
+```
+
+- `NativeArtifactInventory` lists the files an operation needs: the runtime
+  bridge for startup, the import tool and its schemas for cooking.
+- `NativeCompatibilityVerifier` checks each against the receipt embedded in the
+  Interop build: content hash, size and schema identifier. It never rewrites the
+  receipt.
+- `NativeArtifactLease` keeps the verified files open, so they cannot be
+  replaced while native work uses them, and carries the fingerprint that cook
+  provenance uses to decide whether earlier output can be reused. The
+  fingerprint depends on content, schemas and configuration, not on install
+  paths.
+- `EditorNativeCompatibilityService` is the editor's service for the running
+  process (`ForCurrentProcess`) and for cooking (`ForCooking`), and publishes
+  the last `NativeProducerObservation` for the UI.
+
+## Paths
+
+`OxygenPathFinder` extends `DroidNet.Config`'s path finder with the Oxygen
+folders: personal and local projects, and the state database.
+
+## Dependencies
+
+- `DroidNet.Config`: the base path finder.
+- `Testably.Abstractions`: the file system abstraction `OxygenPathFinder` uses.
+- At build time, the analyzer reference to `Generators/src` and the Unicode
+  database in the engine's source tree.
+
+## Tests
+
+[tests/](tests/) covers the identities and asset URIs, the virtual path rules
+(including the engine's case table), operation results and status reduction, the
+diagnostic vocabularies, and native artifact verification against the installed
+SDK. [Generators/tests/](Generators/tests/) covers the Unicode tables generator.
+
+## Related documentation
+
+- [Virtual path rules](../Oxygen.Engine/src/Oxygen/Content/Docs/virtual_paths.md)
+- [Diagnostics and operation results](../../design/editor/lld/diagnostics-operation-results.md)
+- [Editor architecture](../../design/editor/ARCHITECTURE.md)
 
 ## License
 
-Oxygen.Managed.Core is distributed under the **MIT License**. See the LICENSE file in the repository root for details.
+Distributed under the MIT License. See [LICENSE](../../LICENSE) or
+[opensource.org/licenses/MIT](https://opensource.org/licenses/MIT).

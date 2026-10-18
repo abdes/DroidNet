@@ -230,7 +230,7 @@ public class LocalTemplatesSource(IFileSystem filesystem) : ITemplatesSource
         }
 
         if (!templateInfo.AuthoringMounts.Any(static mount =>
-                string.Equals(mount.Name, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)
+                string.Equals(mount.Name, Constants.ContentFolderName, StringComparison.Ordinal)
                 && string.Equals(mount.RelativePath, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)))
         {
             throw new TemplateLoadingException("Template descriptor AuthoringMounts must include Content -> Content.");
@@ -312,7 +312,7 @@ public class LocalTemplatesSource(IFileSystem filesystem) : ITemplatesSource
         var mountName = assetPath[..slash];
         var mountRelativePath = assetPath[(slash + 1)..].Replace('\\', '/').Trim('/');
         var mount = templateInfo.AuthoringMounts.FirstOrDefault(mount =>
-            string.Equals(mount.Name, mountName, StringComparison.OrdinalIgnoreCase));
+            string.Equals(mount.Name, mountName, StringComparison.Ordinal));
         if (mount is null)
         {
             throw new TemplateLoadingException($"Template {fieldName} URI targets unknown authoring mount `{mountName}`.");

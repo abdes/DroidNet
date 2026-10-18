@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using DroidNet.Storage;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
 
@@ -133,17 +134,18 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (string.IsNullOrWhiteSpace(mount.Name) || string.IsNullOrWhiteSpace(mount.RelativePath))
+            // A mount of the pipeline's output is not authored content; it is skipped, not validated.
+            if (ProjectOutputFolders.Contains(mount))
+            {
+                continue;
+            }
+
+            if (VirtualPath.ValidateMountName(mount.Name, VirtualPathRuleSet.Authored) is not null || string.IsNullOrWhiteSpace(mount.RelativePath))
             {
                 return ProjectValidationResult.Failure(
                     ProjectValidationState.InvalidContentRoots,
                     projectRoot,
                     "Project manifest declares an invalid authoring mount root.");
-            }
-
-            if (mount.RelativePath.Trim().Replace('\\', '/').Trim('/') is ".cooked" or ".imported" or ".build")
-            {
-                continue;
             }
 
             if (Path.IsPathRooted(mount.RelativePath))

@@ -31,8 +31,10 @@ source inspection, import, texture cooking and packaging are coordinated by
 through the shared native tools.
 
 Use the [content pipeline LLD](../../design/editor/lld/content-pipeline.md) for
-authoring and cooking workflows, and [virtual paths](docs/virtual-paths.md) for
-asset naming. Binary runtime formats are owned by native Data and Content.
+authoring and cooking workflows, and the engine's
+[virtual path rules](../Oxygen.Engine/src/Oxygen/Content/Docs/virtual_paths.md),
+implemented for the editor by `Oxygen.Managed.Core`'s `VirtualPath`, for asset
+naming. Binary runtime formats are owned by native Data and Content.
 
 ## Cooked metadata
 

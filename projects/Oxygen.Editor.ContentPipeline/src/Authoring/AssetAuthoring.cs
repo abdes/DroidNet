@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Authoring;
 
@@ -54,7 +55,7 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(folder);
-        return Reject(project, Template.Of(kind), name, folder, await this.ReadExistingAsync(cancellationToken).ConfigureAwait(false));
+        return Reject(project, Template.Of(kind), VirtualPath.NormalizeTypedName(name), folder, await this.ReadExistingAsync(cancellationToken).ConfigureAwait(false));
     }
 
     /// <inheritdoc/>
@@ -64,6 +65,7 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(folder);
         var template = Template.Of(kind);
+        name = VirtualPath.NormalizeTypedName(name);
 
         // Resumes on the caller's context, where FilesChanged is raised.
         if (Reject(project, template, name, folder, await this.ReadExistingAsync(cancellationToken).ConfigureAwait(true)) is { } rejected)
@@ -119,9 +121,9 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
 
     private static string? Reject(ProjectContext project, Template template, string name, string folder, HashSet<string> existing)
     {
-        if (RelocationPaths.ValidateName(name) is { } invalid)
+        if (VirtualPath.ValidateSegment(name + template.Extensions[0], VirtualPathRuleSet.Authored) is { } invalid)
         {
-            return invalid;
+            return invalid.ToMessage();
         }
 
         if (name.Length > MaxNameLength)
@@ -138,14 +140,14 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
             .FirstOrDefault(file => existing.Contains(RelocationPaths.Combine(normalized, file)));
         return taken is null
             ? null
-            : $"'{taken}' already exists in {folder}; both would cook to the same asset. Choose another name.";
+            : $"'{taken}' already exists in {folder}, or differs from an existing file only in case. Choose another name.";
     }
 
     // The catalog's records are the project's files under their virtual paths, such as /Content/Player/move.lua.
     private async Task<HashSet<string>> ReadExistingAsync(CancellationToken cancellationToken)
         => (await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false))
             .Select(static record => AssetUriHelper.GetVirtualPath(record.Uri))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .ToHashSet(VirtualPathComparer.CaseFolded);
 
     /// <summary>What one kind of file is called, where it goes and what it starts with.</summary>
     /// <param name="Folder">The kind's folder under a mount root.</param>

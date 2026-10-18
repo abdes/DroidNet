@@ -252,7 +252,7 @@ public sealed partial class ContentPipelineService
             throw new InvalidDataException("The replacement destination overlaps another retained source. Resolve its ownership before replacing this model.");
         }
 
-        var mount = operation.Project.AuthoringMounts.Single(mount => string.Equals(mount.Name, settings.MountPoint, StringComparison.OrdinalIgnoreCase));
+        var mount = operation.Project.AuthoringMounts.Single(mount => string.Equals(mount.Name, settings.MountPoint, StringComparison.Ordinal));
         var conflict = settings.OutputDirectories.Select(directory => Path.Combine(operation.Project.ProjectRoot, mount.RelativePath, directory))
             .Where(Directory.Exists).SelectMany(static directory => Directory.EnumerateFiles(directory, "*.json", SearchOption.AllDirectories))
             .FirstOrDefault(static path => Path.GetExtension(Path.GetFileNameWithoutExtension(path)).ToUpperInvariant() is ".OMAT" or ".OGEO" or ".OSCENE");

@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -55,7 +56,7 @@ public static class RelocationPaths
 
     /// <summary>Returns the path of a file or folder renamed in place, keeping its extension.</summary>
     /// <param name="virtualPath">The current virtual path.</param>
-    /// <param name="newName">The new name, without the extension.</param>
+    /// <param name="newName">The new name as typed, without the extension; it is trimmed and put in NFC.</param>
     /// <param name="isFolder">Whether the path names a folder, which has no extension.</param>
     /// <returns>The renamed virtual path in the same folder.</returns>
     public static string Rename(string virtualPath, string newName, bool isFolder)
@@ -63,41 +64,7 @@ public static class RelocationPaths
         ArgumentNullException.ThrowIfNull(newName);
         var name = GetName(virtualPath);
         var extension = isFolder ? string.Empty : GetExtension(name);
-        return Combine(GetParent(virtualPath), newName.Trim() + extension);
-    }
-
-    /// <summary>Validates one user-supplied file or folder name.</summary>
-    /// <param name="name">The name, without path separators.</param>
-    /// <returns>Why the name cannot be used, or null when it is valid.</returns>
-    public static string? ValidateName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return "Enter a name.";
-        }
-
-        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.Contains('/', StringComparison.Ordinal)
-            || name.EndsWith('.') || name.EndsWith(' ') || name.StartsWith(' ') || name is "." or "..")
-        {
-            return "Use a name without path separators, reserved characters or a trailing dot or space.";
-        }
-
-        if (name.StartsWith('.'))
-        {
-            return "Names starting with a dot are reserved for derived content.";
-        }
-
-        // The engine cooks a virtual path whose segments use only these characters.
-        if (!name.All(static c => char.IsAsciiLetterOrDigit(c) || c is ' ' or '-' or '_' or '.' or '(' or ')'))
-        {
-            return "Use letters, digits, spaces, '-', '_', '(' and ')'; other characters cannot be cooked.";
-        }
-
-        var stem = name.Split('.')[0].ToUpperInvariant();
-        return stem is "CON" or "PRN" or "AUX" or "NUL"
-            || (stem.Length == 4 && stem[3] is >= '1' and <= '9' && (stem.StartsWith("COM", StringComparison.Ordinal) || stem.StartsWith("LPT", StringComparison.Ordinal)))
-            ? "The name is reserved by the file system."
-            : null;
+        return Combine(GetParent(virtualPath), VirtualPath.NormalizeTypedName(newName) + extension);
     }
 
     /// <summary>Gets the last segment of a virtual path.</summary>
@@ -140,8 +107,8 @@ public static class RelocationPaths
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(folder);
         var root = folder.TrimEnd('/');
-        return string.Equals(path, root, StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(path, root, StringComparison.Ordinal)
+            || path.StartsWith(root + "/", StringComparison.Ordinal);
     }
 
     /// <summary>Gets the writable authoring mount that owns a virtual path.</summary>
@@ -154,7 +121,7 @@ public static class RelocationPaths
         ArgumentNullException.ThrowIfNull(virtualPath);
         var trimmed = virtualPath.Trim('/');
         var name = trimmed.Split('/')[0];
-        return GetWritableMounts(project).FirstOrDefault(mount => string.Equals(mount.Name, name, StringComparison.OrdinalIgnoreCase));
+        return GetWritableMounts(project).FirstOrDefault(mount => string.Equals(mount.Name, name, StringComparison.Ordinal));
     }
 
     /// <summary>Gets the project's writable authoring mounts: project sources, never derived output.</summary>
@@ -166,7 +133,7 @@ public static class RelocationPaths
         return project.AuthoringMounts.Where(mount =>
         {
             var relative = mount.RelativePath.Replace('\\', '/').Trim('/');
-            if (relative.Length == 0 || relative.StartsWith('.') || Path.IsPathRooted(mount.RelativePath))
+            if (relative.Length == 0 || ProjectOutputFolders.Contains(mount) || Path.IsPathRooted(mount.RelativePath))
             {
                 return false;
             }

@@ -71,7 +71,7 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
     internal static string ResolveDestination(ProjectContext project, string bundleName)
     {
         ValidateBundleName(bundleName);
-        var content = project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase))
+        var content = project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal))
             ?? throw new InvalidOperationException("Source retention requires the project's Content authoring mount.");
         var projectRoot = Path.GetFullPath(project.ProjectRoot);
         var contentRoot = Path.GetFullPath(Path.Combine(projectRoot, content.RelativePath));

@@ -51,7 +51,7 @@ public sealed class SceneImportReplacement
         var relativeRoot = Path.GetRelativePath(project.ProjectRoot, root).Replace('\\', '/');
         if (!string.Equals(relativeRoot, settings.BundleRoot, StringComparison.OrdinalIgnoreCase)
             || !string.Equals(sidecars[0], settings.PrimaryRelativePath + NativeSceneImportSettings.SidecarSuffix, StringComparison.OrdinalIgnoreCase)
-            || !project.AuthoringMounts.Any(mount => string.Equals(mount.Name, settings.MountPoint, StringComparison.OrdinalIgnoreCase)))
+            || !project.AuthoringMounts.Any(mount => string.Equals(mount.Name, settings.MountPoint, StringComparison.Ordinal)))
         {
             throw new InvalidDataException("The existing import settings do not own this retained source and destination.");
         }
@@ -69,7 +69,7 @@ public sealed class SceneImportReplacement
             throw new IOException("The retained source changed during review. Review it again.");
         }
 
-        var mountName = project.AuthoringMounts.Single(static mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase)).Name;
+        var mountName = project.AuthoringMounts.Single(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal)).Name;
         var virtualPath = string.Join('/', new[] { mountName, "SourceMedia", "DCC", bundleName }.Concat(settings.PrimaryRelativePath.Split('/')).Select(Uri.EscapeDataString));
         return new(bundleName, new Uri(AssetUris.Scheme + ":///" + virtualPath), settings, before);
     }

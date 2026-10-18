@@ -38,33 +38,19 @@ public static class ContentPipelinePaths
         }
 
         var path = Uri.UnescapeDataString(assetUri.AbsolutePath).Replace('\\', '/');
-        if (!IsCanonicalVirtualPath(path))
-        {
-            throw new ArgumentException("Asset URI path must be an absolute canonical virtual path.", nameof(assetUri));
-        }
-
         var nativePath = path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
             ? path[..^".json".Length]
             : path;
+        if (VirtualPath.Validate(nativePath) is { } error)
+        {
+            throw new ArgumentException($"Asset URI path is not a virtual path the engine accepts ({error.ToCode()}).", nameof(assetUri));
+        }
 
         return !nativePath.EndsWith(expectedExtension, StringComparison.OrdinalIgnoreCase)
             ? throw new ArgumentException(
                 $"Asset URI '{assetUri}' does not normalize to '{expectedExtension}'.",
                 nameof(assetUri))
             : nativePath;
-    }
-
-    /// <summary>Checks whether a virtual path is absolute and has no relative or empty segments.</summary>
-    /// <param name="path">The native virtual path.</param>
-    /// <returns><see langword="true"/> when the path is canonical.</returns>
-    public static bool IsCanonicalVirtualPath(string path)
-    {
-        ArgumentNullException.ThrowIfNull(path);
-        return path.StartsWith('/')
-            && !path.Contains("//", StringComparison.Ordinal)
-            && !path.Contains('\\')
-            && !path.Contains('\0')
-            && !path.Split('/').Skip(1).Any(static segment => segment is "" or "." or "..");
     }
 
     /// <summary>
@@ -119,10 +105,13 @@ public static class ContentPipelinePaths
     /// </summary>
     /// <param name="mountName">The mount name.</param>
     /// <returns>The native virtual mount root.</returns>
+    /// <exception cref="ArgumentException">The mount name is refused by the mount rule.</exception>
     public static string GetVirtualMountRoot(string mountName)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(mountName);
-        return "/" + mountName.Trim('/');
+        ArgumentNullException.ThrowIfNull(mountName);
+        return VirtualPath.ValidateMountName(mountName) is { } error
+            ? throw new ArgumentException($"The mount name is refused ({error.ToCode()}).", nameof(mountName))
+            : "/" + mountName;
     }
 
     /// <summary>Gets the virtual path a scene cooks to, which the runtime loads it by.</summary>

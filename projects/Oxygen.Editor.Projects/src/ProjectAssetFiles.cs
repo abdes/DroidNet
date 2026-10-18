@@ -75,7 +75,7 @@ public static class ProjectAssetFiles
     private static ProjectAssetLocation? Locate(ProjectContext project, string mountName, string relativePath)
     {
         if (mountName.Length == 0
-            || Mounts(project).FirstOrDefault(mount => string.Equals(mount.Name, mountName, StringComparison.OrdinalIgnoreCase)) is not { } mount)
+            || Mounts(project).FirstOrDefault(mount => string.Equals(mount.Name, mountName, StringComparison.Ordinal)) is not { } mount)
         {
             return null;
         }

@@ -4,7 +4,6 @@
 
 using DroidNet.Controls;
 using DroidNet.Controls.Selection;
-using Oxygen.Managed.Assets.Filesystem;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
@@ -124,7 +123,7 @@ public partial class ProjectLayoutViewModel
 
     private async Task<ITreeItem?> FindSelectedFolderAsync(TreeItemAdapter root, string path)
         => path is "/" or "." ? root
-            : VirtualPath.IsCanonicalAbsolute(path)
+            : path.StartsWith('/')
                 ? await this.FindAdapterByVirtualPathAsync(path).ConfigureAwait(true)
                 : await FindFolderAdapterAsync(root, path).ConfigureAwait(true);
 

@@ -446,12 +446,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return TreeItemRenameResult.Rejected("The scene's file cannot be renamed here.");
         }
 
-        if (Oxygen.Editor.ContentPipeline.Relocation.RelocationPaths.ValidateName(name) is { } invalid)
+        var target = Oxygen.Editor.ContentPipeline.Relocation.RelocationPaths.Rename(location.VirtualPath, name, isFolder: false);
+        if (VirtualPath.ValidateSegment(Oxygen.Editor.ContentPipeline.Relocation.RelocationPaths.GetName(target), VirtualPathRuleSet.Authored) is { } invalid)
         {
-            return TreeItemRenameResult.Rejected(invalid);
+            return TreeItemRenameResult.Rejected(invalid.ToMessage());
         }
 
-        var target = Oxygen.Editor.ContentPipeline.Relocation.RelocationPaths.Rename(location.VirtualPath, name, isFolder: false);
         try
         {
             _ = await this.relocation.RelocateAsync(
