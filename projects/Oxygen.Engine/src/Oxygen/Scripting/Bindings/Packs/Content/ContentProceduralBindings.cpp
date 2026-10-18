@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -42,31 +41,6 @@ namespace oxygen::scripting::bindings {
 namespace {
   using MeshData = std::pair<std::vector<data::Vertex>, std::vector<uint32_t>>;
 
-  auto SanitizeTokenSegment(std::string_view token) -> std::string
-  {
-    auto segment = std::string {};
-    segment.reserve(token.size());
-    for (const auto ch : token) {
-      if (std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '_'
-        || ch == '-') {
-        segment.push_back(ch);
-      } else {
-        segment.push_back('_');
-      }
-    }
-    if (segment.empty()) {
-      segment = "unnamed";
-    }
-    return segment;
-  }
-
-  auto MakeProceduralGeometryKey(std::string_view name) -> data::AssetKey
-  {
-    const auto key_path = "/Engine/Scripting/Procedural/Geometry/"
-      + SanitizeTokenSegment(name) + ".ogeo";
-    return data::AssetKey::FromVirtualPath(key_path);
-  }
-
   auto MakeBaseColorMaterialKey(const float r, const float g, const float b,
     const float a) -> data::AssetKey
   {
@@ -74,11 +48,9 @@ namespace {
       return static_cast<int>(
         std::lround(std::clamp(value, 0.0F, 1.0F) * 255.0F));
     };
-    const auto key_path = "/Engine/Scripting/Procedural/Materials/BaseColor_"
-      + std::to_string(ToChannel(r)) + "_" + std::to_string(ToChannel(g)) + "_"
-      + std::to_string(ToChannel(b)) + "_" + std::to_string(ToChannel(a))
-      + ".omat";
-    return data::AssetKey::FromVirtualPath(key_path);
+    return MakeProceduralMaterialKey("BaseColor_" + std::to_string(ToChannel(r))
+      + "_" + std::to_string(ToChannel(g)) + "_" + std::to_string(ToChannel(b))
+      + "_" + std::to_string(ToChannel(a)));
   }
 
   //! An optional integer option: its value when absent and its minimum.

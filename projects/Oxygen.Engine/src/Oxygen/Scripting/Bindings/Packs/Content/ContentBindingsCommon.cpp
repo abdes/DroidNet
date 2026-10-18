@@ -5,10 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -18,6 +20,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputActionAsset.h>
@@ -32,6 +35,38 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
+
+  //! Owner of the assets scripts create procedurally (see FromCodePath).
+  constexpr std::string_view kProceduralOwner = "Scripting/Procedural";
+
+  //! `name` as one path segment: anything but [A-Za-z0-9_-] becomes `_`.
+  auto ToPathSegment(const std::string_view name) -> std::string
+  {
+    auto segment = std::string {};
+    segment.reserve(name.size());
+    for (const auto ch : name) {
+      if (std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '_'
+        || ch == '-') {
+        segment.push_back(ch);
+      } else {
+        segment.push_back('_');
+      }
+    }
+    if (segment.empty()) {
+      segment = "unnamed";
+    }
+    return segment;
+  }
+
+  auto MakeProceduralKey(const std::string_view name,
+    const std::string_view extension) -> data::AssetKey
+  {
+    auto code_path = std::string { kProceduralOwner };
+    code_path.push_back('/');
+    code_path.append(ToPathSegment(name));
+    code_path.append(extension);
+    return data::AssetKey::FromCodePath(code_path);
+  }
 
   constexpr auto kUuidTextLength = size_t { 36U };
   constexpr auto kUuidByteLength = size_t { 16U };
@@ -222,6 +257,16 @@ auto RequireAssetGuid(lua_State* state, const int arg_index) -> data::AssetKey
     luaL_argerror(state, arg_index, "asset_guid must be canonical UUID string");
   }
   return *parsed;
+}
+
+auto MakeProceduralGeometryKey(const std::string_view name) -> data::AssetKey
+{
+  return MakeProceduralKey(name, data::kGeometryDescriptorExtension);
+}
+
+auto MakeProceduralMaterialKey(const std::string_view name) -> data::AssetKey
+{
+  return MakeProceduralKey(name, data::kMaterialDescriptorExtension);
 }
 
 auto GetAssetLoader(lua_State* state) noexcept

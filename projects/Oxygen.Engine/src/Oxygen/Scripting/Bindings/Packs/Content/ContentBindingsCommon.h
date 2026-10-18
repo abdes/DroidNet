@@ -96,6 +96,11 @@ auto RequireResourceKey(lua_State* state, int arg_index)
 auto RequireAssetGuid(lua_State* state, int arg_index) -> data::AssetKey;
 auto TryParseAssetGuid(std::string_view text) -> std::optional<data::AssetKey>;
 
+//! Key of the geometry a script creates procedurally, named `name`.
+auto MakeProceduralGeometryKey(std::string_view name) -> data::AssetKey;
+//! Key of the material a script creates procedurally, named `name`.
+auto MakeProceduralMaterialKey(std::string_view name) -> data::AssetKey;
+
 auto GetAssetLoader(lua_State* state) noexcept
   -> observer_ptr<content::IAssetLoader>;
 auto IsAssetLoaderEnabled(lua_State* state) -> bool;

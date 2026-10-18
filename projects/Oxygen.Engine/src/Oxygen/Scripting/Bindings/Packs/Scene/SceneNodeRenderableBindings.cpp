@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -45,38 +44,6 @@ namespace oxygen::scripting::bindings {
 
 namespace {
   using MeshData = std::pair<std::vector<data::Vertex>, std::vector<uint32_t>>;
-
-  auto SanitizeTokenSegment(std::string_view token) -> std::string
-  {
-    auto segment = std::string {};
-    segment.reserve(token.size());
-    for (const auto ch : token) {
-      if (std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '_'
-        || ch == '-') {
-        segment.push_back(ch);
-      } else {
-        segment.push_back('_');
-      }
-    }
-    if (segment.empty()) {
-      segment = "unnamed";
-    }
-    return segment;
-  }
-
-  auto MakeProceduralGeometryKey(std::string_view token) -> data::AssetKey
-  {
-    const auto key_path = "/Engine/Scripting/Procedural/Geometry/"
-      + SanitizeTokenSegment(token) + ".ogeo";
-    return data::AssetKey::FromVirtualPath(key_path);
-  }
-
-  auto MakeProceduralMaterialKey(std::string_view token) -> data::AssetKey
-  {
-    const auto key_path = "/Engine/Scripting/Procedural/Materials/"
-      + SanitizeTokenSegment(token) + ".omat";
-    return data::AssetKey::FromVirtualPath(key_path);
-  }
 
   auto BuildGeometryAssetFromMeshData(const std::string& token, MeshData data)
     -> std::shared_ptr<const data::GeometryAsset>
