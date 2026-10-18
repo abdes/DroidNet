@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
+#pragma managed(push, off)
 
 #include <memory>
 #include <stdexcept>
@@ -69,3 +70,5 @@ namespace oxygen::interop::module {
     scene::NodeHandle node_;
   };
 } // namespace oxygen::interop::module
+
+#pragma managed(pop)

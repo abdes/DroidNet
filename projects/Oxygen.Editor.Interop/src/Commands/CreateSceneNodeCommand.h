@@ -5,14 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed(push, on)
 
+#pragma managed(push, off)
 #include <array>
 #include <cstdint>
 #include <functional>
 #include <string>
-
-#include <msclr/auto_gcroot.h>
 
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
@@ -20,6 +18,10 @@
 
 #include <EditorModule/EditorCommand.h>
 #include <EditorModule/NodeRegistry.h>
+#pragma managed(pop)
+
+#pragma managed(push, on)
+#include <msclr/auto_gcroot.h>
 
 namespace oxygen::interop::module {
 

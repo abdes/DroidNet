@@ -8,9 +8,9 @@
 
 #include <msclr/gcroot.h>
 
-#pragma warning(disable : 4793) // function compiled as native
-#include <Oxygen/Base/logging.h>
-#pragma warning(default : 4793)
+#pragma managed(push, off)
+#include <Oxygen/Base/Logging.h>
+#pragma managed(pop)
 
 using System::IntPtr;
 using System::String;

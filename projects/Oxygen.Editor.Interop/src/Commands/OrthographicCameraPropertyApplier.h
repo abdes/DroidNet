@@ -21,18 +21,6 @@
 
 namespace oxygen::interop::module {
 
-  enum class OrthographicCameraField : std::uint16_t {
-    kOrthographicSize = 0,
-    kAspectRatio = 1,
-    kNearPlane = 2,
-    kFarPlane = 3,
-    kApertureF = 4,
-    kShutterRate = 5,
-    kIso = 6,
-    kAspectMode = 7,
-    kCount,
-  };
-
   //! Editor view of an orthographic volume: half-height, Fixed width ratio.
   struct OrthographicCameraProjection {
     float orthographic_size { 0.0F };

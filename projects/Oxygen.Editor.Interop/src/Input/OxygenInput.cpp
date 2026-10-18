@@ -4,23 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma managed
+#include "pch_clr.h"
 
+#pragma managed(push, off)
 #include <chrono>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <type_traits>
 
-//#ifdef _WIN32
-//#include <WinSock2.h> // include before any header that might include <windows.h>
-//#endif
-
 #include <Oxygen/Base/Detail/NamedType_impl.h>
-#pragma warning(push)
-#pragma warning(disable : 4793)
 #include <Oxygen/Base/Logging.h>
-#pragma warning(pop)
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Time/Types.h>
@@ -28,9 +22,12 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Platform/Input.h>
 
-
 #include <EditorModule/EditorModule.h>
 #include <EditorModule/InputAccumulator.h>
+#pragma managed(pop)
+
+#pragma managed
+
 #include <EngineContext.h>
 #include <Input/OxygenInput.h>
 

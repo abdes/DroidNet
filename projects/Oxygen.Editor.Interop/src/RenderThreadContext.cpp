@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "pch_clr.h"
+
 #pragma managed
 
 #include "RenderThreadContext.h"

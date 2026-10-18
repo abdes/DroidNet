@@ -33,29 +33,47 @@ param(
 if ($Help) { Get-Help $PSCommandPath -Full; return }
 $ErrorActionPreference = 'Stop'
 $SdkRoot = [IO.Path]::GetFullPath($SdkRoot)
-function Get-SdkFileHash([string] $Path) {
-    $stream = [IO.File]::OpenRead($Path)
-    $algorithm = [Security.Cryptography.SHA256]::Create()
-    try { return [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '') }
-    finally { $algorithm.Dispose(); $stream.Dispose() }
-}
-$nativeFiles = @(Get-ChildItem -LiteralPath (Join-Path $SdkRoot 'bin') -Filter '*.dll' -File | Sort-Object Name)
-$suffix = if ($Configuration -eq 'Debug') { '-d' } else { '' }
-foreach ($required in @("Oxygen.Engine$suffix.dll", "Oxygen.Engine.EditorInterface$suffix.dll")) {
-    if ($required -notin $nativeFiles.Name) { throw "Install the $Configuration engine SDK first: $required is missing." }
-}
-$artifacts = @($nativeFiles | ForEach-Object {
-    [ordered]@{ id = 'engine/bin/' + $_.Name; size = $_.Length; sha256 = Get-SdkFileHash $_.FullName; schemaId = $null }
-})
-$receipt = [ordered]@{ version = 1; configuration = $Configuration; artifacts = $artifacts } | ConvertTo-Json -Depth 5 -Compress
-# Header/import-library changes also invalidate compiled C++ code even when DLLs are unchanged.
-$compileFiles = @(Get-ChildItem -LiteralPath (Join-Path $SdkRoot 'include'), (Join-Path $SdkRoot 'lib') -Recurse -File | Sort-Object FullName)
-$compileIdentity = ($compileFiles | ForEach-Object {
-    $_.FullName.Substring($SdkRoot.Length).Replace('\', '/') + '|' + (Get-SdkFileHash $_.FullName)
-}) -join "`n"
 $sha = [Security.Cryptography.SHA256]::Create()
-try { $compileHash = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($compileIdentity))).Replace('-', '') }
-finally { $sha.Dispose() }
+try {
+    $binDir = [IO.DirectoryInfo]::new((Join-Path $SdkRoot 'bin'))
+    $nativeFiles = if ($binDir.Exists) { @($binDir.GetFiles('*.dll') | Sort-Object Name) } else { @() }
+    $suffix = if ($Configuration -eq 'Debug') { '-d' } else { '' }
+    $nativeNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($f in $nativeFiles) { [void]$nativeNames.Add($f.Name) }
+    foreach ($required in @("Oxygen.Engine$suffix.dll", "Oxygen.Engine.EditorInterface$suffix.dll")) {
+        if (!$nativeNames.Contains($required)) { throw "Install the $Configuration engine SDK first: $required is missing." }
+    }
+    $artifacts = [Collections.Generic.List[object]]::new($nativeFiles.Count)
+    foreach ($f in $nativeFiles) {
+        $stream = [IO.File]::OpenRead($f.FullName)
+        try { $hash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '') }
+        finally { $stream.Dispose() }
+        $artifacts.Add([ordered]@{ id = 'engine/bin/' + $f.Name; size = $f.Length; sha256 = $hash; schemaId = $null })
+    }
+    $receipt = [ordered]@{ version = 1; configuration = $Configuration; artifacts = $artifacts } | ConvertTo-Json -Depth 5 -Compress
+    # Header/import-library changes also invalidate compiled C++ code even when DLLs are unchanged.
+    $compilePaths = [Collections.Generic.List[string]]::new(3072)
+    foreach ($sub in @('include', 'lib')) {
+        $dirPath = Join-Path $SdkRoot $sub
+        if ([IO.Directory]::Exists($dirPath)) {
+            $compilePaths.AddRange([IO.Directory]::GetFiles($dirPath, '*', [IO.SearchOption]::AllDirectories))
+        }
+    }
+    $compilePaths.Sort([StringComparer]::OrdinalIgnoreCase)
+    $sb = [Text.StringBuilder]::new($compilePaths.Count * 112)
+    for ($i = 0; $i -lt $compilePaths.Count; $i++) {
+        $fullPath = $compilePaths[$i]
+        $stream = [IO.File]::OpenRead($fullPath)
+        try { $fileHash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '') }
+        finally { $stream.Dispose() }
+        if ($i -gt 0) { [void]$sb.Append("`n") }
+        [void]$sb.Append($fullPath.Substring($SdkRoot.Length).Replace('\', '/')).Append('|').Append($fileHash)
+    }
+    $compileHash = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($sb.ToString()))).Replace('-', '')
+}
+finally {
+    $sha.Dispose()
+}
 $literal = $receipt.Replace('\', '\\').Replace('"', '\"')
 $content = "#pragma once`n#define OXYGEN_NATIVE_SDK_RECEIPT L`"$literal`"`n"
 $OutputHeader = [IO.Path]::GetFullPath($OutputHeader)

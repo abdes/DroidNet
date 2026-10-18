@@ -4,7 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma unmanaged
+#include "pch.h"
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -17,11 +18,11 @@
 #include <utility>
 #include <vector>
 
-#include "pch.h"
 #include <EditorModule/EditorModule.h>
 #include <EditorModule/SceneAssetRequests.h>
 #include <EditorModule/ThreadSafeQueue.h>
 
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Data/BuiltinGeometry.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/TextureResource.h>

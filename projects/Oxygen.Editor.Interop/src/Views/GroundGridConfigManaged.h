@@ -3,11 +3,14 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed
 
+#pragma managed(push, off)
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
+#pragma managed(pop)
 
 #include "Views/ColorManaged.h"
+
+#pragma managed(push, on)
 
 namespace Oxygen::Interop {
 
@@ -85,3 +88,5 @@ namespace Oxygen::Interop {
   };
 
 } // namespace Oxygen::Interop
+
+#pragma managed(pop)

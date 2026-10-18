@@ -5,11 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed(push, on)
 
+#pragma managed(push, off)
 #include <memory>
 
 #include <Oxygen/EditorInterface/EngineContext.h>
+#pragma managed(pop)
+
+#pragma managed(push, on)
 
 namespace Oxygen::Interop {
 

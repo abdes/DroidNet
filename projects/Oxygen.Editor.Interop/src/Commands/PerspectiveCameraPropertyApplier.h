@@ -20,18 +20,6 @@
 
 namespace oxygen::interop::module {
 
-  enum class PerspectiveCameraField : std::uint16_t {
-    kFieldOfViewYRadians = 0,
-    kAspectRatio = 1,
-    kNearPlane = 2,
-    kFarPlane = 3,
-    kApertureF = 4,
-    kShutterRate = 5,
-    kIso = 6,
-    kAspectMode = 7,
-    kCount,
-  };
-
   [[nodiscard]] inline auto to_string(const PerspectiveCameraField field) noexcept
     -> std::string_view
   {

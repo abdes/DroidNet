@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma managed
+#include "pch_clr.h"
 
+#pragma managed(push, off)
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -21,6 +22,9 @@
 #include <Oxygen/Scripting/Analysis/DiagnosticRenderer.h>
 #include <Oxygen/Scripting/Analysis/ScriptAnalyzer.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
+#pragma managed(pop)
+
+#pragma managed
 
 #include <Scripting/ScriptAnalysis.h>
 

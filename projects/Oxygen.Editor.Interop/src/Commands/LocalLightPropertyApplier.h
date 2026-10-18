@@ -22,26 +22,6 @@
 
 namespace oxygen::interop::module {
 
-  //! Field ids shared by point and spot lights; common ids match directional.
-  enum class LocalLightField : std::uint16_t {
-    kColorR = 0,
-    kColorG = 1,
-    kColorB = 2,
-    kAffectsWorld = 3,
-    kCastsShadows = 5,
-    kShadowBias = 6,
-    kShadowNormalBias = 7,
-    kContactShadows = 8,
-    kShadowResolutionHint = 9,
-    kExposureCompensation = 10,
-    kLuminousFluxLm = 11,
-    kRange = 12,
-    kSourceRadius = 13,
-    kInnerConeAngleRadians = 14,
-    kOuterConeAngleRadians = 15,
-    kCount = 16,
-  };
-
   template <typename T>
   concept LocalLight
     = std::same_as<T, scene::PointLight> || std::same_as<T, scene::SpotLight>;

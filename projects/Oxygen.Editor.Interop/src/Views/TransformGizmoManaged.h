@@ -5,10 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed
 
+#pragma managed(push, off)
 #include <EditorModule/TransformGizmoController.h>
+#pragma managed(pop)
+
 #include <Views/ViewIdManaged.h>
+
+#pragma managed(push, on)
 
 namespace Oxygen::Interop {
 
@@ -175,3 +179,5 @@ namespace Oxygen::Interop {
   };
 
 } // namespace Oxygen::Interop
+
+#pragma managed(pop)

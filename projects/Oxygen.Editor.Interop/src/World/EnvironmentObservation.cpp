@@ -4,20 +4,26 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma managed
+#include "pch_clr.h"
 
+#pragma managed(push, off)
 #include <functional>
 #include <memory>
-#include <msclr/gcroot.h>
 
 #include <Oxygen/EditorInterface/EngineContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 
 #include <Commands/ObserveEnvironmentCommand.h>
 #include <EditorModule/EditorModule.h>
+#pragma managed(pop)
+
+#pragma managed
+
+#include <msclr/gcroot.h>
+
 #include <World/FogEnvironmentConversion.h>
-#include <World/SkyEnvironmentConversion.h>
 #include <World/OxygenWorld.h>
+#include <World/SkyEnvironmentConversion.h>
 
 using namespace System::Threading::Tasks;
 using namespace oxygen::interop::module;
@@ -134,7 +140,8 @@ auto MakeEnvironmentObservationCallback(
   TaskCompletionSource<EnvironmentStateManaged>^ completion)
   -> std::function<void(EnvironmentObservation)>
 {
-  auto observer = std::make_shared<EnvironmentObservationCompletion>(completion);
+  auto observer = std::shared_ptr<EnvironmentObservationCompletion>(
+    new EnvironmentObservationCompletion(completion));
   return [observer](EnvironmentObservation value) { observer->Complete(value); };
 }
 

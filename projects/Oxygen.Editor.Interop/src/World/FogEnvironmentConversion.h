@@ -5,10 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed(push, on)
 
 #include <Commands/SetEnvironmentCommand.h>
 #include <World/FogEnvironmentManaged.h>
+
+#pragma managed(push, on)
 
 namespace Oxygen::Interop::World {
 

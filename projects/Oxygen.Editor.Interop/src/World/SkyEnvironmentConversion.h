@@ -5,14 +5,18 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed(push, on)
 
+#pragma managed(push, off)
 #include <cstddef>
 #include <filesystem>
 #include <string>
 
 #include <Commands/SetEnvironmentCommand.h>
+#pragma managed(pop)
+
 #include <World/SkyEnvironmentManaged.h>
+
+#pragma managed(push, on)
 
 namespace Oxygen::Interop::World {
 

@@ -4,17 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma unmanaged
-
 #include "pch.h"
 
 #include <Commands/CreateSceneCommand.h>
+#include <Commands/DestroySceneCommand.h>
 #include <EditorModule/EditorCommand.h>
 #include <EditorModule/EditorModule.h>
 
 namespace oxygen::interop::module {
 
-  void CreateSceneCommand::Execute(CommandContext& context) {
+  void CreateSceneCommand::Execute(CommandContext& /*context*/) {
     if (!module_)
       return;
 
@@ -38,6 +37,18 @@ namespace oxygen::interop::module {
         try { cb_(false, "unknown exception"); }
         catch (...) {}
       }
+    }
+  }
+
+  void DestroySceneCommand::Execute(CommandContext& context) {
+    if (!module_)
+      return;
+
+    try {
+      module_->ApplyDestroyScene(true, context.FrameContext.get());
+    }
+    catch (...) {
+      // swallow exceptions across engine boundary
     }
   }
 

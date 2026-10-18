@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 #pragma once
+#pragma managed(push, off)
 
 #include <mutex>
 #include <type_traits>
@@ -112,3 +113,5 @@ namespace oxygen::interop::module {
   };
 
 } // namespace oxygen::interop::module
+
+#pragma managed(pop)

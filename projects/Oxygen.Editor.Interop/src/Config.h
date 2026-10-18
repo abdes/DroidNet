@@ -5,24 +5,23 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed(push, on)
 
-#include <Oxygen/Base/Logging.h>
+#pragma managed(push, off)
+#include <chrono>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <vector>
+
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/EditorInterface/Api.h>
+#pragma managed(pop)
 
-// Std / interop
-#ifdef _WIN32
-#include <WinSock2.h> // include before any header that might include <windows.h>
-#endif
+#pragma managed(push, on)
 #include <msclr/marshal_cppstd.h>
-#include <filesystem>
-#include <optional>
-#include <string>
-#include <vector>
 
 // The purpose of this header is to expose managed (C++/CLI) mirror types for
 // the native Oxygen engine configuration structures so they can be consumed
@@ -240,14 +239,9 @@ namespace Oxygen::Interop {
     property bool IsColored;
     property System::String^ ModuleOverrides;
 
-    // Minimum and maximum allowed verbosity values (loguru constants).
-    static property int MinVerbosity {
-      int get() { return static_cast<int>(::loguru::Verbosity_OFF); }
-    }
-
-    static property int MaxVerbosity {
-      int get() { return static_cast<int>(::loguru::Verbosity_MAX); }
-    }
+    // Minimum and maximum allowed verbosity values (loguru constants, static_assert-verified in EngineRunner_logging.cpp).
+    literal int MinVerbosity = -9;
+    literal int MaxVerbosity = 9;
   };
 
   // FrameCaptureConfig -----------------------------------------------------

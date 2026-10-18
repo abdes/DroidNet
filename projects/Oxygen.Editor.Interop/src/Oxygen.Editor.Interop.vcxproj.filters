@@ -47,6 +47,7 @@
     </ClCompile>
     <ClCompile Include="EngineRunner_logging.cpp" />
     <ClCompile Include="pch.cpp" />
+    <ClCompile Include="pch_clr.cpp" />
     <ClCompile Include="EngineRunner_surfaces.cpp" />
     <ClCompile Include="Utils\TokenHelpers.cpp">
       <Filter>Utils</Filter>
@@ -54,19 +55,7 @@
     <ClCompile Include="Commands\CreateSceneCommand.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
-    <ClCompile Include="Commands\DestroySceneCommand.cpp">
-      <Filter>Commands</Filter>
-    </ClCompile>
-    <ClCompile Include="Commands\CreateViewCommand.cpp">
-      <Filter>Commands</Filter>
-    </ClCompile>
-    <ClCompile Include="Commands\DestroyViewCommand.cpp">
-      <Filter>Commands</Filter>
-    </ClCompile>
-    <ClCompile Include="Commands\HideViewCommand.cpp">
-      <Filter>Commands</Filter>
-    </ClCompile>
-    <ClCompile Include="Commands\ShowViewCommand.cpp">
+    <ClCompile Include="Commands\PropertyApplierRegistry.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
     <ClCompile Include="EditorModule\InputAccumulator.cpp">
@@ -102,24 +91,6 @@
     <ClCompile Include="Commands\ViewCameraCommands.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
-    <ClCompile Include="Commands\SetViewSceneCameraCommand.cpp">
-      <Filter>Commands</Filter>
-    </ClCompile>
-    <ClCompile Include="Commands\SetViewCameraPresetCommand.cpp">
-      <Filter>Commands</Filter>
-    </ClCompile>
-    <ClCompile Include="Commands\SetViewCameraControlModeCommand.cpp">
-      <Filter>Commands</Filter>
-    </ClCompile>
-    <ClCompile Include="Commands\SetViewCameraMovementSpeedCommand.cpp">
-      <Filter>Commands</Filter>
-    </ClCompile>
-    <ClCompile Include="Commands\SetViewRenderOptionsCommand.cpp">
-      <Filter>Commands</Filter>
-    </ClCompile>
-    <ClCompile Include="Commands\FrameViewCommand.cpp">
-      <Filter>Commands</Filter>
-    </ClCompile>
     <ClCompile Include="EditorModule\ViewFraming.cpp">
       <Filter>EditorModule</Filter>
     </ClCompile>
@@ -137,9 +108,6 @@
     </ClCompile>
     <ClCompile Include="EditorModule\PaneRenderPolicy.cpp">
       <Filter>EditorModule</Filter>
-    </ClCompile>
-    <ClCompile Include="Commands\SetViewCameraSettingsCommand.cpp">
-      <Filter>Commands</Filter>
     </ClCompile>
     <ClCompile Include="EditorModule\CommandFactory.cpp">
       <Filter>EditorModule</Filter>
@@ -219,6 +187,7 @@
     </ClInclude>
     <ClInclude Include="LogHandler.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="pch_clr.h" />
     <ClInclude Include="Views\ViewCameraPoseManaged.h">
       <Filter>Views</Filter>
     </ClInclude>

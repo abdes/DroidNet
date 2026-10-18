@@ -4,14 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstring>
-#include <exception>
-#include <stdexcept>
-#include <memory>
-#include <limits>
-#include <string>
-#include <utility>
-#include <vector>
+#include "pch.h"
+
+#pragma unmanaged
 
 #include <Commands/AttachLightCommand.h>
 #include <Commands/DirectionalLightPropertyApplier.h>
@@ -24,20 +19,7 @@
 #include <Commands/ObserveEnvironmentCommand.h>
 #include <Commands/SetEnvironmentCommand.h>
 #include <EditorModule/EditorCommand.h>
-#include <Oxygen/Core/Types/Atmosphere.h>
-#include <Oxygen/Core/Types/PostProcess.h>
-#include <Oxygen/Scene/Environment/Fog.h>
-#include <Oxygen/Scene/Environment/PostProcessVolume.h>
-#include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
-#include <Oxygen/Scene/Environment/SkyLight.h>
-#include <Oxygen/Scene/Environment/SkySphere.h>
-#include <Oxygen/Scene/Light/DirectionalLight.h>
-#include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/Environment/SceneBackground.h>
-
-#pragma unmanaged
 
 using namespace oxygen::interop::module;
 

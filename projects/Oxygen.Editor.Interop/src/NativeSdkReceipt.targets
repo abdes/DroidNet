@@ -10,6 +10,8 @@
     <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
     <NativeSdkCompileHeader>$(IntDir)NativeSdkCompile.h</NativeSdkCompileHeader>
     <NativeSdkReceiptHeader>$(IntDir)NativeSdkReceipt.h</NativeSdkReceiptHeader>
+    <NativeSdkStampFile>$(IntDir)NativeSdkReceipt.stamp</NativeSdkStampFile>
+    <NativeSdkRoot>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)</NativeSdkRoot>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -21,10 +23,20 @@
       <ForcedIncludeFiles>$(NativeSdkReceiptHeader);$(NativeSdkCompileHeader);%(ForcedIncludeFiles)</ForcedIncludeFiles>
     </ClCompile>
   </ItemGroup>
-  <Target Name="RecordInteropNativeSdk" BeforeTargets="ClCompile" Condition="'$(DesignTimeBuild)' != 'true'">
-    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\tools\Write-NativeSdkReceipt.ps1&quot; -SdkRoot &quot;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)&quot; -Configuration &quot;$(Configuration)&quot; -OutputHeader &quot;$(NativeSdkReceiptHeader)&quot; -CompileHeader &quot;$(NativeSdkCompileHeader)&quot;" />
+  <Target Name="_PrepareInteropNativeSdkInputs" BeforeTargets="RecordInteropNativeSdk" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Delete Files="$(NativeSdkStampFile)" Condition="!Exists('$(NativeSdkReceiptHeader)') or !Exists('$(NativeSdkCompileHeader)')" />
     <ItemGroup>
-      <FileWrites Include="$(NativeSdkReceiptHeader);$(NativeSdkCompileHeader)" />
+      <_NativeSdkInputs Include="$(MSBuildThisFileFullPath);$(MSBuildThisFileDirectory)..\tools\Write-NativeSdkReceipt.ps1" />
+      <_NativeSdkInputs Include="$(NativeSdkRoot)\bin\*.dll;$(NativeSdkRoot)\include\**\*;$(NativeSdkRoot)\lib\**\*" Condition="Exists('$(NativeSdkRoot)')" />
+      <!-- Force RecordInteropNativeSdk to run and produce the missing-SDK error when the SDK directory is absent -->
+      <_NativeSdkInputs Include="$(NativeSdkRoot)\__missing_sdk__" Condition="!Exists('$(NativeSdkRoot)')" />
+    </ItemGroup>
+  </Target>
+  <Target Name="RecordInteropNativeSdk" BeforeTargets="ClCompile" DependsOnTargets="_PrepareInteropNativeSdkInputs" Condition="'$(DesignTimeBuild)' != 'true'" Inputs="@(_NativeSdkInputs)" Outputs="$(NativeSdkStampFile)">
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\tools\Write-NativeSdkReceipt.ps1&quot; -SdkRoot &quot;$(NativeSdkRoot)&quot; -Configuration &quot;$(Configuration)&quot; -OutputHeader &quot;$(NativeSdkReceiptHeader)&quot; -CompileHeader &quot;$(NativeSdkCompileHeader)&quot;" />
+    <Touch Files="$(NativeSdkStampFile)" AlwaysCreate="true" />
+    <ItemGroup>
+      <FileWrites Include="$(NativeSdkReceiptHeader);$(NativeSdkCompileHeader);$(NativeSdkStampFile)" />
     </ItemGroup>
   </Target>
 </Project>

@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma managed
+#include "pch_clr.h"
 
+#pragma managed(push, off)
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -19,34 +20,7 @@
 #include <utility>
 #include <vector>
 
-#include <Commands/AttachCameraCommand.h>
-#include <Commands/AttachLightCommand.h>
-#include <Commands/CreateSceneNodeCommand.h>
-#include <Commands/DetachGeometryCommand.h>
-#include <Commands/PropertyApplierRegistry.h>
-#include <Commands/RemoveSceneNodeCommand.h>
-#include <Commands/RemoveSceneNodesCommand.h>
-#include <Commands/RenameSceneNodeCommand.h>
-#include <Commands/ReparentSceneNodeCommand.h>
-#include <Commands/ReparentSceneNodesCommand.h>
-#include <Commands/LocalFogVolumeCommands.h>
-#include <Commands/SetEnvironmentCommand.h>
-#include <World/FogEnvironmentConversion.h>
-#include <World/SkyEnvironmentConversion.h>
-#include <Commands/SetGeometryCommand.h>
-#include <Commands/SetLocalTransformCommand.h>
-#include <Commands/SetMaterialOverrideCommand.h>
-#include <Commands/SetPropertiesCommand.h>
-#include <Commands/UpdateTransformsForNodesCommand.h>
-#include <EditorModule/CommandFactory.h>
-#include <EditorModule/EditorModule.h>
-#include <EditorModule/NodeRegistry.h>
-#include <EditorModule/SceneAssetRequests.h>
-#include <World/OxygenWorld.h>
 #include <glm/fwd.hpp>
-#include <msclr/gcroot.h>
-#include <msclr/marshal.h>
-#include <msclr/marshal_cppstd.h>
 
 #include <Oxygen/EditorInterface/EngineContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
@@ -54,6 +28,39 @@
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
+
+#include <Commands/DetachGeometryCommand.h>
+#include <Commands/LocalFogVolumeCommands.h>
+#include <Commands/PropertyApplierRegistry.h>
+#include <Commands/RemoveSceneNodeCommand.h>
+#include <Commands/RemoveSceneNodesCommand.h>
+#include <Commands/RenameSceneNodeCommand.h>
+#include <Commands/ReparentSceneNodeCommand.h>
+#include <Commands/ReparentSceneNodesCommand.h>
+#include <Commands/SetEnvironmentCommand.h>
+#include <Commands/SetGeometryCommand.h>
+#include <Commands/SetLocalTransformCommand.h>
+#include <Commands/SetMaterialOverrideCommand.h>
+#include <Commands/SetPropertiesCommand.h>
+#include <Commands/UpdateTransformsForNodesCommand.h>
+#include <EditorModule/EditorModule.h>
+#include <EditorModule/NodeRegistry.h>
+#include <EditorModule/SceneAssetRequests.h>
+#pragma managed(pop)
+
+#pragma managed
+
+#include <msclr/gcroot.h>
+#include <msclr/marshal.h>
+#include <msclr/marshal_cppstd.h>
+
+#include <Commands/AttachCameraCommand.h>
+#include <Commands/AttachLightCommand.h>
+#include <Commands/CreateSceneNodeCommand.h>
+#include <EditorModule/CommandFactory.h>
+#include <World/FogEnvironmentConversion.h>
+#include <World/OxygenWorld.h>
+#include <World/SkyEnvironmentConversion.h>
 
 using namespace System::Threading::Tasks;
 

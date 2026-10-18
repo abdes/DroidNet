@@ -4,16 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cmath>
-#include <limits>
-#include <memory>
-
-#include <glm/gtc/epsilon.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <glm/vector_relational.hpp>
-
-#include <Oxygen/Scene/Camera/Orthographic.h>
-#include <Oxygen/Scene/Scene.h>
+#include "pch.h"
 
 #include <EditorModule/EditorView.h>
 #include <EditorModule/ViewportInset.h>

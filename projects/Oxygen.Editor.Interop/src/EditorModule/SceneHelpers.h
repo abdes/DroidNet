@@ -20,6 +20,7 @@
 
 #include <EditorModule/NodeRegistry.h>
 #include <EditorModule/TransformGizmo.h>
+#include <api_export.h>
 
 namespace oxygen::interop::module {
 
@@ -110,25 +111,25 @@ namespace oxygen::interop::module {
   //! The icons whose discs overlap the rectangle between `rect_min` and
   //! `rect_max`, in view pixels; a click picks a few pixels around the
   //! pointer. Icons behind the eye are not hit.
-  [[nodiscard]] auto PickHelperIcons(const GizmoCamera& camera,
+  OXGN_EI_NDAPI auto PickHelperIcons(const GizmoCamera& camera,
     std::span<const SceneHelperNode> nodes, const glm::vec2& rect_min,
     const glm::vec2& rect_max, float display_scale)
     -> std::vector<HelperIconHit>;
 
   //! Draws every node's icon, tinted by its light colour, into the scene
   //! layer; selected icons get the selection accent.
-  void BuildHelperIcons(const GizmoCamera& camera,
+  OXGN_EI_API void BuildHelperIcons(const GizmoCamera& camera,
     std::span<const SceneHelperNode> nodes, float display_scale,
     vortex::ViewOverlay& overlay);
 
   //! Where a helper handle is drawn; none when the node has no such handle.
-  [[nodiscard]] auto HelperHandlePosition(const GizmoCamera& camera,
+  OXGN_EI_NDAPI auto HelperHandlePosition(const GizmoCamera& camera,
     const SceneHelperNode& node, HelperHandle handle)
     -> std::optional<glm::vec3>;
 
   //! The editable handle under `pointer`, the nearest first; a point light's
   //! range can be grabbed anywhere on its silhouette circle.
-  [[nodiscard]] auto HitTestHelperHandles(const GizmoCamera& camera,
+  OXGN_EI_NDAPI auto HitTestHelperHandles(const GizmoCamera& camera,
     std::span<const SceneHelperNode> nodes, const glm::vec2& pointer,
     float display_scale) -> std::optional<HelperHandleHit>;
 
@@ -137,13 +138,13 @@ namespace oxygen::interop::module {
   class HelperDrag {
   public:
     //! Starts a drag; none when the handle cannot be dragged from this view.
-    [[nodiscard]] static auto Begin(const GizmoCamera& camera,
+    OXGN_EI_NDAPI static auto Begin(const GizmoCamera& camera,
       const SceneHelperNode& node, HelperHandle handle,
       const glm::vec2& pointer) -> std::optional<HelperDrag>;
 
     //! Applies the pointer; returns true when the value changed. A pointer
     //! whose ray misses the drag plane keeps the last value.
-    auto Update(const GizmoCamera& camera, const glm::vec2& pointer) -> bool;
+    OXGN_EI_API auto Update(const GizmoCamera& camera, const glm::vec2& pointer) -> bool;
 
     [[nodiscard]] auto Handle() const noexcept -> HelperHandle
     {
@@ -196,21 +197,21 @@ namespace oxygen::interop::module {
   //! viewing volume and frame, a directional light's arrow, a point light's
   //! range sphere, a spot light's cones and a local fog volume's sphere,
   //! with the editable handles.
-  void BuildSelectedHelpers(const GizmoCamera& camera,
+  OXGN_EI_API void BuildSelectedHelpers(const GizmoCamera& camera,
     std::span<const SceneHelperNode> nodes, const HelperVisual& visual,
     vortex::ViewOverlay& overlay);
 
   //! The triad's centre in view pixels: the image's bottom-left corner.
-  [[nodiscard]] auto TriadCenter(const GizmoCamera& camera,
+  OXGN_EI_NDAPI auto TriadCenter(const GizmoCamera& camera,
     float display_scale) -> glm::vec2;
 
   //! The triad letter under `pointer`; the letter nearest the eye wins.
-  [[nodiscard]] auto HitTestTriad(const GizmoCamera& camera,
+  OXGN_EI_NDAPI auto HitTestTriad(const GizmoCamera& camera,
     const glm::vec2& pointer, float display_scale) -> TriadAxis;
 
   //! Draws the orientation triad over everything: X, Y and Z letters in the
   //! axis colours, placed by the view's rotation.
-  void BuildTriad(const GizmoCamera& camera, TriadAxis hovered,
+  OXGN_EI_API void BuildTriad(const GizmoCamera& camera, TriadAxis hovered,
     float display_scale, vortex::ViewOverlay& overlay);
 
 } // namespace oxygen::interop::module

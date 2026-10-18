@@ -13,6 +13,7 @@
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Scene/Types/NodeHandle.h>
+#include <api_export.h>
 
 namespace oxygen::scene {
   class Scene;
@@ -39,13 +40,13 @@ namespace oxygen::interop::module {
    `kFramePointRadius`. Missing nodes are skipped; no value when none of the
    nodes exist or the bounds are not finite.
   */
-  [[nodiscard]] auto ResolveNodesFrameSphere(scene::Scene& scene,
+  OXGN_EI_NDAPI auto ResolveNodesFrameSphere(scene::Scene& scene,
     std::span<const scene::NodeHandle> nodes) -> std::optional<FrameSphere>;
 
   //! Bounds that frame the whole scene: its geometry, or every node's
   //! position when it has none, or the origin when it is empty. No value when
   //! the bounds are not finite.
-  [[nodiscard]] auto ResolveSceneFrameSphere(scene::Scene& scene)
+  OXGN_EI_NDAPI auto ResolveSceneFrameSphere(scene::Scene& scene)
     -> std::optional<FrameSphere>;
 
 } // namespace oxygen::interop::module

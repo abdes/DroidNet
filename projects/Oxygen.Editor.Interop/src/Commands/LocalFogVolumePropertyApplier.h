@@ -20,24 +20,6 @@
 
 namespace oxygen::interop::module {
 
-  //! Field ids of the local fog volume component.
-  enum class LocalFogVolumeField : std::uint16_t {
-    kEnabled = 0,
-    kRadialFogExtinction = 1,
-    kHeightFogExtinction = 2,
-    kHeightFogFalloff = 3,
-    kHeightFogOffset = 4,
-    kFogPhaseG = 5,
-    kFogAlbedoR = 6,
-    kFogAlbedoG = 7,
-    kFogAlbedoB = 8,
-    kFogEmissiveR = 9,
-    kFogEmissiveG = 10,
-    kFogEmissiveB = 11,
-    kSortPriority = 12,
-    kCount = 13,
-  };
-
   //! Applies one complete local fog volume candidate; an invalid entry rejects
   //! the whole edit and leaves the component unchanged.
   class LocalFogVolumePropertyApplier final : public IComponentPropertyApplier {

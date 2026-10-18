@@ -4,10 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// This translation unit implements member functions on managed types.
-// It must be compiled as managed code.
-#pragma managed
+#include "pch_clr.h"
 
+#pragma managed(push, off)
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -16,28 +15,30 @@
 #include <utility>
 #include <vector>
 
-//#ifdef _WIN32
-//#include <WinSock2.h> // include before any header that might include <windows.h>
-//#endif
-
 #include <glm/fwd.hpp>
 
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
-#include <Commands/AttachCameraCommand.h>
-#include <Commands/SetGeometryCommand.h>
-#include <Commands/SetEnvironmentCommand.h>
-#include <Commands/SetMaterialOverrideCommand.h>
-#include <Commands/CreateSceneNodeCommand.h>
 #include <Commands/DetachGeometryCommand.h>
 #include <Commands/RemoveSceneNodeCommand.h>
 #include <Commands/RemoveSceneNodesCommand.h>
 #include <Commands/RenameSceneNodeCommand.h>
 #include <Commands/ReparentSceneNodeCommand.h>
 #include <Commands/ReparentSceneNodesCommand.h>
+#include <Commands/SetEnvironmentCommand.h>
+#include <Commands/SetGeometryCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
+#include <Commands/SetMaterialOverrideCommand.h>
 #include <Commands/SetPropertiesCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
+#pragma managed(pop)
+
+// This translation unit implements member functions on managed types.
+// It must be compiled as managed code.
+#pragma managed
+
+#include <Commands/AttachCameraCommand.h>
+#include <Commands/CreateSceneNodeCommand.h>
 #include <EditorModule/CommandFactory.h>
 
 using namespace oxygen::interop::module;

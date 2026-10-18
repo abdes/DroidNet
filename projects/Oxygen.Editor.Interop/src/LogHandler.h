@@ -5,9 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed(push, on)
 
 #include "Config.h"
+
+#pragma managed(push, off)
+namespace loguru {
+  struct Message;
+}
+#pragma managed(pop)
+
+#pragma managed(push, on)
 
 using System::Object;
 using System::String;
@@ -15,9 +22,6 @@ using System::IntPtr;
 
 namespace Microsoft::Extensions::Logging {
   interface class ILogger;
-}
-namespace loguru {
-  struct Message;
 }
 
 namespace Oxygen::Interop {

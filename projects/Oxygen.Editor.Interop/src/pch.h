@@ -16,37 +16,42 @@
 // Standard library
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <ctime>
+#include <exception>
+#include <filesystem>
 #include <functional>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <new>
+#include <numbers>
 #include <optional>
-#include <string_view>
+#include <span>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
-// Windows (include winsock2 before windows.h if needed elsewhere)
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#endif
-
-// DX12 and DXGI
-#include <dxgi1_2.h>
-#include <dxgi1_3.h>
-
 // GLM
+#include <glm/geometric.hpp>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/mat4x4.hpp>
+#include <glm/vec2.hpp>
+#include <glm/vec3.hpp>
+#include <glm/vec4.hpp>
 
 // Common Oxygen headers often used across sources
 #pragma warning(push)
@@ -54,6 +59,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/VirtualPathResolver.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -63,13 +70,9 @@
 #include <Oxygen/Core/Types/ViewResolver.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/ProceduralMeshes.h>
-#include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/VirtualPathResolver.h>
-#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/EditorInterface/Api.h>
+#include <Oxygen/EditorInterface/EngineContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
@@ -91,13 +94,20 @@
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/InputEvent.h>
+#include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
-#include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
+
+#include <api_export.h>
+#include <EditorModule/EditorCommand.h>
+#include <EditorModule/NodeRegistry.h>
+#include <EditorModule/SurfaceRegistry.h>
 #pragma warning(pop)
 
 #pragma managed(pop)

@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed(push, off)
+#pragma managed(push, on)
 
 namespace System {
   ref class Object;

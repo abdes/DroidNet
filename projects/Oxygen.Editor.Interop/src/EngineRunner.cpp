@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma managed
+#include "pch_clr.h"
 
+#pragma managed(push, off)
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -36,6 +37,10 @@
 #include <Oxygen/Vortex/RendererCapability.h>
 
 #include <EditorModule/EditorModule.h>
+#pragma managed(pop)
+
+#pragma managed
+
 #include <EngineRunner.h>
 #include <LogHandler.h>
 #include <Utils/TokenHelpers.h>

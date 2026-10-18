@@ -4,12 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cmath>
-#include <optional>
-#include <vector>
-
-#include <glm/geometric.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include "pch.h"
 
 #include <EditorModule/SceneHelpers.h>
 
