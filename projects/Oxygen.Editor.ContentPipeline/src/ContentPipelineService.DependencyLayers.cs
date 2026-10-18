@@ -126,7 +126,7 @@ public sealed partial class ContentPipelineService
                 break;
             }
 
-            foreach (var mount in ready.GroupBy(static input => input.MountName, StringComparer.OrdinalIgnoreCase))
+            foreach (var mount in ready.GroupBy(static input => input.MountName, StringComparer.Ordinal))
             {
                 var inputs = mount.ToArray();
                 var scope = this.CreateScope(operation.Project, inputs, targetKind) with
@@ -139,7 +139,7 @@ public sealed partial class ContentPipelineService
                     NativeJobs = graph.NativeJobs,
                     SceneDescriptors = graph.SceneDescriptors,
                     CapturedInputs = new([.. snapshot.CreateNativeInputs().Inputs, .. graph.GeneratedInputs]),
-                    Output = staging.Roots.Single(root => string.Equals(root.Mount, mount.Key, StringComparison.OrdinalIgnoreCase)),
+                    Output = staging.Roots.Single(root => string.Equals(root.Mount, mount.Key, StringComparison.Ordinal)),
                     CookedContextRoots = referenceRoots,
                     InputDependencies = graph.Dependencies.SetItems(graph.Builtins.Where(ProceduralGeometryDescriptorService.IsGeneratedBasicShape)
                         .Select(static uri => KeyValuePair.Create<Uri, ImmutableArray<Uri>>(uri, [AssetUris.BuildGeneratedUri("Materials/Default")]))),

@@ -326,7 +326,7 @@ internal static class AuthoredReferenceFormat
         var virtualPath = escaped ? Uri.UnescapeDataString(path) : path;
         var segments = virtualPath.Split('/');
         if (segments.Length < 3 || segments.Skip(1).Any(static segment => segment.Length == 0)
-            || (mounts?.Contains(segments[1], StringComparer.OrdinalIgnoreCase) == false))
+            || (mounts?.Contains(segments[1], StringComparer.Ordinal) == false))
         {
             return false;
         }

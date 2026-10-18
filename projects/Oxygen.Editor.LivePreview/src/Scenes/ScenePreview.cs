@@ -617,7 +617,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
             throw new InvalidOperationException($"The {label} requires a source mount.");
         }
 
-        var cookedRoot = this.engineService.ContentStatus.Bindings.SingleOrDefault(root => string.Equals(root.ProjectMount, path[1..separator], StringComparison.OrdinalIgnoreCase))?.Path
+        var cookedRoot = this.engineService.ContentStatus.Bindings.SingleOrDefault(root => string.Equals(root.ProjectMount, path[1..separator], StringComparison.Ordinal))?.Path
             ?? throw new InvalidOperationException($"The {label} has no accepted cooked generation. Cook its content before previewing it.");
         return new(texture, cookedRoot, path[(separator + 1)..]) { ProjectMount = path[1..separator] };
     }

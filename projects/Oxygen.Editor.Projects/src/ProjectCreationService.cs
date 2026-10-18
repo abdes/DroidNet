@@ -330,6 +330,11 @@ public sealed class ProjectCreationService(
             ValidateMount(mount);
         }
 
+        if (descriptor.AuthoringMounts.Select(static mount => mount.Name).Distinct(VirtualPathComparer.CaseFolded).Count() != descriptor.AuthoringMounts.Count)
+        {
+            throw new InvalidDataException("Project template AuthoringMounts names must differ by more than case.");
+        }
+
         if (descriptor.StarterScene is null)
         {
             throw new InvalidDataException("Project template StarterScene is required.");
@@ -347,6 +352,11 @@ public sealed class ProjectCreationService(
     private static void ValidateMount(ProjectMountPoint mount)
     {
         RequireDescriptorText(mount.Name, "AuthoringMounts.Name");
+        if (VirtualPath.ValidateMountName(mount.Name, VirtualPathRuleSet.Authored) is { } error)
+        {
+            throw new InvalidDataException($"Project template AuthoringMounts.Name '{mount.Name}' is not a mount name ({error.ToCode()}).");
+        }
+
         RequireDescriptorText(mount.RelativePath, "AuthoringMounts.RelativePath");
         ValidateRelativeDescriptorPath(mount.RelativePath, "AuthoringMounts.RelativePath");
     }

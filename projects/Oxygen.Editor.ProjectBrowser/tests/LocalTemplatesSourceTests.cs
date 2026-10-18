@@ -63,6 +63,35 @@ public class LocalTemplatesSourceTests
     }
 
     [TestMethod]
+    [DataRow(".Cooked", DisplayName = "Engine-reserved mount")]
+    [DataRow("content", DisplayName = "Case-only sibling")]
+    public async Task LoadTemplateAsync_ShouldRejectMountNamesTheEngineRefuses(string name)
+    {
+        var root = CreateTempTemplate();
+        try
+        {
+            var descriptor = Path.Combine(root, "Template.json");
+            var json = await File.ReadAllTextAsync(descriptor).ConfigureAwait(false);
+            var extraMount = $$"""{ "Name": "{{name}}", "RelativePath": "Config" }, { "Name": "Content",""";
+            await File.WriteAllTextAsync(descriptor, json.Replace("{\n      \"Name\": \"Content\",", extraMount, StringComparison.Ordinal)).ConfigureAwait(false);
+            var source = new LocalTemplatesSource(new RealFileSystem());
+
+            try
+            {
+                _ = await source.LoadTemplateAsync(new Uri(descriptor)).ConfigureAwait(false);
+                Assert.Fail("Template loading should reject a mount name the engine refuses.");
+            }
+            catch (TemplateLoadingException)
+            {
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public async Task BuiltInStarterScenes_ShouldDeserializeAsSceneData()
     {
         var templatesRoot = FindBuiltInTemplatesRoot();

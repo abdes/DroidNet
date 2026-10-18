@@ -45,7 +45,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         {
             foreach (var source in result.order.Where(static source => source.Kind == CookedContentSourceKind.LocalFolder))
             {
-                var mount = project.LocalFolderMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.OrdinalIgnoreCase));
+                var mount = project.LocalFolderMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
                 var path = Path.GetFullPath(mount.AbsolutePath);
                 if (!File.Exists(Path.Combine(path, "container.index.bin")))
                 {
@@ -220,7 +220,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             var owned = HasProjectOwner(graph, uri) || this.knownProjectOutputs.Contains(uri);
             if (match.record?.Cooked is { } asset)
             {
-                var libraryPriority = priority.Single(item => string.Equals(item.source.Name, match.root.Name, StringComparison.OrdinalIgnoreCase)).index;
+                var libraryPriority = priority.Single(item => string.Equals(item.source.Name, match.root.Name, StringComparison.Ordinal)).index;
                 if (owned && projectPriority > libraryPriority)
                 {
                     continue;
@@ -263,7 +263,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     public IReadOnlyList<string> OrderRoots(IEnumerable<string> projectRoots)
     {
         var paths = this.order.SelectMany(source => source.Kind == CookedContentSourceKind.ProjectOutput ? projectRoots.Order(StringComparer.Ordinal)
-            : this.roots.Where(root => string.Equals(root.Name, source.Name, StringComparison.OrdinalIgnoreCase)).Select(static root => root.Path));
+            : this.roots.Where(root => string.Equals(root.Name, source.Name, StringComparison.Ordinal)).Select(static root => root.Path));
         return paths.Reverse().Distinct(StringComparer.OrdinalIgnoreCase).Reverse().ToArray();
     }
 
@@ -326,7 +326,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             {
                 result.AddRange(owned);
             }
-            else if (this.roots.FirstOrDefault(root => string.Equals(root.Name, source.Name, StringComparison.OrdinalIgnoreCase)) is { } library)
+            else if (this.roots.FirstOrDefault(root => string.Equals(root.Name, source.Name, StringComparison.Ordinal)) is { } library)
             {
                 result.Add(new(CookPublicationRootOwner.Library, library.Name, library.SourceKey, library.Fingerprint, library.Path));
             }
@@ -405,7 +405,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
 
     private bool ProjectHasPriority(Root root)
         => this.order.Last(source => source.Kind == CookedContentSourceKind.ProjectOutput
-            || (source.Kind == CookedContentSourceKind.LocalFolder && string.Equals(source.Name, root.Name, StringComparison.OrdinalIgnoreCase))).Kind == CookedContentSourceKind.ProjectOutput;
+            || (source.Kind == CookedContentSourceKind.LocalFolder && string.Equals(source.Name, root.Name, StringComparison.Ordinal))).Kind == CookedContentSourceKind.ProjectOutput;
 
     private bool ProjectSourceWins(Uri uri, Root root)
         => this.ProjectHasPriority(root) && (this.resolveImported?.Invoke(uri) is not null

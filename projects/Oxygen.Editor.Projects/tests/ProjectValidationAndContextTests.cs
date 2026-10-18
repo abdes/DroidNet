@@ -490,6 +490,37 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
+    [DataRow(".Cooked", DisplayName = "Engine-reserved mount")]
+    [DataRow("content", DisplayName = "Case-only sibling")]
+    public async Task ProjectCreationService_ShouldRejectTemplateMountNamesTheEngineRefuses(string name)
+    {
+        var fs = new MockFileSystem();
+        CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
+        fs.Directory.CreateDirectory(@"C:\Projects");
+        var extraMount = $$"""{ "Name": "{{name}}", "RelativePath": "Config" }, {""";
+        await fs.File.WriteAllTextAsync(
+                @"C:\Templates\Blank\Template.json",
+                CreateTemplateDescriptorJson().Replace("\"AuthoringMounts\": [\n    {", $"\"AuthoringMounts\": [{extraMount}", StringComparison.Ordinal))
+            .ConfigureAwait(false);
+
+        var storage = new NativeStorageProvider(fs);
+        var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
+
+        var result = await service.CreateFromTemplateAsync(
+                new ProjectCreationRequest
+                {
+                    TemplateRoot = @"C:\Templates\Blank",
+                    ParentLocation = @"C:\Projects",
+                    ProjectName = "Created",
+                    Category = Category.Games,
+                })
+            .ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = fs.Directory.Exists(@"C:\Projects\Created").Should().BeFalse();
+    }
+
+    [TestMethod]
     public async Task RecentProjectAdapter_ShouldClassifyStaleProjectsWithoutDeletingUsage()
     {
         var projectUsage = new Mock<IProjectUsageService>();

@@ -111,13 +111,13 @@ public sealed partial class ContentPipelineService
         var split = path.IndexOf('/', StringComparison.Ordinal);
         var mountName = split < 0 ? path : path[..split];
         if (publication.Roots.FirstOrDefault(root => root.Owner == CookPublicationRootOwner.Library
-            && string.Equals(root.Name, mountName, StringComparison.OrdinalIgnoreCase)) is { } local)
+            && string.Equals(root.Name, mountName, StringComparison.Ordinal)) is { } local)
         {
             return [new(local.Name, local.LibraryPath, split < 0 ? string.Empty : path[(split + 1)..], IsLocal: true)];
         }
 
         var mounts = project.AuthoringMounts.Where(mount => !ProjectOutputFolders.Contains(mount)
-            && (path.Length == 0 || string.Equals(mountName, "Engine", StringComparison.OrdinalIgnoreCase)
+            && (path.Length == 0 || string.Equals(mountName, "Engine", StringComparison.Ordinal)
                 || string.Equals(mount.Name, mountName, StringComparison.Ordinal))).ToArray();
         return mounts.Length == 0 ? throw new InvalidDataException("The inspection scope does not belong to a project content mount.")
             : mounts.Select(mount => new InspectionRoot(mount.Name, publication.FindProjectRoot(mount.Name), path, IsLocal: false)).ToArray();
@@ -181,7 +181,7 @@ public sealed partial class ContentPipelineService
     private static InspectionRoot[] ResolveImportedInspectionRoots(ProjectContext project, CookPublicationReadLease publication, Uri scope, InspectionRoot[] ordinary, IEnumerable<string> outputScopes)
     {
         var isModel = Path.GetExtension(scope.AbsolutePath).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX";
-        var roots = (isModel ? [] : ordinary).ToDictionary(static root => root.Name, StringComparer.OrdinalIgnoreCase);
+        var roots = (isModel ? [] : ordinary).ToDictionary(static root => root.Name, StringComparer.Ordinal);
         foreach (var group in outputScopes.GroupBy(static path => path.Trim('/').Split('/')[0], StringComparer.OrdinalIgnoreCase))
         {
             if (!project.AuthoringMounts.Any(mount => !ProjectOutputFolders.Contains(mount) && string.Equals(mount.Name, group.Key, StringComparison.Ordinal)))

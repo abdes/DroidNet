@@ -160,12 +160,12 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
     private static string GetLocalMountRelativeSelection(string mountName, string selected)
     {
         if (string.IsNullOrWhiteSpace(selected)
-            || string.Equals(selected, mountName, StringComparison.OrdinalIgnoreCase))
+            || string.Equals(selected, mountName, StringComparison.Ordinal))
         {
             return string.Empty;
         }
 
-        return selected.StartsWith(mountName + "/", StringComparison.OrdinalIgnoreCase)
+        return selected.StartsWith(mountName + "/", StringComparison.Ordinal)
             ? selected[(mountName.Length + 1)..]
             : selected;
     }

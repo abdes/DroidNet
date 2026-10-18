@@ -23,10 +23,10 @@ internal sealed partial class CookReferenceRoots : IDisposable
     public static async Task<CookReferenceRoots> AcquireAsync(CookStagingArea staging, CookProvenance previous, CookIncrementalPlan plan, IEngineContentPipelineApi native, CancellationToken cancellationToken)
     {
         var result = new CookReferenceRoots();
-        var paths = staging.Roots.ToDictionary(static root => root.Mount, static root => root.Path, StringComparer.OrdinalIgnoreCase);
+        var paths = staging.Roots.ToDictionary(static root => root.Mount, static root => root.Path, StringComparer.Ordinal);
         try
         {
-            foreach (var mount in plan.ReusedAssets.Select(static asset => asset.MountName).Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var mount in plan.ReusedAssets.Select(static asset => asset.MountName).Distinct(StringComparer.Ordinal))
             {
                 if (paths.ContainsKey(mount))
                 {
@@ -42,7 +42,7 @@ internal sealed partial class CookReferenceRoots : IDisposable
                     throw new IOException($"Cooked dependency mount '{mount}' is missing its index. Cook that content again.");
                 }
 
-                var expected = previous.Roots.Single(root => string.Equals(root.Mount, mount, StringComparison.OrdinalIgnoreCase));
+                var expected = previous.Roots.Single(root => string.Equals(root.Mount, mount, StringComparison.Ordinal));
                 var actual = await lease.ReadInventoryAsync(native, cancellationToken).ConfigureAwait(false);
                 if (!expected.Matches(actual) || !actual.IsValid)
                 {

@@ -5,6 +5,7 @@
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Session;
 
@@ -80,8 +81,9 @@ internal static class MountChange
     private static void Validate(ProjectInfo candidate)
     {
         var names = candidate.AuthoringMounts.Select(static mount => mount.Name).Concat(candidate.LocalFolderMounts.Select(static mount => mount.Name)).ToArray();
-        if (names.Any(static name => string.IsNullOrWhiteSpace(name) || name is "." or ".." || name.IndexOfAny(['/', '\\', ':']) >= 0)
-            || names.ToHashSet(StringComparer.OrdinalIgnoreCase).Count != names.Length)
+        if (candidate.AuthoringMounts.Any(static mount => !ProjectOutputFolders.Contains(mount) && VirtualPath.ValidateMountName(mount.Name, VirtualPathRuleSet.Authored) is not null)
+            || candidate.LocalFolderMounts.Any(static mount => string.IsNullOrWhiteSpace(mount.Name) || mount.Name.IndexOfAny(['/', '\\', ':']) >= 0)
+            || names.Distinct(VirtualPathComparer.CaseFolded).Count() != names.Length)
         {
             throw new InvalidDataException("Content mount names must be unique folder names.");
         }

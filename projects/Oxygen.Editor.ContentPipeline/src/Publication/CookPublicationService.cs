@@ -313,7 +313,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
         IReadOnlySet<string> droppedRoots)
     {
         // A mount left with no products leaves the publication, as if it was never cooked; so does a removed mount.
-        var names = selected.AuthoringMounts.Select(static mount => mount.Name).Where(name => !droppedRoots.Contains(name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var names = selected.AuthoringMounts.Select(static mount => mount.Name).Where(name => !droppedRoots.Contains(name)).ToHashSet(StringComparer.Ordinal);
         var owned = baseline.Roots.Where(root => root.Owner == CookPublicationRootOwner.Project && names.Contains(root.Name)).ToArray();
         var products = baseline.ProductState.Products.Where(product => product.Outputs.All(output => owned.Any(root => string.Equals(root.Name, output.RootMount, StringComparison.Ordinal)))).ToImmutableArray();
         return new(

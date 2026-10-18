@@ -262,7 +262,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
             var roots = document?.Roots ?? [];
             this.RootPaths = [.. roots.Select(root => root.ResolvePath(project.ProjectRoot))];
             this.ProjectRoots = roots.Where(static root => root.Owner == CookPublicationRootOwner.Project)
-                .ToImmutableDictionary(static root => root.Name, root => root.ResolvePath(project.ProjectRoot), StringComparer.OrdinalIgnoreCase);
+                .ToImmutableDictionary(static root => root.Name, root => root.ResolvePath(project.ProjectRoot), StringComparer.Ordinal);
             this.Products = document?.ProductState ?? new(project.ProjectId, [], []);
         }
 

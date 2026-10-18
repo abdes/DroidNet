@@ -127,9 +127,9 @@ internal sealed class AssetIdentityReducer
         => AssetFileTypes.Is(path, AssetFileCategory.ImportSettings);
 
     private static bool IsDerivedRootMount(string mountPoint)
-        => string.Equals(mountPoint, "Cooked", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(mountPoint, "Imported", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(mountPoint, "Build", StringComparison.OrdinalIgnoreCase);
+        => string.Equals(mountPoint, "Cooked", StringComparison.Ordinal)
+           || string.Equals(mountPoint, "Imported", StringComparison.Ordinal)
+           || string.Equals(mountPoint, "Build", StringComparison.Ordinal);
 
     private static string GetLogicalKey(Uri uri)
     {

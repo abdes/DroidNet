@@ -349,7 +349,7 @@ public sealed partial class ContentPipelineService
         CookReferenceRoots? references = null;
         try
         {
-            var mounts = dirtyInputs.Select(static input => input.MountName).Concat(plan.Removals.Keys).Distinct(StringComparer.OrdinalIgnoreCase);
+            var mounts = dirtyInputs.Select(static input => input.MountName).Concat(plan.Removals.Keys).Distinct(StringComparer.Ordinal);
             staging = await this.publication.CreateStagingAsync(operation, baseline, mounts, repair.EmptyRoots, cancellationToken).ConfigureAwait(false);
             staging.VerifyAcceptedInventories(inventories, repair.EmptyRoots);
             var removals = await this.RemoveRetiredOutputsAsync(operation, targetKind, artifacts, staging, plan, cancellationToken).ConfigureAwait(false);

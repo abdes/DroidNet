@@ -6,6 +6,9 @@ using System.Diagnostics;
 using System.IO.Abstractions;
 using System.Text.Json;
 using Oxygen.Editor.Projects;
+using VirtualPath = Oxygen.Managed.Core.VirtualPath;
+using VirtualPathComparer = Oxygen.Managed.Core.VirtualPathComparer;
+using VirtualPathRuleSet = Oxygen.Managed.Core.VirtualPathRuleSet;
 
 namespace Oxygen.Editor.ProjectBrowser.Templates;
 
@@ -253,6 +256,16 @@ public class LocalTemplatesSource(IFileSystem filesystem) : ITemplatesSource
                 && string.Equals(mount.RelativePath, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)))
         {
             throw new TemplateLoadingException("Template descriptor AuthoringMounts must include Content -> Content.");
+        }
+
+        if (templateInfo.AuthoringMounts.FirstOrDefault(static mount => VirtualPath.ValidateMountName(mount.Name, VirtualPathRuleSet.Authored) is not null) is { } invalid)
+        {
+            throw new TemplateLoadingException($"Template descriptor AuthoringMounts name `{invalid.Name}` is not a mount name.");
+        }
+
+        if (templateInfo.AuthoringMounts.Select(static mount => mount.Name).Distinct(VirtualPathComparer.CaseFolded).Count() != templateInfo.AuthoringMounts.Count)
+        {
+            throw new TemplateLoadingException("Template descriptor AuthoringMounts names must differ by more than case.");
         }
     }
 
