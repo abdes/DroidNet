@@ -344,6 +344,8 @@ dotnet_diagnostic.MA0027.severity = none
 dotnet_diagnostic.RCS1044.severity = none
 # Owner: CA1825
 dotnet_diagnostic.MA0005.severity = none
+# MA0176: Optimize guid creation
+dotnet_diagnostic.MA0176.severity = none
 
 # Suppress specific StyleCop rule(s) for files whose name ends with .Log.cs
 [**/*.Logs.cs]
