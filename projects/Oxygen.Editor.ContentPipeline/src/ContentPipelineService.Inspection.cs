@@ -18,6 +18,7 @@ namespace Oxygen.Editor.ContentPipeline;
 public sealed partial class ContentPipelineService
 {
     /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2025:Ensure tasks using IDisposable instances complete before the instances are disposed", Justification = "The gate owns the lease: this method clears its own reference before handing the lease over, so only the gate disposes it, after the drain.")]
     public async Task<CookedOutputReport> InspectCookedOutputAsync(Uri? scopeUri, CancellationToken cancellationToken, bool validate = false, ProjectContext? expectedProject = null)
     {
         var project = expectedProject ?? this.RequireActiveProject();
@@ -66,7 +67,18 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private static async Task ReleaseInspectionGateAsync(Task drain, IDisposable reader)
+    private static DiagnosticRecord IndexMismatch(string rootPath)
+        => new()
+        {
+            OperationId = Guid.NewGuid(),
+            Domain = FailureDomain.ContentPipeline,
+            Severity = DiagnosticSeverity.Error,
+            Code = ContentPipelineDiagnosticCodes.ValidateFailed,
+            Message = "The cooked index no longer matches its publication.",
+            AffectedPath = Path.Combine(rootPath, "container.index.bin"),
+        };
+
+    private static async Task ReleaseInspectionGateAsync(Task drain, CookPublicationReadLease reader)
     {
         try
         {
@@ -117,9 +129,17 @@ public sealed partial class ContentPipelineService
         CookedInventoryReport actual)
     {
         var known = root.IsLocal ? null : provenance.Roots.FirstOrDefault(item => string.Equals(item.Mount, root.Name, StringComparison.Ordinal));
-        if (known is null) { return []; }
+        if (known is null)
+        {
+            return [];
+        }
+
         var (shared, valid) = known.Compare(actual, provenance.Products.SelectMany(static product => product.Outputs));
-        if (!shared) { return []; }
+        if (!shared)
+        {
+            return [];
+        }
+
         return provenance.Products.SelectMany(product => product.Outputs
                 .Where(output => string.Equals(output.RootMount, root.Name, StringComparison.Ordinal)
                     && output.Asset.DescriptorRelativePath is { } path && valid.Contains(path))
@@ -189,7 +209,7 @@ public sealed partial class ContentPipelineService
             await using var lifetime = lease.ConfigureAwait(false);
             if (lease.GetFiles().Count == 0)
             {
-                return new(root.Name, IsPresent: false, new(root.Path ?? string.Empty, Succeeded: true, SourceIdentity: null, [], [], []), Validation: null, []);
+                return new(root.Name, IsPresent: false, new(root.Path, Succeeded: true, SourceIdentity: null, [], [], []), Validation: null, []);
             }
 
             var actual = await lease.ReadInventoryAsync(this.engineContentPipelineApi, cancellationToken).ConfigureAwait(false);
@@ -202,12 +222,7 @@ public sealed partial class ContentPipelineService
                 validation = validation with
                 {
                     Succeeded = false,
-                    Diagnostics = [.. validation.Diagnostics, new DiagnosticRecord
-                {
-                    OperationId = Guid.NewGuid(), Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
-                    Code = ContentPipelineDiagnosticCodes.ValidateFailed, Message = "The cooked index no longer matches its publication.",
-                    AffectedPath = Path.Combine(root.Path, "container.index.bin"),
-                }],
+                    Diagnostics = [.. validation.Diagnostics, IndexMismatch(root.Path)],
                 };
             }
 

@@ -105,7 +105,7 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
     internal static string GetDefaultFolder(ProjectContext project, string? selectedFolder, string kindFolder)
     {
         var normalized = selectedFolder?.Replace('\\', '/').Trim().TrimEnd('/');
-        var selected = string.IsNullOrWhiteSpace(normalized) || normalized == "/"
+        var selected = string.IsNullOrWhiteSpace(normalized) || string.Equals(normalized, "/", StringComparison.Ordinal)
             ? null
             : RelocationPaths.ToPhysical(project, "/" + normalized.TrimStart('/')) is { } physical
                 ? RelocationPaths.ToVirtual(project, physical)
@@ -115,7 +115,7 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
             return selected;
         }
 
-        var mount = selected ?? "/" + (RelocationPaths.GetWritableMounts(project).FirstOrDefault()?.Name ?? Oxygen.Editor.Projects.Constants.ContentFolderName);
+        var mount = selected ?? ("/" + (RelocationPaths.GetWritableMounts(project).FirstOrDefault()?.Name ?? Oxygen.Editor.Projects.Constants.ContentFolderName));
         return RelocationPaths.Combine(mount, kindFolder);
     }
 

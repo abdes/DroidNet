@@ -271,7 +271,7 @@ public sealed partial class ContentPipelineService
             .Where(mount => !graph.Assets.Any(input => string.Equals(input.MountName, mount, StringComparison.Ordinal))).ToArray();
         var plan = CookIncrementalPlanner.CreatePlan(snapshot.BuildFingerprint, snapshot.Inputs, graph, previous, inventories, repair.EmptyRoots, repair.RemovedSources) with
         {
-            DroppedRoots = [.. dropped],
+            DroppedRoots = dropped.ToImmutableHashSet(StringComparer.Ordinal),
             Removals = repair.Removals.RemoveRange(dropped),
         };
         if (resolveScopes().Any(static scope => !scope.AllowImportedSourceChanges))

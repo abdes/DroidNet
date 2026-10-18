@@ -172,7 +172,7 @@ public sealed partial class ContentCookCoordinator
             run.Snapshot = snapshot = Append(run.Snapshot with { UnsavedDocuments = documents }, new(Message: "Waiting for participating documents to be saved.", State: CookRunState.NeedsSave));
         }
 
-        this.LogRunWaitingForSave(DescribeRun(snapshot), documents.Length);
+        this.LogRunWaitingForSave(snapshot);
         this.PublishRun(snapshot, reveal: !snapshot.Request.IsAutomatic);
         return resume;
     }
@@ -207,7 +207,7 @@ public sealed partial class ContentCookCoordinator
             this.revealQueueOutcome |= !snapshot.Request.IsAutomatic;
         }
 
-        this.LogRunQueued(DescribeRun(snapshot), snapshot.Request.IsDemand ? "the active preview" : snapshot.Request.IsAutomatic ? "cook on change" : "a request");
+        this.LogRunQueued(snapshot);
         this.PublishRun(snapshot, reveal: !snapshot.Request.IsAutomatic);
         return new RunProgress(this, operation.OperationId);
     }

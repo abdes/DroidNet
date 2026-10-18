@@ -125,10 +125,7 @@ public partial class ProjectLayoutViewModel(
             this.messenger.Register<CreateFolderRequestMessage>(this, (_, message) => _ = this.CreateFolderAsync(message));
             this.catalogSubscription = catalog.Changes.Subscribe(_ => this.OnCatalogChanged());
             this.folderSubscription = folders.FolderChanges.Subscribe(_ => this.OnFoldersChanged());
-            if (relocationService is not null)
-            {
-                relocationService.FilesChanged += this.OnFilesChanged;
-            }
+            relocationService?.FilesChanged += this.OnFilesChanged;
 
             this.isSubscribed = true;
         }
@@ -227,10 +224,7 @@ public partial class ProjectLayoutViewModel(
             this.messenger.UnregisterAll(this);
             this.catalogSubscription?.Dispose();
             this.folderSubscription?.Dispose();
-            if (relocationService is not null)
-            {
-                relocationService.FilesChanged -= this.OnFilesChanged;
-            }
+            relocationService?.FilesChanged -= this.OnFilesChanged;
             contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
             this.projectRoot?.Dispose();
         }
@@ -378,7 +372,7 @@ public partial class ProjectLayoutViewModel(
         this.LogRestoreStateFinal(string.Join(", ", contentBrowserState.SelectedFolders));
     }
 
-    private void OnMountRenamed(object? sender, VirtualFolderMountTreeItemAdapter mount)
+    private void OnMountRenamed(object? sender, MountRenamedEventArgs e)
     {
         if (!this.IsApplyingMounts)
         {

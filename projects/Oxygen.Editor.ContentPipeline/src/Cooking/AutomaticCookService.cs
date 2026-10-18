@@ -282,7 +282,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         var changedSources = closed.Select(static item => item.Key).Where(asset => !resumed.Contains(asset)).ToList();
         if (changedSources.Count != 0)
         {
-            this.LogCheckingChangedSources(changedSources.Count, changedSources);
+            this.LogCheckingChangedSources(changedSources);
             await this.CookStaleAsync(current, changedSources, lifetime).ConfigureAwait(false);
         }
     }
@@ -305,11 +305,12 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
                 var waitStarted = this.time.GetTimestamp();
                 this.LogWaitingForWriter(changedSources.Count);
                 await idle.ConfigureAwait(false);
-                this.LogWriterIdle(this.time.GetElapsedTime(waitStarted).TotalSeconds);
+                this.LogWriterIdle(waitStarted);
             }
 
             var read = await this.statuses.ReadAsync(current, changedSources, lifetime).ConfigureAwait(false);
             var cooked = read.Where(static status => status.Freshness == AssetCookFreshness.Current).Select(static status => status.AssetUri).ToHashSet();
+
             // A source that is gone is cooked only to remove the output it published.
             var gone = read.Where(static status => status.Freshness == AssetCookFreshness.MissingSource && !status.HasPublishedOutput)
                 .Select(static status => status.AssetUri).ToHashSet();
@@ -414,7 +415,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
                 }
                 catch (Exception exception)
                 {
-                    this.LogSchedulingFailure(exception, cook.AssetUri.AbsoluteUri);
+                    this.LogSchedulingFailure(exception, cook.AssetUri);
                 }
 
                 lock (this.sync)
@@ -462,7 +463,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         }
         catch (Exception exception)
         {
-            this.LogSchedulingFailure(exception, cook.AssetUri.AbsoluteUri);
+            this.LogSchedulingFailure(exception, cook.AssetUri);
         }
         finally
         {

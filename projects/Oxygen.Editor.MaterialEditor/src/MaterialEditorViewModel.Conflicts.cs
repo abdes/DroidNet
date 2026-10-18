@@ -56,9 +56,10 @@ public sealed partial class MaterialEditorViewModel
             var saved = await current.SaveCopyAsync(new DocumentFile(location.FilePath, location.AssetUri), CancellationToken.None).ConfigureAwait(true);
             if (!saved.Succeeded)
             {
-                return new(Succeeded: false, saved.Outcome == DocumentSaveOutcome.Conflict
+                var reason = saved.Outcome == DocumentSaveOutcome.Conflict
                     ? $"A file named “{normalized}” already exists. Choose another name."
-                    : $"The copy was not saved. {saved.Message}");
+                    : $"The copy was not saved. {saved.Message}";
+                return new(Succeeded: false, reason);
             }
 
             await this.assets.RefreshAsync().ConfigureAwait(true);

@@ -129,7 +129,7 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
             mount.Name,
             projectRelativeFolder,
             ToAssetFolderUri(mount.Name, kindFolder),
-isExplicitLocalMount: false,
+            isExplicitLocalMount: false,
             fallbackReason);
     }
 
@@ -154,7 +154,7 @@ isExplicitLocalMount: false,
             mountName,
             mountRelativeFolder,
             ToAssetFolderUri(mountName, mountRelativeFolder),
-isExplicitLocalMount: true,
+            isExplicitLocalMount: true,
             fallbackReason);
 
     private static string GetLocalMountRelativeSelection(string mountName, string selected)

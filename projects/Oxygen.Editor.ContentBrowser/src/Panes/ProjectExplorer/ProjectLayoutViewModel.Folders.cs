@@ -268,10 +268,10 @@ public partial class ProjectLayoutViewModel
     // A selection without any authored folder leaves the clipboard as it is.
     private void PutOnClipboard(IReadOnlyList<ITreeItem> items, bool isCut)
     {
-        var folders = this.GetAuthoredFolders(items);
-        if (folders.Length != 0)
+        var authored = this.GetAuthoredFolders(items);
+        if (authored.Length != 0)
         {
-            contentBrowserState.SetClipboard(folders, isCut);
+            contentBrowserState.SetClipboard(authored, isCut);
         }
     }
 

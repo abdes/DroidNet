@@ -34,6 +34,9 @@ public sealed class CookedFolderTreeItemAdapter : TreeItemAdapter
     /// <summary>Gets the same folder icon used by authored folders.</summary>
     public string IconGlyph => this.IsExpanded && this.folders.Count > 0 ? "\uE838" : "\uE8B7";
 
+    /// <inheritdoc />
+    public override bool ValidateItemName(string name) => false;
+
     internal static IReadOnlyList<CookedFolderTreeItemAdapter> Build(VirtualFolderMountTreeItemAdapter mount, IEnumerable<string> paths)
     {
         var roots = new Dictionary<string, CookedFolderTreeItemAdapter>(StringComparer.Ordinal);
@@ -57,9 +60,6 @@ public sealed class CookedFolderTreeItemAdapter : TreeItemAdapter
 
         return roots.Values.OrderBy(static folder => folder.Label, StringComparer.OrdinalIgnoreCase).ToArray();
     }
-
-    /// <inheritdoc />
-    public override bool ValidateItemName(string name) => false;
 
     /// <inheritdoc />
     protected override int DoGetChildrenCount() => this.folders.Count;

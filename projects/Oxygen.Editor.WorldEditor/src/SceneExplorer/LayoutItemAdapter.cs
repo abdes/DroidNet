@@ -17,8 +17,8 @@ namespace Oxygen.Editor.World.SceneExplorer;
 public abstract class LayoutItemAdapter : TreeItemAdapter
 {
     // Separated collections allow for "Folders First" sorting or distinct UI templates if needed.
-    protected readonly ObservableCollection<FolderAdapter> Folders = [];
-    protected readonly ObservableCollection<ITreeItem> Content = [];
+    private readonly ObservableCollection<FolderAdapter> folders = [];
+    private readonly ObservableCollection<ITreeItem> content = [];
 
     private bool isHiddenInEditor;
     private bool isEffectivelyHiddenInEditor;
@@ -26,19 +26,19 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
     protected LayoutItemAdapter()
     {
         // Subscribe to changes to keep the base TreeItemAdapter in sync
-        this.Folders.CollectionChanged += this.OnChildrenChanged;
-        this.Content.CollectionChanged += this.OnChildrenChanged;
+        this.folders.CollectionChanged += this.OnChildrenChanged;
+        this.content.CollectionChanged += this.OnChildrenChanged;
     }
 
     /// <summary>
     /// Gets a value indicating whether this item has any children (Folders or Content).
     /// </summary>
-    public bool HasChildren => this.Folders.Count > 0 || this.Content.Count > 0;
+    public bool HasChildren => this.folders.Count > 0 || this.content.Count > 0;
 
     /// <summary>
     /// Gets the current children (Folders and Content) synchronously.
     /// </summary>
-    public IEnumerable<ITreeItem> CurrentChildren => this.Folders.Cast<ITreeItem>().Concat(this.Content);
+    public IEnumerable<ITreeItem> CurrentChildren => this.folders.Cast<ITreeItem>().Concat(this.content);
 
     /// <summary>
     /// Gets or sets a value indicating whether this row's node is explicitly hidden in the editing
@@ -117,48 +117,54 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
     /// <summary>
     /// Adds a folder to the layout.
     /// </summary>
+    /// <param name="folder">The folder; adding it again does nothing.</param>
     public void AddFolder(FolderAdapter folder)
     {
-        if (!this.Folders.Contains(folder))
+        if (!this.folders.Contains(folder))
         {
-            this.Folders.Add(folder);
+            this.folders.Add(folder);
         }
     }
 
     /// <summary>
     /// Adds a content item (Node) to the layout.
     /// </summary>
+    /// <param name="item">The item; adding it again does nothing.</param>
     public void AddContent(ITreeItem item)
     {
-        if (!this.Content.Contains(item))
+        if (!this.content.Contains(item))
         {
-            this.Content.Add(item);
+            this.content.Add(item);
         }
     }
 
     /// <summary>
     /// Removes a folder from the layout.
     /// </summary>
-    public bool RemoveFolder(FolderAdapter folder) => this.Folders.Remove(folder);
+    /// <param name="folder">The folder.</param>
+    /// <returns><see langword="true"/> when the folder was in the layout.</returns>
+    public bool RemoveFolder(FolderAdapter folder) => this.folders.Remove(folder);
 
     /// <summary>
     /// Removes a content item from the layout.
     /// </summary>
-    public bool RemoveContent(ITreeItem item) => this.Content.Remove(item);
+    /// <param name="item">The item.</param>
+    /// <returns><see langword="true"/> when the item was in the layout.</returns>
+    public bool RemoveContent(ITreeItem item) => this.content.Remove(item);
 
-    protected override int DoGetChildrenCount() => this.Folders.Count + this.Content.Count;
+    protected override int DoGetChildrenCount() => this.folders.Count + this.content.Count;
 
     protected override async Task LoadChildren()
     {
         this.ClearChildren();
 
         // Enforce "Folders First" order in the UI
-        foreach (var folder in this.Folders)
+        foreach (var folder in this.folders)
         {
             this.AddChildInternal(folder);
         }
 
-        foreach (var item in this.Content)
+        foreach (var item in this.content)
         {
             if (item is TreeItemAdapter adapter)
             {
@@ -195,6 +201,7 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
     /// <summary>
     /// Hook for subclasses to react to expansion changes (e.g. updating model state).
     /// </summary>
+    /// <param name="isExpanded">Whether the item is now expanded.</param>
     protected virtual void OnIsExpandedChanged(bool isExpanded)
     {
     }
@@ -267,9 +274,9 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
                 this.AddChildInternal(child);
             }
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
-            // Swallow to avoid crashing background sync
+            // The tree refuses a child it cannot hold, or is disposed; background sync goes on without it.
         }
     }
 
@@ -280,9 +287,9 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
             await this.Children.ConfigureAwait(true);
             await this.RemoveChildAsync(child).ConfigureAwait(true);
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
-            // Swallow to avoid crashing background sync
+            // The tree refuses a child it cannot hold, or is disposed; background sync goes on without it.
         }
     }
 }

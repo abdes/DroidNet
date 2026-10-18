@@ -145,9 +145,10 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
                 _ = nodesById.TryAdd(node.Id, node);
             }
 
+            var realization = new LayoutRealization(nodesById, seenNodeIds, seenFolderIds, expandedFolderIds, preserveNodeExpansion, transientlyExpandedFolderIds);
             foreach (var entry in layout)
             {
-                await this.ProcessLayoutEntryAsync(entry, this, nodesById, seenNodeIds, seenFolderIds, expandedFolderIds, preserveNodeExpansion, transientlyExpandedFolderIds).ConfigureAwait(true);
+                await this.ProcessLayoutEntryAsync(entry, this, realization).ConfigureAwait(true);
             }
         }
 
@@ -192,84 +193,73 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
         }
     }
 
-    private async Task ProcessLayoutEntryAsync(
-        ExplorerEntryData entry,
-        ITreeItem parent,
-        Dictionary<NodeId, SceneNode> nodesById,
-        HashSet<NodeId> seenNodeIds,
-        HashSet<FolderId> seenFolderIds,
-        ISet<FolderId>? expandedFolderIds,
-        bool preserveNodeExpansion,
-        ISet<FolderId>? transientlyExpandedFolderIds = null)
+    private async Task ProcessLayoutEntryAsync(ExplorerEntryData entry, ITreeItem parent, LayoutRealization realization)
     {
-        // Case A: Folder
         if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
         {
-            // Claim the id before realizing so a duplicate layout entry cannot realize a second
-            // adapter sharing one folder identity; a skipped entry must not recurse into its
-            // children either. Entries without a folder id are not stably addressable and realize
-            // with a fresh identity per rebuild, so they cannot collide.
-            if (entry.FolderId is { } folderId && !seenFolderIds.Add(folderId))
-            {
-                return;
-            }
+            await this.ProcessFolderEntryAsync(entry, parent, realization).ConfigureAwait(true);
+        }
+        else if (string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) && entry.NodeId.HasValue)
+        {
+            await this.ProcessNodeEntryAsync(entry, entry.NodeId.Value, parent, realization).ConfigureAwait(true);
+        }
+    }
 
-            var folder = new FolderAdapter(entry);
-
-            // A transient (search-driven) expansion must be marked before it is applied, or the
-            // expanded view would be re-authored into the layout entry on this rebuild.
-            if (entry.FolderId is { } transientId && transientlyExpandedFolderIds?.Contains(transientId) == true)
-            {
-                folder.SetExpansionTransient(transient: true);
-            }
-
-            // Restore expansion state
-            if ((entry.FolderId is { } expandedId && expandedFolderIds?.Contains(expandedId) == true) || entry.IsExpanded == true)
-            {
-                folder.IsExpanded = true;
-            }
-
-            // Recurse
-            if (entry.Children != null)
-            {
-                foreach (var childEntry in entry.Children)
-                {
-                    await this.ProcessLayoutEntryAsync(childEntry, folder, nodesById, seenNodeIds, seenFolderIds, expandedFolderIds, preserveNodeExpansion, transientlyExpandedFolderIds).ConfigureAwait(true);
-                }
-            }
-
-            this.AddToParent(parent, folder);
+    private async Task ProcessFolderEntryAsync(ExplorerEntryData entry, ITreeItem parent, LayoutRealization realization)
+    {
+        // Claim the id before realizing so a duplicate layout entry cannot realize a second
+        // adapter sharing one folder identity; a skipped entry must not recurse into its
+        // children either. Entries without a folder id are not stably addressable and realize
+        // with a fresh identity per rebuild, so they cannot collide.
+        if (entry.FolderId is { } folderId && !realization.SeenFolderIds.Add(folderId))
+        {
             return;
         }
 
-        // Case B: Scene Node
-        if (string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) && entry.NodeId.HasValue)
+        var folder = new FolderAdapter(entry);
+
+        // A transient (search-driven) expansion must be marked before it is applied, or the
+        // expanded view would be re-authored into the layout entry on this rebuild.
+        if (entry.FolderId is { } transientId && realization.TransientlyExpandedFolderIds?.Contains(transientId) == true)
         {
-            // Claim the id before realizing so a duplicate layout entry cannot realize a second
-            // adapter for the same node; a skipped entry must not recurse into its children either.
-            if (!nodesById.TryGetValue(entry.NodeId.Value, out var node) || !seenNodeIds.Add(node.Id))
-            {
-                return;
-            }
-
-            var adapter = new SceneNodeAdapter(node);
-
-            if (!preserveNodeExpansion && entry.IsExpanded.HasValue)
-            {
-                adapter.IsExpanded = entry.IsExpanded.Value;
-            }
-
-            // Recurse (Layout Children)
-            if (entry.Children != null)
-            {
-                foreach (var childEntry in entry.Children)
-                {
-                    await this.ProcessLayoutEntryAsync(childEntry, adapter, nodesById, seenNodeIds, seenFolderIds, expandedFolderIds, preserveNodeExpansion, transientlyExpandedFolderIds).ConfigureAwait(true);
-                }
-            }
-
-            this.AddToParent(parent, adapter);
+            folder.SetExpansionTransient(transient: true);
         }
+
+        // Restore expansion state
+        if ((entry.FolderId is { } expandedId && realization.ExpandedFolderIds?.Contains(expandedId) == true) || entry.IsExpanded == true)
+        {
+            folder.IsExpanded = true;
+        }
+
+        foreach (var childEntry in entry.Children ?? [])
+        {
+            await this.ProcessLayoutEntryAsync(childEntry, folder, realization).ConfigureAwait(true);
+        }
+
+        this.AddToParent(parent, folder);
+    }
+
+    private async Task ProcessNodeEntryAsync(ExplorerEntryData entry, NodeId nodeId, ITreeItem parent, LayoutRealization realization)
+    {
+        // Claim the id before realizing so a duplicate layout entry cannot realize a second
+        // adapter for the same node; a skipped entry must not recurse into its children either.
+        if (!realization.NodesById.TryGetValue(nodeId, out var node) || !realization.SeenNodeIds.Add(node.Id))
+        {
+            return;
+        }
+
+        var adapter = new SceneNodeAdapter(node);
+        if (!realization.PreserveNodeExpansion && entry.IsExpanded.HasValue)
+        {
+            adapter.IsExpanded = entry.IsExpanded.Value;
+        }
+
+        foreach (var childEntry in entry.Children ?? [])
+        {
+            await this.ProcessLayoutEntryAsync(childEntry, adapter, realization).ConfigureAwait(true);
+        }
+
+        this.AddToParent(parent, adapter);
     }
 
     private void AddToParent(ITreeItem parent, LayoutItemAdapter child)
@@ -306,4 +296,19 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
             this.OnPropertyChanged(nameof(this.Label));
         }
     }
+
+    /// <summary>The state one rebuild of the layout shares across its entries.</summary>
+    /// <param name="NodesById">The scene's nodes by id; the first node wins on duplicate ids.</param>
+    /// <param name="SeenNodeIds">The nodes already given an adapter.</param>
+    /// <param name="SeenFolderIds">The folders already given an adapter.</param>
+    /// <param name="ExpandedFolderIds">The folders to show expanded, if any.</param>
+    /// <param name="PreserveNodeExpansion">Whether node adapters keep their own expansion instead of the layout's.</param>
+    /// <param name="TransientlyExpandedFolderIds">The folders a search expanded, which the layout does not record.</param>
+    private sealed record LayoutRealization(
+        Dictionary<NodeId, SceneNode> NodesById,
+        HashSet<NodeId> SeenNodeIds,
+        HashSet<FolderId> SeenFolderIds,
+        ISet<FolderId>? ExpandedFolderIds,
+        bool PreserveNodeExpansion,
+        ISet<FolderId>? TransientlyExpandedFolderIds);
 }

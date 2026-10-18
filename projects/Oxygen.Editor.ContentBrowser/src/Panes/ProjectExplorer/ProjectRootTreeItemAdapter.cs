@@ -59,7 +59,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     /// <summary>
     ///     Raised when a virtual folder mount has been renamed.
     /// </summary>
-    public event EventHandler<VirtualFolderMountTreeItemAdapter>? MountRenamed;
+    public event EventHandler<MountRenamedEventArgs>? MountRenamed;
 
     /// <inheritdoc />
     public override string Label
@@ -172,7 +172,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
         if (this.virtualFolderMounts.Remove(oldName))
         {
             this.virtualFolderMounts.Add(mount.MountPointName, mount);
-            this.MountRenamed?.Invoke(this, mount);
+            this.MountRenamed?.Invoke(this, new MountRenamedEventArgs(mount));
         }
     }
 
@@ -188,72 +188,8 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     {
         try
         {
-            var excludedDirectFolderNames = this.GetExcludedDirectFolderNames();
-
-            // 1) Non-hidden folders directly under project root.
-            await foreach (var child in this.ProjectRootFolder.GetFoldersAsync().ConfigureAwait(true))
-            {
-                if (child.Name.StartsWith('.'))
-                {
-                    continue;
-                }
-
-                if (excludedDirectFolderNames.Contains(child.Name))
-                {
-                    continue;
-                }
-
-                FolderTreeItemAdapter? item = null;
-                try
-                {
-                    item = new FolderTreeItemAdapter(this.logger, child, child.Name);
-                    this.AddChildInternal(item);
-                    item = null;
-                }
-                catch (Exception ex)
-                {
-                    this.CouldNotLoadProjectFolders(this.ProjectRootFolder.Location, ex.Message);
-                }
-                finally
-                {
-                    item?.Dispose();
-                }
-            }
-
-            // 2) Authoring mounts.
-            foreach (var mountPoint in this.ProjectInfo.AuthoringMounts)
-            {
-                if (IsDerivedRootMount(mountPoint))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    var mountRootLocation = this.storage.NormalizeRelativeTo(
-                        this.ProjectRootFolder.Location,
-                        mountPoint.RelativePath);
-
-                    var mountRootFolder = await this.storage.GetFolderFromPathAsync(mountRootLocation)
-                        .ConfigureAwait(true);
-
-                    var mountAdapter = new AuthoringMountPointTreeItemAdapter(
-                        this.logger,
-                        mountPoint,
-                        mountRootFolder)
-                    {
-                        IsExpanded = mountPoint.IsExpanded,
-                    };
-
-                    this.AddChildInternal(mountAdapter);
-                }
-                catch (Exception ex)
-                {
-                    this.CouldNotLoadProjectFolders(this.ProjectRootFolder.Location, ex.Message);
-                }
-            }
-
-            // 3) Virtual folder mounts.
+            await this.LoadProjectFoldersAsync().ConfigureAwait(true);
+            await this.LoadAuthoringMountsAsync().ConfigureAwait(true);
             foreach (var mount in this.virtualFolderMounts.Values)
             {
                 this.AddChildInternal(mount);
@@ -308,6 +244,70 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
         }
 
         return excluded;
+    }
+
+    // Non-hidden folders directly under the project root, except those mounts and outputs already show.
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "Tree load should be resilient to partial failures")]
+    private async Task LoadProjectFoldersAsync()
+    {
+        var excludedDirectFolderNames = this.GetExcludedDirectFolderNames();
+        await foreach (var child in this.ProjectRootFolder.GetFoldersAsync().ConfigureAwait(true))
+        {
+            if (child.Name.StartsWith('.') || excludedDirectFolderNames.Contains(child.Name))
+            {
+                continue;
+            }
+
+            FolderTreeItemAdapter? item = null;
+            try
+            {
+                item = new FolderTreeItemAdapter(this.logger, child, child.Name);
+                this.AddChildInternal(item);
+                item = null;
+            }
+            catch (Exception ex)
+            {
+                this.CouldNotLoadProjectFolders(this.ProjectRootFolder.Location, ex.Message);
+            }
+            finally
+            {
+                item?.Dispose();
+            }
+        }
+    }
+
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "Tree load should be resilient to partial failures")]
+    private async Task LoadAuthoringMountsAsync()
+    {
+        foreach (var mountPoint in this.ProjectInfo.AuthoringMounts.Where(static mount => !IsDerivedRootMount(mount)))
+        {
+            AuthoringMountPointTreeItemAdapter? mountAdapter = null;
+            try
+            {
+                var mountRootLocation = this.storage.NormalizeRelativeTo(this.ProjectRootFolder.Location, mountPoint.RelativePath);
+                var mountRootFolder = await this.storage.GetFolderFromPathAsync(mountRootLocation).ConfigureAwait(true);
+                mountAdapter = new AuthoringMountPointTreeItemAdapter(this.logger, mountPoint, mountRootFolder)
+                {
+                    IsExpanded = mountPoint.IsExpanded,
+                };
+                this.AddChildInternal(mountAdapter);
+                mountAdapter = null;
+            }
+            catch (Exception ex)
+            {
+                this.CouldNotLoadProjectFolders(this.ProjectRootFolder.Location, ex.Message);
+            }
+            finally
+            {
+                mountAdapter?.Dispose();
+            }
+        }
     }
 
     private void Dispose(bool disposing)

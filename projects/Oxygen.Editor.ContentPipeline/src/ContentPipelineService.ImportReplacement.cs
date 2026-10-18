@@ -69,6 +69,64 @@ public sealed partial class ContentPipelineService
         }
     }
 
+    private static void RequireCompleteReplacementBundle(
+        ContentCookOperation operation,
+        NativeSceneImportSettings settings,
+        ImmutableArray<CookSnapshotInput> replacementFiles,
+        CookDependencyGraph graph)
+    {
+        var root = settings.ResolveFile(operation.Project.ProjectRoot, ".").TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var incoming = replacementFiles.Select(static file => file.RelativePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missing = graph.Files.FirstOrDefault(file => !file.IsAbsent && !incoming.Contains(file.RelativePath)
+            && Path.GetFullPath(Path.Combine(operation.Project.ProjectRoot, file.RelativePath)).StartsWith(root, StringComparison.OrdinalIgnoreCase));
+        if (missing is not null)
+        {
+            var owners = graph.FileDependencies.Where(pair => pair.Value.Contains(missing.RelativePath, StringComparer.Ordinal))
+                .Select(static pair => AssetUriHelper.GetVirtualPath(pair.Key));
+            throw new CookInputDiscoveryException([new()
+            {
+                OperationId = operation.OperationId,
+                Domain = Oxygen.Managed.Core.Diagnostics.FailureDomain.AssetCook,
+                Severity = Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Error,
+                Code = "asset_cook.replacement_dependency_missing",
+                AffectedPath = missing.SourcePath,
+                Message = $"{string.Join(", ", owners)} requires '{missing.RelativePath}', which the replacement would remove. Include it in the replacement or update the dependent source before replacing the model.",
+            }
+            ]);
+        }
+    }
+
+    // The settings are rewritten for the incoming files and written beside the captured inputs.
+    private static async Task<(NativeSceneImportSettings Settings, ImmutableArray<CookSnapshotInput> Inputs)> RewriteReplacementSettingsAsync(
+        ContentCookOperation operation,
+        ReplacementDiscovery discovery,
+        CookInputSnapshot snapshot,
+        HashSet<string> replacementPaths,
+        CancellationToken cancellationToken)
+    {
+        var (source, original, settingsRelative) = (discovery.Source, discovery.Original, discovery.SettingsRelative);
+        var inputs = snapshot.Inputs.Select(file => replacementPaths.Contains(file.RelativePath)
+            ? file with { SourcePath = Path.Combine(operation.Project.ProjectRoot, file.RelativePath) } : file).ToImmutableArray();
+        var settings = original with
+        {
+            SourceHash = inputs.Single(file => file.AssetUri == source.AssetUri).DiscoveryHash,
+            Files = [.. inputs.Where(file => file.Kind == CookSnapshotInputKind.File && replacementPaths.Contains(file.RelativePath))
+                .Select(file => Path.GetRelativePath(original.ResolveFile(operation.Project.ProjectRoot, "."), file.SourcePath).Replace('\\', '/')).Order(StringComparer.Ordinal)],
+        };
+        var bytes = settings.ToBytes();
+        if (inputs.Any(file => string.Equals(file.RelativePath, settingsRelative, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidDataException("An incoming dependency conflicts with the existing import settings path.");
+        }
+
+        await File.WriteAllBytesAsync(Path.Combine(snapshot.InputRoot, settingsRelative), bytes, cancellationToken).ConfigureAwait(false);
+        inputs = inputs.Add(new(null, Path.Combine(operation.Project.ProjectRoot, settingsRelative), settingsRelative, Convert.ToHexString(SHA256.HashData(bytes)))
+        {
+            Metadata = CookSavedSourceReader.ReadMetadata(Path.Combine(snapshot.InputRoot, settingsRelative)),
+        });
+        return (settings, [.. inputs.OrderBy(static file => file.RelativePath, StringComparer.Ordinal)]);
+    }
+
     private async Task<ContentCookResult> CookReplacementAsync(ContentCookOperation operation, SceneImportRequest request, Action<SceneImportRequest> retainRecovery, CancellationToken cancellationToken)
     {
         var replacement = request.Replacement!;
@@ -87,7 +145,7 @@ public sealed partial class ContentPipelineService
         return result with { RetainedSourceUri = input.AssetUri };
     }
 
-    private async Task<(CookInputSnapshot snapshot, CookDependencyGraph graph)> CaptureReplacementAsync(
+    private async Task<(CookInputSnapshot Snapshot, CookDependencyGraph Graph)> CaptureReplacementAsync(
         ContentCookOperation operation,
         ContentCookScope scope,
         Func<IReadOnlyList<ContentCookScope>> resolveScopes,
@@ -114,51 +172,10 @@ public sealed partial class ContentPipelineService
         }
 
         var settingsRelative = source.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix;
-        CookDependencyGraph? graph = null;
-        ImmutableArray<CookSnapshotInput> replacementFiles = [];
-        var capture = await new CookInputSnapshotCapture(cookDocuments, this.cookCoordinator).CaptureAsync(
-            operation,
-            async token =>
-            {
-                var discovered = await this.DiscoverChangedImportedSourceAsync(operation, source with { SourceAbsolutePath = incoming }, original, artifacts, token).ConfigureAwait(false);
-                replacementFiles = [.. MapReplacementFiles(operation, source, original, incoming, discovered)];
-                var prepared = CreateReplacementGraph(source, original with
-                {
-                    SourceHash = replacementFiles.Single(file => file.AssetUri == source.AssetUri).DiscoveryHash,
-                }, replacementFiles, settingsRelative, previous);
-                var scopes = resolveScopes();
-                graph = await this.CreateDependencyDiscovery(operation, artifacts, previous, imports, libraries)
-                    .DiscoverAsync(operation.Project, scopes.SelectMany(static value => value.Inputs).ToArray(), prepared, token).ConfigureAwait(false);
-                graph = graph with { ImportedReferences = [.. graph.ImportedReferences.Union(scopes.SelectMany(static value => value.RequiredImportedOutputs))] };
-                RequireCompleteReplacementBundle(operation, original, replacementFiles, graph);
-                return HasError(graph.Diagnostics) ? throw new CookInputDiscoveryException(graph.Diagnostics) : graph.Files;
-            },
-            artifacts.Fingerprint,
-            cancellationToken).ConfigureAwait(false);
-        var snapshot = capture.Snapshot ?? (capture.NeedsSave.IsEmpty
-            ? throw new IOException("The incoming source changed. Review the replacement again.")
-            : throw new CookInputsNeedSaveException(capture.NeedsSave));
+        var discovery = new ReplacementDiscovery(source, original, incoming, settingsRelative, resolveScopes, previous, imports, libraries);
+        var (snapshot, graph, replacementFiles) = await this.CaptureIncomingAsync(operation, discovery, artifacts, cancellationToken).ConfigureAwait(false);
         var replacementPaths = replacementFiles.Select(static file => file.RelativePath).ToHashSet(StringComparer.Ordinal);
-        var inputs = snapshot.Inputs.Select(file => replacementPaths.Contains(file.RelativePath)
-            ? file with { SourcePath = Path.Combine(operation.Project.ProjectRoot, file.RelativePath) } : file).ToImmutableArray();
-        var settings = original with
-        {
-            SourceHash = inputs.Single(file => file.AssetUri == source.AssetUri).DiscoveryHash,
-            Files = [.. inputs.Where(file => file.Kind == CookSnapshotInputKind.File && replacementPaths.Contains(file.RelativePath))
-                .Select(file => Path.GetRelativePath(original.ResolveFile(operation.Project.ProjectRoot, "."), file.SourcePath).Replace('\\', '/')).Order(StringComparer.Ordinal)],
-        };
-        var bytes = settings.ToBytes();
-        if (inputs.Any(file => string.Equals(file.RelativePath, settingsRelative, StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new InvalidDataException("An incoming dependency conflicts with the existing import settings path.");
-        }
-
-        await File.WriteAllBytesAsync(Path.Combine(snapshot.InputRoot, settingsRelative), bytes, cancellationToken).ConfigureAwait(false);
-        inputs = inputs.Add(new(null, Path.Combine(operation.Project.ProjectRoot, settingsRelative), settingsRelative, Convert.ToHexString(SHA256.HashData(bytes)))
-        {
-            Metadata = CookSavedSourceReader.ReadMetadata(Path.Combine(snapshot.InputRoot, settingsRelative)),
-        });
-        inputs = [.. inputs.OrderBy(static file => file.RelativePath, StringComparer.Ordinal)];
+        var (settings, inputs) = await RewriteReplacementSettingsAsync(operation, discovery, snapshot, replacementPaths, cancellationToken).ConfigureAwait(false);
         var recovery = request with { ReplacementCandidatePath = Path.Combine(snapshot.InputRoot, source.SourceRelativePath) };
         scope.RetainReplacementCandidate?.Invoke(recovery);
         CookRunContext.Report(new(Message: "Replacement captured. Cooking before replacing the existing source.")
@@ -171,64 +188,19 @@ public sealed partial class ContentPipelineService
             InputIdentity = CookInputSnapshotCapture.ComputeIdentity(snapshot.BuildFingerprint, inputs),
             SourceReplacement = new(replacement.BundleName, replacement.Before),
         };
-        var replacementGraph = CreateReplacementGraph(source, settings,
-            [.. inputs.Where(file => replacementPaths.Contains(file.RelativePath) || string.Equals(file.RelativePath, settingsRelative, StringComparison.Ordinal))], settingsRelative, previous);
-        graph = graph! with
+        var replacementGraph = CreateReplacementGraph(
+            source,
+            settings,
+            [.. inputs.Where(file => replacementPaths.Contains(file.RelativePath) || string.Equals(file.RelativePath, settingsRelative, StringComparison.Ordinal))],
+            settingsRelative,
+            previous);
+        graph = graph with
         {
             Files = inputs,
             FileDependencies = graph.FileDependencies.SetItem(source.AssetUri, replacementGraph.FileDependencies[source.AssetUri]),
             ImportedSources = graph.ImportedSources.SetItem(source.AssetUri, replacementGraph.ImportedSources[source.AssetUri]),
         };
-        var job = this.manifestBuilder.BuildJob(source, [], settings);
-        var analysis = await this.engineContentPipelineApi.AnalyzeSourcesAsync(
-            new(
-            operation.OperationId,
-            operation.Project.ProjectRoot,
-            Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")),
-            [job])
-            { Artifacts = artifacts, CapturedInputs = snapshot.CreateNativeInputs() }, cancellationToken).ConfigureAwait(false);
-        if (!analysis.Complete)
-        {
-            var issues = analysis.Jobs.SelectMany(static result => result.Diagnostics).ToArray();
-            throw issues.Length != 0 ? new CookInputDiscoveryException(issues)
-                : new InvalidDataException("Native analysis of the captured replacement did not complete.");
-        }
-
-        var facts = analysis.Jobs.Single();
-        graph = graph with
-        {
-            NativeJobs = graph.NativeJobs.SetItem(source.AssetUri, job),
-            SourceFacts = graph.SourceFacts.SetItem(
-                source.AssetUri,
-                new(source, facts.Outputs, facts.References,
-                    [.. inputs.Where(file => graph.FileDependencies[source.AssetUri].Contains(file.RelativePath, StringComparer.Ordinal))])
-                { Job = job }),
-        };
-        return (snapshot, graph);
-    }
-
-    private static void RequireCompleteReplacementBundle(ContentCookOperation operation, NativeSceneImportSettings settings,
-        ImmutableArray<CookSnapshotInput> replacementFiles, CookDependencyGraph graph)
-    {
-        var root = settings.ResolveFile(operation.Project.ProjectRoot, ".").TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var incoming = replacementFiles.Select(static file => file.RelativePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var missing = graph.Files.FirstOrDefault(file => !file.IsAbsent && !incoming.Contains(file.RelativePath)
-            && Path.GetFullPath(Path.Combine(operation.Project.ProjectRoot, file.RelativePath)).StartsWith(root, StringComparison.OrdinalIgnoreCase));
-        if (missing is not null)
-        {
-            var owners = graph.FileDependencies.Where(pair => pair.Value.Contains(missing.RelativePath, StringComparer.Ordinal))
-                .Select(static pair => AssetUriHelper.GetVirtualPath(pair.Key));
-            throw new CookInputDiscoveryException([new()
-            {
-                OperationId = operation.OperationId,
-                Domain = Oxygen.Managed.Core.Diagnostics.FailureDomain.AssetCook,
-                Severity = Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Error,
-                Code = "asset_cook.replacement_dependency_missing",
-                AffectedPath = missing.SourcePath,
-                Message = $"{string.Join(", ", owners)} requires '{missing.RelativePath}', which the replacement would remove. Include it in the replacement or update the dependent source before replacing the model.",
-            }
-            ]);
-        }
+        return (snapshot, await this.AnalyzeReplacementAsync(operation, source, settings, snapshot, graph, artifacts, cancellationToken).ConfigureAwait(false));
     }
 
     private async Task VerifyReplacementTargetAsync(ContentCookOperation operation, SceneImportReplacement replacement, ImportedSourceIndex imports, CancellationToken cancellationToken)
@@ -261,4 +233,96 @@ public sealed partial class ContentPipelineService
             throw new InvalidDataException($"The replacement destination contains authored asset '{conflict}'. Keep it in a separate destination before replacing the model.");
         }
     }
+
+    // Captures the incoming files and discovers what the replacement depends on.
+    private async Task<(CookInputSnapshot Snapshot, CookDependencyGraph Graph, ImmutableArray<CookSnapshotInput> ReplacementFiles)> CaptureIncomingAsync(
+        ContentCookOperation operation,
+        ReplacementDiscovery discovery,
+        NativeArtifactLease artifacts,
+        CancellationToken cancellationToken)
+    {
+        var (source, original) = (discovery.Source, discovery.Original);
+        CookDependencyGraph? graph = null;
+        ImmutableArray<CookSnapshotInput> replacementFiles = [];
+        var capture = await new CookInputSnapshotCapture(cookDocuments, this.cookCoordinator).CaptureAsync(
+            operation,
+            async token =>
+            {
+                var discovered = await this.DiscoverChangedImportedSourceAsync(operation, source with { SourceAbsolutePath = discovery.Incoming }, original, artifacts, token).ConfigureAwait(false);
+                replacementFiles = [.. MapReplacementFiles(operation, source, original, discovery.Incoming, discovered)];
+                var incomingSettings = original with
+                {
+                    SourceHash = replacementFiles.Single(file => file.AssetUri == source.AssetUri).DiscoveryHash,
+                };
+                var prepared = CreateReplacementGraph(source, incomingSettings, replacementFiles, discovery.SettingsRelative, discovery.Previous);
+                var scopes = discovery.ResolveScopes();
+                graph = await this.CreateDependencyDiscovery(operation, artifacts, discovery.Previous, discovery.Imports, discovery.Libraries)
+                    .DiscoverAsync(operation.Project, scopes.SelectMany(static value => value.Inputs).ToArray(), prepared, token).ConfigureAwait(false);
+                graph = graph with { ImportedReferences = [.. graph.ImportedReferences.Union(scopes.SelectMany(static value => value.RequiredImportedOutputs))] };
+                RequireCompleteReplacementBundle(operation, original, replacementFiles, graph);
+                return HasError(graph.Diagnostics) ? throw new CookInputDiscoveryException(graph.Diagnostics) : graph.Files;
+            },
+            artifacts.Fingerprint,
+            cancellationToken).ConfigureAwait(false);
+        var snapshot = capture.Snapshot ?? (capture.NeedsSave.IsEmpty
+            ? throw new IOException("The incoming source changed. Review the replacement again.")
+            : throw new CookInputsNeedSaveException(capture.NeedsSave));
+        return (snapshot, graph!, replacementFiles);
+    }
+
+    // Native analysis of the captured replacement supplies its outputs and references.
+    private async Task<CookDependencyGraph> AnalyzeReplacementAsync(
+        ContentCookOperation operation,
+        ContentCookInput source,
+        NativeSceneImportSettings settings,
+        CookInputSnapshot snapshot,
+        CookDependencyGraph graph,
+        NativeArtifactLease artifacts,
+        CancellationToken cancellationToken)
+    {
+        var job = this.manifestBuilder.BuildJob(source, [], settings);
+        var execution = new ContentSourceAnalysisExecution(
+            operation.OperationId,
+            operation.Project.ProjectRoot,
+            Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")),
+            [job])
+        {
+            Artifacts = artifacts,
+            CapturedInputs = snapshot.CreateNativeInputs(),
+        };
+        var analysis = await this.engineContentPipelineApi.AnalyzeSourcesAsync(execution, cancellationToken).ConfigureAwait(false);
+        if (!analysis.Complete)
+        {
+            var issues = analysis.Jobs.SelectMany(static result => result.Diagnostics).ToArray();
+            throw issues.Length != 0 ? new CookInputDiscoveryException(issues)
+                : new InvalidDataException("Native analysis of the captured replacement did not complete.");
+        }
+
+        var facts = analysis.Jobs.Single();
+        var dependencies = snapshot.Inputs.Where(file => graph.FileDependencies[source.AssetUri].Contains(file.RelativePath, StringComparer.Ordinal));
+        return graph with
+        {
+            NativeJobs = graph.NativeJobs.SetItem(source.AssetUri, job),
+            SourceFacts = graph.SourceFacts.SetItem(source.AssetUri, new(source, facts.Outputs, facts.References, [.. dependencies]) { Job = job }),
+        };
+    }
+
+    /// <summary>What discovering a replacement needs, beside the operation and the artifacts.</summary>
+    /// <param name="Source">The retained source, in its own mount and output namespaces.</param>
+    /// <param name="Original">The import settings the replacement starts from.</param>
+    /// <param name="Incoming">The incoming source file.</param>
+    /// <param name="SettingsRelative">The import settings' project-relative path.</param>
+    /// <param name="ResolveScopes">Resolves the cook scopes at discovery time.</param>
+    /// <param name="Previous">The previous cook provenance.</param>
+    /// <param name="Imports">The retained imported sources.</param>
+    /// <param name="Libraries">The cooked libraries read by the cook.</param>
+    private sealed record ReplacementDiscovery(
+        ContentCookInput Source,
+        NativeSceneImportSettings Original,
+        string Incoming,
+        string SettingsRelative,
+        Func<IReadOnlyList<ContentCookScope>> ResolveScopes,
+        CookProvenance Previous,
+        ImportedSourceIndex Imports,
+        CookedLibraryReadSet Libraries);
 }

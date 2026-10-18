@@ -324,6 +324,21 @@ public partial class SceneExplorerViewModel
     private void LogDocumentActivated(DroidNet.Documents.DocumentId documentId)
         => LogDocumentActivated(this.logger, documentId);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Scene '{Scene}' was not renamed to '{Name}': {Reason}")]
-    private partial void LogSceneRenameRejected(string scene, string name, string reason);
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "{Action} is unavailable: no workspace interaction service is composed.")]
+    private static partial void LogWorkspaceStateUnavailable(ILogger logger, string action);
+
+    private void LogWorkspaceStateUnavailable(string action)
+        => LogWorkspaceStateUnavailable(this.logger, action);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Scene '{Scene}' was not renamed to '{Name}': {Reason}")]
+    private static partial void LogSceneRenameRejected(ILogger logger, string scene, string name, string reason);
+
+    private void LogSceneRenameRejected(string scene, string name, string reason)
+        => LogSceneRenameRejected(this.logger, scene, name, reason);
 }

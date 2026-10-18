@@ -94,6 +94,60 @@ public sealed partial class ContentPipelineService(
     public Task<ContentCookResult> CookProjectAsync(CancellationToken cancellationToken)
         => this.cookCoordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null) { CoalescePending = true, OriginContext = this.projectContextService.ActiveProject }, this.CookProjectCoreAsync, cancellationToken);
 
+    /// <summary>Removes the jobs of input files that use actions declared in other files, reporting each file.</summary>
+    /// <param name="operationId">The cook operation.</param>
+    /// <param name="scope">The cook scope.</param>
+    /// <param name="manifest">The manifest.</param>
+    /// <returns>The manifest without those jobs, and one error per rejected file.</returns>
+    internal static (ContentImportManifest Manifest, IReadOnlyList<DiagnosticRecord> Diagnostics) RejectInputFilesWithForeignActions(
+        Guid operationId,
+        ContentCookScope scope,
+        ContentImportManifest manifest)
+    {
+        var rejected = new HashSet<string>(StringComparer.Ordinal);
+        var diagnostics = new List<DiagnosticRecord>();
+        foreach (var input in scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.Input))
+        {
+            string text;
+            try
+            {
+                text = File.ReadAllText(input.SourceAbsolutePath);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                continue; // The cooker reports the unreadable source.
+            }
+
+            if (InputFileReferences.FindUndeclaredActions(text) is { Count: > 0 } foreign)
+            {
+                _ = rejected.Add(input.SourceRelativePath.Replace('\\', '/').TrimStart('/'));
+                diagnostics.Add(new DiagnosticRecord
+                {
+                    OperationId = operationId,
+                    Domain = FailureDomain.ScriptAuthoring,
+                    Severity = DiagnosticSeverity.Error,
+                    Code = ScriptDiagnosticCodes.InputReferenceUnsupported,
+                    Message = $"{Path.GetFileName(input.SourceAbsolutePath)} uses {string.Join(", ", foreign.Select(static name => "'" + name + "'"))}, which it does not declare. Declare every action an input file uses in that file; input files cannot share actions yet.",
+                    AffectedPath = input.SourceAbsolutePath,
+                    AffectedVirtualPath = input.OutputVirtualPath,
+                });
+            }
+        }
+
+        return rejected.Count == 0
+            ? (manifest, diagnostics)
+            : (manifest with { Jobs = [.. manifest.Jobs.Where(job => !(string.Equals(job.Type, "input", StringComparison.Ordinal) && rejected.Contains(job.AttributedSource)))] }, diagnostics);
+    }
+
+    internal static bool IsCookableDescriptorFile(string path)
+        => path.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
+           || path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
+           || path.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase)
+           || path.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
+           || AssetFileTypes.Is(path, AssetFileCategory.Input)
+           || (AssetFileTypes.Is(path, AssetFileCategory.Model)
+               && File.Exists(path + Import.NativeSceneImportSettings.SidecarSuffix));
+
     private static ContentCookResult MergeProjectResults(
         Guid operationId,
         IReadOnlyList<ContentCookResult> results)
@@ -260,51 +314,6 @@ public sealed partial class ContentPipelineService(
         };
     }
 
-    /// <summary>Removes the jobs of input files that use actions declared in other files, reporting each file.</summary>
-    /// <param name="operationId">The cook operation.</param>
-    /// <param name="scope">The cook scope.</param>
-    /// <param name="manifest">The manifest.</param>
-    /// <returns>The manifest without those jobs, and one error per rejected file.</returns>
-    internal static (ContentImportManifest Manifest, IReadOnlyList<DiagnosticRecord> Diagnostics) RejectInputFilesWithForeignActions(
-        Guid operationId,
-        ContentCookScope scope,
-        ContentImportManifest manifest)
-    {
-        var rejected = new HashSet<string>(StringComparer.Ordinal);
-        var diagnostics = new List<DiagnosticRecord>();
-        foreach (var input in scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.Input))
-        {
-            string text;
-            try
-            {
-                text = File.ReadAllText(input.SourceAbsolutePath);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                continue; // The cooker reports the unreadable source.
-            }
-
-            if (InputFileReferences.FindUndeclaredActions(text) is { Count: > 0 } foreign)
-            {
-                _ = rejected.Add(input.SourceRelativePath.Replace('\\', '/').TrimStart('/'));
-                diagnostics.Add(new DiagnosticRecord
-                {
-                    OperationId = operationId,
-                    Domain = FailureDomain.ScriptAuthoring,
-                    Severity = DiagnosticSeverity.Error,
-                    Code = ScriptDiagnosticCodes.InputReferenceUnsupported,
-                    Message = $"{Path.GetFileName(input.SourceAbsolutePath)} uses {string.Join(", ", foreign.Select(static name => "'" + name + "'"))}, which it does not declare. Declare every action an input file uses in that file; input files cannot share actions yet.",
-                    AffectedPath = input.SourceAbsolutePath,
-                    AffectedVirtualPath = input.OutputVirtualPath,
-                });
-            }
-        }
-
-        return rejected.Count == 0
-            ? (manifest, diagnostics)
-            : (manifest with { Jobs = [.. manifest.Jobs.Where(job => !(job.Type == "input" && rejected.Contains(job.AttributedSource)))] }, diagnostics);
-    }
-
     private static string GetMountName(string virtualPath)
     {
         var path = virtualPath.TrimStart('/');
@@ -321,15 +330,6 @@ public sealed partial class ContentPipelineService(
         var input = CookInputResolver.Resolve(project, assetUri, role);
         return input.Kind == kind ? input : throw new ArgumentException("The asset kind does not match its source identity.", nameof(assetUri));
     }
-
-    internal static bool IsCookableDescriptorFile(string path)
-        => path.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
-           || path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
-           || path.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase)
-           || path.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
-           || AssetFileTypes.Is(path, AssetFileCategory.Input)
-           || (AssetFileTypes.Is(path, AssetFileCategory.Model)
-               && File.Exists(path + Import.NativeSceneImportSettings.SidecarSuffix));
 
     private static List<ContentCookInput> ResolveFolderInputs(ProjectContext project, Uri folderUri)
     {

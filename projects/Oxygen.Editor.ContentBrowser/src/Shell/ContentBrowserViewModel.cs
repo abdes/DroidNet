@@ -432,6 +432,10 @@ public sealed partial class ContentBrowserViewModel(
         _ => AssetBrowserView.Tiles,
     };
 
+    // A new project's scenes are in Content/Scenes, which the browser opens on when it has no saved state.
+    private static bool HasScenesFolder(ProjectContext project)
+        => project.FindByVirtualPath("/Content/Scenes") is { } folder && Directory.Exists(folder.FilePath);
+
     private void OnContentBrowserStateChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(ContentBrowserState.ResultCount) or nameof(ContentBrowserState.SelectedAssets)
@@ -478,10 +482,6 @@ public sealed partial class ContentBrowserViewModel(
             this.LogContentBrowserStatePersistFailed(ex, project.Name);
         }
     }
-
-    // A new project's scenes are in Content/Scenes, which the browser opens on when it has no saved state.
-    private static bool HasScenesFolder(ProjectContext project)
-        => project.FindByVirtualPath("/Content/Scenes") is { } folder && Directory.Exists(folder.FilePath);
 
     private async Task<string> GetInitialContentBrowserUrlAsync()
     {

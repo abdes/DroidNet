@@ -42,12 +42,6 @@ public static class TextureSourceAssetImporter
         ["_right", "_left", "_top", "_bottom", "_front", "_back"],
     ];
 
-    internal static bool IsSupportedIntent(string value) => Intents.Contains(value);
-
-    internal static bool IsSupportedColorSpace(string value) => ColorSpaces.Contains(value);
-
-    internal static bool IsSupportedFormat(string value) => Formats.Contains(value);
-
     /// <summary>Gets the supported standalone image extensions.</summary>
     public static IReadOnlyCollection<string> SupportedExtensions => ImageExtensions;
 
@@ -76,8 +70,10 @@ public static class TextureSourceAssetImporter
         {
             for (var index = 0; index < sources.Count; ++index)
             {
-                await using var source = new FileStream(sources[index], FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
-                await using var image = new FileStream(target.ImagePaths[index], FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                var source = new FileStream(sources[index], FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                await using var sourceLifetime = source.ConfigureAwait(false);
+                var image = new FileStream(target.ImagePaths[index], FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                await using var imageLifetime = image.ConfigureAwait(false);
                 ++imagesCreated;
                 await source.CopyToAsync(image, cancellationToken).ConfigureAwait(false);
             }
@@ -91,7 +87,8 @@ public static class TextureSourceAssetImporter
                 request.Format,
                 CubeSettings.From(request.Cube));
             var descriptorBytes = JsonSerializer.SerializeToUtf8Bytes(descriptor, JsonOptions);
-            await using (var output = new FileStream(target.DescriptorPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            var output = new FileStream(target.DescriptorPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using (output.ConfigureAwait(false))
             {
                 descriptorCreated = true;
                 await output.WriteAsync(descriptorBytes, cancellationToken).ConfigureAwait(false);
@@ -253,6 +250,12 @@ public static class TextureSourceAssetImporter
         return stem;
     }
 
+    internal static bool IsSupportedIntent(string value) => Intents.Contains(value);
+
+    internal static bool IsSupportedColorSpace(string value) => ColorSpaces.Contains(value);
+
+    internal static bool IsSupportedFormat(string value) => Formats.Contains(value);
+
     private static void CleanupOwnedFiles(TextureSourceImportTarget target, bool descriptorCreated, int imagesCreated)
     {
         if (descriptorCreated)
@@ -306,208 +309,4 @@ public static class TextureSourceAssetImporter
     private sealed record DecodeSettings([property: JsonPropertyName("color_space")] string ColorSpace);
 
     private sealed record OutputSettings([property: JsonPropertyName("format")] string Format);
-}
-
-/// <summary>What a cube texture descriptor cooks.</summary>
-/// <param name="StoresRadiance">
-/// Whether the cube keeps float (HDR) texels. Only such a cube can light a scene; an LDR cube is
-/// display-only.
-/// </param>
-public readonly record struct CubeDescriptorInfo(bool StoresRadiance);
-
-/// <summary>A user's reviewed image-to-texture import request.</summary>
-/// <param name="Project">The project whose authoring mount receives the texture.</param>
-/// <param name="SourcePath">The selected image file.</param>
-/// <param name="DestinationFolder">The selected authoring folder URI.</param>
-/// <param name="Name">The unique texture asset name without file extensions, as typed; it is kept trimmed and in NFC.</param>
-/// <param name="Intent">The native texture semantic.</param>
-/// <param name="ColorSpace">The native decode color space.</param>
-/// <param name="Format">The native output format.</param>
-public sealed record TextureSourceImportRequest(
-    ProjectContext Project,
-    string SourcePath,
-    Uri DestinationFolder,
-    string Name,
-    string Intent,
-    string ColorSpace,
-    string Format)
-{
-    private readonly string name = VirtualPath.NormalizeTypedName(Name);
-
-    /// <summary>Gets the texture asset name, trimmed and in NFC as the virtual path rules require.</summary>
-    public string Name
-    {
-        get => this.name;
-        init => this.name = VirtualPath.NormalizeTypedName(value);
-    }
-
-    /// <summary>Gets how the image becomes a cube texture, or null for a 2D texture.</summary>
-    public TextureCubeImport? Cube { get; init; }
-}
-
-/// <summary>How a single image lays out the six faces of a cube texture.</summary>
-public enum CubeLayout
-{
-    /// <summary>A 2:1 equirectangular (latitude-longitude) panorama, resampled to faces.</summary>
-    Panorama,
-
-    /// <summary>Six faces side by side, 6:1.</summary>
-    HorizontalStrip,
-
-    /// <summary>Six faces stacked, 1:6.</summary>
-    VerticalStrip,
-
-    /// <summary>A 4:3 horizontal cross.</summary>
-    HorizontalCross,
-
-    /// <summary>A 3:4 vertical cross.</summary>
-    VerticalCross,
-
-    /// <summary>Six square images of the same size, one per face, named with a face suffix such as <c>_px</c>.</summary>
-    SixFaces,
-}
-
-/// <summary>Cube import settings for a single source image.</summary>
-/// <param name="Layout">How the image lays out the faces.</param>
-/// <param name="FaceSize">The face size in pixels for a panorama, a multiple of 256; ignored otherwise.</param>
-public sealed record TextureCubeImport(CubeLayout Layout, int? FaceSize = null);
-
-/// <summary>A collision-checked filesystem target for a named texture asset.</summary>
-public sealed record TextureSourceImportTarget(string MountName, string VirtualPath, string ImagePath, string DescriptorPath, Uri AssetUri)
-{
-    /// <summary>Gets every image the import writes: the source image, or the six faces with the +X face first.</summary>
-    public IReadOnlyList<string> ImagePaths { get; init; } = [ImagePath];
-
-    /// <summary>Resolves and validates a reviewed texture import request.</summary>
-    /// <param name="request">The import request.</param>
-    /// <returns>The in-mount descriptor and source paths.</returns>
-    public static TextureSourceImportTarget Resolve(TextureSourceImportRequest request)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(request.Project);
-        ArgumentNullException.ThrowIfNull(request.DestinationFolder);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.SourcePath);
-        if (!TextureSourceAssetImporter.IsSupportedImage(request.SourcePath) || !File.Exists(request.SourcePath))
-        {
-            throw new ArgumentException("Choose an existing PNG, JPEG, TGA, BMP or HDR image.", nameof(request));
-        }
-
-        if (Oxygen.Managed.Core.VirtualPath.ValidateSegment(request.Name + AssetFileTypes.TextureDescriptor, VirtualPathRuleSet.Authored) is { } invalidName)
-        {
-            throw new ArgumentException(invalidName.ToMessage(), nameof(request));
-        }
-
-        if (!TextureSourceAssetImporter.IsSupportedIntent(request.Intent)
-            || !TextureSourceAssetImporter.IsSupportedColorSpace(request.ColorSpace)
-            || !TextureSourceAssetImporter.IsSupportedFormat(request.Format))
-        {
-            throw new ArgumentException("Choose a supported texture intent, color space and output format.", nameof(request));
-        }
-
-        if (request.Cube is { Layout: CubeLayout.Panorama } panorama
-            && (panorama.FaceSize is not { } faceSize || faceSize <= 0 || faceSize % 256 != 0))
-        {
-            throw new ArgumentException("A panorama cube needs a face size that is a multiple of 256.", nameof(request));
-        }
-
-        var folder = request.DestinationFolder;
-        if (!folder.IsAbsoluteUri || !string.Equals(folder.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase)
-            || !string.IsNullOrEmpty(folder.Host) || !string.IsNullOrEmpty(folder.Query) || !string.IsNullOrEmpty(folder.Fragment))
-        {
-            throw new ArgumentException("Choose a project authoring folder.", nameof(request));
-        }
-
-        var parts = Uri.UnescapeDataString(folder.AbsolutePath).Trim('/').Split('/');
-        if (Oxygen.Managed.Core.VirtualPath.ValidateMountName(parts[0]) is not null || parts.Skip(1).Any(static part => Oxygen.Managed.Core.VirtualPath.ValidateSegment(part) is not null))
-        {
-            throw new ArgumentException("Choose a valid project authoring folder.", nameof(request));
-        }
-
-        var mount = request.Project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.Ordinal))
-            ?? throw new ArgumentException("Choose a folder inside a project authoring mount.", nameof(request));
-        if (parts.Skip(1).Any(Oxygen.Managed.Core.VirtualPath.IsDerivedContent))
-        {
-            throw new ArgumentException("Choose an authoring folder outside source-media and generated folders.", nameof(request));
-        }
-
-        var mountRoot = Path.GetFullPath(Path.Combine(request.Project.ProjectRoot, mount.RelativePath));
-        var relativeFolder = Path.Combine(parts.Skip(1).ToArray());
-        var physicalFolder = Path.GetFullPath(Path.Combine(mountRoot, relativeFolder));
-        if (!IsUnderRoot(physicalFolder, mountRoot))
-        {
-            throw new ArgumentException("The selected folder resolves outside its authoring mount.", nameof(request));
-        }
-
-        var sixFaces = request.Cube?.Layout == CubeLayout.SixFaces;
-        if (sixFaces)
-        {
-            ValidateCubeFaces(request.SourcePath);
-        }
-        else if (request.Cube is { } cube)
-        {
-            ValidateLayoutFits(request.SourcePath, cube.Layout);
-        }
-
-        var extension = Path.GetExtension(request.SourcePath).ToLowerInvariant();
-        var imagePaths = (sixFaces ? TextureSourceAssetImporter.FaceSuffixes : [string.Empty])
-            .Select(suffix => Path.Combine(physicalFolder, request.Name + suffix + extension))
-            .ToArray();
-        var descriptorName = request.Name + AssetFileTypes.TextureDescriptor;
-        var imagePath = imagePaths[0];
-        var descriptorPath = Path.Combine(physicalFolder, descriptorName);
-        var virtualDirectory = string.Join('/', parts.Skip(1));
-        var virtualPath = "/" + mount.Name + (virtualDirectory.Length == 0 ? string.Empty : "/" + virtualDirectory) + "/" + request.Name + AssetFileTypes.Texture;
-        var assetPath = string.Join('/', new[] { mount.Name }.Concat(parts.Skip(1)).Append(descriptorName).Select(Uri.EscapeDataString));
-        return new(mount.Name, virtualPath, imagePath, descriptorPath, new Uri(AssetUris.Scheme + ":///" + assetPath)) { ImagePaths = imagePaths };
-    }
-
-    // A strip or cross is cut into faces without resampling, so the image must be exactly the
-    // grid of square faces; a panorama is resampled and fits any size.
-    private static void ValidateLayoutFits(string sourcePath, CubeLayout layout)
-    {
-        if (layout == CubeLayout.Panorama || ImageDimensions.TryRead(sourcePath) is not { } size
-            || TextureSourceAssetImporter.DetectCubeLayout(size.Width, size.Height) == layout)
-        {
-            return;
-        }
-
-        var (columns, rows, name) = layout switch
-        {
-            CubeLayout.HorizontalStrip => (6, 1, "A horizontal strip"),
-            CubeLayout.VerticalStrip => (1, 6, "A vertical strip"),
-            CubeLayout.HorizontalCross => (4, 3, "A horizontal cross"),
-            _ => (3, 4, "A vertical cross"),
-        };
-        throw new ArgumentException(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"{name} must be exactly {columns} square faces wide and {rows} high, with no margins (for example {columns * 256} × {rows * 256}); this image is {size.Width} × {size.Height}."),
-            nameof(sourcePath));
-    }
-
-    private static void ValidateCubeFaces(string sourcePath)
-    {
-        var faces = TextureSourceAssetImporter.FindCubeFaces(sourcePath)
-            ?? throw new ArgumentException(
-                "Six-face import needs six images next to the selected one, named with _px, _nx, _py, _ny, _pz and _nz (or _posx... or _right, _left, _top, _bottom, _front, _back).",
-                nameof(sourcePath));
-        var sizes = faces.Select(ImageDimensions.TryRead).ToArray();
-        if (sizes.Any(static size => size is null))
-        {
-            throw new ArgumentException("A cube face image could not be read.", nameof(sourcePath));
-        }
-
-        var first = sizes[0]!.Value;
-        if (first.Width != first.Height || sizes.Any(size => size!.Value != first))
-        {
-            throw new ArgumentException("Cube faces must be square images of the same size.", nameof(sourcePath));
-        }
-    }
-
-    private static bool IsUnderRoot(string path, string root)
-    {
-        var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var normalizedPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        return normalizedPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
-    }
 }

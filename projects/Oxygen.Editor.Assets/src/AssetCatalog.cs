@@ -37,6 +37,15 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     private readonly IBuiltinCatalogDiscovery builtins;
     private readonly ICookPublicationReader publication;
     private readonly ILogger logger;
+    private readonly Lock stateLock = new();
+    private readonly Lock notificationLock = new();
+    private readonly List<Registration> catalogs = [];
+    private readonly HashSet<Uri> visible = [];
+    private readonly HashSet<Task> initializationRuns = [];
+    private readonly Subject<AssetChange> changes = new();
+    private readonly Subject<Uri> folderChanges = new();
+    private readonly CancellationTokenSource lifetime = new();
+    private readonly CancellationToken lifetimeToken;
     private Guid? initializedPublicationId;
     private ICookPublicationReadLease? installedPublication;
     private string? publicationError;
@@ -45,16 +54,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     private long catalogRevision;
     private long refreshSequence;
     private string? initializingPublicationError;
-    private readonly Lock stateLock = new();
-    private readonly Lock notificationLock = new();
-    private readonly List<Registration> catalogs = [];
-    private readonly HashSet<Uri> visible = [];
     private Guid? visibleProjectId;
-    private readonly HashSet<Task> initializationRuns = [];
-    private readonly Subject<AssetChange> changes = new();
-    private readonly Subject<Uri> folderChanges = new();
-    private readonly CancellationTokenSource lifetime = new();
-    private readonly CancellationToken lifetimeToken;
     private Task? initialization;
     private ProjectContext? initializedProject;
     private volatile bool isDisposed;
@@ -65,7 +65,11 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     /// <param name="builtins">The engine-owned discovery catalog.</param>
     /// <param name="publication">Reads the project's publication and the catalogs of its cooked roots.</param>
     /// <param name="logger">Records failures of the catalog's observers.</param>
-    public AssetCatalog(IProjectContextService projectContextService, IStorageProvider storage, IBuiltinCatalogDiscovery builtins, ICookPublicationReader publication,
+    public AssetCatalog(
+        IProjectContextService projectContextService,
+        IStorageProvider storage,
+        IBuiltinCatalogDiscovery builtins,
+        ICookPublicationReader publication,
         ILogger<AssetCatalog>? logger = null)
     {
         this.projectContextService = projectContextService;
@@ -147,17 +151,87 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
 
         using (selected)
         {
-            await this.RefreshSelectedAsync(selected, cancellationToken, observation).ConfigureAwait(false);
+            await this.RefreshSelectedAsync(selected, observation, cancellationToken).ConfigureAwait(false);
         }
     }
 
     /// <inheritdoc />
     public Task UsePublicationAsync(ICookPublicationReadLease publication, CancellationToken cancellationToken = default)
-        => this.RefreshSelectedAsync(publication, cancellationToken, observation: null);
+        => this.RefreshSelectedAsync(publication, observation: null, cancellationToken);
 
     /// <inheritdoc />
     Task<AssetCatalogSnapshot> IAssetCatalogReader.ReadSnapshotAsync(AssetQuery query, CancellationToken cancellationToken)
         => this.ReadSnapshotAsync(query, cancellationToken);
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        Registration[] snapshot;
+        ICookPublicationReadLease? installed;
+        Task? pending;
+        lock (this.stateLock)
+        {
+            if (this.isDisposed)
+            {
+                return;
+            }
+
+            this.isDisposed = true;
+            snapshot = this.catalogs.ToArray();
+            this.catalogs.Clear();
+            installed = this.installedPublication;
+            this.installedPublication = null;
+            pending = Task.WhenAll(this.initializationRuns);
+        }
+
+        this.lifetime.Cancel();
+        foreach (var catalog in snapshot)
+        {
+            catalog.Dispose();
+        }
+
+        installed?.Dispose();
+
+        lock (this.notificationLock)
+        {
+            this.changes.OnCompleted();
+            this.changes.Dispose();
+            this.folderChanges.OnCompleted();
+            this.folderChanges.Dispose();
+        }
+
+        if (pending?.IsCompleted != false)
+        {
+            this.lifetime.Dispose();
+        }
+        else
+        {
+            _ = pending.ContinueWith(
+                task =>
+                {
+                    _ = task.Exception;
+                    this.lifetime.Dispose();
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+    }
+
+    /// <summary>Cancels catalog work and drains every initialization, including superseded snapshots.</summary>
+    /// <returns>Completion after initialization has released retained publications and child catalogs.</returns>
+    public async ValueTask DisposeAsync()
+    {
+        this.Dispose();
+        Task[] pending;
+        lock (this.stateLock)
+        {
+            pending = this.initializationRuns.ToArray();
+        }
+
+        await Task.WhenAll(pending).ConfigureAwait(false);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Reads the active project once; later calls share that reading until the project changes.</summary>
     /// <returns>Completion after the catalog lists the project's assets.</returns>
@@ -213,172 +287,6 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
             : throw new OperationCanceledException("The project changed during catalog discovery.");
     }
 
-    private async Task RefreshSelectedAsync(ICookPublicationReadLease selected, CancellationToken cancellationToken, long? observation)
-    {
-        using var operation = this.CreateOperationCancellation(cancellationToken);
-        var project = this.projectContextService.ActiveProject
-            ?? throw new OperationCanceledException("The project closed before catalog refresh.");
-        if (selected.ProjectId != project.ProjectId
-            || !string.Equals(selected.ProjectRoot, project.ProjectRoot, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException("The catalog publication belongs to another project.");
-        }
-
-        Task initialization;
-        TaskCompletionSource? completion = null;
-        ICookPublicationReadLease? retained = null;
-        var refreshExisting = false;
-        lock (this.stateLock)
-        {
-            ObjectDisposedException.ThrowIf(this.isDisposed, this);
-            if (observation is { } observed && this.refreshSequence != observed)
-            {
-                return;
-            }
-
-            this.refreshSequence++;
-            if (ReferenceEquals(this.initializedProject, project) && this.initialization is { IsFaulted: false, IsCanceled: false } existing
-                && (existing.IsCompletedSuccessfully ? this.installedPublication is not null && this.initializedPublicationId == selected.PublicationId
-                    : this.initializingWithSelection && this.initializingPublicationId == selected.PublicationId))
-            {
-                initialization = existing;
-                refreshExisting = existing.IsCompletedSuccessfully;
-            }
-            else
-            {
-                // A publication handed over by its owner is shown exactly: the owner may hold the project writer, so
-                // it must not be published again here. A publication the catalog observed itself is read again
-                // through the reader, which publishes the project again when a library changed after it.
-                retained = observation is null ? selected.Retain() : null;
-                completion = this.StartInitialization(project, retained);
-                initialization = completion.Task;
-                this.initializedProject = project;
-                this.initializingWithSelection = retained is not null;
-                this.initializingPublicationId = retained?.PublicationId;
-                this.initializingPublicationError = null;
-            }
-        }
-
-        await initialization.WaitAsync(operation.Token).ConfigureAwait(false);
-        lock (this.stateLock)
-        {
-            if (!ReferenceEquals(this.initialization, initialization) || !ReferenceEquals(project, this.projectContextService.ActiveProject))
-            {
-                // An observation only asks for the current publication; a newer installed one satisfies it.
-                if (observation is not null && ReferenceEquals(project, this.projectContextService.ActiveProject))
-                {
-                    return;
-                }
-
-                throw new OperationCanceledException("A newer publication superseded catalog initialization.");
-            }
-        }
-
-        if (!refreshExisting)
-        {
-            return;
-        }
-
-        using var snapshot = this.AcquireCatalogs();
-        foreach (var catalog in snapshot.Catalogs.OfType<IRefreshableAssetCatalog>())
-        {
-            await catalog.RefreshAsync(operation.Token).ConfigureAwait(false);
-        }
-
-        if (!this.IsCurrentSnapshot(project, snapshot.Revision))
-        {
-            throw new OperationCanceledException("A newer catalog replaced the refreshed snapshot.");
-        }
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        Registration[] snapshot;
-        ICookPublicationReadLease? publication;
-        Task? pending;
-        lock (this.stateLock)
-        {
-            if (this.isDisposed)
-            {
-                return;
-            }
-
-            this.isDisposed = true;
-            snapshot = this.catalogs.ToArray();
-            this.catalogs.Clear();
-            publication = this.installedPublication;
-            this.installedPublication = null;
-            pending = Task.WhenAll(this.initializationRuns);
-        }
-
-        this.lifetime.Cancel();
-        foreach (var catalog in snapshot)
-        {
-            catalog.Dispose();
-        }
-
-        publication?.Dispose();
-
-        lock (this.notificationLock)
-        {
-            this.changes.OnCompleted();
-            this.changes.Dispose();
-            this.folderChanges.OnCompleted();
-            this.folderChanges.Dispose();
-        }
-
-        if (pending?.IsCompleted != false)
-        {
-            this.lifetime.Dispose();
-        }
-        else
-        {
-            _ = pending.ContinueWith(
-                task =>
-                {
-                    _ = task.Exception;
-                    this.lifetime.Dispose();
-                },
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-        }
-    }
-
-    /// <summary>Cancels catalog work and drains every initialization, including superseded snapshots.</summary>
-    /// <returns>Completion after initialization has released retained publications and child catalogs.</returns>
-    public async ValueTask DisposeAsync()
-    {
-        this.Dispose();
-        Task[] pending;
-        lock (this.stateLock)
-        {
-            pending = this.initializationRuns.ToArray();
-        }
-
-        await Task.WhenAll(pending).ConfigureAwait(false);
-        GC.SuppressFinalize(this);
-    }
-
-    // Called under stateLock so shutdown observes the run before it can finish or publish.
-    private TaskCompletionSource StartInitialization(ProjectContext project, ICookPublicationReadLease? supplied, string? publicationError = null)
-    {
-        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        this.initialization = completion.Task;
-        var run = Task.Run(() => this.InitializeCoreAsync(project, completion, supplied, publicationError));
-        this.initializationRuns.Add(run);
-        _ = run.ContinueWith(task =>
-        {
-            _ = task.Exception;
-            lock (this.stateLock)
-            {
-                this.initializationRuns.Remove(task);
-            }
-        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-        return completion;
-    }
-
     private static void Follow(TaskCompletionSource completion, Task successor)
         => _ = successor.ContinueWith(
             task =>
@@ -403,6 +311,121 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     private static bool IsPublicationUnavailable(Exception failure)
         => failure is IOException or InvalidDataException or UnauthorizedAccessException or JsonException;
 
+    // Each file belongs to one catalog. The project folder's catalog lists the files outside the mounts, so it leaves
+    // out every mount folder inside the project: the authoring mounts and the local folders mounted from inside it.
+    private static string[] GetFoldersOfOtherCatalogs(ProjectContext project)
+        => [.. project.AuthoringMounts.Select(static mount => mount.RelativePath)
+            .Concat(project.LocalFolderMounts.Select(mount => Path.GetRelativePath(project.ProjectRoot, mount.AbsolutePath)))
+            .Select(static path => path.Replace('/', Path.DirectorySeparatorChar).Trim(Path.DirectorySeparatorChar))
+            .Where(static path => path.Length != 0 && !string.Equals(path, ".", StringComparison.Ordinal) && !string.Equals(path, "..", StringComparison.Ordinal) && !path.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) && !Path.IsPathRooted(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)];
+
+    private async Task RefreshSelectedAsync(ICookPublicationReadLease selected, long? observation, CancellationToken cancellationToken)
+    {
+        using var operation = this.CreateOperationCancellation(cancellationToken);
+        var project = this.projectContextService.ActiveProject
+            ?? throw new OperationCanceledException("The project closed before catalog refresh.");
+        if (selected.ProjectId != project.ProjectId
+            || !string.Equals(selected.ProjectRoot, project.ProjectRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The catalog publication belongs to another project.");
+        }
+
+        if (this.SelectInitialization(project, selected, observation) is not { } selection)
+        {
+            return;
+        }
+
+        await selection.Run.WaitAsync(operation.Token).ConfigureAwait(false);
+        lock (this.stateLock)
+        {
+            if (!ReferenceEquals(this.initialization, selection.Run) || !ReferenceEquals(project, this.projectContextService.ActiveProject))
+            {
+                // An observation only asks for the current publication; a newer installed one satisfies it.
+                if (observation is not null && ReferenceEquals(project, this.projectContextService.ActiveProject))
+                {
+                    return;
+                }
+
+                throw new OperationCanceledException("A newer publication superseded catalog initialization.");
+            }
+        }
+
+        if (selection.RefreshExisting)
+        {
+            await this.RefreshInstalledCatalogsAsync(project, operation.Token).ConfigureAwait(false);
+        }
+    }
+
+    // Joins the initialization that already shows this publication, or starts one; an observation that a newer
+    // refresh superseded selects nothing.
+    private (Task Run, bool RefreshExisting)? SelectInitialization(ProjectContext project, ICookPublicationReadLease selected, long? observation)
+    {
+        lock (this.stateLock)
+        {
+            ObjectDisposedException.ThrowIf(this.isDisposed, this);
+            if (observation is { } observed && this.refreshSequence != observed)
+            {
+                return null;
+            }
+
+            this.refreshSequence++;
+            if (ReferenceEquals(this.initializedProject, project) && this.initialization is { IsFaulted: false, IsCanceled: false } existing
+                && (existing.IsCompletedSuccessfully ? this.installedPublication is not null && this.initializedPublicationId == selected.PublicationId
+                    : this.initializingWithSelection && this.initializingPublicationId == selected.PublicationId))
+            {
+                return (existing, existing.IsCompletedSuccessfully);
+            }
+
+            // A publication handed over by its owner is shown exactly: the owner may hold the project writer, so
+            // it must not be published again here. A publication the catalog observed itself is read again
+            // through the reader, which publishes the project again when a library changed after it.
+            var retained = observation is null ? selected.Retain() : null;
+            var completion = this.StartInitialization(project, retained);
+            this.initializedProject = project;
+            this.initializingWithSelection = retained is not null;
+            this.initializingPublicationId = retained?.PublicationId;
+            this.initializingPublicationError = null;
+            return (completion.Task, false);
+        }
+    }
+
+    private async Task RefreshInstalledCatalogsAsync(ProjectContext project, CancellationToken cancellationToken)
+    {
+        using var snapshot = this.AcquireCatalogs();
+        foreach (var catalog in snapshot.Catalogs.OfType<IRefreshableAssetCatalog>())
+        {
+            await catalog.RefreshAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!this.IsCurrentSnapshot(project, snapshot.Revision))
+        {
+            throw new OperationCanceledException("A newer catalog replaced the refreshed snapshot.");
+        }
+    }
+
+    // Called under stateLock so shutdown observes the run before it can finish or publish.
+    private TaskCompletionSource StartInitialization(ProjectContext project, ICookPublicationReadLease? supplied, string? publicationError = null)
+    {
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        this.initialization = completion.Task;
+        var run = Task.Run(() => this.InitializeCoreAsync(project, completion, supplied, publicationError));
+        this.initializationRuns.Add(run);
+        _ = run.ContinueWith(
+            task =>
+            {
+                _ = task.Exception;
+                lock (this.stateLock)
+                {
+                    this.initializationRuns.Remove(task);
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+        return completion;
+    }
+
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Prepared registrations transfer to the catalog or are disposed in the initialization finally block.")]
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Every initialization failure must complete the shared promise so callers can observe it and retry; observer failures after publication do not roll back an installed catalog.")]
     private async Task InitializeCoreAsync(ProjectContext project, TaskCompletionSource completion, ICookPublicationReadLease? supplied, string? publicationError = null)
@@ -415,24 +438,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         try
         {
             this.lifetimeToken.ThrowIfCancellationRequested();
-            if (selected is not null)
-            {
-                cooked = await selected.CreateCatalogsAsync(this.lifetimeToken).ConfigureAwait(false);
-            }
-            else if (publicationError is null)
-            {
-                try
-                {
-                    var opened = await this.publication.AcquireCatalogsAsync(project, this.lifetimeToken).ConfigureAwait(false);
-                    (selected, cooked) = (opened.Publication, opened.Catalogs);
-                }
-                catch (Exception failure) when (IsPublicationUnavailable(failure))
-                {
-                    // Project activation reports recovery failures. Keep authored assets accessible
-                    // while the publication owner blocks admission of unresolved cooked output.
-                    publicationError = failure.Message;
-                }
-            }
+            (selected, cooked, publicationError) = await this.OpenCookedCatalogsAsync(project, selected, publicationError).ConfigureAwait(false);
 
             await this.PrepareAuthoredCatalogsAsync(project, selected, candidates, kept).ConfigureAwait(false);
             for (; cookedPrepared < cooked.Count; cookedPrepared++)
@@ -449,34 +455,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         }
         catch (Exception exception)
         {
-            if (completion.Task.IsCompletedSuccessfully)
-            {
-                this.LogObserverFailed(exception);
-                return;
-            }
-
-            Task? successor = null;
-            lock (this.stateLock)
-            {
-                if (ReferenceEquals(this.initialization, completion.Task))
-                {
-                    this.initialization = null;
-                }
-                else if (ReferenceEquals(this.initializedProject, project))
-                {
-                    successor = this.initialization;
-                }
-            }
-
-            // A newer selection for the same project replaced this run; its callers observe that catalog instead.
-            if (exception is OperationCanceledException && successor is not null)
-            {
-                Follow(completion, successor);
-                return;
-            }
-
-            _ = completion.TrySetException(exception);
-            return;
+            this.FailInitialization(project, completion, exception);
         }
         finally
         {
@@ -494,6 +473,68 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
 
             selected?.Dispose();
         }
+    }
+
+    // The supplied publication's catalogs, or the current publication's; an unavailable publication leaves only the
+    // authored catalogs, with the reason.
+    private async Task<(ICookPublicationReadLease? Selected, IReadOnlyList<IAssetCatalog> Cooked, string? PublicationError)> OpenCookedCatalogsAsync(
+        ProjectContext project,
+        ICookPublicationReadLease? selected,
+        string? publicationError)
+    {
+        if (selected is not null)
+        {
+            return (selected, await selected.CreateCatalogsAsync(this.lifetimeToken).ConfigureAwait(false), publicationError);
+        }
+
+        if (publicationError is not null)
+        {
+            return (null, [], publicationError);
+        }
+
+        try
+        {
+            var opened = await this.publication.AcquireCatalogsAsync(project, this.lifetimeToken).ConfigureAwait(false);
+            return (opened.Publication, opened.Catalogs, null);
+        }
+        catch (Exception failure) when (IsPublicationUnavailable(failure))
+        {
+            // Project activation reports recovery failures. Keep authored assets accessible
+            // while the publication owner blocks admission of unresolved cooked output.
+            return (null, [], failure.Message);
+        }
+    }
+
+    // A run that failed after publishing only reports the observer's failure; one that a newer selection for the same
+    // project replaced follows it; any other fails its callers.
+    private void FailInitialization(ProjectContext project, TaskCompletionSource completion, Exception exception)
+    {
+        if (completion.Task.IsCompletedSuccessfully)
+        {
+            this.LogObserverFailed(exception);
+            return;
+        }
+
+        Task? successor = null;
+        lock (this.stateLock)
+        {
+            if (ReferenceEquals(this.initialization, completion.Task))
+            {
+                this.initialization = null;
+            }
+            else if (ReferenceEquals(this.initializedProject, project))
+            {
+                successor = this.initialization;
+            }
+        }
+
+        if (exception is OperationCanceledException && successor is not null)
+        {
+            Follow(completion, successor);
+            return;
+        }
+
+        _ = completion.TrySetException(exception);
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "PrepareCatalogAsync owns each child catalog through Registration and disposes it on preparation failure.")]
@@ -520,17 +561,9 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         }
     }
 
-    // Each file belongs to one catalog. The project folder's catalog lists the files outside the mounts, so it leaves
-    // out every mount folder inside the project: the authoring mounts and the local folders mounted from inside it.
-    private static string[] GetFoldersOfOtherCatalogs(ProjectContext project)
-        => [.. project.AuthoringMounts.Select(static mount => mount.RelativePath)
-            .Concat(project.LocalFolderMounts.Select(mount => Path.GetRelativePath(project.ProjectRoot, mount.AbsolutePath)))
-            .Select(static path => path.Replace('/', Path.DirectorySeparatorChar).Trim(Path.DirectorySeparatorChar))
-            .Where(static path => path.Length != 0 && path != "." && path != ".." && !path.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) && !Path.IsPathRooted(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)];
-
     // A folder the installed catalogs already watch for this project keeps its catalog and watcher, so no change made
     // while another publication is installed goes unseen.
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "PrepareCatalogAsync owns the new catalog through its Registration and disposes it on preparation failure.")]
     private async Task<Registration> PrepareFolderAsync(ProjectContext project, string mountPoint, string root, Dictionary<Registration, IReadOnlyList<AssetRecord>> kept, IReadOnlyList<string>? excluded = null)
     {
         var folder = new WatchedFolder(project.ProjectId, mountPoint, root, string.Join('|', excluded ?? []));
@@ -589,8 +622,15 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         }
     }
 
-    private List<AssetChange> CommitCatalogs(IReadOnlyList<Registration> candidates, IReadOnlyDictionary<Registration, IReadOnlyList<AssetRecord>> kept, TaskCompletionSource completion, ProjectContext project,
-        ICookPublicationReadLease? publication, string? publicationError, out Registration[] retired, out ICookPublicationReadLease? retiredPublication)
+    private List<AssetChange> CommitCatalogs(
+        IReadOnlyList<Registration> candidates,
+        IReadOnlyDictionary<Registration, IReadOnlyList<AssetRecord>> kept,
+        TaskCompletionSource completion,
+        ProjectContext project,
+        ICookPublicationReadLease? publication,
+        string? publicationError,
+        out Registration[] retired,
+        out ICookPublicationReadLease? retiredPublication)
     {
         var notifications = new List<AssetChange>();
         lock (this.stateLock)
@@ -773,8 +813,8 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         lock (this.stateLock)
         {
             ObjectDisposedException.ThrowIf(this.isDisposed, this);
-            var catalogs = this.catalogs.Select(static entry => entry.Catalog).ToArray();
-            return new(this.catalogRevision, catalogs, this.installedPublication?.Retain(), this.publicationError);
+            var installed = this.catalogs.Select(static entry => entry.Catalog).ToArray();
+            return new(this.catalogRevision, installed, this.installedPublication?.Retain(), this.publicationError);
         }
     }
 
@@ -783,6 +823,15 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         lock (this.stateLock)
         {
             return !this.isDisposed && this.catalogRevision == revision && ReferenceEquals(project, this.projectContextService.ActiveProject);
+        }
+    }
+
+    private CancellationTokenSource CreateOperationCancellation(CancellationToken cancellationToken)
+    {
+        lock (this.stateLock)
+        {
+            ObjectDisposedException.ThrowIf(this.isDisposed, this);
+            return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.lifetimeToken);
         }
     }
 
@@ -797,15 +846,6 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         internal ICookPublicationReadLease? Publication { get; } = publication;
 
         public void Dispose() => this.Publication?.Dispose();
-    }
-
-    private CancellationTokenSource CreateOperationCancellation(CancellationToken cancellationToken)
-    {
-        lock (this.stateLock)
-        {
-            ObjectDisposedException.ThrowIf(this.isDisposed, this);
-            return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.lifetimeToken);
-        }
     }
 
     private sealed partial class Registration(IAssetCatalog catalog, bool isCooked) : IDisposable

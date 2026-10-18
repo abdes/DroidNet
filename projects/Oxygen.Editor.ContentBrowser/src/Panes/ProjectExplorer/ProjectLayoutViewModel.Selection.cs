@@ -25,6 +25,23 @@ public partial class ProjectLayoutViewModel
         }
     }
 
+    // The folder above a selected folder, in the selection's own form: "/Content/Props" or "Content/Props".
+    private static string? GetParentFolder(string path)
+    {
+        if (path is "/" or "." || path.Length == 0)
+        {
+            return null;
+        }
+
+        var slash = path.TrimEnd('/').LastIndexOf('/');
+        return slash switch
+        {
+            < 0 => ".",
+            0 => "/",
+            _ => path[..slash],
+        };
+    }
+
     private async Task UpdateTreeSelectionFromStateAsync()
     {
         var version = ++this.selectionRequestVersion;
@@ -41,16 +58,7 @@ public partial class ProjectLayoutViewModel
             var shown = new List<string>(paths.Length);
             foreach (var path in paths)
             {
-                // A folder deleted since it was selected, or reached again through Back or Forward, is not shown: its
-                // nearest folder that still exists is.
-                var existing = path;
-                var target = await this.FindSelectedFolderAsync(root, existing).ConfigureAwait(true);
-                while (target is null && GetParentFolder(existing) is { } parent)
-                {
-                    existing = parent;
-                    target = await this.FindSelectedFolderAsync(root, existing).ConfigureAwait(true);
-                }
-
+                var (existing, target) = await this.FindNearestExistingFolderAsync(root, path).ConfigureAwait(true);
                 if (!this.IsSelectionRequestCurrent(version, root))
                 {
                     return;
@@ -79,23 +87,7 @@ public partial class ProjectLayoutViewModel
             if (this.IsSelectionRequestCurrent(version, root) && this.ShownItems.Contains(root)
                 && await this.RevealSelectedAncestorsAsync(selected, version, root).ConfigureAwait(true))
             {
-                this.isUpdatingFromState = true;
-                try
-                {
-                    if (this.SelectionModel is MultipleSelectionModel<ITreeItem> selection)
-                    {
-                        selection.SelectItemsAt(this.ShownItems.Select((item, index) => (item, index))
-                            .Where(pair => pair.item is TreeItemAdapter adapter && selected.Contains(adapter))
-                            .Select(static pair => pair.index).ToArray());
-                    }
-
-                    ApplyLoadedSelection(root, selected);
-                    this.UpdateSelectionDerivedState();
-                }
-                finally
-                {
-                    this.isUpdatingFromState = false;
-                }
+                this.SelectInTree(root, selected);
             }
         }
         catch (ObjectDisposedException) when (!this.IsSelectionRequestCurrent(version, root))
@@ -104,21 +96,41 @@ public partial class ProjectLayoutViewModel
         }
     }
 
-    // The folder above a selected folder, in the selection's own form: "/Content/Props" or "Content/Props".
-    private static string? GetParentFolder(string path)
+    // A folder deleted since it was selected, or reached again through Back or Forward, is not shown: its nearest
+    // folder that still exists is.
+    private async Task<(string Existing, ITreeItem? Target)> FindNearestExistingFolderAsync(TreeItemAdapter root, string path)
     {
-        if (path is "/" or "." || path.Length == 0)
+        var existing = path;
+        var target = await this.FindSelectedFolderAsync(root, existing).ConfigureAwait(true);
+        while (target is null && GetParentFolder(existing) is { } parent)
         {
-            return null;
+            existing = parent;
+            target = await this.FindSelectedFolderAsync(root, existing).ConfigureAwait(true);
         }
 
-        var slash = path.TrimEnd('/').LastIndexOf('/');
-        return slash switch
+        return (existing, target);
+    }
+
+    // Selects the shown rows of the selected folders without the selection writing back to the state.
+    private void SelectInTree(TreeItemAdapter root, HashSet<TreeItemAdapter> selected)
+    {
+        this.isUpdatingFromState = true;
+        try
         {
-            < 0 => ".",
-            0 => "/",
-            _ => path[..slash],
-        };
+            if (this.SelectionModel is MultipleSelectionModel<ITreeItem> selection)
+            {
+                selection.SelectItemsAt(this.ShownItems.Select((item, index) => (item, index))
+                    .Where(pair => pair.item is TreeItemAdapter adapter && selected.Contains(adapter))
+                    .Select(static pair => pair.index).ToArray());
+            }
+
+            ApplyLoadedSelection(root, selected);
+            this.UpdateSelectionDerivedState();
+        }
+        finally
+        {
+            this.isUpdatingFromState = false;
+        }
     }
 
     private async Task<ITreeItem?> FindSelectedFolderAsync(TreeItemAdapter root, string path)

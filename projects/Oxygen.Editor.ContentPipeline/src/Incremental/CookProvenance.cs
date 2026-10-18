@@ -20,6 +20,75 @@ internal sealed partial record CookProvenance(Guid ProjectId, ImmutableArray<Coo
         .SelectMany(static product => product.Outputs.Select(output => KeyValuePair.Create(output.Asset.VirtualPath, product.SourceUri)))
         .ToImmutableDictionary(StringComparer.Ordinal);
 
+    internal bool IsValid(ProjectContext project)
+    {
+        if (this.ProjectId != project.ProjectId || this.Roots.IsDefault || this.Products.IsDefault
+            || !this.Roots.All(IsValidRoot) || !this.Products.All(IsValidProduct))
+        {
+            return false;
+        }
+
+        var mounts = this.Roots.Select(static root => root.Mount).ToHashSet(StringComparer.Ordinal);
+        var sources = this.Products.Select(static product => product.SourceUri).ToHashSet();
+        if (mounts.Count != this.Roots.Length || sources.Count != this.Products.Length)
+        {
+            return false;
+        }
+
+        try
+        {
+            return this.Products.SelectMany(static product => product.Outputs).All(output => IsValidOutput(output, mounts));
+        }
+        catch (Exception exception) when (exception is InvalidDataException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsValidRoot(Root? root)
+        => root is not null
+            && root.SourceKey != Guid.Empty
+            && IsSha256(root.IndexSha256)
+            && !string.IsNullOrWhiteSpace(root.Mount)
+            && root.Mount is not ("." or "..")
+            && root.Mount.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
+
+    private static bool IsValidProduct(Product? product)
+        => product?.SourceUri is { IsAbsoluteUri: true }
+            && ValidSourceFacts(product)
+            && IsSha256(product.Fingerprint)
+            && IsSha256(product.ReuseFingerprint)
+            && !product.Dependencies.IsDefault
+            && !product.Outputs.IsDefaultOrEmpty
+            && !product.Diagnostics.IsDefault && product.Diagnostics.All(static diagnostic => diagnostic is not null)
+            && !product.AuxiliaryFiles.IsDefault && product.AuxiliaryFiles.All(IsContainedRelativePath)
+            && !product.CookedDependencies.IsDefault && product.CookedDependencies.All(IsValidCookedDependency);
+
+    private static bool IsValidCookedDependency(Snapshots.CookedDependencySnapshot? dependency)
+        => dependency?.AssetUri is { IsAbsoluteUri: true }
+            && !string.IsNullOrWhiteSpace(dependency.SourceName)
+            && Path.IsPathFullyQualified(dependency.RootPath)
+            && !string.IsNullOrWhiteSpace(dependency.AssetKey)
+            && IsSha256(dependency.ContentFingerprint);
+
+    // An output names a cooked asset whose descriptor lies inside one of this publication's roots.
+    private static bool IsValidOutput(Output? output, HashSet<string> mounts)
+        => output?.Asset is { } asset
+            && !string.IsNullOrWhiteSpace(asset.VirtualPath)
+            && IsContainedRelativePath(asset.DescriptorRelativePath)
+            && mounts.Contains(output.RootMount);
+
+    private static bool IsSha256(string? digest)
+        => digest is { Length: 64 } && digest.All(Uri.IsHexDigit);
+
+    // A '/'-separated path that cannot leave the folder it is relative to.
+    private static bool IsContainedRelativePath(string? path)
+        => !string.IsNullOrWhiteSpace(path)
+            && !Path.IsPathRooted(path)
+            && !path.Contains('\\', StringComparison.Ordinal)
+            && !path.Contains(':', StringComparison.Ordinal)
+            && path.Split('/').All(static segment => segment is not ("" or "." or ".."));
+
     /// <summary>The exact native inventory selected for a physical publication mount.</summary>
     /// <param name="Mount">The physical mount, independent of virtual asset names.</param>
     /// <param name="SourceKey">The native source identity.</param>
@@ -95,40 +164,5 @@ internal sealed partial record CookProvenance(Guid ProjectId, ImmutableArray<Coo
 
         /// <summary>Gets warnings that still apply when the unchanged product is reused.</summary>
         public ImmutableArray<Oxygen.Managed.Core.Diagnostics.DiagnosticRecord> Diagnostics { get; init; } = [];
-    }
-
-    internal bool IsValid(ProjectContext project)
-    {
-        if (this.ProjectId != project.ProjectId || this.Roots.IsDefault || this.Products.IsDefault
-            || this.Roots.Any(static root => root is null || root.SourceKey == Guid.Empty
-                || root.IndexSha256 is not { Length: 64 } || !root.IndexSha256.All(Uri.IsHexDigit))
-            || this.Products.Any(static product => product?.SourceUri is null || !product.SourceUri.IsAbsoluteUri || !ValidSourceFacts(product) || product.Fingerprint is not { Length: 64 } || !product.Fingerprint.All(Uri.IsHexDigit)
-                || product.ReuseFingerprint is not { Length: 64 } || !product.ReuseFingerprint.All(Uri.IsHexDigit) || product.Dependencies.IsDefault || product.Outputs.IsDefaultOrEmpty || product.Diagnostics.IsDefault || product.Diagnostics.Any(static diagnostic => diagnostic is null)
-                || product.AuxiliaryFiles.IsDefault || product.AuxiliaryFiles.Any(static path => string.IsNullOrWhiteSpace(path)
-                    || path.Contains('\\') || path.Contains(':') || path.Split('/').Any(static segment => segment is "" or "." or ".."))
-                || product.CookedDependencies.IsDefault || product.CookedDependencies.Any(static dependency => dependency?.AssetUri?.IsAbsoluteUri != true
-                    || string.IsNullOrWhiteSpace(dependency.SourceName) || !Path.IsPathFullyQualified(dependency.RootPath)
-                    || string.IsNullOrWhiteSpace(dependency.AssetKey) || dependency.ContentFingerprint is not { Length: 64 } || !dependency.ContentFingerprint.All(Uri.IsHexDigit)))
-            || this.Roots.Select(static root => root.Mount).ToHashSet(StringComparer.Ordinal).Count != this.Roots.Length
-            || this.Products.Select(static product => product.SourceUri).ToHashSet().Count != this.Products.Length)
-        {
-            return false;
-        }
-
-        try
-        {
-            return this.Roots.All(static root => !string.IsNullOrWhiteSpace(root.Mount)
-                    && root.Mount is not ("." or "..") && root.Mount.IndexOfAny(Path.GetInvalidFileNameChars()) < 0)
-                && this.Products.SelectMany(static product => product.Outputs).All(output => output?.Asset is not null
-                && !string.IsNullOrWhiteSpace(output.Asset.VirtualPath)
-                && output.Asset.DescriptorRelativePath is { Length: > 0 } descriptor
-                && !Path.IsPathRooted(descriptor) && !descriptor.Contains('\\') && !descriptor.Contains(':')
-                && !descriptor.Split('/').Any(static segment => segment is "" or "." or "..")
-                && this.Roots.Any(root => string.Equals(root.Mount, output.RootMount, StringComparison.Ordinal)));
-        }
-        catch (Exception exception) when (exception is InvalidDataException or ArgumentException)
-        {
-            return false;
-        }
     }
 }

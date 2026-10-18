@@ -127,7 +127,7 @@ internal static class AssetRelocationPlanner
         }
     }
 
-    private static (string source, string target, bool isDirectory) Resolve(ProjectContext project, AssetRelocationMove move)
+    private static (string Source, string Target, bool IsDirectory) Resolve(ProjectContext project, AssetRelocationMove move)
     {
         var segments = RequireMovableSegments(project, move);
         if (RelocationPaths.ToPhysical(project, move.SourcePath) is not { } source || RelocationPaths.ToPhysical(project, move.TargetPath) is not { } target)

@@ -86,33 +86,10 @@ public sealed class ProjectCreationService(
                     "Project destination is not available.");
             }
 
-            var templateFolder = await storage.GetFolderFromPathAsync(request.TemplateRoot, cancellationToken)
-                .ConfigureAwait(false);
-            if (!await templateFolder.ExistsAsync().ConfigureAwait(false))
+            var prepared = await this.PrepareTemplateAsync(request.TemplateRoot, cancellationToken).ConfigureAwait(false);
+            if (prepared is not ({ } templateDescriptor, { } sourceFolder, null))
             {
-                return ProjectCreationResult.Failure(projectRoot, "Project template folder does not exist.");
-            }
-
-            var templateDescriptor = await this.LoadTemplateDescriptorAsync(templateFolder, cancellationToken)
-                .ConfigureAwait(false);
-            var sourceFolder = await this.GetTemplateSourceFolderAsync(templateFolder, templateDescriptor, cancellationToken)
-                .ConfigureAwait(false);
-            await this.ValidateTemplateDescriptorAsync(templateFolder, sourceFolder, templateDescriptor, cancellationToken)
-                .ConfigureAwait(false);
-            if (await ContainsProjectManifestAsync(sourceFolder, cancellationToken).ConfigureAwait(false))
-            {
-                return ProjectCreationResult.Failure(
-                    projectRoot,
-                    $"Project template source folder must not contain '{Constants.ProjectFileName}'.");
-            }
-
-            var missingFolder = await FindMissingRequiredTemplateFolderAsync(sourceFolder, cancellationToken)
-                .ConfigureAwait(false);
-            if (missingFolder is not null)
-            {
-                return ProjectCreationResult.Failure(
-                    projectRoot,
-                    $"Project template is missing required folder '{missingFolder}'.");
+                return ProjectCreationResult.Failure(projectRoot, prepared.Refusal ?? "Project template could not be read.");
             }
 
             var projectFolder = await storage.GetFolderFromPathAsync(projectRoot, cancellationToken)
@@ -120,13 +97,7 @@ public sealed class ProjectCreationService(
             rootCreated = !await projectFolder.ExistsAsync().ConfigureAwait(false);
             await projectFolder.CreateAsync(cancellationToken).ConfigureAwait(false);
 
-            await CopyTemplatePayloadAsync(sourceFolder, projectFolder, createdItems, cancellationToken)
-                .ConfigureAwait(false);
-            await EnsureRequiredFolderSkeletonAsync(projectFolder, createdItems, cancellationToken)
-                .ConfigureAwait(false);
-            var defaultSceneId = await this.ReadStarterSceneIdAsync(projectFolder, templateDescriptor, cancellationToken)
-                .ConfigureAwait(false);
-            await WriteProjectManifestAsync(projectFolder, request, templateDescriptor, defaultSceneId, cancellationToken)
+            await this.PopulateProjectAsync(request, templateDescriptor, sourceFolder, projectFolder, createdItems, cancellationToken)
                 .ConfigureAwait(false);
 
             var validationResult = await validation.ValidateAsync(projectRoot, cancellationToken).ConfigureAwait(false);
@@ -286,146 +257,6 @@ public sealed class ProjectCreationService(
         await manifest.WriteAllTextAsync(ProjectInfo.ToJson(projectInfo), cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<SceneId?> ReadStarterSceneIdAsync(
-        IFolder projectFolder,
-        TemplateDescriptor descriptor,
-        CancellationToken cancellationToken)
-    {
-        if (descriptor.StarterScene is null)
-        {
-            return null;
-        }
-
-        var relativePath = ResolveTemplateAssetRelativePath(
-            descriptor,
-            descriptor.StarterScene.AssetUri,
-            descriptor.StarterScene.RelativePath,
-            "StarterScene");
-        var sceneDocument = await storage.GetDocumentFromPathAsync(
-                storage.NormalizeRelativeTo(projectFolder.Location, NormalizeTemplatePath(relativePath)),
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (!await sceneDocument.ExistsAsync().ConfigureAwait(false))
-        {
-            return null;
-        }
-
-        var sceneJson = await sceneDocument.ReadAllTextAsync(cancellationToken).ConfigureAwait(false);
-        return TryReadSceneId(sceneJson);
-    }
-
-    private async Task ValidateTemplateDescriptorAsync(
-        IFolder templateFolder,
-        IFolder sourceFolder,
-        TemplateDescriptor descriptor,
-        CancellationToken cancellationToken)
-    {
-        if (descriptor.SchemaVersion != 1)
-        {
-            throw new InvalidDataException("Project template SchemaVersion must be 1.");
-        }
-
-        RequireDescriptorText(descriptor.TemplateId, "TemplateId");
-        RequireDescriptorText(descriptor.DisplayName, "DisplayName");
-        RequireDescriptorText(descriptor.Description, "Description");
-        RequireDescriptorText(descriptor.Icon, "Icon");
-        RequireDescriptorText(descriptor.Preview, "Preview");
-        RequireDescriptorText(descriptor.SourceFolder, "SourceFolder");
-
-        if (descriptor.Category is null)
-        {
-            throw new InvalidDataException("Project template Category is required.");
-        }
-
-        await this.RequireTemplateFileExistsAsync(templateFolder, descriptor.Icon!, "Icon", cancellationToken)
-            .ConfigureAwait(false);
-        await this.RequireTemplateFileExistsAsync(templateFolder, descriptor.Preview!, "Preview", cancellationToken)
-            .ConfigureAwait(false);
-        foreach (var preview in descriptor.PreviewImages)
-        {
-            await this.RequireTemplateFileExistsAsync(templateFolder, preview, "PreviewImages", cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        if (descriptor.AuthoringMounts.Count == 0)
-        {
-            throw new InvalidDataException("Project template AuthoringMounts is required.");
-        }
-
-        if (!descriptor.AuthoringMounts.Any(static mount =>
-                string.Equals(mount.Name, Constants.ContentFolderName, StringComparison.Ordinal)
-                && string.Equals(mount.RelativePath, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new InvalidDataException("Project template AuthoringMounts must include Content -> Content.");
-        }
-
-        foreach (var mount in descriptor.AuthoringMounts)
-        {
-            ValidateMount(mount);
-        }
-
-        if (descriptor.StarterScene is null)
-        {
-            throw new InvalidDataException("Project template StarterScene is required.");
-        }
-
-        var starterSceneRelativePath = ResolveTemplateAssetRelativePath(
-            descriptor,
-            descriptor.StarterScene.AssetUri,
-            descriptor.StarterScene.RelativePath,
-            "StarterScene");
-        await this.RequireSourceFileExistsAsync(sourceFolder, starterSceneRelativePath, "StarterScene", cancellationToken)
-            .ConfigureAwait(false);
-
-        foreach (var starterContent in descriptor.StarterContent)
-        {
-            RequireDescriptorText(starterContent.Kind, "StarterContent.Kind");
-            var relativePath = ResolveTemplateAssetRelativePath(
-                descriptor,
-                starterContent.AssetUri,
-                starterContent.RelativePath,
-                "StarterContent");
-            await this.RequireSourceFileExistsAsync(sourceFolder, relativePath, "StarterContent", cancellationToken)
-                .ConfigureAwait(false);
-        }
-    }
-
-    private async Task RequireTemplateFileExistsAsync(
-        IFolder templateFolder,
-        string relativePath,
-        string fieldName,
-        CancellationToken cancellationToken)
-    {
-        ValidateRelativeDescriptorPath(relativePath, fieldName);
-
-        var document = await storage.GetDocumentFromPathAsync(
-                storage.NormalizeRelativeTo(templateFolder.Location, NormalizeTemplatePath(relativePath)),
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (!await document.ExistsAsync().ConfigureAwait(false))
-        {
-            throw new InvalidDataException($"Project template {fieldName} file '{relativePath}' does not exist.");
-        }
-    }
-
-    private async Task RequireSourceFileExistsAsync(
-        IFolder sourceFolder,
-        string relativePath,
-        string fieldName,
-        CancellationToken cancellationToken)
-    {
-        ValidateRelativeDescriptorPath(relativePath, fieldName);
-
-        var document = await storage.GetDocumentFromPathAsync(
-                storage.NormalizeRelativeTo(sourceFolder.Location, NormalizeTemplatePath(relativePath)),
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (!await document.ExistsAsync().ConfigureAwait(false))
-        {
-            throw new InvalidDataException($"Project template {fieldName} file '{relativePath}' does not exist.");
-        }
-    }
-
     private static string ResolveTemplateAssetRelativePath(
         TemplateDescriptor descriptor,
         Uri assetUri,
@@ -463,48 +294,46 @@ public sealed class ProjectCreationService(
         return expectedRelativePath;
     }
 
-    [SuppressMessage(
-        "Performance",
-        "CA1822:Mark members as static",
-        Justification = "Instance helper keeps template-manifest loading grouped with this service.")]
-    private async Task<TemplateDescriptor> LoadTemplateDescriptorAsync(
-        IFolder templateFolder,
-        CancellationToken cancellationToken)
+    // The descriptor's own fields, before any file is looked at.
+    private static void ValidateDescriptorFields(TemplateDescriptor descriptor)
     {
-        var manifest = await templateFolder.GetDocumentAsync(TemplateManifestFileName, cancellationToken)
-            .ConfigureAwait(false);
-        if (!await manifest.ExistsAsync().ConfigureAwait(false))
+        if (descriptor.SchemaVersion != 1)
         {
-            throw new InvalidDataException($"Project template is missing required '{TemplateManifestFileName}'.");
+            throw new InvalidDataException("Project template SchemaVersion must be 1.");
         }
 
-        var json = await manifest.ReadAllTextAsync(cancellationToken).ConfigureAwait(false);
-        return TemplateDescriptor.FromJson(json);
-    }
-
-    private async Task<IFolder> GetTemplateSourceFolderAsync(
-        IFolder templateFolder,
-        TemplateDescriptor descriptor,
-        CancellationToken cancellationToken)
-    {
-        var sourceFolderPath = string.IsNullOrWhiteSpace(descriptor.SourceFolder)
-            ? "."
-            : descriptor.SourceFolder;
-        if (Path.IsPathRooted(sourceFolderPath))
+        RequireDescriptorText(descriptor.TemplateId, "TemplateId");
+        RequireDescriptorText(descriptor.DisplayName, "DisplayName");
+        RequireDescriptorText(descriptor.Description, "Description");
+        RequireDescriptorText(descriptor.Icon, "Icon");
+        RequireDescriptorText(descriptor.Preview, "Preview");
+        RequireDescriptorText(descriptor.SourceFolder, "SourceFolder");
+        if (descriptor.Category is null)
         {
-            throw new InvalidDataException("Project template SourceFolder must be relative to the template folder.");
+            throw new InvalidDataException("Project template Category is required.");
         }
 
-        var sourceFolder = sourceFolderPath is "." or "./"
-            ? templateFolder
-            : await storage.GetFolderFromPathAsync(storage.NormalizeRelativeTo(templateFolder.Location, sourceFolderPath), cancellationToken)
-                .ConfigureAwait(false);
-        if (!await sourceFolder.ExistsAsync().ConfigureAwait(false))
+        if (descriptor.AuthoringMounts.Count == 0)
         {
-            throw new InvalidDataException($"Project template SourceFolder '{sourceFolderPath}' does not exist.");
+            throw new InvalidDataException("Project template AuthoringMounts is required.");
         }
 
-        return sourceFolder;
+        if (!descriptor.AuthoringMounts.Any(static mount =>
+                string.Equals(mount.Name, Constants.ContentFolderName, StringComparison.Ordinal)
+                && string.Equals(mount.RelativePath, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidDataException("Project template AuthoringMounts must include Content -> Content.");
+        }
+
+        foreach (var mount in descriptor.AuthoringMounts)
+        {
+            ValidateMount(mount);
+        }
+
+        if (descriptor.StarterScene is null)
+        {
+            throw new InvalidDataException("Project template StarterScene is required.");
+        }
     }
 
     private static void RequireDescriptorText(string? value, string fieldName)
@@ -626,6 +455,203 @@ public sealed class ProjectCreationService(
         }
 
         return false;
+    }
+
+    // Loads the template and checks it can be copied; a refusal says why it cannot.
+    // The template payload, the required folders and the manifest; every item created is recorded for cleanup.
+    private async Task PopulateProjectAsync(
+        ProjectCreationRequest request,
+        TemplateDescriptor descriptor,
+        IFolder sourceFolder,
+        IFolder projectFolder,
+        ICollection<IStorageItem> createdItems,
+        CancellationToken cancellationToken)
+    {
+        await CopyTemplatePayloadAsync(sourceFolder, projectFolder, createdItems, cancellationToken)
+            .ConfigureAwait(false);
+        await EnsureRequiredFolderSkeletonAsync(projectFolder, createdItems, cancellationToken)
+            .ConfigureAwait(false);
+        var defaultSceneId = await this.ReadStarterSceneIdAsync(projectFolder, descriptor, cancellationToken)
+            .ConfigureAwait(false);
+        await WriteProjectManifestAsync(projectFolder, request, descriptor, defaultSceneId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<(TemplateDescriptor? Descriptor, IFolder? Source, string? Refusal)> PrepareTemplateAsync(
+        string templateRoot,
+        CancellationToken cancellationToken)
+    {
+        var templateFolder = await storage.GetFolderFromPathAsync(templateRoot, cancellationToken).ConfigureAwait(false);
+        if (!await templateFolder.ExistsAsync().ConfigureAwait(false))
+        {
+            return (null, null, "Project template folder does not exist.");
+        }
+
+        var descriptor = await this.LoadTemplateDescriptorAsync(templateFolder, cancellationToken).ConfigureAwait(false);
+        var source = await this.GetTemplateSourceFolderAsync(templateFolder, descriptor, cancellationToken).ConfigureAwait(false);
+        await this.ValidateTemplateDescriptorAsync(templateFolder, source, descriptor, cancellationToken).ConfigureAwait(false);
+        if (await ContainsProjectManifestAsync(source, cancellationToken).ConfigureAwait(false))
+        {
+            return (null, null, $"Project template source folder must not contain '{Constants.ProjectFileName}'.");
+        }
+
+        var missingFolder = await FindMissingRequiredTemplateFolderAsync(source, cancellationToken).ConfigureAwait(false);
+        return missingFolder is null
+            ? (descriptor, source, null)
+            : (null, null, $"Project template is missing required folder '{missingFolder}'.");
+    }
+
+    private async Task<SceneId?> ReadStarterSceneIdAsync(
+        IFolder projectFolder,
+        TemplateDescriptor descriptor,
+        CancellationToken cancellationToken)
+    {
+        if (descriptor.StarterScene is null)
+        {
+            return null;
+        }
+
+        var relativePath = ResolveTemplateAssetRelativePath(
+            descriptor,
+            descriptor.StarterScene.AssetUri,
+            descriptor.StarterScene.RelativePath,
+            "StarterScene");
+        var sceneDocument = await storage.GetDocumentFromPathAsync(
+                storage.NormalizeRelativeTo(projectFolder.Location, NormalizeTemplatePath(relativePath)),
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!await sceneDocument.ExistsAsync().ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        var sceneJson = await sceneDocument.ReadAllTextAsync(cancellationToken).ConfigureAwait(false);
+        return TryReadSceneId(sceneJson);
+    }
+
+    private async Task ValidateTemplateDescriptorAsync(
+        IFolder templateFolder,
+        IFolder sourceFolder,
+        TemplateDescriptor descriptor,
+        CancellationToken cancellationToken)
+    {
+        ValidateDescriptorFields(descriptor);
+        await this.RequireTemplateFileExistsAsync(templateFolder, descriptor.Icon!, "Icon", cancellationToken)
+            .ConfigureAwait(false);
+        await this.RequireTemplateFileExistsAsync(templateFolder, descriptor.Preview!, "Preview", cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var preview in descriptor.PreviewImages)
+        {
+            await this.RequireTemplateFileExistsAsync(templateFolder, preview, "PreviewImages", cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await this.RequireStarterFilesAsync(sourceFolder, descriptor, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RequireStarterFilesAsync(IFolder sourceFolder, TemplateDescriptor descriptor, CancellationToken cancellationToken)
+    {
+        var starterScene = descriptor.StarterScene
+            ?? throw new InvalidDataException("Project template StarterScene is required.");
+        var starterSceneRelativePath = ResolveTemplateAssetRelativePath(
+            descriptor,
+            starterScene.AssetUri,
+            starterScene.RelativePath,
+            "StarterScene");
+        await this.RequireSourceFileExistsAsync(sourceFolder, starterSceneRelativePath, "StarterScene", cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var starterContent in descriptor.StarterContent)
+        {
+            RequireDescriptorText(starterContent.Kind, "StarterContent.Kind");
+            var relativePath = ResolveTemplateAssetRelativePath(
+                descriptor,
+                starterContent.AssetUri,
+                starterContent.RelativePath,
+                "StarterContent");
+            await this.RequireSourceFileExistsAsync(sourceFolder, relativePath, "StarterContent", cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async Task RequireTemplateFileExistsAsync(
+        IFolder templateFolder,
+        string relativePath,
+        string fieldName,
+        CancellationToken cancellationToken)
+    {
+        ValidateRelativeDescriptorPath(relativePath, fieldName);
+
+        var document = await storage.GetDocumentFromPathAsync(
+                storage.NormalizeRelativeTo(templateFolder.Location, NormalizeTemplatePath(relativePath)),
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!await document.ExistsAsync().ConfigureAwait(false))
+        {
+            throw new InvalidDataException($"Project template {fieldName} file '{relativePath}' does not exist.");
+        }
+    }
+
+    private async Task RequireSourceFileExistsAsync(
+        IFolder sourceFolder,
+        string relativePath,
+        string fieldName,
+        CancellationToken cancellationToken)
+    {
+        ValidateRelativeDescriptorPath(relativePath, fieldName);
+
+        var document = await storage.GetDocumentFromPathAsync(
+                storage.NormalizeRelativeTo(sourceFolder.Location, NormalizeTemplatePath(relativePath)),
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!await document.ExistsAsync().ConfigureAwait(false))
+        {
+            throw new InvalidDataException($"Project template {fieldName} file '{relativePath}' does not exist.");
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1822:Mark members as static",
+        Justification = "Instance helper keeps template-manifest loading grouped with this service.")]
+    private async Task<TemplateDescriptor> LoadTemplateDescriptorAsync(
+        IFolder templateFolder,
+        CancellationToken cancellationToken)
+    {
+        var manifest = await templateFolder.GetDocumentAsync(TemplateManifestFileName, cancellationToken)
+            .ConfigureAwait(false);
+        if (!await manifest.ExistsAsync().ConfigureAwait(false))
+        {
+            throw new InvalidDataException($"Project template is missing required '{TemplateManifestFileName}'.");
+        }
+
+        var json = await manifest.ReadAllTextAsync(cancellationToken).ConfigureAwait(false);
+        return TemplateDescriptor.FromJson(json);
+    }
+
+    private async Task<IFolder> GetTemplateSourceFolderAsync(
+        IFolder templateFolder,
+        TemplateDescriptor descriptor,
+        CancellationToken cancellationToken)
+    {
+        var sourceFolderPath = string.IsNullOrWhiteSpace(descriptor.SourceFolder)
+            ? "."
+            : descriptor.SourceFolder;
+        if (Path.IsPathRooted(sourceFolderPath))
+        {
+            throw new InvalidDataException("Project template SourceFolder must be relative to the template folder.");
+        }
+
+        var sourceFolder = sourceFolderPath is "." or "./"
+            ? templateFolder
+            : await storage.GetFolderFromPathAsync(storage.NormalizeRelativeTo(templateFolder.Location, sourceFolderPath), cancellationToken)
+                .ConfigureAwait(false);
+        if (!await sourceFolder.ExistsAsync().ConfigureAwait(false))
+        {
+            throw new InvalidDataException($"Project template SourceFolder '{sourceFolderPath}' does not exist.");
+        }
+
+        return sourceFolder;
     }
 
     private sealed record TemplateDescriptor(

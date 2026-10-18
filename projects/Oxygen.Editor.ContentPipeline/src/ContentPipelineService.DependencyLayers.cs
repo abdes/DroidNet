@@ -62,6 +62,30 @@ public sealed partial class ContentPipelineService
         return new(operation.OperationId, targetKind, OperationStatus.Failed, diagnostics, [], Inspection: null, Validation: null);
     }
 
+    // An input of a failed cook fails when an error names it, an error names none of the layer's inputs, or it
+    // produced nothing; every other input of the layer is complete.
+    private static void RecordLayerOutcome(
+        ContentCookResult result,
+        ContentCookInput[] inputs,
+        Dictionary<Uri, ContentCookInput> remaining,
+        HashSet<Uri> failed,
+        HashSet<Uri> completed)
+    {
+        var succeeded = result.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings;
+        var globalError = result.Diagnostics.Any(issue => issue.Severity >= DiagnosticSeverity.Error
+            && !inputs.Any(input => string.Equals(issue.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(input.AssetUri), StringComparison.Ordinal)));
+        foreach (var input in inputs)
+        {
+            _ = remaining.Remove(input.AssetUri);
+            var inputFailed = !succeeded
+                && (globalError
+                    || result.Diagnostics.Any(issue => issue.Severity >= DiagnosticSeverity.Error
+                        && string.Equals(issue.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(input.AssetUri), StringComparison.Ordinal))
+                    || !result.CookedAssets.Any(asset => asset.SourceAssetUri == input.AssetUri));
+            _ = inputFailed ? failed.Add(input.AssetUri) : completed.Add(input.AssetUri);
+        }
+    }
+
     private async Task<List<ContentCookResult>> CookDependencyLayersAsync(
         ContentCookOperation operation,
         CookTargetKind targetKind,
@@ -122,23 +146,7 @@ public sealed partial class ContentPipelineService
                 };
                 var result = await this.CookMixedInputsAsync(operation.OperationId, scope, cancellationToken).ConfigureAwait(false);
                 results.Add(result);
-                var globalError = result.Diagnostics.Any(issue => issue.Severity >= DiagnosticSeverity.Error
-                    && !mount.Any(input => string.Equals(issue.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(input.AssetUri), StringComparison.Ordinal)));
-                foreach (var input in mount)
-                {
-                    _ = remaining.Remove(input.AssetUri);
-                    if (result.Status is not (OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings)
-                        && (globalError || result.Diagnostics.Any(issue => issue.Severity >= DiagnosticSeverity.Error
-                            && string.Equals(issue.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(input.AssetUri), StringComparison.Ordinal))
-                            || !result.CookedAssets.Any(asset => asset.SourceAssetUri == input.AssetUri)))
-                    {
-                        _ = failed.Add(input.AssetUri);
-                    }
-                    else
-                    {
-                        _ = completed.Add(input.AssetUri);
-                    }
-                }
+                RecordLayerOutcome(result, inputs, remaining, failed, completed);
             }
         }
 
