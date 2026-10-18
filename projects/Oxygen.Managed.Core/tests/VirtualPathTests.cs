@@ -14,43 +14,6 @@ namespace Oxygen.Managed.Core.Tests;
 public sealed class VirtualPathTests
 {
     [TestMethod]
-    public void CreateAbsolute_MountAndRelativePath_JoinsThem()
-    {
-        var path = VirtualPath.CreateAbsolute("Content", "Materials/Wood.omat");
-
-        _ = path.Should().Be("/Content/Materials/Wood.omat");
-        _ = VirtualPath.IsCanonical(path).Should().BeTrue();
-    }
-
-    [TestMethod]
-    public void CreateAbsolute_NoRelativePath_ReturnsMountRoot()
-    {
-        _ = VirtualPath.CreateAbsolute("Content").Should().Be("/Content");
-        _ = VirtualPath.CreateAbsolute("Content", relativePath: string.Empty).Should().Be("/Content");
-        _ = VirtualPath.CreateAbsolute(".cooked").Should().Be("/.cooked");
-    }
-
-    [TestMethod]
-    public void CreateAbsolute_Backslashes_BecomeSeparators()
-        => _ = VirtualPath.CreateAbsolute("Content", "Materials\\Wood.omat").Should().Be("/Content/Materials/Wood.omat");
-
-    [TestMethod]
-    [DataRow("", "a")]
-    [DataRow("Con/tent", "a")]
-    [DataRow("1Content", "a")]
-    [DataRow("Content", "/Materials")]
-    [DataRow("Content", "Materials//Wood.omat")]
-    [DataRow("Content", "Materials/./Wood.omat")]
-    [DataRow("Content", "Materials/../Wood.omat")]
-    [DataRow("Content", "Materials/Wood:1.omat")]
-    public void CreateAbsolute_RefusedMountOrSegment_Throws(string mount, string relativePath)
-    {
-        var act = () => VirtualPath.CreateAbsolute(mount, relativePath);
-
-        _ = act.Should().Throw<ArgumentException>();
-    }
-
-    [TestMethod]
     [DataRow("Paint", "paint")]
     [DataRow("\u00C9cole", "\u00E9cole")]
     [DataRow("\u1E9E", "\u00DF")]

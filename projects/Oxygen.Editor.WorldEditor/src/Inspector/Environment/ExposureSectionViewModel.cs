@@ -13,6 +13,7 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -94,7 +95,7 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
     public partial double AutoExposureTransitionDistanceEv { get; set; } = 1.5f;
 
     [ObservableProperty]
-    public partial Uri? AutoExposureMeteringMask { get; set; }
+    public partial AssetPath? AutoExposureMeteringMask { get; set; }
 
     [ObservableProperty]
     public partial ImmutableArray<ExposureCompensationKeyData> AutoExposureCompensationCurve { get; set; } = [];
@@ -125,8 +126,8 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
 
     /// <summary>Gets the authored reference name, None, or URI fallback.</summary>
     public string MeteringMaskDisplayName => this.AutoExposureMeteringMask is null ? "None"
-        : this.MeteringMaskRows.FirstOrDefault(row => row.Item.Uri == this.AutoExposureMeteringMask)?.Item.Name
-            ?? Path.GetFileNameWithoutExtension(this.AutoExposureMeteringMask.AbsolutePath);
+        : this.MeteringMaskRows.FirstOrDefault(row => row.Item.Asset == this.AutoExposureMeteringMask)?.Item.Name
+            ?? Path.GetFileNameWithoutExtension(this.AutoExposureMeteringMask.Name);
 
     /// <summary>Gets a value indicating whether manual controls apply.</summary>
     public bool IsManualExposureVisible => this.ExposureMode == ExposureMode.Manual;
@@ -193,7 +194,7 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
 
     /// <summary>Sets or clears the authored texture reference.</summary>
     /// <param name="textureUri">The authored texture identity, or null.</param>
-    public void SetMeteringMask(Uri? textureUri) => this.AutoExposureMeteringMask = textureUri;
+    public void SetMeteringMask(AssetPath? textureUri) => this.AutoExposureMeteringMask = textureUri;
 
     /// <inheritdoc />
     public void Dispose()
@@ -289,7 +290,7 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
 
     partial void OnAutoExposureTransitionDistanceEvChanged(double value) => this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureTransitionDistanceEv, value);
 
-    partial void OnAutoExposureMeteringMaskChanged(Uri? value)
+    partial void OnAutoExposureMeteringMaskChanged(AssetPath? value)
     {
         this.OnPropertyChanged(nameof(this.MeteringMaskDisplayName));
         this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureMeteringMask, value);
@@ -328,8 +329,8 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
         }
 
         var textures = AssetRule.For(AssetKind.Texture).Apply(assets);
-        var wanted = textures.Select(static asset => asset.IdentityUri.AbsoluteUri).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var removed in this.MeteringMaskRows.Where(row => !wanted.Contains(row.Item.Uri.AbsoluteUri)).ToArray())
+        var wanted = textures.Select(static asset => asset.Identity).ToHashSet();
+        foreach (var removed in this.MeteringMaskRows.Where(row => !wanted.Contains(row.Item.Asset)).ToArray())
         {
             _ = this.MeteringMaskRows.Remove(removed);
         }
@@ -337,8 +338,8 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
         for (var index = 0; index < textures.Count; index++)
         {
             var asset = textures[index];
-            var item = new AssetPickerItem(asset.DisplayName, asset.IdentityUri, "Texture · " + asset.PrimaryBadge, asset.DisplayPath, AssetPickerGroup.Content, asset.IsSelectable, "\uE7C3");
-            var row = this.MeteringMaskRows.FirstOrDefault(candidate => candidate.Item.Uri == asset.IdentityUri);
+            var item = new AssetPickerItem(asset.DisplayName, asset.Identity, "Texture · " + asset.PrimaryBadge, asset.DisplayPath, AssetPickerGroup.Content, asset.IsSelectable, "\uE7C3");
+            var row = this.MeteringMaskRows.FirstOrDefault(candidate => candidate.Item.Asset == asset.Identity);
             if (row is null)
             {
                 this.MeteringMaskRows.Insert(Math.Min(index, this.MeteringMaskRows.Count), new(item));

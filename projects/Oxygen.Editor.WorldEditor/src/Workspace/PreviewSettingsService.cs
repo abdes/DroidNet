@@ -187,7 +187,7 @@ public sealed partial class PreviewSettingsService(
     private static bool IsLive(EngineServiceState state) => state is EngineServiceState.Ready or EngineServiceState.Running;
 
     private static SettingContext Context(ProjectContext project)
-        => SettingContext.Project(Path.TrimEndingDirectorySeparator(Path.GetFullPath(project.ProjectRoot)).ToUpperInvariant());
+        => SettingContext.Project(project.ProjectRoot.FullPath.ToUpperInvariant());
 
     private static string RejectionCode(string property) => property switch
     {
@@ -470,7 +470,7 @@ public sealed partial class PreviewSettingsService(
             DiagnosticCodes.SettingsPrefix + code,
             title,
             message,
-            project is null ? AffectedScope.Empty : new AffectedScope { ProjectId = project.ProjectId, ProjectName = project.Name, ProjectPath = project.ProjectRoot },
+            project is null ? AffectedScope.Empty : new AffectedScope { ProjectId = project.ProjectId, ProjectName = project.Name, ProjectPath = project.ProjectRoot.FullPath },
             exception: exception);
     }
 

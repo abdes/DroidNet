@@ -107,12 +107,9 @@ public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter,
     public string MountPointName { get; private set; }
 
     /// <summary>
-    ///     Gets the canonical absolute virtual root path for this virtual folder mount.
+    ///     Gets the mount's virtual root, the identity the browser selects it by.
     /// </summary>
-    /// <remarks>
-    ///     This is the stable identity for asset selection and must be case-sensitive.
-    /// </remarks>
-    public string VirtualRootPath => VirtualPath.CreateAbsolute(this.MountPointName);
+    public AssetPath VirtualRootPath => AssetPath.Create(this.MountPointName);
 
     /// <summary>
     ///     Gets the backing root folder for this mount.

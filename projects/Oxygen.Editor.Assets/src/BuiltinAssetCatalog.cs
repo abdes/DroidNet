@@ -6,6 +6,7 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets;
 
@@ -15,7 +16,7 @@ internal sealed partial class BuiltinAssetCatalog : IAssetCatalog, IDisposable
     private readonly IBuiltinCatalogDiscovery discovery;
     private readonly Lock sync = new();
     private readonly Subject<AssetChange> changes = new();
-    private Dictionary<Uri, AssetRecord> records = [];
+    private Dictionary<AssetPath, AssetRecord> records = [];
     private GeneratedAssetCatalog catalog = new([]);
     private bool disposed;
 
@@ -67,7 +68,7 @@ internal sealed partial class BuiltinAssetCatalog : IAssetCatalog, IDisposable
         var next = (snapshot.Catalog?.CreateCatalogRecords() ?? []).Select(record => record with
         {
             Generated = record.Generated! with { IsLastKnown = snapshot.IsLastKnown },
-        }).ToDictionary(static record => record.Uri);
+        }).ToDictionary(static record => record.Identity);
         lock (this.sync)
         {
             if (this.disposed || !ReferenceEquals(snapshot, this.discovery.Snapshot))
@@ -75,9 +76,9 @@ internal sealed partial class BuiltinAssetCatalog : IAssetCatalog, IDisposable
                 return;
             }
 
-            var events = this.records.Keys.Where(uri => !next.ContainsKey(uri)).Select(static uri => new AssetChange(AssetChangeKind.Removed, uri))
-                .Concat(next.Values.Where(record => !this.records.TryGetValue(record.Uri, out var prior) || prior != record)
-                    .Select(record => new AssetChange(this.records.ContainsKey(record.Uri) ? AssetChangeKind.Updated : AssetChangeKind.Added, record.Uri))).ToArray();
+            var events = this.records.Keys.Where(identity => !next.ContainsKey(identity)).Select(static identity => new AssetChange(AssetChangeKind.Removed, identity))
+                .Concat(next.Values.Where(record => !this.records.TryGetValue(record.Identity, out var prior) || prior != record)
+                    .Select(record => new AssetChange(this.records.ContainsKey(record.Identity) ? AssetChangeKind.Updated : AssetChangeKind.Added, record.Identity))).ToArray();
             this.records = next;
             this.catalog = new(next.Values);
             foreach (var change in events)

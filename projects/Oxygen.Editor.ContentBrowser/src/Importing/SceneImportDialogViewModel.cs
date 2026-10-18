@@ -8,6 +8,7 @@ using DroidNet.Aura.Dialogs;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Importing;
 
@@ -74,7 +75,7 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
 
     /// <summary>Gets the existing identity and destination being replaced.</summary>
     public string ReplacementMessage => this.Replacement is { } replacement
-        ? Uri.UnescapeDataString(replacement.SourceUri.AbsolutePath) + "\nDestinations: " + string.Join(", ", replacement.Settings.OutputPrefixes.Select(static prefix => prefix.TrimEnd('/')))
+        ? replacement.SourceUri.VirtualPath + "\nDestinations: " + string.Join(", ", replacement.Settings.OutputPrefixes.Select(static prefix => prefix.TrimEnd('/')))
         : "Choose another name, or review the existing source for replacement.";
 
     /// <summary>Gets the action matching the reviewed import intent.</summary>
@@ -97,7 +98,7 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
 
             try
             {
-                var target = SceneImportTarget.Resolve(this.project, ToUri(this.DestinationFolder ?? string.Empty), this.Name?.Trim() ?? string.Empty);
+                var target = SceneImportTarget.Resolve(this.project, ImportDestination.Parse(this.DestinationFolder ?? string.Empty), this.Name?.Trim() ?? string.Empty);
                 return string.Join(Environment.NewLine, ImportedAssetFolders.Select(kind => "/" + target.MountName + "/" + kind + "/" + target.OutputDirectory));
             }
             catch (ArgumentException)
@@ -108,7 +109,7 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
     }
 
     /// <summary>Gets the reviewed request, or null while validation fails.</summary>
-    public SceneImportRequest? Request => this.CanAccept ? new(this.project, this.SourcePath, this.Name.Trim(), ToUri(this.DestinationFolder)) { Replacement = this.Replacement } : null;
+    public SceneImportRequest? Request => this.CanAccept ? new(this.project, this.SourcePath, this.Name.Trim(), ImportDestination.Parse(this.DestinationFolder)) { Replacement = this.Replacement } : null;
 
     /// <summary>Rechecks the review before accepting the dialog.</summary>
     /// <returns>Whether import may proceed.</returns>
@@ -117,8 +118,6 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
         this.Revalidate();
         return this.CanAccept;
     }
-
-    private static Uri ToUri(string folder) => new("asset:///" + string.Join('/', folder.Trim().Trim('/').Split('/').Select(Uri.EscapeDataString)));
 
     partial void OnNameChanged(string value)
     {
@@ -181,7 +180,7 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
         {
             var picker = new FolderPickerSpec("Choose model destination", "Oxygen.ModelDestination")
             {
-                SuggestedStartFolder = this.project.ProjectRoot,
+                SuggestedStartFolder = this.project.ProjectRoot.FullPath,
             };
             var selected = await this.dialogs.PickFolderAsync(picker, cancellationToken).ConfigureAwait(true);
             if (selected is null)
@@ -191,7 +190,7 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
 
             foreach (var mount in this.project.AuthoringMounts)
             {
-                var root = Path.GetFullPath(Path.Combine(this.project.ProjectRoot, mount.RelativePath));
+                var root = this.project.ProjectRoot.Combine(mount.RelativePath).FullPath;
                 var relative = Path.GetRelativePath(root, selected).Replace('\\', '/');
                 if (!Path.IsPathRooted(relative) && !string.Equals(relative, "..", StringComparison.Ordinal) && !relative.StartsWith("../", StringComparison.Ordinal))
                 {
@@ -215,8 +214,11 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
         }
     }
 
-    private bool IsProjectSource() => this.project.AuthoringMounts.Any(mount => this.SourcePath.StartsWith(
-        Path.GetFullPath(Path.Combine(this.project.ProjectRoot, mount.RelativePath)).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+    private bool IsProjectSource()
+    {
+        var source = FileSystemPath.From(this.SourcePath);
+        return this.project.AuthoringMounts.Any(mount => source.IsSameOrInside(this.project.ProjectRoot.Combine(mount.RelativePath)));
+    }
 
     private void Revalidate()
     {
@@ -225,9 +227,9 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
         try
         {
             var name = this.Name?.Trim() ?? string.Empty;
-            _ = SceneImportTarget.Resolve(this.project, ToUri(this.DestinationFolder ?? string.Empty), name);
+            _ = SceneImportTarget.Resolve(this.project, ImportDestination.Parse(this.DestinationFolder ?? string.Empty), name);
             var content = this.project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal));
-            if (!this.IsProjectSource() && content is not null && Directory.Exists(Path.Combine(this.project.ProjectRoot, content.RelativePath, "SourceMedia", "DCC", name)))
+            if (!this.IsProjectSource() && content is not null && Directory.Exists(Path.Combine(this.project.ProjectRoot.FullPath, content.RelativePath, "SourceMedia", "DCC", name)))
             {
                 this.HasCollision = true;
                 this.Error = string.Empty;

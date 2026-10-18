@@ -98,7 +98,7 @@ public sealed partial class ViewportStateService(
     // The project scope id is the normalized project root, the same identity the other workspace
     // settings use; the stored ProjectId inside the value is what rejects a reused path.
     private static string RootOf(ProjectContext project)
-        => Path.TrimEndingDirectorySeparator(Path.GetFullPath(project.ProjectRoot)).ToUpperInvariant();
+        => project.ProjectRoot.FullPath.ToUpperInvariant();
 
     private static bool IsSameProject(ProjectContext? left, ProjectContext right)
         => left is not null && left.ProjectId == right.ProjectId
@@ -191,7 +191,7 @@ public sealed partial class ViewportStateService(
                     DiagnosticCodes.SettingsPrefix + "VIEWPORT_STATE_SAVE_FAILED",
                     "Viewport layout was not saved",
                     "The scene's viewports keep working, but reopen with their previous layout.",
-                    new AffectedScope { ProjectId = write.Project.ProjectId, ProjectName = write.Project.Name, ProjectPath = write.Project.ProjectRoot },
+                    new AffectedScope { ProjectId = write.Project.ProjectId, ProjectName = write.Project.Name, ProjectPath = write.Project.ProjectRoot.FullPath },
                     exception: failure);
             }
         }
@@ -208,18 +208,18 @@ public sealed partial class ViewportStateService(
             DiagnosticCodes.SettingsPrefix + code,
             "Viewport layout was not restored",
             reason + " Scenes open with the default viewports.",
-            new AffectedScope { ProjectId = project.ProjectId, ProjectName = project.Name, ProjectPath = project.ProjectRoot },
+            new AffectedScope { ProjectId = project.ProjectId, ProjectName = project.Name, ProjectPath = project.ProjectRoot.FullPath },
             exception: exception);
     }
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Restored viewport state for {SceneCount} scene(s) of project {ProjectRoot} (activation {Activation}).")]
-    private partial void LogRestored(int sceneCount, string projectRoot, long activation);
+    private partial void LogRestored(int sceneCount, FileSystemPath projectRoot, long activation);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Discarded saved viewport state ({Code}) of project {ProjectRoot}.")]
-    private partial void LogDiscarded(Exception exception, string code, string projectRoot);
+    private partial void LogDiscarded(Exception exception, string code, FileSystemPath projectRoot);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Viewport state was not saved for project {ProjectRoot}.")]
-    private partial void LogWriteFailed(Exception exception, string projectRoot);
+    private partial void LogWriteFailed(Exception exception, FileSystemPath projectRoot);
 
     /// <summary>The saved viewport state of a project, guarded by project identity and version.</summary>
     /// <param name="ProjectId">The project owning this state.</param>

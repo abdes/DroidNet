@@ -5,6 +5,7 @@
 using System.Text.Json;
 using DroidNet.Storage;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
@@ -15,7 +16,7 @@ internal sealed partial class CookPublicationTransaction
         IAtomicFileStore files, IProjectManagerService manager, CookOutputWriteLease gate, CancellationToken cancellationToken)
     {
         gate.VerifyOwner(project.ProjectRoot);
-        var directory = Path.Combine(project.ProjectRoot, ".build", "cook", operationId.ToString("N"));
+        var directory = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", operationId.ToString("N"));
         CookOutputLease.RejectReparsePoint(directory);
         var path = Path.Combine(directory, "publication.json");
         CookOutputLease.RejectReparsePoint(path);
@@ -98,7 +99,7 @@ internal sealed partial class CookPublicationTransaction
         foreach (var id in await PendingMutationsAsync(project, files, currentOperation, cancellationToken).ConfigureAwait(false))
         {
             using var operation = CookOutputLease.AcquireOperation(project.ProjectRoot, id);
-            var saved = await manager.LoadProjectInfoAsync(project.ProjectRoot).ConfigureAwait(false)
+            var saved = await manager.LoadProjectInfoAsync(project.ProjectRoot.FullPath).ConfigureAwait(false)
                 ?? throw new InvalidDataException("The saved project is unavailable for publication recovery.");
             if (saved.Id != project.ProjectId)
             {
@@ -125,7 +126,7 @@ internal sealed partial class CookPublicationTransaction
         Guid? currentOperation, CancellationToken cancellationToken)
     {
         var pending = new List<Guid>();
-        var operations = Path.Combine(project.ProjectRoot, ".build", "cook");
+        var operations = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook");
         foreach (var directory in Directory.EnumerateDirectories(operations))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -168,7 +169,7 @@ internal sealed partial class CookPublicationTransaction
             || journal.CandidateGenerations.Any(static id => id == Guid.Empty)
             || journal.CandidateGenerations.Distinct().Count() != journal.CandidateGenerations.Length
             || journal.SourceFiles.IsDefault || journal.SourceFiles.Any(static file => file is null)
-            || journal.SourceFiles.Select(static file => file.RelativePath).Distinct(StringComparer.OrdinalIgnoreCase).Count() != journal.SourceFiles.Length
+            || journal.SourceFiles.Select(static file => file.RelativePath).Distinct(FileSystemPath.NameComparer).Count() != journal.SourceFiles.Length
             || (journal.Phase is not (CookPublicationPhase.Building or CookPublicationPhase.RolledBack) && journal.CandidateHead is null))
         {
             throw new InvalidDataException("The publication journal does not identify a complete operation for this project.");
@@ -219,7 +220,7 @@ internal sealed partial class CookPublicationTransaction
 
     private async Task RestoreFilesAsync()
     {
-        var headPath = CookPublicationPaths.Head(this.project.ProjectRoot);
+        var headPath = CookPublicationPaths.Head(this.project.ProjectRoot.FullPath);
         var head = await this.files.ReadAsync(headPath, CancellationToken.None).ConfigureAwait(false);
         if (head.Version != this.PreviousHead.Version && head.Version != this.journal.CandidateHead?.Version)
         {
@@ -238,7 +239,7 @@ internal sealed partial class CookPublicationTransaction
         var restoreProject = false;
         if (this.journal.ProjectChange is { } change)
         {
-            var actual = await this.projectManager.LoadProjectInfoAsync(this.project.ProjectRoot).ConfigureAwait(false)
+            var actual = await this.projectManager.LoadProjectInfoAsync(this.project.ProjectRoot.FullPath).ConfigureAwait(false)
                 ?? throw new InvalidDataException("The project's configuration cannot be read for recovery.");
             var json = ProjectInfo.ToJson(actual);
             var before = ProjectInfo.ToJson(this.ParseProjectConfiguration(change.BeforeJson));

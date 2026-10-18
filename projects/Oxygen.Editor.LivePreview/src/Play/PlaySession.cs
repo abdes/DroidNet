@@ -132,7 +132,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
             return;
         }
 
-        var request = new PlayRequest(scene, content.Scene, document.File.AssetUri);
+        var request = new PlayRequest(scene, content.Scene, document.File.Asset);
 
         using var cancellation = new CancellationTokenSource();
         this.play = cancellation;
@@ -212,10 +212,10 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
         _ = this.EndLoggingFailuresAsync();
     }
 
-    private static string LaunchFilePath(ProjectContext project) => Path.Combine(project.ProjectRoot, ".build", "play", "launch.json");
+    private static string LaunchFilePath(ProjectContext project) => Path.Combine(project.ProjectRoot.FullPath, ".build", "play", "launch.json");
 
     private static IReadOnlyList<string> ScriptSourceRoots(ProjectContext project)
-        => [.. project.AuthoringMounts.Select(mount => Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath))).Where(Directory.Exists)];
+        => [.. project.AuthoringMounts.Select(mount => project.ProjectRoot.Combine(mount.RelativePath).FullPath).Where(Directory.Exists)];
 
     private async Task RunPlayAsync(ProjectContext project, PlayRequest request, CancellationToken cancellationToken)
     {
@@ -235,14 +235,14 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
 
         cancellationToken.ThrowIfCancellationRequested();
         this.Status = this.Status with { Activity = PlayActivity.Cooking };
-        var cook = await this.pipeline.CookCurrentSceneAsync(request.SceneAssetUri, cancellationToken).ConfigureAwait(true);
+        var cook = await this.pipeline.CookCurrentSceneAsync(request.SceneAsset, cancellationToken).ConfigureAwait(true);
         if (cook.Status == OperationStatus.Failed)
         {
             await this.FailAsync(PlayDiagnosticCodes.CookFailed, "Cook failed", $"'{request.Scene.Name}' did not cook. The Cooking panel shows why.", PlayStage.Cook, diagnostics: cook.Diagnostics).ConfigureAwait(true);
             return;
         }
 
-        var scenePath = ContentPipelinePaths.ToCookedScenePath(request.SceneAssetUri);
+        var scenePath = ContentPipelinePaths.ToCookedScenePath(request.SceneAsset);
         var mounts = await this.WriteLaunchFileAsync(project, request, scenePath, cancellationToken).ConfigureAwait(true);
         this.scene = request;
         this.reader = new RuntimeProblemReader(project);

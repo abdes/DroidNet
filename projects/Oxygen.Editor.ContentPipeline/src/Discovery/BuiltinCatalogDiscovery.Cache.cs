@@ -20,9 +20,8 @@ public sealed partial class BuiltinCatalogDiscovery
 
     private static void Validate(BuiltinGeometryCatalog catalog)
     {
-        if (!string.Equals(catalog.MountName, AssetUris.ContentMountPoint, StringComparison.Ordinal)
-            || catalog.Geometries.Any(static definition => !string.Equals(definition.AssetUri.Scheme, AssetUris.Scheme, StringComparison.Ordinal)
-                || !definition.AssetUri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.Ordinal)))
+        if (!string.Equals(catalog.MountName, AssetPath.Content.Mount, StringComparison.Ordinal)
+            || catalog.Geometries.Any(static definition => definition.AssetUri == AssetPath.Generated || !definition.AssetUri.IsSameOrInside(AssetPath.Generated)))
         {
             throw new InvalidDataException("The built-in catalog must contain engine-generated identities in the Content output mount.");
         }
@@ -71,7 +70,7 @@ public sealed partial class BuiltinCatalogDiscovery
     {
         try
         {
-            return await this.nativeCatalog.GetBuiltinGeometryCatalogAsync(this.queryRoot, AssetUris.ContentMountPoint, cancellationToken, artifacts).ConfigureAwait(false);
+            return await this.nativeCatalog.GetBuiltinGeometryCatalogAsync(this.queryRoot, AssetPath.Content.Mount, cancellationToken, artifacts).ConfigureAwait(false);
         }
         catch (ContentPipelineTerminationException exception)
         {

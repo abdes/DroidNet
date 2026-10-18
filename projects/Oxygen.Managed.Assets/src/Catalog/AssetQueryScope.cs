@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Managed.Assets.Catalog;
 
 /// <summary>
@@ -9,18 +11,12 @@ namespace Oxygen.Managed.Assets.Catalog;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Scope is expressed in terms of canonical asset URIs. A root is typically either:
-/// <list type="bullet">
-/// <item><description>A mount point root: <c>asset:///Content/</c>, <c>asset:///Engine/</c></description></item>
-/// <item><description>A folder root: <c>asset:///Content/Textures/</c></description></item>
-/// </list>
-/// </para>
-/// <para>
-/// The catalog decides how to interpret roots (prefix match on mount point + path segments is the
-/// expected default). Consumers should treat the semantics as "best effort" across providers.
+/// A root is a mount (<c>/Content</c>, <c>/Engine</c>), a folder (<c>/Content/Textures</c>) or, with
+/// <see cref="AssetQueryTraversal.Self"/>, an asset. The traversal selects the root itself, its children or all its
+/// descendants, comparing whole segments.
 /// </para>
 /// </remarks>
-public sealed record AssetQueryScope(IReadOnlyList<Uri> Roots, AssetQueryTraversal Traversal)
+public sealed record AssetQueryScope(IReadOnlyList<AssetPath> Roots, AssetQueryTraversal Traversal)
 {
     /// <summary>
     /// Gets a scope that targets all assets across all providers/mount points.

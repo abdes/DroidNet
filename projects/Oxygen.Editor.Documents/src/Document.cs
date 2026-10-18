@@ -132,12 +132,12 @@ public sealed partial class Document : IDisposable
             var expected = this.IsMissingOnDisk ? FileVersion.Missing : this.Version;
             try
             {
-                this.Version = await this.files.WriteAsync(this.File.Path, bytes, expected, cancellationToken).ConfigureAwait(true);
+                this.Version = await this.files.WriteAsync(this.File.Path.FullPath, bytes, expected, cancellationToken).ConfigureAwait(true);
             }
             catch (StorageWriteConflictException ex)
             {
                 // The file was replaced, created or deleted since the document held it.
-                var current = await this.files.ReadAsync(this.File.Path, cancellationToken).ConfigureAwait(true);
+                var current = await this.files.ReadAsync(this.File.Path.FullPath, cancellationToken).ConfigureAwait(true);
                 this.IsMissingOnDisk = !current.Version.Exists;
                 this.IsChangedOnDisk = current.Version.Exists;
                 this.LogSaveConflict(ex.Message);
@@ -184,7 +184,7 @@ public sealed partial class Document : IDisposable
             var bytes = await capture.EncodeAsync(cancellationToken).ConfigureAwait(true);
             try
             {
-                _ = await this.files.WriteAsync(copy.Path, bytes, FileVersion.Missing, cancellationToken).ConfigureAwait(true);
+                _ = await this.files.WriteAsync(copy.Path.FullPath, bytes, FileVersion.Missing, cancellationToken).ConfigureAwait(true);
             }
             catch (StorageWriteConflictException ex)
             {
@@ -213,7 +213,7 @@ public sealed partial class Document : IDisposable
         await this.operations.WaitAsync(cancellationToken).ConfigureAwait(true);
         try
         {
-            var snapshot = await this.files.ReadAsync(this.File.Path, cancellationToken).ConfigureAwait(true);
+            var snapshot = await this.files.ReadAsync(this.File.Path.FullPath, cancellationToken).ConfigureAwait(true);
             if (!snapshot.Version.Exists)
             {
                 return this.MarkMissing();
@@ -256,7 +256,7 @@ public sealed partial class Document : IDisposable
                 return this.ReloadFailed("The document is being edited. Finish the edit, then reload it.");
             }
 
-            var snapshot = await this.files.ReadAsync(this.File.Path, cancellationToken).ConfigureAwait(true);
+            var snapshot = await this.files.ReadAsync(this.File.Path.FullPath, cancellationToken).ConfigureAwait(true);
             if (!snapshot.Version.Exists)
             {
                 _ = this.MarkMissing();
@@ -286,7 +286,7 @@ public sealed partial class Document : IDisposable
                 return;
             }
 
-            var snapshot = await this.files.ReadAsync(this.File.Path, cancellationToken).ConfigureAwait(true);
+            var snapshot = await this.files.ReadAsync(this.File.Path.FullPath, cancellationToken).ConfigureAwait(true);
             this.IsChangedOnDisk = false;
             if (snapshot.Version.Exists)
             {

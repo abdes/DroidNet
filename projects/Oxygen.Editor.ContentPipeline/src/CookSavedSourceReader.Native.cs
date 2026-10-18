@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -21,30 +22,29 @@ internal static partial class CookSavedSourceReader
     internal static async Task<ImmutableArray<CookSnapshotInput>> ReadNativeInputsAsync(
         ICookDocumentRegistry documents,
         NativeSourceAnalysisJob facts,
-        string root,
-        IReadOnlySet<string> excluded,
+        FileSystemPath root,
+        IReadOnlySet<FileSystemPath> excluded,
         CancellationToken cancellationToken)
     {
-        var declared = facts.Files.Select(static file => file.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var observed = facts.Observations.ToDictionary(static observation => observation.Path, StringComparer.OrdinalIgnoreCase);
+        var declared = facts.Files.Select(static file => FileSystemPath.From(file.Path)).ToHashSet();
+        var observed = facts.Observations.ToDictionary(static observation => FileSystemPath.From(observation.Path));
         var inputs = ImmutableArray.CreateBuilder<CookSnapshotInput>();
-        foreach (var path in observed.Keys.Concat(declared).Distinct(StringComparer.OrdinalIgnoreCase).Where(path => !excluded.Contains(path)))
+        foreach (var path in observed.Keys.Concat(declared).Distinct().Where(path => !excluded.Contains(path)))
         {
-            var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
-            if (Path.IsPathRooted(relative) || relative is ".." || relative.StartsWith("../", StringComparison.Ordinal))
+            if (!path.IsSameOrInside(root))
             {
                 throw new InvalidDataException($"Source dependency '{path}' lies outside its source root '{root}'.");
             }
 
             _ = observed.TryGetValue(path, out var observation);
-            var exists = observation?.Exists ?? Exists(path);
-            var metadata = observation?.Metadata ?? (observation is null && exists ? ReadMetadata(path) : null);
+            var exists = observation?.Exists ?? Exists(path.FullPath);
+            var metadata = observation?.Metadata ?? (observation is null && exists ? ReadMetadata(path.FullPath) : null);
             var kind = !exists ? CookSnapshotInputKind.Absent
                 : metadata?.IsDirectory == true || (observation?.Reads.IsEmpty == true && !declared.Contains(path))
                     ? CookSnapshotInputKind.Probe : CookSnapshotInputKind.File;
             var hash = kind == CookSnapshotInputKind.File
-                ? await HashAsync(documents, path, cancellationToken).ConfigureAwait(false) : string.Empty;
-            inputs.Add(new(null, path, relative, hash, kind)
+                ? await HashAsync(documents, path.FullPath, cancellationToken).ConfigureAwait(false) : string.Empty;
+            inputs.Add(new(null, path, path.GetPathBelow(root), hash, kind)
             {
                 Metadata = metadata,
                 NativeObservations = observation is null ? [] : [observation],

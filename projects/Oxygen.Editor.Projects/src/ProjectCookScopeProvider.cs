@@ -20,6 +20,6 @@ public sealed class ProjectCookScopeProvider(IStorageProvider storage) : IProjec
         return new ProjectCookScope(
             context.ProjectId,
             context.ProjectRoot,
-            storage.NormalizeRelativeTo(context.ProjectRoot, Constants.CookedOutputFolderName));
+            storage.NormalizeRelativeTo(context.ProjectRoot.FullPath, Constants.CookedOutputFolderName));
     }
 }

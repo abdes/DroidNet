@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Tests;
 
@@ -33,15 +34,15 @@ public sealed class CookedAssetResolutionTests
         var first = Create("First", "/Content/Original/Shared.omat", new(1, 2));
         var pathWinner = Create("Middle", "/Content/Original/Shared.omat", new(3, 4));
         var keyWinner = Create("Last", "/Content/Replacement/Other.omat", new(3, 4));
-        var query = new AssetQuery(new AssetQueryScope([new("asset:///Content/Original")], AssetQueryTraversal.Descendants));
+        var query = new AssetQuery(new AssetQueryScope([AssetPath.Parse("/Content/Original")], AssetQueryTraversal.Descendants));
         var resolved = CookedAssetResolution.Resolve([first, pathWinner, keyWinner], query).Single();
-        _ = resolved.Uri.Should().Be(first.Uri);
+        _ = resolved.Identity.Should().Be(first.Identity);
         _ = resolved.Cooked.Should().Be(keyWinner.Cooked);
         _ = resolved.OverriddenCookedSources.Should().BeEquivalentTo(new[] { first.Cooked, pathWinner.Cooked });
     }
 
-    private static AssetRecord Create(string root, string path, AssetKey key) => new(new Uri("asset://" + path))
+    private static AssetRecord Create(string root, string path, AssetKey key) => new(AssetPath.Parse(path))
     {
-        Cooked = new(root, "Materials/Shared.omat", Guid.CreateVersion7(), key, 1, 1, new string('0', 64)) { VirtualPath = path },
+        Cooked = new(FileSystemPath.From(Path.Combine(Path.GetTempPath(), root)), "Materials/Shared.omat", Guid.CreateVersion7(), key, 1, 1, new string('0', 64)) { VirtualPath = AssetPath.Parse(path) },
     };
 }

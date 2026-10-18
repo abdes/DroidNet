@@ -13,6 +13,7 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Documents;
 
@@ -40,7 +41,7 @@ public sealed partial class DocumentManager : IDisposable
     private readonly Oxygen.Managed.Core.Diagnostics.IOperationResultPublisher? operationResults;
     private readonly Oxygen.Managed.Core.Diagnostics.IStatusReducer? statusReducer;
     private long sceneRequestId;
-    private (Guid ProjectId, string ProjectRoot, Uri SceneUri)? previousSavedScene;
+    private (Guid ProjectId, FileSystemPath ProjectRoot, AssetPath SceneUri)? previousSavedScene;
     private bool disposed;
     private DocumentFile? installing;
 
@@ -109,7 +110,7 @@ public sealed partial class DocumentManager : IDisposable
     /// <param name="cancellationToken">Cancels reading the scene or the close guards before the previous scene closes.</param>
     /// <returns><see langword="true"/> when the scene document is open and selected.</returns>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Scene replacement keeps the current scene until the incoming one is read, and reports the unavailable state afterwards.")]
-    public async Task<bool> OpenSceneAsync(Uri sceneUri, CancellationToken cancellationToken = default)
+    public async Task<bool> OpenSceneAsync(AssetPath sceneUri, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sceneUri);
         this.LogOnOpenSceneRequested(sceneUri);
@@ -121,16 +122,16 @@ public sealed partial class DocumentManager : IDisposable
         }
 
         if (this.projectContextService.ActiveProject is not { } project
-            || project.FindByAssetUri(sceneUri) is not { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location)
+            || project.FindSource(sceneUri) is not { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location)
         {
             this.PublishSceneLoadFailure(sceneUri, unavailable: false);
             return false;
         }
 
-        var file = new DocumentFile(location.FilePath, location.AssetUri);
+        var file = new DocumentFile(location.File, location.Identity);
 
         // Showing the incoming scene's tab activates it; the request that shows it already owns its installation.
-        if (this.installing is { } installing && installing.IsAt(file.Path))
+        if (this.installing is { } installing && installing.Path == file.Path)
         {
             return false;
         }
@@ -174,19 +175,19 @@ public sealed partial class DocumentManager : IDisposable
     /// <param name="materialUri">The material's asset URI.</param>
     /// <param name="cancellationToken">Cancels the open.</param>
     /// <returns>Whether the material's document is shown.</returns>
-    public async Task<bool> OpenMaterialAsync(Uri materialUri, CancellationToken cancellationToken = default)
+    public async Task<bool> OpenMaterialAsync(AssetPath materialUri, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(materialUri);
         if (this.projectContextService.ActiveProject is not { } project
-            || project.FindByAssetUri(materialUri) is not { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location)
+            || project.FindSource(materialUri) is not { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location)
         {
             return false;
         }
 
-        var opened = await this.documents.OpenAsync(new DocumentFile(location.FilePath, location.AssetUri), cancellationToken).ConfigureAwait(true);
+        var opened = await this.documents.OpenAsync(new DocumentFile(location.File, location.Identity), cancellationToken).ConfigureAwait(true);
         if (opened.Document is not { } document)
         {
-            this.LogDocumentNotOpened(location.FilePath, opened.Problem ?? "it could not be read");
+            this.LogDocumentNotOpened(location.File, opened.Problem ?? "it could not be read");
             return false;
         }
 
@@ -214,7 +215,7 @@ public sealed partial class DocumentManager : IDisposable
 
             if (!replacement.Installed && (replacement.Retired || replacement.Incoming is not null))
             {
-                this.PublishSceneLoadFailure(file.AssetUri, unavailable: true);
+                this.PublishSceneLoadFailure(file.Asset, unavailable: true);
             }
         }
     }
@@ -227,7 +228,7 @@ public sealed partial class DocumentManager : IDisposable
         }
 
         var openScenes = this.documentArea.Documents.Where(static document => document.Content is SceneContent).ToArray();
-        var existing = openScenes.FirstOrDefault(document => document.File.IsAt(file.Path));
+        var existing = openScenes.FirstOrDefault(document => document.File.Path == file.Path);
         if (existing is { Content: SceneContent current })
         {
             var selected = await this.documentArea.ShowAsync(existing).ConfigureAwait(true);
@@ -255,14 +256,14 @@ public sealed partial class DocumentManager : IDisposable
             if (opened.Document is not { Content: SceneContent } incoming)
             {
                 this.LogSceneNotOpened(file.Path, opened.Problem ?? "it is not a scene");
-                this.PublishSceneLoadFailure(file.AssetUri, unavailable: false, opened.Problem);
+                this.PublishSceneLoadFailure(file.Asset, unavailable: false, opened.Problem);
                 return false;
             }
 
             if (opened.WasOpen)
             {
                 this.LogSceneNotOpened(file.Path, "it is open in another window");
-                this.PublishSceneLoadFailure(file.AssetUri, unavailable: false, "The scene is open in another window.");
+                this.PublishSceneLoadFailure(file.Asset, unavailable: false, "The scene is open in another window.");
                 return false;
             }
 
@@ -282,7 +283,7 @@ public sealed partial class DocumentManager : IDisposable
 
         if (openScenes.Length != 0)
         {
-            this.previousSavedScene = (project.ProjectId, project.ProjectRoot, openScenes[^1].File.AssetUri);
+            this.previousSavedScene = (project.ProjectId, project.ProjectRoot, openScenes[^1].File.Asset);
             replacement.Retired = true;
         }
 
@@ -324,16 +325,16 @@ public sealed partial class DocumentManager : IDisposable
     }
 
     private void OnOpenSceneRequested(object recipient, OpenSceneRequestMessage message)
-        => message.Reply(this.OpenSceneAsync(message.SceneUri));
+        => message.Reply(this.OpenSceneAsync(message.Scene));
 
     private async void OnOpenMaterialRequested(object recipient, OpenMaterialRequestMessage message)
-        => message.Reply(await this.OpenMaterialAsync(message.MaterialUri).ConfigureAwait(true));
+        => message.Reply(await this.OpenMaterialAsync(message.Material).ConfigureAwait(true));
 
     private async Task MarkSceneActivatedAsync(SceneContent content)
     {
         if (this.projectContextService.ActiveProject is not { } project
             || content.Project.ProjectId != project.ProjectId
-            || !string.Equals(content.Project.ProjectRoot, project.ProjectRoot, StringComparison.OrdinalIgnoreCase))
+            || content.Project.ProjectRoot != project.ProjectRoot)
         {
             return;
         }
@@ -342,7 +343,7 @@ public sealed partial class DocumentManager : IDisposable
         // the identity. The workspace still finds scenes remembered by name before.
         try
         {
-            await this.projectUsage.UpdateLastOpenedSceneAsync(project.Name, project.ProjectRoot, content.Scene.Id.ToString()).ConfigureAwait(true);
+            await this.projectUsage.UpdateLastOpenedSceneAsync(project.Name, project.ProjectRoot.FullPath, content.Scene.Id.ToString()).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

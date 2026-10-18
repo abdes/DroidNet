@@ -2,9 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentBrowser.Shell;
 
 /// <summary>
-/// Represents one breadcrumb segment with a label and the accumulated relative path.
+/// Represents one breadcrumb segment: its label and the folder it opens.
 /// </summary>
-public sealed record BreadcrumbEntry(string Label, string RelativePath);
+/// <param name="Label">The segment's label.</param>
+/// <param name="Folder">The folder; <see langword="null"/> for the project, which browses every folder.</param>
+public sealed record BreadcrumbEntry(string Label, AssetPath? Folder);

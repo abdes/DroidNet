@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Assets;
 
 /// <summary>
@@ -19,8 +21,8 @@ public interface IAssetFeed
     public Task RefreshAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Resolves the entry a reference denotes, including references to missing assets.</summary>
-    /// <param name="uri">The asset reference.</param>
+    /// <param name="identity">The asset reference.</param>
     /// <param name="cancellationToken">Cancels the resolution.</param>
     /// <returns>The entry, or <see langword="null"/> when the active project changed during resolution.</returns>
-    public Task<AssetEntry?> ResolveAsync(Uri uri, CancellationToken cancellationToken = default);
+    public Task<AssetEntry?> ResolveAsync(AssetPath identity, CancellationToken cancellationToken = default);
 }

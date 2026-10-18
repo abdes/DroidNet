@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
@@ -14,10 +15,10 @@ namespace Oxygen.Editor.ContentPipeline.Incremental;
 /// <summary>Identifies source-owned repair work before capturing inputs or inheriting cooked bytes.</summary>
 /// <param name="EmptyRoots">The roots reconstructed from nothing, because their cooked content is missing or damaged.</param>
 /// <param name="Sources">The sources cooked again: products of reconstructed roots, relocated imports and the users of removed products.</param>
-internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, ImmutableHashSet<Uri> Sources)
+internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, ImmutableHashSet<AssetPath> Sources)
 {
     /// <summary>Gets the sources whose prior products leave the cooked content: moved, renamed or deleted sources, and imports whose outputs moved to another group.</summary>
-    public ImmutableHashSet<Uri> RemovedSources { get; init; } = [];
+    public ImmutableHashSet<AssetPath> RemovedSources { get; init; } = [];
 
     /// <summary>Gets the outputs removed from each inherited root, by mount.</summary>
     public ImmutableDictionary<string, CookedOutputRemoval> Removals { get; init; } = ImmutableDictionary<string, CookedOutputRemoval>.Empty.WithComparers(StringComparer.Ordinal);
@@ -40,20 +41,20 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
         Func<CookProvenance.Product, bool> isRelocatedImport)
     {
         var empty = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
-        var sources = ImmutableHashSet.CreateBuilder<Uri>();
+        var sources = ImmutableHashSet.CreateBuilder<AssetPath>();
         var removals = ImmutableDictionary.CreateBuilder<string, CookedOutputRemoval>(StringComparer.Ordinal);
         var vacated = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
         var diagnostics = new List<DiagnosticRecord>();
 
         // A moved, renamed or deleted source retires its product; a relocated import group cooks its product again
         // into the new group. Either way the prior outputs leave their roots.
-        var retired = previous.Products.Where(product => IsRetired(publication.ProjectRoot, product)).ToHashSet();
+        var retired = previous.Products.Where(product => IsRetired(publication.ProjectRoot.FullPath, product)).ToHashSet();
         var removed = previous.Products.Where(product => retired.Contains(product) || isRelocatedImport(product)).ToHashSet();
         sources.UnionWith(removed.Where(product => !retired.Contains(product)).Select(static product => product.SourceUri));
         sources.UnionWith(FindUsers(previous, removed));
         foreach (var mount in mounts)
         {
-            var path = publication.FindProjectRoot(mount);
+            var path = publication.FindProjectRoot(mount)?.FullPath;
             var prior = previous.Roots.FirstOrDefault(root => string.Equals(root.Mount, mount, StringComparison.Ordinal));
             var owners = previous.Products.Where(product => product.Outputs.Any(output => string.Equals(output.RootMount, mount, StringComparison.Ordinal))).ToArray();
             var kept = owners.Where(product => !retired.Contains(product)).ToArray();
@@ -104,7 +105,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
     public static bool IsRetired(string projectRoot, CookProvenance.Product product)
     {
         ArgumentNullException.ThrowIfNull(product);
-        if (product.SourceInput is not { } source || product.SourceUri.AbsolutePath.StartsWith("/Engine/", StringComparison.OrdinalIgnoreCase))
+        if (product.SourceInput is not { } source || product.SourceUri.IsSameOrInside(AssetPath.Engine))
         {
             return false;
         }
@@ -115,7 +116,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
     }
 
     /// <summary>Finds the remaining products that use a removed product, so that cooking them again reports what they lost.</summary>
-    private static IEnumerable<Uri> FindUsers(CookProvenance previous, HashSet<CookProvenance.Product> removed)
+    private static IEnumerable<AssetPath> FindUsers(CookProvenance previous, HashSet<CookProvenance.Product> removed)
     {
         var identities = removed.Select(static product => product.SourceUri)
             .Concat(removed.SelectMany(static product => product.Outputs).SelectMany(static output => new[] { output.Asset.SourceAssetUri, output.Asset.CookedAssetUri }))
@@ -166,7 +167,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
         CookProvenance.Root? prior,
         CookProvenance.Product[] owners,
         ImmutableHashSet<string>.Builder empty,
-        ImmutableHashSet<Uri>.Builder sources,
+        ImmutableHashSet<AssetPath>.Builder sources,
         List<DiagnosticRecord> diagnostics)
     {
         if (prior is null && path is not null && Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any())
@@ -190,7 +191,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
         HashSet<CookProvenance.Product> retired,
         CookedInventoryReport inventory,
         ImmutableHashSet<string>.Builder empty,
-        ImmutableHashSet<Uri>.Builder sources,
+        ImmutableHashSet<AssetPath>.Builder sources,
         List<DiagnosticRecord> diagnostics)
     {
         if (prior is null || !prior.Matches(inventory))

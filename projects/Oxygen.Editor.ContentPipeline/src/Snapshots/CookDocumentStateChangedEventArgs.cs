@@ -21,6 +21,6 @@ public sealed class CookDocumentStateChangedEventArgs(CookDocumentState? before,
 
     /// <summary>Gets a value indicating whether the saved source path or bytes changed, requiring a new freshness check.</summary>
     public bool SavedSourceChanged => this.Before is not null && this.After is not null
-        && (!string.Equals(this.Before.SourcePath, this.After.SourcePath, StringComparison.Ordinal)
+        && (!string.Equals(this.Before.SourcePath.FullPath, this.After.SourcePath.FullPath, StringComparison.Ordinal)
             || !string.Equals(this.Before.SavedContentHash, this.After.SavedContentHash, StringComparison.OrdinalIgnoreCase));
 }

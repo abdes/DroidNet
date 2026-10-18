@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.MaterialEditor;
 
@@ -12,10 +13,10 @@ namespace Oxygen.Editor.MaterialEditor;
 public sealed partial class MaterialEditorViewModel
 {
     [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Material editor shows the relocated material as '{Material}'.")]
-    private static partial void LogFollowedRelocation(ILogger logger, Uri material);
+    private static partial void LogFollowedRelocation(ILogger logger, AssetPath material);
 
     [System.Diagnostics.Conditional("DEBUG")]
-    private void LogFollowedRelocation(Uri material)
+    private void LogFollowedRelocation(AssetPath material)
         => LogFollowedRelocation(this.logger, material);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Pending material work failed while disposing the editor.")]

@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using Oxygen.Editor.Scripting;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Scripts;
 
@@ -11,14 +12,14 @@ namespace Oxygen.Editor.ContentBrowser.Scripts;
 /// The latest analysis of one script file.
 /// </summary>
 /// <param name="SourcePath">The script file.</param>
-/// <param name="ScriptUri">The script's asset identity, its cooked virtual path.</param>
+/// <param name="Script">The script's asset identity, its cooked virtual path.</param>
 /// <param name="Problems">The problems, in source order.</param>
 /// <param name="Parameters">The declared parameters; when the script has errors, the last valid declarations.</param>
 /// <param name="ParametersOutOfDate">Whether <paramref name="Parameters"/> come from an earlier, valid version of the
 /// script because the current one has errors.</param>
 public sealed record ScriptAnalysisSnapshot(
-    string SourcePath,
-    Uri ScriptUri,
+    FileSystemPath SourcePath,
+    AssetPath Script,
     IReadOnlyList<ScriptProblem> Problems,
     IReadOnlyList<ScriptParameter> Parameters,
     bool ParametersOutOfDate)

@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
@@ -16,5 +17,5 @@ internal sealed record CookSourceFrontier(
     ImmutableArray<DiagnosticRecord> Diagnostics)
 {
     /// <summary>Gets the authored owners of generated built-in descriptors.</summary>
-    public ImmutableDictionary<string, Uri> BuiltinOwners { get; init; } = ImmutableDictionary<string, Uri>.Empty;
+    public ImmutableDictionary<string, AssetPath> BuiltinOwners { get; init; } = ImmutableDictionary<string, AssetPath>.Empty;
 }

@@ -15,7 +15,7 @@ public sealed partial class CookingAssetViewModel(CookRunAsset asset) : Observab
     public CookRunAsset Asset { get; private set; } = asset;
 
     /// <summary>Gets the logical asset name.</summary>
-    public string Name => CookingRunViewModel.GetAssetName(this.Asset.AssetUri.AbsolutePath, this.Asset.AssetUri.AbsoluteUri);
+    public string Name => CookingRunViewModel.GetAssetName(this.Asset.AssetUri.VirtualPath, this.Asset.AssetUri.VirtualPath);
 
     /// <summary>Gets the asset type.</summary>
     public string Kind => this.Asset.Kind.ToString();

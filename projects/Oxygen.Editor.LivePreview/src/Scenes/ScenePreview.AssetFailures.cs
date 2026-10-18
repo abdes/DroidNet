@@ -23,7 +23,7 @@ internal sealed partial class ScenePreview
     {
         RuntimeTextureReference?[] textures = [environment.AutoExposureMeteringMask, environment.SkySphereCubemap, environment.SkyLightCubemap];
         var loaded = textures.OfType<RuntimeTextureReference>().ToArray();
-        return loaded.Length == 1 ? loaded[0].AssetUri.AbsoluteUri : null;
+        return loaded.Length == 1 ? loaded[0].Asset.ToUriString() : null;
     }
 
     private void ObserveWorld(IRuntimeWorldCommands commands)

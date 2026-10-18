@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
 
@@ -57,8 +58,8 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
         CookOutputLease.RejectReparsePoint(parent);
         Directory.Move(snapshot.InputRoot, destination);
         var retained = new RetainedImportSource(
-            Path.GetRelativePath(operation.Project.ProjectRoot, destination).Replace('\\', '/'),
-            snapshot.Inputs.Single(file => string.Equals(file.RelativePath, primary, StringComparison.OrdinalIgnoreCase)).RelativePath,
+            Path.GetRelativePath(operation.Project.ProjectRoot.FullPath, destination).Replace('\\', '/'),
+            snapshot.Inputs.Single(file => string.Equals(file.RelativePath, primary, FileSystemPath.NameComparison)).RelativePath,
             snapshot.Inputs.Where(static file => file.Kind == CookSnapshotInputKind.File)
                 .Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash)).ToImmutableArray());
         return new(retained, [], []);
@@ -73,8 +74,8 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
         ValidateBundleName(bundleName);
         var content = project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal))
             ?? throw new InvalidOperationException("Source retention requires the project's Content authoring mount.");
-        var projectRoot = Path.GetFullPath(project.ProjectRoot);
-        var contentRoot = Path.GetFullPath(Path.Combine(projectRoot, content.RelativePath));
+        var projectRoot = project.ProjectRoot.FullPath;
+        var contentRoot = project.ProjectRoot.Combine(content.RelativePath).FullPath;
         var relative = Path.GetRelativePath(projectRoot, contentRoot).Replace('\\', '/');
         if (Path.IsPathRooted(relative) || string.Equals(relative, "..", StringComparison.Ordinal) || relative.StartsWith("../", StringComparison.Ordinal)
             || relative.Split('/')[0].ToUpperInvariant() is ".BUILD" or ".COOKED" or ".IMPORTED" or ".PIPELINE")
@@ -112,7 +113,7 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
 
         var primary = bundle.PrimaryRelativePath.Replace('\\', '/');
         return !bundle.Files.Any(file => file.Kind == CookSnapshotInputKind.File
-            && string.Equals(file.RelativePath.Replace('\\', '/'), primary, StringComparison.OrdinalIgnoreCase))
+            && string.Equals(file.RelativePath.Replace('\\', '/'), primary, FileSystemPath.NameComparison))
             ? throw new InvalidDataException("Source retention requires the selected primary file.")
             : primary;
     }

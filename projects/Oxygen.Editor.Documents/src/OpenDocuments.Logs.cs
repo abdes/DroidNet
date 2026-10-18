@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Documents;
 
@@ -10,17 +11,17 @@ namespace Oxygen.Editor.Documents;
 public sealed partial class OpenDocuments
 {
     [LoggerMessage(Level = LogLevel.Information, Message = "Opened {Kind} '{Title}' from '{Path}'.")]
-    private static partial void LogOpened(ILogger logger, string kind, string title, string path);
+    private static partial void LogOpened(ILogger logger, string kind, string title, FileSystemPath path);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Did not open '{Path}': {Problem}")]
-    private static partial void LogOpenFailed(ILogger logger, string path, string problem);
+    private static partial void LogOpenFailed(ILogger logger, FileSystemPath path, string problem);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Closed {Kind} '{Title}'; unsaved edits discarded: {Discarded}.")]
     private static partial void LogClosed(ILogger logger, string kind, string title, bool discarded);
 
-    private void LogOpened(string kind, string title, string path) => LogOpened(this.logger, kind, title, path);
+    private void LogOpened(string kind, string title, FileSystemPath path) => LogOpened(this.logger, kind, title, path);
 
-    private void LogOpenFailed(string path, string problem) => LogOpenFailed(this.logger, path, problem);
+    private void LogOpenFailed(FileSystemPath path, string problem) => LogOpenFailed(this.logger, path, problem);
 
     private void LogClosed(string kind, string title, bool discarded) => LogClosed(this.logger, kind, title, discarded);
 }

@@ -34,65 +34,63 @@ internal static class AssetRelocationPlanner
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(index);
         var map = new RelocationMap();
-        var previousGroups = new Dictionary<string, string>(StringComparer.Ordinal);
+        var previousGroups = new Dictionary<AssetPath, string>();
         var groupFolders = new List<string>();
         var moving = new List<AuthoredReferenceIndex.ImportSource>();
-        foreach (var move in request.Moves.Where(static move => !string.Equals(move.SourcePath, move.TargetPath, StringComparison.Ordinal)))
+        foreach (var move in request.Moves.Where(static move => move.Source != move.Target))
         {
             AddMove(project, index, map, move);
         }
 
         foreach (var move in request.GroupMoves)
         {
-            var import = index.Imports.FirstOrDefault(item => string.Equals(item.PrimaryVirtualPath, move.SourcePath, StringComparison.OrdinalIgnoreCase))
-                ?? throw new AssetRelocationException($"'{move.SourcePath}' is not an imported model with saved import settings.");
+            var import = index.Imports.FirstOrDefault(item => item.PrimaryVirtualPath == move.Source)
+                ?? throw new AssetRelocationException($"'{move.Source}' is not an imported model with saved import settings.");
             ValidateGroup(move.Group);
-            previousGroups[move.SourcePath] = import.Settings.OutputDirectory;
+            previousGroups[move.Source] = import.Settings.OutputDirectory;
             moving.Add(import);
             foreach (var type in RelocationPaths.ImportTypeFolders)
             {
-                AddGroupFolder(project, map, groupFolders, import.GetGroupFolder(type), RelocationPaths.Combine("/" + import.Settings.MountPoint + "/" + type, move.Group));
+                AddGroupFolder(project, map, groupFolders, import.GetGroupFolder(type), AssetPath.Create(import.Settings.MountPoint, type + "/" + move.Group));
             }
         }
 
         ExpandImportGroups(project, index, map, groupFolders, moving);
         CheckGroupOverlaps(index, map, moving);
+
+        // A file's references name the asset it stands for; a script source's name the script it cooks to.
         foreach (var move in map.Moves)
         {
             var source = RelocationPaths.ToVirtual(project, move.Source)!;
             var target = RelocationPaths.ToVirtual(project, move.Target)!;
-            map.AddIdentity(move.IsDirectory ? source : RelocationPaths.ToIdentity(source), move.IsDirectory ? target : RelocationPaths.ToIdentity(target), move.IsDirectory);
-
-            // Slots and parameters refer to a script by the asset it cooks to.
-            if (!move.IsDirectory && ScriptSourceNames.ToScriptIdentity(source) is { } script && ScriptSourceNames.ToScriptIdentity(target) is { } moved)
-            {
-                map.AddIdentity(script, moved, isFolder: false);
-            }
+            map.AddPath(source, target, move.IsDirectory);
+            map.AddIdentity(move.IsDirectory ? source : AssetFileTypes.ToIdentity(source), move.IsDirectory ? target : AssetFileTypes.ToIdentity(target), move.IsDirectory);
         }
 
         var edits = await PlanEditsAsync(project, index, map, files, cancellationToken).ConfigureAwait(false);
         var referrers = edits.Where(edit => !map.IsMoved(edit.OriginalPath))
             .Select(edit => RelocationPaths.ToVirtual(project, edit.OriginalPath)!)
-            .Order(StringComparer.OrdinalIgnoreCase).ToArray();
-        return new(request, map, edits, referrers, [.. groupFolders.Distinct(StringComparer.OrdinalIgnoreCase)], previousGroups);
+            .Order().ToArray();
+        return new(request, map, edits, referrers, [.. groupFolders.Distinct(StringComparer.Ordinal)], previousGroups);
     }
 
     private static void AddMove(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map, AssetRelocationMove move)
     {
         var (source, target, isDirectory) = Resolve(project, move);
-        if (map.Moves.Any(existing => IsSameOrInside(source, existing.Source) || IsSameOrInside(existing.Source, source)))
+        if (map.Moves.Any(existing => source.IsSameOrInside(existing.Source) || existing.Source.IsSameOrInside(source)))
         {
             throw new AssetRelocationException("Select either a folder or the items inside it, not both.");
         }
 
-        var name = RelocationPaths.GetName(move.SourcePath);
+        var name = move.Source.Name;
+        var root = project.ProjectRoot;
         foreach (var import in index.Imports)
         {
-            var bundle = Path.GetFullPath(Path.Combine(project.ProjectRoot, import.Settings.BundleRoot));
-            var model = RelocationPaths.GetName(import.PrimaryVirtualPath);
+            var bundle = root.Combine(import.Settings.BundleRoot);
+            var model = import.PrimaryVirtualPath.Name;
             if (isDirectory)
             {
-                if (source.StartsWith(bundle + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                if (source != bundle && source.IsSameOrInside(bundle))
                 {
                     throw new AssetRelocationException($"'{name}' is part of the imported model '{model}'. Move the model's folder instead.");
                 }
@@ -100,21 +98,21 @@ internal static class AssetRelocationPlanner
                 continue;
             }
 
-            if (string.Equals(source, import.SidecarPath, StringComparison.OrdinalIgnoreCase))
+            if (source == import.SidecarPath)
             {
                 throw new AssetRelocationException($"'{name}' holds the import settings of '{model}'. Rename the model instead.");
             }
 
-            if (string.Equals(source, import.PrimaryPath, StringComparison.OrdinalIgnoreCase))
+            if (source == import.PrimaryPath)
             {
-                if (!string.Equals(Path.GetDirectoryName(source), Path.GetDirectoryName(target), StringComparison.OrdinalIgnoreCase))
+                if (source.Parent != target.Parent)
                 {
                     throw new AssetRelocationException($"'{model}' references its other files by relative path. Move the model's folder to move it.");
                 }
 
-                AddFile(map, import.SidecarPath, target + Import.NativeSceneImportSettings.SidecarSuffix);
+                AddFile(map, import.SidecarPath, FileSystemPath.From(target.FullPath + Import.NativeSceneImportSettings.SidecarSuffix));
             }
-            else if (import.Settings.Files.Any(file => string.Equals(import.Settings.ResolveFile(project.ProjectRoot, file), source, StringComparison.OrdinalIgnoreCase)))
+            else if (import.Settings.Files.Any(file => FileSystemPath.From(import.Settings.ResolveFile(project.ProjectRoot.FullPath, file)) == source))
             {
                 throw new AssetRelocationException($"'{name}' is part of the imported model '{model}'. Move the model's folder instead.");
             }
@@ -127,88 +125,87 @@ internal static class AssetRelocationPlanner
         }
     }
 
-    private static (string Source, string Target, bool IsDirectory) Resolve(ProjectContext project, AssetRelocationMove move)
+    private static (FileSystemPath Source, FileSystemPath Target, bool IsDirectory) Resolve(ProjectContext project, AssetRelocationMove move)
     {
-        var segments = RequireMovableSegments(project, move);
-        if (RelocationPaths.ToPhysical(project, move.SourcePath) is not { } source || RelocationPaths.ToPhysical(project, move.TargetPath) is not { } target)
+        RequireMovable(project, move);
+        if (RelocationPaths.ToPhysical(project, move.Source) is not { } source || RelocationPaths.ToPhysical(project, move.Target) is not { } target)
         {
-            throw new AssetRelocationException($"'{move.SourcePath}' cannot be moved to '{move.TargetPath}'.");
+            throw new AssetRelocationException($"'{move.Source}' cannot be moved to '{move.Target}'.");
         }
 
-        var isDirectory = Directory.Exists(source);
-        if (!isDirectory && !File.Exists(source))
+        var isDirectory = Directory.Exists(source.FullPath);
+        if (!isDirectory && !File.Exists(source.FullPath))
         {
-            throw new AssetRelocationException($"'{move.SourcePath}' no longer exists; it was deleted or moved outside the Content Browser.");
+            throw new AssetRelocationException($"'{move.Source}' no longer exists; it was deleted or moved outside the Content Browser.");
         }
 
-        RequireValidTarget(move, segments, source, target, isDirectory);
+        RequireValidTarget(move, source, target, isDirectory);
         return (source, target, isDirectory);
     }
 
-    private static string[] RequireMovableSegments(ProjectContext project, AssetRelocationMove move)
+    private static void RequireMovable(ProjectContext project, AssetRelocationMove move)
     {
-        if (RelocationPaths.FindWritableMount(project, move.SourcePath) is null)
+        if (RelocationPaths.FindWritableMount(project, move.Source) is null)
         {
-            throw new AssetRelocationException($"'{move.SourcePath}' is read-only. Only project content can be renamed or moved.");
+            throw new AssetRelocationException($"'{move.Source}' is read-only. Only project content can be renamed or moved.");
         }
 
-        if (RelocationPaths.FindWritableMount(project, move.TargetPath) is null)
+        if (RelocationPaths.FindWritableMount(project, move.Target) is null)
         {
             throw new AssetRelocationException("Choose a destination under Content or another authoring folder.");
         }
 
-        var segments = move.SourcePath.Trim('/').Split('/');
-        return segments.Length == 1 ? throw new AssetRelocationException("A content mount is renamed in Mounts, not here.") : segments;
+        if (move.Source.IsMount)
+        {
+            throw new AssetRelocationException("A content mount is renamed in Mounts, not here.");
+        }
     }
 
-    private static void RequireValidTarget(AssetRelocationMove move, string[] segments, string source, string target, bool isDirectory)
+    private static void RequireValidTarget(AssetRelocationMove move, FileSystemPath source, FileSystemPath target, bool isDirectory)
     {
-        var name = RelocationPaths.GetName(move.TargetPath);
+        var name = move.Target.Name;
         if (VirtualPath.ValidateSegment(name, VirtualPathRuleSet.Authored) is { } invalid)
         {
             throw new AssetRelocationException(invalid.ToMessage());
         }
 
-        if (isDirectory && segments.Length == 2 && RelocationPaths.ImportTypeFolders.Contains(segments[1], StringComparer.OrdinalIgnoreCase))
+        if (isDirectory && move.Source.Parent!.IsMount && RelocationPaths.ImportTypeFolders.Contains(move.Source.Name, StringComparer.Ordinal))
         {
-            throw new AssetRelocationException($"'{segments[1]}' is one of the importer's fixed folders and cannot be renamed or moved.");
+            throw new AssetRelocationException($"'{move.Source.Name}' is one of the importer's fixed folders and cannot be renamed or moved.");
         }
 
-        if (isDirectory && RelocationPaths.IsSameOrInside(move.TargetPath, move.SourcePath))
+        if (isDirectory && move.Target.IsSameOrInside(move.Source))
         {
             throw new AssetRelocationException("A folder cannot be moved into itself.");
         }
 
-        if (!isDirectory && !string.Equals(RelocationPaths.GetExtension(RelocationPaths.GetName(move.SourcePath)), RelocationPaths.GetExtension(name), StringComparison.OrdinalIgnoreCase))
+        if (!isDirectory && !string.Equals(RelocationPaths.GetExtension(move.Source.Name), RelocationPaths.GetExtension(name), StringComparison.OrdinalIgnoreCase))
         {
             throw new AssetRelocationException("A rename keeps the asset's type; change only its name.");
         }
 
-        var caseOnly = string.Equals(source, target, StringComparison.OrdinalIgnoreCase);
-        if (!caseOnly && (File.Exists(target) || Directory.Exists(target)))
+        // A change of case only is a rename of the same file.
+        if (source != target && (File.Exists(target.FullPath) || Directory.Exists(target.FullPath)))
         {
-            throw new AssetRelocationException($"'{name}' already exists in '{RelocationPaths.GetParent(move.TargetPath)}'.");
+            throw new AssetRelocationException($"'{name}' already exists in '{move.Target.Parent}'.");
         }
 
-        if (!Directory.Exists(Path.GetDirectoryName(target)))
+        if (!Directory.Exists(target.Parent!.FullPath))
         {
-            throw new AssetRelocationException($"The destination folder '{RelocationPaths.GetParent(move.TargetPath)}' does not exist.");
+            throw new AssetRelocationException($"The destination folder '{move.Target.Parent}' does not exist.");
         }
 
         if (!isDirectory && ScriptSourceNames.FindCollision(target, ignored: source) is { } collision)
         {
-            throw new AssetRelocationException($"'{Path.GetFileName(collision)}' is already in '{RelocationPaths.GetParent(move.TargetPath)}'; both would cook to the same script. Choose another name.");
+            throw new AssetRelocationException($"'{collision.Name}' is already in '{move.Target.Parent}'; both would cook to the same script. Choose another name.");
         }
     }
 
-    private static bool IsSameOrInside(string path, string folder)
-        => string.Equals(path, folder, StringComparison.OrdinalIgnoreCase) || path.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-
-    private static void AddFile(RelocationMap map, string source, string target)
+    private static void AddFile(RelocationMap map, FileSystemPath source, FileSystemPath target)
     {
-        if (File.Exists(target) && !string.Equals(source, target, StringComparison.OrdinalIgnoreCase))
+        if (File.Exists(target.FullPath) && source != target)
         {
-            throw new AssetRelocationException($"'{Path.GetFileName(target)}' already exists next to the destination.");
+            throw new AssetRelocationException($"'{target.Name}' already exists next to the destination.");
         }
 
         map.AddMove(new(source, target, IsDirectory: false));
@@ -216,24 +213,22 @@ internal static class AssetRelocationPlanner
 
     // A texture descriptor and the image beside it are one asset: each moves with the other, and a rename
     // renames an image that shares the descriptor's name.
-    private static void AddTextureCompanions(AuthoredReferenceIndex index, RelocationMap map, string source, string target)
+    private static void AddTextureCompanions(AuthoredReferenceIndex index, RelocationMap map, FileSystemPath source, FileSystemPath target)
     {
-        var folder = Path.GetDirectoryName(source)!;
-        var targetFolder = Path.GetDirectoryName(target)!;
-        var stem = RelocationPaths.GetDisplayName(Path.GetFileName(source));
-        var newStem = RelocationPaths.GetDisplayName(Path.GetFileName(target));
-        string Companion(string file)
-        {
-            var name = Path.GetFileName(file);
-            var companionStem = RelocationPaths.GetDisplayName(name);
-            return Path.Combine(targetFolder, string.Equals(companionStem, stem, StringComparison.OrdinalIgnoreCase) ? newStem + RelocationPaths.GetExtension(name) : name);
-        }
+        var folder = source.Parent!;
+        var targetFolder = target.Parent!;
+        var stem = RelocationPaths.GetDisplayName(source.Name);
+        var newStem = RelocationPaths.GetDisplayName(target.Name);
+        FileSystemPath Companion(FileSystemPath file)
+            => targetFolder.Combine(string.Equals(RelocationPaths.GetDisplayName(file.Name), stem, FileSystemPath.NameComparison)
+                ? newStem + RelocationPaths.GetExtension(file.Name)
+                : file.Name);
 
-        if (source.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
+        if (source.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
         {
-            var content = File.ReadAllBytes(source);
+            var content = File.ReadAllBytes(source.FullPath);
             foreach (var image in AuthoredReferenceFormat.ReadTextureSources(source, content)
-                .Where(image => string.Equals(Path.GetDirectoryName(image), folder, StringComparison.OrdinalIgnoreCase) && File.Exists(image) && !map.IsMoved(image)))
+                .Where(image => image.Parent == folder && File.Exists(image.FullPath) && !map.IsMoved(image)))
             {
                 AddFile(map, image, Companion(image));
             }
@@ -241,13 +236,12 @@ internal static class AssetRelocationPlanner
             return;
         }
 
-        foreach (var descriptor in index.Descriptors.Where(descriptor => descriptor.Path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(Path.GetDirectoryName(descriptor.Path), folder, StringComparison.OrdinalIgnoreCase) && !map.IsMoved(descriptor.Path)))
+        foreach (var descriptor in index.Descriptors.Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
+            && descriptor.Location.Parent == folder && !map.IsMoved(descriptor.Location)))
         {
-            var sources = AuthoredReferenceFormat.ReadTextureSources(descriptor.Path, File.ReadAllBytes(descriptor.Path));
-            if (sources.Contains(source, StringComparer.OrdinalIgnoreCase))
+            if (AuthoredReferenceFormat.ReadTextureSources(descriptor.Location, File.ReadAllBytes(descriptor.Location.FullPath)).Contains(source))
             {
-                AddFile(map, descriptor.Path, Companion(descriptor.Path));
+                AddFile(map, descriptor.Location, Companion(descriptor.Location));
             }
         }
     }
@@ -261,22 +255,21 @@ internal static class AssetRelocationPlanner
         }
     }
 
-    private static void AddGroupFolder(ProjectContext project, RelocationMap map, List<string> folders, string from, string to)
+    private static void AddGroupFolder(ProjectContext project, RelocationMap map, List<string> folders, AssetPath from, AssetPath to)
     {
-        if (string.Equals(from, to, StringComparison.Ordinal) || map.Identities.Any(entry => string.Equals(entry.source, from, StringComparison.OrdinalIgnoreCase)))
+        if (from == to || map.Identities.Any(entry => entry.Source == from))
         {
             return;
         }
 
         var source = RelocationPaths.ToPhysical(project, from)!;
         var target = RelocationPaths.ToPhysical(project, to)!;
-        var caseOnly = string.Equals(source, target, StringComparison.OrdinalIgnoreCase);
-        if (!caseOnly && (Directory.Exists(target) || File.Exists(target)))
+        if (source != target && (Directory.Exists(target.FullPath) || File.Exists(target.FullPath)))
         {
             throw new AssetRelocationException($"'{to}' already exists. Choose an output group that is not in use.");
         }
 
-        if (Directory.Exists(source) && !map.IsMoved(source))
+        if (Directory.Exists(source.FullPath) && !map.IsMoved(source))
         {
             map.AddMove(new(source, target, IsDirectory: true));
         }
@@ -297,26 +290,26 @@ internal static class AssetRelocationPlanner
             {
                 foreach (var type in RelocationPaths.ImportTypeFolders)
                 {
-                    var typeFolder = "/" + import.Settings.MountPoint + "/" + type;
-                    if (!RelocationPaths.IsSameOrInside(import.GetGroupFolder(type), from) || !from.StartsWith(typeFolder + "/", StringComparison.OrdinalIgnoreCase))
+                    var typeFolder = AssetPath.Create(import.Settings.MountPoint, type);
+                    if (!import.GetGroupFolder(type).IsSameOrInside(from) || from == typeFolder || !from.IsSameOrInside(typeFolder))
                     {
                         continue;
                     }
 
-                    if (!to.StartsWith(typeFolder + "/", StringComparison.OrdinalIgnoreCase))
+                    if (to == typeFolder || !to.IsSameOrInside(typeFolder))
                     {
-                        throw new AssetRelocationException($"'{from}' holds the output group of '{RelocationPaths.GetName(import.PrimaryVirtualPath)}'. Output groups stay in '{typeFolder}'.");
+                        throw new AssetRelocationException($"'{from}' holds the output group of '{import.PrimaryVirtualPath.Name}'. Output groups stay in '{typeFolder}'.");
                     }
 
-                    var oldPart = from[(typeFolder.Length + 1)..];
-                    var newPart = to[(typeFolder.Length + 1)..];
+                    var oldPart = from.GetPathBelow(typeFolder);
+                    var newPart = to.GetPathBelow(typeFolder);
                     moving.Add(import);
                     folders.Add(from + " → " + to);
                     map.AddIdentity(from, to, isFolder: true);
                     foreach (var sibling in RelocationPaths.ImportTypeFolders.Where(sibling => !string.Equals(sibling, type, StringComparison.Ordinal)))
                     {
-                        var siblingFolder = "/" + import.Settings.MountPoint + "/" + sibling;
-                        AddGroupFolder(project, map, folders, siblingFolder + "/" + oldPart, siblingFolder + "/" + newPart);
+                        var siblingFolder = AssetPath.Create(import.Settings.MountPoint, sibling);
+                        AddGroupFolder(project, map, folders, siblingFolder.Combine(oldPart), siblingFolder.Combine(newPart));
                     }
 
                     break;
@@ -334,9 +327,9 @@ internal static class AssetRelocationPlanner
             foreach (var other in index.Imports.Where(other => !moving.Contains(other)))
             {
                 var existing = other.GetGroupFolder(RelocationPaths.ImportTypeFolders[0]);
-                if (RelocationPaths.IsSameOrInside(mapped, existing) || RelocationPaths.IsSameOrInside(existing, mapped))
+                if (mapped.IsSameOrInside(existing) || existing.IsSameOrInside(mapped))
                 {
-                    throw new AssetRelocationException($"The output group would overlap the group of '{RelocationPaths.GetName(other.PrimaryVirtualPath)}'. Choose a separate group.");
+                    throw new AssetRelocationException($"The output group would overlap the group of '{other.PrimaryVirtualPath.Name}'. Choose a separate group.");
                 }
             }
         }
@@ -352,26 +345,26 @@ internal static class AssetRelocationPlanner
         var edits = new List<RelocationEdit>();
         foreach (var descriptor in index.Descriptors)
         {
-            var snapshot = await files.ReadAsync(descriptor.Path, cancellationToken).ConfigureAwait(false);
+            var snapshot = await files.ReadAsync(descriptor.Location.FullPath, cancellationToken).ConfigureAwait(false);
             var content = snapshot.Content.ToArray();
-            if (AuthoredReferenceFormat.RewriteDescriptor(descriptor.Path, content, map, index.Mounts) is { } rewritten)
+            if (AuthoredReferenceFormat.RewriteDescriptor(descriptor.Location, content, map, index.Mounts) is { } rewritten)
             {
-                edits.Add(new(descriptor.Path, map.MapPath(descriptor.Path), snapshot.Version, content, rewritten));
+                edits.Add(new(descriptor.Location, map.MapPath(descriptor.Location), snapshot.Version, content, rewritten));
             }
         }
 
         foreach (var import in index.Imports)
         {
-            var snapshot = await files.ReadAsync(import.SidecarPath, cancellationToken).ConfigureAwait(false);
+            var snapshot = await files.ReadAsync(import.SidecarPath.FullPath, cancellationToken).ConfigureAwait(false);
             var content = snapshot.Content.ToArray();
             byte[]? rewritten;
             try
             {
-                rewritten = AuthoredReferenceFormat.RewriteImportSettings(project.ProjectRoot, content, map);
+                rewritten = AuthoredReferenceFormat.RewriteImportSettings(project.ProjectRoot.FullPath, content, map);
             }
             catch (InvalidDataException error)
             {
-                throw new AssetRelocationException($"The move would separate '{RelocationPaths.GetName(import.PrimaryVirtualPath)}' from its files. Move the model's folder instead.", error);
+                throw new AssetRelocationException($"The move would separate '{import.PrimaryVirtualPath.Name}' from its files. Move the model's folder instead.", error);
             }
 
             if (rewritten is not null)

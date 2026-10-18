@@ -43,7 +43,7 @@ public sealed class DocumentClosePrompt(IDialogService dialogs, IWindowManagerSe
         content.Children.Add(selection);
         if (isWorkspaceClose && item.Metadata is DocumentTab tab)
         {
-            content.Children.Add(new TextBlock { Text = tab.Document.File.AssetUri.ToString(), TextWrapping = TextWrapping.Wrap });
+            content.Children.Add(new TextBlock { Text = tab.Document.File.Asset.VirtualPath, TextWrapping = TextWrapping.Wrap });
         }
 
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };

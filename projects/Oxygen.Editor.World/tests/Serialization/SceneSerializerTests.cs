@@ -125,7 +125,7 @@ public sealed class SceneSerializerTests
         _ = scripting.Slots[0].ExecutionOrder.Should().Be(10);
 
         var geo = heroNode.Components.OfType<GeometryComponent>().Single();
-        _ = geo.Geometry.Should().Be("asset:///Content/Meshes/Hero.geometry");
+        _ = geo.Geometry.Should().Be(AssetPath.Parse("/Content/Meshes/Hero.geometry"));
         _ = geo.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle();
         _ = geo.TargetedOverrides.Should().ContainSingle();
 

@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Managed.Assets.Catalog.FileSystem;
 
 /// <summary>
@@ -20,7 +22,7 @@ public sealed record FileSystemAssetCatalogOptions
     /// <summary>
     /// Gets the root folder path to index.
     /// </summary>
-    public required string RootFolderPath { get; init; }
+    public required FileSystemPath RootFolderPath { get; init; }
 
     /// <summary>
     /// Gets the file search pattern.

@@ -25,7 +25,7 @@ public sealed record SetMaterialSlot : ISceneEdit
     /// <param name="nodes">The nodes, all using the slot's geometry.</param>
     /// <param name="target">The slot.</param>
     /// <param name="material">The material, or <see langword="null"/> to clear the override.</param>
-    public SetMaterialSlot(IReadOnlyCollection<NodeId> nodes, MaterialSlotTarget target, Uri? material)
+    public SetMaterialSlot(IReadOnlyCollection<NodeId> nodes, MaterialSlotTarget target, AssetPath? material)
     {
         ArgumentNullException.ThrowIfNull(nodes);
         ArgumentNullException.ThrowIfNull(target);
@@ -68,7 +68,7 @@ public sealed record SetMaterialSlot : ISceneEdit
             }
 
             var geometries = scope.FindNode(id)?.Components.OfType<GeometryComponent>().ToList() ?? [];
-            if (geometries.Count != 1 || geometries[0].Geometry != assignment.Target.GeometryUri)
+            if (geometries.Count != 1 || geometries[0].Geometry != assignment.Target.Geometry)
             {
                 return SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.MaterialSlotStale, "The node no longer uses the geometry that owns this slot.", id));
             }
@@ -120,10 +120,10 @@ public sealed record SetMaterialSlot : ISceneEdit
     /// <param name="right">The other target.</param>
     /// <returns>Whether they name the same slot.</returns>
     internal static bool SameSlot(MaterialSlotTarget left, MaterialSlotTarget right)
-        => left.GeometryUri == right.GeometryUri && left.SlotId == right.SlotId;
+        => left.Geometry == right.Geometry && left.SlotId == right.SlotId;
 
     private static MaterialSlotAssignment Resolve(SceneEditScope scope, MaterialSlotAssignment assignment)
-        => new(assignment.Target with { GeometryUri = scope.Resolve(assignment.Target.GeometryUri) }, scope.Resolve(assignment.Material));
+        => new(assignment.Target with { Geometry = scope.Resolve(assignment.Target.Geometry) }, scope.Resolve(assignment.Material));
 
     private static void Assign(GeometryComponent geometry, MaterialsSlot? existing, MaterialSlotAssignment assignment)
     {
@@ -147,13 +147,11 @@ public sealed record SetMaterialSlot : ISceneEdit
         var valid = target.SlotId != Guid.Empty
             && target.LayoutRevision is { Length: 64 }
             && target.LayoutRevision.All(Uri.IsHexDigit)
-            && AssetUris.IsAssetUri(target.GeometryUri)
-            && target.GeometryUri.Query.Length == 0
-            && target.GeometryUri.Fragment.Length == 0;
+            && target.Geometry is not null;
         return valid ? null : SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, "Select an existing material slot of a geometry asset.");
     }
 
-    private static SceneDiagnostic? CheckMaterial(Uri? material)
+    private static SceneDiagnostic? CheckMaterial(AssetPath? material)
         => material is not null && AssetReferenceRules.Check([material], AssetFileTypes.Material) is { } error
             ? SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, error)
             : null;

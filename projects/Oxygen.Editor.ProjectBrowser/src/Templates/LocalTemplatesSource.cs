@@ -6,6 +6,8 @@ using System.Diagnostics;
 using System.IO.Abstractions;
 using System.Text.Json;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
+using AssetPath = Oxygen.Managed.Core.AssetPath;
 using VirtualPath = Oxygen.Managed.Core.VirtualPath;
 using VirtualPathComparer = Oxygen.Managed.Core.VirtualPathComparer;
 using VirtualPathRuleSet = Oxygen.Managed.Core.VirtualPathRuleSet;
@@ -154,28 +156,21 @@ public class LocalTemplatesSource(IFileSystem filesystem) : ITemplatesSource
 
     private static string ResolveAssetRelativePath(
         TemplateInfo templateInfo,
-        Uri assetUri,
+        AssetPath asset,
         string? declaredRelativePath,
         string fieldName)
     {
-        if (!string.Equals(assetUri.Scheme, "asset", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new TemplateLoadingException($"Template {fieldName} URI must use the asset scheme.");
-        }
-
-        var assetPath = Uri.UnescapeDataString(assetUri.AbsolutePath).TrimStart('/');
-        var slash = assetPath.IndexOf('/', StringComparison.Ordinal);
-        if (slash <= 0)
+        if (asset.IsMount)
         {
             throw new TemplateLoadingException($"Template {fieldName} URI must include an authoring mount.");
         }
 
-        var mountName = assetPath[..slash];
-        var mountRelativePath = assetPath[(slash + 1)..].Replace('\\', '/').Trim('/');
-        var mount = templateInfo.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, mountName, StringComparison.Ordinal))
-            ?? throw new TemplateLoadingException($"Template {fieldName} URI targets unknown authoring mount `{mountName}`.");
+        var mount = templateInfo.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, asset.Mount, StringComparison.Ordinal))
+            ?? throw new TemplateLoadingException($"Template {fieldName} URI targets unknown authoring mount `{asset.Mount}`.");
 
-        var expectedPath = Path.Combine(mount.RelativePath, mountRelativePath).Replace('\\', '/').Trim('/');
+        // The template ships the asset's source, such as Main.oscene.json for the scene Main.oscene.
+        var source = AssetFileTypes.SourcesOf(asset)[0];
+        var expectedPath = Path.Combine(mount.RelativePath, source.RelativePath).Replace('\\', '/').Trim('/');
         if (!string.IsNullOrWhiteSpace(declaredRelativePath))
         {
             ValidateTemplateRelativePath(declaredRelativePath, $"{fieldName}.RelativePath");

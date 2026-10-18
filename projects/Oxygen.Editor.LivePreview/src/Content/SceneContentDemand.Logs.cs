@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Content;
 
@@ -15,29 +16,29 @@ internal sealed partial class SceneContentDemand
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Unable to prepare preview content for {AssetUri}.")]
-    private static partial void LogDemandFailure(ILogger logger, Exception exception, Uri assetUri);
+        Message = "Unable to prepare preview content for {Asset}.")]
+    private static partial void LogDemandFailure(ILogger logger, Exception exception, AssetPath asset);
 
-    private void LogDemandFailure(Exception exception, Uri assetUri)
-        => LogDemandFailure(this.logger, exception, assetUri);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Demanding a preview cook of {AssetUri}.")]
-    private static partial void LogDemandStarted(ILogger logger, Uri assetUri);
-
-    [Conditional("DEBUG")]
-    private void LogDemandStarted(Uri assetUri)
-        => LogDemandStarted(this.logger, assetUri);
+    private void LogDemandFailure(Exception exception, AssetPath asset)
+        => LogDemandFailure(this.logger, exception, asset);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "The scene no longer references {AssetUri}; cancelling its preview cook.")]
-    private static partial void LogDemandCancelled(ILogger logger, Uri assetUri);
+        Message = "Demanding a preview cook of {Asset}.")]
+    private static partial void LogDemandStarted(ILogger logger, AssetPath asset);
 
     [Conditional("DEBUG")]
-    private void LogDemandCancelled(Uri assetUri)
-        => LogDemandCancelled(this.logger, assetUri);
+    private void LogDemandStarted(AssetPath asset)
+        => LogDemandStarted(this.logger, asset);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "The scene no longer references {Asset}; cancelling its preview cook.")]
+    private static partial void LogDemandCancelled(ILogger logger, AssetPath asset);
+
+    [Conditional("DEBUG")]
+    private void LogDemandCancelled(AssetPath asset)
+        => LogDemandCancelled(this.logger, asset);
 }

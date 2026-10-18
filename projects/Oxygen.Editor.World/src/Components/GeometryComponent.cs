@@ -33,7 +33,7 @@ public partial class GeometryComponent : GameComponent
             var g = new GeometryComponent
             {
                 Name = d.Name,
-                Geometry = AssetUriData.Read(d.GeometryUri, nameof(d.GeometryUri)),
+                Geometry = AssetPathData.Require(d.GeometryUri, nameof(d.GeometryUri)),
             };
             g.Hydrate(d);
             return g;
@@ -49,11 +49,10 @@ public partial class GeometryComponent : GameComponent
     /// geometry assets, by this URI.
     /// </value>
     /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The value does not name an asset.</exception>
-    public required Uri Geometry
+    public required AssetPath Geometry
     {
         get;
-        set => _ = this.SetProperty(ref field, AssetUris.EnsureAssetUri(value));
+        set => _ = this.SetProperty(ref field, value ?? throw new ArgumentNullException(nameof(value)));
     }
 
     /// <summary>
@@ -83,7 +82,7 @@ public partial class GeometryComponent : GameComponent
 
         using (this.SuppressNotifications())
         {
-            this.Geometry = AssetUriData.Read(gd.GeometryUri, nameof(gd.GeometryUri));
+            this.Geometry = AssetPathData.Require(gd.GeometryUri, nameof(gd.GeometryUri));
 
             // component-level override slots
             this.OverrideSlots.Clear();

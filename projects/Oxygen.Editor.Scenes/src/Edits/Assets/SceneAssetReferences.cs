@@ -6,6 +6,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Assets;
 
@@ -15,7 +16,7 @@ public static class SceneAssetReferences
     /// <summary>Gets the asset references the runtime shows for a node: its geometry and material slots.</summary>
     /// <param name="node">The node.</param>
     /// <returns>The geometry and the materials of its component and targeted slots.</returns>
-    public static IEnumerable<Uri> Runtime(SceneNode node)
+    public static IEnumerable<AssetPath> Runtime(SceneNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
         return node.Components.OfType<GeometryComponent>().SelectMany(static geometry => new[] { geometry.Geometry }
@@ -26,20 +27,20 @@ public static class SceneAssetReferences
     /// <summary>Gets the asset references a node's script slots hold.</summary>
     /// <param name="node">The node.</param>
     /// <returns>The scripts and asset parameter values.</returns>
-    public static IEnumerable<Uri> Scripts(SceneNode node)
+    public static IEnumerable<AssetPath> Scripts(SceneNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
         return node.Components.OfType<ScriptingComponent>().SelectMany(static scripting => scripting.Slots)
-            .SelectMany(static slot => new[] { slot.Script }.Concat(slot.Overrides.Values.Select(static value => value.AssetUri)))
-            .OfType<Uri>();
+            .SelectMany(static slot => new[] { slot.Script }.Concat(slot.Overrides.Values.Select(static value => value.Asset)))
+            .OfType<AssetPath>();
     }
 
     /// <summary>Gets the asset references an environment holds.</summary>
     /// <param name="environment">The environment.</param>
     /// <returns>The metering mask and sky cubemaps that are set.</returns>
-    public static IEnumerable<Uri> Environment(SceneEnvironmentData environment)
+    public static IEnumerable<AssetPath> Environment(SceneEnvironmentData environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
-        return new[] { environment.PostProcess.AutoExposureMeteringMask, environment.SkySphere.Cubemap, environment.SkyLight.Cubemap }.OfType<Uri>();
+        return new[] { environment.PostProcess.AutoExposureMeteringMask, environment.SkySphere.Cubemap, environment.SkyLight.Cubemap }.OfType<AssetPath>();
     }
 }

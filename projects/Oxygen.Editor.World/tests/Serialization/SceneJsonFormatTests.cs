@@ -59,10 +59,10 @@ public sealed class SceneJsonFormatTests
         {
             "MaterialsSlot" => new MaterialsSlotData
             {
-                GeometryUri = new Uri("asset:///Mesh.geometry"),
+                GeometryUri = AssetPath.Parse("/Content/Mesh.geometry"),
                 SlotId = Guid.NewGuid(),
                 LayoutRevision = "rev1",
-                MaterialUri = new Uri("asset:///Material.omat.json"),
+                MaterialUri = AssetPath.Parse("/Content/Material.omat"),
             },
             "RenderingSlot" => new RenderingSlotData(),
             "LightingSlot" => new LightingSlotData(),

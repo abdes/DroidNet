@@ -471,7 +471,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         => this.PropertyEditors.Contains(editor) && this.CanEditSelectedNodes;
 
     // Ctrl+B's navigation: the Content Browser shows and selects the asset.
-    private async Task RevealAssetAsync(IProjectContextService projectContexts, Uri asset)
+    private async Task RevealAssetAsync(IProjectContextService projectContexts, AssetPath asset)
     {
         if (projectContexts.ActiveProject is not { } project)
         {

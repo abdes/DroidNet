@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Status;
@@ -17,7 +18,7 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// <param name="hashSource">Hashes one source file: a cook reads what its open documents acknowledge, a status reads the disk.</param>
 internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProvenance publication, Func<string, CancellationToken, Task<string>> hashSource) : ICookSourceFactsProvider
 {
-    private readonly Dictionary<Uri, CookProvenance.Product> products = publication.Products.ToDictionary(static product => product.SourceUri);
+    private readonly Dictionary<AssetPath, CookProvenance.Product> products = publication.Products.ToDictionary(static product => product.SourceUri);
 
     /// <inheritdoc />
     public async Task<CookSourceFrontier> ReadAsync(IReadOnlyList<ContentCookInput> inputs, CancellationToken cancellationToken)
@@ -29,7 +30,7 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                if (!CookSavedSourceReader.Exists(input.SourceAbsolutePath))
+                if (!CookSavedSourceReader.Exists(input.SourceAbsolutePath.FullPath))
                 {
                     issues.Add(new()
                     {
@@ -38,8 +39,8 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
                         Severity = DiagnosticSeverity.Error,
                         Code = AssetImportDiagnosticCodes.SourceMissing,
                         Message = $"The authored source is no longer available: '{input.SourceAbsolutePath}'.",
-                        AffectedPath = input.SourceAbsolutePath,
-                        AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
+                        AffectedPath = input.SourceAbsolutePath.FullPath,
+                        AffectedVirtualPath = input.AssetUri.VirtualPath,
                     });
                     continue;
                 }
@@ -55,8 +56,8 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
                     Severity = DiagnosticSeverity.Error,
                     Code = error is FileNotFoundException or DirectoryNotFoundException ? AssetImportDiagnosticCodes.SourceMissing : ContentPipelineDiagnosticCodes.ManifestGenerationFailed,
                     Message = error.Message,
-                    AffectedPath = input.SourceAbsolutePath,
-                    AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
+                    AffectedPath = input.SourceAbsolutePath.FullPath,
+                    AffectedVirtualPath = input.AssetUri.VirtualPath,
                 });
             }
         }
@@ -69,7 +70,7 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
 
     private async Task<CookSourceFacts> ReadSourceAsync(ContentCookInput input, CancellationToken cancellationToken)
     {
-        var hash = await hashSource(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
+        var hash = await hashSource(input.SourceAbsolutePath.FullPath, cancellationToken).ConfigureAwait(false);
         var primary = new CookSnapshotInput(input.AssetUri, input.SourceAbsolutePath, input.SourceRelativePath, hash);
         if (!this.products.TryGetValue(input.AssetUri, out var prior)
             || prior.SourceInput is null || prior.SourceFiles.IsEmpty
@@ -85,13 +86,13 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
         {
             var file = accepted with
             {
-                SourcePath = Path.GetFullPath(Path.Combine(project.ProjectRoot, accepted.RelativePath)),
+                SourcePath = project.ProjectRoot.Combine(accepted.RelativePath),
                 NativeObservations = [],
             };
             if (file.Kind == CookSnapshotInputKind.File)
             {
                 var currentHash = string.Equals(file.RelativePath, primary.RelativePath, StringComparison.Ordinal)
-                    ? hash : await hashSource(file.SourcePath, cancellationToken).ConfigureAwait(false);
+                    ? hash : await hashSource(file.SourcePath.FullPath, cancellationToken).ConfigureAwait(false);
                 files.Add(file with { DiscoveryHash = currentHash });
             }
             else
@@ -99,7 +100,7 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
                 var matches = CookSavedSourceReader.MatchesProbe(file);
                 changedProbe |= !matches;
                 files.Add(matches && file.Kind == CookSnapshotInputKind.Probe && file.Metadata is not null
-                    ? file with { Metadata = CookSavedSourceReader.ReadMetadata(file.SourcePath) } : file);
+                    ? file with { Metadata = CookSavedSourceReader.ReadMetadata(file.SourcePath.FullPath) } : file);
             }
         }
 

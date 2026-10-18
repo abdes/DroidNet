@@ -7,6 +7,7 @@ using DroidNet.Storage;
 using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Documents;
 
@@ -18,7 +19,7 @@ public sealed partial class OpenDocuments : IDisposable
     private readonly ILoggerFactory loggerFactory;
     private readonly ILogger logger;
     private readonly List<Document> documents = [];
-    private readonly Dictionary<string, Task<DocumentOpenResult>> opening = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<FileSystemPath, Task<DocumentOpenResult>> opening = [];
 
     /// <summary>Initializes a new instance of the <see cref="OpenDocuments"/> class.</summary>
     /// <param name="kinds">The registered document kinds; no two open the same suffix.</param>
@@ -51,9 +52,9 @@ public sealed partial class OpenDocuments : IDisposable
     /// <summary>Finds the kind that opens a file: the one with the longest suffix that ends its name.</summary>
     /// <param name="path">The file's path.</param>
     /// <returns>The kind, or <see langword="null"/> when no kind opens the file.</returns>
-    public IDocumentKind? FindKind(string path)
+    public IDocumentKind? FindKind(FileSystemPath path)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(path);
         return this.Kinds
             .Select(kind => (Kind: kind, Suffix: DocumentKinds.SuffixOf(kind, path)))
             .Where(static match => match.Suffix is not null)
@@ -65,10 +66,10 @@ public sealed partial class OpenDocuments : IDisposable
     /// <summary>Finds the open document that edits a file.</summary>
     /// <param name="path">The file's path.</param>
     /// <returns>The document, or <see langword="null"/> when the file is not open.</returns>
-    public Document? Find(string path)
+    public Document? Find(FileSystemPath path)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        return this.documents.FirstOrDefault(document => document.File.IsAt(path));
+        ArgumentNullException.ThrowIfNull(path);
+        return this.documents.FirstOrDefault(document => document.File.Path == path);
     }
 
     /// <summary>Finds an open document by its id.</summary>
@@ -77,12 +78,12 @@ public sealed partial class OpenDocuments : IDisposable
     public Document? Find(DocumentId id) => this.documents.FirstOrDefault(document => document.Id == id);
 
     /// <summary>Finds the open document that edits an asset.</summary>
-    /// <param name="asset">The asset's URI, in the catalog's form, as every <see cref="DocumentFile"/> holds it.</param>
+    /// <param name="asset">The asset.</param>
     /// <returns>The document, or <see langword="null"/> when the asset is not open.</returns>
-    public Document? FindByAsset(Uri asset)
+    public Document? FindByAsset(AssetPath asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        return this.documents.FirstOrDefault(document => document.File.AssetUri == asset);
+        return this.documents.FirstOrDefault(document => document.File.Asset == asset);
     }
 
     /// <summary>Opens a file, or finds the document that already edits it.</summary>
@@ -161,10 +162,10 @@ public sealed partial class OpenDocuments : IDisposable
         {
             if (this.FindKind(file.Path) is not { } kind)
             {
-                return this.OpenFailed(file, $"No editor opens '{Path.GetFileName(file.Path)}'.");
+                return this.OpenFailed(file, $"No editor opens '{file.Path.Name}'.");
             }
 
-            var snapshot = await this.files.ReadAsync(file.Path).ConfigureAwait(true);
+            var snapshot = await this.files.ReadAsync(file.Path.FullPath).ConfigureAwait(true);
             if (!snapshot.Version.Exists)
             {
                 return this.OpenFailed(file, $"'{file.Path}' does not exist.");

@@ -8,6 +8,7 @@ using System.Reactive.Subjects;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Catalog.FileSystem;
 
@@ -16,7 +17,8 @@ namespace Oxygen.Managed.Assets.Catalog.FileSystem;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This catalog enumerates files under a configured root folder and maps them to canonical asset URIs.
+/// This catalog enumerates files under a configured root folder and maps each to its <see cref="AssetPath"/>. A
+/// file whose name the virtual path rules refuse has no identity; it is left out and logged.
 /// </para>
 /// <para>
 /// It uses an Rx pipeline for filesystem event ingestion and emits <see cref="AssetChange"/> deltas after
@@ -30,11 +32,14 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
     private readonly IFileSystemCatalogEventSource eventSource;
 
     private readonly Subject<AssetChange> changes = new();
-    private readonly ConcurrentDictionary<Uri, AssetRecord> records = new();
-    private readonly Subject<Uri> folderChanges = new();
+    private readonly ConcurrentDictionary<AssetPath, AssetRecord> records = new();
+    private readonly Subject<AssetPath> folderChanges = new();
 
     // The folders under the root, by full path; a watcher reports a folder event without saying it is a folder.
-    private readonly ConcurrentDictionary<string, Uri> folders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<FileSystemPath, AssetPath> folders = new();
+    private readonly AssetPath mount;
+    private readonly FileSystemPath root;
+    private readonly FileSystemPath[] excludedFolders;
     private readonly IDisposable eventSubscription;
     private readonly ILogger logger;
     private readonly Lock batchSync = new();
@@ -66,10 +71,13 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
         ArgumentNullException.ThrowIfNull(options);
         this.logger = logger ?? NullLogger.Instance;
         ArgumentException.ThrowIfNullOrEmpty(options.MountPoint);
-        ArgumentException.ThrowIfNullOrEmpty(options.RootFolderPath);
+        ArgumentNullException.ThrowIfNull(options.RootFolderPath);
 
         this.storage = storage;
         this.options = options;
+        this.mount = AssetPath.Create(options.MountPoint);
+        this.root = options.RootFolderPath;
+        this.excludedFolders = [.. options.ExcludedFolders.Select(this.root.Combine)];
 
         // Watching is optional in tests via injected source. The catalog may
         // be created for generated project folders that do not exist yet
@@ -83,7 +91,7 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
         else
         {
             var watchRoot = FindNearestExistingDirectory(
-                this.storage.Normalize(options.RootFolderPath));
+                this.root.FullPath);
             this.eventSource = string.IsNullOrEmpty(watchRoot)
                 ? new NoopFileSystemCatalogEventSource()
                 : new FileSystemWatcherEventSource(
@@ -102,27 +110,15 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
     public IObservable<AssetChange> Changes => this.changes.AsObservable();
 
     /// <inheritdoc />
-    public IObservable<Uri> FolderChanges => this.folderChanges.AsObservable();
+    public IObservable<AssetPath> FolderChanges => this.folderChanges.AsObservable();
 
     /// <inheritdoc />
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0305:Simplify collection initialization", Justification = "LINQ is more clear like that")]
     public async Task<IReadOnlyList<AssetRecord>> QueryAsync(AssetQuery query, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
         await this.EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
-        IEnumerable<AssetRecord> results = this.records.Values;
-        results = results.Where(r => AssetQueryScopeMatcher.IsMatch(query.Scope, r.Uri));
-
-        if (!string.IsNullOrWhiteSpace(query.SearchText))
-        {
-            var term = query.SearchText.Trim();
-            results = results.Where(r => MatchesSearch(r, term));
-        }
-
-        return results
-            .OrderBy(r => r.Uri.ToString(), StringComparer.Ordinal)
-            .ToArray();
+        return AssetQueryMatcher.Apply(query, this.records.Values);
     }
 
     /// <inheritdoc />
@@ -146,46 +142,8 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
         this.folderChanges.Dispose();
     }
 
-    private static bool MatchesSearch(AssetRecord record, string term)
-        => record.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
-            || record.Uri.ToString().Contains(term, StringComparison.OrdinalIgnoreCase)
-            || AssetUriHelper.GetMountPoint(record.Uri).Contains(term, StringComparison.OrdinalIgnoreCase);
-
-    // A path under the root that the catalog lists: not hidden, and not in a folder it was told to leave out.
-    private bool Includes(string relativePath)
-        => ShouldInclude(relativePath)
-            && !this.options.ExcludedFolders.Any(excluded => relativePath.Equals(excluded, StringComparison.OrdinalIgnoreCase)
-                || relativePath.StartsWith(excluded + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                || relativePath.StartsWith(excluded + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
-
-    private static bool ShouldInclude(string relativePath)
-    {
-        if (string.Equals(relativePath, ".", StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        foreach (var segment in segments)
-        {
-            if (string.Equals(segment, ".", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (string.Equals(segment, "..", StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            if (segment.Length > 0 && segment[0] == '.')
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    // A segment starting with a dot is hidden: the derived folders (.cooked, .imported) and a save's temporary files.
+    private static bool IsHidden(string relativePath) => relativePath.Split('/').Any(static segment => segment.StartsWith('.'));
 
     private static string FindNearestExistingDirectory(string start)
     {
@@ -221,7 +179,7 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
             return;
         }
 
-        var folder = await this.storage.GetFolderFromPathAsync(this.options.RootFolderPath, cancellationToken)
+        var folder = await this.storage.GetFolderFromPathAsync(this.root.FullPath, cancellationToken)
             .ConfigureAwait(false);
 
         this.rootFolder = folder;
@@ -236,12 +194,12 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
         var snapshot = await this.EnumerateAllFilesAsync(folder, cancellationToken).ConfigureAwait(false);
         foreach (var record in snapshot.Records)
         {
-            _ = this.records.TryAdd(record.Uri, record);
+            _ = this.records.TryAdd(record.Identity, record);
         }
 
-        foreach (var (path, uri) in snapshot.Folders)
+        foreach (var (path, identity) in snapshot.Folders)
         {
-            _ = this.folders.TryAdd(path, uri);
+            _ = this.folders.TryAdd(path, identity);
         }
 
         this.isInitialized = true;
@@ -250,7 +208,7 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
     private async Task<Snapshot> EnumerateAllFilesAsync(IFolder root, CancellationToken cancellationToken)
     {
         var results = new List<AssetRecord>();
-        var found = new Dictionary<string, Uri>(StringComparer.OrdinalIgnoreCase);
+        var found = new Dictionary<FileSystemPath, AssetPath>();
         var pending = new Stack<IFolder>();
         pending.Push(root);
 
@@ -261,32 +219,23 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
 
             await foreach (var document in folder.GetDocumentsAsync(cancellationToken).ConfigureAwait(false))
             {
-                var relative = Path.GetRelativePath(root.Location, document.Location);
-                if (this.Includes(relative))
+                if (this.TryMap(document.Location, out var identity))
                 {
-                    var uri = this.MapFilePathToAssetUri(root.Location, document.Location);
-                    results.Add(new AssetRecord(uri));
+                    results.Add(new AssetRecord(identity));
                 }
             }
 
             await foreach (var childFolder in folder.GetFoldersAsync(cancellationToken).ConfigureAwait(false))
             {
-                var relative = Path.GetRelativePath(root.Location, childFolder.Location);
-                if (this.Includes(relative))
+                if (this.TryMap(childFolder.Location, out var identity))
                 {
-                    found[childFolder.Location] = this.MapFilePathToAssetUri(root.Location, childFolder.Location);
+                    found[FileSystemPath.From(childFolder.Location)] = identity;
                     pending.Push(childFolder);
                 }
             }
         }
 
         return new(results, found);
-    }
-
-    private Uri MapFilePathToAssetUri(string rootLocation, string fullPath)
-    {
-        var relative = Path.GetRelativePath(rootLocation, fullPath);
-        return AssetUriHelper.CreateUri(this.options.MountPoint, relative);
     }
 
     // Batches apply one at a time, in the order the watcher reported them: a rescan that read the disk before a delete
@@ -358,7 +307,7 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
                         this.ApplyCreated(ev);
                         break;
 
-                    case FileSystemCatalogEventKind.Changed when !this.folders.ContainsKey(ev.FullPath):
+                    case FileSystemCatalogEventKind.Changed when !this.folders.ContainsKey(FileSystemPath.From(ev.FullPath)):
                         this.ApplyChanged(ev);
                         break;
 
@@ -378,41 +327,41 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
 
     private void ApplyCreated(FileSystemCatalogEvent ev)
     {
-        if (!this.TryMapIfUnderRoot(ev.FullPath, out var uri))
+        if (!this.TryMap(ev.FullPath, out var identity))
         {
             return;
         }
 
-        var record = new AssetRecord(uri);
-        if (this.records.TryAdd(uri, record))
+        var record = new AssetRecord(identity);
+        if (this.records.TryAdd(identity, record))
         {
-            this.Publish(new AssetChange(AssetChangeKind.Added, uri));
+            this.Publish(new AssetChange(AssetChangeKind.Added, identity));
         }
     }
 
     private void ApplyChanged(FileSystemCatalogEvent ev)
     {
-        if (!this.TryMapIfUnderRoot(ev.FullPath, out var uri))
+        if (!this.TryMap(ev.FullPath, out var identity))
         {
             return;
         }
 
         // If we don't know the file yet, treat as add.
-        var record = new AssetRecord(uri);
-        var isNew = this.records.TryAdd(uri, record);
-        this.Publish(new AssetChange(isNew ? AssetChangeKind.Added : AssetChangeKind.Updated, uri));
+        var record = new AssetRecord(identity);
+        var isNew = this.records.TryAdd(identity, record);
+        this.Publish(new AssetChange(isNew ? AssetChangeKind.Added : AssetChangeKind.Updated, identity));
     }
 
     private void ApplyDeleted(FileSystemCatalogEvent ev)
     {
-        if (!this.TryMapIfUnderRoot(ev.FullPath, out var uri))
+        if (!this.TryMap(ev.FullPath, out var identity))
         {
             return;
         }
 
-        if (this.records.TryRemove(uri, out _))
+        if (this.records.TryRemove(identity, out _))
         {
-            this.Publish(new AssetChange(AssetChangeKind.Removed, uri));
+            this.Publish(new AssetChange(AssetChangeKind.Removed, identity));
         }
     }
 
@@ -424,7 +373,7 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
             return;
         }
 
-        if (!this.TryMapIfUnderRoot(ev.OldFullPath, out var oldUri))
+        if (!this.TryMap(ev.OldFullPath, out var oldIdentity))
         {
             // Old was outside scope or hidden, as the temporary file of an atomic save is; new might be inside, and
             // replacing a known file changes it.
@@ -432,17 +381,17 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
             return;
         }
 
-        if (!this.TryMapIfUnderRoot(ev.FullPath, out var newUri))
+        if (!this.TryMap(ev.FullPath, out var newIdentity))
         {
             // New is outside scope; old was inside.
             this.ApplyDeleted(new FileSystemCatalogEvent(FileSystemCatalogEventKind.Deleted, ev.OldFullPath));
             return;
         }
 
-        if (this.records.TryRemove(oldUri, out _))
+        if (this.records.TryRemove(oldIdentity, out _))
         {
-            _ = this.records.TryAdd(newUri, new AssetRecord(newUri));
-            this.Publish(new AssetChange(AssetChangeKind.Relocated, newUri, PreviousUri: oldUri));
+            _ = this.records.TryAdd(newIdentity, new AssetRecord(newIdentity));
+            this.Publish(new AssetChange(AssetChangeKind.Relocated, newIdentity, PreviousIdentity: oldIdentity));
         }
         else
         {
@@ -458,27 +407,34 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
         this.changes.OnNext(change);
     }
 
-    private bool TryMapIfUnderRoot(string fullPath, out Uri uri)
+    // Maps a file or folder under the root to its identity: not the root itself, not hidden, not in an excluded folder,
+    // and named as the virtual path rules accept.
+    private bool TryMap(string fullPath, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out AssetPath? identity)
     {
-        uri = null!;
+        identity = null;
         if (this.rootFolder is null)
         {
             return false;
         }
 
-        var root = this.rootFolder.Location;
-        if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        var path = FileSystemPath.From(fullPath);
+        if (path == this.root || !path.IsSameOrInside(this.root) || this.excludedFolders.Any(path.IsSameOrInside))
         {
             return false;
         }
 
-        var relative = Path.GetRelativePath(root, fullPath);
-        if (!this.Includes(relative))
+        var relative = path.GetPathBelow(this.root);
+        if (IsHidden(relative))
         {
             return false;
         }
 
-        uri = this.MapFilePathToAssetUri(root, fullPath);
+        if (!this.mount.TryCombine(relative, out identity))
+        {
+            this.LogNameRefused(relative, this.options.MountPoint);
+            return false;
+        }
+
         return true;
     }
 
@@ -501,12 +457,12 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
                 }
             }
 
-            this.ReplaceFolders(new Dictionary<string, Uri>(StringComparer.OrdinalIgnoreCase), publishChanges);
+            this.ReplaceFolders(new Dictionary<FileSystemPath, AssetPath>(), publishChanges);
             return;
         }
 
         var snapshot = await this.EnumerateAllFilesAsync(this.rootFolder, cancellationToken).ConfigureAwait(false);
-        var next = snapshot.Records.ToDictionary(r => r.Uri, r => r);
+        var next = snapshot.Records.ToDictionary(static record => record.Identity);
 
         // Removed
         foreach (var existing in this.records.Keys)
@@ -542,21 +498,21 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
     }
 
     // Called with the folders a scan found: reports each folder that appeared or disappeared since the last scan.
-    private void ReplaceFolders(IReadOnlyDictionary<string, Uri> found, bool publishChanges)
+    private void ReplaceFolders(IReadOnlyDictionary<FileSystemPath, AssetPath> found, bool publishChanges)
     {
-        foreach (var (path, uri) in this.folders.ToArray())
+        foreach (var (path, identity) in this.folders.ToArray())
         {
             if (!found.ContainsKey(path) && this.folders.TryRemove(path, out _) && publishChanges)
             {
-                this.folderChanges.OnNext(uri);
+                this.folderChanges.OnNext(identity);
             }
         }
 
-        foreach (var (path, uri) in found)
+        foreach (var (path, identity) in found)
         {
-            if (this.folders.TryAdd(path, uri) && publishChanges)
+            if (this.folders.TryAdd(path, identity) && publishChanges)
             {
-                this.folderChanges.OnNext(uri);
+                this.folderChanges.OnNext(identity);
             }
         }
     }
@@ -571,13 +527,13 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
                 continue;
             }
 
-            if (this.folders.ContainsKey(ev.FullPath) || (ev.OldFullPath is { } old && this.folders.ContainsKey(old)))
+            if (this.folders.ContainsKey(FileSystemPath.From(ev.FullPath)) || (ev.OldFullPath is { } old && this.folders.ContainsKey(FileSystemPath.From(old))))
             {
                 return true;
             }
 
             if (ev.Kind is FileSystemCatalogEventKind.Created or FileSystemCatalogEventKind.Renamed
-                && this.TryMapIfUnderRoot(ev.FullPath, out _)
+                && this.TryMap(ev.FullPath, out _)
                 && await this.storage.FolderExistsAsync(ev.FullPath).ConfigureAwait(false))
             {
                 return true;
@@ -608,7 +564,7 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
     /// <summary>The files and folders under the root.</summary>
     /// <param name="Records">The files.</param>
     /// <param name="Folders">The folders, by full path.</param>
-    private sealed record Snapshot(IReadOnlyList<AssetRecord> Records, IReadOnlyDictionary<string, Uri> Folders);
+    private sealed record Snapshot(IReadOnlyList<AssetRecord> Records, IReadOnlyDictionary<FileSystemPath, AssetPath> Folders);
 
     private sealed class NoopFileSystemCatalogEventSource : IFileSystemCatalogEventSource
     {

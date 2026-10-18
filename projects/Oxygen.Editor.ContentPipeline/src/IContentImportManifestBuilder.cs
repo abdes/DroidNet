@@ -10,13 +10,13 @@ namespace Oxygen.Editor.ContentPipeline;
 public interface IContentImportManifestBuilder
 {
     /// <summary>Builds the initial model recipe before its source bundle has been retained.</summary>
-    /// <param name="input">The logical source identity.</param>
+    /// <param name="sourceRelativePath">The model file, relative to the folder the cooker reads sources from.</param>
     /// <param name="dependsOn">Other jobs required in the batch.</param>
     /// <param name="name">The reviewed model name.</param>
     /// <param name="layout">The reviewed output namespace.</param>
     /// <param name="provenance">The source's stable native slot identity.</param>
     /// <returns>The native recipe shared with retained-source cooking.</returns>
-    public ContentImportJob BuildModelJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string name, ContentImportLayout layout, Import.NativeMaterialSlotProvenance provenance);
+    public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, ContentImportLayout layout, Import.NativeMaterialSlotProvenance provenance);
 
     /// <summary>Builds one destination-free native recipe for discovery and execution.</summary>
     /// <param name="input">The logical source and output identity.</param>

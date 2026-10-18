@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using Oxygen.Editor.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
 
@@ -23,11 +24,10 @@ public readonly record struct AssetFileFacts(string? Path, long? Size, DateTimeO
     /// <summary>Returns the file an asset is authored in: its descriptor, else its source, else its cooked file.</summary>
     /// <param name="asset">The asset.</param>
     /// <returns>The absolute file path, or null when the asset has no file.</returns>
-    public static string? GetPath(AssetEntry asset)
+    public static FileSystemPath? GetPath(AssetEntry asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        return new[] { asset.DescriptorPath, asset.SourcePath, asset.CookedPath }
-            .FirstOrDefault(static path => !string.IsNullOrWhiteSpace(path) && System.IO.Path.IsPathFullyQualified(path));
+        return asset.DescriptorPath ?? asset.SourcePath ?? asset.CookedPath;
     }
 
     /// <summary>Reads the current facts for an asset's file.</summary>
@@ -43,12 +43,12 @@ public readonly record struct AssetFileFacts(string? Path, long? Size, DateTimeO
 
         try
         {
-            var file = new FileInfo(path);
-            return file.Exists ? new(path, file.Length, file.LastWriteTimeUtc) : new(path, null, null);
+            var file = new FileInfo(path.FullPath);
+            return file.Exists ? new(path.FullPath, file.Length, file.LastWriteTimeUtc) : new(path.FullPath, null, null);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            return new(path, null, null);
+            return new(path.FullPath, null, null);
         }
     }
 

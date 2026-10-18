@@ -5,6 +5,7 @@
 using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets;
 
@@ -28,8 +29,7 @@ public sealed partial class AssetFeed
             return (AssetRuntimeAvailability.Updating, "The preview is updating cooked content.");
         }
 
-        var paths = new[] { item.IdentityUri, item.CookedUri, item.BuiltinOriginUri }.OfType<Uri>().Select(AssetUriHelper.GetVirtualPath).Select(NormalizeRuntimePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var applicable = status.Requests.Where(request => paths.Contains(NormalizeRuntimePath(request.AssetPath))).ToArray();
+        var applicable = status.Requests.Where(request => request.Asset == item.Identity || request.Asset == item.BuiltinOrigin).ToArray();
         if (applicable.FirstOrDefault(static request => request.Succeeded == false) is { } failed)
         {
             return (AssetRuntimeAvailability.Failed, failed.Reason ?? "The asset could not be applied in the preview.");
@@ -40,26 +40,15 @@ public sealed partial class AssetFeed
             return (AssetRuntimeAvailability.Updating, "The asset is loading in the preview.");
         }
 
-        if (item.IsBuiltin && item.BuiltinOriginUri is null)
+        if (item.IsBuiltin && item.BuiltinOrigin is null)
         {
             return item.Generated?.IsLastKnown == true
                 ? (AssetRuntimeAvailability.Unavailable, "The engine catalog is last-known. Preview unavailable.")
                 : (AssetRuntimeAvailability.Mounted, null);
         }
 
-        var mounted = status.State == AssetRuntimeContentState.Mounted && item.CookedPath is { } cookedPath && status.Roots.Any(root => Path.GetFullPath(cookedPath).StartsWith(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+        var mounted = status.State == AssetRuntimeContentState.Mounted && item.CookedPath is { } cookedPath && status.Roots.Any(cookedPath.IsSameOrInside);
         return mounted ? (AssetRuntimeAvailability.Mounted, null) : (AssetRuntimeAvailability.NotMounted, "This asset's cooked content is not mounted in the preview.");
-    }
-
-    private static string NormalizeRuntimePath(string path)
-    {
-        if (Uri.TryCreate(path, UriKind.Absolute, out var uri) && string.Equals(uri.Scheme, "asset", StringComparison.OrdinalIgnoreCase))
-        {
-            path = AssetUriHelper.GetVirtualPath(uri);
-        }
-
-        path = path.Replace('\\', '/').Trim('/');
-        return path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? path[..^5] : path;
     }
 
     private void OnRuntimeStatusChanged(object? sender, EventArgs args)

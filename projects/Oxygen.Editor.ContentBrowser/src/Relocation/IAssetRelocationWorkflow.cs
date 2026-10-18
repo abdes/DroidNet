@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Relocation;
 
@@ -52,25 +53,25 @@ public interface IAssetRelocationWorkflow
     /// <param name="targetFolder">The destination folder.</param>
     /// <param name="title">The operation title.</param>
     /// <returns>The outcome.</returns>
-    public Task<AssetRelocationOutcome> CopyAsync(IReadOnlyList<string> sources, string targetFolder, string title);
+    public Task<AssetRelocationOutcome> CopyAsync(IReadOnlyList<AssetPath> sources, AssetPath targetFolder, string title);
 
     /// <summary>Pastes cut or copied items into a folder: a cut moves them there, a copy creates copies.</summary>
     /// <param name="sources">The virtual paths on the clipboard.</param>
     /// <param name="move">Whether the items were cut.</param>
     /// <param name="targetFolder">The folder to paste into.</param>
     /// <returns>The outcome, or null when every cut item is already in that folder.</returns>
-    public Task<AssetRelocationOutcome?> PasteAsync(IReadOnlyList<string> sources, bool move, string targetFolder);
+    public Task<AssetRelocationOutcome?> PasteAsync(IReadOnlyList<AssetPath> sources, bool move, AssetPath targetFolder);
 
     /// <summary>Confirms when other content uses the items or they are open, then moves them to the Recycle Bin.</summary>
     /// <param name="sources">The virtual paths to delete.</param>
     /// <returns>The outcome, or null when the user cancelled.</returns>
-    public Task<AssetRelocationOutcome?> DeleteAsync(IReadOnlyList<string> sources);
+    public Task<AssetRelocationOutcome?> DeleteAsync(IReadOnlyList<AssetPath> sources);
 
     /// <summary>Finds the authored files that use an asset or any asset inside a folder.</summary>
     /// <param name="virtualPath">The asset or folder.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The referrers' virtual paths.</returns>
-    public Task<IReadOnlyList<string>> FindReferrersAsync(string virtualPath, CancellationToken cancellationToken);
+    public Task<IReadOnlyList<AssetPath>> FindReferrersAsync(AssetPath virtualPath, CancellationToken cancellationToken);
 
     /// <summary>Asks for a new name.</summary>
     /// <param name="title">The dialog title.</param>

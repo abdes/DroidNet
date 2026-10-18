@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Catalog;
 
@@ -15,7 +16,7 @@ namespace Oxygen.Managed.Assets.Catalog;
 /// <param name="DescriptorSize">The recorded descriptor length.</param>
 /// <param name="DescriptorSha256">The recorded descriptor digest in hexadecimal.</param>
 public sealed record CookedAssetMetadata(
-    string RootFolderPath,
+    FileSystemPath RootFolderPath,
     string DescriptorRelativePath,
     Guid SourceIdentity,
     AssetKey AssetKey,
@@ -24,7 +25,7 @@ public sealed record CookedAssetMetadata(
     string DescriptorSha256)
 {
     /// <summary>Gets the native virtual path declared by this representation, including aliases of a shared asset key.</summary>
-    public string? VirtualPath { get; init; }
+    public AssetPath? VirtualPath { get; init; }
 
     /// <summary>Gets the opaque native reference-block locator and counts.</summary>
     public AssetReferenceTable References { get; init; }

@@ -30,25 +30,25 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
                 facts.Add(new("Generator", asset.AliasDescription));
             }
         }
-        else if (asset.ImportSourceUri is { } origin && origin != asset.IdentityUri)
+        else if (asset.ImportSource is { } origin && origin != asset.Identity)
         {
-            facts.Add(new("Imported from", AssetUriHelper.GetVirtualPath(origin)));
+            facts.Add(new("Imported from", origin.VirtualPath));
         }
         else if ((asset.SourcePath ?? asset.DescriptorPath) is { } source)
         {
-            facts.Add(new("Source", source));
+            facts.Add(new("Source", source.FullPath));
         }
-        else if (asset.CookedUri is not null)
+        else if (asset.IsCookedAsset)
         {
             facts.Add(new("Source", "Unavailable · read-only"));
         }
 
         if (asset.CookedMetadata is { } cooked)
         {
-            facts.Add(new("Cooked source", cooked.RootFolderPath));
+            facts.Add(new("Cooked source", cooked.RootFolderPath.FullPath));
             if (asset.OverriddenCookedSources.Count > 0)
             {
-                facts.Add(new("Overrides", string.Join(Environment.NewLine, asset.OverriddenCookedSources.Select(static source => source.RootFolderPath).Distinct(StringComparer.OrdinalIgnoreCase))));
+                facts.Add(new("Overrides", string.Join(Environment.NewLine, asset.OverriddenCookedSources.Select(static source => source.RootFolderPath).Distinct())));
             }
         }
 
@@ -61,7 +61,7 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
     {
         if (asset.Kind == AssetKind.ForeignSource && asset.CookStatus is { Outputs.Length: > 0 } status)
         {
-            var imported = status.Outputs.Where(output => output.SourceAssetUri == asset.IdentityUri).DistinctBy(static output => output.CookedAssetUri).ToArray();
+            var imported = status.Outputs.Where(output => output.SourceAssetUri == asset.Identity).DistinctBy(static output => output.CookedAssetUri).ToArray();
             var text = string.Join(Environment.NewLine, imported.Take(3).Select(static output => AssetIdentityReducer.GetDisplayName(output.CookedAssetUri) + " (" + output.Kind + ")"));
             if (imported.Length > 3)
             {
@@ -77,11 +77,11 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
         }
 
         var outputs = asset.CookedCompanions.Prepend(asset)
-            .Select(static item => item.CookedUri)
-            .OfType<Uri>()
-            .Concat(asset.CookStatus?.Outputs.Where(output => output.SourceAssetUri == asset.IdentityUri).Select(static output => output.CookedAssetUri) ?? [])
+            .Where(static item => item.IsCookedAsset)
+            .Select(static item => item.Identity)
+            .Concat(asset.CookStatus?.Outputs.Where(output => output.SourceAssetUri == asset.Identity).Select(static output => output.CookedAssetUri) ?? [])
             .Distinct()
-            .Select(AssetUriHelper.GetVirtualPath)
+            .Select(static identity => identity.VirtualPath)
             .ToArray();
         if (outputs.Length > 0)
         {

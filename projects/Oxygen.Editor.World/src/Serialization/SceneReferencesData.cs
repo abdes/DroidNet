@@ -2,19 +2,21 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>Authored asset references owned by a scene.</summary>
 public sealed record SceneReferencesData
 {
     /// <summary>Gets the scene's script asset references.</summary>
-    public IList<Uri> Scripts { get; init; } = [];
+    public IList<AssetPath> Scripts { get; init; } = [];
 
     /// <summary>Gets the scene's input action references.</summary>
-    public IList<Uri> InputActions { get; init; } = [];
+    public IList<AssetPath> InputActions { get; init; } = [];
 
     /// <summary>Gets the scene's physics sidecar references.</summary>
-    public IList<Uri> PhysicsSidecars { get; init; } = [];
+    public IList<AssetPath> PhysicsSidecars { get; init; } = [];
 
     /// <summary>Gets additional native virtual paths required by the scene.</summary>
     public IList<string> ExtraAssets { get; init; } = [];

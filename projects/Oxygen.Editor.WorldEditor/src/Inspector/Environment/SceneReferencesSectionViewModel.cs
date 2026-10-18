@@ -13,6 +13,7 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Settings;
 using Oxygen.Editor.World.Inspector.Presentation;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -186,7 +187,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
             return Task.CompletedTask;
         }
 
-        return this.ApplyAsync(this.WithTypedReference(this.scene!.References, kind, selected.IdentityUri, add: true));
+        return this.ApplyAsync(this.WithTypedReference(this.scene!.References, kind, selected.Identity, add: true));
     }
 
     /// <summary>Removes an existing typed reference without discarding unresolved references.</summary>
@@ -200,7 +201,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
             return Task.CompletedTask;
         }
 
-        return this.ApplyAsync(this.WithTypedReference(this.scene!.References, row.Kind, row.Uri, add: false));
+        return this.ApplyAsync(this.WithTypedReference(this.scene!.References, row.Kind, row.Asset, add: false));
     }
 
     /// <summary>Adds the entered canonical native virtual path.</summary>
@@ -305,9 +306,9 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         this.OnPropertyChanged(nameof(this.CanAddExtraAsset));
     }
 
-    private SceneReferencesData WithTypedReference(SceneReferencesData current, AssetKind kind, Uri uri, bool add)
+    private SceneReferencesData WithTypedReference(SceneReferencesData current, AssetKind kind, AssetPath uri, bool add)
     {
-        static IList<Uri> Update(IList<Uri> existing, Uri value, bool shouldAdd)
+        static IList<AssetPath> Update(IList<AssetPath> existing, AssetPath value, bool shouldAdd)
             => shouldAdd
                 ? existing.Contains(value) ? [.. existing] : [.. existing, value]
                 : [.. existing.Where(candidate => candidate != value)];
@@ -406,7 +407,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
 
         setSelected(selected is null
             ? null
-            : candidates.FirstOrDefault(candidate => candidate.IdentityUri == selected.IdentityUri));
+            : candidates.FirstOrDefault(candidate => candidate.Identity == selected.Identity));
     }
 
     private void RefreshFromScene()
@@ -424,16 +425,15 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         this.OnPropertyChanged(nameof(this.SearchableContent));
     }
 
-    private void UpdateReferenceRows(AssetKind kind, IEnumerable<Uri> references, ObservableCollection<SceneReferenceRow> destination)
+    private void UpdateReferenceRows(AssetKind kind, IEnumerable<AssetPath> references, ObservableCollection<SceneReferenceRow> destination)
     {
         destination.Clear();
-        foreach (var uri in references)
+        foreach (var reference in references)
         {
-            var asset = this.assets.FirstOrDefault(candidate => candidate.IdentityUri == uri || candidate.CookedUri == uri);
+            var asset = this.assets.FirstOrDefault(candidate => candidate.Identity == reference);
             var expected = asset is not null && AssetRule.ForCooked(kind).Accepts(asset);
-            var path = uri.IsAbsoluteUri ? uri.AbsolutePath : uri.OriginalString;
-            var label = asset?.DisplayName ?? Path.GetFileNameWithoutExtension(path);
-            destination.Add(new(kind, uri, label, path, !expected, this.CanEdit));
+            var label = asset?.DisplayName ?? Path.GetFileNameWithoutExtension(reference.Name);
+            destination.Add(new(kind, reference, label, reference.VirtualPath, !expected, this.CanEdit));
         }
     }
 
@@ -505,7 +505,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
 }
 
 /// <summary>Displays a typed scene reference and whether it is currently resolvable.</summary>
-public sealed record SceneReferenceRow(AssetKind Kind, Uri Uri, string DisplayName, string DisplayPath, bool IsUnavailable, bool CanEdit)
+public sealed record SceneReferenceRow(AssetKind Kind, AssetPath Asset, string DisplayName, string DisplayPath, bool IsUnavailable, bool CanEdit)
 {
     /// <summary>Gets searchable display text for this reference.</summary>
     public string SearchText => this.DisplayName + " " + this.DisplayPath;

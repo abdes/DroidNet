@@ -288,7 +288,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
         try
         {
-            var sceneUri = this.Document.File.AssetUri;
+            var sceneUri = this.Document.File.Asset;
             var result = await this.contentPipelineService.CookCurrentSceneAsync(sceneUri, CancellationToken.None)
                 .ConfigureAwait(true);
 
@@ -402,7 +402,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.RefreshPlayScene();
     }
 
-    private void PublishCookResult(ContentCookResult result, Uri sceneUri)
+    private void PublishCookResult(ContentCookResult result, AssetPath sceneUri)
     {
         var diagnostics = result.Diagnostics;
         this.operationResults.Publish(new OperationResult
@@ -420,8 +420,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             CompletedAt = DateTimeOffset.UtcNow,
             AffectedScope = new AffectedScope
             {
-                AssetId = sceneUri.ToString(),
-                AssetVirtualPath = sceneUri.AbsolutePath,
+                AssetId = sceneUri.ToUriString(),
+                AssetVirtualPath = sceneUri.VirtualPath,
                 SceneId = this.scene?.Id,
                 SceneName = this.scene?.Name,
             },

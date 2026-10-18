@@ -45,15 +45,15 @@ public sealed partial class MaterialEditorViewModel
             return Task.FromResult(new DocumentConflictResult(Succeeded: false, invalid.ToMessage()));
         }
 
-        var target = new Uri(this.document.File.AssetUri, Uri.EscapeDataString(normalized) + AssetFileTypes.MaterialDescriptor);
-        if (this.projects.ActiveProject?.FindByAssetUri(target) is not { IsMountRoot: false } location)
+        var target = this.document.File.Asset.WithName(normalized + AssetFileTypes.MaterialDescriptor);
+        if (this.projects.ActiveProject?.Find(target) is not { IsMountRoot: false } location)
         {
             return Task.FromResult(new DocumentConflictResult(Succeeded: false, "The copy would be outside the project's folders."));
         }
 
         return this.ResolveConflictAsync(async current =>
         {
-            var saved = await current.SaveCopyAsync(new DocumentFile(location.FilePath, location.AssetUri), CancellationToken.None).ConfigureAwait(true);
+            var saved = await current.SaveCopyAsync(new DocumentFile(location.File, location.Identity), CancellationToken.None).ConfigureAwait(true);
             if (!saved.Succeeded)
             {
                 var reason = saved.Outcome == DocumentSaveOutcome.Conflict

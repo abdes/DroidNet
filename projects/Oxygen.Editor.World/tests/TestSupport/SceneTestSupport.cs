@@ -44,13 +44,13 @@ internal static class SceneTestSupport
         scene.SetEnvironment(CreateCompleteEnvironment());
         scene.SetReferences(new SceneReferencesData
         {
-            Scripts = [new Uri("asset:///Content/Scripts/Controller.oscript")],
-            InputActions = [new Uri("asset:///Content/Input/Move.oiact")],
-            PhysicsSidecars = [new Uri("asset:///Content/Physics/Colliders.opscene")],
+            Scripts = [AssetPath.Parse("/Content/Scripts/Controller.oscript")],
+            InputActions = [AssetPath.Parse("/Content/Input/Move.oiact")],
+            PhysicsSidecars = [AssetPath.Parse("/Content/Physics/Colliders.opscene")],
             ExtraAssets = ["/Content/Textures/Noise.otex"],
         });
         scene.SetStartingInputContexts([
-            new StartingInputContextData(new Uri("asset:///Content/Input/Gameplay.oimap"), Priority: 1),
+            new StartingInputContextData(AssetPath.Parse("/Content/Input/Gameplay.oimap"), Priority: 1),
         ]);
 
         var cameraNode = CreateCameraNode(scene);
@@ -81,7 +81,7 @@ internal static class SceneTestSupport
         {
             Enabled = true,
             Source = SkyLightSource.SpecifiedCubemap,
-            Cubemap = new Uri("asset:///Content/Light.otex.json"),
+            Cubemap = AssetPath.Parse("/Content/Light.otex.json"),
             Intensity = 1.5f,
             TintRgb = new Vector3(0.9f, 0.9f, 1f),
             DiffuseIntensity = 0.8f,
@@ -161,19 +161,19 @@ internal static class SceneTestSupport
         var geometry = new GeometryComponent
         {
             Name = "Hero Mesh",
-            Geometry = new Uri("asset:///Content/Meshes/Hero.geometry"),
+            Geometry = AssetPath.Parse("/Content/Meshes/Hero.geometry"),
         };
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
-            Target = new MaterialSlotTarget(new Uri("asset:///Content/Meshes/Hero.geometry"), Guid.Parse("20000000-0000-0000-0000-000000000001"), "rev-1"),
-            Material = new Uri("asset:///Content/Materials/HeroSkin.omat.json"),
+            Target = new MaterialSlotTarget(AssetPath.Parse("/Content/Meshes/Hero.geometry"), Guid.Parse("20000000-0000-0000-0000-000000000001"), "rev-1"),
+            Material = AssetPath.Parse("/Content/Materials/HeroSkin.omat.json"),
         });
 
         var targetedOverride = new GeometryOverrideTarget { LodIndex = 0, SubmeshIndex = 1 };
         targetedOverride.OverrideSlots.Add(new MaterialsSlot
         {
-            Target = new MaterialSlotTarget(new Uri("asset:///Content/Meshes/Hero.geometry"), Guid.Parse("20000000-0000-0000-0000-000000000002"), "rev-1"),
-            Material = new Uri("asset:///Content/Materials/HeroArmor.omat.json"),
+            Target = new MaterialSlotTarget(AssetPath.Parse("/Content/Meshes/Hero.geometry"), Guid.Parse("20000000-0000-0000-0000-000000000002"), "rev-1"),
+            Material = AssetPath.Parse("/Content/Materials/HeroArmor.omat.json"),
         });
         geometry.TargetedOverrides.Add(targetedOverride);
         return geometry;
@@ -187,7 +187,7 @@ internal static class SceneTestSupport
             [
                 new ScriptSlot
                 {
-                    Script = new Uri("asset:///Content/Scripts/Controller.oscript"),
+                    Script = AssetPath.Parse("/Content/Scripts/Controller.oscript"),
                     ExecutionOrder = 10,
                 }
                 .WithOverride("speed", ScriptValue.FromFloat(5.5f))

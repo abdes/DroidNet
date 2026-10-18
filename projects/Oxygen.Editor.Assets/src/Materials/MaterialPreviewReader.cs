@@ -6,13 +6,14 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Diagnostics;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets.Materials;
 
 /// <summary>Reads a material's base colour from its saved descriptor for swatch previews.</summary>
 internal static class MaterialPreviewReader
 {
-    private static readonly ConcurrentDictionary<string, (DateTime Written, MaterialPreviewColor? Color)> Cache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<FileSystemPath, (DateTime Written, MaterialPreviewColor? Color)> Cache = new();
 
     /// <summary>Returns the base colour of a material row, re-reading its descriptor only after it changes.</summary>
     /// <param name="asset">The material asset.</param>
@@ -29,7 +30,7 @@ internal static class MaterialPreviewReader
         DateTime written;
         try
         {
-            written = File.GetLastWriteTimeUtc(path);
+            written = File.GetLastWriteTimeUtc(path.FullPath);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
@@ -50,16 +51,16 @@ internal static class MaterialPreviewReader
     /// <param name="descriptorPath">The material descriptor path.</param>
     /// <param name="expectedHash">The saved-source hash the descriptor must match, or null to accept any content.</param>
     /// <returns>The base colour, or null when the descriptor is missing, changed or unreadable.</returns>
-    public static MaterialPreviewColor? TryRead(string? descriptorPath, string? expectedHash = null)
+    public static MaterialPreviewColor? TryRead(FileSystemPath? descriptorPath, string? expectedHash = null)
     {
-        if (descriptorPath is null || !File.Exists(descriptorPath))
+        if (descriptorPath is null || !File.Exists(descriptorPath.FullPath))
         {
             return null;
         }
 
         try
         {
-            var bytes = File.ReadAllBytes(descriptorPath);
+            var bytes = File.ReadAllBytes(descriptorPath.FullPath);
             if (expectedHash is not null && !string.Equals(Convert.ToHexString(SHA256.HashData(bytes)), expectedHash, StringComparison.Ordinal))
             {
                 return null;

@@ -21,7 +21,7 @@ internal static class MountChange
     public static ProjectContext CandidateContext(ProjectContext expected, ProjectInfo candidate)
     {
         if (candidate.Id != expected.ProjectId || candidate.Location is null
-            || !string.Equals(Path.GetFullPath(candidate.Location), Path.GetFullPath(expected.ProjectRoot), StringComparison.OrdinalIgnoreCase))
+            || FileSystemPath.From(candidate.Location) != expected.ProjectRoot)
         {
             throw new InvalidOperationException("A content mount change must stay within the active project.");
         }
@@ -30,7 +30,7 @@ internal static class MountChange
         return ProjectContext.FromProjectInfo(candidate) with
         {
             OpenInitialScene = expected.OpenInitialScene,
-            InitialSceneAssetUri = expected.InitialSceneAssetUri,
+            InitialScene = expected.InitialScene,
         };
     }
 
@@ -38,7 +38,7 @@ internal static class MountChange
     /// <param name="context">The context.</param>
     /// <param name="settings">The project settings.</param>
     /// <returns>The project information.</returns>
-    public static ProjectInfo ProjectInfoOf(ProjectContext context, ProjectSettings settings) => new(context.ProjectId, context.Name, context.Category, context.ProjectRoot, context.Thumbnail)
+    public static ProjectInfo ProjectInfoOf(ProjectContext context, ProjectSettings settings) => new(context.ProjectId, context.Name, context.Category, context.ProjectRoot.FullPath, context.Thumbnail)
     {
         Settings = settings,
         AuthoringMounts = [.. context.AuthoringMounts],
@@ -95,9 +95,9 @@ internal static class MountChange
 
         foreach (var folder in candidate.LocalFolderMounts)
         {
-            if (!Path.IsPathFullyQualified(folder.AbsolutePath) || !Directory.Exists(folder.AbsolutePath))
+            if (!Directory.Exists(folder.Root.FullPath))
             {
-                throw new DirectoryNotFoundException($"Local folder '{folder.Name}' is unavailable: {folder.AbsolutePath}.");
+                throw new DirectoryNotFoundException($"Local folder '{folder.Name}' is unavailable: {folder.Root}.");
             }
         }
 

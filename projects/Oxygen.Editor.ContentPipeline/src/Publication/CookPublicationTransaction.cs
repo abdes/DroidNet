@@ -8,6 +8,7 @@ using System.Text.Json;
 using DroidNet.Storage;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
@@ -31,7 +32,7 @@ internal sealed partial class CookPublicationTransaction
         this.projectManager = projectManager;
         this.journal = journal;
         this.journalVersion = journalVersion;
-        this.operationDirectory = Path.Combine(project.ProjectRoot, ".build", "cook", journal.OperationId.ToString("N"));
+        this.operationDirectory = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", journal.OperationId.ToString("N"));
         this.checkpoint = checkpoint ?? (_ => Task.CompletedTask);
     }
 
@@ -82,7 +83,7 @@ internal sealed partial class CookPublicationTransaction
         }
 
         producedSourceFiles = producedSourceFiles.IsDefault ? [] : producedSourceFiles;
-        if (producedSourceFiles.Select(static file => file.RelativePath).Distinct(StringComparer.OrdinalIgnoreCase).Count() != producedSourceFiles.Length)
+        if (producedSourceFiles.Select(static file => file.RelativePath).Distinct(FileSystemPath.NameComparer).Count() != producedSourceFiles.Length)
         {
             throw new InvalidDataException("A publication cannot update the same source settings twice.");
         }
@@ -119,7 +120,7 @@ internal sealed partial class CookPublicationTransaction
 
         var sourceBundle = sourceReplacement is null ? null
             : await CaptureSourceReplacementAsync(operation, sourceReplacement, producedSourceFiles, cancellationToken).ConfigureAwait(false);
-        var pathToDocument = CookPublicationPaths.Document(this.project.ProjectRoot, document.OperationId);
+        var pathToDocument = CookPublicationPaths.Document(this.project.ProjectRoot.FullPath, document.OperationId);
         _ = Directory.CreateDirectory(Path.GetDirectoryName(pathToDocument)!);
         var documentVersion = await this.files.WriteAsync(pathToDocument, JsonSerializer.SerializeToUtf8Bytes(document, JsonOptions), FileVersion.Missing, cancellationToken).ConfigureAwait(false);
         var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, documentVersion.Sha256);
@@ -181,7 +182,7 @@ internal sealed partial class CookPublicationTransaction
                 await this.InstallSourceChangesAsync(verifyOwner).ConfigureAwait(false);
                 await this.WriteJournalAsync(CookPublicationPhase.SourcesApplied, CancellationToken.None).ConfigureAwait(false);
                 await this.checkpoint("SourcesApplied").ConfigureAwait(false);
-                _ = await this.files.WriteAsync(CookPublicationPaths.Head(this.project.ProjectRoot), this.CandidateHead.Content.ToArray(),
+                _ = await this.files.WriteAsync(CookPublicationPaths.Head(this.project.ProjectRoot.FullPath), this.CandidateHead.Content.ToArray(),
                     this.PreviousHead.Version, CancellationToken.None).ConfigureAwait(false);
                 await this.WriteJournalAsync(CookPublicationPhase.HeadSelected, CancellationToken.None).ConfigureAwait(false);
                 await this.checkpoint("HeadSelected").ConfigureAwait(false);
@@ -283,12 +284,12 @@ internal sealed partial class CookPublicationTransaction
 
     private async Task VerifyBaselinesAsync(CancellationToken cancellationToken)
     {
-        if ((await this.files.ReadAsync(CookPublicationPaths.Head(this.project.ProjectRoot), cancellationToken).ConfigureAwait(false)).Version != this.PreviousHead.Version)
+        if ((await this.files.ReadAsync(CookPublicationPaths.Head(this.project.ProjectRoot.FullPath), cancellationToken).ConfigureAwait(false)).Version != this.PreviousHead.Version)
         {
             throw new StorageWriteConflictException("The cooked publication changed while cooking. Retry from the current publication.");
         }
 
-        var currentProject = await this.projectManager.LoadProjectInfoAsync(this.project.ProjectRoot).ConfigureAwait(false)
+        var currentProject = await this.projectManager.LoadProjectInfoAsync(this.project.ProjectRoot.FullPath).ConfigureAwait(false)
             ?? throw new InvalidDataException("The project's saved configuration is unavailable.");
         var configurationMatches = this.journal.ProjectChange is { } change
             ? string.Equals(ProjectInfo.ToJson(currentProject), ProjectInfo.ToJson(this.ParseProjectConfiguration(change.BeforeJson)), StringComparison.Ordinal)
@@ -345,7 +346,7 @@ internal sealed partial class CookPublicationTransaction
             throw new InvalidDataException("A publication cannot change another project's configuration.");
         }
 
-        configuration.Location = this.project.ProjectRoot;
+        configuration.Location = this.project.ProjectRoot.FullPath;
         return configuration;
     }
 }

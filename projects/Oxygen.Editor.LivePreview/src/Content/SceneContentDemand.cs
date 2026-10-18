@@ -14,6 +14,7 @@ using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Content;
 
@@ -72,10 +73,10 @@ internal sealed partial class SceneContentDemand : IDisposable
         }
     }
 
-    private static bool IsDemandable(Uri uri)
-        => !string.Equals(AssetUriHelper.GetMountPoint(uri), "Engine", StringComparison.Ordinal);
+    private static bool IsDemandable(AssetPath asset)
+        => !asset.IsSameOrInside(AssetPath.Engine);
 
-    private static HashSet<Uri> ReferencesOf(Scene scene)
+    private static HashSet<AssetPath> ReferencesOf(Scene scene)
         => [.. scene.AllNodes.SelectMany(SceneAssetReferences.Runtime).Where(IsDemandable)];
 
     private static bool ChangesReferences(SceneChange change)
@@ -151,35 +152,35 @@ internal sealed partial class SceneContentDemand : IDisposable
         }
 
         var now = ReferencesOf(authoring.Scene);
-        foreach (var uri in entry.Referenced.Where(uri => !now.Contains(uri)).ToArray())
+        foreach (var reference in entry.Referenced.Where(reference => !now.Contains(reference)).ToArray())
         {
-            if (entry.Demands.TryGetValue(uri, out var stale))
+            if (entry.Demands.TryGetValue(reference, out var stale))
             {
-                this.LogDemandCancelled(uri);
+                this.LogDemandCancelled(reference);
                 stale.Cancel();
             }
         }
 
-        foreach (var uri in now.Where(uri => demandAll || !entry.Referenced.Contains(uri)))
+        foreach (var reference in now.Where(reference => demandAll || !entry.Referenced.Contains(reference)))
         {
-            this.StartDemand(entry, uri);
+            this.StartDemand(entry, reference);
         }
 
         entry.Referenced = now;
     }
 
     // A demand still cooking is kept; one cancelled while its cook unwinds, as by an undo then a redo, is replaced.
-    private void StartDemand(FollowedDocument entry, Uri uri)
+    private void StartDemand(FollowedDocument entry, AssetPath reference)
     {
-        if ((entry.Demands.TryGetValue(uri, out var existing) && !existing.IsCancelled) || this.projects.ActiveProject is not { } project
+        if ((entry.Demands.TryGetValue(reference, out var existing) && !existing.IsCancelled) || this.projects.ActiveProject is not { } project
             || entry.Content?.Project.ProjectId != project.ProjectId)
         {
             return;
         }
 
-        var demand = new Demand(uri, project);
-        entry.Demands[uri] = demand;
-        this.LogDemandStarted(uri);
+        var demand = new Demand(reference, project);
+        entry.Demands[reference] = demand;
+        this.LogDemandStarted(reference);
         _ = this.CookDemandAsync(entry, demand);
     }
 
@@ -188,7 +189,7 @@ internal sealed partial class SceneContentDemand : IDisposable
     {
         try
         {
-            var asset = await this.assets.ResolveAsync(demand.Uri, demand.Cancellation.Token).ConfigureAwait(true);
+            var asset = await this.assets.ResolveAsync(demand.Asset, demand.Cancellation.Token).ConfigureAwait(true);
             demand.Cancellation.Token.ThrowIfCancellationRequested();
             if (asset?.CanCook != true || !asset.IsSelectable || !ReferenceEquals(this.projects.ActiveProject, demand.Project)
                 || asset.CookStatus?.Freshness is not (AssetCookFreshness.NeedsCooking or AssetCookFreshness.OutOfDate))
@@ -196,7 +197,7 @@ internal sealed partial class SceneContentDemand : IDisposable
                 return;
             }
 
-            _ = await this.pipeline.CookPreviewAssetAsync(asset.IdentityUri, demand.Project, demand.Cancellation.Token).ConfigureAwait(true);
+            _ = await this.pipeline.CookPreviewAssetAsync(asset.Identity, demand.Project, demand.Cancellation.Token).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -204,13 +205,13 @@ internal sealed partial class SceneContentDemand : IDisposable
         }
         catch (Exception exception)
         {
-            this.LogDemandFailure(exception, demand.Uri);
+            this.LogDemandFailure(exception, demand.Asset);
         }
         finally
         {
-            if (entry.Demands.TryGetValue(demand.Uri, out var current) && ReferenceEquals(current, demand))
+            if (entry.Demands.TryGetValue(demand.Asset, out var current) && ReferenceEquals(current, demand))
             {
-                _ = entry.Demands.Remove(demand.Uri);
+                _ = entry.Demands.Remove(demand.Asset);
             }
 
             try
@@ -222,7 +223,7 @@ internal sealed partial class SceneContentDemand : IDisposable
             }
             catch (Exception exception)
             {
-                this.LogDemandFailure(exception, demand.Uri);
+                this.LogDemandFailure(exception, demand.Asset);
             }
             finally
             {
@@ -237,18 +238,18 @@ internal sealed partial class SceneContentDemand : IDisposable
 
         public SceneContent? Content { get; set; }
 
-        public HashSet<Uri> Referenced { get; set; } = [];
+        public HashSet<AssetPath> Referenced { get; set; } = [];
 
-        public Dictionary<Uri, Demand> Demands { get; } = [];
+        public Dictionary<AssetPath, Demand> Demands { get; } = [];
 
         public EventHandler<DocumentContentReplacedEventArgs>? OnContentReplaced { get; set; }
 
         public EventHandler<SceneChangedEventArgs>? OnChanged { get; set; }
     }
 
-    private sealed class Demand(Uri uri, ProjectContext project)
+    private sealed class Demand(AssetPath asset, ProjectContext project)
     {
-        public Uri Uri { get; } = uri;
+        public AssetPath Asset { get; } = asset;
 
         public ProjectContext Project { get; } = project;
 

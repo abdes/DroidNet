@@ -24,6 +24,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Windows.ApplicationModel.DataTransfer;
 using WindowId = Microsoft.UI.WindowId;
 
@@ -99,7 +100,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.inputCommitter = inputCommitter;
         this.windowId = windowId;
         this.conflictPrompt = conflictPrompt;
-        this.MaterialUriText = this.document.File.AssetUri.ToString();
+        this.MaterialUriText = this.document.File.Asset.ToUriString();
         this.TextureChannels =
         [
             new("base_color", "Base color", this.OnTextureSelectionChanged),
@@ -472,9 +473,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     [RelayCommand]
     private async Task CookAsync()
     {
-        var asset = this.document.File.AssetUri;
         if (this.projects.ActiveProject is not { } project
-            || project.FindByAssetUri(asset) is not { IsMountRoot: false } location)
+            || project.FindSource(this.document.File.Asset) is not { IsMountRoot: false } location)
         {
             this.StatusText = "The material is not in the active project and cannot be cooked.";
             return;
@@ -482,10 +482,10 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
         // An authoring mount's file is named from the project root; a local folder mount's file from its mount.
         var relativePath = location.MountKind == ProjectMountKind.Authoring
-            ? Path.GetRelativePath(project.ProjectRoot, location.FilePath).Replace('\\', '/')
-            : location.MountRelativePath;
+            ? location.File.GetPathBelow(project.ProjectRoot)
+            : location.Path.RelativePath;
         _ = await this.cookService.CookMaterialAsync(
-            new MaterialCookRequest(asset, project.ProjectRoot, location.MountName, relativePath),
+            new MaterialCookRequest(location.Path, project.ProjectRoot, location.Path.Mount, relativePath),
             CancellationToken.None).ConfigureAwait(true);
     }
 
@@ -506,9 +506,9 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     }
 
     // A material's GUID is derived from its asset URI, as the cooker derives it.
-    private static Guid GuidOf(Uri materialUri)
+    private static Guid GuidOf(AssetPath material)
     {
-        var text = materialUri.AbsoluteUri.ToUpperInvariant();
+        var text = material.ToUriString().ToUpperInvariant();
         Span<byte> hash = stackalloc byte[32];
         _ = SHA256.HashData(Encoding.UTF8.GetBytes(text), hash);
 
@@ -529,8 +529,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             var pbr = source.PbrMetallicRoughness;
 
             this.DisplayName = this.document.Title;
-            this.MaterialUriText = this.document.File.AssetUri.ToString();
-            this.MaterialGuidText = GuidOf(this.document.File.AssetUri).ToString("D");
+            this.MaterialUriText = this.document.File.Asset.ToUriString();
+            this.MaterialGuidText = GuidOf(this.document.File.Asset).ToString("D");
             this.BaseColorR = pbr.BaseColorR;
             this.BaseColorG = pbr.BaseColorG;
             this.BaseColorB = pbr.BaseColorB;

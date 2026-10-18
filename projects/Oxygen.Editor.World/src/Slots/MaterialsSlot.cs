@@ -22,7 +22,7 @@ public partial class MaterialsSlot : OverrideSlot
         {
             var s = new MaterialsSlot()
             {
-                Material = AssetUriData.Read(d.MaterialUri, nameof(d.MaterialUri)),
+                Material = AssetPathData.Require(d.MaterialUri, nameof(d.MaterialUri)),
                 Target = ReadTarget(d),
             };
             s.Hydrate(d);
@@ -33,13 +33,11 @@ public partial class MaterialsSlot : OverrideSlot
     /// <summary>
     /// Gets or sets the material asset used instead of the mesh's own material on the target slot.
     /// </summary>
-    /// <value>An absolute <c>asset:</c> URI.</value>
     /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The value does not name an asset.</exception>
-    public required Uri Material
+    public required AssetPath Material
     {
         get;
-        set => _ = this.SetProperty(ref field, AssetUris.EnsureAssetUri(value));
+        set => _ = this.SetProperty(ref field, value ?? throw new ArgumentNullException(nameof(value)));
     }
 
     /// <summary>Gets or sets the native slot target retained with this assignment.</summary>
@@ -66,19 +64,19 @@ public partial class MaterialsSlot : OverrideSlot
 
         using var notifications = this.SuppressNotifications();
         this.Target = ReadTarget(md);
-        this.Material = AssetUriData.Read(md.MaterialUri, nameof(md.MaterialUri));
+        this.Material = AssetPathData.Require(md.MaterialUri, nameof(md.MaterialUri));
     }
 
     /// <inheritdoc/>
     public override OverrideSlotData Dehydrate()
         => new MaterialsSlotData
         {
-            GeometryUri = this.Target.GeometryUri,
+            GeometryUri = this.Target.Geometry,
             SlotId = this.Target.SlotId,
             LayoutRevision = this.Target.LayoutRevision,
             MaterialUri = this.Material,
         };
 
     private static MaterialSlotTarget ReadTarget(MaterialsSlotData data)
-        => new(AssetUriData.Read(data.GeometryUri, nameof(data.GeometryUri)), data.SlotId, data.LayoutRevision);
+        => new(AssetPathData.Require(data.GeometryUri, nameof(data.GeometryUri)), data.SlotId, data.LayoutRevision);
 }

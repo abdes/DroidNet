@@ -78,7 +78,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     // Ratified clipboard lifetime (D7): a payload is stamped with the project and scene that
     // produced it, so a stale payload can never be pasted into another project's scene.
     private Guid? clipboardProjectId;
-    private string? clipboardProjectRoot;
+    private FileSystemPath? clipboardProjectRoot;
     private SceneId? clipboardSceneId;
     private WeakReference<Scene>? clipboardSceneLifetime;
 
@@ -782,8 +782,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return TreeItemRenameResult.Rejected("The scene's file cannot be renamed here.");
         }
 
-        var target = Oxygen.Editor.ContentPipeline.Relocation.RelocationPaths.Rename(location.VirtualPath, name, isFolder: false);
-        if (VirtualPath.ValidateSegment(Oxygen.Editor.ContentPipeline.Relocation.RelocationPaths.GetName(target), VirtualPathRuleSet.Authored) is { } invalid)
+        var target = Oxygen.Editor.ContentPipeline.Relocation.RelocationPaths.Rename(location.Path, name, isFolder: false);
+        if (VirtualPath.ValidateSegment(target.Name, VirtualPathRuleSet.Authored) is { } invalid)
         {
             return TreeItemRenameResult.Rejected(invalid.ToMessage());
         }
@@ -791,7 +791,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         try
         {
             _ = await this.relocation.RelocateAsync(
-                new Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationRequest { Moves = [new(location.VirtualPath, target)] },
+                new Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationRequest { Moves = [new(location.Path, target)] },
                 "Rename",
                 this.histories.GlobalHistory,
                 CancellationToken.None).ConfigureAwait(true);
@@ -1017,11 +1017,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <summary>
     /// Records which project and scene produced the staged payload.
     /// </summary>
+    private FileSystemPath? CurrentProjectRoot()
+        => this.projectManager.CurrentProject?.ProjectInfo.Location is { } location ? FileSystemPath.From(location) : null;
+
     private void StampClipboardOrigin()
     {
         this.clipboardGeneration++;
         this.clipboardProjectId = this.projectManager.CurrentProject?.ProjectInfo.Id;
-        this.clipboardProjectRoot = this.projectManager.CurrentProject?.ProjectInfo.Location;
+        this.clipboardProjectRoot = this.CurrentProjectRoot();
         this.clipboardSceneId = this.Scene?.AttachedObject.Id;
         this.clipboardSceneLifetime = this.Scene is { } root ? new(root.AttachedObject) : null;
     }
@@ -1044,8 +1047,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return false;
         }
 
-        if (this.clipboardProjectRoot is { } stagedRoot
-            && !string.Equals(stagedRoot, this.projectManager.CurrentProject?.ProjectInfo.Location, StringComparison.OrdinalIgnoreCase))
+        if (this.clipboardProjectRoot is { } stagedRoot && stagedRoot != this.CurrentProjectRoot())
         {
             return false;
         }
@@ -1148,7 +1150,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         // Scene replacement belongs to the document owner; tab activation must not bypass its
         // close guards or previous-graph retirement.
-        var request = this.messenger.Send(new Oxygen.Editor.ContentBrowser.Messages.OpenSceneRequestMessage(sceneDocument.File.AssetUri));
+        var request = this.messenger.Send(new Oxygen.Editor.ContentBrowser.Messages.OpenSceneRequestMessage(sceneDocument.File.Asset));
         if (request.HasReceivedResponse)
         {
             _ = await request.Response.ConfigureAwait(true);

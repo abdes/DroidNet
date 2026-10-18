@@ -199,7 +199,7 @@ internal sealed partial class ScenePreview
     {
         var current = MaterialOverridesOf(node);
         MaterialSlotTarget[] cleared = [.. lifetime.MaterialOverrides.GetValueOrDefault(node.Id, [])
-            .Where(previous => !current.Any(target => target.GeometryUri == previous.GeometryUri && target.SlotId == previous.SlotId))];
+            .Where(previous => !current.Any(target => target.Geometry == previous.Geometry && target.SlotId == previous.SlotId))];
         lifetime.MaterialOverrides[node.Id] = current;
         var mounted = this.IsMounted(SceneAssetReferences.Runtime(node));
         if (!mounted)
@@ -335,7 +335,7 @@ internal sealed partial class ScenePreview
     }
 
     // An asset the feed does not know, such as a generated shape, is taken as ready.
-    private bool IsMounted(IEnumerable<Uri> references)
+    private bool IsMounted(IEnumerable<AssetPath> references)
         => references.All(uri => this.assetEntries.Find(uri) is not { } entry
             || entry.RuntimeAvailability is AssetRuntimeAvailability.Mounted or AssetRuntimeAvailability.NotApplicable);
 

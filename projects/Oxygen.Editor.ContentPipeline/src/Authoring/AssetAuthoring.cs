@@ -28,7 +28,7 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
     public event EventHandler<AssetFilesChangedEventArgs>? FilesChanged;
 
     /// <inheritdoc/>
-    public async Task<AssetProposal> ProposeAsync(ProjectContext project, AuthoredAssetKind kind, string? selectedFolder, CancellationToken cancellationToken)
+    public async Task<AssetProposal> ProposeAsync(ProjectContext project, AuthoredAssetKind kind, AssetPath? selectedFolder, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(project);
         var template = Template.Of(kind);
@@ -47,7 +47,7 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
     }
 
     /// <inheritdoc/>
-    public async Task<string?> ValidateAsync(ProjectContext project, AuthoredAssetKind kind, string name, string folder, CancellationToken cancellationToken)
+    public async Task<string?> ValidateAsync(ProjectContext project, AuthoredAssetKind kind, string name, AssetPath folder, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(name);
@@ -56,7 +56,7 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
     }
 
     /// <inheritdoc/>
-    public async Task<string> CreateAsync(ProjectContext project, AuthoredAssetKind kind, string name, string folder, CancellationToken cancellationToken)
+    public async Task<FileSystemPath> CreateAsync(ProjectContext project, AuthoredAssetKind kind, string name, AssetPath folder, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(name);
@@ -72,10 +72,10 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
         }
 
         var file = name + template.Extensions[0];
-        var path = Path.Combine(RelocationPaths.ToPhysical(project, folder)!, file);
+        var path = RelocationPaths.ToPhysical(project, folder)!.Combine(file);
         try
         {
-            _ = await files.WriteAsync(path, Encoding.UTF8.GetBytes(template.Text(name)), FileVersion.Missing, cancellationToken).ConfigureAwait(true);
+            _ = await files.WriteAsync(path.FullPath, Encoding.UTF8.GetBytes(template.Text(name)), FileVersion.Missing, cancellationToken).ConfigureAwait(true);
         }
         catch (StorageWriteConflictException conflict)
         {
@@ -99,47 +99,42 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
     /// <param name="selectedFolder">The folder being browsed, a virtual path, if any.</param>
     /// <param name="kindFolder">The kind's folder name, such as <c>Scripts</c>.</param>
     /// <returns>The virtual folder.</returns>
-    internal static string GetDefaultFolder(ProjectContext project, string? selectedFolder, string kindFolder)
+    internal static AssetPath GetDefaultFolder(ProjectContext project, AssetPath? selectedFolder, string kindFolder)
     {
-        var normalized = selectedFolder?.Replace('\\', '/').Trim().TrimEnd('/');
-        var selected = string.IsNullOrWhiteSpace(normalized) || string.Equals(normalized, "/", StringComparison.Ordinal)
-            ? null
-            : RelocationPaths.ToPhysical(project, "/" + normalized.TrimStart('/')) is { } physical
-                ? RelocationPaths.ToVirtual(project, physical)
-                : null;
-        if (selected is not null && selected.Trim('/').Contains('/', StringComparison.Ordinal))
+        var selected = selectedFolder is not null && RelocationPaths.ToPhysical(project, selectedFolder) is not null ? selectedFolder : null;
+        if (selected is { IsMount: false })
         {
             return selected;
         }
 
-        var mount = selected ?? ("/" + (RelocationPaths.GetWritableMounts(project).FirstOrDefault()?.Name ?? Oxygen.Editor.Projects.Constants.ContentFolderName));
-        return RelocationPaths.Combine(mount, kindFolder);
+        var mount = selected ?? AssetPath.Create(RelocationPaths.GetWritableMounts(project).FirstOrDefault()?.Name ?? Oxygen.Editor.Projects.Constants.ContentFolderName);
+        return mount.Combine(kindFolder);
     }
 
-    private static string? Reject(ProjectContext project, Template template, string name, string folder, HashSet<string> existing)
+    private static string? Reject(ProjectContext project, Template template, string name, AssetPath folder, HashSet<AssetPath> existing)
     {
         if (VirtualPath.ValidateSegment(name + template.Extensions[0], VirtualPathRuleSet.Authored) is { } invalid)
         {
             return invalid.ToMessage();
         }
 
-        if (RelocationPaths.ToPhysical(project, folder) is not { } physical || RelocationPaths.ToVirtual(project, physical) is not { } normalized)
+        if (RelocationPaths.ToPhysical(project, folder) is null)
         {
             return "Choose a folder inside a project content folder, such as /Content/Scripts.";
         }
 
         var taken = template.Extensions.Select(extension => name + extension)
-            .FirstOrDefault(file => existing.Contains(RelocationPaths.Combine(normalized, file)));
+            .FirstOrDefault(file => existing.Contains(folder.Combine(file)));
         return taken is null
             ? null
             : $"'{taken}' already exists in {folder}, or differs from an existing file only in case. Choose another name.";
     }
 
     // The catalog's records are the project's files under their virtual paths, such as /Content/Player/move.lua.
-    private async Task<HashSet<string>> ReadExistingAsync(CancellationToken cancellationToken)
+    private async Task<HashSet<AssetPath>> ReadExistingAsync(CancellationToken cancellationToken)
         => (await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false))
-            .Select(static record => AssetUriHelper.GetVirtualPath(record.Uri))
-            .ToHashSet(VirtualPathComparer.CaseFolded);
+            .Select(static record => record.Identity)
+            .ToHashSet(AssetPath.CaseFolded);
 
     /// <summary>What one kind of file is called, where it goes and what it starts with.</summary>
     /// <param name="Folder">The kind's folder under a mount root.</param>

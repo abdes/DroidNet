@@ -19,7 +19,7 @@ public sealed partial class MaterialPickerRow(MaterialPickerItem item) : Observa
     /// <param name="replacement">The latest presentation of this material.</param>
     internal void Update(MaterialPickerItem replacement)
     {
-        if (this.item.Uri != replacement.Uri)
+        if (this.item.Asset != replacement.Asset)
         {
             throw new ArgumentException("A picker row can only update its own material identity.", nameof(replacement));
         }

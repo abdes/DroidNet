@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline.Inspection;
 
 /// <summary>A finite read-only report of the requested published scope.</summary>
@@ -9,4 +11,4 @@ namespace Oxygen.Editor.ContentPipeline.Inspection;
 /// <param name="ScopeUri">The requested asset/folder scope, or null for all project output.</param>
 /// <param name="CapturedAt">The time this inspection completed.</param>
 /// <param name="Roots">Inspected physical roots with scoped assets and root-wide files/validation.</param>
-public sealed record CookedOutputReport(Guid ProjectId, Uri? ScopeUri, DateTimeOffset CapturedAt, IReadOnlyList<CookedRootReport> Roots);
+public sealed record CookedOutputReport(Guid ProjectId, AssetPath? ScopeUri, DateTimeOffset CapturedAt, IReadOnlyList<CookedRootReport> Roots);

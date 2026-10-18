@@ -50,7 +50,7 @@ public sealed class SceneDocumentKind(
         }
         catch (JsonException exception)
         {
-            return DocumentDecodeResult.Failed($"'{Path.GetFileName(file.Path)}' is not a valid scene: {exception.Message}");
+            return DocumentDecodeResult.Failed($"'{file.Path.Name}' is not a valid scene: {exception.Message}");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -59,15 +59,15 @@ public sealed class SceneDocumentKind(
         var nodeIds = new HashSet<NodeId>();
         if (scene.AllNodes.Any(node => node.Id.IsEmpty || !nodeIds.Add(node.Id)))
         {
-            return DocumentDecodeResult.Failed($"'{Path.GetFileName(file.Path)}' has nodes with missing or duplicate identities.");
+            return DocumentDecodeResult.Failed($"'{file.Path.Name}' has nodes with missing or duplicate identities.");
         }
 
         if (!IsLayoutValid(layout, nodeIds, [], []))
         {
-            return DocumentDecodeResult.Failed($"'{Path.GetFileName(file.Path)}' has an explorer layout with duplicate or foreign identities.");
+            return DocumentDecodeResult.Failed($"'{file.Path.Name}' has an explorer layout with duplicate or foreign identities.");
         }
 
-        scene.Name = SceneContent.NameOf(file.Path);
+        scene.Name = SceneContent.NameOf(file.Path.Name);
 
         // Every node gets an explorer entry now, so edits always find one and their reverts restore it exactly.
         SceneLayout.Complete(scene, layout);

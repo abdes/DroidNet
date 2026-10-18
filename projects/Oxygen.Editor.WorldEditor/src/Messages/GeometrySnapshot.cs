@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Runtime.InteropServices;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Messages;
 
@@ -11,4 +12,4 @@ namespace Oxygen.Editor.World.Messages;
 /// </summary>
 /// <param name="Uri">The geometry URI, or <see langword="null"/> when no geometry is set.</param>
 [StructLayout(LayoutKind.Auto)]
-public readonly record struct GeometrySnapshot(Uri? Uri);
+public readonly record struct GeometrySnapshot(AssetPath? AssetPath);

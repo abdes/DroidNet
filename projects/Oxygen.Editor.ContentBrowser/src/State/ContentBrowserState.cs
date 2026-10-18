@@ -3,20 +3,19 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using DroidNet.Storage;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
-using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser;
 
 /// <summary>
-/// Represents the state of the content browser, including selected folders and the project root path.
+/// Represents the state of the content browser, including the selected folders.
 /// This is a passive data holder that is updated by ViewModels.
 /// </summary>
-public sealed partial class ContentBrowserState(IProjectContextService projectContextService) : INotifyPropertyChanged
+public sealed partial class ContentBrowserState : INotifyPropertyChanged
 {
-    private readonly HashSet<string> selectedFolders = [with(StringComparer.Ordinal)];
+    private readonly HashSet<AssetPath> selectedFolders = [];
 
     /// <summary>
     /// Occurs when a property changes.
@@ -24,20 +23,15 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>
-    /// Gets the set of selected folders.
+    /// Gets the selected folders; none selected browses the whole project.
     /// </summary>
-    public IReadOnlySet<string> SelectedFolders => this.selectedFolders;
+    public IReadOnlySet<AssetPath> SelectedFolders => this.selectedFolders;
 
     /// <summary>Gets the search and filter state shared by this browser's layouts.</summary>
     public AssetBrowserQuery Query { get; init; } = new();
 
     /// <summary>Gets the result order, tile size, view and details-pane state shared by this browser's layouts.</summary>
     public AssetBrowserPresentation Presentation { get; init; } = new();
-
-    /// <summary>
-    /// Gets the project root path.
-    /// </summary>
-    public string ProjectRootPath => projectContextService.ActiveProject?.ProjectRoot ?? string.Empty;
 
     /// <summary>Gets the selected assets of the active layout, in selection order; the last is the active asset.</summary>
     public IReadOnlyList<AssetEntry> SelectedAssets { get; private set; } = [];
@@ -52,61 +46,22 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
     /// Gets the virtual paths Paste copies or moves. The asset list and the sources tree share it, so a folder cut or
     /// copied in either pastes as a folder.
     /// </summary>
-    public IReadOnlyList<string> Clipboard { get; private set; } = [];
+    public IReadOnlyList<AssetPath> Clipboard { get; private set; } = [];
 
     /// <summary>Gets a value indicating whether Paste moves the clipboard's items instead of copying them.</summary>
     public bool IsClipboardCut { get; private set; }
 
     /// <summary>Gets or sets the active identity retained when switching asset layouts.</summary>
-    internal Uri? SelectedAssetUri { get; set; }
+    internal AssetPath? SelectedIdentity { get; set; }
 
     /// <summary>Gets or sets every selected identity retained when switching asset layouts.</summary>
-    internal IReadOnlyList<Uri> SelectedAssetUris { get; set; } = [];
+    internal IReadOnlyList<AssetPath> SelectedIdentities { get; set; } = [];
 
     /// <summary>Gets or sets the layout allowed to change the shared asset selection.</summary>
     internal AssetsLayoutViewModel? ActiveAssetLayout { get; set; }
 
     /// <summary>Gets or sets initial shared discovery, so replacing a layout does not rescan the catalog.</summary>
     internal Task? AssetInitialization { get; set; }
-
-    /// <summary>
-    /// Adds a folder to the set of selected folders.
-    /// Publishes the resulting scope as one state change.
-    /// </summary>
-    /// <param name="folder">The folder to add.</param>
-    public void AddSelectedFolder(IFolder folder)
-    {
-        var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
-        if (this.selectedFolders.Add(pathRelativeToProjectRoot))
-        {
-            this.OnPropertyChanged(nameof(this.SelectedFolders));
-        }
-    }
-
-    /// <summary>
-    /// Removes a folder from the set of selected folders.
-    /// Publishes the resulting scope as one state change.
-    /// </summary>
-    /// <param name="folder">The folder to remove.</param>
-    public void RemoveSelectedFolder(IFolder folder)
-    {
-        var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
-        if (this.selectedFolders.Remove(pathRelativeToProjectRoot))
-        {
-            this.OnPropertyChanged(nameof(this.SelectedFolders));
-        }
-    }
-
-    /// <summary>
-    /// Sets the selected folders to contain only the specified folder.
-    /// Publishes the resulting scope as one state change.
-    /// </summary>
-    /// <param name="folder">The folder to select.</param>
-    public void SetSelectedFolder(IFolder folder)
-    {
-        var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
-        this.SetSelectedFolders([pathRelativeToProjectRoot]);
-    }
 
     /// <summary>
     /// Clears all selected folders.
@@ -122,13 +77,13 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
     }
 
     /// <summary>
-    /// Sets the selected folders to the specified collection of relative paths.
+    /// Sets the selected folders; none selected browses the whole project.
     /// </summary>
-    /// <param name="relativePaths">The relative paths to set as selected.</param>
-    public void SetSelectedFolders(IEnumerable<string> relativePaths)
+    /// <param name="folders">The folders to select.</param>
+    public void SetSelectedFolders(IEnumerable<AssetPath> folders)
     {
-        ArgumentNullException.ThrowIfNull(relativePaths);
-        var replacement = relativePaths.Where(static path => !string.IsNullOrWhiteSpace(path)).ToHashSet(StringComparer.Ordinal);
+        ArgumentNullException.ThrowIfNull(folders);
+        var replacement = folders.ToHashSet();
         if (this.selectedFolders.SetEquals(replacement))
         {
             return;
@@ -139,21 +94,10 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
         this.OnPropertyChanged(nameof(this.SelectedFolders));
     }
 
-    /// <summary>
-    /// Checks if a folder is in the set of selected folders.
-    /// </summary>
-    /// <param name="folder">The folder to check.</param>
-    /// <returns><see langword="true"/> if the folder is selected; otherwise, <see langword="false"/>.</returns>
-    public bool ContainsSelectedFolder(IFolder folder)
-    {
-        var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
-        return this.SelectedFolders.Contains(pathRelativeToProjectRoot);
-    }
-
     /// <summary>Puts items on the clipboard, replacing what it held.</summary>
     /// <param name="items">The virtual paths of the assets and folders.</param>
     /// <param name="isCut">Whether Paste moves them instead of copying them.</param>
-    public void SetClipboard(IReadOnlyList<string> items, bool isCut)
+    public void SetClipboard(IReadOnlyList<AssetPath> items, bool isCut)
     {
         ArgumentNullException.ThrowIfNull(items);
         this.Clipboard = items;

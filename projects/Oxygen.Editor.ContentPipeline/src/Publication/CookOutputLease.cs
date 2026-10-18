@@ -2,14 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
 /// <summary>Owns short publication selection gates and whole-operation lifetimes across processes.</summary>
 internal static class CookOutputLease
 {
-    internal static async Task<CookOutputWriteLease> AcquireWriteAsync(string projectRoot, CancellationToken cancellationToken)
+    internal static async Task<CookOutputWriteLease> AcquireWriteAsync(FileSystemPath projectRoot, CancellationToken cancellationToken)
     {
-        var (root, cook) = PreparePaths(projectRoot);
+        var cook = PrepareCookFolder(projectRoot);
         var path = Path.Combine(cook, "publication.lock");
         RejectReparsePoint(path);
         while (true)
@@ -18,31 +20,31 @@ internal static class CookOutputLease
             var handle = WindowsCookFile.TryOpenExclusive(path, FileMode.OpenOrCreate, out _);
             if (handle is not null)
             {
-                return new(root, handle);
+                return new(projectRoot, handle);
             }
 
             await Task.Delay(50, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    internal static FileStream AcquireOperation(string projectRoot, Guid operationId)
+    internal static FileStream AcquireOperation(FileSystemPath projectRoot, Guid operationId)
         => TryAcquireOperation(projectRoot, operationId)
             ?? throw new CookOutputBusyException("The cook operation still owns work.");
 
-    internal static FileStream? TryAcquireOperation(string projectRoot, Guid operationId)
+    internal static FileStream? TryAcquireOperation(FileSystemPath projectRoot, Guid operationId)
         => TryAcquireOperationFile(projectRoot, operationId, "operation.lock");
 
-    internal static FileStream? TryAcquireRetryInput(string projectRoot, Guid operationId)
+    internal static FileStream? TryAcquireRetryInput(FileSystemPath projectRoot, Guid operationId)
         => TryAcquireOperationFile(projectRoot, operationId, "retry-input.lock");
 
-    private static FileStream? TryAcquireOperationFile(string projectRoot, Guid operationId, string name)
+    private static FileStream? TryAcquireOperationFile(FileSystemPath projectRoot, Guid operationId, string name)
     {
         if (operationId == Guid.Empty)
         {
             throw new ArgumentException("An operation identity is required.", nameof(operationId));
         }
 
-        var (_, cook) = PreparePaths(projectRoot);
+        var cook = PrepareCookFolder(projectRoot);
         var directory = Path.Combine(cook, operationId.ToString("N"));
         RejectReparsePoint(directory);
         _ = Directory.CreateDirectory(directory);
@@ -60,10 +62,10 @@ internal static class CookOutputLease
         }
     }
 
-    private static (string root, string cook) PreparePaths(string projectRoot)
+    private static string PrepareCookFolder(FileSystemPath projectRoot)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
-        var root = Path.GetFullPath(projectRoot);
+        ArgumentNullException.ThrowIfNull(projectRoot);
+        var root = projectRoot.FullPath;
         if (!Directory.Exists(root))
         {
             throw new DirectoryNotFoundException($"The project directory does not exist: '{root}'.");
@@ -75,6 +77,6 @@ internal static class CookOutputLease
         RejectReparsePoint(build);
         RejectReparsePoint(cook);
         _ = Directory.CreateDirectory(cook);
-        return (root, cook);
+        return cook;
     }
 }

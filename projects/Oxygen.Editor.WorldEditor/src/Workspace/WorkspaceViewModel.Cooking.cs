@@ -25,14 +25,14 @@ public partial class WorkspaceViewModel
     public Task<bool> SaveListedAsync(CookRunSnapshot run)
         => this.projectContextService.ActiveProject is { } project && run.ProjectId == project.ProjectId
             && Dockable.FromId(this.CenterOutletName)?.ViewModel is DocumentHostViewModel host
-            ? host.SaveDocumentsAsync([.. run.UnsavedDocuments.Select(document => project.FindByFilePath(document.SourcePath)?.AssetUri).OfType<Uri>()])
+            ? host.SaveDocumentsAsync([.. run.UnsavedDocuments.Select(document => project.FindByFilePath(document.SourcePath)?.Identity).OfType<AssetPath>()])
             : Task.FromResult(false);
 
     /// <inheritdoc />
-    public Task<bool> OpenDocumentAsync(string sourcePath)
+    public Task<bool> OpenDocumentAsync(FileSystemPath sourcePath)
         => this.projectContextService.ActiveProject?.FindByFilePath(sourcePath) is { } location
             && Dockable.FromId(this.CenterOutletName)?.ViewModel is DocumentHostViewModel host
-            ? host.SelectDocumentAsync(location.AssetUri) : Task.FromResult(false);
+            ? host.SelectDocumentAsync(location.Identity) : Task.FromResult(false);
 
     /// <inheritdoc />
     public async Task<bool> GoToPropertyAsync(CookRunSnapshot run, DiagnosticRecord issue)
@@ -57,7 +57,7 @@ public partial class WorkspaceViewModel
             explorer.SelectEnvironment(sceneId);
         }
 
-        if (!await this.documentManager.OpenSceneAsync(scene.AssetUri).ConfigureAwait(true)
+        if (!await this.documentManager.OpenSceneAsync(scene.Identity).ConfigureAwait(true)
             || Dockable.FromId("props") is not { ViewModel: SceneNodeEditorViewModel inspector } properties)
         {
             return false;

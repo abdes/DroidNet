@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.MaterialEditor;
 
@@ -43,14 +44,11 @@ public sealed partial class MaterialEditorViewModel
     {
         if (!this.isDisposed)
         {
-            var asset = this.document.File.AssetUri;
-            this.AssetStatus = items.FirstOrDefault(item => item.IdentityUri == asset || item.CookedUri == asset);
+            this.AssetStatus = items.Find(this.document.File.Asset);
             this.availableTextureChoices = AssetRule.For(AssetKind.Texture).Apply(items)
-                .Where(static item => item.DescriptorPath is { } descriptorPath
-                    && item.IdentityUri.AbsolutePath.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
-                    && TextureSourceAssetImporter.HasSourceImage(descriptorPath))
+                .Where(static item => item.DescriptorPath is { } descriptorPath && TextureSourceAssetImporter.HasSourceImage(descriptorPath.FullPath))
                 .Select(static item => new MaterialTextureChoice(
-                    Uri.UnescapeDataString(item.IdentityUri.AbsolutePath)[..^AssetFileTypes.DescriptorSuffix.Length],
+                    item.Identity.VirtualPath,
                     item.DisplayName,
                     IsAvailable: true))
                 .DistinctBy(static choice => choice.VirtualPath, StringComparer.Ordinal)
@@ -91,10 +89,10 @@ public sealed partial class MaterialEditorViewModel
         if (!this.isDisposed)
         {
             this.AssetStatus = null;
-            this.LogAssetStatusFailed(exception, this.document.File.AssetUri);
+            this.LogAssetStatusFailed(exception, this.document.File.Asset);
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not refresh shared asset status for material {MaterialUri}.")]
-    private partial void LogAssetStatusFailed(Exception exception, Uri materialUri);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not refresh shared asset status for material {Material}.")]
+    private partial void LogAssetStatusFailed(Exception exception, AssetPath material);
 }

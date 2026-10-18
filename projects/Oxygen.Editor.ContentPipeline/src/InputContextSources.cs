@@ -6,6 +6,7 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -25,14 +26,12 @@ public static class InputContextSources
     /// <param name="project">The project whose authoring mounts hold the input files.</param>
     /// <param name="context">The mapping context asset.</param>
     /// <returns>Whether the context is the project's, and the priority its input file declares.</returns>
-    public static InputContextSource Find(ProjectContext project, Uri context)
+    public static InputContextSource Find(ProjectContext project, AssetPath context)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(context);
-        var path = Uri.UnescapeDataString(context.AbsolutePath);
-
         // A context of the project is cooked from an input file next to it; one that no file declares is gone.
-        return RelocationPaths.ToPhysical(project, path) is null
+        return RelocationPaths.ToPhysical(project, context) is null
             ? InputContextSource.External
             : new InputContextSource(IsProjectContext: true, FindDeclaredPriority(project, context));
     }
@@ -42,20 +41,19 @@ public static class InputContextSources
     /// <param name="context">The mapping context asset.</param>
     /// <returns>The declared priority, or <see langword="null"/> when no input file in the context's folder declares
     /// it.</returns>
-    public static int? FindDeclaredPriority(ProjectContext project, Uri context)
+    public static int? FindDeclaredPriority(ProjectContext project, AssetPath context)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(context);
-        var path = Uri.UnescapeDataString(context.AbsolutePath);
-        if (!path.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.OrdinalIgnoreCase)
-            || RelocationPaths.ToPhysical(project, RelocationPaths.GetParent(path)) is not { } folder
-            || !Directory.Exists(folder))
+        if (!context.Name.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.OrdinalIgnoreCase)
+            || RelocationPaths.ToPhysical(project, context.Parent!) is not { } folder
+            || !Directory.Exists(folder.FullPath))
         {
             return null;
         }
 
-        var name = Path.GetFileNameWithoutExtension(path);
-        foreach (var file in Directory.EnumerateFiles(folder, "*" + AssetFileTypes.InputFile).Order(StringComparer.OrdinalIgnoreCase))
+        var name = Path.GetFileNameWithoutExtension(context.Name);
+        foreach (var file in Directory.EnumerateFiles(folder.FullPath, "*" + AssetFileTypes.InputFile).Order(StringComparer.Ordinal))
         {
             string text;
             try

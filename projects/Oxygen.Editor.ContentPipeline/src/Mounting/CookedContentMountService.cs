@@ -5,6 +5,7 @@
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Mounting;
 
@@ -19,7 +20,7 @@ public sealed class CookedContentMountService
     public async Task<CookedContentMountSet> PrepareAsync(ProjectContext project, CookPublicationReadLease publication, CancellationToken cancellationToken)
     {
         if (project.ProjectId != publication.ProjectId
-            || !string.Equals(Path.GetFullPath(project.ProjectRoot), publication.ProjectRoot, StringComparison.OrdinalIgnoreCase))
+            || project.ProjectRoot != publication.ProjectRoot)
         {
             throw new InvalidOperationException("Cooked content belongs to another project.");
         }

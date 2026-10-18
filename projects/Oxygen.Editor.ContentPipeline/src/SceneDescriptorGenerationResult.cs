@@ -11,7 +11,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// Result of native scene descriptor generation.
 /// </summary>
 public sealed record SceneDescriptorGenerationResult(
-    Uri SceneAssetUri,
+    AssetPath SceneAssetUri,
     string DescriptorPath,
     string DescriptorVirtualPath,
     IReadOnlyList<ContentCookInput> Dependencies,
@@ -30,7 +30,7 @@ public sealed record SceneDescriptorGenerationResult(
     public IReadOnlyList<ScriptBindingSite> ScriptBindingSites { get; init; } = [];
 
     /// <summary>Gets the scripts and assets the slots use, which the scene depends on.</summary>
-    public IReadOnlyList<Uri> ScriptReferences { get; init; } = [];
+    public IReadOnlyList<AssetPath> ScriptReferences { get; init; } = [];
 }
 
 /// <summary>Where a script sidecar binding comes from, so cook diagnostics can point at the slot.</summary>

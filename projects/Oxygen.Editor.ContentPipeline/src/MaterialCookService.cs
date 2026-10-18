@@ -4,6 +4,8 @@
 
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -34,7 +36,7 @@ public sealed partial class MaterialCookService(
 
         var result = await this.pipeline.CookAssetAsync(request.MaterialSourceUri, cancellationToken, project).ConfigureAwait(false);
         var cooked = result.CookedAssets.Concat(result.ReusedAssets).FirstOrDefault(asset => asset.Kind == ContentCookAssetKind.Material
-            && asset.CookedAssetUri == GetCookedUri(request.MaterialSourceUri));
+            && asset.CookedAssetUri == AssetFileTypes.ToIdentity(request.MaterialSourceUri));
         var succeeded = result.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings;
         var state = !succeeded || cooked is null ? MaterialCookState.Failed
             : result.InputsAreCurrent == false ? MaterialCookState.Stale : MaterialCookState.Cooked;
@@ -46,9 +48,8 @@ public sealed partial class MaterialCookService(
     {
         project = this.projectContextService.ActiveProject;
         if (project is null
-            || request.MaterialSourceUri is not { IsAbsoluteUri: true }
-            || string.IsNullOrWhiteSpace(request.ProjectRoot) || string.IsNullOrWhiteSpace(request.MountName)
-            || !Path.IsPathFullyQualified(request.ProjectRoot)
+            || request.MaterialSourceUri is null
+            || request.ProjectRoot is null || string.IsNullOrWhiteSpace(request.MountName)
             || string.IsNullOrWhiteSpace(request.SourceRelativePath) || Path.IsPathRooted(request.SourceRelativePath))
         {
             return false;
@@ -56,7 +57,7 @@ public sealed partial class MaterialCookService(
 
         try
         {
-            if (!string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(request.ProjectRoot)), Path.TrimEndingDirectorySeparator(project.ProjectRoot), StringComparison.OrdinalIgnoreCase))
+            if (request.ProjectRoot != project.ProjectRoot)
             {
                 return false;
             }
@@ -64,7 +65,7 @@ public sealed partial class MaterialCookService(
             var input = CookInputResolver.Resolve(project, request.MaterialSourceUri, ContentCookInputRole.Primary);
             return input.Kind == ContentCookAssetKind.Material
                 && string.Equals(input.MountName, request.MountName, StringComparison.Ordinal)
-                && string.Equals(input.SourceAbsolutePath, Path.GetFullPath(Path.Combine(project.ProjectRoot, request.SourceRelativePath)), StringComparison.OrdinalIgnoreCase);
+                && input.SourceAbsolutePath == project.ProjectRoot.Combine(request.SourceRelativePath);
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidDataException)
         {
@@ -73,11 +74,11 @@ public sealed partial class MaterialCookService(
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Cooked material state could not be inspected for {MaterialUri}.")]
-    private partial void LogStateInspectionFailed(Uri materialUri, Exception exception);
+    private partial void LogStateInspectionFailed(AssetPath materialUri, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Material cook rejected for {MaterialUri}: the source identity does not match the active project.")]
-    private partial void LogRejected(Uri materialUri);
+    private partial void LogRejected(AssetPath materialUri);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Material cook {OperationId} completed for {MaterialUri}: {State}.")]
-    private partial void LogCompleted(Uri materialUri, Guid operationId, MaterialCookState state);
+    private partial void LogCompleted(AssetPath materialUri, Guid operationId, MaterialCookState state);
 }

@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Documents;
 
 /// <summary>Matches file names against the suffixes of document kinds, and names a document after its file.</summary>
@@ -11,9 +13,10 @@ public static class DocumentKinds
     /// <param name="kind">The kind.</param>
     /// <param name="path">The file's path.</param>
     /// <returns>The suffix, or <see langword="null"/> when the kind does not open the file.</returns>
-    public static string? SuffixOf(IDocumentKind kind, string path)
+    public static string? SuffixOf(IDocumentKind kind, FileSystemPath path)
     {
-        var name = Path.GetFileName(path);
+        ArgumentNullException.ThrowIfNull(path);
+        var name = path.Name;
         return kind.FileSuffixes
             .Where(suffix => name.Length > suffix.Length && name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
             .MaxBy(static suffix => suffix.Length);
@@ -23,9 +26,10 @@ public static class DocumentKinds
     /// <param name="kind">The kind.</param>
     /// <param name="path">The file's path.</param>
     /// <returns>The document's title.</returns>
-    public static string TitleOf(IDocumentKind kind, string path)
+    public static string TitleOf(IDocumentKind kind, FileSystemPath path)
     {
-        var name = Path.GetFileName(path);
+        ArgumentNullException.ThrowIfNull(path);
+        var name = path.Name;
         return SuffixOf(kind, path) is { } suffix ? name[..^suffix.Length] : name;
     }
 }

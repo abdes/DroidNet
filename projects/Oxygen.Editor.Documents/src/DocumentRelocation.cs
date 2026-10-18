@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Storage;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Documents;
 
@@ -16,12 +17,12 @@ namespace Oxygen.Editor.Documents;
 /// </param>
 public sealed record DocumentRelocation(DocumentFile File, FileVersion Version, Func<string, string?> MapReference)
 {
-    /// <summary>Maps an asset URI to its new URI.</summary>
-    /// <param name="reference">The asset URI.</param>
-    /// <returns>The new URI, or <see langword="null"/> when the asset did not move.</returns>
-    public Uri? MapUri(Uri reference)
+    /// <summary>Maps an asset to where it moved.</summary>
+    /// <param name="asset">The asset.</param>
+    /// <returns>Its new identity, or <see langword="null"/> when the asset did not move.</returns>
+    public AssetPath? MapAsset(AssetPath asset)
     {
-        ArgumentNullException.ThrowIfNull(reference);
-        return this.MapReference(reference.ToString()) is { } mapped ? new Uri(mapped) : null;
+        ArgumentNullException.ThrowIfNull(asset);
+        return this.MapReference(asset.ToUriString()) is { } mapped && AssetPath.TryParseUri(mapped, out var moved) ? moved : null;
     }
 }

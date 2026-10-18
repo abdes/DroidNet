@@ -79,7 +79,7 @@ public sealed partial class ContentPipelineService
 
         var retained = products.Values.Where(product => product.Outputs.All(output => inventories.TryGetValue(output.RootMount, out var inventory)
             && output.Asset.DescriptorRelativePath is { } path && inventory.Files.ContainsKey(path)));
-        return new(previous.ProjectId, [.. roots.Values.OrderBy(static root => root.Mount, StringComparer.Ordinal)], [.. retained.OrderBy(static product => product.SourceUri.AbsoluteUri, StringComparer.Ordinal)]);
+        return new(previous.ProjectId, [.. roots.Values.OrderBy(static root => root.Mount, StringComparer.Ordinal)], [.. retained.OrderBy(static product => product.SourceUri)]);
     }
 
     private static void EnsureUnrelatedOutputsUnchanged(
@@ -120,7 +120,7 @@ public sealed partial class ContentPipelineService
     }
 
     private static CookProvenance.Product CreateProduct(
-        IGrouping<Uri, ContentCookedAsset> source,
+        IGrouping<AssetPath, ContentCookedAsset> source,
         string fingerprint,
         CookProvenance.Root root,
         ContentCookResult result,
@@ -128,10 +128,10 @@ public sealed partial class ContentPipelineService
         CookInputSnapshot snapshot,
         ImmutableArray<CookSnapshotInput> expectedInputs,
         Dictionary<string, CookSnapshotInput> expectedFiles,
-        Dictionary<Uri, ContentCookInput> sourceInputs)
+        Dictionary<AssetPath, ContentCookInput> sourceInputs)
     {
         var dependencies = graph.Dependencies.TryGetValue(source.Key, out var discovered) ? discovered
-            : ProceduralGeometryDescriptorService.IsGeneratedBasicShape(source.Key) ? [AssetUris.BuildGeneratedUri("Materials/Default")] : ImmutableArray<Uri>.Empty;
+            : ProceduralGeometryDescriptorService.IsGeneratedBasicShape(source.Key) ? [ProceduralGeometryDescriptorService.DefaultMaterial] : ImmutableArray<AssetPath>.Empty;
         return new(source.Key, fingerprint, dependencies, [.. source.Select(asset => new CookProvenance.Output(asset, root.Mount))])
         {
             SourceInput = sourceInputs.GetValueOrDefault(source.Key),
@@ -150,14 +150,14 @@ public sealed partial class ContentPipelineService
             Diagnostics =
             [
                 .. result.Diagnostics.Where(diagnostic => diagnostic.Severity == Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Warning
-                    && (diagnostic.AffectedVirtualPath is null || string.Equals(diagnostic.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(source.Key), StringComparison.Ordinal)
+                    && (diagnostic.AffectedVirtualPath is null || string.Equals(diagnostic.AffectedVirtualPath, source.Key.VirtualPath, StringComparison.Ordinal)
                         || source.Any(asset => string.Equals(asset.VirtualPath, diagnostic.AffectedVirtualPath, StringComparison.Ordinal)))),
             ],
         };
     }
 
-    private static bool IsGeneratedSource(Uri uri)
-        => uri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase);
+    private static bool IsGeneratedSource(AssetPath uri)
+        => uri.IsGenerated;
 
     private async Task<IReadOnlyList<ContentCookInput>> PrepareMissingBuiltinsAsync(
         ContentCookOperation operation,
@@ -194,12 +194,12 @@ public sealed partial class ContentPipelineService
         {
             Snapshot = snapshot,
             Artifacts = artifacts,
-            PreparationRoot = Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N"), "builtins"),
+            PreparationRoot = Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N"), "builtins"),
         };
         var generated = await new ProceduralGeometryDescriptorService(catalog).EnsureDescriptorsAsync(scope, [.. missing], cancellationToken).ConfigureAwait(false);
         return missing.Any(uri => !generated.Any(input => input.AssetUri == uri))
             ? throw new InvalidDataException("A required generated asset is absent from the native catalog.")
-            : [.. retained, .. generated.Select(input => input with { SourceRelativePath = Path.GetRelativePath(operation.Project.ProjectRoot, input.SourceAbsolutePath).Replace('\\', '/') })];
+            : [.. retained, .. generated.Select(input => input with { SourceRelativePath = Path.GetRelativePath(operation.Project.ProjectRoot.FullPath, input.SourceAbsolutePath.FullPath).Replace('\\', '/') })];
     }
 
     private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, CookPublicationReadLease baseline, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, Import.ImportedSourceIndex imports, CancellationToken cancellationToken)
@@ -209,7 +209,7 @@ public sealed partial class ContentPipelineService
         var inventories = await CookIncrementalPlanner.ReadInventoriesAsync(baseline, mounts, this.engineContentPipelineApi, cancellationToken, artifacts).ConfigureAwait(false);
         var repair = CookRootRepair.Create(baseline, previous, mounts, inventories, imports.IsRelocated);
         resolveScopes = this.ExpandRepairScopes(operation, resolveScopes, repair, imports, targetKind);
-        var knownOutputs = imports.KnownOutputs.Concat(baseline.ProjectOutputPaths.Select(ToAssetUri)).Distinct().ToArray();
+        var knownOutputs = imports.KnownOutputs.Concat(baseline.ProjectOutputPaths.Select(AssetPath.Parse)).Distinct().ToArray();
         var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, cancellationToken, uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency), knownOutputs).ConfigureAwait(false);
         try
         {
@@ -320,7 +320,7 @@ public sealed partial class ContentPipelineService
 
         var generated = await this.PrepareMissingBuiltinsAsync(operation, snapshot, graph, plan, dirtyInputs, artifacts, targetKind, cancellationToken).ConfigureAwait(false);
         dirtyInputs.AddRange(generated);
-        var admittedGenerated = graph.GeneratedInputs.Select(static input => input.LogicalPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var admittedGenerated = graph.GeneratedInputs.Select(static input => FileSystemPath.From(input.LogicalPath)).ToHashSet();
         graph = graph with
         {
             GeneratedInputs = [.. graph.GeneratedInputs, .. await CookInputSnapshotCapture.CaptureGeneratedAsync(

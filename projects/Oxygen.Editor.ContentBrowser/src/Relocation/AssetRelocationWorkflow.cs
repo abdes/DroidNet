@@ -93,13 +93,13 @@ public sealed partial class AssetRelocationWorkflow(
         => this.ReplayAsync(undo: false);
 
     /// <inheritdoc/>
-    public async Task<AssetRelocationOutcome> CopyAsync(IReadOnlyList<string> sources, string targetFolder, string title)
+    public async Task<AssetRelocationOutcome> CopyAsync(IReadOnlyList<AssetPath> sources, AssetPath targetFolder, string title)
     {
         try
         {
             var copies = await relocation.CopyAsync(sources, targetFolder, CancellationToken.None).ConfigureAwait(true);
             var message = copies.Count == 1
-                ? $"Created {RelocationPaths.GetName(copies[0])}."
+                ? $"Created {copies[0].Name}."
                 : string.Create(CultureInfo.CurrentCulture, $"Created {copies.Count} copies in {targetFolder}.");
             return this.Publish(new(Succeeded: true, title, message));
         }
@@ -110,7 +110,7 @@ public sealed partial class AssetRelocationWorkflow(
     }
 
     /// <inheritdoc/>
-    public async Task<AssetRelocationOutcome?> PasteAsync(IReadOnlyList<string> sources, bool move, string targetFolder)
+    public async Task<AssetRelocationOutcome?> PasteAsync(IReadOnlyList<AssetPath> sources, bool move, AssetPath targetFolder)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(targetFolder);
@@ -119,13 +119,13 @@ public sealed partial class AssetRelocationWorkflow(
             return await this.CopyAsync(sources, targetFolder, "Paste").ConfigureAwait(true);
         }
 
-        var moves = sources.Where(path => !string.Equals(RelocationPaths.GetParent(path), targetFolder, StringComparison.Ordinal))
-            .Select(path => new AssetRelocationMove(path, RelocationPaths.Combine(targetFolder, RelocationPaths.GetName(path)))).ToArray();
+        var moves = sources.Where(path => path.Parent != targetFolder)
+            .Select(path => new AssetRelocationMove(path, targetFolder.Combine(path.Name))).ToArray();
         return moves.Length == 0 ? null : await this.RelocateAsync(new AssetRelocationRequest { Moves = moves }, "Move").ConfigureAwait(true);
     }
 
     /// <inheritdoc/>
-    public async Task<AssetRelocationOutcome?> DeleteAsync(IReadOnlyList<string> sources)
+    public async Task<AssetRelocationOutcome?> DeleteAsync(IReadOnlyList<AssetPath> sources)
     {
         ArgumentNullException.ThrowIfNull(sources);
         const string title = "Delete";
@@ -183,7 +183,7 @@ public sealed partial class AssetRelocationWorkflow(
     public void Dispose() => this.historyObserver.Dispose();
 
     /// <inheritdoc/>
-    public Task<IReadOnlyList<string>> FindReferrersAsync(string virtualPath, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<AssetPath>> FindReferrersAsync(AssetPath virtualPath, CancellationToken cancellationToken)
         => relocation.FindReferrersAsync(virtualPath, cancellationToken);
 
     /// <inheritdoc/>
@@ -223,7 +223,7 @@ public sealed partial class AssetRelocationWorkflow(
     {
         var moved = plan.Request.Moves.Count + plan.Request.GroupMoves.Count;
         var subject = plan.Request.Moves.Count == 1 && plan.Request.GroupMoves.Count == 0
-            ? $"'{RelocationPaths.GetName(plan.Request.Moves[0].SourcePath)}' is now '{RelocationPaths.GetName(plan.Request.Moves[0].TargetPath)}'"
+            ? $"'{plan.Request.Moves[0].Source.Name}' is now '{plan.Request.Moves[0].Target.Name}'"
             : string.Create(CultureInfo.CurrentCulture, $"Moved {moved} {(moved == 1 ? "item" : "items")}");
         var groups = plan.GroupFolders.Count == 0 ? string.Empty
             : string.Create(CultureInfo.CurrentCulture, $" The model's output group moved in {plan.GroupFolders.Count} type folders.");
@@ -232,10 +232,10 @@ public sealed partial class AssetRelocationWorkflow(
             : string.Create(CultureInfo.CurrentCulture, $"{subject}; updated {plan.Referrers.Count} {(plan.Referrers.Count == 1 ? "file that uses it" : "files that use it")}.")) + groups;
     }
 
-    private static string Describe(IReadOnlyList<string> sources)
-        => sources.Count == 1 ? $"'{RelocationPaths.GetName(sources[0])}'" : string.Create(CultureInfo.CurrentCulture, $"{sources.Count} items");
+    private static string Describe(IReadOnlyList<AssetPath> sources)
+        => sources.Count == 1 ? $"'{sources[0].Name}'" : string.Create(CultureInfo.CurrentCulture, $"{sources.Count} items");
 
-    private static void AppendList(StringBuilder text, IReadOnlyList<string> items)
+    private static void AppendList(StringBuilder text, IReadOnlyList<AssetPath> items)
     {
         foreach (var item in items.Take(ListedItems))
         {

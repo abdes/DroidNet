@@ -5,6 +5,8 @@
 using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -14,7 +16,7 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// </summary>
 internal sealed class AuthoredReferenceIndex
 {
-    private AuthoredReferenceIndex(IReadOnlyList<string> mounts, IReadOnlyList<Descriptor> descriptors, IReadOnlyList<ImportSource> imports, IReadOnlyList<string> unreadable)
+    private AuthoredReferenceIndex(IReadOnlyList<string> mounts, IReadOnlyList<Descriptor> descriptors, IReadOnlyList<ImportSource> imports, IReadOnlyList<FileSystemPath> unreadable)
     {
         this.Mounts = mounts;
         this.Descriptors = descriptors;
@@ -32,7 +34,7 @@ internal sealed class AuthoredReferenceIndex
     public IReadOnlyList<ImportSource> Imports { get; }
 
     /// <summary>Gets the descriptors and sidecars that could not be read or parsed; their references are unknown.</summary>
-    public IReadOnlyList<string> Unreadable { get; }
+    public IReadOnlyList<FileSystemPath> Unreadable { get; }
 
     /// <summary>Reads every authored descriptor and model import sidecar in the project's writable mounts.</summary>
     /// <param name="project">The project.</param>
@@ -45,12 +47,13 @@ internal sealed class AuthoredReferenceIndex
         var names = mounts.Select(static mount => mount.Name).ToArray();
         var descriptors = new List<Descriptor>();
         var imports = new List<ImportSource>();
-        var unreadable = new List<string>();
-        foreach (var path in mounts.SelectMany(mount => EnumerateFiles(Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath)))))
+        var unreadable = new List<FileSystemPath>();
+        var root = project.ProjectRoot;
+        foreach (var path in mounts.SelectMany(mount => EnumerateFiles(root.Combine(mount.RelativePath))))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var isDescriptor = AuthoredReferenceFormat.IsDescriptor(path);
-            if (!isDescriptor && !AuthoredReferenceFormat.IsImportSettings(path))
+            var isDescriptor = AuthoredReferenceFormat.IsDescriptor(path.FullPath);
+            if ((!isDescriptor && !AuthoredReferenceFormat.IsImportSettings(path.FullPath)) || RelocationPaths.ToVirtual(project, path) is not { } virtualPath)
             {
                 continue;
             }
@@ -58,7 +61,7 @@ internal sealed class AuthoredReferenceIndex
             byte[] content;
             try
             {
-                content = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+                content = await File.ReadAllBytesAsync(path.FullPath, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
@@ -66,20 +69,19 @@ internal sealed class AuthoredReferenceIndex
                 continue;
             }
 
-            var virtualPath = RelocationPaths.ToVirtual(project, path)!;
             try
             {
                 if (isDescriptor)
                 {
-                    descriptors.Add(new(path, virtualPath, RelocationPaths.ToIdentity(virtualPath), AuthoredReferenceFormat.ReadReferences(content, names)));
+                    descriptors.Add(new(path, virtualPath, AssetFileTypes.ToIdentity(virtualPath), AuthoredReferenceFormat.ReadReferences(content, names)));
                 }
                 else
                 {
                     var settings = NativeSceneImportSettings.Parse(content);
-                    var primary = path[..^NativeSceneImportSettings.SidecarSuffix.Length];
-                    if (string.Equals(settings.ResolveFile(project.ProjectRoot, settings.PrimaryRelativePath), primary, StringComparison.OrdinalIgnoreCase))
+                    var primary = FileSystemPath.From(path.FullPath[..^NativeSceneImportSettings.SidecarSuffix.Length]);
+                    if (FileSystemPath.From(settings.ResolveFile(project.ProjectRoot.FullPath, settings.PrimaryRelativePath)) == primary)
                     {
-                        imports.Add(new(path, primary, virtualPath[..^NativeSceneImportSettings.SidecarSuffix.Length], settings));
+                        imports.Add(new(path, primary, virtualPath.WithName(primary.Name), settings));
                     }
                 }
             }
@@ -94,49 +96,49 @@ internal sealed class AuthoredReferenceIndex
     }
 
     /// <summary>Finds the descriptors that reference an asset, or any asset inside a folder.</summary>
-    /// <param name="virtualPath">The asset's virtual path, its identity, or a folder.</param>
+    /// <param name="path">The asset's virtual path, its identity, or a folder.</param>
     /// <returns>The referring descriptors' virtual paths, excluding the asset itself.</returns>
-    public IReadOnlyList<string> FindReferrers(string virtualPath)
+    public IReadOnlyList<AssetPath> FindReferrers(AssetPath path)
     {
-        ArgumentNullException.ThrowIfNull(virtualPath);
-        var identity = RelocationPaths.ToIdentity(virtualPath.TrimEnd('/'));
-        return this.Descriptors
-            .Where(descriptor => !RelocationPaths.IsSameOrInside(descriptor.Identity, identity)
-                && descriptor.References.Any(reference => RelocationPaths.IsSameOrInside(reference, identity)))
+        ArgumentNullException.ThrowIfNull(path);
+        var identity = AssetFileTypes.ToIdentity(path);
+        return [.. this.Descriptors
+            .Where(descriptor => !descriptor.Identity.IsSameOrInside(identity)
+                && descriptor.References.Any(reference => reference.IsSameOrInside(identity)))
             .Select(static descriptor => descriptor.VirtualPath)
-            .Order(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+            .Order()];
     }
 
-    private static IEnumerable<string> EnumerateFiles(string root)
+    private static IEnumerable<FileSystemPath> EnumerateFiles(FileSystemPath root)
     {
-        if (!Directory.Exists(root))
+        if (!Directory.Exists(root.FullPath))
         {
             return [];
         }
 
         var options = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = true };
-        return Directory.EnumerateFiles(root, "*", options)
-            .Where(path => !Path.GetRelativePath(root, path).Split(Path.DirectorySeparatorChar).Any(static segment => segment.StartsWith('.')));
+        return Directory.EnumerateFiles(root.FullPath, "*", options)
+            .Select(FileSystemPath.From)
+            .Where(path => !path.GetPathBelow(root).Split('/').Any(static segment => segment.StartsWith('.')));
     }
 
     /// <summary>An authored descriptor and the identities it references.</summary>
-    /// <param name="Path">The absolute file.</param>
+    /// <param name="Location">The file on disk.</param>
     /// <param name="VirtualPath">Its virtual path.</param>
     /// <param name="Identity">Its asset identity.</param>
     /// <param name="References">The identities it references.</param>
-    internal sealed record Descriptor(string Path, string VirtualPath, string Identity, IReadOnlyList<string> References);
+    internal sealed record Descriptor(FileSystemPath Location, AssetPath VirtualPath, AssetPath Identity, IReadOnlyList<AssetPath> References);
 
     /// <summary>A retained model import.</summary>
     /// <param name="SidecarPath">The <c>.import.json</c> file.</param>
     /// <param name="PrimaryPath">The model's primary source file.</param>
     /// <param name="PrimaryVirtualPath">The primary source's virtual path.</param>
     /// <param name="Settings">The saved import settings.</param>
-    internal sealed record ImportSource(string SidecarPath, string PrimaryPath, string PrimaryVirtualPath, NativeSceneImportSettings Settings)
+    internal sealed record ImportSource(FileSystemPath SidecarPath, FileSystemPath PrimaryPath, AssetPath PrimaryVirtualPath, NativeSceneImportSettings Settings)
     {
         /// <summary>Gets the output group's identity folder under one type folder.</summary>
         /// <param name="typeFolder">One of <see cref="RelocationPaths.ImportTypeFolders"/>.</param>
         /// <returns>The folder, such as <c>/Content/Geometry/Robot</c>.</returns>
-        public string GetGroupFolder(string typeFolder) => "/" + this.Settings.MountPoint + "/" + typeFolder + "/" + this.Settings.OutputDirectory;
+        public AssetPath GetGroupFolder(string typeFolder) => AssetPath.Create(this.Settings.MountPoint, typeFolder + "/" + this.Settings.OutputDirectory);
     }
 }

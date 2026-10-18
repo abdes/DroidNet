@@ -10,6 +10,7 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.Materials.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Materials.Documents;
@@ -332,7 +333,7 @@ public sealed partial class MaterialEdits(
         // Warn only for textures the step brings back; one the material already shows as missing was reported before.
         var shown = ContentOf(document).Material.Source.TextureReferences.Values.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var deleted = resolved.TextureReferences.Values
-            .Where(path => !shown.Contains(path) && redirects.WasDeleted(new Uri(Oxygen.Managed.Core.AssetUris.Scheme + "://" + path)))
+            .Where(path => !shown.Contains(path) && AssetPath.TryParse(path, out var texture) && redirects.WasDeleted(texture))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (deleted.Length != 0)
         {
@@ -358,11 +359,11 @@ public sealed partial class MaterialEdits(
         }
 
         var operationId = Guid.NewGuid();
-        var virtualPath = Uri.UnescapeDataString(document.File.AssetUri.AbsolutePath);
+        var virtualPath = document.File.Asset.VirtualPath;
         var scope = new AffectedScope
         {
-            AssetId = document.File.AssetUri.ToString(),
-            AssetSourcePath = document.File.Path,
+            AssetId = document.File.Asset.ToUriString(),
+            AssetSourcePath = document.File.Path.FullPath,
             AssetVirtualPath = virtualPath,
         };
         operationResults.Publish(new OperationResult
@@ -384,7 +385,7 @@ public sealed partial class MaterialEdits(
                     Severity = severity,
                     Code = code,
                     Message = message,
-                    AffectedPath = document.File.Path,
+                    AffectedPath = document.File.Path.FullPath,
                     AffectedVirtualPath = virtualPath,
                     AffectedEntity = scope,
                 },

@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Managed.Assets;
 
 /// <summary>
@@ -15,7 +17,7 @@ namespace Oxygen.Managed.Assets;
 public static class AssetFileTypes
 {
     /// <summary>The suffix an authored descriptor adds to the cooked descriptor it cooks into.</summary>
-    public const string DescriptorSuffix = ".json";
+    public const string DescriptorSuffix = AssetPath.AuthoringSuffix;
 
     /// <summary>The cooked material extension.</summary>
     public const string Material = ".omat";
@@ -162,6 +164,55 @@ public static class AssetFileTypes
     /// <returns>The path without its type suffix, or the path itself when its type is unknown.</returns>
     public static string RemoveSuffix(string path)
         => Find(path) is { } type ? path[..^type.Suffix.Length] : path;
+
+    /// <summary>
+    /// Gets the identity of the asset a source file stands for: the cooked descriptor it is or cooks into
+    /// (<c>Red.omat.json</c> and <c>Red.omat</c> are <c>Red.omat</c>, <c>Orbit.lua</c> is <c>Orbit.oscript</c>), and
+    /// otherwise the file without its authoring suffix (<c>Player.input.json</c> is the container
+    /// <c>Player.input</c>). Import settings stand for no asset and keep their path.
+    /// </summary>
+    /// <param name="source">The source file's path.</param>
+    /// <returns>The identity.</returns>
+    public static AssetPath ToIdentity(AssetPath source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return Find(source.Name) switch
+        {
+            { Category: AssetFileCategory.ImportSettings } => source,
+            { CookedExtension: { } extension } type => source.WithName(source.Name[..^type.Suffix.Length] + extension),
+            _ => source.WithoutAuthoringSuffix(),
+        };
+    }
+
+    /// <summary>
+    /// Gets the files that can be the source of an asset, most specific first: the authored descriptor or scripts that
+    /// cook into it (<c>Red.omat.json</c> for <c>Red.omat</c>; <c>Orbit.lua</c> and <c>Orbit.luau</c> for
+    /// <c>Orbit.oscript</c>), the file with the authoring suffix (<c>Player.input.json</c> for the container
+    /// <c>Player.input</c>), and the file itself (<c>Ship.glb</c>).
+    /// </summary>
+    /// <param name="identity">The asset's identity.</param>
+    /// <returns>The candidate source paths; <see cref="ToIdentity"/> maps each back to <paramref name="identity"/>.</returns>
+    public static IReadOnlyList<AssetPath> SourcesOf(AssetPath identity)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        if (identity.IsMount)
+        {
+            return [identity];
+        }
+
+        var sources = new List<AssetPath>();
+        if (Find(identity.Name) is { Category: AssetFileCategory.Cooked, CookedExtension: { } extension })
+        {
+            var stem = identity.Name[..^extension.Length];
+            sources.AddRange(Types.Where(type => type.Category is AssetFileCategory.Descriptor or AssetFileCategory.Script
+                    && string.Equals(type.CookedExtension, extension, StringComparison.Ordinal))
+                .Select(type => identity.WithName(stem + type.Suffix)));
+        }
+
+        sources.Add(identity.WithAuthoringSuffix());
+        sources.Add(identity);
+        return [.. sources.Distinct().Where(source => ToIdentity(source) == identity)];
+    }
 
     /// <summary>Gives the path of the cooked descriptor a file is or cooks into.</summary>
     /// <param name="path">A file name, path or virtual path.</param>

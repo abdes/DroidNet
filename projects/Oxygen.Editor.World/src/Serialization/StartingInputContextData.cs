@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
@@ -9,4 +11,4 @@ namespace Oxygen.Editor.World.Serialization;
 /// </summary>
 /// <param name="Context">The mapping context asset.</param>
 /// <param name="Priority">The priority it is added with, or <see langword="null"/> for the context's own.</param>
-public sealed record StartingInputContextData(Uri Context, int? Priority = null);
+public sealed record StartingInputContextData(AssetPath Context, int? Priority = null);

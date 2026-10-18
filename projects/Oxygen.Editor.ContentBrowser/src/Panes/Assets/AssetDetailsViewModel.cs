@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Assets;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
 
@@ -119,7 +120,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
         var facts = new List<AssetInformationFact>
         {
             new("Type", asset.TypeDisplayName),
-            new("Logical path", WithPathBreaks(AssetUriHelper.GetVirtualPath(asset.IdentityUri))),
+            new("Logical path", WithPathBreaks(asset.Identity.VirtualPath)),
         };
         if (file.Path is { } path)
         {
@@ -218,7 +219,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
                 string.Join(" · ", new[] { asset.TypeDisplayName, AssetFileFacts.Read(asset).SizeText }.Where(static part => part.Length > 0))))];
         }
 
-        _ = this.RefreshReferrersAsync(assets is [var single] ? AssetUriHelper.GetVirtualPath(single.IdentityUri) : null);
+        _ = this.RefreshReferrersAsync(assets is [var single] ? single.Identity : null);
         this.OnPropertyChanged(nameof(this.IsEmpty));
         this.OnPropertyChanged(nameof(this.HasSelection));
         this.OnPropertyChanged(nameof(this.IsSingle));
@@ -228,21 +229,21 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Referrers are informational; a failed scan only hides them.")]
-    private async Task RefreshReferrersAsync(string? virtualPath)
+    private async Task RefreshReferrersAsync(AssetPath? asset)
     {
         var request = ++this.referrersRequest;
         this.Referrers = [];
         this.ReferrersSummary = string.Empty;
         this.HasReferrerInfo = false;
-        if (this.relocation is null || virtualPath is null)
+        if (this.relocation is null || asset is null)
         {
             return;
         }
 
-        IReadOnlyList<string> referrers;
+        IReadOnlyList<AssetPath> referrers;
         try
         {
-            referrers = await this.relocation.FindReferrersAsync(virtualPath, CancellationToken.None).ConfigureAwait(true);
+            referrers = await this.relocation.FindReferrersAsync(asset, CancellationToken.None).ConfigureAwait(true);
         }
         catch (Exception)
         {
@@ -254,7 +255,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
             return;
         }
 
-        this.Referrers = [.. referrers.Select(WithPathBreaks)];
+        this.Referrers = [.. referrers.Select(static referrer => WithPathBreaks(referrer.VirtualPath))];
         this.ReferrersSummary = referrers.Count == 0
             ? "No other content uses it."
             : string.Create(CultureInfo.CurrentCulture, $"Used by {referrers.Count} {(referrers.Count == 1 ? "file" : "files")}:");

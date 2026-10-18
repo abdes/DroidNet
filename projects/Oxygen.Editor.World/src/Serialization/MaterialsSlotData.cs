@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
@@ -10,7 +12,7 @@ namespace Oxygen.Editor.World.Serialization;
 public record MaterialsSlotData : OverrideSlotData
 {
     /// <summary>Gets the geometry identity retained with this assignment.</summary>
-    public required Uri GeometryUri { get; init; }
+    public required AssetPath GeometryUri { get; init; }
 
     /// <summary>Gets the native slot identity, independent of display order.</summary>
     public required Guid SlotId { get; init; }
@@ -21,5 +23,5 @@ public record MaterialsSlotData : OverrideSlotData
     /// <summary>
     /// Gets or initializes the material URI.
     /// </summary>
-    public required Uri MaterialUri { get; init; }
+    public required AssetPath MaterialUri { get; init; }
 }

@@ -185,7 +185,7 @@
                                                     HorizontalAlignment="Left"
                                                     Click="OnShowAsset"
                                                     Content="{x:Bind Name}"
-                                                    Tag="{x:Bind Uri}"
+                                                    Tag="{x:Bind Asset}"
                                                     ToolTipService.ToolTip="{x:Bind Path}" />
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -213,7 +213,7 @@
                         HorizontalAlignment="Left"
                         Click="OnShowAsset"
                         Content="Show in Content Browser"
-                        Tag="{x:Bind ViewModel.ScopedAsset.IdentityUri, Mode=OneWay}" />
+                        Tag="{x:Bind ViewModel.ScopedAsset.Identity, Mode=OneWay}" />
                 </StackPanel>
             </ScrollViewer>
         </Grid>

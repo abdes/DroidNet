@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
 
@@ -25,7 +26,7 @@ public sealed record ScriptSlotData
     public Guid Id { get; init; }
 
     /// <summary>Gets the script asset identity, if one is picked.</summary>
-    public Uri? Script { get; init; }
+    public AssetPath? Script { get; init; }
 
     /// <summary>Gets the execution order.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]

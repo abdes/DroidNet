@@ -2,9 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
 /// <summary>Renames or moves the output group of a model import within its type folders.</summary>
-/// <param name="SourcePath">The virtual path of the model's primary source file.</param>
+/// <param name="Source">The virtual path of the model's primary source file.</param>
 /// <param name="Group">The new group, relative to each type folder; it may be nested, such as <c>Vehicles/Car</c>.</param>
-public sealed record ImportGroupMove(string SourcePath, string Group);
+public sealed record ImportGroupMove(AssetPath Source, string Group);

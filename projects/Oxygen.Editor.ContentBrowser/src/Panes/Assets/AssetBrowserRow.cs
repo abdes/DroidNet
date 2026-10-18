@@ -96,7 +96,7 @@ public sealed partial class AssetBrowserRow(AssetEntry item) : ObservableObject
     /// <param name="replacement">The latest snapshot of this asset.</param>
     internal void Update(AssetEntry replacement)
     {
-        if (!string.Equals(this.item.IdentityUri.AbsoluteUri, replacement.IdentityUri.AbsoluteUri, StringComparison.OrdinalIgnoreCase))
+        if (this.item.Identity != replacement.Identity)
         {
             throw new ArgumentException("A row can only update its own asset identity.", nameof(replacement));
         }

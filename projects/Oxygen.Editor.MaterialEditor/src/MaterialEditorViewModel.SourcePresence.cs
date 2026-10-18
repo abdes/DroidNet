@@ -5,6 +5,7 @@
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Materials.Documents;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.MaterialEditor;
@@ -33,8 +34,10 @@ public sealed partial class MaterialEditorViewModel
 
     private void OnSourceChanged(AssetChange change)
     {
-        var uri = this.document.File.AssetUri;
-        if (!this.isDisposed && (change.Uri == uri || change.PreviousUri == uri))
+        // Catalog changes name the source file; the document is the asset that file stands for.
+        var asset = this.document.File.Asset;
+        if (!this.isDisposed && (AssetFileTypes.ToIdentity(change.Identity) == asset
+            || (change.PreviousIdentity is { } previous && AssetFileTypes.ToIdentity(previous) == asset)))
         {
             _ = this.CheckSourceAsync();
         }
@@ -62,7 +65,7 @@ public sealed partial class MaterialEditorViewModel
 
         this.IsDirty = this.document.IsDirty;
         this.DisplayName = this.document.Title;
-        this.MaterialUriText = this.document.File.AssetUri.ToString();
+        this.MaterialUriText = this.document.File.Asset.ToUriString();
         this.RefreshHistoryCommands();
     }
 

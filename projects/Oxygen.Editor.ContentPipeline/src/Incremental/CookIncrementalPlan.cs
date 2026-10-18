@@ -14,8 +14,8 @@ namespace Oxygen.Editor.ContentPipeline.Incremental;
 /// <param name="Reusable">Verified products keyed by source identity.</param>
 /// <param name="ValidSharedRoots">Roots whose index and shared resources still match.</param>
 internal sealed record CookIncrementalPlan(
-    ImmutableDictionary<Uri, string> Fingerprints,
-    ImmutableDictionary<Uri, CookProvenance.Product> Reusable,
+    ImmutableDictionary<AssetPath, string> Fingerprints,
+    ImmutableDictionary<AssetPath, CookProvenance.Product> Reusable,
     ImmutableHashSet<string> ValidSharedRoots)
 {
     /// <summary>Gets committed inventory metadata for comparison with candidate outputs; this is not a live read lease.</summary>
@@ -28,7 +28,7 @@ internal sealed record CookIncrementalPlan(
     public ImmutableHashSet<string> DroppedRoots { get; init; } = ImmutableHashSet<string>.Empty.WithComparer(StringComparer.Ordinal);
 
     /// <summary>Gets the sources whose prior products leave the cooked content, so they are never reused.</summary>
-    public ImmutableHashSet<Uri> RemovedSources { get; init; } = [];
+    public ImmutableHashSet<AssetPath> RemovedSources { get; init; } = [];
 
     /// <summary>Gets the outputs removed from each inherited root that stays in the publication, by mount.</summary>
     public ImmutableDictionary<string, CookedOutputRemoval> Removals { get; init; } = ImmutableDictionary<string, CookedOutputRemoval>.Empty.WithComparers(StringComparer.Ordinal);
@@ -51,8 +51,8 @@ internal sealed record CookIncrementalPlan(
     /// <summary>Gets the required generated identities, including the native default material.</summary>
     /// <param name="graph">The captured dependency graph.</param>
     /// <returns>The engine recipe closure.</returns>
-    public static ImmutableArray<Uri> Builtins(CookDependencyGraph graph)
+    public static ImmutableArray<AssetPath> Builtins(CookDependencyGraph graph)
         => graph.Builtins.Any(ProceduralGeometryDescriptorService.IsGeneratedBasicShape)
-            ? [.. graph.Builtins.Append(AssetUris.BuildGeneratedUri("Materials/Default")).Distinct()]
+            ? [.. graph.Builtins.Append(ProceduralGeometryDescriptorService.DefaultMaterial).Distinct()]
             : graph.Builtins;
 }

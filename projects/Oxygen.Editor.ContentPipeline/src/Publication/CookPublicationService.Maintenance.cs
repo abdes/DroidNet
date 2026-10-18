@@ -29,7 +29,7 @@ public sealed partial class CookPublicationService
         using var batch = new MaintenanceBatch();
         using (var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(false))
         {
-            var path = Path.Combine(project.ProjectRoot, ".build", "cook", "maintenance.lock");
+            var path = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", "maintenance.lock");
             CookOutputLease.RejectReparsePoint(path);
             batch.Maintenance = WindowsCookFile.TryOpenExclusive(path, FileMode.OpenOrCreate, out _);
             if (batch.Maintenance is null)
@@ -61,7 +61,7 @@ public sealed partial class CookPublicationService
 
     private async Task ClaimOperationsAsync(ProjectContext project, CookOutputWriteLease gate, Guid? completedOperation, MaintenanceBatch batch, CancellationToken token)
     {
-        foreach (var (id, directory) in OwnedDirectories(Path.Combine(project.ProjectRoot, ".build", "cook")))
+        foreach (var (id, directory) in OwnedDirectories(Path.Combine(project.ProjectRoot.FullPath, ".build", "cook")))
         {
             token.ThrowIfCancellationRequested();
             var handle = CookOutputLease.TryAcquireOperation(project.ProjectRoot, id);
@@ -103,7 +103,7 @@ public sealed partial class CookPublicationService
 
     private static async Task ClaimDocumentsAsync(ProjectContext project, MaintenanceBatch batch, CancellationToken token)
     {
-        var parent = Path.Combine(project.ProjectRoot, ".cooked", "publications");
+        var parent = Path.Combine(project.ProjectRoot.FullPath, ".cooked", "publications");
         CookOutputLease.RejectReparsePoint(parent);
         if (!Directory.Exists(parent))
         {
@@ -140,7 +140,7 @@ public sealed partial class CookPublicationService
 
     private static void ClaimGenerations(ProjectContext project, MaintenanceBatch batch)
     {
-        foreach (var (id, path) in OwnedDirectories(Path.Combine(project.ProjectRoot, ".cooked", "generations")))
+        foreach (var (id, path) in OwnedDirectories(Path.Combine(project.ProjectRoot.FullPath, ".cooked", "generations")))
         {
             if (batch.RetainedGenerations.Contains(id))
             {
@@ -173,7 +173,7 @@ public sealed partial class CookPublicationService
         {
             token.ThrowIfCancellationRequested();
             var retainJournal = operation.Transaction is { HasPreparedHead: false } transaction
-                && transaction.CandidateGenerations.Select(id => CookPublicationPaths.Generation(project.ProjectRoot, id))
+                && transaction.CandidateGenerations.Select(id => CookPublicationPaths.Generation(project.ProjectRoot.FullPath, id))
                     .Any(path => Directory.Exists(path) && !File.Exists(Path.Combine(path, CookedGeneration.MarkerFileName)));
             batch.Attempt(() => DeleteOperationPayloads(operation.Directory, retainJournal));
         }

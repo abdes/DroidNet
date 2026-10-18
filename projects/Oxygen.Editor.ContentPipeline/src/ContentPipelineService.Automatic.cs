@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -10,11 +11,11 @@ namespace Oxygen.Editor.ContentPipeline;
 public sealed partial class ContentPipelineService
 {
     /// <inheritdoc />
-    public Task<ContentCookResult> CookSavedAssetAsync(Uri assetUri, ProjectContext expectedProject, CancellationToken cancellationToken)
+    public Task<ContentCookResult> CookSavedAssetAsync(AssetPath assetUri, ProjectContext expectedProject, CancellationToken cancellationToken)
         => this.CookAutomaticAssetAsync(assetUri, expectedProject, isDemand: false, cancellationToken);
 
     /// <inheritdoc />
-    public Task<ContentCookResult> CookPreviewAssetAsync(Uri assetUri, ProjectContext expectedProject, CancellationToken cancellationToken)
+    public Task<ContentCookResult> CookPreviewAssetAsync(AssetPath assetUri, ProjectContext expectedProject, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(assetUri);
         return GetAssetKind(assetUri) is ContentCookAssetKind.Geometry or ContentCookAssetKind.Material
@@ -22,7 +23,7 @@ public sealed partial class ContentPipelineService
             : throw new ArgumentException("Preview demand requires an authored geometry or material asset.", nameof(assetUri));
     }
 
-    private Task<ContentCookResult> CookAutomaticAssetAsync(Uri assetUri, ProjectContext expectedProject, bool isDemand, CancellationToken cancellationToken)
+    private Task<ContentCookResult> CookAutomaticAssetAsync(AssetPath assetUri, ProjectContext expectedProject, bool isDemand, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(assetUri);
         ArgumentNullException.ThrowIfNull(expectedProject);

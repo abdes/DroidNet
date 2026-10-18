@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TimeMachine;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Documents.Tests;
 
@@ -12,13 +13,13 @@ namespace Oxygen.Editor.Documents.Tests;
 /// <param name="text">The note's text.</param>
 /// <param name="references">The assets the note references.</param>
 [ExcludeFromCodeCoverage]
-internal sealed class NoteContent(Uri identity, string text, List<Uri> references) : IDocumentContent, IDisposable
+internal sealed class NoteContent(AssetPath identity, string text, List<AssetPath> references) : IDocumentContent, IDisposable
 {
-    public Uri Identity { get; private set; } = identity;
+    public AssetPath Identity { get; private set; } = identity;
 
     public string Text { get; private set; } = text;
 
-    public IReadOnlyList<Uri> References => references;
+    public IReadOnlyList<AssetPath> References => references;
 
     /// <summary>Gets or sets the history edits are recorded into, as an editor would get it from its document.</summary>
     public HistoryKeeper? History { get; set; }
@@ -57,14 +58,14 @@ internal sealed class NoteContent(Uri identity, string text, List<Uri> reference
 
     public DocumentCapture Capture() => this.CaptureAs(this.Identity);
 
-    public DocumentCapture CaptureCopy(DocumentFile copy) => this.CaptureAs(copy.AssetUri);
+    public DocumentCapture CaptureCopy(DocumentFile copy) => this.CaptureAs(copy.Asset);
 
     public void ApplyRelocation(DocumentRelocation relocation)
     {
-        this.Identity = relocation.File.AssetUri;
+        this.Identity = relocation.File.Asset;
         for (var index = 0; index < references.Count; index++)
         {
-            if (relocation.MapUri(references[index]) is { } moved)
+            if (relocation.MapAsset(references[index]) is { } moved)
             {
                 references[index] = moved;
             }
@@ -73,7 +74,7 @@ internal sealed class NoteContent(Uri identity, string text, List<Uri> reference
 
     public void Dispose() => this.IsDisposed = true;
 
-    private DocumentCapture CaptureAs(Uri identity)
+    private DocumentCapture CaptureAs(AssetPath identity)
     {
         if (this.Refusal is { } refusal)
         {

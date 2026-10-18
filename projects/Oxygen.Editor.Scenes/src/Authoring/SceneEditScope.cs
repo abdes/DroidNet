@@ -54,12 +54,12 @@ public sealed class SceneEditScope
     /// <param name="reference">The captured reference.</param>
     /// <returns>The current reference; the input when the asset did not move or nothing tracks moves.</returns>
     [return: System.Diagnostics.CodeAnalysis.NotNullIfNotNull(nameof(reference))]
-    public Uri? Resolve(Uri? reference) =>reference is null || this.Redirects is null ? reference : this.Redirects.Resolve(reference);
+    public AssetPath? Resolve(AssetPath? reference) => reference is null || this.Redirects is null ? reference : this.Redirects.Resolve(reference);
 
     /// <summary>Resolves a captured reference, in the form the retargeting helpers take.</summary>
     /// <param name="reference">The captured reference.</param>
     /// <returns>The current reference, or <see langword="null"/> when it did not move.</returns>
-    public Uri? Moved(Uri reference)
+    public AssetPath? Moved(AssetPath reference)
     {
         var resolved = this.Resolve(reference);
         return resolved is null || resolved == reference ? null : resolved;
@@ -82,18 +82,18 @@ public sealed class SceneEditScope
     /// <summary>Warns about references the edit restores to assets this session deleted; they show as missing.</summary>
     /// <param name="restored">The references the edit wrote.</param>
     /// <param name="node">The node that holds them, or <see langword="null"/> for the scene's own references.</param>
-    public void WarnIfDeleted(IEnumerable<Uri?> restored, NodeId? node = null)
+    public void WarnIfDeleted(IEnumerable<AssetPath?> restored, NodeId? node = null)
     {
         if (this.Redirects is not { } redirects)
         {
             return;
         }
 
-        foreach (var uri in restored.OfType<Uri>().Where(redirects.WasDeleted).Distinct())
+        foreach (var uri in restored.OfType<AssetPath>().Where(redirects.WasDeleted).Distinct())
         {
             this.warnings.Add(SceneDiagnostic.Warning(
                 SceneEditCodes.AssetReferenceDeleted,
-                $"{Path.GetFileName(Uri.UnescapeDataString(uri.AbsolutePath))} was deleted, so the restored reference shows as missing until you choose another asset.",
+                $"{Path.GetFileName(uri.VirtualPath)} was deleted, so the restored reference shows as missing until you choose another asset.",
                 node));
         }
     }

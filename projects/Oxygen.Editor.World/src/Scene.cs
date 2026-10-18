@@ -232,9 +232,9 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
 
         return new()
         {
-            Scripts = new List<Uri>(references.Scripts).AsReadOnly(),
-            InputActions = new List<Uri>(references.InputActions).AsReadOnly(),
-            PhysicsSidecars = new List<Uri>(references.PhysicsSidecars).AsReadOnly(),
+            Scripts = new List<AssetPath>(references.Scripts).AsReadOnly(),
+            InputActions = new List<AssetPath>(references.InputActions).AsReadOnly(),
+            PhysicsSidecars = new List<AssetPath>(references.PhysicsSidecars).AsReadOnly(),
             ExtraAssets = new List<string>(references.ExtraAssets).AsReadOnly(),
         };
     }

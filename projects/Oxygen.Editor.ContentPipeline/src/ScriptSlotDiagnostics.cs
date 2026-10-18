@@ -82,8 +82,8 @@ public static class ScriptSlotDiagnostics
             Code = code,
             Message = message,
             TechnicalMessage = technicalMessage,
-            AffectedPath = scene.SourceAbsolutePath,
-            AffectedVirtualPath = AssetUriHelper.GetVirtualPath(scene.AssetUri),
+            AffectedPath = scene.SourceAbsolutePath.FullPath,
+            AffectedVirtualPath = scene.AssetUri.VirtualPath,
             AffectedEntity = new AffectedScope
             {
                 SceneId = sceneId,
@@ -91,7 +91,7 @@ public static class ScriptSlotDiagnostics
                 NodeId = site.NodeId,
                 NodeName = site.NodeName,
                 ComponentName = "Scripting",
-                AssetVirtualPath = AssetUriHelper.GetVirtualPath(scene.AssetUri),
+                AssetVirtualPath = scene.AssetUri.VirtualPath,
             },
             SuggestedAction = new PrimaryAction
             {
@@ -100,7 +100,7 @@ public static class ScriptSlotDiagnostics
                 Kind = PrimaryActionKind.Custom,
                 Payload = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
-                    ["AssetUri"] = scene.AssetUri.AbsoluteUri,
+                    ["AssetUri"] = scene.AssetUri.ToUriString(),
                     ["NodeId"] = site.NodeId.ToString(),
                     ["PropertyPath"] = PropertyPath(site.SlotId, parameter),
                 },

@@ -26,8 +26,7 @@ public sealed partial class DocumentManager
         foreach (var document in this.documentArea.Documents)
         {
             var path = document.File.Path;
-            if (!change.DeletedFiles.Any(item => string.Equals(path, item, StringComparison.OrdinalIgnoreCase)
-                || path.StartsWith(item.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
+            if (!change.DeletedFiles.Any(path.IsSameOrInside))
             {
                 continue;
             }

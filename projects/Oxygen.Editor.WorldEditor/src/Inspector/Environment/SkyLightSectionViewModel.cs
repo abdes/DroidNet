@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -41,7 +42,7 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
     public partial int SourceIndex { get; set; }
 
     [ObservableProperty]
-    public partial Uri? Cubemap { get; set; }
+    public partial AssetPath? Cubemap { get; set; }
 
     /// <summary>Gets or sets the cubemap rotation, in degrees.</summary>
     [ObservableProperty]
@@ -141,7 +142,7 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
 
     /// <summary>Chooses a cubemap, or clears it.</summary>
     /// <param name="cubemap">The cube texture, or null for none.</param>
-    public void SetCubemap(Uri? cubemap) => this.Cubemap = cubemap;
+    public void SetCubemap(AssetPath? cubemap) => this.Cubemap = cubemap;
 
     /// <inheritdoc />
     public void Dispose()
@@ -194,7 +195,7 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
         }
     }
 
-    partial void OnCubemapChanged(Uri? value)
+    partial void OnCubemapChanged(AssetPath? value)
     {
         this.OnPropertyChanged(nameof(this.CubemapDisplayName));
         this.EditOwner.Apply(SceneSkyFields.SkyLightCubemap, value);

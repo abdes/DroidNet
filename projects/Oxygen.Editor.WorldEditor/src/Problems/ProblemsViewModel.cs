@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Scripting;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Problems;
 
@@ -31,7 +32,7 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     private readonly IScriptAnalysisService analysis;
     private readonly ICodeEditorService codeEditor;
     private readonly IProjectContextService projects;
-    private readonly Dictionary<string, ScriptAnalysisSnapshot> files = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<FileSystemPath, ScriptAnalysisSnapshot> files = [];
     private readonly IDisposable subscription;
     private readonly IRuntimeProblemSource? runtime;
 
@@ -215,8 +216,8 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
             .Select(file => new ProblemFileGroup(
                 file.Key,
                 file.Key.Length == 0 ? PlaySessionGroup
-                    : root is null || !Path.IsPathFullyQualified(file.Key) ? file.Key
-                    : Path.GetRelativePath(root, file.Key).Replace('\\', '/'),
+                    : root is not null && Path.IsPathFullyQualified(file.Key) && FileSystemPath.From(file.Key) is var path && path.IsSameOrInside(root) ? path.GetPathBelow(root)
+                    : file.Key,
                 [.. file.OrderBy(static problem => problem.Line ?? 0).ThenBy(static problem => problem.Column ?? 0).Select(static problem => new ProblemEntry(problem))]))
             .OrderBy(static group => group.DisplayPath, StringComparer.OrdinalIgnoreCase)
             .ToList();

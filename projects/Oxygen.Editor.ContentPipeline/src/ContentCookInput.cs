@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -18,11 +19,11 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="OutputVirtualPath">The expected native virtual output path, when known.</param>
 /// <param name="Role">The input role.</param>
 public sealed record ContentCookInput(
-    Uri AssetUri,
+    AssetPath AssetUri,
     ContentCookAssetKind Kind,
     string MountName,
     string SourceRelativePath,
-    string SourceAbsolutePath,
+    FileSystemPath SourceAbsolutePath,
     string? OutputVirtualPath,
     ContentCookInputRole Role)
 {

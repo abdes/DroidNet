@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspection;
 
@@ -11,12 +12,12 @@ namespace Oxygen.Editor.World.Inspection;
 ///     What the Cooked Inspector inspects: a project's cooked output, a folder of it, or one asset's.
 /// </summary>
 /// <param name="Project">The project whose cooked output is inspected.</param>
-/// <param name="ScopeUri">The folder or asset whose cooked output is inspected, or <see langword="null"/> for the whole project.</param>
+/// <param name="Scope">The folder or asset whose cooked output is inspected, or <see langword="null"/> for the whole project.</param>
 /// <param name="Validate">Whether the inspection also validates the cooked packages.</param>
-public sealed record CookedInspectionScope(ProjectContext Project, Uri? ScopeUri, bool Validate)
+public sealed record CookedInspectionScope(ProjectContext Project, AssetPath? Scope, bool Validate)
 {
     /// <summary>Gets the asset whose cooked output is inspected, when one asset is.</summary>
-    public Uri? AssetUri { get; init; }
+    public AssetPath? Asset { get; init; }
 
     /// <summary>Gets the cooked source of the asset, when one cooked copy of it is inspected.</summary>
     public CookedAssetMetadata? CookedSource { get; init; }
@@ -28,7 +29,7 @@ public sealed record CookedInspectionScope(ProjectContext Project, Uri? ScopeUri
     /// <returns>Whether both scopes name the same project, folder or asset, and cooked root.</returns>
     public bool IsSameOutput(CookedInspectionScope? other)
         => other is not null && other.Project.ProjectId == this.Project.ProjectId
-            && string.Equals(other.Project.ProjectRoot, this.Project.ProjectRoot, StringComparison.OrdinalIgnoreCase)
-            && other.ScopeUri == this.ScopeUri && other.AssetUri == this.AssetUri
-            && string.Equals(other.CookedSource?.RootFolderPath, this.CookedSource?.RootFolderPath, StringComparison.OrdinalIgnoreCase);
+            && other.Project.ProjectRoot == this.Project.ProjectRoot
+            && other.Scope == this.Scope && other.Asset == this.Asset
+            && other.CookedSource?.RootFolderPath == this.CookedSource?.RootFolderPath;
 }

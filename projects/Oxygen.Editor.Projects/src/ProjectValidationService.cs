@@ -178,7 +178,7 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (string.IsNullOrWhiteSpace(mount.Name) || string.IsNullOrWhiteSpace(mount.AbsolutePath))
+            if (string.IsNullOrWhiteSpace(mount.Name) || mount.Root is null)
             {
                 return ProjectValidationResult.Failure(
                     ProjectValidationState.InvalidContentRoots,
@@ -186,7 +186,7 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
                     "Project manifest declares an invalid local folder mount root.");
             }
 
-            var mountRoot = storage.Normalize(mount.AbsolutePath);
+            var mountRoot = mount.Root.FullPath;
             if (!await storage.FolderExistsAsync(mountRoot).ConfigureAwait(false))
             {
                 return ProjectValidationResult.Failure(

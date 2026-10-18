@@ -27,4 +27,7 @@ public sealed partial class FileSystemAssetCatalog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "A batch of {Count} file events under mount '{MountPoint}' failed; changes it carried may not have been reported.")]
     private partial void LogBatchFailed(Exception exception, int count, string mountPoint);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "'{RelativePath}' under mount '{MountPoint}' has a name the virtual path rules refuse; it is not listed.")]
+    private partial void LogNameRefused(string relativePath, string mountPoint);
 }

@@ -6,6 +6,7 @@ using System.Text.Json;
 using Json.Schema;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -82,7 +83,7 @@ public sealed partial class ImportToolContentPipelineApi
             if (!string.Equals(observed.Id, submitted.Id, StringComparison.Ordinal)
                 || !string.Equals(observed.JobType, submitted.Type, StringComparison.Ordinal)
                 || !Path.IsPathFullyQualified(observed.SourcePath)
-                || !string.Equals(Path.GetFullPath(observed.SourcePath), Path.GetFullPath(submitted.AttributedSource, execution.InputRoot), StringComparison.OrdinalIgnoreCase))
+                || FileSystemPath.From(observed.SourcePath) != FileSystemPath.From(Path.GetFullPath(submitted.AttributedSource, execution.InputRoot)))
             {
                 throw new InvalidDataException("The native source-analysis report does not match the submitted job identities.");
             }

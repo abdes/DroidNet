@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -55,7 +56,7 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
 
     /// <summary>Gets or sets the sky sphere cubemap.</summary>
     [ObservableProperty]
-    public partial Uri? Cubemap { get; set; }
+    public partial AssetPath? Cubemap { get; set; }
 
     /// <summary>Gets or sets the sky sphere rotation, in degrees.</summary>
     [ObservableProperty]
@@ -141,7 +142,7 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
 
     /// <summary>Chooses a cubemap, or clears it.</summary>
     /// <param name="cubemap">The cube texture, or null for none.</param>
-    public void SetCubemap(Uri? cubemap) => this.Cubemap = cubemap;
+    public void SetCubemap(AssetPath? cubemap) => this.Cubemap = cubemap;
 
     /// <inheritdoc />
     public void Dispose() => this.Cubemaps.Dispose();
@@ -198,7 +199,7 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
 
     partial void OnSolidColorBChanged(double value) => this.ApplySolidColor(InspectorValues.ToVector3(this.SolidColorR, this.SolidColorG, value));
 
-    partial void OnCubemapChanged(Uri? value)
+    partial void OnCubemapChanged(AssetPath? value)
     {
         this.OnPropertyChanged(nameof(this.CubemapDisplayName));
         this.EditOwner.Apply(SceneSkyFields.SkySphereCubemap, value);

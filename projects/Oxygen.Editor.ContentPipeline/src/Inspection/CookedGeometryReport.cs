@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using Json.Schema;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Inspection;
 
@@ -60,13 +61,13 @@ public sealed class CookedGeometryReport
     /// <param name="geometryUri">The authored identity.</param>
     /// <param name="nativeGeometryKey">The native key to resolve.</param>
     /// <returns>The matching inventory, or null.</returns>
-    public GeometryMaterialSlotMetadata? Find(Uri geometryUri, Guid nativeGeometryKey)
+    public GeometryMaterialSlotMetadata? Find(AssetPath geometryUri, Guid nativeGeometryKey)
         => this.geometries.TryGetValue(nativeGeometryKey, out var inventory) ? new(geometryUri, nativeGeometryKey, inventory.LayoutRevision, inventory.Slots) : null;
 
     /// <summary>Reads a native command result scoped to one virtual path.</summary>
     /// <param name="geometryUri">The authored identity.</param>
     /// <returns>The sole inventory, or null when the root has no matching geometry.</returns>
-    public GeometryMaterialSlotMetadata? SingleOrDefault(Uri geometryUri)
+    public GeometryMaterialSlotMetadata? SingleOrDefault(AssetPath geometryUri)
         => this.geometries.Count switch
         {
             0 => null,

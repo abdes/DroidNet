@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Numerics;
 using System.Text.Json;
 using Json.Schema;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Inspection;
 
@@ -49,7 +50,7 @@ public sealed class CookedScriptReport
     /// <summary>Reads a native command result scoped to one virtual path.</summary>
     /// <param name="scriptUri">The requested script identity.</param>
     /// <returns>The sole script's declarations, or null when the root has no matching script.</returns>
-    public CookedScriptDeclarations? SingleOrDefault(Uri scriptUri)
+    public CookedScriptDeclarations? SingleOrDefault(AssetPath scriptUri)
         => this.scripts.Count switch
         {
             0 => null,

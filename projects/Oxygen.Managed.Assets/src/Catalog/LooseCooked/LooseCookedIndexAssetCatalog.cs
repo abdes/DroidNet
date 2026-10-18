@@ -29,19 +29,19 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
     private readonly Subject<AssetChange> changes = new();
     private readonly IDisposable eventSubscription;
 
-    private IReadOnlyDictionary<Uri, AssetRecord> entriesByUri = new Dictionary<Uri, AssetRecord>();
+    private IReadOnlyDictionary<AssetPath, AssetRecord> entries = new Dictionary<AssetPath, AssetRecord>();
     private volatile bool isInitialized;
-    private string cookedRoot = string.Empty;
+    private readonly FileSystemPath cookedRoot;
 
     /// <summary>Creates a fixed catalog from an already captured index; it never watches or reloads its source.</summary>
     /// <param name="document">The decoded index accepted by its content owner.</param>
     /// <param name="cookedRoot">The physical root named by that index.</param>
-    public LooseCookedIndexAssetCatalog(Document document, string cookedRoot)
+    public LooseCookedIndexAssetCatalog(Document document, FileSystemPath cookedRoot)
     {
         ArgumentNullException.ThrowIfNull(document);
-        ArgumentException.ThrowIfNullOrWhiteSpace(cookedRoot);
-        this.cookedRoot = Path.GetFullPath(cookedRoot);
-        this.entriesByUri = CreateEntries(document, this.cookedRoot);
+        ArgumentNullException.ThrowIfNull(cookedRoot);
+        this.cookedRoot = cookedRoot;
+        this.entries = CreateEntries(document, this.cookedRoot);
         this.eventSource = new NoopFileSystemCatalogEventSource();
         this.eventSubscription = Disposable.Empty;
         this.isInitialized = true;
@@ -71,11 +71,7 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         ArgumentNullException.ThrowIfNull(storage);
         ArgumentNullException.ThrowIfNull(options);
 
-        if (string.IsNullOrEmpty(options.CookedRootFolderPath))
-        {
-            throw new ArgumentException("CookedRootFolderPath must not be null or empty.", nameof(options));
-        }
-
+        ArgumentNullException.ThrowIfNull(options.CookedRootFolderPath);
         if (string.IsNullOrEmpty(options.IndexFileName))
         {
             throw new ArgumentException("IndexFileName must not be null or empty.", nameof(options));
@@ -83,8 +79,8 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
 
         this.storage = storage;
         this.options = options;
+        this.cookedRoot = options.CookedRootFolderPath;
 
-        var normalizedRoot = this.storage.Normalize(options.CookedRootFolderPath);
         var filter = options.WatcherFilter ?? options.IndexFileName;
 
         // NOTE:
@@ -93,7 +89,7 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         // If we only watch when the exact root exists, we can permanently miss later creation of
         // the cooked root's "container.index.bin". To avoid that, watch the nearest existing
         // parent directory (usually the ".cooked" folder) with IncludeSubdirectories enabled.
-        var watchRoot = FindNearestExistingDirectory(normalizedRoot);
+        var watchRoot = FindNearestExistingDirectory(this.cookedRoot.FullPath);
 
         if (eventSource is not null)
         {
@@ -129,17 +125,7 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         ArgumentNullException.ThrowIfNull(query);
         await this.EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
-        var records = Volatile.Read(ref this.entriesByUri).Values.Where(record => AssetQueryScopeMatcher.IsMatch(query.Scope, record.Uri));
-
-        if (!string.IsNullOrWhiteSpace(query.SearchText))
-        {
-            var term = query.SearchText.Trim();
-            records = records.Where(record => record.Uri.ToString().Contains(term, StringComparison.OrdinalIgnoreCase));
-        }
-
-        return records
-            .OrderBy(record => record.Uri.ToString(), StringComparer.Ordinal)
-            .ToArray();
+        return AssetQueryMatcher.Apply(query, Volatile.Read(ref this.entries).Values);
     }
 
     /// <inheritdoc />
@@ -156,25 +142,6 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         this.eventSource.Dispose();
         this.changes.OnCompleted();
         this.changes.Dispose();
-    }
-
-    private static Uri VirtualPathToAssetUri(string virtualPath)
-    {
-        if (string.IsNullOrEmpty(virtualPath) || virtualPath[0] != '/')
-        {
-            throw new InvalidDataException("VirtualPath must start with '/'.");
-        }
-
-        var trimmed = virtualPath.TrimStart('/');
-        var slash = trimmed.IndexOf('/', StringComparison.Ordinal);
-        if (slash <= 0 || slash == trimmed.Length - 1)
-        {
-            throw new InvalidDataException("VirtualPath must be of the form '/{Mount}/{Path}'.");
-        }
-
-        var mountPoint = trimmed[..slash];
-        var path = trimmed[(slash + 1)..];
-        return new Uri($"{AssetUris.Scheme}:///{mountPoint}/{path}");
     }
 
     private static string FindNearestExistingDirectory(string start)
@@ -211,7 +178,6 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
             return;
         }
 
-        this.cookedRoot = this.storage!.Normalize(this.options!.CookedRootFolderPath);
         await this.ReloadSnapshotAsync(cancellationToken).ConfigureAwait(false);
         this.isInitialized = true;
     }
@@ -222,9 +188,9 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         {
             await this.EnsureInitializedAsync(CancellationToken.None).ConfigureAwait(false);
 
-            var before = Volatile.Read(ref this.entriesByUri);
+            var before = Volatile.Read(ref this.entries);
             await this.ReloadSnapshotAsync(CancellationToken.None).ConfigureAwait(false);
-            var after = Volatile.Read(ref this.entriesByUri);
+            var after = Volatile.Read(ref this.entries);
 
             foreach (var removed in before.Keys.Except(after.Keys))
             {
@@ -247,10 +213,10 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             // If anything goes wrong while reloading/diffing, fall back to clearing.
-            var beforeUris = Interlocked.Exchange(ref this.entriesByUri, new Dictionary<Uri, AssetRecord>()).Keys;
-            foreach (var uri in beforeUris)
+            var beforeIdentities = Interlocked.Exchange(ref this.entries, new Dictionary<AssetPath, AssetRecord>()).Keys;
+            foreach (var identity in beforeIdentities)
             {
-                this.changes.OnNext(new AssetChange(AssetChangeKind.Removed, uri));
+                this.changes.OnNext(new AssetChange(AssetChangeKind.Removed, identity));
             }
 
             _ = ex; // silence analyzer about unused filtered exception variable
@@ -264,24 +230,24 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
             return;
         }
 
-        var indexPath = this.storage.NormalizeRelativeTo(this.cookedRoot, this.options.IndexFileName);
+        var indexPath = this.storage.NormalizeRelativeTo(this.cookedRoot.FullPath, this.options.IndexFileName);
         var indexDoc = await this.storage.GetDocumentFromPathAsync(indexPath, cancellationToken).ConfigureAwait(false);
 
         if (!await indexDoc.ExistsAsync().ConfigureAwait(false))
         {
-            Volatile.Write(ref this.entriesByUri, new Dictionary<Uri, AssetRecord>());
+            Volatile.Write(ref this.entries, new Dictionary<AssetPath, AssetRecord>());
             return;
         }
 
         var stream = await indexDoc.OpenReadAsync(cancellationToken).ConfigureAwait(false);
         await using var streamLifetime = stream.ConfigureAwait(false);
         var document = LooseCookedIndex.Read(stream);
-        Volatile.Write(ref this.entriesByUri, CreateEntries(document, this.cookedRoot));
+        Volatile.Write(ref this.entries, CreateEntries(document, this.cookedRoot));
     }
 
-    private static IReadOnlyDictionary<Uri, AssetRecord> CreateEntries(Document document, string cookedRoot)
+    private static IReadOnlyDictionary<AssetPath, AssetRecord> CreateEntries(Document document, FileSystemPath root)
     {
-        var next = new Dictionary<Uri, AssetRecord>();
+        var next = new Dictionary<AssetPath, AssetRecord>();
         foreach (var entry in document.Assets)
         {
             if (string.IsNullOrWhiteSpace(entry.VirtualPath))
@@ -289,16 +255,20 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
                 continue;
             }
 
-            var uri = VirtualPathToAssetUri(entry.VirtualPath);
-            var record = new AssetRecord(uri)
+            if (!AssetPath.TryParse(entry.VirtualPath, out var identity) || identity.IsMount)
             {
-                Cooked = new(cookedRoot, entry.DescriptorRelativePath, document.SourceGuid, entry.AssetKey, entry.AssetType, entry.DescriptorSize, Convert.ToHexString(entry.DescriptorSha256.Span))
+                throw new InvalidDataException($"The cooked index lists '{entry.VirtualPath}', which is not the virtual path of an asset.");
+            }
+
+            var record = new AssetRecord(identity)
+            {
+                Cooked = new(root, entry.DescriptorRelativePath, document.SourceGuid, entry.AssetKey, entry.AssetType, entry.DescriptorSize, Convert.ToHexString(entry.DescriptorSha256.Span))
                 {
-                    VirtualPath = entry.VirtualPath,
+                    VirtualPath = identity,
                     References = entry.References,
                 },
             };
-            if (!next.TryAdd(uri, record))
+            if (!next.TryAdd(identity, record))
             {
                 throw new InvalidDataException($"Cooked index contains duplicate virtual path '{entry.VirtualPath}'.");
             }

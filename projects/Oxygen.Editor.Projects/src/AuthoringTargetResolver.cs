@@ -35,7 +35,7 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
                     return CreateLocalMountTarget(localMount.Name, kindFolder, fallbackReason: null);
                 }
 
-                if (IsKindFolderSelection(localRelativeSelection, kindFolder))
+                if (IsKindFolderSelection(localMount.Name, localRelativeSelection, kindFolder))
                 {
                     return CreateLocalMountTarget(localMount.Name, localRelativeSelection, fallbackReason: null);
                 }
@@ -54,34 +54,34 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
         return ResolveAuthoringMountTarget(project, selected, kindFolder, defaultMount);
     }
 
+    // The selection is a folder of the project on disk; the innermost authoring mount that holds it decides.
     private static AuthoringTarget ResolveAuthoringMountTarget(
         ProjectContext project,
         string selected,
         string kindFolder,
         ProjectMountPoint defaultMount)
     {
+        var root = project.ProjectRoot;
+        var folder = root.Combine(selected);
         foreach (var mount in project.AuthoringMounts.OrderByDescending(static mount => mount.RelativePath.Length))
         {
-            var mountPath = NormalizeProjectPath(mount.RelativePath);
-            if (string.IsNullOrWhiteSpace(mountPath))
+            if (string.IsNullOrWhiteSpace(NormalizeProjectPath(mount.RelativePath)))
             {
                 continue;
             }
 
-            if (string.Equals(selected, mountPath, StringComparison.OrdinalIgnoreCase))
+            var mountRoot = root.Combine(mount.RelativePath);
+            if (folder == mountRoot)
             {
                 return CreateProjectMountTarget(mount, kindFolder, fallbackReason: null);
             }
 
-            if (selected.StartsWith(mountPath + "/", StringComparison.OrdinalIgnoreCase))
+            if (folder.IsSameOrInside(mountRoot))
             {
-                var mountRelative = selected[(mountPath.Length + 1)..];
-                if (IsKindFolderSelection(mountRelative, kindFolder))
-                {
-                    return CreateProjectMountTarget(mount.Name, selected, ToAssetFolderUri(mount.Name, mountRelative), isExplicitLocalMount: false, fallbackReason: null);
-                }
-
-                return CreateProjectMountTarget(mount, kindFolder, AuthoringTargetFallbackReason.KindMismatch);
+                var mountRelative = folder.GetPathBelow(mountRoot);
+                return IsKindFolderSelection(mount.Name, mountRelative, kindFolder)
+                    ? new(mount.Name, selected, AssetPath.Create(mount.Name, mountRelative), IsExplicitLocalMount: false, FallbackReason: null)
+                    : CreateProjectMountTarget(mount, kindFolder, AuthoringTargetFallbackReason.KindMismatch);
             }
         }
 
@@ -122,39 +122,22 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
         ProjectMountPoint mount,
         string kindFolder,
         AuthoringTargetFallbackReason? fallbackReason)
-    {
-        var mountPath = NormalizeProjectPath(mount.RelativePath);
-        var projectRelativeFolder = CombineProjectPath(mountPath, kindFolder);
-        return CreateProjectMountTarget(
-            mount.Name,
-            projectRelativeFolder,
-            ToAssetFolderUri(mount.Name, kindFolder),
-            isExplicitLocalMount: false,
-            fallbackReason);
-    }
-
-    private static AuthoringTarget CreateProjectMountTarget(
-        string mountName,
-        string projectRelativeFolder,
-        Uri folderAssetUri,
-        bool isExplicitLocalMount,
-        AuthoringTargetFallbackReason? fallbackReason)
         => new(
-            mountName,
-            projectRelativeFolder,
-            folderAssetUri,
-            isExplicitLocalMount,
+            mount.Name,
+            CombineProjectPath(NormalizeProjectPath(mount.RelativePath), kindFolder),
+            AssetPath.Create(mount.Name, kindFolder),
+            IsExplicitLocalMount: false,
             fallbackReason);
 
     private static AuthoringTarget CreateLocalMountTarget(
         string mountName,
         string mountRelativeFolder,
         AuthoringTargetFallbackReason? fallbackReason)
-        => CreateProjectMountTarget(
+        => new(
             mountName,
             mountRelativeFolder,
-            ToAssetFolderUri(mountName, mountRelativeFolder),
-            isExplicitLocalMount: true,
+            AssetPath.Create(mountName, mountRelativeFolder),
+            IsExplicitLocalMount: true,
             fallbackReason);
 
     private static string GetLocalMountRelativeSelection(string mountName, string selected)
@@ -170,15 +153,8 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
             : selected;
     }
 
-    private static bool IsKindFolderSelection(string mountRelative, string kindFolder)
-        => string.Equals(mountRelative, kindFolder, StringComparison.OrdinalIgnoreCase)
-           || mountRelative.StartsWith(kindFolder + "/", StringComparison.OrdinalIgnoreCase);
-
-    private static Uri ToAssetFolderUri(string mountName, string mountRelative)
-    {
-        var relative = NormalizeProjectPath(mountRelative);
-        return new Uri($"{AssetUris.Scheme}:///{mountName}/{relative}".TrimEnd('/'));
-    }
+    private static bool IsKindFolderSelection(string mountName, string mountRelative, string kindFolder)
+        => AssetPath.TryCreate(mountName, mountRelative, out var folder) && folder.IsSameOrInside(AssetPath.Create(mountName, kindFolder));
 
     private static string CombineProjectPath(string left, string right)
     {

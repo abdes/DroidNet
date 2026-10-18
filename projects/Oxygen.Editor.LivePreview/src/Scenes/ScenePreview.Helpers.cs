@@ -257,7 +257,7 @@ internal sealed partial class ScenePreview
         {
             world.Execute(new RuntimeSetMaterialOverride(
                 node.Id,
-                GeometryPathMapper.ToEnginePath(slot.Target.GeometryUri),
+                GeometryPathMapper.ToEnginePath(slot.Target.Geometry),
                 slot.Target.SlotId,
                 slot.Target.LayoutRevision,
                 MaterialOverridePathMapper.ToEnginePath(slot.Material),

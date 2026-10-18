@@ -19,7 +19,7 @@ namespace Oxygen.Editor.Assets;
 internal sealed class AssetIdentityReducer
 {
     private readonly Lock descriptorValidationSync = new();
-    private readonly Dictionary<string, DescriptorValidationEntry> descriptorValidationCache = [with(StringComparer.OrdinalIgnoreCase)];
+    private readonly Dictionary<FileSystemPath, DescriptorValidationEntry> descriptorValidationCache = [];
 
     /// <summary>Reduces catalog records into one row per logical asset.</summary>
     /// <param name="records">The catalog records.</param>
@@ -38,9 +38,9 @@ internal sealed class AssetIdentityReducer
         ArgumentNullException.ThrowIfNull(cookScope);
 
         return records
-            .Where(static record => IsBrowsableRecord(record.Uri))
-            .GroupBy(static record => record.Cooked is null ? GetLogicalKey(record.Uri) : AssetUriHelper.GetVirtualPath(record.Uri), StringComparer.OrdinalIgnoreCase)
-            .Select(group => this.CreateItem(group.ToList(), project))
+            .Where(static record => IsBrowsableRecord(record.Identity))
+            .GroupBy(static record => record.Cooked is null ? AssetFileTypes.ToIdentity(record.Identity) : record.Identity)
+            .Select(group => this.CreateItem(group.Key, group.ToList(), project))
             .OfType<AssetEntry>()
             .Where(item => IsIncluded(item, includeMissing))
             .OrderBy(static item => item.DisplayPath, StringComparer.OrdinalIgnoreCase)
@@ -50,14 +50,13 @@ internal sealed class AssetIdentityReducer
     /// <summary>Resolves a descriptor path only when it stays inside its indexed root.</summary>
     /// <param name="metadata">The indexed physical source.</param>
     /// <returns>The contained path, or null for an invalid descriptor path.</returns>
-    internal static string? TryResolveIndexedDescriptorPath(CookedAssetMetadata metadata)
+    internal static FileSystemPath? TryResolveIndexedDescriptorPath(CookedAssetMetadata metadata)
     {
         try
         {
-            var relative = metadata.DescriptorRelativePath.Replace('/', Path.DirectorySeparatorChar);
-            var root = Path.GetFullPath(metadata.RootFolderPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-            var path = Path.GetFullPath(Path.Combine(root, relative));
-            return !Path.IsPathRooted(relative) && path.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? path : null;
+            var root = metadata.RootFolderPath;
+            var path = root.Combine(metadata.DescriptorRelativePath);
+            return !Path.IsPathRooted(metadata.DescriptorRelativePath) && path != root && path.IsSameOrInside(root) ? path : null;
         }
         catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
         {
@@ -66,16 +65,11 @@ internal sealed class AssetIdentityReducer
     }
 
     /// <summary>Formats an asset name without descriptor suffixes.</summary>
-    /// <param name="uri">The source or cooked identity.</param>
+    /// <param name="path">The source or cooked path.</param>
     /// <returns>The readable asset name.</returns>
-    internal static string GetDisplayName(Uri uri)
+    internal static string GetDisplayName(AssetPath path)
     {
-        var name = Path.GetFileName(AssetUriHelper.GetVirtualPath(uri));
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return uri.ToString();
-        }
-
+        var name = path.Name;
         return AssetFileTypes.Find(name) is { Category: AssetFileCategory.Descriptor or AssetFileCategory.Cooked or AssetFileCategory.Script or AssetFileCategory.Input }
             ? AssetFileTypes.RemoveSuffix(name)
             : name;
@@ -83,16 +77,15 @@ internal sealed class AssetIdentityReducer
 
     private static AssetEntry CreateGeneratedItem(AssetRecord selected, GeneratedAssetMetadata recipe)
         => new(
-            IdentityUri: selected.Uri,
+            Identity: selected.Identity,
             DisplayName: selected.Name,
-            Kind: GetKind(new Uri(AssetUris.Scheme + "://" + recipe.CookedVirtualPath)),
+            Kind: AssetKinds.FromFileName(recipe.CookedVirtualPath.Name),
             PrimaryState: AssetState.Generated,
             DerivedState: null,
             RuntimeAvailability: AssetRuntimeAvailability.Unknown,
-            DisplayPath: AssetUriHelper.GetVirtualPath(selected.Uri),
+            DisplayPath: selected.Identity.VirtualPath,
             SourcePath: null,
             DescriptorPath: null,
-            CookedUri: null,
             CookedPath: null,
             AssetGuid: null,
             DiagnosticCodes: [],
@@ -112,77 +105,38 @@ internal sealed class AssetIdentityReducer
             _ => false,
         };
 
-    private static bool IsBrowsableRecord(Uri uri)
-    {
-        var path = AssetUriHelper.GetRelativePath(uri).Replace('\\', '/').TrimStart('/');
-        if (IsImportSidecarPath(path))
-        {
-            return false;
-        }
-
-        return !IsDerivedRootMount(AssetUriHelper.GetMountPoint(uri));
-    }
-
-    private static bool IsImportSidecarPath(string path)
-        => AssetFileTypes.Is(path, AssetFileCategory.ImportSettings);
+    private static bool IsBrowsableRecord(AssetPath path)
+        => !AssetFileTypes.Is(path.Name, AssetFileCategory.ImportSettings) && !IsDerivedRootMount(path.Mount);
 
     private static bool IsDerivedRootMount(string mountPoint)
         => string.Equals(mountPoint, "Cooked", StringComparison.Ordinal)
            || string.Equals(mountPoint, "Imported", StringComparison.Ordinal)
            || string.Equals(mountPoint, "Build", StringComparison.Ordinal);
 
-    private static string GetLogicalKey(Uri uri)
-    {
-        var path = AssetUriHelper.GetVirtualPath(uri);
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            path = uri.AbsolutePath;
-        }
-
-        return AssetFileTypes.Is(path, AssetFileCategory.Script)
-            ? AssetFileTypes.ToCookedPath(path)!
-            : path.EndsWith(AssetFileTypes.DescriptorSuffix, StringComparison.OrdinalIgnoreCase)
-                ? path[..^AssetFileTypes.DescriptorSuffix.Length]
-                : path;
-    }
-
     // Only the files of authoring mounts are project sources.
-    private static string? TryResolveSourcePath(ProjectContext project, Uri uri)
-        => project.FindByAssetUri(uri) is { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location ? location.FilePath : null;
+    private static FileSystemPath? TryResolveSourcePath(ProjectContext project, AssetPath path)
+        => project.Find(path) is { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location ? location.File : null;
 
     private static string GetDisplayPath(AssetRecord selected, ProjectContext project)
     {
-        var local = selected.Cooked is { } cooked ? project.LocalFolderMounts.FirstOrDefault(mount =>
-            string.Equals(Path.GetFullPath(mount.AbsolutePath), Path.GetFullPath(cooked.RootFolderPath), StringComparison.OrdinalIgnoreCase)) : null;
-        return local is not null ? "/" + local.Name + "/" + selected.Cooked!.DescriptorRelativePath : AssetUriHelper.GetVirtualPath(selected.Uri);
+        var local = selected.Cooked is { } cooked ? project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == cooked.RootFolderPath) : null;
+        return local is not null ? "/" + local.Name + "/" + selected.Cooked!.DescriptorRelativePath : selected.Identity.VirtualPath;
     }
 
-    private static Uri ToCookedUri(Uri uri)
+    private static bool IsDescriptor(AssetRecord record)
+        => record.Cooked is null && AssetFileTypes.Is(record.Identity.Name, AssetFileCategory.Descriptor);
+
+    private static bool IsCooked(AssetRecord record)
+        => AssetFileTypes.Find(record.Identity.Name) is { Category: AssetFileCategory.Cooked or AssetFileCategory.CookedResource };
+
+    private static AssetKind GetKind(AssetRecord record)
+        => record.Cooked is { } cooked ? AssetKinds.FromCookedType(cooked.AssetType) : AssetKinds.FromFileName(record.Identity.Name);
+
+    private AssetEntry? CreateItem(AssetPath identity, List<AssetRecord> records, ProjectContext project)
     {
-        var path = uri.AbsolutePath;
-        if (path.EndsWith(AssetFileTypes.DescriptorSuffix, StringComparison.OrdinalIgnoreCase))
-        {
-            path = path[..^AssetFileTypes.DescriptorSuffix.Length];
-        }
-
-        return new Uri($"{AssetUris.Scheme}://{path}");
-    }
-
-    private static bool IsDescriptorUri(Uri uri)
-        => AssetFileTypes.Is(AssetUriHelper.GetRelativePath(uri), AssetFileCategory.Descriptor);
-
-    private static bool IsCookedUri(Uri uri)
-        => AssetFileTypes.Find(AssetUriHelper.GetRelativePath(uri)) is { Category: AssetFileCategory.Cooked or AssetFileCategory.CookedResource };
-
-    private static AssetKind GetKind(Uri uri) => AssetKinds.FromFileName(AssetUriHelper.GetRelativePath(uri));
-
-    private static AssetKind GetKind(AssetRecord record) => record.Cooked is { } cooked ? AssetKinds.FromCookedType(cooked.AssetType) : GetKind(record.Uri);
-
-    private AssetEntry? CreateItem(List<AssetRecord> records, ProjectContext project)
-    {
-        var descriptor = records.FirstOrDefault(static record => record.Cooked is null && IsDescriptorUri(record.Uri));
-        var cooked = records.FirstOrDefault(static record => record.Cooked is not null) ?? records.FirstOrDefault(static record => IsCookedUri(record.Uri));
-        var source = records.FirstOrDefault(static record => record.Cooked is null && !IsDescriptorUri(record.Uri) && !IsCookedUri(record.Uri));
+        var descriptor = records.FirstOrDefault(IsDescriptor);
+        var cooked = records.FirstOrDefault(static record => record.Cooked is not null) ?? records.FirstOrDefault(IsCooked);
+        var source = records.FirstOrDefault(static record => record.Cooked is null && !IsDescriptor(record) && !IsCooked(record));
         var selected = descriptor ?? source ?? cooked;
         if (selected is null)
         {
@@ -194,12 +148,9 @@ internal sealed class AssetIdentityReducer
             return CreateGeneratedItem(selected, recipe);
         }
 
-        var sourcePath = source is null ? null : TryResolveSourcePath(project, source.Uri);
-        var descriptorPath = descriptor is null ? null : TryResolveSourcePath(project, descriptor.Uri);
-        var scriptUri = source is not null && AssetFileTypes.Is(source.Uri.AbsolutePath, AssetFileCategory.Script)
-            ? new Uri($"{AssetUris.Scheme}://{AssetFileTypes.ToCookedPath(AssetUriHelper.GetVirtualPath(source.Uri))}")
-            : null;
-        var cookedUri = cooked?.Uri ?? scriptUri ?? (descriptor is null ? null : ToCookedUri(descriptor.Uri));
+        var sourcePath = source is null ? null : TryResolveSourcePath(project, source.Identity);
+        var descriptorPath = descriptor is null ? null : TryResolveSourcePath(project, descriptor.Identity);
+        var cooks = cooked is not null || descriptor is not null || (source is not null && AssetFileTypes.Is(source.Identity.Name, AssetFileCategory.Script));
         var cookedPath = cooked?.Cooked is { } metadata ? TryResolveIndexedDescriptorPath(metadata) : null;
         var diagnostics = new List<string>();
 
@@ -214,23 +165,22 @@ internal sealed class AssetIdentityReducer
         {
             (primaryState, derivedState) = this.ReadDescriptorState(descriptorPath, cookedPath, diagnostics);
         }
-        else if (cooked is not null && (cookedPath is null || !File.Exists(cookedPath)))
+        else if (cooked is not null && (cookedPath is null || !File.Exists(cookedPath.FullPath)))
         {
             primaryState = AssetState.Broken;
             diagnostics.Add(cookedPath is null ? AssetIdentityDiagnosticCodes.DescriptorBroken : AssetIdentityDiagnosticCodes.CookedMissing);
         }
 
         return new AssetEntry(
-            IdentityUri: descriptor?.Uri ?? scriptUri ?? selected.Uri,
-            DisplayName: GetDisplayName(descriptor?.Uri ?? selected.Uri),
+            Identity: identity,
+            DisplayName: GetDisplayName((descriptor ?? selected).Identity),
             Kind: GetKind(descriptor ?? cooked ?? selected),
             PrimaryState: primaryState,
             DerivedState: derivedState,
-            RuntimeAvailability: cookedUri is null ? AssetRuntimeAvailability.NotApplicable : AssetRuntimeAvailability.NotMounted,
+            RuntimeAvailability: cooks ? AssetRuntimeAvailability.NotMounted : AssetRuntimeAvailability.NotApplicable,
             DisplayPath: GetDisplayPath(descriptor ?? cooked ?? selected, project),
             SourcePath: sourcePath,
             DescriptorPath: descriptorPath,
-            CookedUri: cookedUri,
             CookedPath: cookedPath,
             AssetGuid: null,
             DiagnosticCodes: diagnostics,
@@ -241,9 +191,9 @@ internal sealed class AssetIdentityReducer
         };
     }
 
-    private bool CanReadMaterialDescriptor(string descriptorPath)
+    private bool CanReadMaterialDescriptor(FileSystemPath descriptorPath)
     {
-        if (!descriptorPath.EndsWith(AssetFileTypes.Material + AssetFileTypes.DescriptorSuffix, StringComparison.OrdinalIgnoreCase))
+        if (!descriptorPath.Name.EndsWith(AssetFileTypes.Material + AssetFileTypes.DescriptorSuffix, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -251,7 +201,7 @@ internal sealed class AssetIdentityReducer
         byte[] bytes;
         try
         {
-            bytes = File.ReadAllBytes(descriptorPath);
+            bytes = File.ReadAllBytes(descriptorPath.FullPath);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -287,9 +237,9 @@ internal sealed class AssetIdentityReducer
         return canRead;
     }
 
-    private (AssetState primary, AssetState? derived) ReadDescriptorState(string? descriptorPath, string? cookedPath, List<string> diagnostics)
+    private (AssetState primary, AssetState? derived) ReadDescriptorState(FileSystemPath? descriptorPath, FileSystemPath? cookedPath, List<string> diagnostics)
     {
-        if (descriptorPath is null || !File.Exists(descriptorPath) || !this.CanReadMaterialDescriptor(descriptorPath))
+        if (descriptorPath is null || !File.Exists(descriptorPath.FullPath) || !this.CanReadMaterialDescriptor(descriptorPath))
         {
             diagnostics.Add(AssetIdentityDiagnosticCodes.DescriptorBroken);
             return (AssetState.Broken, null);
@@ -300,7 +250,7 @@ internal sealed class AssetIdentityReducer
             return (AssetState.Descriptor, null);
         }
 
-        if (!File.Exists(cookedPath))
+        if (!File.Exists(cookedPath.FullPath))
         {
             diagnostics.Add(AssetIdentityDiagnosticCodes.CookedMissing);
             return (AssetState.Descriptor, null);

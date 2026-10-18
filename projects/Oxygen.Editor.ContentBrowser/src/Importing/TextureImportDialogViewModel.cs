@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Dialogs;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Importing;
 
@@ -269,9 +270,6 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         return this.CanAccept;
     }
 
-    private static Uri ToUri(string folder)
-        => new("asset:///" + string.Join('/', folder.Trim().Trim('/').Split('/').Select(Uri.EscapeDataString)));
-
     [RelayCommand]
     private async Task BrowseDestinationAsync(CancellationToken cancellationToken)
     {
@@ -279,7 +277,7 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         {
             var picker = new FolderPickerSpec("Choose texture destination", "Oxygen.TextureDestination")
             {
-                SuggestedStartFolder = this.project.ProjectRoot,
+                SuggestedStartFolder = this.project.ProjectRoot.FullPath,
             };
             var selected = await this.dialogs.PickFolderAsync(picker, cancellationToken).ConfigureAwait(true);
             if (selected is null)
@@ -289,7 +287,7 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
 
             foreach (var mount in this.project.AuthoringMounts)
             {
-                var root = Path.GetFullPath(Path.Combine(this.project.ProjectRoot, mount.RelativePath));
+                var root = this.project.ProjectRoot.Combine(mount.RelativePath).FullPath;
                 var relative = Path.GetRelativePath(root, selected).Replace('\\', '/');
                 if (!Path.IsPathRooted(relative) && !string.Equals(relative, "..", StringComparison.Ordinal) && !relative.StartsWith("../", StringComparison.Ordinal))
                 {
@@ -314,7 +312,7 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
     }
 
     private TextureSourceImportRequest CreateRequest()
-        => new(this.project, this.SourcePath, ToUri(this.DestinationFolder), this.Name.Trim(), this.Intent, this.ColorSpace, this.Format)
+        => new(this.project, this.SourcePath, ImportDestination.Parse(this.DestinationFolder), this.Name.Trim(), this.Intent, this.ColorSpace, this.Format)
         {
             Cube = this.isCube && this.ResolvedCubeLayout is { } layout
                 ? new TextureCubeImport(layout, layout == Oxygen.Editor.ContentPipeline.Import.CubeLayout.Panorama ? this.faceSize : null)

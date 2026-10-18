@@ -136,11 +136,11 @@ public sealed partial class GeometryViewModel
             this.MaterialSlots = [.. inventory.Slots.Select((slot, index) => new MaterialSlotChoice(
                 new(geometryUri, slot.SlotId, inventory.LayoutRevision),
                 string.IsNullOrWhiteSpace(slot.DisplayName) ? $"Slot {index + 1}" : labels[slot.DisplayName] > 1 ? $"{slot.DisplayName} ({index + 1})" : slot.DisplayName))];
-            this.SelectedMaterialSlot = this.MaterialSlots.FirstOrDefault(slot => selected is not null && slot.Target.GeometryUri == selected.GeometryUri && slot.Target.SlotId == selected.SlotId)
+            this.SelectedMaterialSlot = this.MaterialSlots.FirstOrDefault(slot => selected is not null && slot.Target.Geometry == selected.Geometry && slot.Target.SlotId == selected.SlotId)
                 ?? this.MaterialSlots.FirstOrDefault();
             var slotIds = inventory.Slots.Select(static slot => slot.SlotId).ToHashSet();
             var unresolved = nodes.SelectMany(static node => node.Components.OfType<GeometryComponent>().SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>()))
-                .Count(slot => slot.Target.GeometryUri != geometryUri || !slotIds.Contains(slot.Target.SlotId));
+                .Count(slot => slot.Target.Geometry != geometryUri || !slotIds.Contains(slot.Target.SlotId));
             this.HasUnresolvedMaterialSlots = unresolved != 0;
             this.IsMaterialSlotInventoryFailed = false;
             this.MaterialSlotNotice = unresolved == 1
@@ -199,16 +199,16 @@ public sealed partial class GeometryViewModel
         if (this.SelectedMaterialSlot is not { } selected)
         {
             this.IsMaterialMixed = false;
-            this.SelectedMaterialUriString = null;
+            this.SelectedMaterial = null;
             this.SelectedMaterialName = "Unavailable";
             return;
         }
 
         var materials = (this.selectedItems ?? []).Select(node => node.Components.OfType<GeometryComponent>().FirstOrDefault()
-            ?.OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault(slot => slot.Target.GeometryUri == selected.Target.GeometryUri && slot.Target.SlotId == selected.Target.SlotId)?.Material)
+            ?.OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault(slot => slot.Target.Geometry == selected.Target.Geometry && slot.Target.SlotId == selected.Target.SlotId)?.Material)
             .Distinct().ToArray();
         this.IsMaterialMixed = materials.Length > 1;
-        this.SelectedMaterialUriString = this.IsMaterialMixed ? null : materials.FirstOrDefault()?.ToString();
+        this.SelectedMaterial = this.IsMaterialMixed ? null : materials.FirstOrDefault();
         this.SelectedMaterialName = this.IsMaterialMixed ? "--"
             : materials.FirstOrDefault() is { } material ? this.ResolveMaterialDisplayName(material) : "Geometry default";
     }

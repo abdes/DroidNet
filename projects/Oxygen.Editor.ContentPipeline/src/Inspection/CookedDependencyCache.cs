@@ -84,7 +84,7 @@ internal static class CookedDependencyCache
             || cooked.SourceIdentity != report.SourceIdentity
             || !report.Assets.TryGetValue(cooked.AssetKey.ToString(), out var asset)
             || asset.AssetType != cooked.AssetType
-            || !string.Equals(asset.VirtualPath, Uri.UnescapeDataString(record.Uri.AbsolutePath), StringComparison.Ordinal)))
+            || !string.Equals(asset.VirtualPath, record.Identity.VirtualPath, StringComparison.Ordinal)))
         {
             throw new InvalidDataException("The dependency report does not match the protected library index.");
         }

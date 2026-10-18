@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using DroidNet.Storage.Native;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Testably.Abstractions;
 
@@ -26,12 +27,12 @@ internal sealed class ProjectAssetKeyIndex(string cachePath, string[] paths)
     /// <param name="knownOutputs">Previously identified imported outputs.</param>
     /// <param name="cancellationToken">Cancels enumeration and cache reading.</param>
     /// <returns>A current candidate index, possibly awaiting native identity lookup.</returns>
-    public static async Task<ProjectAssetKeyIndex> ReadAsync(ProjectContext project, IReadOnlyCollection<Uri> knownOutputs, CancellationToken cancellationToken)
+    public static async Task<ProjectAssetKeyIndex> ReadAsync(ProjectContext project, IReadOnlyCollection<AssetPath> knownOutputs, CancellationToken cancellationToken)
     {
-        var candidates = EnumeratePaths(project, cancellationToken).Concat(knownOutputs.Select(static uri => Uri.UnescapeDataString(uri.AbsolutePath)))
+        var candidates = EnumeratePaths(project, cancellationToken).Concat(knownOutputs.Select(static uri => uri.VirtualPath))
             .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
         var fingerprint = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(candidates)));
-        var index = new ProjectAssetKeyIndex(Path.Combine(project.ProjectRoot, ".build", "cache", "project-asset-keys-v1", fingerprint + ".json"), candidates);
+        var index = new ProjectAssetKeyIndex(Path.Combine(project.ProjectRoot.FullPath, ".build", "cache", "project-asset-keys-v1", fingerprint + ".json"), candidates);
         await index.ReadCacheAsync(cancellationToken).ConfigureAwait(false);
         return index;
     }
@@ -39,9 +40,9 @@ internal sealed class ProjectAssetKeyIndex(string cachePath, string[] paths)
     /// <summary>Finds a native dependency's project path after its identity map is available.</summary>
     /// <param name="key">The native key in managed index representation.</param>
     /// <returns>The candidate identity, or null when absent or not yet inspected.</returns>
-    public Uri? Resolve(string key)
+    public AssetPath? Resolve(string key)
         => this.map?.PathsByKey.GetValueOrDefault(key) is { } path
-            ? new Uri("asset:///" + string.Join('/', path.TrimStart('/').Split('/').Select(Uri.EscapeDataString))) : null;
+            ? AssetPath.Parse(path) : null;
 
     /// <summary>Fills a cache miss using one batched native metadata operation.</summary>
     /// <param name="provider">The engine identity authority.</param>
@@ -70,8 +71,8 @@ internal sealed class ProjectAssetKeyIndex(string cachePath, string[] paths)
     {
         foreach (var mount in project.AuthoringMounts)
         {
-            var root = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath));
-            var relative = Path.GetRelativePath(project.ProjectRoot, root).Replace('\\', '/');
+            var root = project.ProjectRoot.Combine(mount.RelativePath).FullPath;
+            var relative = Path.GetRelativePath(project.ProjectRoot.FullPath, root).Replace('\\', '/');
             if (Path.IsPathRooted(relative) || relative.StartsWith("..", StringComparison.Ordinal)
                 || relative.Split('/')[0].ToUpperInvariant() is ".COOKED" or ".IMPORTED" or ".BUILD" or ".PIPELINE" || !Directory.Exists(root))
             {

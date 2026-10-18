@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Documents;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
@@ -95,7 +96,7 @@ public sealed class OpenDocumentCookInputs : IDisposable
     private sealed class Registration(Document document, SynchronizationContext? owner) : IDisposable
     {
         private ICookDocumentRegistration? registration;
-        private string sourcePath = document.File.Path;
+        private FileSystemPath sourcePath = document.File.Path;
 
         public void Attach(ICookDocumentRegistration value)
         {
@@ -150,7 +151,7 @@ public sealed class OpenDocumentCookInputs : IDisposable
             }
 
             var state = CaptureState(document);
-            if (string.Equals(this.sourcePath, state.SourcePath, StringComparison.OrdinalIgnoreCase))
+            if (this.sourcePath == state.SourcePath)
             {
                 current.UpdateState(state);
                 return;

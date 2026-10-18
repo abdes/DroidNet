@@ -51,7 +51,7 @@ public sealed class ComponentIdentityTests
                 {
                     Id = ComponentId.Empty,
                     Name = "Geometry",
-                    GeometryUri = new Uri("asset:///Engine/Generated/BasicShapes/Cube"),
+                    GeometryUri = AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"),
                 },
                 new PerspectiveCameraData
                 {

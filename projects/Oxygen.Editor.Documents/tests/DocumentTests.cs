@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using AwesomeAssertions;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Documents.Tests;
 
@@ -319,7 +320,7 @@ public sealed class DocumentTests : DocumentTestBase
         var written = (await this.Store.ReadAsync(PathOf("Timber"), this.Token).ConfigureAwait(false)).Version;
 
         await document.FollowRelocationAsync(
-            new DocumentRelocation(FileOf("Timber"), written, Moves(new Dictionary<Uri, Uri> { [UriOf("Wood")] = UriOf("Timber"), [oak] = pine })),
+            new DocumentRelocation(FileOf("Timber"), written, Moves(new Dictionary<AssetPath, AssetPath> { [UriOf("Wood")] = UriOf("Timber"), [oak] = pine })),
             this.Token).ConfigureAwait(false);
 
         _ = document.Title.Should().Be("Timber");
@@ -358,7 +359,7 @@ public sealed class DocumentTests : DocumentTestBase
 
         _ = result.Succeeded.Should().BeTrue();
         var copy = this.FileSystem.File.ReadAllText(PathOf("Wood Copy"), Encoding.UTF8).Split('\n');
-        _ = copy[0].Should().Be(UriOf("Wood Copy").ToString());
+        _ = copy[0].Should().Be(UriOf("Wood Copy").ToUriString());
         _ = copy[1].Should().Be("mine");
         _ = this.ReadText("Wood").Should().Be("first");
         _ = document.IsDirty.Should().BeTrue();
@@ -377,6 +378,6 @@ public sealed class DocumentTests : DocumentTestBase
         _ = this.ReadText("Oak").Should().Be("oak");
     }
 
-    private static Func<string, string?> Moves(Dictionary<Uri, Uri> moves)
-        => reference => moves.TryGetValue(new Uri(reference), out var moved) ? moved.ToString() : null;
+    private static Func<string, string?> Moves(Dictionary<AssetPath, AssetPath> moves)
+        => reference => moves.TryGetValue(AssetPath.ParseUri(reference), out var moved) ? moved.ToUriString() : null;
 }

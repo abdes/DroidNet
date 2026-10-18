@@ -15,6 +15,7 @@ using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.SceneEditor;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Documents;
 
@@ -93,7 +94,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     /// <summary>Saves the open documents of an explicit list of assets through their editors.</summary>
     /// <param name="assets">The assets whose open documents the user authorized saving.</param>
     /// <returns>Whether no listed open document remains unsaved.</returns>
-    public Task<bool> SaveDocumentsAsync(IReadOnlyList<Uri> assets)
+    public Task<bool> SaveDocumentsAsync(IReadOnlyList<AssetPath> assets)
         => this.SaveAsync([.. assets.Select(this.documents.FindByAsset).OfType<Document>()]);
 
     /// <summary>Saves every document of the window with unsaved changes, through their editors.</summary>
@@ -104,7 +105,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     /// <summary>Shows the open document of an asset for an explicit recovery action.</summary>
     /// <param name="asset">The asset whose open document is shown.</param>
     /// <returns>Whether the document was shown.</returns>
-    public Task<bool> SelectDocumentAsync(Uri asset)
+    public Task<bool> SelectDocumentAsync(AssetPath asset)
         => this.documents.FindByAsset(asset) is { } document ? this.documentArea.ShowAsync(document) : Task.FromResult(false);
 
     /// <summary>Shows an open document.</summary>

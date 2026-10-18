@@ -24,7 +24,7 @@ public static class DocumentRelocations
         var path = document.File.Path;
         var target = change.MapPath(path) ?? path;
         var rewrite = change.FindRewrite(target) ?? change.FindRewrite(path);
-        if (rewrite is null && string.Equals(target, path, StringComparison.OrdinalIgnoreCase))
+        if (rewrite is null && target == path)
         {
             skipped = "the relocation did not move or rewrite " + path;
             return null;
@@ -37,6 +37,6 @@ public static class DocumentRelocations
         }
 
         skipped = null;
-        return new DocumentRelocation(new DocumentFile(location.FilePath, location.AssetUri), rewrite?.Written ?? document.Version, change.MapReference);
+        return new DocumentRelocation(new DocumentFile(location.File, location.Identity), rewrite?.Written ?? document.Version, change.MapReference);
     }
 }

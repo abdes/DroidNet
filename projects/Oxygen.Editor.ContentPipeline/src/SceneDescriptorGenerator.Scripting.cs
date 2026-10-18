@@ -23,7 +23,7 @@ public sealed partial class SceneDescriptorGenerator
     /// <param name="operationId">The cook operation.</param>
     /// <param name="diagnostics">Receives slot problems.</param>
     /// <returns>The bindings, their sites and the scripts and assets they use.</returns>
-    private static (List<ScriptSidecarBinding> Bindings, List<ScriptBindingSite> Sites, List<Uri> References) CreateScriptBindings(
+    private static (List<ScriptSidecarBinding> Bindings, List<ScriptBindingSite> Sites, List<AssetPath> References) CreateScriptBindings(
         Scene scene,
         ContentCookScope scope,
         ContentCookInput sceneInput,
@@ -33,7 +33,7 @@ public sealed partial class SceneDescriptorGenerator
     {
         var bindings = new List<ScriptSidecarBinding>();
         var sites = new List<ScriptBindingSite>();
-        var references = new List<Uri>();
+        var references = new List<AssetPath>();
         foreach (var node in scene.AllNodes.Where(node => nodeIndices.ContainsKey(node.Id)).OrderBy(node => nodeIndices[node.Id]))
         {
             var slots = node.Components.OfType<ScriptingComponent>().SelectMany(static scripting => scripting.Slots).ToArray();
@@ -53,7 +53,7 @@ public sealed partial class SceneDescriptorGenerator
                     continue;
                 }
 
-                var scriptPath = Uri.UnescapeDataString(script.AbsolutePath);
+                var scriptPath = script.VirtualPath;
                 if (!scriptPath.EndsWith(AssetFileTypes.Script, StringComparison.OrdinalIgnoreCase)
                     || (CookInputResolver.IsAuthoringUri(scope.Project, script) && CookInputResolver.TryResolveScript(scope.Project, script, ContentCookInputRole.Dependency) is null))
                 {
@@ -72,7 +72,7 @@ public sealed partial class SceneDescriptorGenerator
                         ScriptValueKind.FloatValue => value.FloatValue,
                         ScriptValueKind.StringValue => value.StringValue,
                         ScriptValueKind.Vec2Value or ScriptValueKind.Vec3Value or ScriptValueKind.Vec4Value => value.GetVectorComponents(),
-                        ScriptValueKind.AssetValue => ToAssetVirtualPath(value.AssetUri!),
+                        ScriptValueKind.AssetValue => value.Asset!.VirtualPath,
                         ScriptValueKind.NodeValue => nodeIndices.TryGetValue(value.NodeId, out var index) ? (uint)index : null,
                         _ => null,
                     };
@@ -84,7 +84,7 @@ public sealed partial class SceneDescriptorGenerator
 
                     if (value.Kind == ScriptValueKind.AssetValue)
                     {
-                        references.Add(value.AssetUri!);
+                        references.Add(value.Asset!);
                     }
 
                     parameters.Add(new ScriptSidecarParam(name, ScriptingComponent.GetTypeName(value.Kind), cooked));
@@ -96,12 +96,6 @@ public sealed partial class SceneDescriptorGenerator
         }
 
         return (bindings, sites, [.. references.Distinct()]);
-    }
-
-    private static string ToAssetVirtualPath(Uri asset)
-    {
-        var path = Uri.UnescapeDataString(asset.AbsolutePath);
-        return path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? path[..^".json".Length] : path;
     }
 
     private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];

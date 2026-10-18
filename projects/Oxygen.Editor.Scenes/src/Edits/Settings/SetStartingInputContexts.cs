@@ -54,7 +54,7 @@ public sealed record SetStartingInputContexts : ISceneEdit
             return new SceneEditApplication.Applied(this, []);
         }
 
-        scope.WarnIfDeleted(contexts.Select(static entry => (Uri?)entry.Context));
+        scope.WarnIfDeleted(contexts.Select(static entry => (AssetPath?)entry.Context));
         scope.Scene.SetStartingInputContexts(contexts);
         return new SceneEditApplication.Applied(new SetStartingInputContexts(before), [new SceneChange.StartingInputContextsChanged()]);
     }
@@ -66,7 +66,7 @@ public sealed record SetStartingInputContexts : ISceneEdit
             return SceneDiagnostic.Error(SceneEditCodes.EntryMissing, "The starting input context list is missing an entry.");
         }
 
-        if (AssetReferenceRules.Check(contexts.Select(static entry => (Uri?)entry.Context), AssetFileTypes.InputMappingContext) is { } invalid)
+        if (AssetReferenceRules.Check(contexts.Select(static entry => (AssetPath?)entry.Context), AssetFileTypes.InputMappingContext) is { } invalid)
         {
             return SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, invalid);
         }

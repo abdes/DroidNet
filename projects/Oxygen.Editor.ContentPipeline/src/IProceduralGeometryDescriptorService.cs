@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
@@ -18,6 +20,6 @@ public interface IProceduralGeometryDescriptorService
     /// <returns>The generated descriptor inputs.</returns>
     public Task<IReadOnlyList<ContentCookInput>> EnsureDescriptorsAsync(
         ContentCookScope scope,
-        IReadOnlyList<Uri> geometryUris,
+        IReadOnlyList<AssetPath> geometryUris,
         CancellationToken cancellationToken);
 }

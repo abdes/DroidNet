@@ -33,7 +33,7 @@ internal sealed partial class CookReferenceRoots : IDisposable
                     continue;
                 }
 
-                var path = staging.Baseline.FindProjectRoot(mount) ?? throw new InvalidDataException($"No selected generation owns dependency mount '{mount}'.");
+                var path = staging.Baseline.FindProjectRoot(mount)?.FullPath ?? throw new InvalidDataException($"No selected generation owns dependency mount '{mount}'.");
                 CookOutputLease.RejectReparsePoint(path);
                 var lease = await CookOutputReadLease.AcquireAsync(path, cancellationToken).ConfigureAwait(false);
                 result.readers.Add(lease);

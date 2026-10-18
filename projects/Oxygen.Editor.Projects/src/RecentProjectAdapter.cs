@@ -51,7 +51,7 @@ public sealed class RecentProjectAdapter(
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        await projectUsage.UpdateProjectUsageAsync(context.Name, context.ProjectRoot).ConfigureAwait(false);
+        await projectUsage.UpdateProjectUsageAsync(context.Name, context.ProjectRoot.FullPath).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

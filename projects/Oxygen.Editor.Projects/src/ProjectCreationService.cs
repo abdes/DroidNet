@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using DroidNet.Storage;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
@@ -257,35 +258,27 @@ public sealed class ProjectCreationService(
         await manifest.WriteAllTextAsync(ProjectInfo.ToJson(projectInfo), cancellationToken).ConfigureAwait(false);
     }
 
+    // The project-relative path of the file a template's asset reference names: its source in the mount it names.
     private static string ResolveTemplateAssetRelativePath(
         TemplateDescriptor descriptor,
-        Uri assetUri,
+        AssetPath asset,
         string? declaredRelativePath,
         string fieldName)
     {
-        if (!string.Equals(assetUri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase))
+        if (asset.IsMount)
         {
-            throw new InvalidDataException($"Project template {fieldName} URI must use the asset scheme.");
+            throw new InvalidDataException($"Project template {fieldName} URI must name an asset inside an authoring mount.");
         }
 
-        var assetPath = Uri.UnescapeDataString(assetUri.AbsolutePath).TrimStart('/');
-        var slash = assetPath.IndexOf('/', StringComparison.Ordinal);
-        if (slash <= 0)
-        {
-            throw new InvalidDataException($"Project template {fieldName} URI must include an authoring mount.");
-        }
-
-        var mountName = assetPath[..slash];
-        var mountRelativePath = NormalizeTemplatePath(assetPath[(slash + 1)..]);
-        var mount = descriptor.AuthoringMounts.FirstOrDefault(mount =>
-            string.Equals(mount.Name, mountName, StringComparison.Ordinal))
-            ?? throw new InvalidDataException($"Project template {fieldName} URI targets unknown authoring mount '{mountName}'.");
-        var expectedRelativePath = NormalizeTemplatePath(Path.Combine(mount.RelativePath, mountRelativePath));
+        var mount = descriptor.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, asset.Mount, StringComparison.Ordinal))
+            ?? throw new InvalidDataException($"Project template {fieldName} URI targets unknown authoring mount '{asset.Mount}'.");
+        var source = AssetFileTypes.SourcesOf(asset)[0];
+        var expectedRelativePath = NormalizeTemplatePath(Path.Combine(mount.RelativePath, source.RelativePath));
         if (!string.IsNullOrWhiteSpace(declaredRelativePath))
         {
             var normalizedDeclaredPath = NormalizeTemplatePath(declaredRelativePath);
             ValidateRelativeDescriptorPath(normalizedDeclaredPath, $"{fieldName}.RelativePath");
-            if (!string.Equals(normalizedDeclaredPath, expectedRelativePath, StringComparison.OrdinalIgnoreCase))
+            if (FileSystemPath.From(normalizedDeclaredPath) != FileSystemPath.From(expectedRelativePath))
             {
                 throw new InvalidDataException($"Project template {fieldName}.RelativePath does not match its AssetUri.");
             }
@@ -746,7 +739,7 @@ public sealed class ProjectCreationService(
         public List<TemplateStarterContent>? StarterContent { get; set; }
     }
 
-    private sealed record TemplateStarterScene(Uri AssetUri, string? RelativePath, bool OpenOnCreate);
+    private sealed record TemplateStarterScene(AssetPath AssetUri, string? RelativePath, bool OpenOnCreate);
 
-    private sealed record TemplateStarterContent(Uri AssetUri, string? RelativePath, string? Kind);
+    private sealed record TemplateStarterContent(AssetPath AssetUri, string? RelativePath, string? Kind);
 }

@@ -16,15 +16,15 @@ namespace Oxygen.Editor.World.Documents;
 public partial class DocumentManager
 {
     [LoggerMessage(Level = LogLevel.Information, Message = "Request to open scene '{SceneUri}' in window {WindowId} received")]
-    private static partial void LogOnOpenSceneRequested(ILogger logger, Uri sceneUri, WindowId windowId);
+    private static partial void LogOnOpenSceneRequested(ILogger logger, AssetPath sceneUri, WindowId windowId);
 
-    private void LogOnOpenSceneRequested(Uri sceneUri) => LogOnOpenSceneRequested(this.logger, sceneUri, this.windowId);
+    private void LogOnOpenSceneRequested(AssetPath sceneUri) => LogOnOpenSceneRequested(this.logger, sceneUri, this.windowId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Cannot open scene '{SceneUri}': the window ID is invalid")]
-    private partial void LogCannotOpenSceneWindowIdInvalid(Uri sceneUri);
+    private partial void LogCannotOpenSceneWindowIdInvalid(AssetPath sceneUri);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Did not open scene '{Path}': {Reason}. The current scene stays open.")]
-    private partial void LogSceneNotOpened(string path, string reason);
+    private partial void LogSceneNotOpened(FileSystemPath path, string reason);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Opened scene `{SceneName}` ({SceneId}) in window {WindowId}")]
     private static partial void LogOpenedNewScene(ILogger logger, string sceneName, SceneId sceneId, WindowId windowId);
@@ -33,17 +33,17 @@ public partial class DocumentManager
         => LogOpenedNewScene(this.logger, scene.Name, scene.Id, this.windowId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Did not open '{Path}': {Reason}.")]
-    private partial void LogDocumentNotOpened(string path, string reason);
+    private partial void LogDocumentNotOpened(FileSystemPath path, string reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to persist last opened scene {SceneName} for project {ProjectName}.")]
     private partial void LogSceneUsageUpdateFailed(Exception exception, string sceneName, string projectName);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Scene replacement failed for '{Path}'. Reload the previous saved scene if its document was retired.")]
-    private partial void LogSceneReplacementFailed(Exception exception, string path);
+    private partial void LogSceneReplacementFailed(Exception exception, FileSystemPath path);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Closed the document '{Document}' because its file '{Path}' was deleted in the editor.")]
-    private partial void LogDeletedDocumentClosed(string document, string path);
+    private partial void LogDeletedDocumentClosed(string document, FileSystemPath path);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The document '{Document}' stays open although its file '{Path}' was deleted in the editor; saving it writes the file again.")]
-    private partial void LogDeletedDocumentNotClosed(string document, string path);
+    private partial void LogDeletedDocumentNotClosed(string document, FileSystemPath path);
 }

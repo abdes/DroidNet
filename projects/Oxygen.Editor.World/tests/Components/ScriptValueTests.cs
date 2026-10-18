@@ -53,10 +53,10 @@ public sealed class ScriptValueTests
         _ = customVec2.Kind.Should().Be(ScriptValueKind.Vec2Value);
         _ = customVec2.GetVectorComponents().Should().Equal([5f, 6f]);
 
-        var assetUri = new Uri("asset:///Content/Scripts/Test.oscript");
+        var assetUri = AssetPath.Parse("/Content/Scripts/Test.oscript");
         var assetVal = ScriptValue.FromAsset(assetUri);
         _ = assetVal.Kind.Should().Be(ScriptValueKind.AssetValue);
-        _ = assetVal.AssetUri.Should().Be(assetUri);
+        _ = assetVal.Asset.Should().Be(assetUri);
 
         var nodeId = NodeId.New();
         var nodeVal = ScriptValue.FromNode(nodeId);

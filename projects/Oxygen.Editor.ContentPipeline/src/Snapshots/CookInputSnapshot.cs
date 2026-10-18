@@ -33,7 +33,7 @@ public sealed record CookInputSnapshot(
     public NativeCapturedInputSet CreateNativeInputs()
         => new([.. this.Inputs.Select(input =>
         {
-            var logicalPath = Path.GetFullPath(Path.Combine(this.Operation.Project.ProjectRoot, input.RelativePath));
+            var logicalPath = this.Operation.Project.ProjectRoot.Combine(input.RelativePath).FullPath;
             NativeCapturedFile? file = input.Kind == CookSnapshotInputKind.File
                 ? new(
                     Path.Combine(this.InputRoot, input.RelativePath),

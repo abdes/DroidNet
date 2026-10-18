@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
 /// <summary>Connects source capture to the document owners' existing save gates.</summary>
@@ -18,11 +20,11 @@ public interface ICookDocumentRegistry
     /// <param name="sourcePath">The canonical saved source path.</param>
     /// <param name="acquire">Acquires the save gate and state; null means the document closed.</param>
     /// <returns>A registration removed when the document closes or changes source identity.</returns>
-    public ICookDocumentRegistration Register(string sourcePath, Func<CancellationToken, Task<CookDocumentReadLease?>> acquire);
+    public ICookDocumentRegistration Register(FileSystemPath sourcePath, Func<CancellationToken, Task<CookDocumentReadLease?>> acquire);
 
     /// <summary>Acquires all open documents that contribute to the requested source set.</summary>
     /// <param name="sourcePaths">The files in the resolved dependency closure.</param>
     /// <param name="cancellationToken">Cancels waiting for an owner's save gate.</param>
     /// <returns>The protected document states, including any dirty-document blockers.</returns>
-    public Task<CookDocumentReadSet> AcquireAsync(IEnumerable<string> sourcePaths, CancellationToken cancellationToken);
+    public Task<CookDocumentReadSet> AcquireAsync(IEnumerable<FileSystemPath> sourcePaths, CancellationToken cancellationToken);
 }

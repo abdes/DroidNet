@@ -7,6 +7,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Assets;
 
@@ -21,7 +22,7 @@ internal static class SceneReferenceRetargeting
     /// <param name="node">The node.</param>
     /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
     /// <returns>Whether any reference changed.</returns>
-    internal static bool RetargetNode(SceneNode node, Func<Uri, Uri?> map)
+    internal static bool RetargetNode(SceneNode node, Func<AssetPath, AssetPath?> map)
     {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(map);
@@ -42,9 +43,9 @@ internal static class SceneReferenceRetargeting
                     changed = true;
                 }
 
-                if (map(slot.Target.GeometryUri) is { } target)
+                if (map(slot.Target.Geometry) is { } target)
                 {
-                    slot.Target = slot.Target with { GeometryUri = target };
+                    slot.Target = slot.Target with { Geometry = target };
                     changed = true;
                 }
             }
@@ -66,7 +67,7 @@ internal static class SceneReferenceRetargeting
     /// <param name="slots">The slots.</param>
     /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
     /// <returns>The re-pointed slots, or null when nothing changed.</returns>
-    internal static ImmutableArray<ScriptSlot>? Retarget(ImmutableArray<ScriptSlot> slots, Func<Uri, Uri?> map)
+    internal static ImmutableArray<ScriptSlot>? Retarget(ImmutableArray<ScriptSlot> slots, Func<AssetPath, AssetPath?> map)
     {
         ArgumentNullException.ThrowIfNull(map);
         var changed = false;
@@ -75,7 +76,7 @@ internal static class SceneReferenceRetargeting
             var updated = slot.Script is { } script && map(script) is { } moved ? slot with { Script = moved } : slot;
             foreach (var (name, value) in slot.Overrides)
             {
-                if (value.AssetUri is { } asset && map(asset) is { } target)
+                if (value.Asset is { } asset && map(asset) is { } target)
                 {
                     updated = updated.WithOverride(name, ScriptValue.FromAsset(target));
                 }
@@ -91,7 +92,7 @@ internal static class SceneReferenceRetargeting
     /// <param name="node">The subtree root.</param>
     /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
     /// <returns>The nodes that changed.</returns>
-    internal static IReadOnlyList<SceneNode> RetargetSubtree(SceneNode node, Func<Uri, Uri?> map)
+    internal static IReadOnlyList<SceneNode> RetargetSubtree(SceneNode node, Func<AssetPath, AssetPath?> map)
     {
         ArgumentNullException.ThrowIfNull(node);
         return [.. new[] { node }.Concat(node.Descendants()).Where(item => RetargetNode(item, map))];
@@ -101,20 +102,21 @@ internal static class SceneReferenceRetargeting
     /// <param name="references">The references.</param>
     /// <param name="map">Returns the new reference, keeping its form, or null when it does not move.</param>
     /// <returns>The re-pointed references, or null when nothing changed.</returns>
-    internal static SceneReferencesData? Retarget(SceneReferencesData references, Func<string, string?> map)
+    internal static SceneReferencesData? Retarget(SceneReferencesData references, Func<AssetPath, AssetPath?> mapAsset, Func<string, string?> map)
     {
         ArgumentNullException.ThrowIfNull(references);
+        ArgumentNullException.ThrowIfNull(mapAsset);
         ArgumentNullException.ThrowIfNull(map);
         var changed = false;
-        IList<Uri> Uris(IList<Uri> values) => [.. values.Select(value =>
+        IList<AssetPath> Uris(IList<AssetPath> values) => [.. values.Select(value =>
         {
-            if (map(value.ToString()) is not { } mapped)
+            if (mapAsset(value) is not { } mapped)
             {
                 return value;
             }
 
             changed = true;
-            return new Uri(mapped);
+            return mapped;
         })];
         var result = references with
         {
@@ -139,7 +141,7 @@ internal static class SceneReferenceRetargeting
     /// <param name="contexts">The starting input contexts.</param>
     /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
     /// <returns>The re-pointed contexts, or null when nothing changed.</returns>
-    internal static IReadOnlyList<StartingInputContextData>? Retarget(IReadOnlyList<StartingInputContextData> contexts, Func<Uri, Uri?> map)
+    internal static IReadOnlyList<StartingInputContextData>? Retarget(IReadOnlyList<StartingInputContextData> contexts, Func<AssetPath, AssetPath?> map)
     {
         ArgumentNullException.ThrowIfNull(contexts);
         ArgumentNullException.ThrowIfNull(map);
@@ -161,7 +163,7 @@ internal static class SceneReferenceRetargeting
     /// <param name="environment">The environment.</param>
     /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
     /// <returns>The re-pointed environment, or null when nothing changed.</returns>
-    internal static SceneEnvironmentData? Retarget(SceneEnvironmentData environment, Func<Uri, Uri?> map)
+    internal static SceneEnvironmentData? Retarget(SceneEnvironmentData environment, Func<AssetPath, AssetPath?> map)
     {
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(map);
@@ -183,6 +185,6 @@ internal static class SceneReferenceRetargeting
 
         return ReferenceEquals(result, environment) ? null : result;
 
-        static Uri? Moved(Uri? reference, Func<Uri, Uri?> map) => reference is null ? null : map(reference);
+        static AssetPath? Moved(AssetPath? reference, Func<AssetPath, AssetPath?> map) => reference is null ? null : map(reference);
     }
 }

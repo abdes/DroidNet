@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using Oxygen.Editor.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Geometry;
 
@@ -39,12 +40,12 @@ public sealed partial class GeometryViewModel
             return;
         }
 
-        _ = Uri.TryCreate(this.SelectedAssetUriString, UriKind.Absolute, out var selectedGeometry);
-        var previousGeometry = this.latestAssets.FirstOrDefault(asset => selectedGeometry is not null && (asset.IdentityUri == selectedGeometry || asset.CookedUri == selectedGeometry));
-        var currentGeometry = assets.FirstOrDefault(asset => selectedGeometry is not null && (asset.IdentityUri == selectedGeometry || asset.CookedUri == selectedGeometry));
+        var selectedGeometry = this.SelectedGeometry;
+        var previousGeometry = selectedGeometry is null ? null : this.latestAssets.Find(selectedGeometry);
+        var currentGeometry = selectedGeometry is null ? null : assets.Find(selectedGeometry);
         this.latestAssets = assets;
         var geometries = AssetRule.For(AssetKind.Geometry).Apply(assets, selectedGeometry);
-        var wanted = geometries.Select(static asset => asset.IdentityUri.AbsoluteUri).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var wanted = geometries.Select(static asset => asset.Identity).ToHashSet();
         foreach (var removed in this.contentItemsByKey.Keys.Where(key => !wanted.Contains(key)).ToArray())
         {
             _ = this.contentItems.Remove(this.contentItemsByKey[removed]);
@@ -56,13 +57,13 @@ public sealed partial class GeometryViewModel
             var asset = geometries[index];
             var item = new AssetPickerItem(
                 asset.DisplayName,
-                asset.IdentityUri,
+                asset.Identity,
                 "Geometry · " + asset.PrimaryBadge,
                 asset.DisplayPath,
                 AssetPickerGroup.Content,
                 asset.IsSelectable,
                 "\uF158");
-            if (this.contentItemsByKey.TryGetValue(asset.IdentityUri.AbsoluteUri, out var row))
+            if (this.contentItemsByKey.TryGetValue(asset.Identity, out var row))
             {
                 row.Update(item);
                 if (this.contentItems.IndexOf(row) != index)
@@ -73,7 +74,7 @@ public sealed partial class GeometryViewModel
             else
             {
                 row = new(item);
-                this.contentItemsByKey.Add(asset.IdentityUri.AbsoluteUri, row);
+                this.contentItemsByKey.Add(asset.Identity, row);
                 this.contentItems.Insert(index, row);
             }
         }
@@ -87,20 +88,18 @@ public sealed partial class GeometryViewModel
             _ = this.RefreshMaterialSlotsAsync();
         }
 
-        if (!this.IsMixed && Uri.TryCreate(this.SelectedAssetUriString, UriKind.Absolute, out var selected)
-            && assets.FirstOrDefault(asset => asset.IdentityUri == selected || asset.CookedUri == selected) is { } current)
+        if (!this.IsMixed && this.SelectedGeometry is { } selected && assets.Find(selected) is { } current)
         {
             this.SelectedAssetName = current.DisplayName;
         }
     }
 
-    private string ResolveGeometryDisplayName(Uri uri)
-        => this.latestAssets.FirstOrDefault(asset => asset.IdentityUri == uri || asset.CookedUri == uri)?.DisplayName
-            ?? ExtractNameFromUriString(uri.ToString());
+    private string ResolveGeometryDisplayName(AssetPath geometry)
+        => this.latestAssets.Find(geometry)?.DisplayName ?? geometry.Name;
 
-    private string BuiltinAvailability(Uri uri)
+    private string BuiltinAvailability(AssetPath uri)
     {
-        var asset = this.latestAssets.FirstOrDefault(item => item.IdentityUri == uri);
+        var asset = this.latestAssets.FirstOrDefault(item => item.Identity == uri);
         return asset?.RuntimeAvailability switch
         {
             AssetRuntimeAvailability.Unavailable or AssetRuntimeAvailability.NotMounted => " · Preview unavailable",

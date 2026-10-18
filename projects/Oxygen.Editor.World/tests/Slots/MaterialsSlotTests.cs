@@ -9,6 +9,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Tests.Slots;
 
@@ -24,23 +25,23 @@ public sealed class MaterialsSlotTests
     public void MaterialsSlot_RoundTrip_KeepsGeometryUriSlotIdLayoutRevisionAndMaterialUri()
     {
         var target = new MaterialSlotTarget(
-            new Uri("asset:///Content/Meshes/Gate.geometry"),
+            AssetPath.Parse("/Content/Meshes/Gate.geometry"),
             Guid.Parse("40000000-0000-0000-0000-000000000001"),
             "rev-gate-42");
 
         var slot = new MaterialsSlot
         {
             Target = target,
-            Material = new Uri("asset:///Content/Materials/Iron.omat.json"),
+            Material = AssetPath.Parse("/Content/Materials/Iron.omat.json"),
         };
 
         var dto = (MaterialsSlotData)slot.Dehydrate();
         var restored = (MaterialsSlot)OverrideSlot.CreateAndHydrate(dto);
 
-        _ = restored.Target.GeometryUri.Should().Be(target.GeometryUri);
+        _ = restored.Target.Geometry.Should().Be(target.Geometry);
         _ = restored.Target.SlotId.Should().Be(target.SlotId);
         _ = restored.Target.LayoutRevision.Should().Be(target.LayoutRevision);
-        _ = restored.Material.Should().Be(new Uri("asset:///Content/Materials/Iron.omat.json"));
+        _ = restored.Material.Should().Be(AssetPath.Parse("/Content/Materials/Iron.omat.json"));
         _ = restored.Target.Should().Be(target);
     }
 
@@ -53,10 +54,10 @@ public sealed class MaterialsSlotTests
         {
             Name = "Geometry",
             Node = node,
-            Geometry = new Uri("asset:///Engine/Generated/BasicShapes/Cube"),
+            Geometry = AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"),
         };
         var target = new MaterialSlotTarget(geometry.Geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
-        var materialSlot = new MaterialsSlot { Target = target, Material = new Uri("asset:///Content/Materials/Red.omat.json") };
+        var materialSlot = new MaterialsSlot { Target = target, Material = AssetPath.Parse("/Content/Materials/Red.omat.json") };
         geometry.OverrideSlots.Add(materialSlot);
         node.Components.Add(geometry);
         scene.RootNodes.Add(node);
@@ -80,46 +81,28 @@ public sealed class MaterialsSlotTests
     }
 
     [TestMethod]
-    public void Material_SetToANonAssetUri_ThrowsAndKeepsTheMaterial()
+    public void Material_SetToNull_ThrowsAndKeepsTheMaterial()
     {
-        var iron = new Uri("asset:///Content/Materials/Iron.omat.json");
+        var iron = AssetPath.Parse("/Content/Materials/Iron.omat");
         var slot = new MaterialsSlot { Target = GateTarget(), Material = iron };
 
-        var act = () => slot.Material = new Uri("https://example.com/Content/Materials/Iron.omat.json");
+        var act = () => slot.Material = null!;
 
-        _ = act.Should().Throw<ArgumentException>();
+        _ = act.Should().Throw<ArgumentNullException>();
         _ = slot.Material.Should().Be(iron);
     }
 
     [TestMethod]
-    public void MaterialSlotTarget_NonAssetGeometry_Throws()
-    {
-        var act = () => new MaterialSlotTarget(new Uri("file:///C:/Content/Meshes/Gate.geometry"), Guid.NewGuid(), "rev-gate-42");
-
-        _ = act.Should().Throw<ArgumentException>();
-    }
-
-    [TestMethod]
-    public void MaterialSlotTarget_WithNonAssetGeometry_Throws()
-    {
-        var target = GateTarget();
-
-        var act = () => target with { GeometryUri = new Uri("https://example.com/Content/Meshes/Gate.geometry") };
-
-        _ = act.Should().Throw<ArgumentException>();
-    }
-
-    [TestMethod]
-    [DataRow("asset:///Content/Meshes/Gate.geometry", "https://example.com/Content/Materials/Iron.omat.json")]
-    [DataRow("https://example.com/Content/Meshes/Gate.geometry", "asset:///Content/Materials/Iron.omat.json")]
-    public void CreateAndHydrate_UriNotAnAsset_ThrowsJsonException(string geometry, string material)
+    [DataRow(false, true)]
+    [DataRow(true, false)]
+    public void CreateAndHydrate_MissingReference_ThrowsJsonException(bool hasGeometry, bool hasMaterial)
     {
         var data = new MaterialsSlotData
         {
-            GeometryUri = new Uri(geometry),
+            GeometryUri = hasGeometry ? AssetPath.Parse("/Content/Meshes/Gate.geometry") : null!,
             SlotId = Guid.Parse("40000000-0000-0000-0000-000000000001"),
             LayoutRevision = "rev-gate-42",
-            MaterialUri = new Uri(material),
+            MaterialUri = hasMaterial ? AssetPath.Parse("/Content/Materials/Iron.omat") : null!,
         };
 
         var act = () => OverrideSlot.CreateAndHydrate(data);
@@ -128,5 +111,5 @@ public sealed class MaterialsSlotTests
     }
 
     private static MaterialSlotTarget GateTarget()
-        => new(new Uri("asset:///Content/Meshes/Gate.geometry"), Guid.Parse("40000000-0000-0000-0000-000000000001"), "rev-gate-42");
+        => new(AssetPath.Parse("/Content/Meshes/Gate.geometry"), Guid.Parse("40000000-0000-0000-0000-000000000001"), "rev-gate-42");
 }

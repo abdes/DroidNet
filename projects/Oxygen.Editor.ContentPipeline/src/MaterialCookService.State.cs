@@ -12,7 +12,7 @@ public sealed partial class MaterialCookService
 {
     /// <inheritdoc />
     public async Task<MaterialCookState> GetMaterialCookStateAsync(
-        Uri materialSourceUri,
+        AssetPath materialSourceUri,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(materialSourceUri);
@@ -38,16 +38,5 @@ public sealed partial class MaterialCookService
             this.LogStateInspectionFailed(materialSourceUri, exception);
             return MaterialCookState.Failed;
         }
-    }
-
-    private static Uri GetCookedUri(Uri materialSourceUri)
-    {
-        var path = materialSourceUri.AbsolutePath;
-        if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-        {
-            path = path[..^".json".Length];
-        }
-
-        return new Uri($"{AssetUris.Scheme}://{path}");
     }
 }

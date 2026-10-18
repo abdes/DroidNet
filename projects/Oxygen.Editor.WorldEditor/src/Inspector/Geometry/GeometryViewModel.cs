@@ -21,6 +21,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Geometry;
 
@@ -40,13 +41,13 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     private readonly IGeometryMaterialSlotProvider materialSlots;
     private readonly IProjectContextService projectContexts;
     private readonly Func<SceneAuthoring?>? authoringProvider;
-    private readonly PropertyBinding<Uri?> geometryUriBinding = new(SceneProperties.Geometry.GeometryUriDescriptor);
+    private readonly PropertyBinding<AssetPath?> geometryUriBinding = new(SceneProperties.Geometry.GeometryUriDescriptor);
     private readonly ObservableCollection<AssetPickerRow> contentItems = [];
     private readonly ObservableCollection<AssetPickerRow> engineItems = [];
     private readonly ObservableCollection<MaterialPickerRow> engineMaterials = [];
-    private readonly Dictionary<string, AssetPickerRow> contentItemsByKey = [with(StringComparer.OrdinalIgnoreCase)];
+    private readonly Dictionary<AssetPath, AssetPickerRow> contentItemsByKey = [];
     private readonly ObservableCollection<MaterialPickerRow> contentMaterialItems = [];
-    private readonly Dictionary<string, MaterialPickerItem> contentMaterialItemsByKey = [with(StringComparer.OrdinalIgnoreCase)];
+    private readonly Dictionary<AssetPath, MaterialPickerItem> contentMaterialItemsByKey = [];
     private readonly DispatcherQueue dispatcherQueue;
 
     private IDisposable? assetChangesSubscription;
@@ -116,11 +117,11 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     public partial bool IsMixed { get; set; }
 
     /// <summary>
-    /// Gets or sets the URI string of the currently selected geometry asset. When multiple
-    /// nodes are selected and they reference different assets this value will be <c>null</c>.
+    /// Gets or sets the currently selected geometry asset. When multiple nodes are selected and
+    /// they reference different assets this value will be <c>null</c>.
     /// </summary>
     [ObservableProperty]
-    public partial string? SelectedAssetUriString { get; set; }
+    public partial AssetPath? SelectedGeometry { get; set; }
 
     /// <summary>
     /// Gets or sets the display name of the currently selected geometry asset. When no asset
@@ -144,10 +145,10 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     public partial bool IsMaterialMixed { get; set; }
 
     /// <summary>
-    /// Gets or sets the URI string of the currently selected material asset.
+    /// Gets or sets the currently selected material asset.
     /// </summary>
     [ObservableProperty]
-    public partial string? SelectedMaterialUriString { get; set; }
+    public partial AssetPath? SelectedMaterial { get; set; }
 
     /// <summary>
     /// Gets or sets the display name of the currently selected material asset.
@@ -174,7 +175,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
                 return "\uE9D9"; // Indeterminate / mixed
             }
 
-            if (string.IsNullOrWhiteSpace(this.SelectedAssetUriString))
+            if (this.SelectedGeometry is null)
             {
                 return string.Empty; // Empty placeholder
             }
@@ -195,7 +196,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
                 return "\uE9D9"; // Indeterminate / mixed
             }
 
-            if (string.IsNullOrWhiteSpace(this.SelectedMaterialUriString))
+            if (this.SelectedMaterial is null)
             {
                 return string.Empty;
             }
@@ -232,20 +233,20 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         }
 
         var nodes = this.selectedItems.ToList();
-        var newUri = item.Uri;
+        var geometry = item.Asset;
         if (this.authoringProvider?.Invoke() is not { } authoring)
         {
             return;
         }
 
-        var result = await authoring.ExecuteAsync(new SetGeometry(nodes.ConvertAll(static node => node.Id), newUri)).ConfigureAwait(true);
+        var result = await authoring.ExecuteAsync(new SetGeometry(nodes.ConvertAll(static node => node.Id), geometry)).ConfigureAwait(true);
         if (!result.Succeeded || !this.IsCurrentSelection(nodes))
         {
             return;
         }
 
         // Update viewmodel display
-        this.SelectedAssetUriString = newUri.ToString();
+        this.SelectedGeometry = geometry;
         this.SelectedAssetName = item.Name;
         this.IsMixed = false;
         await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);
@@ -269,7 +270,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         }
 
         var nodeIds = picker.Nodes.ConvertAll(static node => node.Id);
-        var built = await MaterialSlotEdits.SetAsync(this.materialSlots, project, nodeIds, picker.Target, item.Uri).ConfigureAwait(true);
+        var built = await MaterialSlotEdits.SetAsync(this.materialSlots, project, nodeIds, picker.Target, item.Asset).ConfigureAwait(true);
         var succeeded = built.Edit is { } edit && (await picker.Authoring.ExecuteAsync(edit).ConfigureAwait(true)).Succeeded;
         if (!this.IsCurrentSelection(picker.Nodes))
         {
@@ -278,7 +279,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
         if (succeeded)
         {
-            this.UpdateMaterialDisplay(item.Uri);
+            this.UpdateMaterialDisplay(item.Asset);
         }
 
         await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);
@@ -317,14 +318,14 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
         if (this.geometryUriBinding.IsMixed)
         {
-            this.SelectedAssetUriString = null;
+            this.SelectedGeometry = null;
             this.SelectedAssetName = "--";
         }
         else
         {
-            var selectedUri = this.geometryUriBinding.HasValue ? this.geometryUriBinding.Value : null;
-            this.SelectedAssetUriString = selectedUri?.ToString();
-            this.SelectedAssetName = selectedUri is null ? "None" : this.ResolveGeometryDisplayName(selectedUri);
+            var selected = this.geometryUriBinding.HasValue ? this.geometryUriBinding.Value : null;
+            this.SelectedGeometry = selected;
+            this.SelectedAssetName = selected is null ? "None" : this.ResolveGeometryDisplayName(selected);
         }
 
         // Authored assignments change synchronously, including during undo/redo.
@@ -344,42 +345,17 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>
-    /// Extracts the user-facing material name from a material descriptor or cooked material URI.
-    /// </summary>
-    /// <param name="uriString">The material URI string.</param>
-    /// <returns>The user-facing material name.</returns>
-    internal static string ExtractMaterialNameFromUriString(string uriString)
-    {
-        var name = ExtractNameFromUriString(uriString);
-        foreach (var suffix in new[] { AssetFileTypes.MaterialDescriptor, AssetFileTypes.Material })
-        {
-            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-            {
-                return name[..^suffix.Length];
-            }
-        }
+    /// <summary>Gets the user-facing name of an asset: its name without its file type.</summary>
+    /// <param name="asset">The asset.</param>
+    /// <returns>The user-facing name.</returns>
+    internal static string NameOf(AssetPath asset) => AssetFileTypes.RemoveSuffix(asset.Name);
 
-        return name;
-    }
-
-    private static string ExtractNameFromUriString(string uriString)
-    {
-        if (!Uri.TryCreate(uriString, UriKind.Absolute, out var uri))
-        {
-            return uriString;
-        }
-
-        var lastSegment = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
-        return string.IsNullOrWhiteSpace(lastSegment) ? uriString : lastSegment;
-    }
-
-    private static AssetPickerItem CreateEngineItem(string name, Uri uri, string displayPath)
+    private static AssetPickerItem CreateEngineItem(string name, AssetPath asset)
         => new(
             Name: name,
-            Uri: uri,
+            Asset: asset,
             DisplayType: "Static Mesh",
-            DisplayPath: displayPath,
+            DisplayPath: asset.VirtualPath,
             Group: AssetPickerGroup.Engine,
             IsEnabled: true,
             ThumbnailModel: "\uF158");
@@ -387,32 +363,29 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     private static MaterialPickerItem CreateNoMaterialItem()
         => new(
             Name: "Clear override",
-            Uri: null,
+            Asset: null,
             DisplayType: "Use the geometry default",
             DisplayPath: "Geometry default",
             Group: AssetPickerGroup.Engine,
             IsEnabled: true,
             ThumbnailModel: string.Empty);
 
-    private static MaterialPickerItem CreateEngineMaterialItem(string name, Uri uri, string displayPath)
+    private static MaterialPickerItem CreateEngineMaterialItem(string name, AssetPath asset)
         => new(
             Name: name,
-            Uri: uri,
+            Asset: asset,
             DisplayType: "Material",
-            DisplayPath: displayPath,
+            DisplayPath: asset.VirtualPath,
             Group: AssetPickerGroup.Engine,
             IsEnabled: true,
             ThumbnailModel: "\uE790");
 
-    private static bool UriValuesEqual(Uri? left, Uri? right)
-        => string.Equals(left?.ToString(), right?.ToString(), StringComparison.OrdinalIgnoreCase);
-
     private static MaterialPickerItem CreateContentMaterialItem(AssetEntry asset)
         => new(
             Name: asset.DisplayName,
-            Uri: asset.IdentityUri,
+            Asset: asset.Identity,
             DisplayType: $"Material · {AssetStatusText.ForEntry(asset)}",
-            DisplayPath: asset.DescriptorPath ?? asset.CookedPath ?? AssetUriHelper.GetVirtualPath(asset.IdentityUri),
+            DisplayPath: (asset.DescriptorPath ?? asset.CookedPath)?.FullPath ?? asset.Identity.VirtualPath,
             Group: AssetPickerGroup.Content,
             IsEnabled: asset.IsSelectable,
             ThumbnailModel: "\uE8B9");
@@ -435,21 +408,18 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     // Lists the materials the slot accepts, keeping the one assigned now even when it is gone.
     private void ApplyContentMaterials()
     {
-        _ = Uri.TryCreate(this.IsMaterialMixed ? null : this.SelectedMaterialUriString, UriKind.Absolute, out var assigned);
-        this.ReplaceContentMaterialItems(AssetRule.For(AssetKind.Material).Apply(this.latestMaterialAssets, assigned));
+        this.ReplaceContentMaterialItems(AssetRule.For(AssetKind.Material).Apply(this.latestMaterialAssets, this.IsMaterialMixed ? null : this.SelectedMaterial));
     }
 
-    private void UpdateMaterialDisplay(Uri? uri)
+    private void UpdateMaterialDisplay(AssetPath? material)
     {
-        this.SelectedMaterialUriString = uri?.ToString();
-        this.SelectedMaterialName = uri is null ? "Geometry default" : this.ResolveMaterialDisplayName(uri);
+        this.SelectedMaterial = material;
+        this.SelectedMaterialName = material is null ? "Geometry default" : this.ResolveMaterialDisplayName(material);
         this.IsMaterialMixed = false;
     }
 
-    private string ResolveMaterialDisplayName(Uri uri)
-        => this.contentMaterialItemsByKey.TryGetValue(uri.ToString(), out var item)
-            ? item.Name
-            : ExtractMaterialNameFromUriString(uri.ToString());
+    private string ResolveMaterialDisplayName(AssetPath material)
+        => this.contentMaterialItemsByKey.TryGetValue(material, out var item) ? item.Name : NameOf(material);
 
     // Use the shared WinUI dispatcher helpers to handle shutdown / exceptions robustly.
     private void DispatchOnUi(Action action)
@@ -468,13 +438,13 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
     private void ReplaceContentMaterialItems(IReadOnlyList<AssetEntry> materials)
     {
-        var existing = this.contentMaterialItems.ToDictionary(static row => row.Item.Uri!.ToString(), StringComparer.OrdinalIgnoreCase);
+        var existing = this.contentMaterialItems.ToDictionary(static row => row.Item.Asset!);
         this.contentMaterialItemsByKey.Clear();
         var index = 0;
         foreach (var material in materials.OrderBy(static m => m.DisplayName, StringComparer.OrdinalIgnoreCase))
         {
             var item = CreateContentMaterialItem(material);
-            var key = material.IdentityUri.ToString();
+            var key = material.Identity;
             if (existing.TryGetValue(key, out var row))
             {
                 row.Update(item);
@@ -511,7 +481,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         this.OnPropertyChanged(nameof(this.AssetButtonLabel));
     }
 
-    partial void OnSelectedAssetUriStringChanged(string? value)
+    partial void OnSelectedGeometryChanged(AssetPath? value)
     {
         _ = value;
         this.OnPropertyChanged(nameof(this.AssetThumbnailGlyph));
@@ -532,7 +502,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         this.OnPropertyChanged(nameof(this.MaterialToolTip));
     }
 
-    partial void OnSelectedMaterialUriStringChanged(string? value)
+    partial void OnSelectedMaterialChanged(AssetPath? value)
     {
         _ = value;
         this.OnPropertyChanged(nameof(this.MaterialThumbnailGlyph));

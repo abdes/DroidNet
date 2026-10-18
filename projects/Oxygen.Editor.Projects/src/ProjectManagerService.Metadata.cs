@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
 
@@ -29,7 +30,7 @@ public partial class ProjectManagerService
                 saved.Settings = settings;
                 _ = await this.AtomicFiles.WriteAsync(path, Encoding.UTF8.GetBytes(ProjectInfo.ToJson(saved)), snapshot.Version, cancellationToken).ConfigureAwait(true);
                 if (this.CurrentProject?.ProjectInfo is { Location: { } location } current
-                    && string.Equals(Path.GetFullPath(location), Path.GetFullPath(projectRoot), StringComparison.OrdinalIgnoreCase))
+                    && FileSystemPath.From(location) == FileSystemPath.From(projectRoot))
                 {
                     current.Settings = settings;
                 }

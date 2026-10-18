@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
@@ -56,19 +57,25 @@ public partial class ProjectLayoutViewModel
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "RestoreState: Adding folder from URL: {Path}")]
-    private static partial void LogRestoreStateAddFolder(ILogger logger, string path);
+    private static partial void LogRestoreStateAddFolder(ILogger logger, AssetPath path);
 
     [System.Diagnostics.Conditional("DEBUG")]
-    private void LogRestoreStateAddFolder(string path)
+    private void LogRestoreStateAddFolder(AssetPath path)
         => LogRestoreStateAddFolder(this.logger, path);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "RestoreState: Final ContentBrowserState.SelectedFolders: [{Folders}]")]
     private static partial void LogRestoreStateFinal(ILogger logger, string folders);
 
-    private void LogRestoreStateFinal(string folders)
-        => LogRestoreStateFinal(this.logger, folders);
+    private void LogRestoreStateFinal(IEnumerable<AssetPath> folders)
+    {
+        if (this.logger.IsEnabled(LogLevel.Debug))
+        {
+            LogRestoreStateFinal(this.logger, string.Join(", ", folders));
+        }
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -101,12 +108,18 @@ public partial class ProjectLayoutViewModel
         => LogTreeSelectionChangedUpdatingState(this.logger, count);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Selected folders: [{Folders}]")]
     private static partial void LogSelectedFolders(ILogger logger, string folders);
 
-    private void LogSelectedFolders(string folders)
-        => LogSelectedFolders(this.logger, folders);
+    private void LogSelectedFolders(IEnumerable<AssetPath> folders)
+    {
+        if (this.logger.IsEnabled(LogLevel.Debug))
+        {
+            LogSelectedFolders(this.logger, string.Join(", ", folders));
+        }
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -139,12 +152,18 @@ public partial class ProjectLayoutViewModel
         => LogContentBrowserStatePropertyChanged(this.logger, propertyName);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "ContentBrowserState.SelectedFolders changed. New selection: [{Folders}]")]
     private static partial void LogContentBrowserStateSelectedFoldersChanged(ILogger logger, string folders);
 
-    private void LogContentBrowserStateSelectedFoldersChanged(string folders)
-        => LogContentBrowserStateSelectedFoldersChanged(this.logger, folders);
+    private void LogContentBrowserStateSelectedFoldersChanged(IEnumerable<AssetPath> folders)
+    {
+        if (this.logger.IsEnabled(LogLevel.Debug))
+        {
+            LogContentBrowserStateSelectedFoldersChanged(this.logger, string.Join(", ", folders));
+        }
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -235,23 +254,23 @@ public partial class ProjectLayoutViewModel
         => LogUpdateTreeSelectionCompleted(this.logger);
 
     [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Folder rename requested in the sources tree: '{Before}' -> '{After}'.")]
-    private static partial void LogFolderRenameRequested(ILogger logger, string before, string after);
+    private static partial void LogFolderRenameRequested(ILogger logger, AssetPath before, AssetPath after);
 
     [System.Diagnostics.Conditional("DEBUG")]
-    private void LogFolderRenameRequested(string before, string after)
+    private void LogFolderRenameRequested(AssetPath before, AssetPath after)
         => LogFolderRenameRequested(this.logger, before, after);
 
     [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Folder drop in the sources tree: {Operation} [{Folders}] into '{Parent}'.")]
-    private static partial void LogFolderDropRequested(ILogger logger, DroidNet.Controls.TreeDropOperation operation, string folders, string parent);
+    private static partial void LogFolderDropRequested(ILogger logger, DroidNet.Controls.TreeDropOperation operation, string folders, AssetPath parent);
 
     [System.Diagnostics.Conditional("DEBUG")]
-    private void LogFolderDropRequested(DroidNet.Controls.TreeDropOperation operation, IEnumerable<string> folders, string parent)
+    private void LogFolderDropRequested(DroidNet.Controls.TreeDropOperation operation, IEnumerable<AssetPath> folders, AssetPath parent)
 #pragma warning disable CA1873 // Compiled out of release builds by Conditional("DEBUG")
         => LogFolderDropRequested(this.logger, operation, string.Join(", ", folders), parent);
 #pragma warning restore CA1873
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Folder '{Folder}' no longer exists; showing '{Shown}' instead.")]
-    private partial void LogMissingSelectedFolder(string folder, string shown);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Folder '{Folder}' no longer exists; showing its nearest existing folder '{Shown}' instead, or the whole project when none is.")]
+    private partial void LogMissingSelectedFolder(AssetPath folder, AssetPath? shown);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Reloading the sources tree: the asset catalog reported changed folders.")]
     private partial void LogReloadingTreeAfterFolderChanges();
@@ -260,7 +279,7 @@ public partial class ProjectLayoutViewModel
     private static partial void LogFolderDeleteRequested(ILogger logger, string folders);
 
     [System.Diagnostics.Conditional("DEBUG")]
-    private void LogFolderDeleteRequested(IEnumerable<string> folders)
+    private void LogFolderDeleteRequested(IEnumerable<AssetPath> folders)
 #pragma warning disable CA1873 // Compiled out of release builds by Conditional("DEBUG")
         => LogFolderDeleteRequested(this.logger, string.Join(", ", folders));
 #pragma warning restore CA1873

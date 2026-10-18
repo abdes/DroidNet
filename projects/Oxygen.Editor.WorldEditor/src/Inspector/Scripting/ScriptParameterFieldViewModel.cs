@@ -331,7 +331,7 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
     {
         if (!this.updating && value is not null)
         {
-            this.Commit(ScriptValue.FromAsset(value.Uri));
+            this.Commit(ScriptValue.FromAsset(value.Asset));
         }
     }
 
@@ -423,10 +423,10 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
                     (this.X, this.Y, this.Z, this.W) = (vector.X, vector.Y, vector.Z, vector.W);
                     break;
                 case ScriptFieldKind.Asset:
-                    var asset = shown?.AssetUri;
-                    this.SelectedAsset = asset is null ? null : this.AssetChoices.FirstOrDefault(choice => choice.Uri == asset);
+                    var asset = shown?.Asset;
+                    this.SelectedAsset = asset is null ? null : this.AssetChoices.FirstOrDefault(choice => choice.Asset == asset);
                     this.IsReferenceMissing = asset is not null && this.SelectedAsset is null;
-                    this.ReferenceText = asset is null ? "None" : this.SelectedAsset?.Name ?? ("Missing: " + Uri.UnescapeDataString(asset.AbsolutePath));
+                    this.ReferenceText = asset is null ? "None" : this.SelectedAsset?.Name ?? ("Missing: " + asset.VirtualPath);
                     break;
                 case ScriptFieldKind.Node:
                     var node = shown?.NodeId;

@@ -82,7 +82,7 @@ public sealed partial class WorkspaceInteractionService(
     {
         ArgumentNullException.ThrowIfNull(project);
         if (this.activeProject?.ProjectId != project.ProjectId
-            || !string.Equals(this.activeProject?.ProjectRoot, project.ProjectRoot, StringComparison.OrdinalIgnoreCase))
+            || this.activeProject?.ProjectRoot != project.ProjectRoot)
         {
             this.scenes = [];
         }
@@ -219,7 +219,7 @@ public sealed partial class WorkspaceInteractionService(
     // The project scope id is the normalized project root, the same identity the preview
     // preferences use; the stored ProjectId inside the value is what rejects a reused path.
     private static SettingContext Context(ProjectContext project)
-        => SettingContext.Project(Path.TrimEndingDirectorySeparator(Path.GetFullPath(project.ProjectRoot)).ToUpperInvariant());
+        => SettingContext.Project(project.ProjectRoot.FullPath.ToUpperInvariant());
 
     private void Mutate(NodeId nodeId, bool requested, HashSet<NodeId> target, string appliedMessage, string reversedMessage)
     {
@@ -355,12 +355,12 @@ public sealed partial class WorkspaceInteractionService(
             DiagnosticCodes.SettingsPrefix + code,
             title,
             message,
-            new AffectedScope { ProjectId = project.ProjectId, ProjectName = project.Name, ProjectPath = project.ProjectRoot },
+            new AffectedScope { ProjectId = project.ProjectId, ProjectName = project.Name, ProjectPath = project.ProjectRoot.FullPath },
             exception: exception);
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Workspace interaction state failed ({Code}) for project {ProjectRoot}.")]
-    private partial void LogInteractionFailure(Exception exception, string code, string projectRoot);
+    private partial void LogInteractionFailure(Exception exception, string code, FileSystemPath projectRoot);
 
     private readonly record struct PendingWrite(ProjectContext Project, ProjectInteraction Value);
 

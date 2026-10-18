@@ -9,6 +9,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Tests.Components;
 
@@ -20,8 +21,8 @@ namespace Oxygen.Editor.World.Tests.Components;
 [TestCategory(nameof(ScriptingComponent))]
 public sealed class ScriptingComponentTests
 {
-    private static readonly Uri MoveScript = new("asset:///Content/Player/move.oscript");
-    private static readonly Uri LookScript = new("asset:///Content/Player/look.oscript");
+    private static readonly AssetPath MoveScript = AssetPath.Parse("/Content/Player/move.oscript");
+    private static readonly AssetPath LookScript = AssetPath.Parse("/Content/Player/look.oscript");
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -41,7 +42,7 @@ public sealed class ScriptingComponentTests
             .WithOverride("offset", ScriptValue.FromVector(new Vector2(1, 2)))
             .WithOverride("tint", ScriptValue.FromVector(new Vector3(0.1f, 0.2f, 0.3f)))
             .WithOverride("rect", ScriptValue.FromVector(new Vector4(1, 2, 3, 4)))
-            .WithOverride("jump", ScriptValue.FromAsset(new Uri("asset:///Content/Input/Jump.oiact")))
+            .WithOverride("jump", ScriptValue.FromAsset(AssetPath.Parse("/Content/Input/Jump.oiact")))
             .WithOverride("follow", ScriptValue.FromNode(target.Id));
         var second = new ScriptSlot { Script = LookScript, ExecutionOrder = 7 };
         var unassigned = new ScriptSlot();

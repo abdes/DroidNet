@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Scenes.Properties;
@@ -13,18 +14,18 @@ namespace Oxygen.Editor.Scenes.Properties;
 /// </summary>
 public sealed class GeometryDescriptors
 {
-    private GeometryDescriptors(PropertyDescriptor<Uri?> geometryUri)
+    private GeometryDescriptors(PropertyDescriptor<AssetPath?> geometryUri)
     {
-        this.GeometryUri = new PropertyId<Uri?>(geometryUri.Id);
+        this.GeometryUri = new PropertyId<AssetPath?>(geometryUri.Id);
         this.GeometryUriDescriptor = geometryUri;
         this.ById = new Dictionary<PropertyId, PropertyDescriptor> { [geometryUri.Id] = geometryUri };
     }
 
     /// <summary>Gets the typed property id for the geometry asset URI.</summary>
-    public PropertyId<Uri?> GeometryUri { get; }
+    public PropertyId<AssetPath?> GeometryUri { get; }
 
     /// <summary>Gets the descriptor for the geometry asset URI.</summary>
-    public PropertyDescriptor<Uri?> GeometryUriDescriptor { get; }
+    public PropertyDescriptor<AssetPath?> GeometryUriDescriptor { get; }
 
     /// <summary>Gets descriptors indexed by property id.</summary>
     public IReadOnlyDictionary<PropertyId, PropertyDescriptor> ById { get; }
@@ -35,8 +36,8 @@ public sealed class GeometryDescriptors
     /// <returns>The descriptor catalog.</returns>
     public static GeometryDescriptors Build()
         => new(
-            geometryUri: new PropertyDescriptor<Uri?>(
-                id: new PropertyId<Uri?>(SceneProperties.GeometryKind, "/geometry_uri"),
+            geometryUri: new PropertyDescriptor<AssetPath?>(
+                id: new PropertyId<AssetPath?>(SceneProperties.GeometryKind, "/geometry_uri"),
                 reader: static target => ((GeometryComponent)target).Geometry,
                 writer: static (target, value) => ((GeometryComponent)target).Geometry = value ?? throw new ArgumentNullException(nameof(value)),
                 validator: static value => value is null

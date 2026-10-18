@@ -34,27 +34,6 @@ public sealed class GeneratedAssetCatalog : IAssetCatalog
         ArgumentNullException.ThrowIfNull(query);
         cancellationToken.ThrowIfCancellationRequested();
 
-        IEnumerable<AssetRecord> results = this.records;
-
-        results = results.Where(r => AssetQueryScopeMatcher.IsMatch(query.Scope, r.Uri));
-
-        if (!string.IsNullOrWhiteSpace(query.SearchText))
-        {
-            var term = query.SearchText.Trim();
-            results = results.Where(r => MatchesSearch(r, term));
-        }
-
-        var list = results
-            .OrderBy(r => r.Uri.ToString(), StringComparer.Ordinal)
-            .ToArray();
-
-        return Task.FromResult<IReadOnlyList<AssetRecord>>(list);
+        return Task.FromResult(AssetQueryMatcher.Apply(query, this.records));
     }
-
-    // Provider-defined semantics (intentionally small and stable).
-    private static bool MatchesSearch(AssetRecord record, string term)
-        => record.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
-            || record.Generated?.CanonicalName.Contains(term, StringComparison.OrdinalIgnoreCase) == true
-            || record.Uri.ToString().Contains(term, StringComparison.OrdinalIgnoreCase)
-            || AssetUriHelper.GetMountPoint(record.Uri).Contains(term, StringComparison.OrdinalIgnoreCase);
 }

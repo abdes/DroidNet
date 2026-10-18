@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets;
 
@@ -82,22 +83,22 @@ public sealed class AssetRule
     /// <param name="assets">The feed's assets.</param>
     /// <param name="keeping">The property's current assignments; null entries are ignored.</param>
     /// <returns>The accepted and kept assets, ordered by name and then path.</returns>
-    public IReadOnlyList<AssetEntry> Apply(IReadOnlyList<AssetEntry> assets, params IEnumerable<Uri?> keeping)
+    public IReadOnlyList<AssetEntry> Apply(IReadOnlyList<AssetEntry> assets, params IEnumerable<AssetPath?> keeping)
     {
         ArgumentNullException.ThrowIfNull(assets);
         ArgumentNullException.ThrowIfNull(keeping);
         var accepted = assets.Where(this.Accepts).ToList();
-        foreach (var uri in keeping.OfType<Uri>())
+        foreach (var identity in keeping.OfType<AssetPath>())
         {
-            if (accepted.Any(asset => IsAssignment(asset, uri)))
+            if (accepted.Any(asset => AssetIdentity.Represents(asset, identity)))
             {
                 continue;
             }
 
-            var assigned = assets.FirstOrDefault(asset => IsAssignment(asset, uri));
+            var assigned = assets.FirstOrDefault(asset => AssetIdentity.Represents(asset, identity));
             if (assigned is null)
             {
-                accepted.Add(AssetEntry.Missing(uri));
+                accepted.Add(AssetEntry.Missing(identity));
             }
             else if (this.IsOfKind(assigned))
             {
@@ -106,7 +107,7 @@ public sealed class AssetRule
         }
 
         return [.. accepted
-            .DistinctBy(static asset => asset.IdentityUri)
+            .DistinctBy(static asset => asset.Identity)
             .OrderBy(static asset => asset.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static asset => asset.DisplayPath, StringComparer.OrdinalIgnoreCase)];
     }
@@ -115,8 +116,6 @@ public sealed class AssetRule
         => Rules.TryGetValue(kind, out var rules)
             ? cooked ? rules.Cooked : rules.Any
             : new AssetRule(kind, cooked, referenceable: false);
-
-    private static bool IsAssignment(AssetEntry asset, Uri uri) => AssetIdentity.Represents(asset, uri) || asset.CookedUri == uri;
 
     private bool IsOfKind(AssetEntry asset) => this.referenceable && asset.Kind == this.Kind && !asset.IsBuiltin;
 }

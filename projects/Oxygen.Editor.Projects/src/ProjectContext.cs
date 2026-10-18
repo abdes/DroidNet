@@ -27,9 +27,9 @@ public sealed record ProjectContext
     public required Category Category { get; init; }
 
     /// <summary>
-    ///     Gets the normalized project root path.
+    ///     Gets the project folder on disk.
     /// </summary>
-    public required string ProjectRoot { get; init; }
+    public required FileSystemPath ProjectRoot { get; init; }
 
     /// <summary>
     ///     Gets the project thumbnail path.
@@ -55,9 +55,9 @@ public sealed record ProjectContext
     public bool OpenInitialScene { get; init; } = true;
 
     /// <summary>
-    ///     Gets the scene asset URI requested by project activation, when a template or workflow selected one.
+    ///     Gets the scene requested by project activation, when a template or workflow selected one.
     /// </summary>
-    public Uri? InitialSceneAssetUri { get; init; }
+    public AssetPath? InitialScene { get; init; }
 
     /// <summary>
     ///     Gets the project's configured default scene identity, or <see langword="null"/> when none is configured.
@@ -87,16 +87,21 @@ public sealed record ProjectContext
     /// </summary>
     /// <param name="info">The project metadata.</param>
     /// <returns>The project context.</returns>
+    /// <exception cref="ArgumentException">The project has no location on disk.</exception>
     public static ProjectContext FromProjectInfo(IProjectInfo info)
     {
         ArgumentNullException.ThrowIfNull(info);
+        if (string.IsNullOrWhiteSpace(info.Location))
+        {
+            throw new ArgumentException($"Project '{info.Name}' has no location on disk.", nameof(info));
+        }
 
         return new ProjectContext
         {
             ProjectId = info.Id,
             Name = info.Name,
             Category = info.Category,
-            ProjectRoot = info.Location ?? string.Empty,
+            ProjectRoot = FileSystemPath.From(info.Location),
             Thumbnail = info.Thumbnail,
             AuthoringMounts = [.. info.AuthoringMounts],
             LocalFolderMounts = [.. info.LocalFolderMounts],

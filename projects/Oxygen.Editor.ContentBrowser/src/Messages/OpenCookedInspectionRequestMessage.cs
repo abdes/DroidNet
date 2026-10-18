@@ -5,23 +5,24 @@
 using CommunityToolkit.Mvvm.Messaging.Messages;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Messages;
 
 /// <summary>Opens an explicit read-only inspection in the originating workspace's document host.</summary>
 /// <param name="project">The originating project activation.</param>
-/// <param name="scopeUri">The requested asset/folder scope, or null for project output.</param>
+/// <param name="scope">The requested asset/folder scope, or null for project output.</param>
 /// <param name="validate">Whether the request also checks output integrity.</param>
-public sealed class OpenCookedInspectionRequestMessage(ProjectContext project, Uri? scopeUri, bool validate) : AsyncRequestMessage<bool>
+public sealed class OpenCookedInspectionRequestMessage(ProjectContext project, AssetPath? scope, bool validate) : AsyncRequestMessage<bool>
 {
     /// <summary>Gets the originating project.</summary>
     public ProjectContext Project { get; } = project;
 
     /// <summary>Gets the requested scope.</summary>
-    public Uri? ScopeUri { get; } = scopeUri;
+    public AssetPath? Scope { get; } = scope;
 
     /// <summary>Gets an optional asset identity whose catalog facts should accompany output inspection.</summary>
-    public Uri? AssetUri { get; init; }
+    public AssetPath? Asset { get; init; }
 
     /// <summary>Gets the physical representation explicitly selected in a library view.</summary>
     public CookedAssetMetadata? CookedSource { get; init; }

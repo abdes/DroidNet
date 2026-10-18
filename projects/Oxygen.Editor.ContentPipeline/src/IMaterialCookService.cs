@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
@@ -23,5 +25,5 @@ public interface IMaterialCookService
     /// <param name="materialSourceUri">The material source asset URI.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The known material cook state.</returns>
-    public Task<MaterialCookState> GetMaterialCookStateAsync(Uri materialSourceUri, CancellationToken cancellationToken = default);
+    public Task<MaterialCookState> GetMaterialCookStateAsync(AssetPath materialSourceUri, CancellationToken cancellationToken = default);
 }

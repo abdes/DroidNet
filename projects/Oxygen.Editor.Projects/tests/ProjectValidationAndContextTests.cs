@@ -153,7 +153,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         var target = resolver.ResolveCreateTarget(context, AuthoringAssetKind.Material, selection: null);
 
         _ = target.ProjectRelativeFolder.Should().Be("Content/Materials");
-        _ = target.FolderAssetUri.Should().Be(new Uri("asset:///Content/Materials"));
+        _ = target.Folder.Should().Be(AssetPath.Parse("/Content/Materials"));
         _ = target.FallbackReason.Should().Be(AuthoringTargetFallbackReason.NoSelection);
     }
 
@@ -169,7 +169,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             new ContentBrowserSelection("Content/Scenes"));
 
         _ = target.ProjectRelativeFolder.Should().Be("Content/Materials");
-        _ = target.FolderAssetUri.Should().Be(new Uri("asset:///Content/Materials"));
+        _ = target.Folder.Should().Be(AssetPath.Parse("/Content/Materials"));
         _ = target.FallbackReason.Should().Be(AuthoringTargetFallbackReason.KindMismatch);
     }
 
@@ -185,7 +185,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             new ContentBrowserSelection("Content/Materials/Subfolder"));
 
         _ = target.ProjectRelativeFolder.Should().Be("Content/Materials/Subfolder");
-        _ = target.FolderAssetUri.Should().Be(new Uri("asset:///Content/Materials/Subfolder"));
+        _ = target.Folder.Should().Be(AssetPath.Parse("/Content/Materials/Subfolder"));
         _ = target.FallbackReason.Should().BeNull();
     }
 
@@ -204,7 +204,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             new ContentBrowserSelection("Authoring/Materials/Subfolder"));
 
         _ = target.ProjectRelativeFolder.Should().Be("Authoring/Materials/Subfolder");
-        _ = target.FolderAssetUri.Should().Be(new Uri("asset:///Content/Materials/Subfolder"));
+        _ = target.Folder.Should().Be(AssetPath.Parse("/Content/Materials/Subfolder"));
         _ = target.FallbackReason.Should().BeNull();
     }
 
@@ -224,7 +224,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
 
         _ = target.IsExplicitLocalMount.Should().BeTrue();
         _ = target.ProjectRelativeFolder.Should().Be("Materials/Shared");
-        _ = target.FolderAssetUri.Should().Be(new Uri("asset:///StudioLibrary/Materials/Shared"));
+        _ = target.Folder.Should().Be(AssetPath.Parse("/StudioLibrary/Materials/Shared"));
         _ = target.FallbackReason.Should().BeNull();
     }
 
@@ -244,7 +244,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
 
         _ = target.IsExplicitLocalMount.Should().BeTrue();
         _ = target.ProjectRelativeFolder.Should().Be("Materials");
-        _ = target.FolderAssetUri.Should().Be(new Uri("asset:///StudioLibrary/Materials"));
+        _ = target.Folder.Should().Be(AssetPath.Parse("/StudioLibrary/Materials"));
         _ = target.FallbackReason.Should().Be(AuthoringTargetFallbackReason.KindMismatch);
     }
 
@@ -286,7 +286,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         _ = fs.Directory.Exists(@"C:\Projects\Created\Content\Scenes").Should().BeTrue();
         _ = fs.Directory.Exists(@"C:\Projects\Created\Content\Materials").Should().BeTrue();
         _ = result.OpenStarterScene.Should().BeTrue();
-        _ = result.StarterSceneAssetUri.Should().Be(new Uri("asset:///Content/Scenes/Main.oscene.json"));
+        _ = result.StarterScene.Should().Be(AssetPath.Parse("/Content/Scenes/Main.oscene"));
     }
 
     [TestMethod]
@@ -634,13 +634,13 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
              ],
              "LocalFolderMounts": [],
              "StarterScene": {
-               "AssetUri": "asset:///Content/Scenes/Main.oscene.json",
+               "AssetUri": "asset:///Content/Scenes/Main.oscene",
                "RelativePath": "Content/Scenes/Main.oscene.json",
                "OpenOnCreate": true
              },
              "StarterContent": [
                {
-                 "AssetUri": "asset:///Content/Materials/Default.omat.json",
+                 "AssetUri": "asset:///Content/Materials/Default.omat",
                  "RelativePath": "Content/Materials/Default.omat.json",
                  "Kind": "Material"
                }

@@ -170,7 +170,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                 {
                     world.Execute(new RuntimeSetMaterialOverride(
                         node.Id,
-                        GeometryPathMapper.ToEnginePath(slot.GeometryUri),
+                        GeometryPathMapper.ToEnginePath(slot.Geometry),
                         slot.SlotId,
                         slot.LayoutRevision,
                         MaterialPath: null,
@@ -603,7 +603,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
         };
     }
 
-    private RuntimeTextureReference? CreateTextureReference(Uri? texture, string label)
+    private RuntimeTextureReference? CreateTextureReference(AssetPath? texture, string label)
     {
         if (texture is null)
         {

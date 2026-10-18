@@ -216,7 +216,7 @@ public sealed class SceneEnvironmentTests
         {
             Enabled = true,
             Source = SkySphereSource.SolidColor,
-            Cubemap = new Uri("asset:///Content/Sky.otex.json"),
+            Cubemap = AssetPath.Parse("/Content/Sky.otex.json"),
             SolidColorRgb = new Vector3(2.0f, 3.0f, 4.0f),
             Intensity = 256.0f,
             RotationRadians = 1.5f,
@@ -226,7 +226,7 @@ public sealed class SceneEnvironmentTests
         {
             Enabled = false,
             Source = SkyLightSource.SpecifiedCubemap,
-            Cubemap = new Uri("asset:///Content/Light.otex.json"),
+            Cubemap = AssetPath.Parse("/Content/Light.otex.json"),
             Intensity = 2.0f,
             TintRgb = new Vector3(0.5f, 0.6f, 0.7f),
             DiffuseIntensity = 0.25f,

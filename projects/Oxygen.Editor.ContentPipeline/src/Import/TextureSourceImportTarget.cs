@@ -10,7 +10,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ContentPipeline.Import;
 
 /// <summary>A collision-checked filesystem target for a named texture asset.</summary>
-public sealed record TextureSourceImportTarget(string MountName, string VirtualPath, string ImagePath, string DescriptorPath, Uri AssetUri)
+public sealed record TextureSourceImportTarget(string MountName, string VirtualPath, string ImagePath, string DescriptorPath, AssetPath AssetUri)
 {
     /// <summary>Gets every image the import writes: the source image, or the six faces with the +X face first.</summary>
     public IReadOnlyList<string> ImagePaths { get; init; } = [ImagePath];
@@ -39,10 +39,8 @@ public sealed record TextureSourceImportTarget(string MountName, string VirtualP
             .ToArray();
         var descriptorName = request.Name + AssetFileTypes.TextureDescriptor;
         var descriptorPath = Path.Combine(physicalFolder, descriptorName);
-        var virtualDirectory = string.Join('/', folderParts);
-        var virtualPath = "/" + mount.Name + (virtualDirectory.Length == 0 ? string.Empty : "/" + virtualDirectory) + "/" + request.Name + AssetFileTypes.Texture;
-        var assetPath = string.Join('/', new[] { mount.Name }.Concat(folderParts).Append(descriptorName).Select(Uri.EscapeDataString));
-        return new(mount.Name, virtualPath, imagePaths[0], descriptorPath, new Uri(AssetUris.Scheme + ":///" + assetPath)) { ImagePaths = imagePaths };
+        var folder = request.DestinationFolder;
+        return new(mount.Name, folder.Combine(request.Name + AssetFileTypes.Texture).VirtualPath, imagePaths[0], descriptorPath, folder.Combine(descriptorName)) { ImagePaths = imagePaths };
     }
 
     // The image, the name and the cook settings, before the destination is looked at.
@@ -80,31 +78,19 @@ public sealed record TextureSourceImportTarget(string MountName, string VirtualP
     private static (ProjectMountPoint Mount, string[] FolderParts, string PhysicalFolder) ResolveFolder(TextureSourceImportRequest request)
     {
         var folder = request.DestinationFolder;
-        if (!folder.IsAbsoluteUri || !string.Equals(folder.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase)
-            || !string.IsNullOrEmpty(folder.Host) || !string.IsNullOrEmpty(folder.Query) || !string.IsNullOrEmpty(folder.Fragment))
-        {
-            throw new ArgumentException("Choose a project authoring folder.", nameof(request));
-        }
+        var folderParts = folder.IsMount ? [] : folder.RelativePath.Split('/');
 
-        var parts = Uri.UnescapeDataString(folder.AbsolutePath).Trim('/').Split('/');
-        var folderParts = parts[1..];
-        if (Oxygen.Managed.Core.VirtualPath.ValidateMountName(parts[0]) is not null
-            || folderParts.Any(static part => Oxygen.Managed.Core.VirtualPath.ValidateSegment(part) is not null))
-        {
-            throw new ArgumentException("Choose a valid project authoring folder.", nameof(request));
-        }
-
-        var mount = request.Project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.Ordinal))
+        var mount = request.Project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal))
             ?? throw new ArgumentException("Choose a folder inside a project authoring mount.", nameof(request));
         if (folderParts.Any(Oxygen.Managed.Core.VirtualPath.IsDerivedContent))
         {
             throw new ArgumentException("Choose an authoring folder outside source-media and generated folders.", nameof(request));
         }
 
-        var mountRoot = Path.GetFullPath(Path.Combine(request.Project.ProjectRoot, mount.RelativePath));
-        var physicalFolder = Path.GetFullPath(Path.Combine(mountRoot, Path.Combine(folderParts)));
-        return IsUnderRoot(physicalFolder, mountRoot)
-            ? (mount, folderParts, physicalFolder)
+        var mountRoot = request.Project.ProjectRoot.Combine(mount.RelativePath);
+        var physicalFolder = folderParts.Length == 0 ? mountRoot : mountRoot.Combine(Path.Combine(folderParts));
+        return physicalFolder.IsSameOrInside(mountRoot)
+            ? (mount, folderParts, physicalFolder.FullPath)
             : throw new ArgumentException("The selected folder resolves outside its authoring mount.", nameof(request));
     }
 
@@ -149,12 +135,5 @@ public sealed record TextureSourceImportTarget(string MountName, string VirtualP
         {
             throw new ArgumentException("Cube faces must be square images of the same size.", nameof(sourcePath));
         }
-    }
-
-    private static bool IsUnderRoot(string path, string root)
-    {
-        var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var normalizedPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        return normalizedPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
 
@@ -15,8 +16,7 @@ internal sealed partial record CookProvenance
     /// <returns>Whether the input representation is valid.</returns>
     internal static bool ValidInputFacts(CookSnapshotInput input)
     {
-        if ((!input.IsRootDirectoryProbe && !ValidRelativePath(input.RelativePath)) || !Path.IsPathFullyQualified(input.SourcePath)
-            || input.AssetUri is { IsAbsoluteUri: false } || !Enum.IsDefined(input.Kind)
+        if ((!input.IsRootDirectoryProbe && !ValidRelativePath(input.RelativePath)) || !Enum.IsDefined(input.Kind)
             || input.DiscoveryHash is null || !ValidMetadata(input.Metadata))
         {
             return false;
@@ -47,7 +47,7 @@ internal sealed partial record CookProvenance
 
         return owners.FirstOrDefault()?.SourceInput is { } input ? input with
         {
-            SourceAbsolutePath = Path.GetFullPath(Path.Combine(project.ProjectRoot, input.SourceRelativePath)),
+            SourceAbsolutePath = project.ProjectRoot.Combine(input.SourceRelativePath),
             Role = ContentCookInputRole.Dependency,
         } : null;
     }
@@ -64,11 +64,11 @@ internal sealed partial record CookProvenance
         if (product.SourceInput is not { } source)
         {
             return product.SourceFiles.IsEmpty && product.DeclaredOutputs.IsEmpty && product.NativeReferences.IsEmpty
-                && product.SourceUri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase);
+                && product.SourceUri.IsGenerated;
         }
 
         if (source.AssetUri != product.SourceUri || !Enum.IsDefined(source.Kind) || !Enum.IsDefined(source.Role)
-            || !ValidRelativePath(source.SourceRelativePath) || !Path.IsPathFullyQualified(source.SourceAbsolutePath)
+            || !ValidRelativePath(source.SourceRelativePath)
             || string.IsNullOrWhiteSpace(source.MountName) || source.OutputNamespaces.IsDefault
             || (source.OutputVirtualPath is { } output && !ValidVirtualPath(output))
             || product.SourceFiles.IsEmpty || product.DeclaredOutputs.IsEmpty)
@@ -76,10 +76,10 @@ internal sealed partial record CookProvenance
             return false;
         }
 
-        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var paths = new HashSet<string>(FileSystemPath.NameComparer);
         return product.SourceFiles.All(file => file is not null && paths.Add(file.RelativePath) && ValidInputFacts(file))
             && product.SourceFiles.Any(file => file.AssetUri == product.SourceUri
-                && file.Kind == CookSnapshotInputKind.File && string.Equals(file.RelativePath, source.SourceRelativePath, StringComparison.OrdinalIgnoreCase));
+                && file.Kind == CookSnapshotInputKind.File && string.Equals(file.RelativePath, source.SourceRelativePath, FileSystemPath.NameComparison));
     }
 
     private static bool ValidMetadata(NativeSourceFileMetadata? metadata)

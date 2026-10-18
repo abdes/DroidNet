@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Storage;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -12,4 +13,4 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// <param name="Before">The baseline version the rewrite was prepared from.</param>
 /// <param name="BeforeContent">The baseline bytes, restored on rollback.</param>
 /// <param name="AfterContent">The rewritten bytes.</param>
-internal sealed record RelocationEdit(string OriginalPath, string FinalPath, FileVersion Before, byte[] BeforeContent, byte[] AfterContent);
+internal sealed record RelocationEdit(FileSystemPath OriginalPath, FileSystemPath FinalPath, FileVersion Before, byte[] BeforeContent, byte[] AfterContent);

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
 
@@ -103,7 +104,7 @@ public sealed record PostProcessEnvironmentData
     public float AutoExposureTransitionDistanceEv { get; init; } = 1.5f;
 
     /// <summary>Gets the authored texture descriptor URI, or null for no mask.</summary>
-    public Uri? AutoExposureMeteringMask { get; init; }
+    public AssetPath? AutoExposureMeteringMask { get; init; }
 
     /// <summary>Gets the ordered exposure compensation keys.</summary>
     public ImmutableArray<ExposureCompensationKeyData> AutoExposureCompensationCurve { get; init; } = [];

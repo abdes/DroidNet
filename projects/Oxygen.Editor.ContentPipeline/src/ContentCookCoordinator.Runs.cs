@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -107,7 +108,7 @@ public sealed partial class ContentCookCoordinator
 
     private static IEnumerable<CookRunAsset> FinishedAssets(IEnumerable<ContentCookedAsset> cooked, CookAssetState state)
     {
-        var sources = new HashSet<Uri>();
+        var sources = new HashSet<AssetPath>();
         foreach (var asset in cooked)
         {
             var imported = IsModelSource(asset.SourceAssetUri);
@@ -119,7 +120,7 @@ public sealed partial class ContentCookCoordinator
         }
     }
 
-    private static bool IsModelSource(Uri uri) => Path.GetExtension(uri.AbsolutePath).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX";
+    private static bool IsModelSource(AssetPath uri) => Path.GetExtension(uri.Name).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX";
 
     private static string GetScopeName(ContentCookOperation operation, CookRunRequest request)
     {
@@ -133,8 +134,7 @@ public sealed partial class ContentCookCoordinator
             return operation.Project.Name;
         }
 
-        var name = Uri.UnescapeDataString(request.ScopeUri.AbsolutePath).TrimEnd('/');
-        name = name[(name.LastIndexOf('/') + 1)..];
+        var name = request.ScopeUri.Name;
         return request.TargetKind == CookTargetKind.Folder ? name : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(name));
     }
 
@@ -189,10 +189,10 @@ public sealed partial class ContentCookCoordinator
         };
         if (request.ScopeUri is { } assetUri && request.TargetKind is CookTargetKind.Asset or CookTargetKind.CurrentScene)
         {
-            var kind = request.TargetKind == CookTargetKind.CurrentScene || assetUri.AbsolutePath.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
-                ? ContentCookAssetKind.Scene : assetUri.AbsolutePath.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
-                    ? ContentCookAssetKind.Material : assetUri.AbsolutePath.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase)
-                        ? ContentCookAssetKind.Geometry : assetUri.AbsolutePath.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
+            var kind = request.TargetKind == CookTargetKind.CurrentScene || assetUri.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
+                ? ContentCookAssetKind.Scene : assetUri.Name.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
+                    ? ContentCookAssetKind.Material : assetUri.Name.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase)
+                        ? ContentCookAssetKind.Geometry : assetUri.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
                             ? ContentCookAssetKind.Texture : request.Import is not null || request.IsReimport || IsModelSource(assetUri) ? ContentCookAssetKind.ForeignSource : ContentCookAssetKind.Unknown;
             snapshot = snapshot with { Assets = snapshot.Assets.Add(assetUri, new(assetUri, kind, CookAssetState.Preparing)) };
         }
@@ -328,7 +328,7 @@ public sealed partial class ContentCookCoordinator
             foreach (var asset in snapshot.Assets.Values.Where(static asset => asset.State is CookAssetState.Preparing or CookAssetState.Cooking))
             {
                 var issue = snapshot.Diagnostics.FirstOrDefault(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Fatal
-                    && string.Equals(diagnostic.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(asset.AssetUri), StringComparison.Ordinal));
+                    && string.Equals(diagnostic.AffectedVirtualPath, asset.AssetUri.VirtualPath, StringComparison.Ordinal));
                 var assetState = issue is not null ? CookAssetState.Failed
                     : state == CookRunState.Cancelled ? CookAssetState.Cancelled
                     : asset.State == CookAssetState.Preparing ? CookAssetState.Skipped : CookAssetState.Unresolved;

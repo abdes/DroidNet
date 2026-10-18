@@ -18,7 +18,7 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 public sealed record TextureSourceImportRequest(
     ProjectContext Project,
     string SourcePath,
-    Uri DestinationFolder,
+    AssetPath DestinationFolder,
     string Name,
     string Intent,
     string ColorSpace,

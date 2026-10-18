@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentBrowser.Scripts;
 
 /// <summary>
@@ -23,13 +25,13 @@ public interface IScriptAnalysisService
     /// <summary>Finds the current analysis of a script.</summary>
     /// <param name="sourcePath">The script file.</param>
     /// <returns>The analysis, or <see langword="null"/> when the file has not been analyzed.</returns>
-    public ScriptAnalysisSnapshot? Find(string sourcePath);
+    public ScriptAnalysisSnapshot? Find(FileSystemPath sourcePath);
 
     /// <summary>Analyzes a script now, unless its content is unchanged since the last analysis.</summary>
     /// <param name="sourcePath">The script file.</param>
     /// <param name="cancellationToken">A token that cancels the analysis.</param>
     /// <returns>The analysis, or <see langword="null"/> when the file is not a script of the active project.</returns>
-    public Task<ScriptAnalysisSnapshot?> AnalyzeAsync(string sourcePath, CancellationToken cancellationToken = default);
+    public Task<ScriptAnalysisSnapshot?> AnalyzeAsync(FileSystemPath sourcePath, CancellationToken cancellationToken = default);
 
     /// <summary>Analyzes every script of the active project again, including unchanged ones.</summary>
     /// <param name="cancellationToken">A token that cancels the analysis.</param>

@@ -2,13 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline.Cooking;
 
 /// <summary>Identifies the logical scope of a cook independently of its captured inputs.</summary>
 /// <param name="TargetKind">Whether the request cooks an asset, scene, folder, or project.</param>
 /// <param name="ScopeUri">The source asset/folder identity; null for the entire project.</param>
 /// <param name="IsAutomatic">Whether the request must remain quiet in the workspace.</param>
-public sealed record CookRunRequest(CookTargetKind TargetKind, Uri? ScopeUri, bool IsAutomatic = false)
+public sealed record CookRunRequest(CookTargetKind TargetKind, AssetPath? ScopeUri, bool IsAutomatic = false)
 {
     /// <summary>Gets an initial or partially retained import request used by Retry.</summary>
     public Import.SceneImportRequest? Import { get; init; }

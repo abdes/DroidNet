@@ -11,7 +11,7 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <summary>The existing retained source and byte baseline explicitly reviewed for replacement.</summary>
 public sealed class SceneImportReplacement
 {
-    private SceneImportReplacement(string bundleName, Uri sourceUri, NativeSceneImportSettings settings, CookRootImage before)
+    private SceneImportReplacement(string bundleName, AssetPath sourceUri, NativeSceneImportSettings settings, CookRootImage before)
     {
         this.BundleName = bundleName;
         this.SourceUri = sourceUri;
@@ -23,7 +23,7 @@ public sealed class SceneImportReplacement
     public string BundleName { get; }
 
     /// <summary>Gets the stable source identity preserved by replacement.</summary>
-    public Uri SourceUri { get; }
+    public AssetPath SourceUri { get; }
 
     /// <summary>Gets the existing import policies and output namespace.</summary>
     public NativeSceneImportSettings Settings { get; }
@@ -48,15 +48,14 @@ public sealed class SceneImportReplacement
         }
 
         var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(Path.Combine(root, sidecars[0]), cancellationToken).ConfigureAwait(false));
-        var relativeRoot = Path.GetRelativePath(project.ProjectRoot, root).Replace('\\', '/');
-        if (!string.Equals(relativeRoot, settings.BundleRoot, StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(sidecars[0], settings.PrimaryRelativePath + NativeSceneImportSettings.SidecarSuffix, StringComparison.OrdinalIgnoreCase)
+        if (FileSystemPath.From(root) != project.ProjectRoot.Combine(settings.BundleRoot)
+            || !string.Equals(sidecars[0], settings.PrimaryRelativePath + NativeSceneImportSettings.SidecarSuffix, FileSystemPath.NameComparison)
             || !project.AuthoringMounts.Any(mount => string.Equals(mount.Name, settings.MountPoint, StringComparison.Ordinal)))
         {
             throw new InvalidDataException("The existing import settings do not own this retained source and destination.");
         }
 
-        var owned = settings.Files.Append(sidecars[0]).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var owned = settings.Files.Append(sidecars[0]).ToHashSet(FileSystemPath.NameComparer);
         var unrelated = before.Files.Keys.FirstOrDefault(path => !owned.Contains(path));
         if (unrelated is not null)
         {
@@ -70,7 +69,6 @@ public sealed class SceneImportReplacement
         }
 
         var mountName = project.AuthoringMounts.Single(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal)).Name;
-        var virtualPath = string.Join('/', new[] { mountName, "SourceMedia", "DCC", bundleName }.Concat(settings.PrimaryRelativePath.Split('/')).Select(Uri.EscapeDataString));
-        return new(bundleName, new Uri(AssetUris.Scheme + ":///" + virtualPath), settings, before);
+        return new(bundleName, AssetPath.Create(mountName, "SourceMedia/DCC/" + bundleName + "/" + settings.PrimaryRelativePath), settings, before);
     }
 }

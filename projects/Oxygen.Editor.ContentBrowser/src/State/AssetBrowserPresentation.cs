@@ -85,7 +85,7 @@ public sealed partial class AssetBrowserPresentation : ObservableObject
 
             if (order == 0)
             {
-                order = StringComparer.OrdinalIgnoreCase.Compare(left.Item.IdentityUri.AbsoluteUri, right.Item.IdentityUri.AbsoluteUri);
+                order = StringComparer.OrdinalIgnoreCase.Compare(left.Item.Identity.VirtualPath, right.Item.Identity.VirtualPath);
             }
 
             return order;

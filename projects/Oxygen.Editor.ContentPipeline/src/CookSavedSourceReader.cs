@@ -5,6 +5,7 @@
 using System.Security.Cryptography;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -130,8 +131,8 @@ internal static partial class CookSavedSourceReader
     /// <returns>Whether the observed source state is unchanged.</returns>
     public static bool MatchesProbe(CookSnapshotInput input)
     {
-        var exists = Exists(input.SourcePath);
-        return input.IsAbsent ? !exists : exists && (input.Metadata is null || ReadMetadata(input.SourcePath).Shape == input.Metadata.Shape);
+        var exists = Exists(input.SourcePath.FullPath);
+        return input.IsAbsent ? !exists : exists && (input.Metadata is null || ReadMetadata(input.SourcePath.FullPath).Shape == input.Metadata.Shape);
     }
 
     private static async Task<T> ReadCoreAsync<T>(
@@ -141,7 +142,7 @@ internal static partial class CookSavedSourceReader
         CancellationToken cancellationToken,
         bool allowUnsavedDocuments = false)
     {
-        using var reads = await documents.AcquireAsync([sourcePath], cancellationToken).ConfigureAwait(false);
+        using var reads = await documents.AcquireAsync([FileSystemPath.From(sourcePath)], cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         var dirty = reads.Documents.Where(static document => document.IsDirty).ToArray();
         if (!allowUnsavedDocuments && dirty.Length != 0)

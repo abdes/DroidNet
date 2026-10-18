@@ -20,7 +20,7 @@ public sealed partial class CookPublicationService
         }
         catch (CookedLibraryChangedException changed)
         {
-            LogCookedRootChanged(this.Logger, changed, selected.PublicationId, project.ProjectRoot);
+            LogCookedRootChanged(this.Logger, changed, selected.PublicationId, project.ProjectRoot.FullPath);
             selected.Dispose();
         }
         catch
@@ -41,14 +41,14 @@ public sealed partial class CookPublicationService
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
-            LogRepublishFailed(this.Logger, failure, project.ProjectRoot);
+            LogRepublishFailed(this.Logger, failure, project.ProjectRoot.FullPath);
             throw;
         }
 
         try
         {
             var catalogs = await republished.CreateCatalogsAsync(cancellationToken).ConfigureAwait(false);
-            LogRepublished(this.Logger, republished.PublicationId, project.ProjectRoot);
+            LogRepublished(this.Logger, republished.PublicationId, project.ProjectRoot.FullPath);
             return new(republished, catalogs);
         }
         catch

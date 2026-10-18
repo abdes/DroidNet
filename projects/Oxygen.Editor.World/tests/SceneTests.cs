@@ -118,7 +118,7 @@ public sealed class SceneTests
         var recorder = new PropertyChangeRecorder(scene);
         var references = new SceneReferencesData
         {
-            Scripts = [new Uri("asset:///Content/Scripts/Test.oscript")],
+            Scripts = [AssetPath.Parse("/Content/Scripts/Test.oscript")],
         };
 
         scene.SetReferences(references);
@@ -133,14 +133,14 @@ public sealed class SceneTests
         var scene = new Scene { Name = "Scene" };
         var references = new SceneReferencesData
         {
-            Scripts = [new Uri("asset:///Content/Scripts/Test.oscript")],
+            Scripts = [AssetPath.Parse("/Content/Scripts/Test.oscript")],
         };
         scene.SetReferences(references);
         var recorder = new PropertyChangeRecorder(scene);
 
         var duplicateInstance = new SceneReferencesData
         {
-            Scripts = [new Uri("asset:///Content/Scripts/Test.oscript")],
+            Scripts = [AssetPath.Parse("/Content/Scripts/Test.oscript")],
         };
         scene.SetReferences(duplicateInstance);
 
@@ -192,7 +192,7 @@ public sealed class SceneTests
     {
         var scene = new Scene { Name = "Scene" };
         var recorder = new PropertyChangeRecorder(scene);
-        StartingInputContextData[] contexts = [new(new Uri("asset:///Content/Input/Move.oimap"), Priority: 2)];
+        StartingInputContextData[] contexts = [new(AssetPath.Parse("/Content/Input/Move.oimap"), Priority: 2)];
 
         scene.SetStartingInputContexts(contexts);
 
@@ -204,11 +204,11 @@ public sealed class SceneTests
     public void SetStartingInputContexts_WhenValueIsEqual_RaisesNoNotifications()
     {
         var scene = new Scene { Name = "Scene" };
-        StartingInputContextData[] contexts = [new(new Uri("asset:///Content/Input/Move.oimap"), Priority: 2)];
+        StartingInputContextData[] contexts = [new(AssetPath.Parse("/Content/Input/Move.oimap"), Priority: 2)];
         scene.SetStartingInputContexts(contexts);
         var recorder = new PropertyChangeRecorder(scene);
 
-        StartingInputContextData[] sameContexts = [new(new Uri("asset:///Content/Input/Move.oimap"), Priority: 2)];
+        StartingInputContextData[] sameContexts = [new(AssetPath.Parse("/Content/Input/Move.oimap"), Priority: 2)];
         scene.SetStartingInputContexts(sameContexts);
 
         _ = recorder.ChangingCount(nameof(Scene.StartingInputContexts)).Should().Be(0);

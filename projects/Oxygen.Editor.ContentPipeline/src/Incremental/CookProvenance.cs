@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
 
@@ -15,8 +16,8 @@ namespace Oxygen.Editor.ContentPipeline.Incremental;
 internal sealed partial record CookProvenance(Guid ProjectId, ImmutableArray<CookProvenance.Root> Roots, ImmutableArray<CookProvenance.Product> Products)
 {
     /// <summary>Gets accepted native builtin output identities for source dependency resolution.</summary>
-    internal ImmutableDictionary<string, Uri> BuiltinOwners => this.Products
-        .Where(static product => product.SourceUri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase))
+    internal ImmutableDictionary<string, AssetPath> BuiltinOwners => this.Products
+        .Where(static product => product.SourceUri.IsGenerated)
         .SelectMany(static product => product.Outputs.Select(output => KeyValuePair.Create(output.Asset.VirtualPath, product.SourceUri)))
         .ToImmutableDictionary(StringComparer.Ordinal);
 
@@ -54,7 +55,7 @@ internal sealed partial record CookProvenance(Guid ProjectId, ImmutableArray<Coo
             && root.Mount.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
 
     private static bool IsValidProduct(Product? product)
-        => product?.SourceUri is { IsAbsoluteUri: true }
+        => product?.SourceUri is not null
             && ValidSourceFacts(product)
             && IsSha256(product.Fingerprint)
             && IsSha256(product.ReuseFingerprint)
@@ -65,7 +66,7 @@ internal sealed partial record CookProvenance(Guid ProjectId, ImmutableArray<Coo
             && !product.CookedDependencies.IsDefault && product.CookedDependencies.All(IsValidCookedDependency);
 
     private static bool IsValidCookedDependency(Snapshots.CookedDependencySnapshot? dependency)
-        => dependency?.AssetUri is { IsAbsoluteUri: true }
+        => dependency?.AssetUri is not null
             && !string.IsNullOrWhiteSpace(dependency.SourceName)
             && Path.IsPathFullyQualified(dependency.RootPath)
             && !string.IsNullOrWhiteSpace(dependency.AssetKey)
@@ -136,7 +137,7 @@ internal sealed partial record CookProvenance(Guid ProjectId, ImmutableArray<Coo
     /// <param name="Fingerprint">The inputs affecting the emitted product.</param>
     /// <param name="Dependencies">The logical dependencies needed by the product.</param>
     /// <param name="Outputs">The produced asset identities.</param>
-    public sealed record Product(Uri SourceUri, string Fingerprint, ImmutableArray<Uri> Dependencies, ImmutableArray<Output> Outputs)
+    public sealed record Product(AssetPath SourceUri, string Fingerprint, ImmutableArray<AssetPath> Dependencies, ImmutableArray<Output> Outputs)
     {
         /// <summary>Gets the authored owner and recipe identity accepted by this publication.</summary>
         public ContentCookInput? SourceInput { get; init; }

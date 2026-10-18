@@ -65,7 +65,7 @@ public static class SceneComponents
             Geometry => new GeometryComponent
             {
                 Name = "Geometry",
-                Geometry = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
+                Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
             },
             PerspectiveCamera => new PerspectiveCamera { Name = "Perspective Camera" },
             OrthographicCamera => new OrthographicCamera { Name = "Orthographic Camera" },

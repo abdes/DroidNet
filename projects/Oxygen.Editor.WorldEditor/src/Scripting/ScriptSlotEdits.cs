@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Numerics;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Scripting;
 
@@ -51,7 +52,7 @@ internal static class ScriptSlotEdits
     /// <param name="slotId">The slot.</param>
     /// <param name="script">The script identity, or null to clear it.</param>
     /// <returns>The updated slots.</returns>
-    public static ImmutableArray<ScriptSlot> SetScript(ImmutableArray<ScriptSlot> slots, Guid slotId, Uri? script)
+    public static ImmutableArray<ScriptSlot> SetScript(ImmutableArray<ScriptSlot> slots, Guid slotId, AssetPath? script)
         => Update(slots, slotId, slot => slot with { Script = script });
 
     /// <summary>Sets a slot's execution order.</summary>

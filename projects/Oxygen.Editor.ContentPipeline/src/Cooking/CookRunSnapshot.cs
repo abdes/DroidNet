@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Cooking;
@@ -18,7 +19,7 @@ public sealed record CookRunSnapshot
     public required Guid ProjectId { get; init; }
 
     /// <summary>Gets the owning project's root.</summary>
-    public required string ProjectRoot { get; init; }
+    public required FileSystemPath ProjectRoot { get; init; }
 
     /// <summary>Gets the user-visible scope name.</summary>
     public required string DisplayName { get; init; }
@@ -42,7 +43,7 @@ public sealed record CookRunSnapshot
     public ImmutableList<CookRunMessage> Messages { get; init; } = [];
 
     /// <summary>Gets identified assets and their individual outcomes.</summary>
-    public ImmutableDictionary<Uri, CookRunAsset> Assets { get; init; } = ImmutableDictionary<Uri, CookRunAsset>.Empty;
+    public ImmutableDictionary<AssetPath, CookRunAsset> Assets { get; init; } = ImmutableDictionary<AssetPath, CookRunAsset>.Empty;
 
     /// <summary>Gets actionable structured issues from the cook.</summary>
     public ImmutableArray<DiagnosticRecord> Diagnostics { get; init; } = [];
@@ -54,13 +55,13 @@ public sealed record CookRunSnapshot
     public bool IsCompleted => this.CompletedAt.HasValue;
 
     /// <summary>Gets current native output identities offered for explicit navigation after successful model cooking.</summary>
-    public ImmutableArray<Uri> ImportedOutputs => !this.IsCompleted
+    public ImmutableArray<AssetPath> ImportedOutputs => !this.IsCompleted
         || this.State is not (CookRunState.Succeeded or CookRunState.SucceededWithWarnings or CookRunState.UpToDate)
         || !this.Assets.Values.Any(static asset => asset.Kind == ContentCookAssetKind.ForeignSource) ? []
         :
         [
             .. this.Assets.Values.Where(static asset => asset.State is CookAssetState.Updated or CookAssetState.Reused
-            && Path.GetExtension(asset.AssetUri.AbsolutePath).ToUpperInvariant() is ".OGEO" or ".OMAT" or ".OSCENE")
-            .Select(static asset => asset.AssetUri).OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal),
+            && Path.GetExtension(asset.AssetUri.Name).ToUpperInvariant() is ".OGEO" or ".OMAT" or ".OSCENE")
+            .Select(static asset => asset.AssetUri).Order(),
         ];
 }

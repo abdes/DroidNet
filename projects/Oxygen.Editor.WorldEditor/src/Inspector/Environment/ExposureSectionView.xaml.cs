@@ -69,7 +69,7 @@ public sealed partial class ExposureSectionView
     {
         if (sender is FrameworkElement { DataContext: AssetPickerRow row } && row.Item.IsEnabled)
         {
-            this.ViewModel?.SetMeteringMask(row.Item.Uri);
+            this.ViewModel?.SetMeteringMask(row.Item.Asset);
             this.MeteringMaskFlyout.Hide();
         }
     }

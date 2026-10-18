@@ -5,6 +5,7 @@
 using CommunityToolkit.Mvvm.Messaging;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World.Diagnostics;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Documents;
@@ -16,11 +17,11 @@ public sealed partial class DocumentManager
     public Task<bool> ReloadPreviousSceneAsync()
         => this.previousSavedScene is { } previous && this.projectContextService.ActiveProject is { } project
             && project.ProjectId == previous.ProjectId
-            && string.Equals(project.ProjectRoot, previous.ProjectRoot, StringComparison.OrdinalIgnoreCase)
+            && project.ProjectRoot == previous.ProjectRoot
                 ? this.OpenSceneAsync(previous.SceneUri)
                 : Task.FromResult(false);
 
-    private void PublishSceneLoadFailure(Uri sceneUri, bool unavailable, string? problem = null)
+    private void PublishSceneLoadFailure(AssetPath sceneUri, bool unavailable, string? problem = null)
     {
         if (unavailable)
         {
@@ -45,6 +46,6 @@ public sealed partial class DocumentManager
             DiagnosticCodes.DocumentPrefix + (unavailable ? "SCENE_UNAVAILABLE" : "SCENE_LOAD_FAILED"),
             title,
             message,
-            new AffectedScope { SceneName = SceneContent.NameOf(Uri.UnescapeDataString(sceneUri.AbsolutePath)), AssetVirtualPath = Uri.UnescapeDataString(sceneUri.AbsolutePath) });
+            new AffectedScope { SceneName = SceneContent.NameOf(sceneUri.Name), AssetVirtualPath = sceneUri.VirtualPath });
     }
 }

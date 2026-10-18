@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Shell;
 
@@ -39,9 +40,9 @@ public partial class ContentBrowserViewModel
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Navigated Up to: {Url} (from '{Current}')")]
-    private static partial void LogNavigationUp(ILogger logger, string url, string current);
+    private static partial void LogNavigationUp(ILogger logger, string url, AssetPath current);
 
-    private void LogNavigationUp(string url, string current)
+    private void LogNavigationUp(string url, AssetPath current)
         => LogNavigationUp(this.logger, url, current);
 
     [LoggerMessage(
@@ -101,9 +102,9 @@ public partial class ContentBrowserViewModel
     [LoggerMessage(
         Level = LogLevel.Debug,
         Message = "CanGoUp updated: {CanGoUp}, current='{Current}', parent='{Parent}'")]
-    private static partial void LogCanGoUpUpdated(ILogger logger, bool canGoUp, string? current, string? parent);
+    private static partial void LogCanGoUpUpdated(ILogger logger, bool canGoUp, AssetPath? current, AssetPath? parent);
 
-    private void LogCanGoUpUpdated(bool canGoUp, string? current, string? parent)
+    private void LogCanGoUpUpdated(bool canGoUp, AssetPath? current, AssetPath? parent)
         => LogCanGoUpUpdated(this.logger, canGoUp, current, parent);
 
     [LoggerMessage(

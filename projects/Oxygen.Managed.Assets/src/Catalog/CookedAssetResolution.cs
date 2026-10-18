@@ -18,7 +18,7 @@ public static class CookedAssetResolution
         var snapshot = records.ToArray();
         var native = snapshot.Where(static record => record.Cooked is not null).ToArray();
         var byKey = native.GroupBy(static record => record.Cooked!.AssetKey).ToDictionary(static group => group.Key, static group => group.ToArray());
-        return snapshot.GroupBy(static record => record.Uri).Select(group =>
+        return AssetQueryMatcher.Apply(query, snapshot.GroupBy(static record => record.Identity).Select(group =>
         {
             var pathWinner = group.LastOrDefault(static record => record.Cooked is not null);
             if (pathWinner?.Cooked is not { } indexed)
@@ -31,9 +31,6 @@ public static class CookedAssetResolution
             var overridden = group.Concat(keyVersions).Select(static record => record.Cooked).OfType<CookedAssetMetadata>()
                 .Where(candidate => candidate != winner).Distinct().ToArray();
             return pathWinner with { Cooked = winner, OverriddenCookedSources = overridden };
-        })
-            .Where(record => AssetQueryScopeMatcher.IsMatch(query.Scope, record.Uri)
-                && (string.IsNullOrWhiteSpace(query.SearchText) || record.Uri.ToString().Contains(query.SearchText.Trim(), StringComparison.OrdinalIgnoreCase)))
-            .OrderBy(static record => record.Uri.ToString(), StringComparer.Ordinal).ToArray();
+        }));
     }
 }

@@ -22,9 +22,9 @@ public static class CookedContentOrdering
             throw new InvalidDataException("Content priority requires named folder declarations.");
         }
 
-        var declared = definitions.ToDictionary(static folder => folder.Name, StringComparer.OrdinalIgnoreCase);
+        var declared = definitions.ToDictionary(static folder => folder.Name, StringComparer.Ordinal);
         var order = new List<CookedContentSource>();
-        var included = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var included = new HashSet<string>(StringComparer.Ordinal);
         var projectIndex = -1;
         foreach (var source in savedOrder)
         {

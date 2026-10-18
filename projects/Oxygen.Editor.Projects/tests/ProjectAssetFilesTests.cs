@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects.Tests;
 
-/// <summary>Verifies the one mapping between the project's assets and their files.</summary>
+/// <summary>Verifies the one mapping between the project's virtual paths and their files.</summary>
 [TestClass]
 [TestCategory("Unit")]
 public sealed class ProjectAssetFilesTests
@@ -24,54 +25,47 @@ public sealed class ProjectAssetFilesTests
     };
 
     [TestMethod]
-    public void FindByAssetUri_ForAnAuthoringFile_ResolvesItsFileAndMount()
+    public void Find_ForAnAuthoringFile_ResolvesItsFileAndMount()
     {
-        var location = Project.FindByAssetUri(new Uri("asset:///Content/Materials/Wood.omat.json"));
+        var location = Project.Find(AssetPath.Parse("/Content/Materials/Wood.omat.json"));
 
         _ = location.Should().NotBeNull();
         _ = location!.FilePath.Should().Be(@"C:\Games\Demo\Content\Materials\Wood.omat.json");
-        _ = location.MountName.Should().Be("Content");
-        _ = location.MountRelativePath.Should().Be("Materials/Wood.omat.json");
-        _ = location.VirtualPath.Should().Be("/Content/Materials/Wood.omat.json");
+        _ = location.MountRoot.Should().Be(FileSystemPath.From(@"C:\Games\Demo\Content"));
+        _ = location.Path.Should().Be(AssetPath.Parse("/Content/Materials/Wood.omat.json"));
         _ = location.MountKind.Should().Be(ProjectMountKind.Authoring);
         _ = location.IsMountRoot.Should().BeFalse();
     }
 
     [TestMethod]
-    public void FindByAssetUri_ForALocalFolderFile_ResolvesItUnderTheFolder()
+    public void Find_ForALocalFolderFile_ResolvesItUnderTheFolder()
     {
-        var location = Project.FindByAssetUri(new Uri("asset:///Shared/Wood.omat.json"));
+        var location = Project.Find(AssetPath.Parse("/Shared/Wood.omat.json"));
 
         _ = location!.FilePath.Should().Be(@"D:\Library\Wood.omat.json");
         _ = location.MountKind.Should().Be(ProjectMountKind.LocalFolder);
     }
 
     [TestMethod]
-    public void FindByAssetUri_ForTheMount_ResolvesItsFolder()
+    public void Find_ForTheMount_ResolvesItsFolder()
     {
-        var location = Project.FindByAssetUri(new Uri("asset:///Content"));
+        var location = Project.Find(AssetPath.Content);
 
         _ = location!.FilePath.Should().Be(@"C:\Games\Demo\Content");
         _ = location.IsMountRoot.Should().BeTrue();
     }
 
     [TestMethod]
-    [DataRow("asset:///Unknown/Wood.omat.json", DisplayName = "Unknown mount")]
-    [DataRow("asset:///Content/../Secrets.json", DisplayName = "Parent segment")]
-    [DataRow("asset:///Content/%2E%2E/Secrets.json", DisplayName = "Escaped parent segment")]
-    [DataRow("asset:///Content/Materials//Wood.omat.json", DisplayName = "Empty segment")]
-    [DataRow("asset:///Content/C:/Windows/win.ini", DisplayName = "Rooted segment")]
-    [DataRow("file:///Content/Wood.omat.json", DisplayName = "Not an asset URI")]
-    public void FindByAssetUri_ForAPlaceOutsideTheMounts_IsNull(string uri)
-        => _ = Project.FindByAssetUri(new Uri(uri)).Should().BeNull();
+    public void Find_ForAnUnknownMount_IsNull()
+        => _ = Project.Find(AssetPath.Parse("/Unknown/Wood.omat.json")).Should().BeNull();
 
     [TestMethod]
-    public void FindByFilePath_WritesTheCatalogsUri()
+    public void FindByFilePath_GivesTheVirtualPath()
     {
         var location = Project.FindByFilePath(@"C:\Games\Demo\Content\New folder (2)\Wood mat.omat.json");
 
-        _ = location!.AssetUri.Should().Be(new Uri("asset:///Content/New folder (2)/Wood mat.omat.json"));
-        _ = location.AssetUri.AbsoluteUri.Should().Be("asset:///Content/New%20folder%20(2)/Wood%20mat.omat.json");
+        _ = location!.Path.Should().Be(AssetPath.Parse("/Content/New folder (2)/Wood mat.omat.json"));
+        _ = location.Path.ToUriString().Should().Be("asset:///Content/New%20folder%20%282%29/Wood%20mat.omat.json");
     }
 
     [TestMethod]
@@ -79,8 +73,7 @@ public sealed class ProjectAssetFilesTests
     {
         var location = Project.FindByFilePath(@"C:\Games\Demo\Content\Levels\Intro.oscene.json");
 
-        _ = location!.MountName.Should().Be("Levels");
-        _ = location.VirtualPath.Should().Be("/Levels/Intro.oscene.json");
+        _ = location!.Path.Should().Be(AssetPath.Parse("/Levels/Intro.oscene.json"));
     }
 
     [TestMethod]
@@ -89,40 +82,46 @@ public sealed class ProjectAssetFilesTests
         var location = Project.FindByFilePath(@"C:\Games\Demo\Content\");
 
         _ = location!.IsMountRoot.Should().BeTrue();
-        _ = location.VirtualPath.Should().Be("/Content");
+        _ = location.Path.Should().Be(AssetPath.Content);
     }
 
     [TestMethod]
     [DataRow(@"C:\Games\Demo\project.oxy", DisplayName = "Project file")]
     [DataRow(@"C:\Games\Demo\ContentOther\Wood.omat.json", DisplayName = "Sibling with the mount's prefix")]
     [DataRow(@"E:\Elsewhere\Wood.omat.json", DisplayName = "Another drive")]
+    [DataRow(@"C:\Games\Demo\Content\CON.omat.json", DisplayName = "A name the rules refuse")]
     public void FindByFilePath_OutsideTheMounts_IsNull(string path)
         => _ = Project.FindByFilePath(path).Should().BeNull();
 
     [TestMethod]
-    public void FindByFilePath_RoundTripsThroughTheAssetUri()
+    public void FindByFilePath_RoundTripsThroughTheVirtualPath()
     {
-        var path = @"C:\Games\Demo\Content\Materials\Wood.omat.json";
+        const string path = @"C:\Games\Demo\Content\Materials\Wood.omat.json";
 
-        var location = Project.FindByAssetUri(Project.FindByFilePath(path)!.AssetUri);
+        var location = Project.Find(Project.FindByFilePath(path)!.Path);
 
         _ = location!.FilePath.Should().Be(path);
     }
 
     [TestMethod]
-    public void FindByVirtualPath_ResolvesLikeTheAssetUri()
+    public void FindSource_OfAnIdentity_IsTheSourceThatExists()
     {
-        var location = Project.FindByVirtualPath("/Content/Materials/Wood.omat.json");
+        var root = Directory.CreateTempSubdirectory("ProjectAssetFiles").FullName;
+        try
+        {
+            var project = Project with { ProjectRoot = root };
+            _ = Directory.CreateDirectory(Path.Combine(root, "Content", "Scripts"));
+            File.WriteAllText(Path.Combine(root, "Content", "Scripts", "Orbit.luau"), string.Empty);
+            _ = Directory.CreateDirectory(Path.Combine(root, "Content", "Materials"));
+            File.WriteAllText(Path.Combine(root, "Content", "Materials", "Wood.omat.json"), "{}");
 
-        _ = location.Should().Be(Project.FindByAssetUri(new Uri("asset:///Content/Materials/Wood.omat.json")));
+            _ = project.FindSource(AssetPath.Parse("/Content/Scripts/Orbit.oscript"))!.Path.Should().Be(AssetPath.Parse("/Content/Scripts/Orbit.luau"));
+            _ = project.FindSource(AssetPath.Parse("/Content/Materials/Wood.omat"))!.Path.Should().Be(AssetPath.Parse("/Content/Materials/Wood.omat.json"));
+            _ = project.FindSource(AssetPath.Parse("/Content/Materials/Gone.omat")).Should().BeNull();
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
-
-    [TestMethod]
-    [DataRow("Content/Wood.omat.json", DisplayName = "No leading slash")]
-    [DataRow("/", DisplayName = "No mount")]
-    [DataRow("/Content/../Wood.omat.json", DisplayName = "Parent segment")]
-    [DataRow("/Content/./Wood.omat.json", DisplayName = "Current segment")]
-    [DataRow("/Content/Materials//Wood.omat.json", DisplayName = "Empty segment")]
-    public void FindByVirtualPath_ForAPlaceOutsideTheMounts_IsNull(string virtualPath)
-        => _ = Project.FindByVirtualPath(virtualPath).Should().BeNull();
 }

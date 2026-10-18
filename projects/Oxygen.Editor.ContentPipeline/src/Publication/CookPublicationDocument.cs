@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
@@ -62,8 +63,8 @@ internal sealed record CookPublicationDocument(
             throw new InvalidDataException("The publication document has invalid ownership, identities or root bindings.");
         }
 
-        var paths = this.Roots.Select(root => Path.GetFullPath(root.ResolvePath(project.ProjectRoot))).ToArray();
-        if (paths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != paths.Length || !this.ProductState.IsValid(project))
+        var paths = this.Roots.Select(root => FileSystemPath.From(root.ResolvePath(project.ProjectRoot.FullPath))).ToArray();
+        if (paths.Distinct().Count() != paths.Length || !this.ProductState.IsValid(project))
         {
             throw new InvalidDataException("The publication contains duplicate physical roots or invalid product provenance.");
         }

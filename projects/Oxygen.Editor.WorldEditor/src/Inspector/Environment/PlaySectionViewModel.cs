@@ -30,9 +30,9 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     private readonly Func<SceneAuthoring?>? authoringProvider;
     private readonly IAssetFeed? assetProvider;
     private readonly IScheduler observerScheduler;
-    private readonly Func<Uri, InputContextSource> contextSource;
+    private readonly Func<AssetPath, InputContextSource> contextSource;
     private readonly Func<NodeId, Task>? inspectSceneNode;
-    private readonly Func<Uri, Task>? revealAsset;
+    private readonly Func<AssetPath, Task>? revealAsset;
     private readonly List<AssetEntry> assets = [];
     private IDisposable? assetSubscription;
     private bool catalogLoaded;
@@ -56,9 +56,9 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         Func<SceneAuthoring?>? authoringProvider,
         IAssetFeed? assetProvider,
         IScheduler observerScheduler,
-        Func<Uri, InputContextSource>? contextSource,
+        Func<AssetPath, InputContextSource>? contextSource,
         Func<NodeId, Task>? inspectSceneNode = null,
-        Func<Uri, Task>? revealAsset = null)
+        Func<AssetPath, Task>? revealAsset = null)
     {
         this.authoringProvider = authoringProvider;
         this.assetProvider = assetProvider;
@@ -223,14 +223,14 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     /// <summary>Removes a starting input context.</summary>
     /// <param name="context">The context.</param>
     /// <returns>The completion of the edit.</returns>
-    internal Task RemoveContextAsync(Uri context)
+    internal Task RemoveContextAsync(AssetPath context)
         => this.EditContextsAsync(contexts => [.. contexts.Where(entry => entry.Context != context)]);
 
     /// <summary>Sets the priority a starting input context is added with.</summary>
     /// <param name="context">The context.</param>
     /// <param name="priority">The priority, or <see langword="null"/> for the context's own.</param>
     /// <returns>The completion of the edit.</returns>
-    internal Task SetContextPriorityAsync(Uri context, int? priority)
+    internal Task SetContextPriorityAsync(AssetPath context, int? priority)
         => this.EditContextsAsync(contexts =>
         {
             // Typing the context's own priority keeps following it.
@@ -242,7 +242,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     /// <summary>Shows a starting input context in the Content Browser.</summary>
     /// <param name="context">The context.</param>
     /// <returns>The completion of the navigation.</returns>
-    internal Task RevealContextAsync(Uri context) => this.revealAsset?.Invoke(context) ?? Task.CompletedTask;
+    internal Task RevealContextAsync(AssetPath context) => this.revealAsset?.Invoke(context) ?? Task.CompletedTask;
 
     private static bool IsCamera(SceneNode node) => node.Components.OfType<CameraComponent>().Any();
 
@@ -272,7 +272,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     private Task AddContextAsync(AssetEntry? candidate)
         => candidate is null
             ? Task.CompletedTask
-            : this.EditContextsAsync(contexts => [.. contexts, new StartingInputContextData(candidate.IdentityUri)]);
+            : this.EditContextsAsync(contexts => [.. contexts, new StartingInputContextData(candidate.Identity)]);
 
     private Task EditContextsAsync(Func<List<StartingInputContextData>, List<StartingInputContextData>> edit)
         => this.scene is { } current
@@ -354,14 +354,14 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
             .Select(entry =>
             {
                 var row = this.Contexts.FirstOrDefault(existing => existing.Context == entry.Context) ?? new StartingInputContextRowViewModel(this, entry.Context);
-                var asset = this.assets.FirstOrDefault(candidate => candidate.IdentityUri == entry.Context || candidate.CookedUri == entry.Context);
+                var asset = this.assets.FirstOrDefault(candidate => candidate.Identity == entry.Context);
                 var source = this.contextSource(entry.Context);
 
                 // A project context exists while an input file declares it, whatever the last cook left; another
                 // exists while the catalog lists it.
                 var missing = source.IsProjectContext ? source.IsUndeclared : this.catalogLoaded && asset is null;
                 row.Update(new StartingInputContextRowViewModel.RowState(
-                    asset?.DisplayName ?? Path.GetFileNameWithoutExtension(Uri.UnescapeDataString(entry.Context.AbsolutePath)),
+                    asset?.DisplayName ?? Path.GetFileNameWithoutExtension(entry.Context.VirtualPath),
                     missing,
                     entry.Priority,
                     source.OwnPriority,
@@ -391,9 +391,9 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         var listed = this.scene?.StartingInputContexts.Select(static entry => entry.Context).ToHashSet() ?? [];
         var contexts = AssetRule.For(AssetKind.InputMappingContext).Apply(this.assets);
         var candidates = contexts
-            .Where(asset => !listed.Contains(asset.IdentityUri))
+            .Where(asset => !listed.Contains(asset.Identity))
             .ToArray();
-        if (!candidates.Select(static asset => asset.IdentityUri).SequenceEqual(this.ContextCandidates.Select(static asset => asset.IdentityUri)))
+        if (!candidates.Select(static asset => asset.Identity).SequenceEqual(this.ContextCandidates.Select(static asset => asset.Identity)))
         {
             this.ContextCandidates.Clear();
             foreach (var candidate in candidates)

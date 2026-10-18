@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
@@ -29,7 +30,7 @@ internal sealed partial class CookSourceAnalyzer
             this.builtins[source.AssetUri] = source;
         }
 
-        var existingPaths = existingGeneratedSources.Select(static input => input.SourceAbsolutePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingPaths = existingGeneratedSources.Select(static input => input.SourceAbsolutePath).ToHashSet();
         var prepared = new List<PreparedSource>();
         foreach (var input in inputs)
         {
@@ -47,7 +48,7 @@ internal sealed partial class CookSourceAnalyzer
 
         var descriptors = prepared.Select(source => this.Rebase(source.Input with
         {
-            SourceAbsolutePath = source.Scene!.DescriptorPath,
+            SourceAbsolutePath = FileSystemPath.From(source.Scene!.DescriptorPath),
             Role = ContentCookInputRole.GeneratedDescriptor,
         }));
         var captured = await CookInputSnapshotCapture.CaptureGeneratedAsync(descriptors.Concat(generated), cancellationToken).ConfigureAwait(false);
@@ -58,12 +59,12 @@ internal sealed partial class CookSourceAnalyzer
             diagnostics);
     }
 
-    private ImmutableDictionary<string, Uri> AcceptedBuiltinOwners()
-        => previous?.BuiltinOwners ?? ImmutableDictionary<string, Uri>.Empty;
+    private ImmutableDictionary<string, AssetPath> AcceptedBuiltinOwners()
+        => previous?.BuiltinOwners ?? ImmutableDictionary<string, AssetPath>.Empty;
 
-    private async Task<Dictionary<Uri, CookSourceFacts>> ReadReusableFactsAsync(IReadOnlyList<ContentCookInput> inputs, CancellationToken cancellationToken)
+    private async Task<Dictionary<AssetPath, CookSourceFacts>> ReadReusableFactsAsync(IReadOnlyList<ContentCookInput> inputs, CancellationToken cancellationToken)
     {
-        var reused = new Dictionary<Uri, CookSourceFacts>();
+        var reused = new Dictionary<AssetPath, CookSourceFacts>();
         if (previous is null || previous.Products.IsEmpty)
         {
             return reused;

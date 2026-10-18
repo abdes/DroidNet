@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -29,7 +30,7 @@ public sealed record ContentCookResult(
     CookValidationResult? Validation)
 {
     /// <summary>Gets the retained source that remains available after an import, including failed cooking.</summary>
-    public Uri? RetainedSourceUri { get; init; }
+    public AssetPath? RetainedSourceUri { get; init; }
 
     /// <summary>Gets the saved inputs and compatible producer fingerprint used by this cook.</summary>
     public CookInputSnapshot? InputSnapshot { get; init; }
@@ -60,8 +61,8 @@ public sealed record ContentCookResult(
         = ImmutableDictionary<string, NativeMaterialSlotProvenance>.Empty;
 
     /// <summary>Gets native-reported auxiliary file ownership for imported source products.</summary>
-    internal ImmutableDictionary<Uri, ImmutableArray<string>> AuxiliaryFilesBySource { get; init; }
-        = ImmutableDictionary<Uri, ImmutableArray<string>>.Empty;
+    internal ImmutableDictionary<AssetPath, ImmutableArray<string>> AuxiliaryFilesBySource { get; init; }
+        = ImmutableDictionary<AssetPath, ImmutableArray<string>>.Empty;
 
     /// <summary>Gets source settings emitted by the native producer and committed with its outputs.</summary>
     internal ImmutableArray<Publication.CookProducedSourceFile> ProducedSourceFiles { get; init; } = [];

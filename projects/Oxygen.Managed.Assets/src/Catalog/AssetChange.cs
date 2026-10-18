@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Managed.Assets.Catalog;
 
 /// <summary>
@@ -25,7 +27,7 @@ public enum AssetChangeKind
     Updated,
 
     /// <summary>
-    /// An asset changed identity (rename/move). <see cref="AssetChange.PreviousUri"/> carries the old value.
+    /// An asset changed identity (rename/move). <see cref="AssetChange.PreviousIdentity"/> carries the old value.
     /// </summary>
     Relocated,
 
@@ -39,4 +41,7 @@ public enum AssetChangeKind
 /// <summary>
 /// Represents an incremental change in an asset catalog.
 /// </summary>
-public sealed record AssetChange(AssetChangeKind Kind, Uri Uri, Uri? PreviousUri = null);
+/// <param name="Kind">What changed.</param>
+/// <param name="Identity">The asset that changed.</param>
+/// <param name="PreviousIdentity">The asset's identity before a <see cref="AssetChangeKind.Relocated"/> change.</param>
+public sealed record AssetChange(AssetChangeKind Kind, AssetPath Identity, AssetPath? PreviousIdentity = null);

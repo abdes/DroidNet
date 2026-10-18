@@ -51,7 +51,7 @@ public sealed partial class SceneDescriptorGenerator
         var contexts = new List<NativeStartingInputContext>();
         foreach (var entry in scene.StartingInputContexts)
         {
-            var path = Uri.UnescapeDataString(entry.Context.AbsolutePath);
+            var path = entry.Context.VirtualPath;
             if (!path.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.OrdinalIgnoreCase))
             {
                 site.Report(SceneStartingPropertyPaths.StartingInputContexts, $"'{path}' is not an input mapping context. Remove it from the scene's starting input contexts.");
@@ -97,14 +97,14 @@ public sealed partial class SceneDescriptorGenerator
                 Code = ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
                 Message = message,
                 TechnicalMessage = technicalMessage ?? $"Scene '{this.Scene.Name}': {propertyPath}.",
-                AffectedPath = this.SceneInput.SourceAbsolutePath,
-                AffectedVirtualPath = AssetUriHelper.GetVirtualPath(this.SceneInput.AssetUri),
+                AffectedPath = this.SceneInput.SourceAbsolutePath.FullPath,
+                AffectedVirtualPath = this.SceneInput.AssetUri.VirtualPath,
                 AffectedEntity = new AffectedScope
                 {
                     ProjectId = this.Scope.Project.ProjectId,
                     SceneId = this.Scene.Id,
                     SceneName = this.Scene.Name,
-                    AssetVirtualPath = AssetUriHelper.GetVirtualPath(this.SceneInput.AssetUri),
+                    AssetVirtualPath = this.SceneInput.AssetUri.VirtualPath,
                     ComponentName = SceneStartingPropertyPaths.IsStartingProperty(propertyPath) ? "Play" : "Environment",
                 },
                 SuggestedAction = new PrimaryAction
@@ -114,7 +114,7 @@ public sealed partial class SceneDescriptorGenerator
                     Kind = PrimaryActionKind.Custom,
                     Payload = new Dictionary<string, string>(StringComparer.Ordinal)
                     {
-                        ["AssetUri"] = this.SceneInput.AssetUri.AbsoluteUri,
+                        ["AssetUri"] = this.SceneInput.AssetUri.ToUriString(),
                         ["PropertyPath"] = propertyPath,
                     },
                 },

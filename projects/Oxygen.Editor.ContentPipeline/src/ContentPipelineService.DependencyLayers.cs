@@ -17,11 +17,11 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Orders source work across output mounts while allowing independent branches to finish.</summary>
 public sealed partial class ContentPipelineService
 {
-    private static ImmutableArray<Uri> SourceDependencies(ContentCookInput input, CookDependencyGraph graph)
+    private static ImmutableArray<AssetPath> SourceDependencies(ContentCookInput input, CookDependencyGraph graph)
         => graph.Dependencies.TryGetValue(input.AssetUri, out var dependencies) ? dependencies
-            : ProceduralGeometryDescriptorService.IsGeneratedBasicShape(input.AssetUri) ? [AssetUris.BuildGeneratedUri("Materials/Default")] : [];
+            : ProceduralGeometryDescriptorService.IsGeneratedBasicShape(input.AssetUri) ? [ProceduralGeometryDescriptorService.DefaultMaterial] : [];
 
-    private static ContentCookInput[] ReadyInputs(Dictionary<Uri, ContentCookInput> remaining, CookDependencyGraph graph)
+    private static ContentCookInput[] ReadyInputs(Dictionary<AssetPath, ContentCookInput> remaining, CookDependencyGraph graph)
     {
         var ready = remaining.Values.Where(input => SourceDependencies(input, graph).All(uri => !remaining.ContainsKey(uri))).Select(static input => input.AssetUri).ToHashSet();
         bool expanded;
@@ -51,7 +51,7 @@ public sealed partial class ContentPipelineService
             Domain = FailureDomain.AssetCook,
             Severity = cycle ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
             Code = cycle ? "asset_cook.dependency_cycle" : "asset_cook.dependency_failed",
-            AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
+            AffectedVirtualPath = input.AssetUri.VirtualPath,
             Message = cycle ? $"A dependency cycle prevents cooking '{input.AssetUri}'." : $"Skipped '{input.AssetUri}' because a required asset failed.",
         }).ToArray();
         foreach (var input in inputs)
@@ -67,20 +67,20 @@ public sealed partial class ContentPipelineService
     private static void RecordLayerOutcome(
         ContentCookResult result,
         ContentCookInput[] inputs,
-        Dictionary<Uri, ContentCookInput> remaining,
-        HashSet<Uri> failed,
-        HashSet<Uri> completed)
+        Dictionary<AssetPath, ContentCookInput> remaining,
+        HashSet<AssetPath> failed,
+        HashSet<AssetPath> completed)
     {
         var succeeded = result.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings;
         var globalError = result.Diagnostics.Any(issue => issue.Severity >= DiagnosticSeverity.Error
-            && !inputs.Any(input => string.Equals(issue.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(input.AssetUri), StringComparison.Ordinal)));
+            && !inputs.Any(input => string.Equals(issue.AffectedVirtualPath, input.AssetUri.VirtualPath, StringComparison.Ordinal)));
         foreach (var input in inputs)
         {
             _ = remaining.Remove(input.AssetUri);
             var inputFailed = !succeeded
                 && (globalError
                     || result.Diagnostics.Any(issue => issue.Severity >= DiagnosticSeverity.Error
-                        && string.Equals(issue.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(input.AssetUri), StringComparison.Ordinal))
+                        && string.Equals(issue.AffectedVirtualPath, input.AssetUri.VirtualPath, StringComparison.Ordinal))
                     || !result.CookedAssets.Any(asset => asset.SourceAssetUri == input.AssetUri));
             _ = inputFailed ? failed.Add(input.AssetUri) : completed.Add(input.AssetUri);
         }
@@ -100,7 +100,7 @@ public sealed partial class ContentPipelineService
         CancellationToken cancellationToken)
     {
         var remaining = dirtyInputs.ToDictionary(static input => input.AssetUri);
-        var failed = new HashSet<Uri>();
+        var failed = new HashSet<AssetPath>();
         var completed = plan.Reusable.Keys.ToHashSet();
         var results = new List<ContentCookResult>();
         while (remaining.Count > 0)
@@ -142,7 +142,7 @@ public sealed partial class ContentPipelineService
                     Output = staging.Roots.Single(root => string.Equals(root.Mount, mount.Key, StringComparison.Ordinal)),
                     CookedContextRoots = referenceRoots,
                     InputDependencies = graph.Dependencies.SetItems(graph.Builtins.Where(ProceduralGeometryDescriptorService.IsGeneratedBasicShape)
-                        .Select(static uri => KeyValuePair.Create<Uri, ImmutableArray<Uri>>(uri, [AssetUris.BuildGeneratedUri("Materials/Default")]))),
+                        .Select(static uri => KeyValuePair.Create<AssetPath, ImmutableArray<AssetPath>>(uri, [ProceduralGeometryDescriptorService.DefaultMaterial]))),
                 };
                 var result = await this.CookMixedInputsAsync(operation.OperationId, scope, cancellationToken).ConfigureAwait(false);
                 results.Add(result);

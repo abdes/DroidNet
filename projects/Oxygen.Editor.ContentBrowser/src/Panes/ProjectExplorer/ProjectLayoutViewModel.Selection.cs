@@ -4,6 +4,7 @@
 
 using DroidNet.Controls;
 using DroidNet.Controls.Selection;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
@@ -25,23 +26,6 @@ public partial class ProjectLayoutViewModel
         }
     }
 
-    // The folder above a selected folder, in the selection's own form: "/Content/Props" or "Content/Props".
-    private static string? GetParentFolder(string path)
-    {
-        if (path is "/" or "." || path.Length == 0)
-        {
-            return null;
-        }
-
-        var slash = path.TrimEnd('/').LastIndexOf('/');
-        return slash switch
-        {
-            < 0 => ".",
-            0 => "/",
-            _ => path[..slash],
-        };
-    }
-
     private async Task UpdateTreeSelectionFromStateAsync()
     {
         var version = ++this.selectionRequestVersion;
@@ -53,9 +37,15 @@ public partial class ProjectLayoutViewModel
 
         var paths = contentBrowserState.SelectedFolders.ToArray();
         var selected = new HashSet<TreeItemAdapter>(ReferenceEqualityComparer.Instance);
+        if (paths.Length == 0)
+        {
+            // No selected folder browses the whole project, which the project's row stands for.
+            _ = selected.Add(root);
+        }
+
         try
         {
-            var shown = new List<string>(paths.Length);
+            var shown = new List<AssetPath?>(paths.Length);
             foreach (var path in paths)
             {
                 var (existing, target) = await this.FindNearestExistingFolderAsync(root, path).ConfigureAwait(true);
@@ -69,7 +59,7 @@ public partial class ProjectLayoutViewModel
                     _ = selected.Add(adapter);
                 }
 
-                if (!string.Equals(existing, path, StringComparison.Ordinal))
+                if (existing != path)
                 {
                     this.LogMissingSelectedFolder(path, existing);
                 }
@@ -77,10 +67,10 @@ public partial class ProjectLayoutViewModel
                 shown.Add(existing);
             }
 
-            if (!shown.SequenceEqual(paths, StringComparer.Ordinal))
+            if (!shown.SequenceEqual(paths))
             {
                 // The new scope selects the tree again, through the state's change.
-                contentBrowserState.SetSelectedFolders([.. shown.Distinct(StringComparer.Ordinal)]);
+                contentBrowserState.SetSelectedFolders(shown.Contains(null) ? [] : shown.OfType<AssetPath>());
                 return;
             }
 
@@ -98,17 +88,18 @@ public partial class ProjectLayoutViewModel
 
     // A folder deleted since it was selected, or reached again through Back or Forward, is not shown: its nearest
     // folder that still exists is.
-    private async Task<(string Existing, ITreeItem? Target)> FindNearestExistingFolderAsync(TreeItemAdapter root, string path)
+    // When not even the folder's mount is shown, the whole project is.
+    private async Task<(AssetPath? Existing, ITreeItem? Target)> FindNearestExistingFolderAsync(TreeItemAdapter root, AssetPath path)
     {
-        var existing = path;
-        var target = await this.FindSelectedFolderAsync(root, existing).ConfigureAwait(true);
-        while (target is null && GetParentFolder(existing) is { } parent)
+        for (var existing = path; existing is not null; existing = existing.Parent)
         {
-            existing = parent;
-            target = await this.FindSelectedFolderAsync(root, existing).ConfigureAwait(true);
+            if (await this.FindAdapterByVirtualPathAsync(existing).ConfigureAwait(true) is { } target)
+            {
+                return (existing, target);
+            }
         }
 
-        return (existing, target);
+        return (null, root);
     }
 
     // Selects the shown rows of the selected folders without the selection writing back to the state.
@@ -132,12 +123,6 @@ public partial class ProjectLayoutViewModel
             this.isUpdatingFromState = false;
         }
     }
-
-    private async Task<ITreeItem?> FindSelectedFolderAsync(TreeItemAdapter root, string path)
-        => path is "/" or "." ? root
-            : path.StartsWith('/')
-                ? await this.FindAdapterByVirtualPathAsync(path).ConfigureAwait(true)
-                : await FindFolderAdapterAsync(root, path).ConfigureAwait(true);
 
     private async Task<bool> RevealSelectedAncestorsAsync(HashSet<TreeItemAdapter> selected, long version, TreeItemAdapter root)
     {

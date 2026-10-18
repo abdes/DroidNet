@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Cooking;
@@ -12,4 +13,4 @@ namespace Oxygen.Editor.ContentPipeline.Cooking;
 /// <param name="Severity">The message's severity.</param>
 /// <param name="Text">The complete readable or native message text.</param>
 /// <param name="AssetUri">The affected asset, when known.</param>
-public sealed record CookRunMessage(long Sequence, DateTimeOffset Timestamp, DiagnosticSeverity Severity, string Text, Uri? AssetUri = null);
+public sealed record CookRunMessage(long Sequence, DateTimeOffset Timestamp, DiagnosticSeverity Severity, string Text, AssetPath? AssetUri = null);

@@ -115,7 +115,7 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
     public bool CanRemoveAllStale => this.StaleValues.Count > 1;
 
     /// <summary>Gets a value indicating whether the script's source can be opened in the code editor.</summary>
-    public bool CanEditScript => this.declarations.Analysis is { SourcePath.Length: > 0 };
+    public bool CanEditScript => this.declarations.Analysis is not null;
 
     /// <summary>Gets the Edit button tooltip, which says why Edit is unavailable when it is.</summary>
     public string EditToolTip => this.declarations.Origin switch
@@ -174,16 +174,16 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
         this.updating = true;
         try
         {
-            this.SelectedScript = slot.Script is { } script ? this.ScriptChoices.FirstOrDefault(choice => choice.Uri == script) : null;
+            this.SelectedScript = slot.Script is { } script ? this.ScriptChoices.FirstOrDefault(choice => choice.Asset == script) : null;
         }
         finally
         {
             this.updating = false;
         }
 
-        this.Title = this.SelectedScript?.Name ?? (slot.Script is { } uri ? Path.GetFileNameWithoutExtension(Uri.UnescapeDataString(uri.AbsolutePath)) : "No script");
+        this.Title = this.SelectedScript?.Name ?? (slot.Script is { } uri ? Path.GetFileNameWithoutExtension(uri.VirtualPath) : "No script");
         this.MissingScriptText = slot.Script is { } missing && this.SelectedScript is null && declared.Origin == ScriptDeclarationOrigin.Unknown
-            ? "Missing: " + Uri.UnescapeDataString(missing.AbsolutePath)
+            ? "Missing: " + missing.VirtualPath
             : string.Empty;
         if (!this.inOrderSession)
         {
@@ -221,9 +221,9 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
 
     partial void OnSelectedScriptChanged(ScriptAssetChoice? value)
     {
-        if (!this.updating && value is not null && value.Uri != this.Slot.Script)
+        if (!this.updating && value is not null && value.Asset != this.Slot.Script)
         {
-            _ = this.Owner.EditAsync(slots => ScriptSlotEdits.SetScript(slots, this.SlotId, value.Uri));
+            _ = this.Owner.EditAsync(slots => ScriptSlotEdits.SetScript(slots, this.SlotId, value.Asset));
         }
     }
 

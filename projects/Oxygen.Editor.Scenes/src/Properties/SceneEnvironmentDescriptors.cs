@@ -8,6 +8,7 @@ using System.Globalization;
 using System.Numerics;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Scenes.Properties;
@@ -87,7 +88,7 @@ public sealed class SceneEnvironmentDescriptors
     private readonly PropertyDescriptor<float> autoExposureSpotMeterRadiusDescriptor;
     private readonly PropertyDescriptor<float> autoExposureBlackInfluenceDescriptor;
     private readonly PropertyDescriptor<float> autoExposureTransitionDistanceEvDescriptor;
-    private readonly PropertyDescriptor<Uri?> autoExposureMeteringMaskDescriptor;
+    private readonly PropertyDescriptor<AssetPath?> autoExposureMeteringMaskDescriptor;
     private readonly PropertyDescriptor<ImmutableArray<ExposureCompensationKeyData>> autoExposureCompensationCurveDescriptor;
     private readonly PropertyDescriptor<float> bloomIntensityDescriptor;
     private readonly PropertyDescriptor<float> bloomThresholdDescriptor;
@@ -132,7 +133,7 @@ public sealed class SceneEnvironmentDescriptors
         this.autoExposureSpotMeterRadiusDescriptor = this.Get<float>("/post_process/auto_exposure_spot_meter_radius");
         this.autoExposureBlackInfluenceDescriptor = this.Get<float>("/post_process/auto_exposure_black_influence");
         this.autoExposureTransitionDistanceEvDescriptor = this.Get<float>("/post_process/auto_exposure_transition_distance_ev");
-        this.autoExposureMeteringMaskDescriptor = this.Get<Uri?>("/post_process/auto_exposure_metering_mask");
+        this.autoExposureMeteringMaskDescriptor = this.Get<AssetPath?>("/post_process/auto_exposure_metering_mask");
         this.autoExposureCompensationCurveDescriptor = this.Get<ImmutableArray<ExposureCompensationKeyData>>("/post_process/auto_exposure_compensation_curve");
         this.bloomIntensityDescriptor = this.Get<float>("/post_process/bloom_intensity");
         this.bloomThresholdDescriptor = this.Get<float>("/post_process/bloom_threshold");
@@ -218,7 +219,7 @@ public sealed class SceneEnvironmentDescriptors
     public PropertyId<float> AutoExposureTransitionDistanceEv => this.autoExposureTransitionDistanceEvDescriptor.TypedId;
 
     /// <summary>Gets the typed property id for the exposure metering mask reference.</summary>
-    public PropertyId<Uri?> AutoExposureMeteringMask => this.autoExposureMeteringMaskDescriptor.TypedId;
+    public PropertyId<AssetPath?> AutoExposureMeteringMask => this.autoExposureMeteringMaskDescriptor.TypedId;
 
     /// <summary>Gets the typed property id for the exposure compensation curve.</summary>
     public PropertyId<ImmutableArray<ExposureCompensationKeyData>> AutoExposureCompensationCurve => this.autoExposureCompensationCurveDescriptor.TypedId;
@@ -344,9 +345,7 @@ public sealed class SceneEnvironmentDescriptors
             "Metering mask",
             static p => p.AutoExposureMeteringMask,
             static (p, v) => p with { AutoExposureMeteringMask = v },
-            static value => value is null || (value.IsAbsoluteUri && string.Equals(value.Scheme, "asset", StringComparison.OrdinalIgnoreCase))
-                ? ValidationResult.Ok
-                : ValidationResult.Fail("EXPOSURE_METERING_MASK_REFERENCE", "Metering mask must be an absolute asset URI or empty."),
+            static _ => ValidationResult.Ok,
             "asset-picker"));
         descriptors.Add(PostProcessDescriptor(
             "/post_process/auto_exposure_compensation_curve",

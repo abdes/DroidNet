@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.World.Inspector.Geometry;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -52,10 +53,10 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
     /// <summary>Gets the display name of a cubemap reference.</summary>
     /// <param name="cubemap">The referenced cube texture, or null for none.</param>
     /// <returns>The texture's name, its file name when unlisted, or "None".</returns>
-    public string DisplayName(Uri? cubemap)
+    public string DisplayName(AssetPath? cubemap)
         => cubemap is null ? "None"
-            : this.Rows.FirstOrDefault(row => row.Item.Uri == cubemap)?.Item.Name
-                ?? Path.GetFileNameWithoutExtension(cubemap.AbsolutePath);
+            : this.Rows.FirstOrDefault(row => row.Item.Asset == cubemap)?.Item.Name
+                ?? Path.GetFileNameWithoutExtension(cubemap.Name);
 
     /// <inheritdoc />
     public void Dispose()
@@ -80,7 +81,7 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
         => assetProvider?.Items
             .Select(static assets => (IReadOnlyList<CubeTextureAsset>)AssetRule.For(AssetKind.Texture).Apply(assets)
                 .Where(static asset => asset.DescriptorPath is not null)
-                .Select(static asset => (Asset: asset, Cube: TextureSourceAssetImporter.ReadCubeDescriptor(asset.DescriptorPath!)))
+                .Select(static asset => (Asset: asset, Cube: TextureSourceAssetImporter.ReadCubeDescriptor(asset.DescriptorPath!.FullPath)))
                 .Where(static entry => entry.Cube is not null)
                 .Select(static entry => new CubeTextureAsset(entry.Asset, entry.Cube!.Value.StoresRadiance))
                 .ToArray())
@@ -107,8 +108,8 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
             return;
         }
 
-        var wanted = cubemaps.Select(static entry => entry.Asset.IdentityUri.AbsoluteUri).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var removed in this.Rows.Where(row => !wanted.Contains(row.Item.Uri.AbsoluteUri)).ToArray())
+        var wanted = cubemaps.Select(static entry => entry.Asset.Identity).ToHashSet();
+        foreach (var removed in this.Rows.Where(row => !wanted.Contains(row.Item.Asset)).ToArray())
         {
             _ = this.Rows.Remove(removed);
         }
@@ -118,8 +119,8 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
             var (asset, storesRadiance) = cubemaps[index];
             // Lighting accepts only float radiance; an LDR cube can still be shown.
             var kind = storesRadiance ? "Cube texture · " : "LDR cube texture, display only · ";
-            var item = new AssetPickerItem(asset.DisplayName, asset.IdentityUri, kind + asset.PrimaryBadge, asset.DisplayPath, AssetPickerGroup.Content, asset.IsSelectable, "");
-            var row = this.Rows.FirstOrDefault(candidate => candidate.Item.Uri == asset.IdentityUri);
+            var item = new AssetPickerItem(asset.DisplayName, asset.Identity, kind + asset.PrimaryBadge, asset.DisplayPath, AssetPickerGroup.Content, asset.IsSelectable, "");
+            var row = this.Rows.FirstOrDefault(candidate => candidate.Item.Asset == asset.Identity);
             if (row is null)
             {
                 this.Rows.Insert(Math.Min(index, this.Rows.Count), new(item));

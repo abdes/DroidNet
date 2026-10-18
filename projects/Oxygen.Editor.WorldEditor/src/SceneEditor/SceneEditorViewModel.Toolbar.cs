@@ -13,6 +13,7 @@ using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
@@ -49,7 +50,7 @@ public partial class SceneEditorViewModel
     public IMenuSource QuickAddMenu => this.quickAddMenu ??= this.BuildQuickAddMenu();
 
     /// <summary>The geometry and material assets a node uses, in a stable order.</summary>
-    private static IEnumerable<Uri> GetAssetUris(SceneNode node)
+    private static IEnumerable<AssetPath> GetAssets(SceneNode node)
     {
         var geometry = node.Components.OfType<GeometryComponent>().FirstOrDefault();
         if (geometry is not null)
@@ -168,23 +169,23 @@ public partial class SceneEditorViewModel
         this.BrowseToAssetCommand.NotifyCanExecuteChanged();
     }
 
-    private IReadOnlyList<Uri> GetSelectedAssetUris()
-        => [.. this.selectedNodes.SelectMany(GetAssetUris).Distinct()];
+    private IReadOnlyList<AssetPath> GetSelectedAssets()
+        => [.. this.selectedNodes.SelectMany(GetAssets).Distinct()];
 
-    private bool CanBrowseToAsset() => this.GetSelectedAssetUris().Count > 0;
+    private bool CanBrowseToAsset() => this.GetSelectedAssets().Count > 0;
 
     /// <summary>Reveals and selects the selected nodes' geometry and material assets in the Content Browser (Ctrl+B).</summary>
     [RelayCommand(CanExecute = nameof(CanBrowseToAsset))]
     private async Task BrowseToAsset()
     {
-        var uris = this.GetSelectedAssetUris();
-        this.LogBrowseToAssetRequested(uris.Count);
-        if (uris.Count == 0 || this.ActiveProject is not { } project)
+        var assets = this.GetSelectedAssets();
+        this.LogBrowseToAssetRequested(assets.Count);
+        if (assets.Count == 0 || this.ActiveProject is not { } project)
         {
             return;
         }
 
-        var request = this.messenger.Send(new ShowAssetRequestMessage(project, uris));
+        var request = this.messenger.Send(new ShowAssetRequestMessage(project, assets));
         if (request.HasReceivedResponse)
         {
             _ = await request.Response.ConfigureAwait(true);

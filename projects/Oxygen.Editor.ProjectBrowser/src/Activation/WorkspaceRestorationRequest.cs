@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ProjectBrowser.Activation;
 
 /// <summary>
@@ -17,5 +19,5 @@ public sealed record WorkspaceRestorationRequest
     /// <summary>
     /// Gets the project root path.
     /// </summary>
-    public required string ProjectRoot { get; init; }
+    public required FileSystemPath ProjectRoot { get; init; }
 }

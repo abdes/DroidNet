@@ -35,7 +35,7 @@ public sealed class ProjectScriptTooling(ScriptToolingPaths paths, IOperationRes
     public IReadOnlyList<string> Ensure(ProjectContext project)
     {
         ArgumentNullException.ThrowIfNull(project);
-        var root = project.ProjectRoot;
+        var root = project.ProjectRoot.FullPath;
         var changes = new List<string>();
         try
         {

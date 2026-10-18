@@ -29,8 +29,8 @@ internal sealed partial class CookSourceAnalyzer(
     ICookDocumentRegistry documents,
     CookProvenance? previous = null) : ICookSourceFactsProvider
 {
-    private readonly string root = Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N"), "analysis", Guid.NewGuid().ToString("N"));
-    private readonly Dictionary<Uri, ContentCookInput> builtins = [];
+    private readonly string root = Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N"), "analysis", Guid.NewGuid().ToString("N"));
+    private readonly Dictionary<AssetPath, ContentCookInput> builtins = [];
     private BuiltinGeometryCatalog? catalog;
 
     /// <inheritdoc />
@@ -55,7 +55,7 @@ internal sealed partial class CookSourceAnalyzer(
         var generatedJobs = generated.Values.Select(input => recipes.BuildJob(this.Rebase(input), [])).ToArray();
         var execution = new ContentSourceAnalysisExecution(
             operation.OperationId,
-            operation.Project.ProjectRoot,
+            operation.Project.ProjectRoot.FullPath,
             this.root,
             [.. prepared.Select(static source => source.Job), .. generatedJobs])
         { Artifacts = artifacts };
@@ -63,8 +63,8 @@ internal sealed partial class CookSourceAnalyzer(
         this.AddReportDiagnostics(report, prepared, diagnostics);
 
         var generatedPaths = generated.Values.Select(static input => input.SourceAbsolutePath)
-            .Concat(prepared.Where(static source => source.Scene is not null).Select(static source => source.Scene!.DescriptorPath))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .Concat(prepared.Where(static source => source.Scene is not null).Select(static source => FileSystemPath.From(source.Scene!.DescriptorPath)))
+            .ToHashSet();
         var analyzed = await this.CollectFactsAsync(reused, prepared, report, diagnostics, generatedPaths, cancellationToken).ConfigureAwait(false);
         return new(analyzed, [.. generated.Values.Select(this.Rebase)], CaptureGeneratedInputs(report, generatedPaths), diagnostics.ToImmutable())
         {
@@ -73,13 +73,13 @@ internal sealed partial class CookSourceAnalyzer(
     }
 
     // The descriptors native analysis read but the editor generated are captured from the analysis, not from disk.
-    private static ImmutableArray<NativeCapturedInput> CaptureGeneratedInputs(NativeSourceAnalysisReport report, HashSet<string> generatedPaths)
+    private static ImmutableArray<NativeCapturedInput> CaptureGeneratedInputs(NativeSourceAnalysisReport report, HashSet<FileSystemPath> generatedPaths)
     {
         var generatedInputs = ImmutableArray.CreateBuilder<NativeCapturedInput>();
         foreach (var path in generatedPaths)
         {
             var observation = report.Jobs.SelectMany(static job => job.Observations)
-                .FirstOrDefault(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(item => FileSystemPath.From(item.Path) == path);
             if (observation?.Metadata is not { } metadata)
             {
                 continue;
@@ -87,7 +87,7 @@ internal sealed partial class CookSourceAnalyzer(
 
             var digest = observation.Reads.FirstOrDefault(static read => read.Offset == 0 && (read.MaxBytes == 0))
                 ?? throw new InvalidDataException("Native analysis did not retain the complete generated descriptor.");
-            generatedInputs.Add(new(path, true, metadata, new(path, metadata.Size, digest.Sha256)));
+            generatedInputs.Add(new(path.FullPath, true, metadata, new(path.FullPath, metadata.Size, digest.Sha256)));
         }
 
         return generatedInputs.ToImmutable();
@@ -97,18 +97,17 @@ internal sealed partial class CookSourceAnalyzer(
     private static IEnumerable<NativeLogicalDependency> ScriptReferences(SceneDescriptorGenerationResult? scene)
         => scene?.ScriptReferences.Select(static uri =>
         {
-            var path = Uri.UnescapeDataString(uri.AbsolutePath);
-            path = path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? path[..^".json".Length] : path;
+            var path = uri.VirtualPath;
             var kind = path.EndsWith(AssetFileTypes.Script, StringComparison.OrdinalIgnoreCase) ? "script" : "asset";
             return new NativeLogicalDependency(path, kind, ObjectPath: "scripting", Required: true);
         }) ?? [];
 
-    private async Task<(List<PreparedSource> Prepared, Dictionary<Uri, ContentCookInput> Generated, ImmutableArray<DiagnosticRecord>.Builder Diagnostics)> PrepareSourcesAsync(
+    private async Task<(List<PreparedSource> Prepared, Dictionary<AssetPath, ContentCookInput> Generated, ImmutableArray<DiagnosticRecord>.Builder Diagnostics)> PrepareSourcesAsync(
         IEnumerable<ContentCookInput> inputs,
         CancellationToken cancellationToken)
     {
         var prepared = new List<PreparedSource>();
-        var generated = new Dictionary<Uri, ContentCookInput>();
+        var generated = new Dictionary<AssetPath, ContentCookInput>();
         var diagnostics = ImmutableArray.CreateBuilder<DiagnosticRecord>();
         foreach (var input in inputs)
         {
@@ -134,11 +133,11 @@ internal sealed partial class CookSourceAnalyzer(
         foreach (var job in report.Jobs)
         {
             var owner = prepared.FirstOrDefault(source => string.Equals(source.Job.Id, job.Id, StringComparison.Ordinal))?.Input;
-            var ownerPath = owner is null ? null : AssetUriHelper.GetVirtualPath(owner.AssetUri);
+            var ownerPath = owner is null ? null : owner.AssetUri.VirtualPath;
             diagnostics.AddRange(job.Diagnostics.Select(issue => issue with { AffectedVirtualPath = ownerPath }));
-            foreach (var path in job.Files.Select(static file => file.Path).Concat(job.Observations.Select(static observation => observation.Path)).Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var path in job.Files.Select(static file => file.Path).Concat(job.Observations.Select(static observation => observation.Path)).DistinctBy(FileSystemPath.From))
             {
-                var relative = Path.GetRelativePath(operation.Project.ProjectRoot, path).Replace('\\', '/');
+                var relative = Path.GetRelativePath(operation.Project.ProjectRoot.FullPath, path).Replace('\\', '/');
                 if (Path.IsPathRooted(relative) || relative is ".." || relative.StartsWith("../", StringComparison.Ordinal))
                 {
                     diagnostics.Add(new()
@@ -163,7 +162,7 @@ internal sealed partial class CookSourceAnalyzer(
                     Severity = DiagnosticSeverity.Error,
                     Code = "asset_cook.analysis_incomplete",
                     Message = "Native source analysis did not complete.",
-                    AffectedPath = owner?.SourceAbsolutePath ?? job.SourcePath,
+                    AffectedPath = owner?.SourceAbsolutePath.FullPath ?? job.SourcePath,
                     AffectedVirtualPath = ownerPath,
                 });
             }
@@ -172,11 +171,11 @@ internal sealed partial class CookSourceAnalyzer(
 
     // The facts of each prepared source that analysis completed without an error, after the reused ones.
     private async Task<ImmutableArray<CookSourceFacts>> CollectFactsAsync(
-        Dictionary<Uri, CookSourceFacts> reused,
+        Dictionary<AssetPath, CookSourceFacts> reused,
         List<PreparedSource> prepared,
         NativeSourceAnalysisReport report,
         ImmutableArray<DiagnosticRecord>.Builder diagnostics,
-        HashSet<string> generatedPaths,
+        HashSet<FileSystemPath> generatedPaths,
         CancellationToken cancellationToken)
     {
         var analyzed = ImmutableArray.CreateBuilder<CookSourceFacts>();
@@ -186,7 +185,7 @@ internal sealed partial class CookSourceAnalyzer(
             var source = prepared[index];
             var facts = report.Jobs[index];
             if (!facts.Complete || diagnostics.Any(issue => issue.Severity >= DiagnosticSeverity.Error
-                && string.Equals(issue.AffectedVirtualPath, AssetUriHelper.GetVirtualPath(source.Input.AssetUri), StringComparison.Ordinal)))
+                && string.Equals(issue.AffectedVirtualPath, source.Input.AssetUri.VirtualPath, StringComparison.Ordinal)))
             {
                 continue;
             }
@@ -196,7 +195,7 @@ internal sealed partial class CookSourceAnalyzer(
                 source.Input,
                 facts.Outputs,
                 [.. facts.References, .. ScriptReferences(source.Scene)],
-                [.. source.ManagedFiles, .. files.Select(file => string.Equals(file.SourcePath, source.Input.SourceAbsolutePath, StringComparison.OrdinalIgnoreCase)
+                [.. source.ManagedFiles, .. files.Select(file => file.SourcePath == source.Input.SourceAbsolutePath
                     ? file with { AssetUri = source.Input.AssetUri } : file)])
             { Job = source.Job, Scene = source.Scene });
         }
@@ -218,7 +217,7 @@ internal sealed partial class CookSourceAnalyzer(
         if (CookSavedSourceReader.Exists(settingsPath))
         {
             var bytes = await CookSavedSourceReader.ReadAsync(documents, settingsPath, cancellationToken).ConfigureAwait(false);
-            managed.Add(new(null, settingsPath, input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix, Convert.ToHexString(SHA256.HashData(bytes))));
+            managed.Add(new(null, FileSystemPath.From(settingsPath), input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix, Convert.ToHexString(SHA256.HashData(bytes))));
             if (input.Kind == ContentCookAssetKind.ForeignSource)
             {
                 settings = NativeSceneImportSettings.Parse(bytes);
@@ -227,7 +226,7 @@ internal sealed partial class CookSourceAnalyzer(
         }
         else
         {
-            managed.Add(new(null, settingsPath, input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix, string.Empty, CookSnapshotInputKind.Absent));
+            managed.Add(new(null, FileSystemPath.From(settingsPath), input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix, string.Empty, CookSnapshotInputKind.Absent));
         }
 
         var textureDiagnostics = input.Kind == ContentCookAssetKind.Material
@@ -242,7 +241,7 @@ internal sealed partial class CookSourceAnalyzer(
         CookInputSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
-        var sourcePath = snapshot is null ? input.SourceAbsolutePath : Path.Combine(snapshot.InputRoot, input.SourceRelativePath);
+        var sourcePath = snapshot is null ? input.SourceAbsolutePath.FullPath : Path.Combine(snapshot.InputRoot, input.SourceRelativePath);
         var bytes = await CookSavedSourceReader.ReadAsync(documents, sourcePath, cancellationToken).ConfigureAwait(false);
         ImmutableArray<CookSnapshotInput> managed = [new(input.AssetUri, input.SourceAbsolutePath, input.SourceRelativePath, Convert.ToHexString(SHA256.HashData(bytes)))];
         var stream = new MemoryStream(bytes, writable: false);
@@ -251,13 +250,13 @@ internal sealed partial class CookSourceAnalyzer(
 
         // A scene's name is its file name, whatever the file says; a scene a relocation renamed keeps its old name
         // inside the file until it is saved again.
-        scene.Name = Path.GetFileName(input.SourceAbsolutePath)[..^AssetFileTypes.SceneDescriptor.Length];
+        scene.Name = input.SourceAbsolutePath.Name[..^AssetFileTypes.SceneDescriptor.Length];
         var hasBuiltins = scene.AllNodes.SelectMany(static node => node.Components.OfType<GeometryComponent>())
-            .Any(static geometry => geometry.Geometry.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase)
-                || geometry.OverrideSlots.OfType<Oxygen.Editor.World.Slots.MaterialsSlot>().Any(static slot => slot.Material.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase)));
+            .Any(static geometry => geometry.Geometry.IsSameOrInside(AssetPath.Generated)
+                || geometry.OverrideSlots.OfType<Oxygen.Editor.World.Slots.MaterialsSlot>().Any(static slot => slot.Material.IsSameOrInside(AssetPath.Generated)));
         if (hasBuiltins && this.catalog is null)
         {
-            this.catalog = await ((IBuiltinGeometryCatalogProvider)native).GetBuiltinGeometryCatalogAsync(this.root, AssetUris.ContentMountPoint, cancellationToken, artifacts).ConfigureAwait(false);
+            this.catalog = await ((IBuiltinGeometryCatalogProvider)native).GetBuiltinGeometryCatalogAsync(this.root, AssetPath.Content.Mount, cancellationToken, artifacts).ConfigureAwait(false);
         }
 
         var scope = new ContentCookScope(operation.Project, scopes.CreateScope(operation.Project), [input], CookTargetKind.Asset)
@@ -274,14 +273,14 @@ internal sealed partial class CookSourceAnalyzer(
             this.builtins[builtin.AssetUri] = builtin;
         }
 
-        var projected = this.Rebase(input with { SourceAbsolutePath = projection.DescriptorPath, Role = ContentCookInputRole.GeneratedDescriptor });
+        var projected = this.Rebase(input with { SourceAbsolutePath = FileSystemPath.From(projection.DescriptorPath), Role = ContentCookInputRole.GeneratedDescriptor });
         return new(input, recipes.BuildJob(projected, []), managed, projection);
     }
 
     private async Task<ImmutableArray<DiagnosticRecord>> ValidateMaterialTextureSourcesAsync(ContentCookInput input, CancellationToken cancellationToken)
     {
         var diagnostics = ImmutableArray.CreateBuilder<DiagnosticRecord>();
-        var materialBytes = await CookSavedSourceReader.ReadAsync(documents, input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
+        var materialBytes = await CookSavedSourceReader.ReadAsync(documents, input.SourceAbsolutePath.FullPath, cancellationToken).ConfigureAwait(false);
         JsonDocument material;
         try
         {
@@ -289,7 +288,7 @@ internal sealed partial class CookSourceAnalyzer(
         }
         catch (JsonException exception)
         {
-            diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, "<unknown>", input.SourceAbsolutePath, "material descriptor is invalid JSON", exception.Message));
+            diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, "<unknown>", input.SourceAbsolutePath.FullPath, "material descriptor is invalid JSON", exception.Message));
             return diagnostics.ToImmutable();
         }
 
@@ -303,7 +302,7 @@ internal sealed partial class CookSourceAnalyzer(
 
             if (textures.ValueKind != JsonValueKind.Object)
             {
-                diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, "<unknown>", input.SourceAbsolutePath, "material texture bindings are invalid", details: null));
+                diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, "<unknown>", input.SourceAbsolutePath.FullPath, "material texture bindings are invalid", details: null));
                 return diagnostics.ToImmutable();
             }
 
@@ -329,7 +328,7 @@ internal sealed partial class CookSourceAnalyzer(
             : null;
         if (string.IsNullOrWhiteSpace(virtualPath))
         {
-            return this.CreateTextureReferenceDiagnostic(input, binding.Name, input.SourceAbsolutePath, "binding has no valid virtual_path", details: null);
+            return this.CreateTextureReferenceDiagnostic(input, binding.Name, input.SourceAbsolutePath.FullPath, "binding has no valid virtual_path", details: null);
         }
 
         if (!VirtualPath.IsCanonical(virtualPath) || !virtualPath.EndsWith(AssetFileTypes.Texture, StringComparison.Ordinal))
@@ -337,7 +336,7 @@ internal sealed partial class CookSourceAnalyzer(
             return this.CreateTextureReferenceDiagnostic(input, binding.Name, virtualPath, "path is not a canonical named texture", details: null);
         }
 
-        var textureUri = new Uri(AssetUris.Scheme + ":///" + string.Join('/', virtualPath.TrimStart('/').Split('/').Select(Uri.EscapeDataString)));
+        var textureUri = AssetPath.Parse(virtualPath);
         if (!CookInputResolver.IsAuthoringUri(operation.Project, textureUri))
         {
             return null;
@@ -376,21 +375,13 @@ internal sealed partial class CookSourceAnalyzer(
         }
     }
 
+    // A texture referenced by identity cooks from its authored descriptor in an authoring mount.
     private string? ResolveTextureDescriptorPath(string virtualPath)
-    {
-        var parts = virtualPath.TrimStart('/').Split('/');
-        var mount = operation.Project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.Ordinal));
-        if (mount is null || parts.Length < 2 || parts.Skip(1).Any(static part => part is "" or "." or ".."))
-        {
-            return null;
-        }
-
-        var relative = Path.Combine(parts.Skip(1).ToArray()) + ".json";
-        var mountRoot = Path.GetFullPath(Path.Combine(operation.Project.ProjectRoot, mount.RelativePath));
-        var descriptor = Path.GetFullPath(Path.Combine(mountRoot, relative));
-        var rootedMount = mountRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        return descriptor.StartsWith(rootedMount, StringComparison.OrdinalIgnoreCase) ? descriptor : null;
-    }
+        => AssetPath.TryParse(virtualPath, out var texture)
+            && operation.Project.AuthoringMounts.Any(mount => string.Equals(mount.Name, texture.Mount, StringComparison.Ordinal))
+            && operation.Project.Find(texture.WithAuthoringSuffix()) is { IsMountRoot: false } descriptor
+                ? descriptor.File.FullPath
+                : null;
 
     private DiagnosticRecord CreateTextureReferenceDiagnostic(ContentCookInput input, string channel, string affectedPath, string issue, string? details)
         => new()
@@ -399,14 +390,14 @@ internal sealed partial class CookSourceAnalyzer(
             Domain = FailureDomain.AssetImport,
             Severity = DiagnosticSeverity.Error,
             Code = "material.texture_reference_invalid",
-            Message = $"Material '{AssetUriHelper.GetVirtualPath(input.AssetUri)}' texture channel '{channel}' {issue}.",
+            Message = $"Material '{input.AssetUri.VirtualPath}' texture channel '{channel}' {issue}.",
             TechnicalMessage = details,
             AffectedPath = affectedPath,
-            AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
+            AffectedVirtualPath = input.AssetUri.VirtualPath,
         };
 
     private ContentCookInput Rebase(ContentCookInput input)
-        => input with { SourceRelativePath = Path.GetRelativePath(operation.Project.ProjectRoot, input.SourceAbsolutePath).Replace('\\', '/') };
+        => input with { SourceRelativePath = Path.GetRelativePath(operation.Project.ProjectRoot.FullPath, input.SourceAbsolutePath.FullPath).Replace('\\', '/') };
 
     private sealed record PreparedSource(ContentCookInput Input, ContentImportJob Job, ImmutableArray<CookSnapshotInput> ManagedFiles, SceneDescriptorGenerationResult? Scene)
     {

@@ -108,7 +108,7 @@ public partial class AssetsViewModel(
             // Listen for changes to ContentBrowserState selection via PropertyChanged
             contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
 
-            messenger.Register<CreateScriptRequestMessage>(this, (_, message) => message.Reply(creation?.CreateScriptAsync() ?? Task.FromResult<string?>(null)));
+            messenger.Register<CreateScriptRequestMessage>(this, (_, message) => message.Reply(creation?.CreateScriptAsync() ?? Task.FromResult<FileSystemPath?>(null)));
             relocation?.Completed += this.OnRelocationCompleted;
             relocation?.HistoryChanged += this.OnRelocationHistoryChanged;
             automaticCooking.PropertyChanged += this.OnAutomaticCookingChanged;
@@ -163,9 +163,8 @@ public partial class AssetsViewModel(
                 return;
             }
 
-            var selected = this.GetSelectedFolderUri();
-            var mount = project.AuthoringMounts.FirstOrDefault(mount => selected.AbsolutePath.StartsWith("/" + Uri.EscapeDataString(mount.Name) + "/", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(selected.AbsolutePath.Trim('/'), Uri.EscapeDataString(mount.Name), StringComparison.OrdinalIgnoreCase))
+            var selected = this.GetSelectedFolder();
+            var mount = project.AuthoringMounts.FirstOrDefault(mount => string.Equals(selected.Mount, mount.Name, StringComparison.Ordinal))
                 ?? project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal))
                 ?? project.AuthoringMounts[0];
             var destination = "/" + mount.Name;
@@ -238,7 +237,7 @@ public partial class AssetsViewModel(
                 ? diagnostic
                 : diagnostic with { OperationId = operationId })];
 
-    private static string DescribeScope(Uri? scopeUri)
+    private static string DescribeScope(AssetPath? scopeUri)
         => scopeUri?.ToString() ?? "the active project";
 
     private async Task ImportImageSourceAsync(ProjectContext project, string sourcePath)
@@ -286,8 +285,8 @@ public partial class AssetsViewModel(
 
     private string GetSelectedTextureFolder(ProjectContext project)
     {
-        var selected = this.GetSelectedFolderUri();
-        var parts = Uri.UnescapeDataString(selected.AbsolutePath).Trim('/').Split('/');
+        var selected = this.GetSelectedFolder();
+        var parts = selected.VirtualPath.Trim('/').Split('/');
         var mountName = parts.Length > 0
             ? project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.Ordinal))?.Name
             : null;
@@ -322,7 +321,7 @@ public partial class AssetsViewModel(
         _ = sender; // Unused
 
         Debug.WriteLine(
-            $"[AssetsViewModel] Item invoked: {args.InvokedItem.DisplayName}, Kind: {args.InvokedItem.Kind}, URI: {args.InvokedItem.IdentityUri}");
+            $"[AssetsViewModel] Item invoked: {args.InvokedItem.DisplayName}, Kind: {args.InvokedItem.Kind}, URI: {args.InvokedItem.Identity}");
 
         if (await this.TryEditInvokedAsync(args.InvokedItem).ConfigureAwait(true))
         {
@@ -330,14 +329,14 @@ public partial class AssetsViewModel(
         }
 
         if (args.InvokedItem.Kind != AssetKind.Folder
-            && (args.InvokedItem.IsBuiltin || (args.InvokedItem.DescriptorPath is null && args.InvokedItem.CookedUri is not null)))
+            && (args.InvokedItem.IsBuiltin || (args.InvokedItem.DescriptorPath is null && args.InvokedItem.IsCookedAsset)))
         {
-            await this.OpenInspectionAsync(validate: false, args.InvokedItem.IdentityUri, args.InvokedItem).ConfigureAwait(true);
+            await this.OpenInspectionAsync(validate: false, args.InvokedItem.Identity, args.InvokedItem).ConfigureAwait(true);
         }
         else if (args.InvokedItem.Kind == AssetKind.Scene)
         {
             // The scene's identity is its file; the workspace's document owner opens it.
-            _ = messenger.Send(new OpenSceneRequestMessage(args.InvokedItem.IdentityUri));
+            _ = messenger.Send(new OpenSceneRequestMessage(args.InvokedItem.Identity));
         }
         else if (args.InvokedItem.Kind == AssetKind.Folder)
         {
@@ -347,19 +346,18 @@ public partial class AssetsViewModel(
         }
         else if (args.InvokedItem is { Kind: AssetKind.ForeignSource, SourcePath: { } sourcePath } && projectContextService.ActiveProject is { } project)
         {
-            if (File.Exists(sourcePath + NativeSceneImportSettings.SidecarSuffix))
+            if (File.Exists(sourcePath.FullPath + NativeSceneImportSettings.SidecarSuffix))
             {
-                await this.RunSourceImportAsync(project, () => contentPipelineService.ReimportSourceAsync(args.InvokedItem.IdentityUri, project, CancellationToken.None)).ConfigureAwait(true);
+                await this.RunSourceImportAsync(project, () => contentPipelineService.ReimportSourceAsync(args.InvokedItem.Identity, project, CancellationToken.None)).ConfigureAwait(true);
             }
             else
             {
-                await this.ImportSourceFileAsync(project, sourcePath).ConfigureAwait(true);
+                await this.ImportSourceFileAsync(project, sourcePath.FullPath).ConfigureAwait(true);
             }
         }
-        else if (args.InvokedItem.Kind == AssetKind.Material
-                 && args.InvokedItem.IdentityUri.AbsolutePath.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase))
+        else if (args.InvokedItem is { Kind: AssetKind.Material, DescriptorPath: not null })
         {
-            _ = messenger.Send(new OpenMaterialRequestMessage(args.InvokedItem.IdentityUri, args.InvokedItem.DisplayName));
+            _ = messenger.Send(new OpenMaterialRequestMessage(args.InvokedItem.Identity, args.InvokedItem.DisplayName));
         }
     }
 
@@ -480,10 +478,9 @@ public partial class AssetsViewModel(
             return false;
         }
 
-        var path = this.GetSelectedFolderUri().AbsolutePath.TrimEnd('/');
+        var folder = this.GetSelectedFolder();
         return project.AuthoringMounts.Any(mount => !ProjectExplorer.ProjectLayoutViewModel.IsPersistedProjectRelativeVirtualMount(mount)
-            && (string.Equals(path, "/" + mount.Name, StringComparison.OrdinalIgnoreCase)
-                || path.StartsWith("/" + mount.Name + "/", StringComparison.OrdinalIgnoreCase)));
+            && string.Equals(folder.Mount, mount.Name, StringComparison.Ordinal));
     }
 
     private void OnAssetSelectionChanged(object? sender, PropertyChangedEventArgs args)
@@ -509,7 +506,7 @@ public partial class AssetsViewModel(
     {
         if (this.CanCreateFolder())
         {
-            _ = messenger.Send(new CreateFolderRequestMessage(this.GetSelectedFolderUri().AbsolutePath));
+            _ = messenger.Send(new CreateFolderRequestMessage(this.GetSelectedFolder()));
         }
     }
 
@@ -535,7 +532,7 @@ public partial class AssetsViewModel(
                 "Cook Asset",
                 $"{ineligible.DisplayName} has no retained source content. Select only assets with saved authored sources.",
                 AssetCookDiagnosticCodes.CookFailed,
-                ineligible.IdentityUri);
+                ineligible.Identity);
             return;
         }
 
@@ -544,8 +541,8 @@ public partial class AssetsViewModel(
             await this.RunCookAsync(
                     ContentPipelineOperationKinds.CookAsset,
                     "Cook Asset",
-                    asset.IdentityUri,
-                    () => contentPipelineService.CookAssetAsync(asset.IdentityUri, CancellationToken.None))
+                    asset.Identity,
+                    () => contentPipelineService.CookAssetAsync(asset.Identity, CancellationToken.None))
                 .ConfigureAwait(true);
         }
     }
@@ -555,8 +552,8 @@ public partial class AssetsViewModel(
         => await this.RunCookAsync(
                 ContentPipelineOperationKinds.CookFolder,
                 "Cook Folder",
-                this.GetSelectedFolderUri(),
-                () => contentPipelineService.CookFolderAsync(this.GetSelectedFolderUri(), CancellationToken.None))
+                this.GetSelectedFolder(),
+                () => contentPipelineService.CookFolderAsync(this.GetSelectedFolder(), CancellationToken.None))
             .ConfigureAwait(true);
 
     [RelayCommand]
@@ -576,12 +573,13 @@ public partial class AssetsViewModel(
 
     private Task OpenSelectedInspectionAsync(bool validate)
         => this.isInitialized && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { Kind: not AssetKind.Folder } asset }
-            ? this.OpenInspectionAsync(validate, asset.IdentityUri, asset) : this.OpenInspectionAsync(validate);
+            ? this.OpenInspectionAsync(validate, asset.Identity, asset) : this.OpenInspectionAsync(validate);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI reports a document-opening failure at its operation boundary.")]
-    private async Task OpenInspectionAsync(bool validate, Uri? assetUri = null, AssetEntry? asset = null)
+    private async Task OpenInspectionAsync(bool validate, AssetPath? identity = null, AssetEntry? asset = null)
     {
-        var scopeUri = asset?.CookedMetadata is not null ? new Uri(AssetUris.Scheme + "://" + asset.DisplayPath) : assetUri ?? this.GetSelectedFolderUri();
+        // A library's copy is inspected where the library shows it.
+        var scope = asset?.CookedMetadata is not null && AssetPath.TryParse(asset.DisplayPath, out var shown) ? shown : identity ?? this.GetSelectedFolder();
         try
         {
             if (projectContextService.ActiveProject is not { } project)
@@ -589,9 +587,9 @@ public partial class AssetsViewModel(
                 return;
             }
 
-            var request = messenger.Send(new OpenCookedInspectionRequestMessage(project, scopeUri, validate)
+            var request = messenger.Send(new OpenCookedInspectionRequestMessage(project, scope, validate)
             {
-                AssetUri = assetUri,
+                Asset = identity,
                 CookedSource = asset?.CookedMetadata,
                 DisplayName = asset?.DisplayName,
             });
@@ -607,7 +605,7 @@ public partial class AssetsViewModel(
                 "Inspect Cooked Output",
                 ex.Message,
                 ContentPipelineDiagnosticCodes.InspectFailed,
-                scopeUri,
+                scope,
                 ex);
         }
     }
@@ -616,7 +614,7 @@ public partial class AssetsViewModel(
     private async Task RunCookAsync(
         string operationKind,
         string title,
-        Uri? scopeUri,
+        AssetPath? scopeUri,
         Func<Task<ContentCookResult>> cook)
     {
         this.IsOperationResultVisible = false;
@@ -642,7 +640,7 @@ public partial class AssetsViewModel(
         string operationKind,
         string title,
         ContentCookResult result,
-        Uri? scopeUri)
+        AssetPath? scopeUri)
     {
         var cookedRoot = result.Validation?.CookedRoot ?? result.Inspection?.CookedRoot ?? "(no cooked root)";
         var message = result.Status == OperationStatus.Failed
@@ -664,7 +662,7 @@ public partial class AssetsViewModel(
         string title,
         string message,
         string code,
-        Uri? scopeUri,
+        AssetPath? scopeUri,
         Exception? exception = null,
         bool showInBrowser = true)
     {
@@ -691,7 +689,7 @@ public partial class AssetsViewModel(
         string title,
         string message,
         IReadOnlyList<DiagnosticRecord> diagnostics,
-        Uri? scopeUri,
+        AssetPath? scopeUri,
         bool showInBrowser = true)
     {
         var normalizedDiagnostics = NormalizeDiagnostics(operationId, diagnostics);
@@ -732,32 +730,22 @@ public partial class AssetsViewModel(
                                         || ShouldShowSucceededOperationResult(result.OperationKind);
     }
 
-    private AffectedScope CreateAffectedScope(Uri? scopeUri)
+    private AffectedScope CreateAffectedScope(AssetPath? scopeUri)
     {
         var project = projectContextService.ActiveProject;
         return new AffectedScope
         {
             ProjectId = project?.ProjectId,
             ProjectName = project?.Name,
-            ProjectPath = project?.ProjectRoot,
-            AssetId = scopeUri?.ToString(),
-            AssetVirtualPath = scopeUri?.AbsolutePath,
+            ProjectPath = project?.ProjectRoot.FullPath,
+            AssetId = scopeUri?.ToUriString(),
+            AssetVirtualPath = scopeUri?.VirtualPath,
         };
     }
 
-    private Uri GetSelectedFolderUri()
-    {
-        var selected = contentBrowserState.SelectedFolders.FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(selected))
-        {
-            return new Uri("asset:///Content");
-        }
-
-        var normalized = selected.Replace('\\', '/').Trim();
-        return Uri.TryCreate(normalized, UriKind.Absolute, out var uri)
-            && string.Equals(uri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase)
-            ? uri : new Uri($"{AssetUris.Scheme}:///{normalized.Trim('/')}");
-    }
+    // The folder that folder-wide commands act on: the first selected one, or the Content mount when none is.
+    private AssetPath GetSelectedFolder()
+        => contentBrowserState.SelectedFolders.Order().FirstOrDefault() ?? AssetPath.Content;
 
     [RelayCommand]
     private Task ImportAsync() => this.ImportPickedSourceAsync(models: true, textures: true);
@@ -802,7 +790,7 @@ public partial class AssetsViewModel(
                 "Oxygen.ImportAsset",
                 filters)
             {
-                SuggestedStartFolder = project.ProjectRoot,
+                SuggestedStartFolder = project.ProjectRoot.FullPath,
             };
 
             if (await dialogService.PickFileAsync(picker, window.AppWindow.Id).ConfigureAwait(true) is { } path)
@@ -827,7 +815,7 @@ public partial class AssetsViewModel(
         && this.SelectedAssets.Count <= 1 && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.CanReimport: true };
 
     private bool CanShowImportSource() => !this.disposed && this.isInitialized && this.SelectedAssets.Count <= 1
-        && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { ImportSourceUri: { } source } asset } && source != asset.IdentityUri;
+        && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { ImportSource: { } source } asset } && source != asset.Identity;
 
     [RelayCommand(CanExecute = nameof(CanShowImportSource))]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Source navigation reports failures at its user-command boundary.")]
@@ -835,7 +823,7 @@ public partial class AssetsViewModel(
     {
         try
         {
-            if (projectContextService.ActiveProject is { } project && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.ImportSourceUri: { } source })
+            if (projectContextService.ActiveProject is { } project && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.ImportSource: { } source })
             {
                 var request = messenger.Send(new ShowAssetRequestMessage(project, source));
                 if (!request.HasReceivedResponse || !await request.Response.ConfigureAwait(true))
@@ -857,14 +845,14 @@ public partial class AssetsViewModel(
     [RelayCommand(CanExecute = nameof(CanReimportSelectedSource))]
     private async Task ReimportSelectedSourceAsync()
     {
-        if (projectContextService.ActiveProject is { } project && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.ImportSourceUri: { } source })
+        if (projectContextService.ActiveProject is { } project && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.ImportSource: { } source })
         {
             await this.RunSourceImportAsync(project, () => contentPipelineService.ReimportSourceAsync(source, project, CancellationToken.None)).ConfigureAwait(true);
         }
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This user-command boundary reports failures; the coordinator owns native work and scoped recovery.")]
-    private async Task RunSourceImportAsync(ProjectContext project, Func<Task<ContentCookResult>> import, string operationTitle = "Import model", Uri? operationScope = null)
+    private async Task RunSourceImportAsync(ProjectContext project, Func<Task<ContentCookResult>> import, string operationTitle = "Import model", AssetPath? operationScope = null)
     {
         this.IsOperationResultVisible = false;
         try

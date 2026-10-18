@@ -23,6 +23,7 @@ using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using IContainer = DryIoc.IContainer;
 
@@ -81,7 +82,7 @@ public sealed partial class ContentBrowserViewModel(
         },
     ]);
 
-    private static readonly char[] AnyPathSeparator = ['\\', '/'];
+    private static readonly AssetPath ScenesFolder = AssetPath.Content.Combine("Scenes");
 
     private static readonly string[] AssetsViewPaths = ["assets/tiles", "assets/list", "assets/details"];
 
@@ -220,7 +221,7 @@ public sealed partial class ContentBrowserViewModel(
                     });
 
             this.childContainer.RegisterDelegate<ContentBrowserState>(
-                _ => new(projectContextService) { Query = this.Query, Presentation = this.Presentation }, Reuse.Singleton);
+                _ => new() { Query = this.Query, Presentation = this.Presentation }, Reuse.Singleton);
             this.childContainer.Register<IAssetShell, WindowsAssetShell>(Reuse.Singleton);
             this.childContainer.Register<Relocation.IAssetRelocationWorkflow, Relocation.AssetRelocationWorkflow>(Reuse.Singleton);
             this.childContainer.Register<AssetDetailsViewModel>(Reuse.Singleton);
@@ -254,17 +255,7 @@ public sealed partial class ContentBrowserViewModel(
         }
 
         var target = this.Breadcrumbs[index];
-        var url = "/(left:project//right:" + this.currentAssetsViewPath + ")";
-        if (string.Equals(target.RelativePath, ".", StringComparison.Ordinal))
-        {
-            url += "?selected=.";
-        }
-        else
-        {
-            url += $"?selected={Uri.EscapeDataString(target.RelativePath)}";
-        }
-
-        await this.localRouter.NavigateAsync(url).ConfigureAwait(true);
+        await this.localRouter.NavigateAsync(this.BuildUrl(target.Folder)).ConfigureAwait(true);
     }
 
     /// <summary>Registers layouts owned and disposed by their router outlet; session state is shared separately.</summary>
@@ -281,20 +272,16 @@ public sealed partial class ContentBrowserViewModel(
 
     /// <summary>Describes whether a location holds authored content or read-only derived and mounted content.</summary>
     /// <param name="project">The active project.</param>
-    /// <param name="folder">The current folder, virtual or project-relative.</param>
+    /// <param name="folder">The current folder; <see langword="null"/> for the whole project.</param>
     /// <returns>The footer description.</returns>
-    internal static string DescribeSource(ProjectContext? project, string? folder)
+    internal static string DescribeSource(ProjectContext? project, AssetPath? folder)
     {
-        var normalized = folder?.Replace('\\', '/').Trim().Trim('/') ?? string.Empty;
-        if (normalized.Length == 0 || string.Equals(normalized, ".", StringComparison.Ordinal))
+        if (folder is null)
         {
             return "All project sources";
         }
 
-        var root = normalized.Split('/')[0];
-        var authoring = project?.AuthoringMounts.FirstOrDefault(mount =>
-            string.Equals(mount.Name, root, StringComparison.Ordinal)
-            || string.Equals(mount.RelativePath.Replace('\\', '/').Trim('/'), root, StringComparison.OrdinalIgnoreCase));
+        var authoring = project?.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal));
         return authoring is not null && !ProjectLayoutViewModel.IsPersistedProjectRelativeVirtualMount(authoring)
             ? "Authoring source" : "Read-only source";
     }
@@ -335,33 +322,9 @@ public sealed partial class ContentBrowserViewModel(
         base.Dispose(disposing);
     }
 
-    private static string? GetParentRelativePath(string? relativePath)
-    {
-        if (string.IsNullOrEmpty(relativePath) || string.Equals(relativePath, ".", StringComparison.Ordinal))
-        {
-            return null; // No parent above root
-        }
-
-        // Handle both Windows and URL style separators
-        var idx = relativePath.LastIndexOfAny(AnyPathSeparator);
-        if (idx < 0)
-        {
-            return string.Empty; // Parent is project root
-        }
-
-        return idx == 0 ? string.Empty : relativePath[..idx];
-    }
-
-    private static string? GetPrimarySelectedFolder(ContentBrowserState? state)
-    {
-        if (state is null || state.SelectedFolders.Count == 0)
-        {
-            return null;
-        }
-
-        // Choose a deterministic primary folder when multiple are selected: the first in ordinal order
-        return state.SelectedFolders.Order(StringComparer.Ordinal).FirstOrDefault();
-    }
+    // The folder the browser shows first when several are selected: the first in ordinal order.
+    private static AssetPath? GetPrimarySelectedFolder(ContentBrowserState? state)
+        => state?.SelectedFolders.Order().FirstOrDefault();
 
     private static bool TryNormalizeContentBrowserUrl(string persisted, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? url)
     {
@@ -396,7 +359,7 @@ public sealed partial class ContentBrowserViewModel(
                 return null;
             }
 
-            var selected = new List<string>();
+            var selected = new List<AssetPath>();
             foreach (var pair in pairs)
             {
                 var parts = pair.Split('=', 2);
@@ -407,10 +370,9 @@ public sealed partial class ContentBrowserViewModel(
 
                 try
                 {
-                    var value = Uri.UnescapeDataString(parts[1]);
-                    if (!string.IsNullOrWhiteSpace(value))
+                    if (AssetPath.TryParse(Uri.UnescapeDataString(parts[1]), out var folder))
                     {
-                        selected.Add(value);
+                        selected.Add(folder);
                     }
                 }
                 catch (UriFormatException)
@@ -434,7 +396,7 @@ public sealed partial class ContentBrowserViewModel(
 
     // A new project's scenes are in Content/Scenes, which the browser opens on when it has no saved state.
     private static bool HasScenesFolder(ProjectContext project)
-        => project.FindByVirtualPath("/Content/Scenes") is { } folder && Directory.Exists(folder.FilePath);
+        => project.Find(ScenesFolder) is { } folder && Directory.Exists(folder.File.FullPath);
 
     private void OnContentBrowserStateChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -475,7 +437,7 @@ public sealed partial class ContentBrowserViewModel(
 
         try
         {
-            await projectUsage.UpdateContentBrowserStateAsync(project.Name, project.ProjectRoot, currentUrl).ConfigureAwait(false);
+            await projectUsage.UpdateContentBrowserStateAsync(project.Name, project.ProjectRoot.FullPath, currentUrl).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -486,10 +448,8 @@ public sealed partial class ContentBrowserViewModel(
     private async Task<string> GetInitialContentBrowserUrlAsync()
     {
         var project = projectContextService.ActiveProject;
-        string[] scenesFolder = project is not null && HasScenesFolder(project) ? ["Content/Scenes"] : [];
-        var defaultUrl = scenesFolder.Length > 0
-            ? DefaultLocalUrl + RouteStateMapping.BuildSelectedQuery(scenesFolder)
-            : DefaultLocalUrl;
+        var scenes = RouteStateMapping.BuildSelectedQuery(project is not null && HasScenesFolder(project) ? [ScenesFolder] : []);
+        var defaultUrl = DefaultLocalUrl + scenes;
         if (project is null)
         {
             return defaultUrl;
@@ -497,7 +457,7 @@ public sealed partial class ContentBrowserViewModel(
 
         try
         {
-            var usage = await projectUsage.GetProjectUsageAsync(project.Name, project.ProjectRoot).ConfigureAwait(true);
+            var usage = await projectUsage.GetProjectUsageAsync(project.Name, project.ProjectRoot.FullPath).ConfigureAwait(true);
             if (string.IsNullOrWhiteSpace(usage?.ContentBrowserState))
             {
                 return defaultUrl;
@@ -506,7 +466,7 @@ public sealed partial class ContentBrowserViewModel(
             if (TryNormalizeContentBrowserUrl(usage.ContentBrowserState, out var restoredUrl))
             {
                 return restoredUrl.Contains('?', StringComparison.Ordinal) ? restoredUrl
-                    : restoredUrl + RouteStateMapping.BuildSelectedQuery(scenesFolder);
+                    : restoredUrl + scenes;
             }
 
             this.PublishPartialRestoreResult(
@@ -520,7 +480,7 @@ public sealed partial class ContentBrowserViewModel(
             this.PublishPartialRestoreResult(
                 DiagnosticCodes.WorkspacePrefix + "CONTENT_BROWSER_STATE_LOAD_FAILED",
                 "The saved Content Browser state could not be loaded.",
-                project.ProjectRoot,
+                project.ProjectRoot.FullPath,
                 ex);
             return defaultUrl;
         }
@@ -563,7 +523,7 @@ public sealed partial class ContentBrowserViewModel(
             {
                 ProjectId = project?.ProjectId,
                 ProjectName = project?.Name,
-                ProjectPath = project?.ProjectRoot,
+                ProjectPath = project?.ProjectRoot.FullPath,
             },
             Diagnostics = diagnostics,
             PrimaryAction = new PrimaryAction
@@ -578,22 +538,12 @@ public sealed partial class ContentBrowserViewModel(
     }
 
     private string BuildCurrentUrl()
-    {
-        var contentBrowserState = this.childContainer?.Resolve<ContentBrowserState>();
-        if (contentBrowserState == null)
-        {
-            return "/(left:project//right:" + this.currentAssetsViewPath + ")";
-        }
+        => "/(left:project//right:" + this.currentAssetsViewPath + ")"
+            + RouteStateMapping.BuildSelectedQuery(this.childContainer?.Resolve<ContentBrowserState>()?.SelectedFolders ?? (IEnumerable<AssetPath>)[]);
 
-        if (contentBrowserState.SelectedFolders.Count == 0)
-        {
-            // No folders selected - return URL without query parameters
-            return "/(left:project//right:" + this.currentAssetsViewPath + ")";
-        }
-
-        var query = RouteStateMapping.BuildSelectedQuery(contentBrowserState.SelectedFolders);
-        return $"/(left:project//right:{this.currentAssetsViewPath}){query}";
-    }
+    // A URL that shows one folder, or the whole project when there is none.
+    private string BuildUrl(AssetPath? folder)
+        => "/(left:project//right:" + this.currentAssetsViewPath + ")" + RouteStateMapping.BuildSelectedQuery(folder is null ? [] : [folder]);
 
     private void UpdateHistoryForStateChange(string url)
     {
@@ -760,55 +710,32 @@ public sealed partial class ContentBrowserViewModel(
             return;
         }
 
-        var state = this.childContainer?.Resolve<ContentBrowserState>();
-        var current = GetPrimarySelectedFolder(state);
-
-        // If no current selection, nothing to do
-        if (string.IsNullOrEmpty(current))
+        // The whole project has no parent; a mount's parent is the whole project.
+        if (GetPrimarySelectedFolder(this.childContainer?.Resolve<ContentBrowserState>()) is not { } current)
         {
             return;
         }
 
-        var parent = GetParentRelativePath(current);
-
-        // If parent is null, we're already at root (no action)
-        if (parent is null)
-        {
-            return;
-        }
-
-        var url = "/(left:project//right:" + this.currentAssetsViewPath + ")";
-        if (parent.Length > 0)
-        {
-            url += $"?selected={Uri.EscapeDataString(parent)}";
-        }
-        else
-        {
-            // Parent is the project root; represent it explicitly as selected=.
-            url += "?selected=.";
-        }
-
+        var url = this.BuildUrl(current.Parent);
         this.LogNavigationUp(url, current);
         await this.localRouter.NavigateAsync(url).ConfigureAwait(true);
     }
 
     private void UpdateUpButtonState()
     {
-        var state = this.childContainer?.Resolve<ContentBrowserState>();
-        var current = GetPrimarySelectedFolder(state);
-        var parent = current is not null ? GetParentRelativePath(current) : null;
+        var current = GetPrimarySelectedFolder(this.childContainer?.Resolve<ContentBrowserState>());
 
         var old = this.CanGoUp;
-        this.CanGoUp = parent is not null;
+        this.CanGoUp = current is not null;
         if (old != this.CanGoUp)
         {
-            this.LogCanGoUpUpdated(this.CanGoUp, current, parent);
+            this.LogCanGoUpUpdated(this.CanGoUp, current, current?.Parent);
         }
 
         this.GoUpCommand.NotifyCanExecuteChanged();
     }
 
-    private void UpdateBreadcrumbs(string? pathOverride = null)
+    private void UpdateBreadcrumbs(AssetPath? pathOverride = null)
     {
         // Build the new list fully, then swap the collection on the UI thread to avoid per-item change notifications
         void UpdateCore()
@@ -842,28 +769,17 @@ public sealed partial class ContentBrowserViewModel(
 #pragma warning restore CA1031 // Do not catch general exception types
 
             // Always include root breadcrumb
-            entries.Add(new BreadcrumbEntry(rootLabel, "."));
+            entries.Add(new BreadcrumbEntry(rootLabel, Folder: null));
             this.SourceDescription = DescribeSource(projectContextService.ActiveProject, primary);
 
-            if (!string.IsNullOrEmpty(primary) && !string.Equals(primary, ".", StringComparison.Ordinal))
+            // The folder's mount, then each folder down to it.
+            var crumbs = new Stack<AssetPath>();
+            for (var folder = primary; folder is not null; folder = folder.Parent)
             {
-                var isVirtual = primary.StartsWith('/');
-
-                // Split path and accumulate segments
-                var parts = primary.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-                var pathSoFar = new List<string>();
-                foreach (var part in parts)
-                {
-                    pathSoFar.Add(part);
-                    var rel = string.Join('/', pathSoFar);
-                    if (isVirtual)
-                    {
-                        rel = "/" + rel;
-                    }
-
-                    entries.Add(new BreadcrumbEntry(part, rel));
-                }
+                crumbs.Push(folder);
             }
+
+            entries.AddRange(crumbs.Select(static folder => new BreadcrumbEntry(folder.Name, folder)));
 
             // Swap the entire collection to minimize WinRT collection change handling issues
             this.Breadcrumbs = [.. entries];

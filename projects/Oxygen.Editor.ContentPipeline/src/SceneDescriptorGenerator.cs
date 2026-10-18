@@ -109,7 +109,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                 .SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>())
                 .Select(static slot => slot.Material)
                 .Where(IsDefaultMaterial)
-                .Select(static _ => AssetUris.BuildGeneratedUri("Materials/Default")))
+                .Select(static _ => ProceduralGeometryDescriptorService.DefaultMaterial))
             .Distinct()
             .ToArray();
         var generatedGeometryInputs = await this.proceduralGeometryDescriptors
@@ -392,7 +392,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             var assignedSlots = new HashSet<Guid>();
             foreach (var slot in geometry.OverrideSlots.OfType<MaterialsSlot>())
             {
-                if (slot.Target.GeometryUri != geometry.Geometry || slot.Target.SlotId == Guid.Empty
+                if (slot.Target.Geometry != geometry.Geometry || slot.Target.SlotId == Guid.Empty
                     || !assignedSlots.Add(slot.Target.SlotId))
                 {
                     diagnostics.Add(CreateDiagnostic(
@@ -452,12 +452,12 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         return Path.Combine(scope.PreparationRoot ?? scope.InputRoot, ".pipeline", "Scenes", folder, Path.GetFileName(sceneInput.SourceRelativePath));
     }
 
-    private static string? ResolveGeometryRef(Uri geometryUri, IReadOnlyList<ContentCookInput> generatedGeometryInputs)
+    private static string? ResolveGeometryRef(AssetPath geometryUri, IReadOnlyList<ContentCookInput> generatedGeometryInputs)
         => ProceduralGeometryDescriptorService.IsGeneratedBasicShape(geometryUri)
             ? generatedGeometryInputs.FirstOrDefault(input => input.AssetUri == geometryUri)?.OutputVirtualPath
             : ContentPipelinePaths.ToNativeDescriptorPath(geometryUri, AssetFileTypes.Geometry);
 
-    private static string? ResolveMaterialRef(Uri materialUri, IReadOnlyList<ContentCookInput> generatedInputs)
+    private static string? ResolveMaterialRef(AssetPath materialUri, IReadOnlyList<ContentCookInput> generatedInputs)
         => IsDefaultMaterial(materialUri)
             ? generatedInputs.FirstOrDefault(static input => IsDefaultMaterial(input.AssetUri))?.OutputVirtualPath
             : ContentPipelinePaths.ToNativeDescriptorPath(materialUri, AssetFileTypes.Material);
@@ -504,18 +504,12 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
     }
 
     private static string[] ResolveTypedReferences(
-        IEnumerable<Uri> assetUris,
+        IEnumerable<AssetPath> assetUris,
         string expectedExtension)
     {
         var paths = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var assetUri in assetUris)
         {
-            if (assetUri is null || !assetUri.IsAbsoluteUri
-                || !string.Equals(assetUri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidDataException($"Scene references must use absolute '{AssetUris.Scheme}' asset URIs.");
-            }
-
             var nativePath = ContentPipelinePaths.ToNativeDescriptorPath(assetUri, expectedExtension);
             _ = paths.Add(nativePath);
         }
@@ -530,11 +524,8 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             ? null
             : new NativeCameras(perspective.Count == 0 ? null : perspective, orthographic.Count == 0 ? null : orthographic);
 
-    private static bool IsDefaultMaterial(Uri? uri)
-        => uri is not null && string.Equals(
-            uri.AbsoluteUri,
-            AssetUris.BuildGeneratedUri("Materials/Default").AbsoluteUri,
-            StringComparison.OrdinalIgnoreCase);
+    private static bool IsDefaultMaterial(AssetPath? uri)
+        => uri == ProceduralGeometryDescriptorService.DefaultMaterial;
 
     private static NativeLightCommon ToCommon(LightComponent light)
         => new(
@@ -580,11 +571,6 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
 
         if (exposure.AutoExposureMeteringMask is { } mask)
         {
-            if (!mask.IsAbsoluteUri)
-            {
-                return "Exposure metering mask must use an absolute asset URI.";
-            }
-
             try
             {
                 _ = ContentPipelinePaths.ToNativeDescriptorPath(mask, AssetFileTypes.Texture);
@@ -612,7 +598,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
     // cubemap is referenced only while an enabled system's source uses it, so a
     // stale reference behind another source or a disabled system does not block
     // the cook.
-    private static IEnumerable<(Uri Uri, string Label)> EnvironmentTextures(SceneEnvironmentData environment)
+    private static IEnumerable<(AssetPath AssetPath, string Label)> EnvironmentTextures(SceneEnvironmentData environment)
     {
         if (environment.PostProcess.AutoExposureMeteringMask is { } mask)
         {
@@ -733,7 +719,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             VignetteIntensity: authored.VignetteIntensity,
             DisplayGamma: authored.DisplayGamma);
 
-    private static string? GetTexturePath(Uri? texture)
+    private static string? GetTexturePath(AssetPath? texture)
         => texture is null ? null : ContentPipelinePaths.ToNativeDescriptorPath(texture, AssetFileTypes.Texture);
 
     // Mirrors the native Earth baseline in Oxygen/Core/Types/Atmosphere.h.

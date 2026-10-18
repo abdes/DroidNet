@@ -11,21 +11,20 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// <summary>Reads optional published contributions for engine identities without inventing authored descriptors.</summary>
 public sealed partial class AssetCookStatusReader
 {
-    private static bool IsBuiltinIdentity(Uri uri)
-        => uri.IsAbsoluteUri && string.Equals(uri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase)
-            && uri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase);
+    private static bool IsBuiltinIdentity(AssetPath uri)
+        => uri.IsGenerated;
 
-    private static Dictionary<Uri, Uri> ResolveBuiltinOutputOrigins(ProjectContext project, CookProvenance provenance)
+    private static Dictionary<AssetPath, AssetPath> ResolveBuiltinOutputOrigins(ProjectContext project, CookProvenance provenance)
         => provenance.Products.Where(static product => IsBuiltinIdentity(product.SourceUri))
             .SelectMany(static product => product.Outputs.Select(output => (output.Asset.CookedAssetUri, product.SourceUri)))
             .GroupBy(static output => output.CookedAssetUri)
             .Where(group => group.Select(static output => output.SourceUri).Distinct().Take(2).Count() == 1
-                && !CookSavedSourceReader.Exists(CookInputResolver.Resolve(project, group.Key, ContentCookInputRole.Primary).SourceAbsolutePath))
+                && !CookSavedSourceReader.Exists(CookInputResolver.Resolve(project, group.Key, ContentCookInputRole.Primary).SourceAbsolutePath.FullPath))
             .ToDictionary(static group => group.Key, static group => group.First().SourceUri);
 
     private static AssetCookStatus CreateBuiltinStatus(
-        Uri uri,
-        Dictionary<Uri, CookProvenance.Product> products,
+        AssetPath uri,
+        Dictionary<AssetPath, CookProvenance.Product> products,
         FreshnessSnapshot plan,
         bool nativeAvailable,
         bool metadataUnavailable)

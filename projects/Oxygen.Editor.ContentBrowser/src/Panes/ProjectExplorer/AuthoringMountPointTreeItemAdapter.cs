@@ -65,12 +65,9 @@ public sealed partial class AuthoringMountPointTreeItemAdapter : TreeItemAdapter
     public ProjectMountPoint MountPoint { get; }
 
     /// <summary>
-    ///     Gets the canonical absolute virtual root path for this authoring mount point.
+    ///     Gets the mount's virtual root, the identity the browser selects it by.
     /// </summary>
-    /// <remarks>
-    ///     This is the stable identity for asset selection and must be case-sensitive.
-    /// </remarks>
-    public string VirtualRootPath => VirtualPath.CreateAbsolute(this.MountPoint.Name);
+    public AssetPath VirtualRootPath => AssetPath.Create(this.MountPoint.Name);
 
     /// <summary>
     ///     Gets the backing root folder for this mount.

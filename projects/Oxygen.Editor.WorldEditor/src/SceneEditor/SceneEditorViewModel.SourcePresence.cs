@@ -4,6 +4,7 @@
 
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.World.Documents;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.World.SceneEditor;
@@ -34,8 +35,10 @@ public partial class SceneEditorViewModel
             return;
         }
 
-        var uri = this.Document.File.AssetUri;
-        if (change.Uri == uri || change.PreviousUri == uri)
+        // Catalog changes name the source file; the document is the asset that file stands for.
+        var asset = this.Document.File.Asset;
+        if (AssetFileTypes.ToIdentity(change.Identity) == asset
+            || (change.PreviousIdentity is { } previous && AssetFileTypes.ToIdentity(previous) == asset))
         {
             _ = this.CheckSourceAsync();
         }

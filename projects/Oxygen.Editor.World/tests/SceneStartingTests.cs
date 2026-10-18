@@ -7,6 +7,7 @@ using System.Text;
 using AwesomeAssertions;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Tests;
 
@@ -23,8 +24,8 @@ public class SceneStartingTests
         var camera = AddCamera(scene, "Gameplay Camera");
         StartingInputContextData[] contexts =
         [
-            new StartingInputContextData(new Uri("asset:///Content/Input/Gameplay.oimap"), Priority: 5),
-            new StartingInputContextData(new Uri("asset:///Content/Input/Menu.oimap")),
+            new StartingInputContextData(AssetPath.Parse("/Content/Input/Gameplay.oimap"), Priority: 5),
+            new StartingInputContextData(AssetPath.Parse("/Content/Input/Menu.oimap")),
         ];
         scene.SetStartingCamera(camera.Id);
         scene.SetStartingInputContexts(contexts);
@@ -71,9 +72,9 @@ public class SceneStartingTests
     public void StartingInputContexts_CannotBeMutatedOutsideSceneCommands()
     {
         var scene = new Scene { Name = "Starting" };
-        scene.SetStartingInputContexts([new StartingInputContextData(new Uri("asset:///Content/Input/Gameplay.oimap"))]);
+        scene.SetStartingInputContexts([new StartingInputContextData(AssetPath.Parse("/Content/Input/Gameplay.oimap"))]);
 
-        var edit = () => ((IList<StartingInputContextData>)scene.StartingInputContexts).Add(new StartingInputContextData(new Uri("asset:///Content/Input/Menu.oimap")));
+        var edit = () => ((IList<StartingInputContextData>)scene.StartingInputContexts).Add(new StartingInputContextData(AssetPath.Parse("/Content/Input/Menu.oimap")));
 
         _ = edit.Should().Throw<NotSupportedException>();
         _ = scene.StartingInputContexts.Should().ContainSingle();

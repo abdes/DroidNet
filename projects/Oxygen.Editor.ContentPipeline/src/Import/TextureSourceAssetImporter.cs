@@ -52,7 +52,7 @@ public static class TextureSourceAssetImporter
     /// <param name="request">The selected image, destination, name and native cook settings.</param>
     /// <param name="cancellationToken">Cancels the copy before the descriptor is published.</param>
     /// <returns>The authored descriptor asset URI consumed by the normal cook pipeline.</returns>
-    public static async Task<Uri> CreateAsync(TextureSourceImportRequest request, CancellationToken cancellationToken = default)
+    public static async Task<AssetPath> CreateAsync(TextureSourceImportRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
@@ -190,10 +190,9 @@ public static class TextureSourceAssetImporter
                 return false;
             }
 
-            var directory = Path.GetDirectoryName(Path.GetFullPath(descriptorPath))!;
-            var sourcePath = Path.GetFullPath(Path.Combine(directory, source));
-            return sourcePath.StartsWith(directory.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                && File.Exists(sourcePath);
+            var directory = FileSystemPath.From(descriptorPath).Parent!;
+            var sourcePath = directory.Combine(source);
+            return sourcePath != directory && sourcePath.IsSameOrInside(directory) && File.Exists(sourcePath.FullPath);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
         {

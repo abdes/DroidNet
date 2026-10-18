@@ -42,7 +42,7 @@ public sealed partial class BackdropSectionView
     {
         if (sender is FrameworkElement { DataContext: AssetPickerRow row })
         {
-            this.ViewModel?.SetCubemap(row.Item.Uri);
+            this.ViewModel?.SetCubemap(row.Item.Asset);
             this.CubemapFlyout.Hide();
         }
     }

@@ -61,12 +61,12 @@ public sealed class SceneContent : IDocumentContent, IDisposable
         return document.Content as SceneContent ?? throw new ArgumentException($"'{document.Title}' is not a scene document.", nameof(document));
     }
 
-    /// <summary>Gets the scene's name for a scene file: its file name without the scene suffix.</summary>
-    /// <param name="path">The scene file's path.</param>
+    /// <summary>Gets the scene's name: its file or asset name without the scene suffix.</summary>
+    /// <param name="name">The scene file's or asset's name, such as <c>Main.oscene.json</c> or <c>Main.oscene</c>.</param>
     /// <returns>The scene's name.</returns>
-    public static string NameOf(string path)
+    public static string NameOf(string name)
     {
-        var name = Path.GetFileName(path);
+        ArgumentNullException.ThrowIfNull(name);
         return name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
             ? name[..^AssetFileTypes.SceneDescriptor.Length]
             : Path.GetFileNameWithoutExtension(name);
@@ -88,7 +88,7 @@ public sealed class SceneContent : IDocumentContent, IDisposable
     public DocumentCapture CaptureCopy(DocumentFile copy)
     {
         ArgumentNullException.ThrowIfNull(copy);
-        return Encoded(new SceneFileData(this.Scene.Dehydrate() with { Id = SceneId.New(), Name = NameOf(copy.Path) }, this.Authoring.Layout));
+        return Encoded(new SceneFileData(this.Scene.Dehydrate() with { Id = SceneId.New(), Name = NameOf(copy.Path.Name) }, this.Authoring.Layout));
     }
 
     /// <inheritdoc/>
@@ -115,24 +115,24 @@ public sealed class SceneContent : IDocumentContent, IDisposable
     // Script slots have no runtime projection; the projector attaches the re-pointed geometry once it is mounted.
     private static IReadOnlyList<SceneChange> Relocate(Scene scene, DocumentRelocation relocation)
     {
-        var nodes = scene.AllNodes.Where(node => SceneReferenceRetargeting.RetargetNode(node, relocation.MapUri)).ToArray();
-        if (SceneReferenceRetargeting.Retarget(scene.References, relocation.MapReference) is { } references)
+        var nodes = scene.AllNodes.Where(node => SceneReferenceRetargeting.RetargetNode(node, relocation.MapAsset)).ToArray();
+        if (SceneReferenceRetargeting.Retarget(scene.References, relocation.MapAsset, relocation.MapReference) is { } references)
         {
             scene.SetReferences(references);
         }
 
-        if (SceneReferenceRetargeting.Retarget(scene.StartingInputContexts, relocation.MapUri) is { } contexts)
+        if (SceneReferenceRetargeting.Retarget(scene.StartingInputContexts, relocation.MapAsset) is { } contexts)
         {
             scene.SetStartingInputContexts(contexts);
         }
 
-        var environment = SceneReferenceRetargeting.Retarget(scene.Environment, relocation.MapUri);
+        var environment = SceneReferenceRetargeting.Retarget(scene.Environment, relocation.MapAsset);
         if (environment is not null)
         {
             scene.SetEnvironment(environment);
         }
 
-        scene.Name = NameOf(relocation.File.Path);
+        scene.Name = NameOf(relocation.File.Path.Name);
         var changes = new List<SceneChange>(nodes
             .Where(static node => node.Components.OfType<GeometryComponent>().Any())
             .Select(static node => new SceneChange.GeometryChanged(node.Id)));

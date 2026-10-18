@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Cooking;
 
@@ -16,9 +17,9 @@ public sealed partial class AutomaticCookService
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
         Message = "Automatic cooking failed for changed source {Source}.")]
-    private static partial void LogSchedulingFailure(ILogger logger, Exception exception, Uri source);
+    private static partial void LogSchedulingFailure(ILogger logger, Exception exception, AssetPath source);
 
-    private void LogSchedulingFailure(Exception exception, Uri source)
+    private void LogSchedulingFailure(Exception exception, AssetPath source)
         => LogSchedulingFailure(this.logger, exception, source);
 
     [LoggerMessage(
@@ -72,7 +73,7 @@ public sealed partial class AutomaticCookService
         Message = "Checking {Count} changed sources for cook on change: {Sources}.")]
     private static partial void LogCheckingChangedSources(ILogger logger, int count, string sources);
 
-    private void LogCheckingChangedSources(List<Uri> changedSources)
+    private void LogCheckingChangedSources(List<AssetPath> changedSources)
     {
         if (!this.logger.IsEnabled(LogLevel.Information))
         {
@@ -80,7 +81,7 @@ public sealed partial class AutomaticCookService
         }
 
         var count = changedSources.Count;
-        var sources = string.Join(", ", changedSources.Select(static uri => Uri.UnescapeDataString(uri.AbsolutePath)));
+        var sources = string.Join(", ", changedSources.Select(static uri => uri.VirtualPath));
         LogCheckingChangedSources(this.logger, count, sources);
     }
 
@@ -114,10 +115,10 @@ public sealed partial class AutomaticCookService
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Change of '{Uri}' is not a cookable source under an authoring mount; cook on change ignores it.")]
-    private static partial void LogChangeIgnored(ILogger logger, Uri uri);
+    private static partial void LogChangeIgnored(ILogger logger, AssetPath uri);
 
     [Conditional("DEBUG")]
-    private void LogChangeIgnored(Uri uri)
+    private void LogChangeIgnored(AssetPath uri)
         => LogChangeIgnored(this.logger, uri);
 
     [LoggerMessage(
@@ -126,14 +127,14 @@ public sealed partial class AutomaticCookService
         Message = "Cancelling the cook on change of '{Source}': the file was moved or deleted; cook on change checks it again.")]
     private static partial void LogCookRetired(ILogger logger, string source);
 
-    private void LogCookRetired(Uri asset)
+    private void LogCookRetired(AssetPath asset)
     {
         if (!this.logger.IsEnabled(LogLevel.Information))
         {
             return;
         }
 
-        var source = Uri.UnescapeDataString(asset.AbsolutePath);
+        var source = asset.VirtualPath;
         LogCookRetired(this.logger, source);
     }
 

@@ -7,9 +7,11 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Controls.OutputConsole.Model;
 using Microsoft.UI.Xaml;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Serilog.Events;
 
@@ -18,7 +20,7 @@ namespace Oxygen.Editor.World.Cooking;
 /// <summary>Maintains stable presentation collections for one session cook.</summary>
 public sealed partial class CookingRunViewModel : ObservableObject
 {
-    private readonly Dictionary<Uri, CookingAssetViewModel> assetRows = [];
+    private readonly Dictionary<AssetPath, CookingAssetViewModel> assetRows = [];
     private CookRunSnapshot snapshot;
 
     /// <summary>Initializes a new instance of the <see cref="CookingRunViewModel"/> class.</summary>
@@ -36,13 +38,17 @@ public sealed partial class CookingRunViewModel : ObservableObject
     public string Name => this.snapshot.DisplayName;
 
     /// <summary>Gets concise secondary scope information.</summary>
-    public string Kind => this.snapshot.Request.Import is not null || this.snapshot.Request.IsReimport || (Path.GetExtension(this.snapshot.Request.ScopeUri?.AbsolutePath) ?? string.Empty).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX" ? "Source" : this.snapshot.Request.TargetKind switch
+    public string Kind => this.snapshot.Request.Import is not null || this.snapshot.Request.IsReimport || (this.snapshot.Request.ScopeUri is { } source && AssetFileTypes.Is(source.Name, AssetFileCategory.Model)) ? "Source" : this.snapshot.Request.TargetKind switch
     {
         CookTargetKind.Project => "Project",
         CookTargetKind.Folder => "Folder",
         CookTargetKind.CurrentScene => "Scene",
-        _ => this.snapshot.Request.ScopeUri?.AbsolutePath.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase) == true ? "Scene"
-            : this.snapshot.Request.ScopeUri?.AbsolutePath.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase) == true ? "Geometry" : "Material",
+        _ => (this.snapshot.Request.ScopeUri is { } asset ? AssetKinds.FromFileName(AssetFileTypes.ToIdentity(asset).Name) : AssetKind.Material) switch
+        {
+            AssetKind.Scene => "Scene",
+            AssetKind.Geometry => "Geometry",
+            _ => "Material",
+        },
     };
 
     /// <summary>Gets the secondary list context.</summary>
@@ -74,7 +80,7 @@ public sealed partial class CookingRunViewModel : ObservableObject
 
     /// <summary>Gets visibility of published-output inspection after the selected operation has finished.</summary>
     public Visibility InspectVisibility => this.snapshot.IsCompleted && (this.snapshot.Request.TargetKind == CookTargetKind.Project
-        || (this.snapshot.Request.ScopeUri is { } uri && string.Equals(uri.Scheme, "asset", StringComparison.OrdinalIgnoreCase))) ? Visibility.Visible : Visibility.Collapsed;
+        || this.snapshot.Request.ScopeUri is not null) ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Gets visibility of explicit navigation to the successful run's imported assets.</summary>
     public Visibility ShowImportedAssetsVisibility => this.snapshot.ImportedOutputs.IsEmpty ? Visibility.Collapsed : Visibility.Visible;
@@ -187,7 +193,7 @@ public sealed partial class CookingRunViewModel : ObservableObject
     /// <param name="fallback">The display name for a project-wide issue.</param>
     /// <returns>The logical name.</returns>
     internal static string GetAssetName(string path, string fallback)
-        => string.IsNullOrWhiteSpace(path) ? fallback : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(Uri.UnescapeDataString(path)));
+        => string.IsNullOrWhiteSpace(path) ? fallback : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(path));
 
     /// <summary>Maps execution state to the shared status icon vocabulary.</summary>
     /// <param name="state">The observed state.</param>
@@ -217,9 +223,9 @@ public sealed partial class CookingRunViewModel : ObservableObject
         _ => state.ToString(),
     };
 
-    private void UpdateAssets(ImmutableDictionary<Uri, CookRunAsset> assets)
+    private void UpdateAssets(ImmutableDictionary<AssetPath, CookRunAsset> assets)
     {
-        foreach (var asset in assets.Values.OrderBy(static asset => asset.AssetUri.AbsoluteUri, StringComparer.Ordinal))
+        foreach (var asset in assets.Values.OrderBy(static asset => asset.AssetUri))
         {
             if (!this.assetRows.TryGetValue(asset.AssetUri, out var existing))
             {

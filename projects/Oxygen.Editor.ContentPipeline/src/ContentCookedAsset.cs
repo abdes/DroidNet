@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
@@ -13,8 +15,8 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="MountName">The mount that owns the cooked output.</param>
 /// <param name="VirtualPath">The native cooked virtual path.</param>
 public sealed record ContentCookedAsset(
-    Uri SourceAssetUri,
-    Uri CookedAssetUri,
+    AssetPath SourceAssetUri,
+    AssetPath CookedAssetUri,
     ContentCookAssetKind Kind,
     string MountName,
     string VirtualPath)

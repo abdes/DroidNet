@@ -63,8 +63,8 @@ public sealed partial class ContentPipelineService
                 Domain = FailureDomain.AssetImport,
                 Severity = DiagnosticSeverity.Error,
                 Code = "asset_import.reimport_required",
-                AffectedVirtualPath = AssetUriHelper.GetVirtualPath(pair.Key),
-                Message = $"Reimport '{Path.GetFileName(Uri.UnescapeDataString(pair.Key.AbsolutePath))}' to confirm its source changes before automatic cooking updates it.",
+                AffectedVirtualPath = pair.Key.VirtualPath,
+                Message = $"Reimport '{Path.GetFileName(pair.Key.VirtualPath)}' to confirm its source changes before automatic cooking updates it.",
             })];
     }
 
@@ -77,7 +77,7 @@ public sealed partial class ContentPipelineService
             Domain = FailureDomain.AssetImport,
             Severity = DiagnosticSeverity.Error,
             Code = AssetImportDiagnosticCodes.ImportFailed,
-            AffectedVirtualPath = AssetUriHelper.GetVirtualPath(uri),
+            AffectedVirtualPath = uri.VirtualPath,
             Message = $"The retained model does not produce '{uri}'. Choose an existing imported output or correct the source before reimporting.",
         })];
     }
@@ -133,7 +133,7 @@ public sealed partial class ContentPipelineService
                     Domain = FailureDomain.AssetImport,
                     Severity = DiagnosticSeverity.Error,
                     Code = AssetImportDiagnosticCodes.ImportFailed,
-                    AffectedVirtualPath = AssetUriHelper.GetVirtualPath(source.AssetUri),
+                    AffectedVirtualPath = source.AssetUri.VirtualPath,
                     Message = message,
                 },
             ],
@@ -149,7 +149,7 @@ public sealed partial class ContentPipelineService
         this.cookCoordinator.VerifyWriter(operation);
         var recipe = this.manifestBuilder.BuildJob(input, [], settings);
         return new SceneImportSourceDiscovery(cookDocuments, this.cookCoordinator, this.engineContentPipelineApi)
-            .DiscoverAsync(operation, input.SourceAbsolutePath, recipe, cancellationToken, artifacts);
+            .DiscoverAsync(operation, input.SourceAbsolutePath.FullPath, recipe, cancellationToken, artifacts);
     }
 
     private async Task<ContentCookResult> CookWithImportedSourcesAsync(Guid operationId, ContentCookScope scope, CancellationToken cancellationToken)
@@ -224,8 +224,8 @@ public sealed partial class ContentPipelineService
             Domain = FailureDomain.AssetImport,
             Severity = DiagnosticSeverity.Error,
             Code = AssetImportDiagnosticCodes.ImportFailed,
-            AffectedPath = source.SourceAbsolutePath,
-            AffectedVirtualPath = AssetUriHelper.GetVirtualPath(source.AssetUri),
+            AffectedPath = source.SourceAbsolutePath.FullPath,
+            AffectedVirtualPath = source.AssetUri.VirtualPath,
             Message = $"Import of '{settings.Name}' overlaps '{path}'. Choose a different destination without replacing existing assets.",
         };
     }

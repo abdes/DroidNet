@@ -19,12 +19,12 @@ public sealed partial class ContentPriorityViewModel : ObservableObject
         foreach (var source in CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder).Reverse())
         {
             var library = source.Kind == CookedContentSourceKind.LocalFolder ? project.LocalFolderMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.OrdinalIgnoreCase)) : null;
-            if (library is not null && !File.Exists(Path.Combine(library.AbsolutePath, "container.index.bin")))
+            if (library is not null && !File.Exists(Path.Combine(library.Root.FullPath, "container.index.bin")))
             {
                 continue;
             }
 
-            this.Sources.Add(new(source, library?.Name ?? "Project output", library?.AbsolutePath ?? Path.Combine(project.ProjectRoot, ".cooked")));
+            this.Sources.Add(new(source, library?.Name ?? "Project output", library?.Root.FullPath ?? Path.Combine(project.ProjectRoot.FullPath, ".cooked")));
         }
 
         this.SelectedSource = this.Sources.FirstOrDefault();

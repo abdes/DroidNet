@@ -32,7 +32,7 @@ public sealed class SceneReferencesTests
             scene.Hydrate(data);
         }
 
-        var reference = new Uri("asset:///Content/Scripts/Orbit.oscript");
+        var reference = AssetPath.Parse("/Content/Scripts/Orbit.oscript");
         foreach (var collection in new[]
         {
             scene.References.Scripts,
@@ -54,7 +54,7 @@ public sealed class SceneReferencesTests
     public void HydratedSceneReferencesCannotBeMutatedOutsideSceneCommands()
     {
         var scene = new Scene { Name = "Scene" };
-        var script = new Uri("asset:///Content/Scripts/Orbit.oscript");
+        var script = AssetPath.Parse("/Content/Scripts/Orbit.oscript");
         scene.Hydrate(new SceneData
         {
             Id = scene.Id,
@@ -63,7 +63,7 @@ public sealed class SceneReferencesTests
             References = new SceneReferencesData { Scripts = [script] },
         });
 
-        var edit = () => scene.References.Scripts.Add(new Uri("asset:///Content/Scripts/Other.oscript"));
+        var edit = () => scene.References.Scripts.Add(AssetPath.Parse("/Content/Scripts/Other.oscript"));
 
         _ = edit.Should().Throw<NotSupportedException>();
         _ = scene.References.Scripts.Should().ContainSingle().Which.Should().Be(script);
@@ -74,9 +74,9 @@ public sealed class SceneReferencesTests
     {
         var references = new SceneReferencesData
         {
-            Scripts = [new("asset:///Content/Scripts/Orbit.oscript.json")],
-            InputActions = [new("asset:///Content/Input/Jump.oiact")],
-            PhysicsSidecars = [new("asset:///Content/Physics/Main.opscene")],
+            Scripts = [AssetPath.Parse("/Content/Scripts/Orbit.oscript.json")],
+            InputActions = [AssetPath.Parse("/Content/Input/Jump.oiact")],
+            PhysicsSidecars = [AssetPath.Parse("/Content/Physics/Main.opscene")],
             ExtraAssets = ["/.cooked/Extras/lookup.bin"],
         };
         var scene = Scene.CreateAndHydrate(new SceneData

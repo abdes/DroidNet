@@ -19,15 +19,15 @@ public static class AssetIdentity
     /// <param name="items">Rows already restricted to the relevant folder scope.</param>
     /// <returns>Canonical built-ins with their verified cooked companions, and all independent assets.</returns>
     public static IReadOnlyList<AssetEntry> GroupBuiltins(IEnumerable<AssetEntry> items)
-        => items.GroupBy(static item => (item.Kind, Identity: item.IsBuiltin ? item.BuiltinOriginUri ?? item.IdentityUri : item.IdentityUri))
+        => items.GroupBy(static item => (item.Kind, Identity: item.IsBuiltin ? item.BuiltinOrigin ?? item.Identity : item.Identity))
             .Select(static group => Combine(group.Key.Identity, group.ToArray())).ToArray();
 
     /// <summary>Checks both the logical identity and its proven existing reference aliases.</summary>
     /// <param name="item">The projected logical asset.</param>
     /// <param name="identity">The reference being selected or invoked.</param>
     /// <returns>Whether this row represents that reference.</returns>
-    public static bool Represents(AssetEntry item, Uri identity)
-        => item.IdentityUri == identity || item.CookedCompanions.Any(companion => companion.IdentityUri == identity);
+    public static bool Represents(AssetEntry item, AssetPath identity)
+        => item.Identity == identity || item.CookedCompanions.Any(companion => companion.Identity == identity);
 
     /// <summary>Describes an asset as one cooked source provides it, retaining the source ordinary assignments use.</summary>
     /// <param name="effective">The asset selected by ordinary native resolution.</param>
@@ -36,24 +36,23 @@ public static class AssetIdentity
     /// <returns>The library's own read-only asset row.</returns>
     public static AssetEntry FromCookedSource(AssetEntry effective, CookedAssetMetadata source, ProjectContext project)
     {
-        var uri = source.VirtualPath is { } path ? new Uri(AssetUris.Scheme + "://" + path) : effective.CookedUri ?? effective.IdentityUri;
+        var identity = source.VirtualPath ?? effective.Identity;
         var physicalPath = AssetIdentityReducer.TryResolveIndexedDescriptorPath(source);
-        var exists = physicalPath is not null && File.Exists(physicalPath);
-        var library = project.LocalFolderMounts.FirstOrDefault(mount => SameRoot(mount.AbsolutePath, source.RootFolderPath));
-        var winningLibrary = project.LocalFolderMounts.FirstOrDefault(mount => effective.CookedMetadata is { } metadata && SameRoot(mount.AbsolutePath, metadata.RootFolderPath));
-        var origin = effective.VerifiedBuiltinSources.FirstOrDefault(proof => proof.CookedUri == uri && SameRoot(proof.Root, source.RootFolderPath))?.Origin;
+        var exists = physicalPath is not null && File.Exists(physicalPath.FullPath);
+        var library = project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == source.RootFolderPath);
+        var winningLibrary = project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == effective.CookedMetadata?.RootFolderPath);
+        var origin = effective.VerifiedBuiltinSources.FirstOrDefault(proof => proof.Identity == identity && proof.Root == source.RootFolderPath)?.Origin;
         origin ??= effective.IsBuiltin && effective.CookedMetadata == source ? effective : null;
         return new(
-            uri,
-            origin?.DisplayName ?? AssetIdentityReducer.GetDisplayName(uri),
+            identity,
+            origin?.DisplayName ?? AssetIdentityReducer.GetDisplayName(identity),
             AssetKinds.FromCookedType(source.AssetType),
             !exists ? AssetState.Broken : origin is not null ? AssetState.Generated : AssetState.Cooked,
             DerivedState: null,
             effective.RuntimeAvailability,
-            library is null ? uri.AbsolutePath : "/" + library.Name + "/" + source.DescriptorRelativePath,
+            library is null ? identity.VirtualPath : "/" + library.Name + "/" + source.DescriptorRelativePath,
             SourcePath: null,
             DescriptorPath: null,
-            uri,
             physicalPath,
             AssetGuid: null,
             exists ? [] : [AssetIdentityDiagnosticCodes.CookedMissing],
@@ -64,15 +63,15 @@ public static class AssetIdentity
             EffectiveCookedSourceName = winningLibrary?.Name ?? "project output",
             RuntimeReason = effective.RuntimeReason,
             Generated = origin?.Generated,
-            BuiltinOriginUri = origin?.BuiltinOriginUri ?? origin?.IdentityUri,
+            BuiltinOrigin = origin?.BuiltinOrigin ?? origin?.Identity,
             VerifiedBuiltinSources = effective.VerifiedBuiltinSources,
             OverriddenCookedSources = source == effective.CookedMetadata ? effective.OverriddenCookedSources : [],
         };
     }
 
-    private static AssetEntry Combine(Uri identity, AssetEntry[] group)
+    private static AssetEntry Combine(AssetPath identity, AssetEntry[] group)
     {
-        var primary = group.FirstOrDefault(item => item.IdentityUri == identity) ?? group[0];
+        var primary = group.FirstOrDefault(item => item.Identity == identity) ?? group[0];
         if (group.Length == 1)
         {
             return primary;
@@ -90,6 +89,4 @@ public static class AssetIdentity
             DiagnosticCodes = group.SelectMany(static item => item.DiagnosticCodes).Distinct(StringComparer.Ordinal).ToArray(),
         };
     }
-
-    private static bool SameRoot(string left, string right) => string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
 }

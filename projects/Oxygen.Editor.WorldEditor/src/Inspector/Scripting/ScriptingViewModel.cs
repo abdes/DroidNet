@@ -15,7 +15,6 @@ using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Settings;
@@ -44,7 +43,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     private readonly IMessenger? messenger;
     private readonly IProjectContextService? projects;
     private readonly IScriptDeclarationProvider? declarationProvider;
-    private readonly Dictionary<Uri, ScriptDeclarations> libraryScripts = [];
+    private readonly Dictionary<AssetPath, ScriptDeclarations> libraryScripts = [];
     private readonly List<AssetEntry> assets = [];
     private readonly IDisposable? analysisSubscription;
     private IDisposable? assetSubscription;
@@ -202,12 +201,12 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         }
 
         if (await request.Response.ConfigureAwait(true) is not { } path
-            || RelocationPaths.ToVirtual(project, path) is not { } virtualPath)
+            || project.FindByFilePath(path) is not { } location)
         {
             return;
         }
 
-        var script = new Uri($"{AssetUris.Scheme}://{AssetFileTypes.ToCookedPath(virtualPath) ?? virtualPath}");
+        var script = location.Identity;
         await this.EditAsync(slots => ScriptSlotEdits.SetScript(slots, slotId, script)).ConfigureAwait(true);
     }
 
@@ -215,11 +214,11 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <param name="sourcePath">The script file.</param>
     /// <param name="line">The line, if any.</param>
     /// <returns>The completion of the request.</returns>
-    internal async Task EditScriptAsync(string? sourcePath, int? line)
+    internal async Task EditScriptAsync(FileSystemPath? sourcePath, int? line)
     {
         if (this.codeEditor is not null && sourcePath is not null)
         {
-            _ = await this.codeEditor.OpenAsync(sourcePath, line).ConfigureAwait(true);
+            _ = await this.codeEditor.OpenAsync(sourcePath.FullPath, line).ConfigureAwait(true);
         }
     }
 
@@ -234,8 +233,8 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     internal IEnumerable<ScriptAssetChoice> FindAssets(byte assetType)
     {
         return AssetRule.ForCooked(AssetKinds.FromCookedType(assetType)).Apply(this.assets)
-            .Select(static asset => new ScriptAssetChoice(asset.Kind == AssetKind.Script ? asset.IdentityUri : asset.CookedUri ?? asset.IdentityUri, asset.DisplayName, asset.DisplayPath, asset.Kind))
-            .DistinctBy(static choice => choice.Uri)
+            .Select(static asset => new ScriptAssetChoice(asset.Identity, asset.DisplayName, asset.DisplayPath, asset.Kind))
+            .DistinctBy(static choice => choice.Asset)
             .OrderBy(static choice => choice.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static choice => choice.Path, StringComparer.OrdinalIgnoreCase);
     }
@@ -315,7 +314,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
 
     private void OnAnalyzed(ScriptAnalysisSnapshot snapshot)
     {
-        if (!this.disposed && this.scripting?.Slots.Any(slot => slot.Script == snapshot.ScriptUri) == true)
+        if (!this.disposed && this.scripting?.Slots.Any(slot => slot.Script == snapshot.Script) == true)
         {
             this.Rebuild();
         }
@@ -346,14 +345,14 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     }
 
     // A script without analysis may come from a mounted library; it is queued for reading, and shown as loading.
-    private ScriptDeclarations FindDeclarations(Uri? script, List<Uri> toRead)
+    private ScriptDeclarations FindDeclarations(AssetPath? script, List<AssetPath> toRead)
     {
         if (script is null)
         {
             return ScriptDeclarations.Unknown;
         }
 
-        if (this.analysis?.Current.FirstOrDefault(snapshot => !snapshot.IsRemoved && snapshot.ScriptUri == script) is { } source)
+        if (this.analysis?.Current.FirstOrDefault(snapshot => !snapshot.IsRemoved && snapshot.Script == script) is { } source)
         {
             return ScriptDeclarations.FromSource(source);
         }
@@ -374,7 +373,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     }
 
     // A library script's cooked descriptor records its parameters; reading it rebuilds the cards that use it.
-    private async Task ReadLibraryScriptAsync(IScriptDeclarationProvider provider, ProjectContext project, Uri script)
+    private async Task ReadLibraryScriptAsync(IScriptDeclarationProvider provider, ProjectContext project, AssetPath script)
     {
         ScriptDeclarations read;
         try
@@ -410,7 +409,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         }
 
         var slots = this.ShowsSlots && this.scripting is { } component ? component.Slots : [];
-        var toRead = new List<Uri>();
+        var toRead = new List<AssetPath>();
         for (var index = this.Slots.Count - 1; index >= 0; index--)
         {
             if (!slots.Any(slot => slot.Id == this.Slots[index].SlotId))

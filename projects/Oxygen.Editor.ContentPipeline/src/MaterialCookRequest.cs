@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
@@ -13,8 +15,8 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="SourceRelativePath">The project-relative material source path.</param>
 /// <param name="FailFast">Whether pipeline failures should abort immediately.</param>
 public sealed record MaterialCookRequest(
-    Uri MaterialSourceUri,
-    string ProjectRoot,
+    AssetPath MaterialSourceUri,
+    FileSystemPath ProjectRoot,
     string MountName,
     string SourceRelativePath,
     bool FailFast = false);

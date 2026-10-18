@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Managed.Core.Diagnostics;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Cooking;
 
@@ -24,7 +25,7 @@ public interface ICookingWorkspaceActions
     /// <summary>Activates a listed open document without hiding Cooking.</summary>
     /// <param name="sourcePath">The listed document's source file.</param>
     /// <returns>Whether the document could be activated.</returns>
-    public Task<bool> OpenDocumentAsync(string sourcePath);
+    public Task<bool> OpenDocumentAsync(FileSystemPath sourcePath);
 
     /// <summary>Opens a read-only report of the current published output for a completed cook's scope.</summary>
     /// <param name="run">The selected cook and its original scope.</param>

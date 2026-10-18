@@ -25,12 +25,12 @@ public static class SceneFiles
         ArgumentNullException.ThrowIfNull(project);
         var records = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), cancellationToken).ConfigureAwait(true);
         return [.. records
-            .Where(static record => record.Uri.AbsolutePath.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase))
-            .Select(record => project.FindByAssetUri(record.Uri))
+            .Where(static record => AssetFileTypes.Find(record.Identity.Name)?.Suffix == AssetFileTypes.SceneDescriptor)
+            .Select(record => project.Find(record.Identity))
             .OfType<ProjectAssetLocation>()
             .Where(static location => location.MountKind == ProjectMountKind.Authoring)
-            .DistinctBy(static location => location.FilePath, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static location => location.VirtualPath, StringComparer.OrdinalIgnoreCase)];
+            .DistinctBy(static location => location.File)
+            .OrderBy(static location => location.Path)];
     }
 
     /// <summary>Finds the scene file that holds a scene identity.</summary>
@@ -43,7 +43,7 @@ public static class SceneFiles
     {
         foreach (var location in await ListAsync(catalog, project, cancellationToken).ConfigureAwait(true))
         {
-            if (await ReadIdAsync(location.FilePath, cancellationToken).ConfigureAwait(true) == sceneId)
+            if (await ReadIdAsync(location.File, cancellationToken).ConfigureAwait(true) == sceneId)
             {
                 return location;
             }
@@ -61,17 +61,17 @@ public static class SceneFiles
     /// <returns>The first scene file with that name, or <see langword="null"/>.</returns>
     public static async Task<ProjectAssetLocation?> FindByNameAsync(IAssetCatalog catalog, ProjectContext project, string name, CancellationToken cancellationToken = default)
         => (await ListAsync(catalog, project, cancellationToken).ConfigureAwait(true))
-            .FirstOrDefault(location => string.Equals(SceneContent.NameOf(location.FilePath), name, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(location => string.Equals(SceneContent.NameOf(location.File.Name), name, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Reads the identity a scene file holds.</summary>
     /// <param name="path">The scene file.</param>
     /// <param name="cancellationToken">Cancels reading the file.</param>
     /// <returns>The scene's id, or <see langword="null"/> when the file is not a readable scene.</returns>
-    public static async Task<SceneId?> ReadIdAsync(string path, CancellationToken cancellationToken = default)
+    public static async Task<SceneId?> ReadIdAsync(FileSystemPath path, CancellationToken cancellationToken = default)
     {
         try
         {
-            var stream = File.OpenRead(path);
+            var stream = File.OpenRead(path.FullPath);
             await using var lifetime = stream.ConfigureAwait(true);
             using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(true);
             return document.RootElement.ValueKind == JsonValueKind.Object

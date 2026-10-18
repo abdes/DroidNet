@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
@@ -12,8 +14,8 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="State">The cook state.</param>
 /// <param name="OperationId">The related operation result identity, when one was published.</param>
 public sealed record MaterialCookResult(
-    Uri MaterialSourceUri,
-    Uri? CookedMaterialUri,
+    AssetPath MaterialSourceUri,
+    AssetPath? CookedMaterialUri,
     MaterialCookState State,
     Guid? OperationId)
 {

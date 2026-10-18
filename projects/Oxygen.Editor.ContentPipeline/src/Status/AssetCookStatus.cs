@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Status;
@@ -17,7 +18,7 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// <param name="UnsavedDocuments">Unsaved owners in the required saved dependency closure.</param>
 /// <param name="Diagnostics">Read, validation or native-availability issues for this status.</param>
 public sealed record AssetCookStatus(
-    Uri AssetUri,
+    AssetPath AssetUri,
     AssetCookFreshness Freshness,
     bool HasPublishedOutput,
     CookedOutputAvailability OutputAvailability,
@@ -29,10 +30,10 @@ public sealed record AssetCookStatus(
     public bool HasAvailableOutput => this.OutputAvailability == CookedOutputAvailability.Present;
 
     /// <summary>Gets saved authoring paths in this asset's dependency closure, for live document overlays.</summary>
-    public ImmutableArray<string> SourcePaths { get; init; } = [];
+    public ImmutableArray<FileSystemPath> SourcePaths { get; init; } = [];
 
     /// <summary>Gets the selected generation paths used by this status read, shared across its result batch.</summary>
-    public ImmutableDictionary<string, string> OutputRoots { get; init; } = ImmutableDictionary<string, string>.Empty;
+    public ImmutableDictionary<string, FileSystemPath> OutputRoots { get; init; } = ImmutableDictionary<string, FileSystemPath>.Empty;
 
     /// <summary>Gets the hash of source bytes used by this status check, for cached source previews.</summary>
     public string? SavedSourceHash { get; init; }

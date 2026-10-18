@@ -7,13 +7,14 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text.Json;
 using DroidNet.Storage;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.FileSystem;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets;
 
@@ -40,10 +41,10 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     private readonly Lock stateLock = new();
     private readonly Lock notificationLock = new();
     private readonly List<Registration> catalogs = [];
-    private readonly HashSet<Uri> visible = [];
+    private readonly HashSet<AssetPath> visible = [];
     private readonly HashSet<Task> initializationRuns = [];
     private readonly Subject<AssetChange> changes = new();
-    private readonly Subject<Uri> folderChanges = new();
+    private readonly Subject<AssetPath> folderChanges = new();
     private readonly CancellationTokenSource lifetime = new();
     private readonly CancellationToken lifetimeToken;
     private Guid? initializedPublicationId;
@@ -80,12 +81,15 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         this.lifetimeToken = this.lifetime.Token;
     }
 
+    /// <summary>Gets the mount that lists the project's files outside its other mounts.</summary>
+    public static AssetPath ProjectFiles { get; } = AssetPath.Create("project");
+
     /// <inheritdoc />
     public IObservable<AssetChange> Changes => this.changes.AsObservable();
 
     /// <inheritdoc />
     /// <remarks>Folders of the installed project folder catalogs; the folders of a catalog being replaced are not reported.</remarks>
-    public IObservable<Uri> FolderChanges => this.folderChanges.AsObservable();
+    public IObservable<AssetPath> FolderChanges => this.folderChanges.AsObservable();
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<AssetRecord>> QueryAsync(AssetQuery query, CancellationToken cancellationToken = default)
@@ -314,11 +318,11 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     // Each file belongs to one catalog. The project folder's catalog lists the files outside the mounts, so it leaves
     // out every mount folder inside the project: the authoring mounts and the local folders mounted from inside it.
     private static string[] GetFoldersOfOtherCatalogs(ProjectContext project)
-        => [.. project.AuthoringMounts.Select(static mount => mount.RelativePath)
-            .Concat(project.LocalFolderMounts.Select(mount => Path.GetRelativePath(project.ProjectRoot, mount.AbsolutePath)))
-            .Select(static path => path.Replace('/', Path.DirectorySeparatorChar).Trim(Path.DirectorySeparatorChar))
-            .Where(static path => path.Length != 0 && !string.Equals(path, ".", StringComparison.Ordinal) && !string.Equals(path, "..", StringComparison.Ordinal) && !path.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) && !Path.IsPathRooted(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)];
+        => [.. project.AuthoringMounts.Select(mount => project.ProjectRoot.Combine(mount.RelativePath))
+            .Concat(project.LocalFolderMounts.Select(static mount => mount.Root))
+            .Where(root => root != project.ProjectRoot && root.IsSameOrInside(project.ProjectRoot))
+            .Select(root => root.GetPathBelow(project.ProjectRoot))
+            .Distinct(FileSystemPath.NameComparer)];
 
     private async Task RefreshSelectedAsync(ICookPublicationReadLease selected, long? observation, CancellationToken cancellationToken)
     {
@@ -326,7 +330,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         var project = this.projectContextService.ActiveProject
             ?? throw new OperationCanceledException("The project closed before catalog refresh.");
         if (selected.ProjectId != project.ProjectId
-            || !string.Equals(selected.ProjectRoot, project.ProjectRoot, StringComparison.OrdinalIgnoreCase))
+            || selected.ProjectRoot != project.ProjectRoot)
         {
             throw new InvalidOperationException("The catalog publication belongs to another project.");
         }
@@ -541,30 +545,26 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     private async Task PrepareAuthoredCatalogsAsync(ProjectContext project, ICookPublicationReadLease? selected, List<Registration> candidates, Dictionary<Registration, IReadOnlyList<AssetRecord>> kept)
     {
         candidates.Add(await this.PrepareCatalogAsync(new BuiltinAssetCatalog(this.builtins)).ConfigureAwait(false));
-        if (!string.IsNullOrEmpty(project.ProjectRoot))
-        {
-            candidates.Add(await this.PrepareFolderAsync(project, "project", project.ProjectRoot, kept, GetFoldersOfOtherCatalogs(project)).ConfigureAwait(false));
-        }
+        candidates.Add(await this.PrepareFolderAsync(project, ProjectFiles.Mount, project.ProjectRoot, kept, GetFoldersOfOtherCatalogs(project)).ConfigureAwait(false));
 
         foreach (var mount in project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount)))
         {
             this.lifetimeToken.ThrowIfCancellationRequested();
-            var root = this.storage.NormalizeRelativeTo(project.ProjectRoot, mount.RelativePath);
-            candidates.Add(await this.PrepareFolderAsync(project, mount.Name, root, kept).ConfigureAwait(false));
+            candidates.Add(await this.PrepareFolderAsync(project, mount.Name, project.ProjectRoot.Combine(mount.RelativePath), kept).ConfigureAwait(false));
         }
 
         // Preserve authored-folder browsing for external folders without cooked content.
         foreach (var mount in project.LocalFolderMounts.Where(mount => selected?.Roots.Any(root =>
-            root.Owner == CookPublicationRootOwner.Library && string.Equals(root.Name, mount.Name, StringComparison.OrdinalIgnoreCase)) != true))
+            root.Owner == CookPublicationRootOwner.Library && string.Equals(root.Name, mount.Name, StringComparison.Ordinal)) != true))
         {
-            candidates.Add(await this.PrepareFolderAsync(project, mount.Name, mount.AbsolutePath, kept).ConfigureAwait(false));
+            candidates.Add(await this.PrepareFolderAsync(project, mount.Name, mount.Root, kept).ConfigureAwait(false));
         }
     }
 
     // A folder the installed catalogs already watch for this project keeps its catalog and watcher, so no change made
     // while another publication is installed goes unseen.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "PrepareCatalogAsync owns the new catalog through its Registration and disposes it on preparation failure.")]
-    private async Task<Registration> PrepareFolderAsync(ProjectContext project, string mountPoint, string root, Dictionary<Registration, IReadOnlyList<AssetRecord>> kept, IReadOnlyList<string>? excluded = null)
+    private async Task<Registration> PrepareFolderAsync(ProjectContext project, string mountPoint, FileSystemPath root, Dictionary<Registration, IReadOnlyList<AssetRecord>> kept, IReadOnlyList<string>? excluded = null)
     {
         var folder = new WatchedFolder(project.ProjectId, mountPoint, root, string.Join('|', excluded ?? []));
         Registration? installed;
@@ -678,13 +678,13 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
             if (!registration.Published)
             {
                 registration.Pending.Add(change);
-                this.LogChangeHeld(change.Kind, change.Uri);
+                this.LogChangeHeld(change.Kind, change.Identity);
                 return;
             }
 
             if (!this.catalogs.Contains(registration))
             {
-                this.LogChangeIgnored(change.Kind, change.Uri);
+                this.LogChangeIgnored(change.Kind, change.Identity);
                 return;
             }
 
@@ -700,33 +700,33 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         if (this.visibleProjectId != project.ProjectId)
         {
             // Another project's records are all gone, even where a path matches.
-            notifications.AddRange(this.visible.Select(static uri => new AssetChange(AssetChangeKind.Removed, uri)));
+            notifications.AddRange(this.visible.Select(static identity => new AssetChange(AssetChangeKind.Removed, identity)));
             this.visible.Clear();
             this.visibleProjectId = project.ProjectId;
         }
 
-        var installed = new HashSet<Uri>();
+        var installed = new HashSet<AssetPath>();
         foreach (var candidate in candidates)
         {
             foreach (var record in kept.TryGetValue(candidate, out var records) ? records : candidate.Initial)
             {
-                if (!installed.Add(record.Uri))
+                if (!installed.Add(record.Identity))
                 {
                     continue;
                 }
 
-                if (!this.visible.Contains(record.Uri))
+                if (!this.visible.Contains(record.Identity))
                 {
-                    notifications.Add(new(AssetChangeKind.Listed, record.Uri));
+                    notifications.Add(new(AssetChangeKind.Listed, record.Identity));
                 }
                 else if (candidate.IsCooked)
                 {
-                    notifications.Add(new(AssetChangeKind.Updated, record.Uri));
+                    notifications.Add(new(AssetChangeKind.Updated, record.Identity));
                 }
             }
         }
 
-        notifications.AddRange(this.visible.Where(uri => !installed.Contains(uri)).Select(static uri => new AssetChange(AssetChangeKind.Removed, uri)));
+        notifications.AddRange(this.visible.Where(identity => !installed.Contains(identity)).Select(static identity => new AssetChange(AssetChangeKind.Removed, identity)));
         this.visible.Clear();
         this.visible.UnionWith(installed);
         var held = 0;
@@ -749,25 +749,25 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         switch (change.Kind)
         {
             case AssetChangeKind.Added or AssetChangeKind.Listed:
-                _ = this.visible.Add(change.Uri);
+                _ = this.visible.Add(change.Identity);
                 break;
             case AssetChangeKind.Removed:
-                _ = this.visible.Remove(change.Uri);
+                _ = this.visible.Remove(change.Identity);
                 break;
             case AssetChangeKind.Relocated:
-                if (change.PreviousUri is { } previous)
+                if (change.PreviousIdentity is { } previous)
                 {
                     _ = this.visible.Remove(previous);
                 }
 
-                _ = this.visible.Add(change.Uri);
+                _ = this.visible.Add(change.Identity);
                 break;
             case AssetChangeKind.Updated:
                 break;
         }
     }
 
-    private void OnFolderChange(Registration registration, Uri folder)
+    private void OnFolderChange(Registration registration, AssetPath folder)
     {
         lock (this.stateLock)
         {
@@ -875,15 +875,15 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     }
 
     // Excluded lists the folders the catalog leaves out, so a catalog whose exclusions changed is replaced.
-    private sealed record WatchedFolder(Guid ProjectId, string MountPoint, string Root, string Excluded)
+    private sealed record WatchedFolder(Guid ProjectId, string MountPoint, FileSystemPath Root, string Excluded)
     {
         public bool Equals(WatchedFolder? other)
             => other is not null && this.ProjectId == other.ProjectId
-                && string.Equals(this.MountPoint, other.MountPoint, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(this.Root, other.Root, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(this.Excluded, other.Excluded, StringComparison.OrdinalIgnoreCase);
+                && string.Equals(this.MountPoint, other.MountPoint, StringComparison.Ordinal)
+                && this.Root == other.Root
+                && FileSystemPath.NameComparer.Equals(this.Excluded, other.Excluded);
 
         public override int GetHashCode()
-            => HashCode.Combine(this.ProjectId, StringComparer.OrdinalIgnoreCase.GetHashCode(this.MountPoint), StringComparer.OrdinalIgnoreCase.GetHashCode(this.Root), StringComparer.OrdinalIgnoreCase.GetHashCode(this.Excluded));
+            => HashCode.Combine(this.ProjectId, StringComparer.Ordinal.GetHashCode(this.MountPoint), this.Root, FileSystemPath.NameComparer.GetHashCode(this.Excluded));
     }
 }

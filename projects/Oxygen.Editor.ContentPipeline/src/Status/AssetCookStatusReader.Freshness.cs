@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Status;
 
@@ -20,7 +21,7 @@ public sealed partial class AssetCookStatusReader
         foreach (var root in previous.Roots)
         {
             if (publication.UnavailableRoots.Any(binding => string.Equals(binding.Name, root.Mount, StringComparison.Ordinal))
-                || publication.FindProjectRoot(root.Mount) is not { } path)
+                || publication.FindProjectRoot(root.Mount)?.FullPath is not { } path)
             {
                 continue;
             }
@@ -86,8 +87,8 @@ public sealed partial class AssetCookStatusReader
         }
     }
 
-    private static CookedOutputAvailability ReadOutputAvailability(Uri source,
-        Dictionary<Uri, CookProvenance.Product> products, FreshnessSnapshot snapshot, HashSet<Uri> visited)
+    private static CookedOutputAvailability ReadOutputAvailability(AssetPath source,
+        Dictionary<AssetPath, CookProvenance.Product> products, FreshnessSnapshot snapshot, HashSet<AssetPath> visited)
     {
         if (!visited.Add(source))
         {
@@ -128,7 +129,7 @@ public sealed partial class AssetCookStatusReader
     }
 
     private sealed record FreshnessSnapshot(
-        ImmutableHashSet<Uri> CurrentProducts,
+        ImmutableHashSet<AssetPath> CurrentProducts,
         ImmutableHashSet<(string rootMount, string virtualPath)> AvailableOutputs,
         ImmutableHashSet<string> UnknownRoots);
 }

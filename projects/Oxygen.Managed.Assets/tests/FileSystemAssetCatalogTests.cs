@@ -8,6 +8,7 @@ using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.FileSystem;
+using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Managed.Assets.Tests;
@@ -35,15 +36,15 @@ public sealed class FileSystemAssetCatalogTests
         using var events = new ManualEventSource();
         using var catalog = new FileSystemAssetCatalog(
             storage,
-            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", MountPoint = "Content" },
+            new FileSystemAssetCatalogOptions { RootFolderPath = FileSystemPath.From(@"C:\Project\Content"), MountPoint = "Content" },
             events);
 
         // Act
         var results = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         // Assert
-        _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Textures/Wood01.png"));
-        _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Meshes/Hero.geo"));
+        _ = results.Select(r => r.Identity).Should().Contain(AssetPath.Parse("/Content/Textures/Wood01.png"));
+        _ = results.Select(r => r.Identity).Should().Contain(AssetPath.Parse("/Content/Meshes/Hero.geo"));
     }
 
     [TestMethod]
@@ -61,20 +62,20 @@ public sealed class FileSystemAssetCatalogTests
         using var events = new ManualEventSource();
         using var catalog = new FileSystemAssetCatalog(
             storage,
-            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", MountPoint = "Content" },
+            new FileSystemAssetCatalogOptions { RootFolderPath = FileSystemPath.From(@"C:\Project\Content"), MountPoint = "Content" },
             events);
 
         var scope = new AssetQueryScope(
-            Roots: [new Uri("asset:///Content/Textures/")],
+            Roots: [AssetPath.Parse("/Content/Textures")],
             Traversal: AssetQueryTraversal.Descendants);
 
         // Act
         var results = await catalog.QueryAsync(new AssetQuery(scope), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         // Assert
-        _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Textures/Wood01.png"));
-        _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Textures/UI/Button.png"));
-        _ = results.Select(r => r.Uri).Should().NotContain(new Uri("asset:///Content/Meshes/Hero.geo"));
+        _ = results.Select(r => r.Identity).Should().Contain(AssetPath.Parse("/Content/Textures/Wood01.png"));
+        _ = results.Select(r => r.Identity).Should().Contain(AssetPath.Parse("/Content/Textures/UI/Button.png"));
+        _ = results.Select(r => r.Identity).Should().NotContain(AssetPath.Parse("/Content/Meshes/Hero.geo"));
     }
 
     [TestMethod]
@@ -88,7 +89,7 @@ public sealed class FileSystemAssetCatalogTests
         using var events = new ManualEventSource();
         using var catalog = new FileSystemAssetCatalog(
             storage,
-            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", MountPoint = "Content" },
+            new FileSystemAssetCatalogOptions { RootFolderPath = FileSystemPath.From(@"C:\Project\Content"), MountPoint = "Content" },
             events);
 
         var initial = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -105,7 +106,7 @@ public sealed class FileSystemAssetCatalogTests
         // Assert
         _ = initial.Should().BeEmpty();
         _ = stale.Should().BeEmpty();
-        _ = refreshed.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Materials/Red.omat.json"));
+        _ = refreshed.Select(r => r.Identity).Should().Contain(AssetPath.Parse("/Content/Materials/Red.omat.json"));
     }
 
     [TestMethod]
@@ -120,7 +121,7 @@ public sealed class FileSystemAssetCatalogTests
         using var events = new ManualEventSource();
         using var catalog = new FileSystemAssetCatalog(
             storage,
-            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", MountPoint = "Content" },
+            new FileSystemAssetCatalogOptions { RootFolderPath = FileSystemPath.From(@"C:\Project\Content"), MountPoint = "Content" },
             events);
 
         // Prime snapshot
@@ -140,14 +141,14 @@ public sealed class FileSystemAssetCatalogTests
 
         // Assert
         _ = received.Should().ContainSingle(c => c.Kind == AssetChangeKind.Relocated);
-        _ = received.Single(c => c.Kind == AssetChangeKind.Relocated).PreviousUri
-            .Should().Be(new Uri("asset:///Content/Textures/Wood01.png"));
-        _ = received.Single(c => c.Kind == AssetChangeKind.Relocated).Uri
-            .Should().Be(new Uri("asset:///Content/Textures/Wood02.png"));
+        _ = received.Single(c => c.Kind == AssetChangeKind.Relocated).PreviousIdentity
+            .Should().Be(AssetPath.Parse("/Content/Textures/Wood01.png"));
+        _ = received.Single(c => c.Kind == AssetChangeKind.Relocated).Identity
+            .Should().Be(AssetPath.Parse("/Content/Textures/Wood02.png"));
 
         var snapshot = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = snapshot.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Textures/Wood02.png"));
-        _ = snapshot.Select(r => r.Uri).Should().NotContain(new Uri("asset:///Content/Textures/Wood01.png"));
+        _ = snapshot.Select(r => r.Identity).Should().Contain(AssetPath.Parse("/Content/Textures/Wood02.png"));
+        _ = snapshot.Select(r => r.Identity).Should().NotContain(AssetPath.Parse("/Content/Textures/Wood01.png"));
     }
 
     [TestMethod]
@@ -162,7 +163,7 @@ public sealed class FileSystemAssetCatalogTests
         using var events = new ManualEventSource();
         using var catalog = new FileSystemAssetCatalog(
             storage,
-            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", MountPoint = "Content" },
+            new FileSystemAssetCatalogOptions { RootFolderPath = FileSystemPath.From(@"C:\Project\Content"), MountPoint = "Content" },
             events);
         _ = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -179,7 +180,7 @@ public sealed class FileSystemAssetCatalogTests
 
         // Assert
         _ = received.Should().ContainSingle()
-            .Which.Should().Be(new AssetChange(AssetChangeKind.Updated, new Uri("asset:///Content/Materials/Wood.omat.json")));
+            .Which.Should().Be(new AssetChange(AssetChangeKind.Updated, AssetPath.Parse("/Content/Materials/Wood.omat.json")));
     }
 
     /// <summary>A folder deleted outside the editor removes its files and is reported, without touching other files.</summary>
@@ -199,8 +200,8 @@ public sealed class FileSystemAssetCatalogTests
         events.Emit(new FileSystemCatalogEvent(FileSystemCatalogEventKind.Deleted, @"C:\Project\Content\Textures"));
 
         _ = (await folders.Reported.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false))
-            .Should().Equal(new Uri("asset:///Content/Textures"));
-        _ = received.Should().Equal(new AssetChange(AssetChangeKind.Removed, new Uri("asset:///Content/Textures/Wood01.png")));
+            .Should().Equal(AssetPath.Parse("/Content/Textures"));
+        _ = received.Should().Equal(new AssetChange(AssetChangeKind.Removed, AssetPath.Parse("/Content/Textures/Wood01.png")));
     }
 
     /// <summary>A folder created or moved in outside the editor adds its files and is reported.</summary>
@@ -221,8 +222,8 @@ public sealed class FileSystemAssetCatalogTests
         events.Emit(new FileSystemCatalogEvent(FileSystemCatalogEventKind.Created, @"C:\Project\Content\Props"));
 
         _ = (await folders.Reported.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false))
-            .Should().Equal(new Uri("asset:///Content/Props"));
-        _ = received.Should().Equal(new AssetChange(AssetChangeKind.Added, new Uri("asset:///Content/Props/Crate.geo")));
+            .Should().Equal(AssetPath.Parse("/Content/Props"));
+        _ = received.Should().Equal(new AssetChange(AssetChangeKind.Added, AssetPath.Parse("/Content/Props/Crate.geo")));
     }
 
     /// <summary>A folder renamed outside the editor moves its files and reports the old and the new folder.</summary>
@@ -242,11 +243,11 @@ public sealed class FileSystemAssetCatalogTests
         events.Emit(new FileSystemCatalogEvent(FileSystemCatalogEventKind.Renamed, @"C:\Project\Content\Images", @"C:\Project\Content\Textures"));
 
         _ = (await folders.Reported.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false))
-            .Should().BeEquivalentTo([new Uri("asset:///Content/Textures"), new Uri("asset:///Content/Images")]);
+            .Should().BeEquivalentTo([AssetPath.Parse("/Content/Textures"), AssetPath.Parse("/Content/Images")]);
         _ = received.Should().BeEquivalentTo(
             [
-                new AssetChange(AssetChangeKind.Removed, new Uri("asset:///Content/Textures/Wood01.png")),
-                new AssetChange(AssetChangeKind.Added, new Uri("asset:///Content/Images/Wood01.png")),
+                new AssetChange(AssetChangeKind.Removed, AssetPath.Parse("/Content/Textures/Wood01.png")),
+                new AssetChange(AssetChangeKind.Added, AssetPath.Parse("/Content/Images/Wood01.png")),
             ]);
     }
 
@@ -273,7 +274,7 @@ public sealed class FileSystemAssetCatalogTests
             : new FileSystemCatalogEvent(FileSystemCatalogEventKind.Created, @"C:\Project\Content\Textures\Stone.png"));
         await Task.Delay(300, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = received.Should().Equal(new AssetChange(AssetChangeKind.Added, new Uri("asset:///Content/Textures/Stone.png")));
+        _ = received.Should().Equal(new AssetChange(AssetChangeKind.Added, AssetPath.Parse("/Content/Textures/Stone.png")));
     }
 
     /// <summary>
@@ -298,8 +299,8 @@ public sealed class FileSystemAssetCatalogTests
 
         _ = received.Should().BeEquivalentTo(
             [
-                new AssetChange(AssetChangeKind.Removed, new Uri("asset:///Content/Textures/Wood01.png")),
-                new AssetChange(AssetChangeKind.Added, new Uri("asset:///Content/Meshes/Wood01.png")),
+                new AssetChange(AssetChangeKind.Removed, AssetPath.Parse("/Content/Textures/Wood01.png")),
+                new AssetChange(AssetChangeKind.Added, AssetPath.Parse("/Content/Meshes/Wood01.png")),
             ]);
     }
 
@@ -316,7 +317,7 @@ public sealed class FileSystemAssetCatalogTests
         using var catalogLifetime = catalog;
         var received = new List<AssetChange>();
         using var sub = catalog.Changes.Subscribe(received.Add);
-        var folders = new List<Uri>();
+        var folders = new List<AssetPath>();
         using var folderSub = catalog.FolderChanges.Subscribe(folders.Add);
 
         events.Emit(new FileSystemCatalogEvent(FileSystemCatalogEventKind.Changed, @"C:\Project\Content\Textures"));
@@ -325,7 +326,7 @@ public sealed class FileSystemAssetCatalogTests
         _ = received.Should().BeEmpty();
         _ = folders.Should().BeEmpty();
         _ = (await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false))
-            .Select(static record => record.Uri).Should().NotContain(new Uri("asset:///Content/Textures"));
+            .Select(static record => record.Identity).Should().NotContain(AssetPath.Parse("/Content/Textures"));
     }
 
     /// <summary>A folder the catalog leaves out is neither listed nor reported, so another catalog can cover it alone.</summary>
@@ -340,19 +341,19 @@ public sealed class FileSystemAssetCatalogTests
         using var events = new ManualEventSource();
         using var catalog = new FileSystemAssetCatalog(
             new NativeStorageProvider(fs),
-            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project", MountPoint = "project", ExcludedFolders = ["Content"] },
+            new FileSystemAssetCatalogOptions { RootFolderPath = FileSystemPath.From(@"C:\Project"), MountPoint = "project", ExcludedFolders = ["Content"] },
             events);
         var listed = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
         var received = new List<AssetChange>();
         using var sub = catalog.Changes.Subscribe(received.Add);
-        var folders = new List<Uri>();
+        var folders = new List<AssetPath>();
         using var folderSub = catalog.FolderChanges.Subscribe(folders.Add);
 
         fs.Directory.Delete(@"C:\Project\Content\Textures", recursive: true);
         events.Emit(new FileSystemCatalogEvent(FileSystemCatalogEventKind.Deleted, @"C:\Project\Content\Textures"));
         await Task.Delay(300, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = listed.Select(static record => record.Uri).Should().Equal(new Uri("asset:///project/Readme.md"));
+        _ = listed.Select(static record => record.Identity).Should().Equal(AssetPath.Parse("/project/Readme.md"));
         _ = received.Should().BeEmpty();
         _ = folders.Should().BeEmpty();
     }
@@ -368,7 +369,7 @@ public sealed class FileSystemAssetCatalogTests
         var events = new ManualEventSource();
         var catalog = new FileSystemAssetCatalog(
             new NativeStorageProvider(fs),
-            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", MountPoint = "Content" },
+            new FileSystemAssetCatalogOptions { RootFolderPath = FileSystemPath.From(@"C:\Project\Content"), MountPoint = "Content" },
             events);
         _ = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
         return (fs, events, catalog);
@@ -377,8 +378,8 @@ public sealed class FileSystemAssetCatalogTests
     /// <summary>Records a catalog's folder changes; completes once the expected number arrived.</summary>
     private sealed class FolderRecorder : IDisposable
     {
-        private readonly List<Uri> received = [];
-        private readonly TaskCompletionSource<IReadOnlyList<Uri>> reported = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly List<AssetPath> received = [];
+        private readonly TaskCompletionSource<IReadOnlyList<AssetPath>> reported = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly IDisposable subscription;
 
         public FolderRecorder(IAssetFolderSource source, int expected)
@@ -394,7 +395,7 @@ public sealed class FileSystemAssetCatalogTests
                 }
             });
 
-        public Task<IReadOnlyList<Uri>> Reported => this.reported.Task;
+        public Task<IReadOnlyList<AssetPath>> Reported => this.reported.Task;
 
         public void Dispose() => this.subscription.Dispose();
     }

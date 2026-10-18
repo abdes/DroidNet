@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Routing;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Shell;
 
@@ -20,9 +21,8 @@ internal static class RouteStateMapping
     /// <summary>Reads the complete scope from a successful local navigation URL.</summary>
     /// <param name="url">The local navigation URL.</param>
     /// <returns>All selected folders, in URL order.</returns>
-    internal static IReadOnlyList<string> ParseSelectedFoldersFromUrl(string? url)
-        => string.IsNullOrEmpty(url) ? [] : DefaultUrlSerializer.Instance.Parse(url).QueryParams.GetValues(SelectedQueryKey)?
-            .OfType<string>().Where(static folder => !string.IsNullOrWhiteSpace(folder)).ToArray() ?? [];
+    internal static IReadOnlyList<AssetPath> ParseSelectedFoldersFromUrl(string? url)
+        => string.IsNullOrEmpty(url) ? [] : ToFolders(DefaultUrlSerializer.Instance.Parse(url).QueryParams.GetValues(SelectedQueryKey));
 
     /// <summary>Applies a completed navigation as one observable scope update.</summary>
     /// <param name="state">The shared browser scope.</param>
@@ -38,33 +38,25 @@ internal static class RouteStateMapping
 
     /// <summary>Reads the folder scope available during route activation.</summary>
     /// <param name="route">The activated route.</param>
-    /// <returns>The selected nonempty folder paths.</returns>
-    internal static IReadOnlyList<string> GetSelectedFolders(IActiveRoute? route)
-    {
-        var values = route?.QueryParams?.GetValues(SelectedQueryKey);
-        if (values is null)
-        {
-            return [];
-        }
-
-        // Match existing behavior: ignore empty entries.
-        return values
-            .Where(v => !string.IsNullOrEmpty(v))
-            .Select(v => v!)
-            .ToArray();
-    }
+    /// <returns>The selected folders.</returns>
+    internal static IReadOnlyList<AssetPath> GetSelectedFolders(IActiveRoute? route)
+        => ToFolders(route?.QueryParams?.GetValues(SelectedQueryKey));
 
     /// <summary>Encodes a deterministic folder scope for local navigation and history.</summary>
     /// <param name="selectedFolders">The selected browser folders.</param>
     /// <returns>The URL query, or an empty string for the project-wide scope.</returns>
-    internal static string BuildSelectedQuery(IEnumerable<string> selectedFolders)
+    internal static string BuildSelectedQuery(IEnumerable<AssetPath> selectedFolders)
     {
         ArgumentNullException.ThrowIfNull(selectedFolders);
 
         // Keep URL generation deterministic.
-        var sortedFolders = selectedFolders.Order(StringComparer.Ordinal);
-        var selectedParams = string.Join('&', sortedFolders.Select(folder => $"{SelectedQueryKey}={Uri.EscapeDataString(folder)}"));
+        var sortedFolders = selectedFolders.Order();
+        var selectedParams = string.Join('&', sortedFolders.Select(folder => $"{SelectedQueryKey}={Uri.EscapeDataString(folder.VirtualPath)}"));
 
         return string.IsNullOrEmpty(selectedParams) ? string.Empty : $"?{selectedParams}";
     }
+
+    // A URL is typed by people and kept in history; values that name no folder select nothing.
+    private static AssetPath[] ToFolders(IEnumerable<string?>? values)
+        => [.. (values ?? []).Select(static value => AssetPath.TryParse(value, out var folder) ? folder : null).OfType<AssetPath>()];
 }

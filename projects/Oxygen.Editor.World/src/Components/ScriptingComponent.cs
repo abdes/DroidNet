@@ -127,7 +127,7 @@ public sealed partial class ScriptingComponent : GameComponent
                 "vec2" => ScriptValue.FromVector(ScriptValueKind.Vec2Value, ReadVector(value, 2)),
                 "vec3" => ScriptValue.FromVector(ScriptValueKind.Vec3Value, ReadVector(value, 3)),
                 "vec4" => ScriptValue.FromVector(ScriptValueKind.Vec4Value, ReadVector(value, 4)),
-                "asset" => ScriptValue.FromAsset(new Uri(value.GetString() ?? throw new JsonException(), UriKind.Absolute)),
+                "asset" => ScriptValue.FromAsset(AssetPath.TryParseUri(value.GetString(), out var asset) ? asset : throw new JsonException($"'{value.GetString()}' is not an asset URI.")),
                 "node" => ScriptValue.FromNode(NodeId.FromValue(Guid.Parse(value.GetString() ?? throw new JsonException(), CultureInfo.InvariantCulture))),
                 _ => throw new JsonException(),
             };
@@ -167,7 +167,7 @@ public sealed partial class ScriptingComponent : GameComponent
                 ScriptValueKind.StringValue => JsonSerializer.SerializeToElement(value.StringValue, SceneJsonContext.Default.String),
                 ScriptValueKind.Vec2Value or ScriptValueKind.Vec3Value or ScriptValueKind.Vec4Value
                     => JsonSerializer.SerializeToElement(value.GetVectorComponents(), SceneJsonContext.Default.SingleArray),
-                ScriptValueKind.AssetValue => JsonSerializer.SerializeToElement(value.AssetUri!.ToString(), SceneJsonContext.Default.String),
+                ScriptValueKind.AssetValue => JsonSerializer.SerializeToElement(value.Asset!.ToUriString(), SceneJsonContext.Default.String),
                 ScriptValueKind.NodeValue => JsonSerializer.SerializeToElement(value.NodeId.ToString(), SceneJsonContext.Default.String),
                 _ => throw new InvalidOperationException($"Unknown script value kind {value.Kind}."),
             },

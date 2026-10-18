@@ -8,6 +8,7 @@ using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Services;
@@ -128,7 +129,7 @@ internal sealed partial class ProjectActivationCoordinator(
             {
                 ProjectId = context.ProjectId,
                 ProjectName = context.Name,
-                ProjectPath = context.ProjectRoot,
+                ProjectPath = context.ProjectRoot.FullPath,
             };
 
             var activationContext = new ProjectActivationContext
@@ -192,7 +193,7 @@ internal sealed partial class ProjectActivationCoordinator(
                         FailureDomain.WorkspaceActivation,
                         NavigationFailedCode,
                         "Workspace activation failed.",
-                        context.ProjectRoot,
+                        context.ProjectRoot.FullPath,
                         affectedScope));
                 return PublishResult(completed: false);
             }
@@ -328,7 +329,7 @@ internal sealed partial class ProjectActivationCoordinator(
                 operationId,
                 diagnostics,
                 openInitialScene: true,
-                initialSceneAssetUri: null,
+                initialScene: null,
                 cancellationToken)
             .ConfigureAwait(true);
     }
@@ -407,7 +408,7 @@ internal sealed partial class ProjectActivationCoordinator(
                 operationId,
                 diagnostics,
                 creationResult.OpenStarterScene,
-                creationResult.StarterSceneAssetUri,
+                creationResult.StarterScene,
                 cancellationToken)
             .ConfigureAwait(true);
     }
@@ -417,7 +418,7 @@ internal sealed partial class ProjectActivationCoordinator(
         Guid operationId,
         List<DiagnosticRecord> diagnostics,
         bool openInitialScene,
-        Uri? initialSceneAssetUri,
+        AssetPath? initialScene,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -438,7 +439,7 @@ internal sealed partial class ProjectActivationCoordinator(
         return ProjectContext.FromProject(this.stagedProject.Project) with
         {
             OpenInitialScene = openInitialScene,
-            InitialSceneAssetUri = initialSceneAssetUri,
+            InitialScene = initialScene,
         };
     }
 
@@ -461,12 +462,12 @@ internal sealed partial class ProjectActivationCoordinator(
                     FailureDomain.ProjectUsage,
                     RecentUsageWarningCode,
                     "The project opened, but recent-project usage could not be updated.",
-                    context.ProjectRoot,
+                    context.ProjectRoot.FullPath,
                     new AffectedScope
                     {
                         ProjectId = context.ProjectId,
                         ProjectName = context.Name,
-                        ProjectPath = context.ProjectRoot,
+                        ProjectPath = context.ProjectRoot.FullPath,
                     }) with
                 {
                     Severity = DiagnosticSeverity.Warning,

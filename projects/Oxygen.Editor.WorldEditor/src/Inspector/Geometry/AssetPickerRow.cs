@@ -19,7 +19,7 @@ public sealed partial class AssetPickerRow(AssetPickerItem item) : ObservableObj
     /// <param name="replacement">The latest choice for this URI.</param>
     internal void Update(AssetPickerItem replacement)
     {
-        if (this.item.Uri != replacement.Uri)
+        if (this.item.Asset != replacement.Asset)
         {
             throw new ArgumentException("A picker row can only update its own geometry identity.", nameof(replacement));
         }

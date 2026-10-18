@@ -12,6 +12,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
@@ -65,14 +66,15 @@ public partial class ProjectLayoutViewModel
             }
 
             // A new authored folder inside the project is a project source; anything else is a read-only library.
-            var relative = row.IsNew ? GetRelativeMountPath(expected.ProjectRoot, row.AbsolutePath!) : null;
+            var folder = FileSystemPath.From(row.AbsolutePath!);
+            var relative = row.IsNew ? GetRelativeMountPath(expected.ProjectRoot, folder) : null;
             if (relative is not null && !isCookedLibrary(row.AbsolutePath!))
             {
                 candidate.AuthoringMounts.Add(new(row.Name, relative, row.IsExpanded));
             }
             else
             {
-                candidate.LocalFolderMounts.Add(new(row.Name, row.AbsolutePath!, row.IsExpanded));
+                candidate.LocalFolderMounts.Add(new(row.Name, folder, row.IsExpanded));
             }
         }
 
@@ -89,7 +91,7 @@ public partial class ProjectLayoutViewModel
 
             var old = previous.LocalFolderMounts.FirstOrDefault(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
             var renamed = old is null ? null : candidate.LocalFolderMounts.FirstOrDefault(mount =>
-                string.Equals(mount.AbsolutePath, old.AbsolutePath, StringComparison.OrdinalIgnoreCase)
+                mount.Root == old.Root
                 && !previous.LocalFolderMounts.Any(original => string.Equals(original.Name, mount.Name, StringComparison.Ordinal)));
             return renamed is null ? null : new CookedContentSource(CookedContentSourceKind.LocalFolder, renamed.Name);
         }).OfType<CookedContentSource>().ToList();
@@ -131,7 +133,7 @@ public partial class ProjectLayoutViewModel
             && (applied.AuthoringMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))
                 || applied.LocalFolderMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))))
         {
-            contentBrowserState.SetSelectedFolders(["/" + added.Name]);
+            contentBrowserState.SetSelectedFolders([AssetPath.Create(added.Name)]);
         }
     }
 
@@ -336,30 +338,29 @@ public partial class ProjectLayoutViewModel
 
     private void ReconcileSelectedMounts(ProjectContext previous, ProjectInfo candidate)
     {
-        var before = previous.AuthoringMounts.Select(mount => (mount.Name, Path: Path.GetFullPath(Path.Combine(previous.ProjectRoot, mount.RelativePath))))
-            .Concat(previous.LocalFolderMounts.Select(static mount => (mount.Name, Path: Path.GetFullPath(mount.AbsolutePath)))).ToArray();
-        var after = candidate.AuthoringMounts.Select(mount => (mount.Name, Path: Path.GetFullPath(Path.Combine(previous.ProjectRoot, mount.RelativePath))))
-            .Concat(candidate.LocalFolderMounts.Select(static mount => (mount.Name, Path: Path.GetFullPath(mount.AbsolutePath)))).ToArray();
+        var before = previous.AuthoringMounts.Select(mount => (mount.Name, Root: previous.ProjectRoot.Combine(mount.RelativePath)))
+            .Concat(previous.LocalFolderMounts.Select(static mount => (mount.Name, mount.Root))).ToArray();
+        var after = candidate.AuthoringMounts.Select(mount => (mount.Name, Root: previous.ProjectRoot.Combine(mount.RelativePath)))
+            .Concat(candidate.LocalFolderMounts.Select(static mount => (mount.Name, mount.Root))).ToArray();
+
+        // A renamed mount keeps its folders selected under its new name; a removed one leaves the whole project shown.
         var folders = contentBrowserState.SelectedFolders.Select(folder =>
         {
-            var path = folder.TrimStart('/');
-            var split = path.IndexOf('/', StringComparison.Ordinal);
-            var name = split < 0 ? path : path[..split];
-            if (after.Any(mount => string.Equals(mount.Name, name, StringComparison.Ordinal)))
+            if (after.Any(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal)))
             {
                 return folder;
             }
 
-            var old = before.FirstOrDefault(mount => string.Equals(mount.Name, name, StringComparison.Ordinal));
+            var old = before.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal));
             if (old.Name is null)
             {
                 return folder;
             }
 
-            var replacement = after.FirstOrDefault(mount => string.Equals(mount.Path, old.Path, StringComparison.OrdinalIgnoreCase));
-            return replacement.Name is null ? "/" : "/" + replacement.Name + (split < 0 ? string.Empty : path[split..]);
-        }).Distinct(StringComparer.Ordinal).ToArray();
-        contentBrowserState.SetSelectedFolders(folders);
+            var replacement = after.FirstOrDefault(mount => mount.Root == old.Root);
+            return replacement.Name is null ? null : folder.IsMount ? AssetPath.Create(replacement.Name) : AssetPath.Create(replacement.Name, folder.RelativePath);
+        }).ToArray();
+        contentBrowserState.SetSelectedFolders(folders.Any(static folder => folder is null) ? [] : folders.OfType<AssetPath>());
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Content mount update failed.")]

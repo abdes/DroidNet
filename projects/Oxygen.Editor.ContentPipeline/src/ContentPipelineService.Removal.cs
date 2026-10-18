@@ -25,7 +25,7 @@ public sealed partial class ContentPipelineService
         CancellationToken cancellationToken)
     {
         var results = new List<ContentCookResult>();
-        var operationRoot = Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N"));
+        var operationRoot = Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N"));
         foreach (var root in staging.Roots)
         {
             if (!plan.Removals.TryGetValue(root.Mount, out var removal))

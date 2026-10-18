@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
@@ -12,7 +13,7 @@ namespace Oxygen.Editor.ContentPipeline.Snapshots;
 /// <param name="RelativePath">The preserved path inside the private input root.</param>
 /// <param name="DiscoveryHash">The discovered content hash for a file; empty for probes and absent paths.</param>
 /// <param name="Kind">Whether capture retains bytes, a positive probe or absence.</param>
-public sealed record CookSnapshotInput(Uri? AssetUri, string SourcePath, string RelativePath, string DiscoveryHash, CookSnapshotInputKind Kind = CookSnapshotInputKind.File)
+public sealed record CookSnapshotInput(AssetPath? AssetUri, FileSystemPath SourcePath, string RelativePath, string DiscoveryHash, CookSnapshotInputKind Kind = CookSnapshotInputKind.File)
 {
     /// <summary>Gets a value indicating whether discovery observed an absent path.</summary>
     [System.Text.Json.Serialization.JsonIgnore]

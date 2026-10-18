@@ -154,10 +154,10 @@ public sealed record NativeSceneImportSettings(
     /// <returns>The original source location.</returns>
     public string ResolveFile(string projectRoot, string relative)
     {
-        var root = Path.GetFullPath(projectRoot).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var path = Path.GetFullPath(Path.Combine(root, this.BundleRoot, relative));
-        return path.StartsWith(root, StringComparison.OrdinalIgnoreCase)
-            ? path : throw new InvalidDataException("Import source settings resolve outside their project.");
+        var root = FileSystemPath.From(projectRoot);
+        var path = root.Combine(Path.Combine(this.BundleRoot, relative));
+        return path != root && path.IsSameOrInside(root)
+            ? path.FullPath : throw new InvalidDataException("Import source settings resolve outside their project.");
     }
 
     private static void ValidatePaths(NativeSceneImportSettings settings)
@@ -167,8 +167,8 @@ public sealed record NativeSceneImportSettings(
         var files = settings.Files.Append(settings.BundleRoot).Append(settings.PrimaryRelativePath);
         if (files.Any(static path => Path.IsPathRooted(path) || path.Split('/').Any(static part => string.IsNullOrEmpty(part)
                 || part is "." or ".." || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || part.EndsWith('.') || part.EndsWith(' ')))
-            || settings.Files.ToHashSet(StringComparer.OrdinalIgnoreCase).Count != settings.Files.Length
-            || !settings.Files.Contains(settings.PrimaryRelativePath, StringComparer.OrdinalIgnoreCase)
+            || settings.Files.ToHashSet(FileSystemPath.NameComparer).Count != settings.Files.Length
+            || !settings.Files.Contains(settings.PrimaryRelativePath, FileSystemPath.NameComparer)
             || VirtualPath.ValidateMountName(settings.MountPoint) is not null
             || settings.OutputDirectory.Split('/').Append(settings.Name)
                 .Any(static segment => VirtualPath.ValidateSegment(segment, VirtualPathRuleSet.Authored) is not null))

@@ -30,19 +30,20 @@ public partial class AssetsViewModel
     internal InputDeclaration? FindCodeSource(AssetEntry asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        if (asset is { Kind: AssetKind.Script or AssetKind.InputFile, SourcePath: { } source } && File.Exists(source))
+        if (asset is { Kind: AssetKind.Script or AssetKind.InputFile, SourcePath: { } source } && File.Exists(source.FullPath))
         {
-            return new InputDeclaration(source, 1);
+            return new InputDeclaration(source.FullPath, 1);
         }
 
         if (asset.Kind is not (AssetKind.InputAction or AssetKind.InputMappingContext)
             || projectContextService.ActiveProject is not { } project
-            || RelocationPaths.ToPhysical(project, RelocationPaths.GetParent(asset.DisplayPath)) is not { } folder)
+            || asset.Identity.Parent is not { } parent
+            || RelocationPaths.ToPhysical(project, parent) is not { } folder)
         {
             return null;
         }
 
-        return InputSourceIndex.Find(folder, asset.DisplayName, isContext: asset.Kind == AssetKind.InputMappingContext);
+        return InputSourceIndex.Find(folder.FullPath, asset.DisplayName, isContext: asset.Kind == AssetKind.InputMappingContext);
     }
 
     private bool CanEditSelected() => codeEditor is not null && this.SelectedAssets.Count == 1 && this.FindCodeSource(this.SelectedAssets[0]) is not null;

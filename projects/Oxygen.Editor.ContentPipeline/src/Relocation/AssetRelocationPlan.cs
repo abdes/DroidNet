@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Storage;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -13,9 +14,9 @@ public sealed class AssetRelocationPlan
         AssetRelocationRequest request,
         RelocationMap map,
         IReadOnlyList<RelocationEdit> edits,
-        IReadOnlyList<string> referrers,
+        IReadOnlyList<AssetPath> referrers,
         IReadOnlyList<string> groupFolders,
-        IReadOnlyDictionary<string, string> previousGroups)
+        IReadOnlyDictionary<AssetPath, string> previousGroups)
     {
         this.Request = request;
         this.Map = map;
@@ -32,13 +33,13 @@ public sealed class AssetRelocationPlan
     public IReadOnlyList<RelocationFileMove> Moves => this.Map.Moves;
 
     /// <summary>Gets the virtual paths of the authored files that reference a moved asset and stay in place.</summary>
-    public IReadOnlyList<string> Referrers { get; }
+    public IReadOnlyList<AssetPath> Referrers { get; }
 
     /// <summary>Gets each imported output group folder that moves, as <c>old → new</c> virtual paths.</summary>
     public IReadOnlyList<string> GroupFolders { get; }
 
     /// <summary>Gets the absolute locations of every file the relocation rewrites, after the moves.</summary>
-    public IReadOnlyList<string> RewrittenFiles => [.. this.Edits.Select(static edit => edit.FinalPath)];
+    public IReadOnlyList<FileSystemPath> RewrittenFiles => [.. this.Edits.Select(static edit => edit.FinalPath)];
 
     /// <summary>Gets the request that undoes this relocation.</summary>
     public AssetRelocationRequest Reverse => this.Request.Reverse(this.PreviousGroups);
@@ -53,15 +54,10 @@ public sealed class AssetRelocationPlan
     internal IReadOnlyList<RelocationEdit> Edits { get; }
 
     /// <summary>Gets each grouped import's group before the relocation, keyed by the request's source path.</summary>
-    internal IReadOnlyDictionary<string, string> PreviousGroups { get; }
+    internal IReadOnlyDictionary<AssetPath, string> PreviousGroups { get; }
 
-    /// <summary>Maps an asset identity or virtual path through the relocation.</summary>
-    /// <param name="virtualPath">A virtual path or identity.</param>
+    /// <summary>Maps the virtual path of a file or folder through the relocation.</summary>
+    /// <param name="path">The virtual path.</param>
     /// <returns>The new virtual path, or null when it does not move.</returns>
-    public string? MapVirtualPath(string virtualPath)
-    {
-        ArgumentNullException.ThrowIfNull(virtualPath);
-        var identity = RelocationPaths.ToIdentity(virtualPath);
-        return this.Map.MapIdentity(identity) is { } mapped ? mapped + virtualPath[identity.Length..] : null;
-    }
+    public AssetPath? MapVirtualPath(AssetPath path) => this.Map.MapPath(path);
 }

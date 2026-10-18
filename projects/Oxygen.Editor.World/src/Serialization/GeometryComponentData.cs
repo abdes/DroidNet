@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
 
@@ -14,7 +15,7 @@ public record GeometryComponentData : ComponentData
     /// <summary>
     /// Gets or initializes the geometry asset URI.
     /// </summary>
-    public required Uri GeometryUri { get; init; }
+    public required AssetPath GeometryUri { get; init; }
 
     /// <summary>
     /// Gets or initializes the component-level override slots.

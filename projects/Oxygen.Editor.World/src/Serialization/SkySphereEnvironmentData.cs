@@ -4,6 +4,7 @@
 
 using System.Numerics;
 using System.Text.Json.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
 
@@ -50,7 +51,7 @@ public sealed record SkySphereEnvironmentData
     public SkySphereSource Source { get; init; } = SkySphereSource.Cubemap;
 
     /// <summary>Gets the authored cube texture descriptor URI, or null for none.</summary>
-    public Uri? Cubemap { get; init; }
+    public AssetPath? Cubemap { get; init; }
 
     /// <summary>Gets the linear color shown by the solid color source.</summary>
     public Vector3 SolidColorRgb { get; init; }
@@ -77,7 +78,7 @@ public sealed record SkySphereEnvironmentData
     /// A cubemap left on a disabled or solid color sky sphere is kept but never loaded or cooked.
     /// </summary>
     [JsonIgnore]
-    public Uri? ActiveCubemap => this.Enabled && this.Source == SkySphereSource.Cubemap ? this.Cubemap : null;
+    public AssetPath? ActiveCubemap => this.Enabled && this.Source == SkySphereSource.Cubemap ? this.Cubemap : null;
 }
 
 /// <summary>
@@ -93,7 +94,7 @@ public sealed record SkyLightEnvironmentData
     public SkyLightSource Source { get; init; } = SkyLightSource.CapturedScene;
 
     /// <summary>Gets the authored cube texture descriptor URI used by the specified cubemap source, or null for none.</summary>
-    public Uri? Cubemap { get; init; }
+    public AssetPath? Cubemap { get; init; }
 
     /// <summary>
     /// Gets the illuminance, in lux, the specified cubemap delivers on an upward-facing surface, or 0
@@ -136,7 +137,7 @@ public sealed record SkyLightEnvironmentData
     /// else null. A cubemap left on a disabled or captured sky light is kept but never loaded or cooked.
     /// </summary>
     [JsonIgnore]
-    public Uri? ActiveCubemap => this.Enabled && this.Source == SkyLightSource.SpecifiedCubemap ? this.Cubemap : null;
+    public AssetPath? ActiveCubemap => this.Enabled && this.Source == SkyLightSource.SpecifiedCubemap ? this.Cubemap : null;
 }
 
 /// <summary>

@@ -40,41 +40,41 @@ public sealed class AuthoredAssetCreation(
 {
     /// <summary>Asks for a name and folder and creates a script from the template.</summary>
     /// <returns>The new file, or <see langword="null"/> when cancelled or failed.</returns>
-    public Task<string?> CreateScriptAsync()
+    public Task<FileSystemPath?> CreateScriptAsync()
         => this.CreateAsync(new CreationKind("New Script", AuthoredAssetKind.Script, ScriptOperationKinds.Create, ScriptDiagnosticCodes.CreateFailed, FailureDomain.ScriptAuthoring), this.OpenInCodeEditorAsync);
 
     /// <summary>Asks for a name and folder and creates an input file with one action and one mapping context.</summary>
     /// <returns>The new file, or <see langword="null"/> when cancelled or failed.</returns>
-    public Task<string?> CreateInputFileAsync()
+    public Task<FileSystemPath?> CreateInputFileAsync()
         => this.CreateAsync(new CreationKind("New Input File", AuthoredAssetKind.InputFile, ScriptOperationKinds.CreateInputFile, ScriptDiagnosticCodes.CreateFailed, FailureDomain.ScriptAuthoring), this.OpenInCodeEditorAsync);
 
     /// <summary>Asks for a name and folder, creates an empty scene, and opens it.</summary>
     /// <returns>The new file, or <see langword="null"/> when cancelled or failed.</returns>
-    public Task<string?> CreateSceneAsync()
+    public Task<FileSystemPath?> CreateSceneAsync()
         => this.CreateAsync(new CreationKind("New Scene", AuthoredAssetKind.Scene, SceneOperationKinds.Create, SceneDiagnosticCodes.CreateFailed, FailureDomain.Document), this.OpenSceneAsync);
 
     /// <summary>Asks for a name and folder, creates a new material there and opens it.</summary>
     /// <returns>The new material's path, or <see langword="null"/> when nothing was created.</returns>
-    public Task<string?> CreateMaterialAsync()
+    public Task<FileSystemPath?> CreateMaterialAsync()
         => this.CreateAsync(new CreationKind("New Material", AuthoredAssetKind.Material, MaterialOperationKinds.Create, MaterialDiagnosticCodes.NameInvalid, FailureDomain.MaterialAuthoring), this.OpenMaterialAsync);
 
     private static string ReadFolder(TextBox folderBox) => "/" + folderBox.Text.Trim().Replace('\\', '/').Trim('/');
 
-    private async Task<string?> CreateAsync(CreationKind kind, Func<ProjectContext, string, Task> open)
+    private async Task<FileSystemPath?> CreateAsync(CreationKind kind, Func<ProjectContext, FileSystemPath, Task> open)
     {
         if (projects.ActiveProject is not { } project)
         {
             return null;
         }
 
-        var proposal = await authoring.ProposeAsync(project, kind.Kind, browserState.SelectedFolders.FirstOrDefault(), CancellationToken.None).ConfigureAwait(true);
+        var proposal = await authoring.ProposeAsync(project, kind.Kind, browserState.SelectedFolders.Order().FirstOrDefault(), CancellationToken.None).ConfigureAwait(true);
         var nameBox = new TextBox { Header = "Name", Text = proposal.Name, MinWidth = 320 };
         nameBox.Loaded += (_, _) =>
         {
             _ = nameBox.Focus(FocusState.Programmatic);
             nameBox.SelectAll();
         };
-        var folderBox = new TextBox { Header = "Folder", Text = proposal.Folder };
+        var folderBox = new TextBox { Header = "Folder", Text = proposal.Folder.VirtualPath };
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
         error.Foreground = Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) ? brush as Microsoft.UI.Xaml.Media.Brush : null;
 
@@ -85,7 +85,9 @@ public sealed class AuthoredAssetCreation(
             DefaultButton = DialogButton.Primary,
             PrimaryAction = async () =>
             {
-                var invalid = await authoring.ValidateAsync(project, kind.Kind, nameBox.Text.Trim(), ReadFolder(folderBox), CancellationToken.None).ConfigureAwait(true);
+                var folder = ReadFolder(folderBox);
+                var invalid = VirtualPath.Validate(folder)?.ToMessage()
+                    ?? await authoring.ValidateAsync(project, kind.Kind, nameBox.Text.Trim(), AssetPath.Parse(folder), CancellationToken.None).ConfigureAwait(true);
                 error.Text = invalid ?? string.Empty;
                 error.Visibility = invalid is null ? Visibility.Collapsed : Visibility.Visible;
                 return invalid is null;
@@ -97,10 +99,10 @@ public sealed class AuthoredAssetCreation(
             return null;
         }
 
-        string path;
+        FileSystemPath path;
         try
         {
-            path = await authoring.CreateAsync(project, kind.Kind, nameBox.Text.Trim(), ReadFolder(folderBox), CancellationToken.None).ConfigureAwait(true);
+            path = await authoring.CreateAsync(project, kind.Kind, nameBox.Text.Trim(), AssetPath.Parse(ReadFolder(folderBox)), CancellationToken.None).ConfigureAwait(true);
         }
         catch (AssetCreationException failure)
         {
@@ -108,51 +110,48 @@ public sealed class AuthoredAssetCreation(
             return null;
         }
 
-        ScriptOperationResults.PublishSuccess(operationResults, kind.OperationKind, kind.Title, $"Created {RelocationPaths.ToVirtual(project, path)}.", path);
+        ScriptOperationResults.PublishSuccess(operationResults, kind.OperationKind, kind.Title, $"Created {RelocationPaths.ToVirtual(project, path)}.", path.FullPath);
         await this.RevealAsync(project, path).ConfigureAwait(true);
         await open(project, path).ConfigureAwait(true);
         return path;
     }
 
-    private async Task OpenInCodeEditorAsync(ProjectContext project, string path) => _ = await codeEditor.OpenAsync(path).ConfigureAwait(true);
+    private async Task OpenInCodeEditorAsync(ProjectContext project, FileSystemPath path) => _ = await codeEditor.OpenAsync(path.FullPath).ConfigureAwait(true);
 
-    private async Task OpenSceneAsync(ProjectContext project, string path)
+    private async Task OpenSceneAsync(ProjectContext project, FileSystemPath path)
     {
         if (project.FindByFilePath(path) is not { } location)
         {
             return;
         }
 
-        var request = messenger.Send(new OpenSceneRequestMessage(location.AssetUri));
+        var request = messenger.Send(new OpenSceneRequestMessage(location.Identity));
         if (request.HasReceivedResponse)
         {
             _ = await request.Response.ConfigureAwait(true);
         }
     }
 
-    private Task OpenMaterialAsync(ProjectContext project, string path)
+    private Task OpenMaterialAsync(ProjectContext project, FileSystemPath path)
     {
         if (project.FindByFilePath(path) is { } location)
         {
-            _ = messenger.Send(new OpenMaterialRequestMessage(location.AssetUri, Path.GetFileNameWithoutExtension(path)));
+            _ = messenger.Send(new OpenMaterialRequestMessage(location.Identity, AssetFileTypes.RemoveSuffix(path.Name)));
         }
 
         return Task.CompletedTask;
     }
 
-    private async Task RevealAsync(ProjectContext project, string path)
+    private async Task RevealAsync(ProjectContext project, FileSystemPath path)
     {
-        if (RelocationPaths.ToVirtual(project, path) is not { } virtualPath)
+        if (project.FindByFilePath(path) is not { } location)
         {
             return;
         }
 
-        var identity = AssetFileTypes.Is(virtualPath, AssetFileCategory.Script) ? AssetFileTypes.ToCookedPath(virtualPath)! : virtualPath;
-        var uri = new Uri($"{AssetUris.Scheme}://{identity}");
-
         // The authoring service reported the file before it returned, so the feed is already reading it again and the
         // reveal resolves the new row, not a missing one.
-        var request = messenger.Send(new ShowAssetRequestMessage(project, uri));
+        var request = messenger.Send(new ShowAssetRequestMessage(project, location.Identity));
         if (request.HasReceivedResponse)
         {
             _ = await request.Response.ConfigureAwait(true);

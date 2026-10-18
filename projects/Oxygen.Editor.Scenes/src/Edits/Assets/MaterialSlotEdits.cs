@@ -32,7 +32,7 @@ public static class MaterialSlotEdits
         ProjectContext project,
         IReadOnlyCollection<NodeId> nodes,
         MaterialSlotTarget target,
-        Uri? material,
+        AssetPath? material,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(inventories);
@@ -40,7 +40,7 @@ public static class MaterialSlotEdits
         GeometryMaterialSlotMetadata? inventory;
         try
         {
-            inventory = await inventories.ReadAsync(project, target.GeometryUri, cancellationToken).ConfigureAwait(true);
+            inventory = await inventories.ReadAsync(project, target.Geometry, cancellationToken).ConfigureAwait(true);
         }
         catch (Exception error) when (IsReadFailure(error))
         {
@@ -52,7 +52,7 @@ public static class MaterialSlotEdits
             return Unavailable("Cook or refresh the geometry before editing its material slots.");
         }
 
-        return inventory.GeometryUri == target.GeometryUri
+        return inventory.GeometryUri == target.Geometry
             && string.Equals(inventory.LayoutRevision, target.LayoutRevision, StringComparison.Ordinal)
             && inventory.Slots.Any(slot => slot.SlotId == target.SlotId)
             ? new MaterialSlotEdit(new SetMaterialSlot(nodes, target, material), Error: null)
@@ -85,7 +85,7 @@ public static class MaterialSlotEdits
             .Where(static pair => pair.Geometry is not null)
             .Select(static pair => (pair.Id, Uri: pair.Geometry!.Geometry, Slots: pair.Geometry.OverrideSlots.OfType<MaterialsSlot>().Select(static slot => slot.Target).ToList()))
             .ToList();
-        var read = new Dictionary<Uri, GeometryMaterialSlotMetadata>();
+        var read = new Dictionary<AssetPath, GeometryMaterialSlotMetadata>();
         foreach (var uri in geometries.Select(static pair => pair.Uri).Distinct())
         {
             try
@@ -102,7 +102,7 @@ public static class MaterialSlotEdits
         }
 
         var unresolved = geometries
-            .Select(pair => (pair.Id, Slots: pair.Slots.Where(target => target.GeometryUri != pair.Uri
+            .Select(pair => (pair.Id, Slots: pair.Slots.Where(target => target.Geometry != pair.Uri
                 || (read.GetValueOrDefault(pair.Uri) is { } inventory && inventory.Slots.All(slot => slot.SlotId != target.SlotId))).ToArray()))
             .Where(static pair => pair.Slots.Length > 0)
             .ToDictionary(static pair => pair.Id, static pair => (IReadOnlyList<MaterialSlotTarget>)pair.Slots);

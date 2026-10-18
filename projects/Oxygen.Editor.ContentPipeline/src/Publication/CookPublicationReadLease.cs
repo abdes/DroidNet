@@ -7,6 +7,7 @@ using System.Text.Json;
 using DroidNet.Storage;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
@@ -23,7 +24,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
 
     public Guid ProjectId => this.state.Products.ProjectId;
 
-    public string ProjectRoot => this.state.ProjectRoot;
+    public FileSystemPath ProjectRoot => this.state.ProjectRoot;
 
     /// <summary>Gets the accepted roots in native precedence order.</summary>
     public ImmutableArray<CookPublicationRoot> Roots => this.state.Document?.Roots ?? [];
@@ -32,7 +33,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
     public ImmutableArray<string> RootPaths => this.state.RootPaths;
 
     /// <summary>Gets the captured physical generations by logical project mount.</summary>
-    public ImmutableDictionary<string, string> ProjectRoots => this.state.ProjectRoots;
+    public ImmutableDictionary<string, FileSystemPath> ProjectRoots => this.state.ProjectRoots;
 
     /// <summary>Gets logical product paths for project-output navigation, including named resources.</summary>
     public IEnumerable<string> ProjectOutputPaths => this.state.Products.Products
@@ -50,7 +51,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
     /// <summary>Resolves an owned logical mount from this captured publication.</summary>
     /// <param name="mount">The project authoring mount.</param>
     /// <returns>The selected generation path, or null when that mount has no cooked output.</returns>
-    public string? FindProjectRoot(string mount) => this.state.ProjectRoots.GetValueOrDefault(mount);
+    public FileSystemPath? FindProjectRoot(string mount) => this.state.ProjectRoots.GetValueOrDefault(mount);
 
     /// <summary>Creates a fixed catalog after matching one index opening to its captured root binding.</summary>
     /// <param name="root">A root from this publication.</param>
@@ -67,14 +68,14 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
             throw new InvalidDataException("The catalog root is not available in this publication.");
         }
 
-        var path = root.ResolvePath(this.ProjectRoot);
+        var path = root.ResolvePath(this.ProjectRoot.FullPath);
         var index = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
         if (index.Index.SourceGuid != root.SourceKey || !string.Equals(index.Fingerprint, root.IndexSha256, StringComparison.OrdinalIgnoreCase))
         {
             throw CookedLibraryChangedException.ForChangedRoot(root, path, index.Index.SourceGuid, index.Fingerprint);
         }
 
-        return new(index.Index, path);
+        return new(index.Index, FileSystemPath.From(path));
     }
 
     /// <summary>Requires sealed owned roots before native mounting or publication, including disk-only publication.</summary>
@@ -171,7 +172,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
         CookOutputWriteLease gate, CancellationToken cancellationToken)
     {
         gate.VerifyOwner(project.ProjectRoot);
-        var head = await files.ReadAsync(CookPublicationPaths.Head(project.ProjectRoot), cancellationToken).ConfigureAwait(false);
+        var head = await files.ReadAsync(CookPublicationPaths.Head(project.ProjectRoot.FullPath), cancellationToken).ConfigureAwait(false);
         return await OpenDocumentUnderGateAsync(project, files, gate, head, cancellationToken).ConfigureAwait(false);
     }
 
@@ -195,7 +196,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
         var handles = new List<FileStream>(capacity: 1);
         try
         {
-            var path = CookPublicationPaths.Document(project.ProjectRoot, head.PublicationId);
+            var path = CookPublicationPaths.Document(project.ProjectRoot.FullPath, head.PublicationId);
 
             // The immutable document cannot be replaced while its contents are
             // read or a consumer still retains this selection.
@@ -219,7 +220,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
             foreach (var root in document.Roots)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var marker = Path.Combine(root.ResolvePath(project.ProjectRoot), CookedGeneration.MarkerFileName);
+                var marker = Path.Combine(root.ResolvePath(project.ProjectRoot.FullPath), CookedGeneration.MarkerFileName);
                 CookOutputLease.RejectReparsePoint(marker);
                 var reader = WindowsCookFile.TryOpenGenerationReader(marker, out var busy);
                 if (reader is not null)
@@ -255,14 +256,14 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
             ImmutableArray<CookPublicationRoot> unavailableRoots)
         {
             this.Head = head;
-            this.ProjectRoot = Path.GetFullPath(project.ProjectRoot);
+            this.ProjectRoot = project.ProjectRoot;
             this.Document = document;
             this.Handles = handles;
             this.UnavailableRoots = unavailableRoots;
             var roots = document?.Roots ?? [];
-            this.RootPaths = [.. roots.Select(root => root.ResolvePath(project.ProjectRoot))];
+            this.RootPaths = [.. roots.Select(root => root.ResolvePath(project.ProjectRoot.FullPath))];
             this.ProjectRoots = roots.Where(static root => root.Owner == CookPublicationRootOwner.Project)
-                .ToImmutableDictionary(static root => root.Name, root => root.ResolvePath(project.ProjectRoot), StringComparer.Ordinal);
+                .ToImmutableDictionary(static root => root.Name, root => FileSystemPath.From(root.ResolvePath(project.ProjectRoot.FullPath)), StringComparer.Ordinal);
             this.Products = document?.ProductState ?? new(project.ProjectId, [], []);
         }
 
@@ -272,7 +273,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
 
         internal FileSnapshot Head { get; }
 
-        internal string ProjectRoot { get; }
+        internal FileSystemPath ProjectRoot { get; }
 
         internal CookPublicationDocument? Document { get; }
 
@@ -280,7 +281,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
 
         internal ImmutableArray<CookPublicationRoot> UnavailableRoots { get; }
 
-        internal ImmutableDictionary<string, string> ProjectRoots { get; }
+        internal ImmutableDictionary<string, FileSystemPath> ProjectRoots { get; }
 
         internal CookProvenance Products { get; }
 

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.TimeMachine;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -54,7 +55,7 @@ public interface IAssetRelocationService
     /// <param name="virtualPath">The asset or folder.</param>
     /// <param name="cancellationToken">Cancels the scan.</param>
     /// <returns>The referrers' virtual paths.</returns>
-    public Task<IReadOnlyList<string>> FindReferrersAsync(string virtualPath, CancellationToken cancellationToken);
+    public Task<IReadOnlyList<AssetPath>> FindReferrersAsync(AssetPath virtualPath, CancellationToken cancellationToken);
 
     /// <summary>
     /// Finds the authored files that would lose a reference if the sources were deleted: the files outside the sources
@@ -63,12 +64,12 @@ public interface IAssetRelocationService
     /// <param name="sources">The assets or folders to delete.</param>
     /// <param name="cancellationToken">Cancels the scan.</param>
     /// <returns>The referrers' virtual paths, sorted and without duplicates.</returns>
-    public Task<IReadOnlyList<string>> FindReferrersOutsideAsync(IReadOnlyList<string> sources, CancellationToken cancellationToken);
+    public Task<IReadOnlyList<AssetPath>> FindReferrersOutsideAsync(IReadOnlyList<AssetPath> sources, CancellationToken cancellationToken);
 
     /// <summary>Finds the open documents whose files a delete of the sources removes, so the delete can name them.</summary>
     /// <param name="sources">The assets or folders to delete.</param>
     /// <returns>The documents' names, each with whether it has unsaved edits, sorted by name.</returns>
-    public IReadOnlyList<(string Name, bool IsDirty)> FindOpenDocuments(IReadOnlyList<string> sources);
+    public IReadOnlyList<(string Name, bool IsDirty)> FindOpenDocuments(IReadOnlyList<AssetPath> sources);
 
     /// <summary>Copies assets or folders into a folder under unique names; references are not rewritten.</summary>
     /// <param name="sources">The virtual paths to copy.</param>
@@ -76,7 +77,7 @@ public interface IAssetRelocationService
     /// <param name="cancellationToken">Cancels before the first copy.</param>
     /// <returns>The copies' virtual paths.</returns>
     /// <exception cref="AssetRelocationException">The copy is not allowed; nothing was created.</exception>
-    public Task<IReadOnlyList<string>> CopyAsync(IReadOnlyList<string> sources, string targetFolder, CancellationToken cancellationToken);
+    public Task<IReadOnlyList<AssetPath>> CopyAsync(IReadOnlyList<AssetPath> sources, AssetPath targetFolder, CancellationToken cancellationToken);
 
     /// <summary>Moves assets or folders, with their companion files, to the Recycle Bin.</summary>
     /// <param name="sources">The virtual paths to delete.</param>
@@ -84,5 +85,5 @@ public interface IAssetRelocationService
     /// <param name="cancellationToken">Cancels before deleting.</param>
     /// <returns>Completion after the files are recycled.</returns>
     /// <exception cref="AssetRelocationException">The delete is not allowed; nothing was deleted.</exception>
-    public Task DeleteAsync(IReadOnlyList<string> sources, Func<IReadOnlyList<string>, Task> recycle, CancellationToken cancellationToken);
+    public Task DeleteAsync(IReadOnlyList<AssetPath> sources, Func<IReadOnlyList<string>, Task> recycle, CancellationToken cancellationToken);
 }

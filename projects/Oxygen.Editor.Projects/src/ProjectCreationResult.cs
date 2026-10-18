@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
@@ -36,9 +38,9 @@ public sealed record ProjectCreationResult
     public bool OpenStarterScene { get; init; }
 
     /// <summary>
-    ///     Gets the starter scene asset URI declared by the template, when available.
+    ///     Gets the starter scene declared by the template, when available.
     /// </summary>
-    public Uri? StarterSceneAssetUri { get; init; }
+    public AssetPath? StarterScene { get; init; }
 
     /// <summary>
     ///     Gets the failure message when creation fails.
@@ -62,7 +64,7 @@ public sealed record ProjectCreationResult
         IProjectInfo projectInfo,
         ProjectValidationResult validation,
         bool openStarterScene = false,
-        Uri? starterSceneAssetUri = null)
+        AssetPath? starterScene = null)
         => new()
         {
             Succeeded = true,
@@ -70,7 +72,7 @@ public sealed record ProjectCreationResult
             ProjectInfo = projectInfo,
             Validation = validation,
             OpenStarterScene = openStarterScene,
-            StarterSceneAssetUri = starterSceneAssetUri,
+            StarterScene = starterScene,
         };
 
     /// <summary>

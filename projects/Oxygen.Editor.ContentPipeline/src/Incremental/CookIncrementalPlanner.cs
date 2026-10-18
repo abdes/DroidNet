@@ -8,6 +8,7 @@ using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
@@ -23,7 +24,7 @@ internal static class CookIncrementalPlanner
         foreach (var mount in mounts.Distinct(StringComparer.Ordinal))
         {
             if (publication.UnavailableRoots.Any(root => string.Equals(root.Name, mount, StringComparison.Ordinal))
-                || publication.FindProjectRoot(mount) is not { } path)
+                || publication.FindProjectRoot(mount)?.FullPath is not { } path)
             {
                 continue;
             }
@@ -41,7 +42,7 @@ internal static class CookIncrementalPlanner
     /// <summary>Compares captured inputs with verified output facts without performing more I/O.</summary>
     public static CookIncrementalPlan CreatePlan(string producer, IReadOnlyList<CookSnapshotInput> inputs,
         CookDependencyGraph graph, CookProvenance previous, ImmutableDictionary<string, CookedInventoryReport> inventories,
-        IReadOnlySet<string>? rebuiltRoots = null, IReadOnlySet<Uri>? removedSources = null)
+        IReadOnlySet<string>? rebuiltRoots = null, IReadOnlySet<AssetPath>? removedSources = null)
     {
         var fingerprints = graph.Assets.ToImmutableDictionary(static input => input.AssetUri, input => Fingerprint(input, producer, inputs, graph));
         foreach (var builtin in CookIncrementalPlan.Builtins(graph))
@@ -107,7 +108,7 @@ internal static class CookIncrementalPlanner
     /// <param name="source">The stable engine identity.</param>
     /// <param name="producer">The engine/tool/generator content identity.</param>
     /// <returns>The deterministic fingerprint.</returns>
-    public static string GeneratedFingerprint(Uri source, string producer) => Hash(new { Version = 1, Source = source.AbsoluteUri, Producer = producer });
+    public static string GeneratedFingerprint(AssetPath source, string producer) => Hash(new { Version = 1, Source = source.ToUriString(), Producer = producer });
 
     internal static string Fingerprint(ContentCookInput input, string producer, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph)
     {
@@ -117,12 +118,12 @@ internal static class CookIncrementalPlanner
     }
 
     internal static string Fingerprint(ContentCookInput input, string producer, IEnumerable<CookSnapshotInput> files,
-        IEnumerable<Uri> dependencies, IEnumerable<CookedDependencySnapshot> cookedDependencies)
+        IEnumerable<AssetPath> dependencies, IEnumerable<CookedDependencySnapshot> cookedDependencies)
     {
         var authored = Hash(new
         {
             Version = 1,
-            Source = input.AssetUri.AbsoluteUri,
+            Source = input.AssetUri.ToUriString(),
             input.Kind,
             input.OutputVirtualPath,
             Producer = producer,
@@ -135,10 +136,10 @@ internal static class CookIncrementalPlanner
             }),
 
             // Native descriptors refer to stable virtual asset identities; scalar material bytes do not alter their consumers.
-            Dependencies = dependencies.Select(static uri => uri.AbsoluteUri),
+            Dependencies = dependencies.Select(static uri => uri.ToUriString()),
         });
         var libraries = cookedDependencies
-            .OrderBy(static dependency => dependency.AssetUri.AbsoluteUri, StringComparer.Ordinal).ThenBy(static dependency => dependency.AssetKey, StringComparer.Ordinal).ToArray();
+            .OrderBy(static dependency => dependency.AssetUri).ThenBy(static dependency => dependency.AssetKey, StringComparer.Ordinal).ToArray();
         return libraries.Length == 0 ? authored : Hash(new { Authored = authored, Libraries = libraries });
     }
 

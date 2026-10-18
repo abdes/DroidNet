@@ -50,7 +50,7 @@ public sealed partial class SkyLightSectionView
     {
         if (sender is FrameworkElement { DataContext: AssetPickerRow row } && row.Item.IsEnabled)
         {
-            this.ViewModel?.SetCubemap(row.Item.Uri);
+            this.ViewModel?.SetCubemap(row.Item.Asset);
             this.CubemapFlyout.Hide();
         }
     }

@@ -12,12 +12,12 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <summary>Resolves imported outputs to retained work without inventing native asset identities.</summary>
 internal sealed class ImportedSourceIndex
 {
-    private readonly Dictionary<Uri, Uri> previousOwners = [];
+    private readonly Dictionary<AssetPath, AssetPath> previousOwners = [];
     private readonly List<Entry> entries = [];
     private string? projectRoot;
 
     /// <summary>Gets previously identified native outputs for project key lookup.</summary>
-    public IReadOnlyCollection<Uri> KnownOutputs => this.previousOwners.Keys;
+    public IReadOnlyCollection<AssetPath> KnownOutputs => this.previousOwners.Keys;
 
     /// <summary>Reads saved source namespaces and trusted prior output ownership once for a cook.</summary>
     /// <param name="project">The project's authoring mount declarations.</param>
@@ -40,8 +40,8 @@ internal sealed class ImportedSourceIndex
         var index = new ImportedSourceIndex();
         foreach (var mount in project.AuthoringMounts)
         {
-            var root = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath));
-            var relative = Path.GetRelativePath(project.ProjectRoot, root).Replace('\\', '/');
+            var root = project.ProjectRoot.Combine(mount.RelativePath).FullPath;
+            var relative = Path.GetRelativePath(project.ProjectRoot.FullPath, root).Replace('\\', '/');
             if (Path.IsPathRooted(relative) || relative.StartsWith("..", StringComparison.Ordinal)
                 || relative.Split('/')[0].ToUpperInvariant() is ".COOKED" or ".IMPORTED" or ".BUILD" or ".PIPELINE" || !Directory.Exists(root))
             {
@@ -61,11 +61,10 @@ internal sealed class ImportedSourceIndex
                 try
                 {
                     var settings = NativeSceneImportSettings.Parse(await readSettings(path, cancellationToken).ConfigureAwait(false));
-                    if (string.Equals(settings.ResolveFile(project.ProjectRoot, settings.PrimaryRelativePath), primary, StringComparison.OrdinalIgnoreCase)
-                        && project.AuthoringMounts.Any(item => string.Equals(item.Name, settings.MountPoint, StringComparison.Ordinal)))
+                    if (FileSystemPath.From(settings.ResolveFile(project.ProjectRoot.FullPath, settings.PrimaryRelativePath)) == FileSystemPath.From(primary)
+                        && project.AuthoringMounts.Any(item => string.Equals(item.Name, settings.MountPoint, StringComparison.Ordinal))
+                        && AssetPath.TryCreate(mount.Name, FileSystemPath.From(primary).GetPathBelow(FileSystemPath.From(root)), out var sourceUri))
                     {
-                        var sourceRelative = Path.GetRelativePath(root, primary).Replace('\\', '/');
-                        var sourceUri = new Uri(AssetUris.Scheme + ":///" + Uri.EscapeDataString(mount.Name) + "/" + string.Join('/', sourceRelative.Split('/').Select(Uri.EscapeDataString)));
                         index.entries.AddRange(settings.OutputPrefixes.Select(prefix => new Entry(prefix, sourceUri)));
                     }
                 }
@@ -78,10 +77,10 @@ internal sealed class ImportedSourceIndex
 
         // A moved or deleted model, or an output its sidecar's group no longer covers, keeps no ownership:
         // the relocation rewrote every reference to it, and the next cook retires it.
-        index.projectRoot = project.ProjectRoot;
+        index.projectRoot = project.ProjectRoot.FullPath;
         foreach (var product in previous.Products.Where(static product => product.ImportedSource is not null))
         {
-            if (Incremental.CookRootRepair.IsRetired(project.ProjectRoot, product))
+            if (Incremental.CookRootRepair.IsRetired(project.ProjectRoot.FullPath, product))
             {
                 continue;
             }
@@ -110,7 +109,7 @@ internal sealed class ImportedSourceIndex
     /// <param name="uri">The requested native identity.</param>
     /// <param name="role">The source's role in the closure.</param>
     /// <returns>The retained input, or null for an output without an imported owner.</returns>
-    public ContentCookInput? ResolveOutput(ProjectContext project, Uri uri, ContentCookInputRole role)
+    public ContentCookInput? ResolveOutput(ProjectContext project, AssetPath uri, ContentCookInputRole role)
     {
         var resolution = this.ResolveOutputFacts(project, uri, role);
         return resolution.Error is { } error ? throw new InvalidDataException(error) : resolution.Source;
@@ -121,16 +120,15 @@ internal sealed class ImportedSourceIndex
     /// <param name="uri">The requested native identity.</param>
     /// <param name="role">The source's role in the closure.</param>
     /// <returns>The source, a conflict, or an unowned output.</returns>
-    public Resolution ResolveOutputFacts(ProjectContext project, Uri uri, ContentCookInputRole role)
+    public Resolution ResolveOutputFacts(ProjectContext project, AssetPath uri, ContentCookInputRole role)
     {
-        if (!string.Equals(uri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase)
-            || Path.GetExtension(uri.AbsolutePath).ToUpperInvariant() is not (".OGEO" or ".OMAT" or ".OSCENE"))
+        if (Path.GetExtension(uri.Name).ToUpperInvariant() is not (".OGEO" or ".OMAT" or ".OSCENE"))
         {
             return new(Source: null, Error: null);
         }
 
-        var path = Uri.UnescapeDataString(uri.AbsolutePath);
-        var owners = this.entries.Where(entry => path.StartsWith(entry.Prefix, StringComparison.OrdinalIgnoreCase)).Select(static entry => entry.Source).Distinct().ToArray();
+        var path = uri.VirtualPath;
+        var owners = this.entries.Where(entry => path.StartsWith(entry.Prefix, StringComparison.Ordinal)).Select(static entry => entry.Source).Distinct().ToArray();
         _ = this.previousOwners.TryGetValue(uri, out var previous);
         if (owners.Length > 1 || (owners.Length == 1 && previous is not null && previous != owners[0]))
         {
@@ -144,7 +142,7 @@ internal sealed class ImportedSourceIndex
         }
 
         var descriptor = CookInputResolver.Resolve(project, uri, role);
-        return File.Exists(descriptor.SourceAbsolutePath)
+        return File.Exists(descriptor.SourceAbsolutePath.FullPath)
             ? new(Source: null, $"Imported output '{uri}' conflicts with authored descriptor '{descriptor.AssetUri}'. Keep separate output destinations.")
             : new(CookInputResolver.Resolve(project, source, role), Error: null);
     }
@@ -152,26 +150,24 @@ internal sealed class ImportedSourceIndex
     /// <summary>Finds declared and recorded native output for a source inspection scope.</summary>
     /// <param name="scope">The source identity or source folder to inspect.</param>
     /// <returns>Declared output namespaces and previously published outputs for matching sources.</returns>
-    public IEnumerable<string> GetInspectionOutputScopes(Uri scope)
+    public IEnumerable<string> GetInspectionOutputScopes(AssetPath scope)
     {
-        var path = Uri.UnescapeDataString(scope.AbsolutePath).TrimEnd('/');
-        bool Matches(Uri source) => string.Equals(Uri.UnescapeDataString(source.AbsolutePath), path, StringComparison.OrdinalIgnoreCase)
-            || Uri.UnescapeDataString(source.AbsolutePath).StartsWith(path + "/", StringComparison.OrdinalIgnoreCase);
+        bool Matches(AssetPath source) => source.IsSameOrInside(scope);
         return this.entries.Where(entry => Matches(entry.Source)).Select(static entry => entry.Prefix.TrimEnd('/'))
-            .Concat(this.previousOwners.Where(pair => Matches(pair.Value)).Select(static pair => Uri.UnescapeDataString(pair.Key.AbsolutePath)))
-            .Distinct(StringComparer.OrdinalIgnoreCase);
+            .Concat(this.previousOwners.Where(pair => Matches(pair.Value)).Select(static pair => pair.Key.VirtualPath))
+            .Distinct(StringComparer.Ordinal);
     }
 
     /// <summary>Includes retained work when the selected folder contains native output rather than descriptors.</summary>
     /// <param name="project">The owning project.</param>
     /// <param name="folder">The requested virtual folder.</param>
     /// <returns>The distinct source owners whose output intersects the folder.</returns>
-    public IEnumerable<ContentCookInput> ResolveFolder(ProjectContext project, Uri folder)
+    public IEnumerable<ContentCookInput> ResolveFolder(ProjectContext project, AssetPath folder)
     {
-        var prefix = Uri.UnescapeDataString(folder.AbsolutePath).TrimEnd('/') + "/";
-        var sources = this.entries.Where(entry => entry.Prefix.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || prefix.StartsWith(entry.Prefix, StringComparison.OrdinalIgnoreCase))
+        var prefix = folder.VirtualPath.TrimEnd('/') + "/";
+        var sources = this.entries.Where(entry => entry.Prefix.StartsWith(prefix, StringComparison.Ordinal) || prefix.StartsWith(entry.Prefix, StringComparison.Ordinal))
             .Select(static entry => entry.Source)
-            .Concat(this.previousOwners.Where(pair => Uri.UnescapeDataString(pair.Key.AbsolutePath).StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).Select(static pair => pair.Value));
+            .Concat(this.previousOwners.Where(pair => pair.Key.VirtualPath.StartsWith(prefix, StringComparison.Ordinal)).Select(static pair => pair.Value));
         return sources.Distinct().Select(uri => CookInputResolver.Resolve(project, uri, ContentCookInputRole.Primary));
     }
 
@@ -182,7 +178,7 @@ internal sealed class ImportedSourceIndex
     {
         foreach (var input in scope.Inputs.Where(static input => input.Kind != ContentCookAssetKind.ForeignSource && input.OutputVirtualPath is not null))
         {
-            _ = this.ResolveOutput(scope.Project, new Uri(AssetUris.Scheme + "://" + input.OutputVirtualPath), input.Role);
+            _ = this.ResolveOutput(scope.Project, AssetPath.Parse(input.OutputVirtualPath!), input.Role);
         }
 
         return scope.ScopeUri is not { } requested ? scope
@@ -192,11 +188,11 @@ internal sealed class ImportedSourceIndex
             ? scope with { Inputs = [source], RequiredImportedOutputs = [requested] } : scope;
     }
 
-    private bool IsOutsideCurrentGroup(Uri source, Uri output)
+    private bool IsOutsideCurrentGroup(AssetPath source, AssetPath output)
     {
         var prefixes = this.entries.Where(entry => entry.Source == source).Select(static entry => entry.Prefix).ToArray();
-        var path = Uri.UnescapeDataString(output.AbsolutePath);
-        return prefixes.Length != 0 && !prefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        var path = output.VirtualPath;
+        return prefixes.Length != 0 && !prefixes.Any(prefix => path.StartsWith(prefix, StringComparison.Ordinal));
     }
 
     /// <summary>One ownership lookup, including a named conflict without claiming an output exists.</summary>
@@ -204,5 +200,5 @@ internal sealed class ImportedSourceIndex
     /// <param name="Error">The conflict requiring user correction.</param>
     public sealed record Resolution(ContentCookInput? Source, string? Error);
 
-    private sealed record Entry(string Prefix, Uri Source);
+    private sealed record Entry(string Prefix, AssetPath Source);
 }

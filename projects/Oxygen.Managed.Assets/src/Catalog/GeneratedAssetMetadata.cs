@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Managed.Assets.Catalog;
 
 /// <summary>Engine-provided recipe identity and its default cooked contribution.</summary>
@@ -9,7 +11,7 @@ namespace Oxygen.Managed.Assets.Catalog;
 /// <param name="DescriptorSchema">The engine descriptor schema identifying the recipe version.</param>
 /// <param name="CookedVirtualPath">The recipe's runtime output path in the requested mount.</param>
 /// <param name="AuthoringCategory">The engine-owned authoring availability.</param>
-public sealed record GeneratedAssetMetadata(string CanonicalName, string DescriptorSchema, string CookedVirtualPath, GeneratedAssetCategory AuthoringCategory)
+public sealed record GeneratedAssetMetadata(string CanonicalName, string DescriptorSchema, AssetPath CookedVirtualPath, GeneratedAssetCategory AuthoringCategory)
 {
     /// <summary>Gets a value indicating whether discovery is using a previously captured engine catalog.</summary>
     public bool IsLastKnown { get; init; }

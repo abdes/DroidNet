@@ -118,7 +118,7 @@ public sealed partial class PreviewSession
         }
         catch (Exception exception)
         {
-            this.LogCookedRootRefreshFailed(exception, stage, active.ProjectRoot, mounted ? "mounted" : "unavailable");
+            this.LogCookedRootRefreshFailed(exception, stage, active.ProjectRoot.FullPath, mounted ? "mounted" : "unavailable");
             var title = mounted ? "Content Browser unavailable" : "Preview unavailable";
             var message = $"Failed during {stage}: {exception.Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()}";
             RuntimeOperationResults.PublishFailure(
@@ -130,7 +130,7 @@ public sealed partial class PreviewSession
                 title,
                 message,
                 this.ProjectScope(),
-                active.ProjectRoot,
+                active.ProjectRoot.FullPath,
                 exception,
                 exception.ToString());
             if (!mounted && !await this.SuspendCookedContentAsync(active).ConfigureAwait(true))
@@ -157,7 +157,7 @@ public sealed partial class PreviewSession
             }
             catch (CookedLibraryChangedException changed)
             {
-                this.LogCookedLibraryChanged(changed, active.ProjectRoot);
+                this.LogCookedLibraryChanged(changed, active.ProjectRoot.FullPath);
                 reader.Dispose();
                 reader = await publication.AcquireForMountAsync(active, CancellationToken.None).ConfigureAwait(true);
                 return (reader, await mounts.PrepareAsync(active, reader, CancellationToken.None).ConfigureAwait(true));
@@ -177,12 +177,12 @@ public sealed partial class PreviewSession
             var cleanupFailures = await publication.MaintainAsync(active, CancellationToken.None).ConfigureAwait(true);
             if (cleanupFailures.Count != 0)
             {
-                this.PublishCleanupWarning(string.Join(Environment.NewLine, cleanupFailures), active.ProjectRoot);
+                this.PublishCleanupWarning(string.Join(Environment.NewLine, cleanupFailures), active.ProjectRoot.FullPath);
             }
         }
         catch (Exception cleanup) when (cleanup is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
         {
-            this.PublishCleanupWarning(cleanup.Message, active.ProjectRoot, cleanup);
+            this.PublishCleanupWarning(cleanup.Message, active.ProjectRoot.FullPath, cleanup);
         }
     }
 
@@ -196,7 +196,7 @@ public sealed partial class PreviewSession
         }
         catch (Exception failure)
         {
-            this.LogCookedContentSuspensionFailed(failure, active.ProjectRoot);
+            this.LogCookedContentSuspensionFailed(failure, active.ProjectRoot.FullPath);
             RuntimeOperationResults.PublishFailure(
                 results,
                 status,
@@ -206,7 +206,7 @@ public sealed partial class PreviewSession
                 "Preview suspension failed",
                 "The preview could not be suspended after content refresh failed.",
                 this.ProjectScope(),
-                active.ProjectRoot,
+                active.ProjectRoot.FullPath,
                 failure,
                 failure.ToString());
             return false;
@@ -232,7 +232,7 @@ public sealed partial class PreviewSession
             {
                 ProjectId = active.ProjectId,
                 ProjectName = active.Name,
-                ProjectPath = active.ProjectRoot,
+                ProjectPath = active.ProjectRoot.FullPath,
             }
             : AffectedScope.Empty;
 

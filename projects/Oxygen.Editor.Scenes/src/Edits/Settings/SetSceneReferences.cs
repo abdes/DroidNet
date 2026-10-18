@@ -45,7 +45,7 @@ public sealed record SetSceneReferences : ISceneEdit
     {
         ArgumentNullException.ThrowIfNull(scope);
         var before = Copy(scope.Scene.References);
-        var references = Copy(SceneReferenceRetargeting.Retarget(this.References, scope.Moved) ?? this.References);
+        var references = Copy(SceneReferenceRetargeting.Retarget(this.References, scope.Moved, scope.Moved) ?? this.References);
         if (AreEqual(before, references))
         {
             return new SceneEditApplication.Applied(this, []);

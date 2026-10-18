@@ -5,6 +5,7 @@
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspection;
 
@@ -35,7 +36,7 @@ public sealed partial class CookedInspectionView
 
     private void OnShowAsset(object sender, RoutedEventArgs args)
     {
-        if (sender is FrameworkElement { Tag: Uri uri })
+        if (sender is FrameworkElement { Tag: AssetPath uri })
         {
             this.ViewModel?.ShowAssetCommand.Execute(uri);
         }

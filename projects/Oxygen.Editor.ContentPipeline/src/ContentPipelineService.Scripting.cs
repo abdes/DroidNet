@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -32,7 +33,7 @@ public sealed partial class ContentPipelineService
 
         // The cooker reports against the scene job's descriptor; a manifest cooks each scene from its own descriptor.
         var scripted = descriptors.Where(static descriptor => descriptor.ScriptBindings.Count > 0).ToArray();
-        var descriptor = scripted.FirstOrDefault(candidate => string.Equals(Path.GetFullPath(candidate.DescriptorPath), issue.AffectedPath is null ? null : Path.GetFullPath(issue.AffectedPath), StringComparison.OrdinalIgnoreCase))
+        var descriptor = scripted.FirstOrDefault(candidate => issue.AffectedPath is { } affected && FileSystemPath.From(candidate.DescriptorPath) == FileSystemPath.From(affected))
             ?? (scripted.Length == 1 ? scripted[0] : null);
         var binding = int.Parse(match.Groups["binding"].Value, CultureInfo.InvariantCulture);
         if (descriptor is null || binding >= descriptor.ScriptBindingSites.Count

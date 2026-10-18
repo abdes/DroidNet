@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -143,8 +144,9 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
 
     private static bool IsInOperationFolder(string path, ContentCookOperation operation)
     {
-        var folder = Path.GetFullPath(Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")));
-        return Path.GetFullPath(path).StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        var folder = operation.Project.ProjectRoot.Combine(Path.Combine(".build", "cook", operation.OperationId.ToString("N")));
+        var file = FileSystemPath.From(path);
+        return file != folder && file.IsSameOrInside(folder);
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed", Justification = "ReleaseAfterDrain takes ownership of the request cancellation and the operation lease and disposes them when the drain ends; this method no longer uses or disposes them.")]

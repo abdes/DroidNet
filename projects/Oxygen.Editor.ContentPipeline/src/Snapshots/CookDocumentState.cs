@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
 /// <summary>What an open document's owner reports to the cook: whether its file has unsaved edits, and the saved file's identity.</summary>
@@ -10,7 +12,7 @@ namespace Oxygen.Editor.ContentPipeline.Snapshots;
 /// <param name="IsDirty">Whether the document has unsaved changes or an edit in progress.</param>
 /// <param name="SavedContentHash">The saved file hash known to the document owner.</param>
 public sealed record CookDocumentState(
-    string SourcePath,
+    FileSystemPath SourcePath,
     string DisplayName,
     bool IsDirty,
     string SavedContentHash);

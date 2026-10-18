@@ -2,9 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.ContentPipeline;
+using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets;
 
@@ -15,7 +17,9 @@ public sealed partial class AssetFeed
 
     private static bool Includes(CookRunSnapshot run, AssetEntry item)
     {
-        if (run.Assets.ContainsKey(item.IdentityUri) || (item.ImportSourceUri is { } source && (run.Request.ScopeUri == source || run.Assets.ContainsKey(source))))
+        // The run keys its assets by source file; an asset is the identity its sources stand for.
+        if (run.Assets.Keys.Any(source => AssetFileTypes.ToIdentity(source) == item.Identity)
+            || (item.ImportSource is { } imported && (run.Request.ScopeUri == imported || run.Assets.ContainsKey(imported))))
         {
             return true;
         }
@@ -24,8 +28,8 @@ public sealed partial class AssetFeed
         return run.Request.TargetKind switch
         {
             CookTargetKind.Project => true,
-            CookTargetKind.Folder => scope is not null && item.IdentityUri.AbsolutePath.StartsWith(scope.AbsolutePath.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase),
-            _ => scope == item.IdentityUri,
+            CookTargetKind.Folder => scope is not null && item.Identity != scope && item.Identity.IsSameOrInside(scope),
+            _ => scope is not null && AssetFileTypes.ToIdentity(scope) == item.Identity,
         };
     }
 
@@ -43,7 +47,7 @@ public sealed partial class AssetFeed
 
             this.PublishLiveState(args.SavedSourceChanged ? args.After!.SourcePath : null);
             if (args.SavedSourceChanged && this.projectContextService.ActiveProject is { } project
-                && args.After!.SourcePath.StartsWith(Path.GetFullPath(project.ProjectRoot).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                && args.After!.SourcePath != project.ProjectRoot && args.After.SourcePath.IsSameOrInside(project.ProjectRoot))
             {
                 _ = this.RequestRefresh(invalidate: true);
             }
@@ -55,7 +59,7 @@ public sealed partial class AssetFeed
         lock (this.refreshSync)
         {
             if (this.disposed || this.projectContextService.ActiveProject is not { } project
-                || args.Run.ProjectId != project.ProjectId || !string.Equals(args.Run.ProjectRoot, project.ProjectRoot, StringComparison.OrdinalIgnoreCase))
+                || args.Run.ProjectId != project.ProjectId || args.Run.ProjectRoot != project.ProjectRoot)
             {
                 return;
             }
@@ -68,7 +72,7 @@ public sealed partial class AssetFeed
         }
     }
 
-    private void PublishLiveState(string? changedSource = null)
+    private void PublishLiveState(FileSystemPath? changedSource = null)
     {
         var current = this.items.Value;
         var updated = this.ApplyLiveState(current, changedSource);
@@ -78,11 +82,11 @@ public sealed partial class AssetFeed
         }
     }
 
-    private AssetEntry[] ApplyLiveState(IReadOnlyList<AssetEntry> source, string? changedSource = null)
+    private AssetEntry[] ApplyLiveState(IReadOnlyList<AssetEntry> source, FileSystemPath? changedSource = null)
     {
         var documentStates = this.documents.GetState().Documents;
         var project = this.projectContextService.ActiveProject;
-        var runs = this.cooks.Runs.Where(run => run.ProjectId == project?.ProjectId && string.Equals(run.ProjectRoot, project?.ProjectRoot, StringComparison.OrdinalIgnoreCase))
+        var runs = this.cooks.Runs.Where(run => run.ProjectId == project?.ProjectId && run.ProjectRoot == project.ProjectRoot)
             .OrderByDescending(ActivityPriority).ThenByDescending(static run => run.StartedAt).ToArray();
         var authored = source.Select(item =>
         {
@@ -91,14 +95,14 @@ public sealed partial class AssetFeed
                 return item;
             }
 
-            var paths = status.SourcePaths.IsEmpty ? new[] { item.DescriptorPath } : status.SourcePaths.ToArray();
-            if (changedSource is not null && paths.Contains(changedSource, StringComparer.OrdinalIgnoreCase)
+            IReadOnlyList<FileSystemPath> paths = !status.SourcePaths.IsEmpty ? status.SourcePaths : item.DescriptorPath is { } descriptor ? [descriptor] : [];
+            if (changedSource is not null && paths.Contains(changedSource)
                 && status.Freshness == Oxygen.Editor.ContentPipeline.Status.AssetCookFreshness.Current)
             {
                 status = status with { Freshness = Oxygen.Editor.ContentPipeline.Status.AssetCookFreshness.OutOfDate };
             }
 
-            var dirty = documentStates.Where(document => document.IsDirty && paths.Contains(document.SourcePath, StringComparer.OrdinalIgnoreCase)).ToArray();
+            var dirty = documentStates.Where(document => document.IsDirty && paths.Contains(document.SourcePath)).ToArray();
             var run = runs.FirstOrDefault(candidate => Includes(candidate, item));
             var activity = run is null ? null : new AssetCookActivity(run.OperationId, run.State);
             return ReferenceEquals(status, item.CookStatus) && status.UnsavedDocuments.SequenceEqual(dirty) && item.CookActivity == activity

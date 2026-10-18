@@ -222,7 +222,7 @@ public partial class SceneExplorerViewModel
         public void OnNext(ProjectContext? value)
         {
             if (owner.clipboardProjectId is { } origin && (origin != value?.ProjectId
-                || !string.Equals(owner.clipboardProjectRoot, value?.ProjectRoot, StringComparison.OrdinalIgnoreCase)))
+                || owner.clipboardProjectRoot != value?.ProjectRoot))
             {
                 owner.InvalidateClipboard("The clipboard was cleared because the project changed.");
             }

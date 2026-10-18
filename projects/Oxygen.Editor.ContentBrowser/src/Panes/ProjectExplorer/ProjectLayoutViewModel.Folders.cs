@@ -58,7 +58,7 @@ public partial class ProjectLayoutViewModel
         if (relocation is not null && before is not null)
         {
             var request = new AssetRelocationRequest { Moves = [new(before, RelocationPaths.Rename(before, name, isFolder: true))] };
-            this.LogFolderRenameRequested(before, request.Moves[0].TargetPath);
+            this.LogFolderRenameRequested(before, request.Moves[0].Target);
             var outcome = await relocation.RelocateAsync(request, "Rename folder").ConfigureAwait(true);
             return outcome switch
             {
@@ -80,7 +80,7 @@ public partial class ProjectLayoutViewModel
         folder.Label = name;
         if (before is not null && contentBrowserState.SelectedFolders.Contains(before) && this.GetVirtualPath(folder) is { } after)
         {
-            contentBrowserState.SetSelectedFolders(contentBrowserState.SelectedFolders.Select(path => string.Equals(path, before, StringComparison.Ordinal) ? after : path));
+            contentBrowserState.SetSelectedFolders(contentBrowserState.SelectedFolders.Select(path => path == before ? after : path));
         }
 
         return TreeItemRenameResult.Success;
@@ -101,7 +101,7 @@ public partial class ProjectLayoutViewModel
             return TreeDropResult.Rejected;
         }
 
-        var sources = request.Items.Select(this.GetVirtualPath).OfType<string>().ToArray();
+        var sources = request.Items.Select(this.GetVirtualPath).OfType<AssetPath>().ToArray();
         this.LogFolderDropRequested(request.Operation, sources, parent);
 
         if (request.Operation == TreeDropOperation.Copy)
@@ -110,8 +110,8 @@ public partial class ProjectLayoutViewModel
                 ? TreeDropResult.Committed(request.Items) : TreeDropResult.Rejected;
         }
 
-        var moves = sources.Where(source => !string.Equals(RelocationPaths.GetParent(source), parent, StringComparison.Ordinal))
-            .Select(source => new AssetRelocationMove(source, RelocationPaths.Combine(parent, RelocationPaths.GetName(source)))).ToArray();
+        var moves = sources.Where(source => source.Parent != parent)
+            .Select(source => new AssetRelocationMove(source, parent.Combine(source.Name))).ToArray();
         return moves.Length != 0 && await relocation.RelocateAsync(new AssetRelocationRequest { Moves = moves }, "Move folders").ConfigureAwait(true) is { Succeeded: true }
             ? TreeDropResult.Committed(request.Items)
             : TreeDropResult.Rejected;
@@ -251,10 +251,10 @@ public partial class ProjectLayoutViewModel
 
     // The folders under an authoring mount: they can be copied, moved and deleted. Mount roots are changed in Mounts,
     // and the importer's fixed folders are rejected by the delete itself.
-    private string[] GetAuthoredFolders(IEnumerable<ITreeItem> items)
-        => [.. items.OfType<FolderTreeItemAdapter>().Where(IsUnderAuthoringMount).Select(this.GetVirtualPath).OfType<string>()];
+    private AssetPath[] GetAuthoredFolders(IEnumerable<ITreeItem> items)
+        => [.. items.OfType<FolderTreeItemAdapter>().Where(IsUnderAuthoringMount).Select(this.GetVirtualPath).OfType<AssetPath>()];
 
-    private async Task DeleteFoldersAsync(string[] folders)
+    private async Task DeleteFoldersAsync(AssetPath[] folders)
     {
         if (relocation is null || folders.Length == 0)
         {
@@ -289,13 +289,13 @@ public partial class ProjectLayoutViewModel
         var moves = message.Moves.Where(static move => move.IsDirectory)
             .Select(move => (From: RelocationPaths.ToVirtual(project, move.Source), To: RelocationPaths.ToVirtual(project, move.Target)))
             .Where(static move => move.From is not null && move.To is not null).ToArray();
-        string Map(string folder)
+        AssetPath Map(AssetPath folder)
         {
             foreach (var (from, to) in moves)
             {
-                if (RelocationPaths.IsSameOrInside(folder, from!))
+                if (folder.IsSameOrInside(from!))
                 {
-                    return to + folder[from!.Length..];
+                    return folder == from ? to! : to!.Combine(folder.GetPathBelow(from!));
                 }
             }
 
@@ -304,7 +304,7 @@ public partial class ProjectLayoutViewModel
 
         this.LogReloadingTreeAfterFileChanges(moves.Length, message.DeletedFiles.Count);
         var selected = contentBrowserState.SelectedFolders.Select(Map).ToArray();
-        if (!selected.SequenceEqual(contentBrowserState.SelectedFolders, StringComparer.Ordinal))
+        if (!selected.SequenceEqual(contentBrowserState.SelectedFolders))
         {
             contentBrowserState.SetSelectedFolders(selected);
         }
@@ -319,7 +319,7 @@ public partial class ProjectLayoutViewModel
     {
         try
         {
-            var parent = await this.FindAdapterByVirtualPathAsync(request.ParentFolder.TrimEnd('/')).ConfigureAwait(true) as TreeItemAdapter;
+            var parent = await this.FindAdapterByVirtualPathAsync(request.ParentFolder).ConfigureAwait(true) as TreeItemAdapter;
             var location = parent is null ? null : parent switch
             {
                 AuthoringMountPointTreeItemAdapter mount when !IsPersistedProjectRelativeVirtualMount(mount.MountPoint) => mount.RootFolder,

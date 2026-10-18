@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using DroidNet.Controls;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
@@ -29,7 +30,7 @@ public sealed class CookedFolderTreeItemAdapter : TreeItemAdapter
     }
 
     /// <summary>Gets the browser path without exposing generation storage.</summary>
-    public string VirtualPath => Oxygen.Managed.Core.VirtualPath.Combine(this.mount.VirtualRootPath, this.nativePath);
+    public AssetPath VirtualPath => this.mount.VirtualRootPath.Combine(this.nativePath.TrimStart('/'));
 
     /// <summary>Gets the same folder icon used by authored folders.</summary>
     public string IconGlyph => this.IsExpanded && this.folders.Count > 0 ? "\uE838" : "\uE8B7";

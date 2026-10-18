@@ -16,6 +16,7 @@ using DroidNet.Routing;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.ContentPipeline.Relocation;
@@ -190,10 +191,10 @@ public partial class ProjectLayoutViewModel(
             return;
         }
 
-        var path = await this.ResolveFolderNavigationPathAsync(root, folder).ConfigureAwait(true);
-        if (path is not null && this.IsSelectionRequestCurrent(version, root))
+        var selection = await this.ResolveFolderNavigationAsync(root, folder).ConfigureAwait(true);
+        if (selection is not null && this.IsSelectionRequestCurrent(version, root))
         {
-            contentBrowserState.SetSelectedFolders([path]);
+            contentBrowserState.SetSelectedFolders(selection);
             await this.UpdateTreeSelectionFromStateAsync().ConfigureAwait(true);
         }
     }
@@ -311,7 +312,7 @@ public partial class ProjectLayoutViewModel(
         if (existing is not null)
         {
             await this.ReloadMountTreeAsync().ConfigureAwait(true);
-            contentBrowserState.SetSelectedFolders(["/" + existing.Name]);
+            contentBrowserState.SetSelectedFolders([AssetPath.Create(existing.Name)]);
             return;
         }
 
@@ -319,7 +320,7 @@ public partial class ProjectLayoutViewModel(
         await this.ApplyMountCandidateAsync(expected, candidate).ConfigureAwait(true);
         if (projectContextService.ActiveProject?.AuthoringMounts.Any(mount => string.Equals(mount.Name, name, StringComparison.Ordinal) && string.Equals(mount.RelativePath, path, StringComparison.Ordinal)) == true)
         {
-            contentBrowserState.SetSelectedFolders(["/" + name]);
+            contentBrowserState.SetSelectedFolders([AssetPath.Create(name)]);
         }
     }
 
@@ -339,7 +340,8 @@ public partial class ProjectLayoutViewModel(
             return;
         }
 
-        var relative = GetRelativeMountPath(expected.ProjectRoot, definition.AbsoluteFolderPath);
+        var folder = FileSystemPath.From(definition.AbsoluteFolderPath);
+        var relative = GetRelativeMountPath(expected.ProjectRoot, folder);
         var isCooked = await storage.DocumentExistsAsync(Path.Combine(definition.AbsoluteFolderPath, "container.index.bin")).ConfigureAwait(true);
         if (relative is not null && !isCooked)
         {
@@ -347,7 +349,7 @@ public partial class ProjectLayoutViewModel(
         }
         else
         {
-            candidate.LocalFolderMounts.Add(new(definition.MountPointName, definition.AbsoluteFolderPath));
+            candidate.LocalFolderMounts.Add(new(definition.MountPointName, folder));
         }
 
         await this.ApplyMountCandidateAsync(expected, candidate).ConfigureAwait(true);
@@ -360,16 +362,16 @@ public partial class ProjectLayoutViewModel(
         this.LogRestoreStateStart();
 
         var selectedFolders = RouteStateMapping.GetSelectedFolders(this.activeRoute);
-        foreach (var relativePath in selectedFolders)
+        foreach (var folder in selectedFolders)
         {
-            this.LogRestoreStateAddFolder(relativePath);
+            this.LogRestoreStateAddFolder(folder);
         }
 
         // Important: apply selection via ContentBrowserState so that PropertyChanged is raised.
         // The assets pane refreshes itself on SelectedFolders PropertyChanged.
         contentBrowserState.SetSelectedFolders(selectedFolders);
 
-        this.LogRestoreStateFinal(string.Join(", ", contentBrowserState.SelectedFolders));
+        this.LogRestoreStateFinal(contentBrowserState.SelectedFolders);
     }
 
     private void OnMountRenamed(object? sender, MountRenamedEventArgs e)
@@ -413,7 +415,7 @@ public partial class ProjectLayoutViewModel(
 
         foreach (var mount in projectInfo.LocalFolderMounts)
         {
-            await this.RestoreMountAsync(root, context, mount.Name, mount.AbsolutePath, isProjectRelative: false, mount.IsExpanded).ConfigureAwait(true);
+            await this.RestoreMountAsync(root, context, mount.Name, mount.Root.FullPath, isProjectRelative: false, mount.IsExpanded).ConfigureAwait(true);
         }
     }
 
@@ -436,7 +438,7 @@ public partial class ProjectLayoutViewModel(
             context.ProjectId,
             context.Name,
             context.Category,
-            context.ProjectRoot,
+            context.ProjectRoot.FullPath,
             context.Thumbnail)
         {
             DefaultSceneId = context.DefaultSceneId,
@@ -492,15 +494,14 @@ public partial class ProjectLayoutViewModel(
         this.LogTreeSelectionChangedUpdatingState(multipleSelection.SelectedIndices.Count);
 
         // Get currently selected folder adapters from ALL selected indices.
-        // For now, only folder nodes and the project root contribute to ContentBrowserState.SelectedFolders.
+        // Folder and mount rows select their folder; the project's row selects no folder, which browses them all.
         var selectedFolders = multipleSelection.SelectedIndices
             .Select(this.GetShownItemAt)
             .Select(this.GetVirtualPath)
-            .Where(static p => !string.IsNullOrEmpty(p))
-            .Select(static p => p!)
+            .OfType<AssetPath>()
             .ToList();
 
-        this.LogSelectedFolders(string.Join(", ", selectedFolders));
+        this.LogSelectedFolders(selectedFolders);
 
         // Update ContentBrowserState
         this.LogUpdatingContentBrowserState(selectedFolders.Count);
@@ -520,7 +521,7 @@ public partial class ProjectLayoutViewModel(
 
         if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
         {
-            this.LogContentBrowserStateSelectedFoldersChanged(string.Join(", ", contentBrowserState.SelectedFolders));
+            this.LogContentBrowserStateSelectedFoldersChanged(contentBrowserState.SelectedFolders);
             await this.UpdateTreeSelectionFromStateAsync().ConfigureAwait(true);
         }
     }
@@ -538,21 +539,14 @@ public partial class ProjectLayoutViewModel(
             : null;
     }
 
-    private async Task<ITreeItem?> FindAdapterByVirtualPathAsync(string virtualPath)
+    private async Task<ITreeItem?> FindAdapterByVirtualPathAsync(AssetPath virtualPath)
     {
         if (this.projectRoot == null)
         {
             return null;
         }
 
-        // virtualPath is guaranteed to be canonical absolute and not "/"
-        var segments = virtualPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length == 0)
-        {
-            return null;
-        }
-
-        var mountName = segments[0];
+        var mountName = virtualPath.Mount;
         var children = await this.projectRoot.Children.ConfigureAwait(true);
 
         TreeItemAdapter? mount = children.OfType<AuthoringMountPointTreeItemAdapter>()
@@ -565,14 +559,7 @@ public partial class ProjectLayoutViewModel(
             return null;
         }
 
-        if (segments.Length == 1)
-        {
-            return mount;
-        }
-
-        // Find subfolder within the mount
-        var relativePath = string.Join('/', segments.Skip(1));
-        return await FindFolderAdapterAsync(mount, relativePath).ConfigureAwait(true);
+        return virtualPath.IsMount ? mount : await FindFolderAdapterAsync(mount, virtualPath.RelativePath).ConfigureAwait(true);
     }
 
     private async Task<IReadOnlyCollection<string>> GetExistingMountPointNamesAsync()
@@ -603,10 +590,9 @@ public partial class ProjectLayoutViewModel(
         return result;
     }
 
-    private string? GetVirtualPath(ITreeItem item)
+    private AssetPath? GetVirtualPath(ITreeItem item)
         => item switch
         {
-            ProjectRootTreeItemAdapter => "/",
             AuthoringMountPointTreeItemAdapter authoring => authoring.VirtualRootPath,
             VirtualFolderMountTreeItemAdapter virtualMount => virtualMount.VirtualRootPath,
             FolderTreeItemAdapter folder => this.GetFolderVirtualPath(folder),
@@ -614,33 +600,28 @@ public partial class ProjectLayoutViewModel(
             _ => null,
         };
 
-    private string? GetFolderVirtualPath(FolderTreeItemAdapter folder)
+    // A folder under a mount is named from the mount; a folder of the project outside the mounts, from the catalog of
+    // the project's own files.
+    private AssetPath? GetFolderVirtualPath(FolderTreeItemAdapter folder)
     {
-        // Find the first ancestor that is a mount or root
-        var current = folder.Parent;
-        while (current != null)
+        var location = FileSystemPath.From(folder.Folder.Location);
+        for (var current = folder.Parent; current is not null; current = current.Parent)
         {
-            if (current is AuthoringMountPointTreeItemAdapter authoringAncestor)
+            (string? root, AssetPath? mount) = current switch
             {
-                var relative = folder.Folder.GetPathRelativeTo(authoringAncestor.RootFolder.Location);
-                return VirtualPath.Combine(authoringAncestor.VirtualRootPath, relative);
-            }
-
-            if (current is VirtualFolderMountTreeItemAdapter virtualAncestor)
+                AuthoringMountPointTreeItemAdapter authoring => (authoring.RootFolder.Location, authoring.VirtualRootPath),
+                VirtualFolderMountTreeItemAdapter mounted => (mounted.RootFolder.Location, mounted.VirtualRootPath),
+                ProjectRootTreeItemAdapter project => (project.ProjectRootFolder.Location, AssetCatalog.ProjectFiles),
+                _ => (null, null),
+            };
+            if (root is not null && mount is not null)
             {
-                var relative = folder.Folder.GetPathRelativeTo(virtualAncestor.RootFolder.Location);
-                return VirtualPath.Combine(virtualAncestor.VirtualRootPath, relative);
+                var mountRoot = FileSystemPath.From(root);
+                return location.IsSameOrInside(mountRoot) && mount.TryCombine(location.GetPathBelow(mountRoot), out var path) ? path : null;
             }
-
-            if (current is ProjectRootTreeItemAdapter)
-            {
-                return folder.Folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
-            }
-
-            current = current.Parent;
         }
 
-        return folder.Folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
+        return null;
     }
 
     private void OnMountPointPropertyChanged(object? sender, PropertyChangedEventArgs e)

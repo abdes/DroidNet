@@ -5,6 +5,7 @@
 using System.Text.Json.Serialization;
 using DroidNet.Resources.Generator.Localized_a870a544;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ProjectBrowser.Templates;
 
@@ -124,9 +125,9 @@ public class TemplateInfo(string description, string name, Category category) : 
 /// <summary>
 /// Starter scene metadata declared by a project template.
 /// </summary>
-public sealed record TemplateStarterSceneInfo(Uri AssetUri, string? RelativePath, bool OpenOnCreate);
+public sealed record TemplateStarterSceneInfo(AssetPath AssetUri, string? RelativePath, bool OpenOnCreate);
 
 /// <summary>
 /// Starter asset metadata declared by a project template.
 /// </summary>
-public sealed record TemplateStarterContentInfo(Uri AssetUri, string? RelativePath, string? Kind);
+public sealed record TemplateStarterContentInfo(AssetPath AssetUri, string? RelativePath, string? Kind);

@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -56,14 +57,14 @@ public sealed partial class BuiltinGeometryCatalog
         }));
         var geometries = root.GetProperty("geometries").EnumerateArray().Select(item =>
         {
-            var uri = new Uri(RequiredString(item, "asset_uri"), UriKind.Absolute);
+            var uri = AssetPath.ParseUri(RequiredString(item, "asset_uri"));
             var key = item.GetProperty("material_slot_inventory").GetProperty("geometry_asset_key").GetGuid();
             return new BuiltinGeometryDefinition(uri, RequiredString(item, "name"), RequiredString(item, "canonical_name"),
                 ReadContribution(item), ReadAuthoringCategory(item),
                 inventories.Find(uri, key) ?? throw new InvalidDataException("A builtin geometry has no native material-slot inventory."));
         }).ToImmutableArray();
-        var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        return geometries.Any(item => !identities.Add(item.AssetUri.AbsoluteUri))
+        var identities = new HashSet<AssetPath>();
+        return geometries.Any(item => !identities.Add(item.AssetUri))
             ? throw new InvalidDataException("The engine builtin catalog contains duplicate authored identities.")
             : new(mount, material, geometries, root.Clone());
     }
@@ -75,8 +76,8 @@ public sealed partial class BuiltinGeometryCatalog
     /// <summary>Finds a native definition while preserving the caller's authored URI.</summary>
     /// <param name="assetUri">The requested built-in URI.</param>
     /// <returns>The matching authorable definition, or null for an unsupported or internal resource.</returns>
-    public BuiltinGeometryDefinition? Find(Uri assetUri)
-        => this.AuthoringGeometries.FirstOrDefault(item => string.Equals(item.AssetUri.AbsoluteUri, assetUri.AbsoluteUri, StringComparison.OrdinalIgnoreCase));
+    public BuiltinGeometryDefinition? Find(AssetPath assetUri)
+        => this.AuthoringGeometries.FirstOrDefault(item => item.AssetUri == assetUri);
 
     private static GeneratedAssetCategory ReadAuthoringCategory(JsonElement item)
         => RequiredString(item, "authoring_category") switch

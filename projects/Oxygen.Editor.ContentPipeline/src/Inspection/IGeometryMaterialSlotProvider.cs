@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Inspection;
 
@@ -14,5 +15,5 @@ public interface IGeometryMaterialSlotProvider
     /// <param name="geometryUri">The authored geometry identity.</param>
     /// <param name="cancellationToken">Cancels inspection and drains any native reader.</param>
     /// <returns>The native inventory, or null when no verified current inventory is available.</returns>
-    public Task<GeometryMaterialSlotMetadata?> ReadAsync(ProjectContext project, Uri geometryUri, CancellationToken cancellationToken = default);
+    public Task<GeometryMaterialSlotMetadata?> ReadAsync(ProjectContext project, AssetPath geometryUri, CancellationToken cancellationToken = default);
 }

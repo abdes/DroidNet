@@ -50,8 +50,8 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
     private readonly ScriptToolingPaths paths;
     private readonly ILogger logger;
     private readonly Subject<ScriptAnalysisSnapshot> changes = new();
-    private readonly ConcurrentDictionary<string, Entry> entries = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, long> versions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<FileSystemPath, Entry> entries = new();
+    private readonly ConcurrentDictionary<FileSystemPath, long> versions = new();
     private readonly IDisposable catalogChanges;
     private readonly IDisposable projectChanges;
     private readonly CancellationTokenSource lifetime = new();
@@ -60,7 +60,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
     private readonly TaskCompletionSource nativeReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly ConcurrentDictionary<string, JsonSchema?> inputSchemas = new(StringComparer.OrdinalIgnoreCase);
     private int unavailableReported;
-    private string? scannedProjectRoot;
+    private FileSystemPath? scannedProjectRoot;
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="ScriptAnalysisService"/> class and starts analyzing the
@@ -107,11 +107,11 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
     public IReadOnlyCollection<ScriptAnalysisSnapshot> Current => [.. this.entries.Values.Select(static entry => entry.Snapshot)];
 
     /// <inheritdoc />
-    public ScriptAnalysisSnapshot? Find(string sourcePath)
-        => this.entries.TryGetValue(Path.GetFullPath(sourcePath), out var entry) ? entry.Snapshot : null;
+    public ScriptAnalysisSnapshot? Find(FileSystemPath sourcePath)
+        => this.entries.TryGetValue(sourcePath, out var entry) ? entry.Snapshot : null;
 
     /// <inheritdoc />
-    public Task<ScriptAnalysisSnapshot?> AnalyzeAsync(string sourcePath, CancellationToken cancellationToken = default)
+    public Task<ScriptAnalysisSnapshot?> AnalyzeAsync(FileSystemPath sourcePath, CancellationToken cancellationToken = default)
         => this.AnalyzeAsync(sourcePath, force: false, cancellationToken);
 
     /// <inheritdoc />
@@ -138,12 +138,13 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
 
     /// <summary>Maps an engine analysis to the editor's snapshot.</summary>
     /// <param name="path">The script file.</param>
-    /// <param name="scriptUri">The script's asset identity.</param>
+    /// <param name="script">The script's asset identity.</param>
     /// <param name="analysis">The engine analysis.</param>
     /// <param name="lastValid">The parameters of the last analysis whose declaration was valid.</param>
     /// <returns>The snapshot; when the declaration has errors, it carries <paramref name="lastValid"/> as out of date.</returns>
-    internal static ScriptAnalysisSnapshot CreateSnapshot(string path, Uri scriptUri, ScriptAnalysisResult analysis, IReadOnlyList<ScriptParameter> lastValid)
+    internal static ScriptAnalysisSnapshot CreateSnapshot(FileSystemPath path, AssetPath script, ScriptAnalysisResult analysis, IReadOnlyList<ScriptParameter> lastValid)
     {
+        ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(analysis);
         var problems = analysis.Diagnostics.Select(diagnostic => new ScriptProblem(
             diagnostic.Severity switch
@@ -154,7 +155,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
             },
             diagnostic.Code,
             diagnostic.Message,
-            path,
+            path.FullPath,
             diagnostic.PrimarySpan?.Line,
             diagnostic.PrimarySpan?.Column,
             diagnostic.Rendered,
@@ -179,86 +180,86 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         // A declaration with errors yields no parameters; keep showing the last valid ones, marked out of date.
         var declarationBroken = parameters.Count == 0 && analysis.HasDeclaration && problems.Any(static problem => problem.Severity == ScriptProblemSeverity.Error);
         var outOfDate = declarationBroken && lastValid.Count > 0;
-        return new ScriptAnalysisSnapshot(path, scriptUri, problems, outOfDate ? lastValid : parameters, outOfDate);
+        return new ScriptAnalysisSnapshot(path, script, problems, outOfDate ? lastValid : parameters, outOfDate);
     }
 
     /// <summary>Finds the other script sources in a script's folder that cook to the same asset.</summary>
     /// <param name="path">The script file.</param>
     /// <returns>The file names of the colliding sources, sorted.</returns>
-    internal static IReadOnlyList<string> FindCollisions(string path)
+    internal static IReadOnlyList<string> FindCollisions(FileSystemPath path)
     {
-        var folder = Path.GetDirectoryName(path);
-        if (folder is null || !Directory.Exists(folder))
+        ArgumentNullException.ThrowIfNull(path);
+        if (path.Parent is not { } folder || !Directory.Exists(folder.FullPath))
         {
             return [];
         }
 
-        var stem = AssetFileTypes.RemoveSuffix(Path.GetFileName(path));
-        return [.. Directory.EnumerateFiles(folder)
-            .Where(other => AssetFileTypes.Is(other, AssetFileCategory.Script)
-                && !string.Equals(other, path, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(AssetFileTypes.RemoveSuffix(Path.GetFileName(other)), stem, StringComparison.OrdinalIgnoreCase))
-            .Select(Path.GetFileName)
-            .OfType<string>()
-            .Order(StringComparer.OrdinalIgnoreCase)];
+        return [.. Directory.EnumerateFiles(folder.FullPath)
+            .Select(FileSystemPath.From)
+            .Where(other => other != path && IsSameScript(other, path))
+            .Select(static other => other.Name)
+            .Order(FileSystemPath.NameComparer)];
     }
 
-    private static IEnumerable<string> EnumerateScripts(string root)
+    // Two sources in one folder cook to the same script when their names match without the file type.
+    private static bool IsSameScript(FileSystemPath left, FileSystemPath right)
+        => AssetFileTypes.Is(left.Name, AssetFileCategory.Script) && AssetFileTypes.Is(right.Name, AssetFileCategory.Script) && left.Parent == right.Parent
+            && string.Equals(AssetFileTypes.RemoveSuffix(left.Name), AssetFileTypes.RemoveSuffix(right.Name), FileSystemPath.NameComparison);
+
+    private static IEnumerable<FileSystemPath> EnumerateScripts(FileSystemPath root)
     {
-        if (!Directory.Exists(root))
+        if (!Directory.Exists(root.FullPath))
         {
             return [];
         }
 
         var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.Hidden | FileAttributes.System };
-        return Directory.EnumerateFiles(root, "*", options)
-            .Where(static path => AssetFileTypes.Is(path, AssetFileCategory.Script) || AssetFileTypes.Is(path, AssetFileCategory.Input))
-            .Where(path => !Path.GetRelativePath(root, path).Split(Path.DirectorySeparatorChar).Any(static segment => segment.StartsWith('.')));
+        return Directory.EnumerateFiles(root.FullPath, "*", options)
+            .Select(FileSystemPath.From)
+            .Where(static path => AssetFileTypes.Is(path.Name, AssetFileCategory.Script) || AssetFileTypes.Is(path.Name, AssetFileCategory.Input))
+            .Where(path => !path.GetPathBelow(root).Split('/').Any(static segment => segment.StartsWith('.')));
     }
 
-    private static ScriptProblem CollisionProblem(string path, IReadOnlyList<string> collisions)
+    private static ScriptProblem CollisionProblem(FileSystemPath path, IReadOnlyList<string> collisions)
     {
-        var name = Path.GetFileName(path);
+        var name = path.Name;
         var others = string.Join(", ", collisions);
         var message = $"{name} and {others} cook to the same script; rename one of them";
         return new ScriptProblem(
             ScriptProblemSeverity.Error,
             ScriptDiagnosticCodes.IdentityCollision,
             message,
-            path,
+            path.FullPath,
             Line: null,
             Column: null,
             Rendered: $"error[{ScriptDiagnosticCodes.IdentityCollision}]: {message}\n --> {path}\n",
             Explanation: "A script is identified by its folder and file name without the extension, so two sources such as move.lua and move.luau in one folder would produce the same asset. Neither is cooked until one is renamed or removed.");
     }
 
-    private static string? ToScriptPath(ProjectContext project, Uri uri)
-    {
-        var virtualPath = AssetUriHelper.GetVirtualPath(uri);
-        return (AssetFileTypes.Is(virtualPath, AssetFileCategory.Script) || AssetFileTypes.Is(virtualPath, AssetFileCategory.Input))
-            && RelocationPaths.ToPhysical(project, virtualPath) is { } physical ? physical : null;
-    }
+    private static FileSystemPath? ToScriptPath(ProjectContext project, AssetPath path)
+        => (AssetFileTypes.Is(path.Name, AssetFileCategory.Script) || AssetFileTypes.Is(path.Name, AssetFileCategory.Input))
+            ? RelocationPaths.ToPhysical(project, path)
+            : null;
 
     /// <summary>Analyzes a script, unless its content is unchanged and <paramref name="force"/> is not set.</summary>
-    /// <param name="sourcePath">The script file.</param>
+    /// <param name="path">The script file.</param>
     /// <param name="force">Whether to analyze even when the content is unchanged.</param>
     /// <param name="cancellationToken">A token that cancels the analysis.</param>
     /// <returns>The analysis, or <see langword="null"/> when the file is not a script of the active project.</returns>
-    private async Task<ScriptAnalysisSnapshot?> AnalyzeAsync(string sourcePath, bool force, CancellationToken cancellationToken)
+    private async Task<ScriptAnalysisSnapshot?> AnalyzeAsync(FileSystemPath path, bool force, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
-        var path = Path.GetFullPath(sourcePath);
+        ArgumentNullException.ThrowIfNull(path);
         if (this.projects.ActiveProject is not { } project || RelocationPaths.ToVirtual(project, path) is not { } virtualPath)
         {
             return null;
         }
 
-        if (AssetFileTypes.Is(path, AssetFileCategory.Input))
+        if (AssetFileTypes.Is(path.Name, AssetFileCategory.Input))
         {
             return await this.CheckInputFileAsync(path, virtualPath, force, cancellationToken).ConfigureAwait(false);
         }
 
-        if (!AssetFileTypes.Is(path, AssetFileCategory.Script))
+        if (!AssetFileTypes.Is(path.Name, AssetFileCategory.Script))
         {
             return null;
         }
@@ -267,7 +268,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         byte[] bytes;
         try
         {
-            bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+            bytes = await File.ReadAllBytesAsync(path.FullPath, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
         {
@@ -289,9 +290,8 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         }
 
         await this.nativeReady.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-        var sourceName = Path.GetRelativePath(project.ProjectRoot, path).Replace('\\', '/');
-        var scriptUri = new Uri($"{AssetUris.Scheme}://{AssetFileTypes.ToCookedPath(virtualPath) ?? virtualPath}");
-        var snapshot = this.Run(path, sourceName, bytes, scriptUri, previous?.LastValidParameters ?? []);
+        var sourceName = path.IsSameOrInside(project.ProjectRoot) ? path.GetPathBelow(project.ProjectRoot) : path.Name;
+        var snapshot = this.Run(path, sourceName, bytes, AssetFileTypes.ToIdentity(virtualPath), previous?.LastValidParameters ?? []);
         if (snapshot is null || (this.versions.TryGetValue(path, out var latest) && latest != version))
         {
             return this.Find(path);
@@ -307,12 +307,12 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         return snapshot;
     }
 
-    private async Task<ScriptAnalysisSnapshot?> CheckInputFileAsync(string path, string virtualPath, bool force, CancellationToken cancellationToken)
+    private async Task<ScriptAnalysisSnapshot?> CheckInputFileAsync(FileSystemPath path, AssetPath virtualPath, bool force, CancellationToken cancellationToken)
     {
         byte[] bytes;
         try
         {
-            bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+            bytes = await File.ReadAllBytesAsync(path.FullPath, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
         {
@@ -332,10 +332,10 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         }
 
         var schema = this.inputSchemas.GetOrAdd(
-            path.EndsWith(AssetFileTypes.InputActionFile, StringComparison.OrdinalIgnoreCase) ? "oxygen.input-action.schema.json" : "oxygen.input.schema.json",
+            path.Name.EndsWith(AssetFileTypes.InputActionFile, StringComparison.OrdinalIgnoreCase) ? "oxygen.input-action.schema.json" : "oxygen.input.schema.json",
             this.LoadInputSchema);
-        var problems = InputFileCheck.Check(path, System.Text.Encoding.UTF8.GetString(bytes), schema);
-        var snapshot = new ScriptAnalysisSnapshot(path, new Uri($"{AssetUris.Scheme}://{virtualPath}"), problems, [], ParametersOutOfDate: false);
+        var problems = InputFileCheck.Check(path.FullPath, System.Text.Encoding.UTF8.GetString(bytes), schema);
+        var snapshot = new ScriptAnalysisSnapshot(path, AssetFileTypes.ToIdentity(virtualPath), problems, [], ParametersOutOfDate: false);
         this.entries[path] = new Entry(hash, snapshot, []);
         this.changes.OnNext(snapshot);
         return snapshot;
@@ -357,11 +357,11 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
 
     // Loading the Interop assembly fails when the method that uses its types is compiled, so those types stay in
     // AnalyzeNative and the load failure surfaces here, at its call.
-    private ScriptAnalysisSnapshot? Run(string path, string sourceName, byte[] bytes, Uri scriptUri, IReadOnlyList<ScriptParameter> lastValid)
+    private ScriptAnalysisSnapshot? Run(FileSystemPath path, string sourceName, byte[] bytes, AssetPath script, IReadOnlyList<ScriptParameter> lastValid)
     {
         try
         {
-            return this.AnalyzeNative(path, sourceName, bytes, scriptUri, lastValid);
+            return this.AnalyzeNative(path, sourceName, bytes, script, lastValid);
         }
         catch (Exception exception) when (exception is FileNotFoundException or DllNotFoundException or BadImageFormatException or TypeLoadException or FileLoadException or System.Runtime.InteropServices.SEHException)
         {
@@ -381,11 +381,11 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private ScriptAnalysisSnapshot AnalyzeNative(string path, string sourceName, byte[] bytes, Uri scriptUri, IReadOnlyList<ScriptParameter> lastValid)
+    private ScriptAnalysisSnapshot AnalyzeNative(FileSystemPath path, string sourceName, byte[] bytes, AssetPath script, IReadOnlyList<ScriptParameter> lastValid)
     {
         var definitionsText = this.definitions.Value;
         var analysis = ScriptAnalysis.Analyze(sourceName, bytes, definitionsText is null ? ScriptAnalysisLevel.Lint : ScriptAnalysisLevel.Types, definitionsText);
-        return CreateSnapshot(path, scriptUri, analysis, lastValid);
+        return CreateSnapshot(path, script, analysis, lastValid);
     }
 
     private void OnEngineStateChanged(object? sender, EngineStateChangedEventArgs args) => this.OnEngineStateChanged(args.State);
@@ -414,7 +414,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
 
     private void OnProjectChanged(ProjectContext? project)
     {
-        if (this.disposed || string.Equals(project?.ProjectRoot, this.scannedProjectRoot, StringComparison.OrdinalIgnoreCase))
+        if (this.disposed || project?.ProjectRoot == this.scannedProjectRoot)
         {
             return;
         }
@@ -442,7 +442,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         try
         {
             var scripts = RelocationPaths.GetWritableMounts(project)
-                .SelectMany(mount => EnumerateScripts(Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath))))
+                .SelectMany(mount => EnumerateScripts(project.ProjectRoot.Combine(mount.RelativePath)))
                 .ToList();
             this.LogProjectScan(project.ProjectRoot, scripts.Count);
             foreach (var path in scripts)
@@ -468,12 +468,12 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
             return;
         }
 
-        if (change.Kind == AssetChangeKind.Relocated && change.PreviousUri is { } previous && ToScriptPath(project, previous) is { } old)
+        if (change.Kind == AssetChangeKind.Relocated && change.PreviousIdentity is { } previous && ToScriptPath(project, previous) is { } old)
         {
             this.Remove(old);
         }
 
-        if (ToScriptPath(project, change.Uri) is not { } path)
+        if (ToScriptPath(project, change.Identity) is not { } path)
         {
             return;
         }
@@ -487,21 +487,14 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
             _ = Task.Run(() => this.AnalyzeChangedAsync(path));
         }
 
-        if (!AssetFileTypes.Is(path, AssetFileCategory.Script))
-        {
-            return;
-        }
-
-        foreach (var sibling in this.entries.Keys.Where(other => !string.Equals(other, path, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(Path.GetDirectoryName(other), Path.GetDirectoryName(path), StringComparison.OrdinalIgnoreCase)
-            && string.Equals(AssetFileTypes.RemoveSuffix(Path.GetFileName(other)), AssetFileTypes.RemoveSuffix(Path.GetFileName(path)), StringComparison.OrdinalIgnoreCase)).ToArray())
+        foreach (var sibling in this.entries.Keys.Where(other => other != path && IsSameScript(other, path)).ToArray())
         {
             _ = Task.Run(() => this.AnalyzeChangedAsync(sibling));
         }
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A failed analysis of a changed file is logged; its next change analyzes it again.")]
-    private async Task AnalyzeChangedAsync(string path)
+    private async Task AnalyzeChangedAsync(FileSystemPath path)
     {
         try
         {
@@ -517,7 +510,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         }
     }
 
-    private void Remove(string path)
+    private void Remove(FileSystemPath path)
     {
         if (this.entries.TryRemove(path, out var entry) && !this.disposed)
         {

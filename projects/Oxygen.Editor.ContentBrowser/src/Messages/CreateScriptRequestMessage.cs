@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Messaging.Messages;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Messages;
 
@@ -10,4 +11,4 @@ namespace Oxygen.Editor.ContentBrowser.Messages;
 /// Runs New Script from another pane, such as a script slot in the inspector. The reply is the new script file, or
 /// <see langword="null"/> when the user cancelled or the file could not be written.
 /// </summary>
-public sealed class CreateScriptRequestMessage : AsyncRequestMessage<string?>;
+public sealed class CreateScriptRequestMessage : AsyncRequestMessage<FileSystemPath?>;

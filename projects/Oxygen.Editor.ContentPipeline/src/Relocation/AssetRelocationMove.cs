@@ -2,9 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
 /// <summary>Moves or renames one authored file or folder.</summary>
-/// <param name="SourcePath">The current virtual path.</param>
-/// <param name="TargetPath">The new virtual path.</param>
-public sealed record AssetRelocationMove(string SourcePath, string TargetPath);
+/// <param name="Source">The current virtual path.</param>
+/// <param name="Target">The new virtual path.</param>
+public sealed record AssetRelocationMove(AssetPath Source, AssetPath Target);

@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using Json.Schema;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
@@ -30,7 +31,7 @@ internal static class NativeImportReportReader
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
         if (!Schema.Value.Evaluate(root).IsValid
-            || !string.Equals(Path.GetFullPath(root.GetProperty("session").GetProperty("cooked_root").GetString()!), Path.GetFullPath(execution.Manifest.Output), StringComparison.OrdinalIgnoreCase))
+            || FileSystemPath.From(root.GetProperty("session").GetProperty("cooked_root").GetString()!) != FileSystemPath.From(execution.Manifest.Output))
         {
             throw new InvalidDataException("The native import report does not match this operation.");
         }
@@ -56,7 +57,7 @@ internal static class NativeImportReportReader
             }
 
             succeeded &= string.Equals(job.GetProperty("status").GetString(), "succeeded", StringComparison.Ordinal);
-            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var emitted = new HashSet<string>(StringComparer.Ordinal);
             AddOutputs(job, emitted);
 
             var requested = execution.Manifest.Jobs[index];

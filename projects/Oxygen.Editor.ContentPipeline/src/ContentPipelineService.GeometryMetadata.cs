@@ -17,16 +17,10 @@ namespace Oxygen.Editor.ContentPipeline;
 public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvider
 {
     /// <inheritdoc />
-    public async Task<GeometryMaterialSlotMetadata?> ReadAsync(ProjectContext project, Uri geometryUri, CancellationToken cancellationToken = default)
+    public async Task<GeometryMaterialSlotMetadata?> ReadAsync(ProjectContext project, AssetPath geometryUri, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(geometryUri);
-        if (!geometryUri.IsAbsoluteUri || !string.Equals(geometryUri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase)
-            || geometryUri.Query.Length != 0 || geometryUri.Fragment.Length != 0)
-        {
-            throw new ArgumentException("Geometry metadata requires an asset URI without query or fragment.", nameof(geometryUri));
-        }
-
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var projectChanges = this.projectContextService.ProjectChanged.Subscribe(current =>
         {
@@ -51,7 +45,7 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
                 return null;
             }
 
-            var catalog = await builtins.GetBuiltinGeometryCatalogAsync(project.ProjectRoot, AssetUris.ContentMountPoint, token).ConfigureAwait(false);
+            var catalog = await builtins.GetBuiltinGeometryCatalogAsync(project.ProjectRoot.FullPath, AssetPath.Content.Mount, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
             var metadata = catalog.Find(geometryUri)?.MaterialSlots;
             return metadata is null ? null : metadata with { GeometryUri = geometryUri };
@@ -67,19 +61,19 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
 
         var imports = await ImportedSourceIndex.ReadAsync(project, cookDocuments, prior, token).ConfigureAwait(false);
         using var libraries = await CookedLibraryReadSet.AcquireAsync(project, token, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), imports.KnownOutputs).ConfigureAwait(false);
-        var operationRoot = Path.Combine(project.ProjectRoot, ".build", "inspection");
+        var operationRoot = Path.Combine(project.ProjectRoot.FullPath, ".build", "inspection");
         try
         {
             if (libraries.FindPreferredAsset(geometryUri) is { } library)
             {
                 await libraries.ValidateNativeAsync(this.engineContentPipelineApi, token).ConfigureAwait(false);
                 var native = library.Asset.Cooked;
-                if (native is null || native.AssetType != 2 || native.VirtualPath is not { Length: > 0 } virtualPath)
+                if (native is null || native.AssetType != 2 || native.VirtualPath is not { } virtualPath)
                 {
                     return null;
                 }
 
-                var report = await inspector.InspectGeometryAsync(operationRoot, library.CookedRoot, virtualPath, token).ConfigureAwait(false);
+                var report = await inspector.InspectGeometryAsync(operationRoot, library.CookedRoot, virtualPath.VirtualPath, token).ConfigureAwait(false);
                 token.ThrowIfCancellationRequested();
                 return VerifyInventoryKey(report.SingleOrDefault(geometryUri), native.AssetKey.ToString());
             }
@@ -101,7 +95,7 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
             var owner = prior.Products.SelectMany(static product => product.Outputs).SingleOrDefault(output => output.Asset == selected);
             var expectedRoot = owner is null ? null : prior.Roots.FirstOrDefault(root => string.Equals(root.Mount, owner.RootMount, StringComparison.Ordinal));
             if (owner is null || expectedRoot is null) { return null; }
-            var cookedRoot = publicationRead.FindProjectRoot(owner.RootMount)
+            var cookedRoot = publicationRead.FindProjectRoot(owner.RootMount)?.FullPath
                 ?? throw new InvalidDataException("Geometry output has no selected generation.");
             await using var files = await CookOutputReadLease.AcquireAsync(cookedRoot, token).ConfigureAwait(false);
             var inventory = await files.ReadInventoryAsync(this.engineContentPipelineApi, token).ConfigureAwait(false);

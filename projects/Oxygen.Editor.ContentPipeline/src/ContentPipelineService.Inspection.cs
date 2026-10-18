@@ -19,7 +19,7 @@ public sealed partial class ContentPipelineService
 {
     /// <inheritdoc />
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2025:Ensure tasks using IDisposable instances complete before the instances are disposed", Justification = "The gate owns the lease: this method clears its own reference before handing the lease over, so only the gate disposes it, after the drain.")]
-    public async Task<CookedOutputReport> InspectCookedOutputAsync(Uri? scopeUri, CancellationToken cancellationToken, bool validate = false, ProjectContext? expectedProject = null)
+    public async Task<CookedOutputReport> InspectCookedOutputAsync(AssetPath? scopeUri, CancellationToken cancellationToken, bool validate = false, ProjectContext? expectedProject = null)
     {
         var project = expectedProject ?? this.RequireActiveProject();
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -90,20 +90,14 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private static InspectionRoot[] ResolveInspectionRoots(ProjectContext project, CookPublicationReadLease publication, Uri? scope)
+    private static InspectionRoot[] ResolveInspectionRoots(ProjectContext project, CookPublicationReadLease publication, AssetPath? scope)
     {
-        if (scope is not null && (!scope.IsAbsoluteUri || !string.Equals(scope.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase)
-            || scope.Query.Length != 0 || scope.Fragment.Length != 0))
-        {
-            throw new ArgumentException("Inspection scope must be an asset URI without a query or fragment.", nameof(scope));
-        }
-
-        var path = scope is null ? string.Empty : AssetUriHelper.GetVirtualPath(scope).Trim('/');
-        if (string.Equals(path, "Cooked", StringComparison.OrdinalIgnoreCase))
+        var path = scope is null ? string.Empty : scope.VirtualPath.Trim('/');
+        if (string.Equals(path, "Cooked", StringComparison.Ordinal))
         {
             path = string.Empty;
         }
-        else if (path.StartsWith("Cooked/", StringComparison.OrdinalIgnoreCase))
+        else if (path.StartsWith("Cooked/", StringComparison.Ordinal))
         {
             path = path["Cooked/".Length..];
         }
@@ -120,7 +114,7 @@ public sealed partial class ContentPipelineService
             && (path.Length == 0 || string.Equals(mountName, "Engine", StringComparison.Ordinal)
                 || string.Equals(mount.Name, mountName, StringComparison.Ordinal))).ToArray();
         return mounts.Length == 0 ? throw new InvalidDataException("The inspection scope does not belong to a project content mount.")
-            : mounts.Select(mount => new InspectionRoot(mount.Name, publication.FindProjectRoot(mount.Name), path, IsLocal: false)).ToArray();
+            : mounts.Select(mount => new InspectionRoot(mount.Name, publication.FindProjectRoot(mount.Name)?.FullPath, path, IsLocal: false)).ToArray();
     }
 
     private static CookedAssetProvenance[] GetInspectionProvenance(
@@ -156,40 +150,34 @@ public sealed partial class ContentPipelineService
             return true;
         }
 
-        var nativeScope = root.Scope;
-        if (nativeScope.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
-            || nativeScope.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
-            || nativeScope.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase)
-            || nativeScope.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase))
-        {
-            nativeScope = nativeScope[..^".json".Length];
-        }
+        // A source in scope stands for the asset it cooks into.
+        var nativeScope = AssetPath.TryParse("/" + root.Scope, out var scopePath) ? AssetFileTypes.ToIdentity(scopePath).VirtualPath.Trim('/') : root.Scope;
 
         return Matches(asset.VirtualPath, nativeScope)
             || root.ImportedScopes.Any(scope => Matches(asset.VirtualPath, scope))
             || (root.IsLocal && asset.DescriptorRelativePath is { } relative && Matches(relative, nativeScope))
-            || provenance.Any(item => string.Equals(AssetUriHelper.GetVirtualPath(item.CookedAssetUri), asset.VirtualPath, StringComparison.Ordinal)
-                && Matches(AssetUriHelper.GetVirtualPath(item.SourceAssetUri), root.Scope));
+            || provenance.Any(item => string.Equals(item.CookedAssetUri.VirtualPath, asset.VirtualPath, StringComparison.Ordinal)
+                && Matches(item.SourceAssetUri.VirtualPath, root.Scope));
 
         static bool Matches(string candidate, string scope)
         {
             var path = candidate.Trim('/');
-            return string.Equals(path, scope, StringComparison.OrdinalIgnoreCase) || path.StartsWith(scope + "/", StringComparison.OrdinalIgnoreCase);
+            return string.Equals(path, scope, StringComparison.Ordinal) || path.StartsWith(scope + "/", StringComparison.Ordinal);
         }
     }
 
-    private static InspectionRoot[] ResolveImportedInspectionRoots(ProjectContext project, CookPublicationReadLease publication, Uri scope, InspectionRoot[] ordinary, IEnumerable<string> outputScopes)
+    private static InspectionRoot[] ResolveImportedInspectionRoots(ProjectContext project, CookPublicationReadLease publication, AssetPath scope, InspectionRoot[] ordinary, IEnumerable<string> outputScopes)
     {
-        var isModel = Path.GetExtension(scope.AbsolutePath).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX";
+        var isModel = Path.GetExtension(scope.Name).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX";
         var roots = (isModel ? [] : ordinary).ToDictionary(static root => root.Name, StringComparer.Ordinal);
-        foreach (var group in outputScopes.GroupBy(static path => path.Trim('/').Split('/')[0], StringComparer.OrdinalIgnoreCase))
+        foreach (var group in outputScopes.GroupBy(static path => path.Trim('/').Split('/')[0], StringComparer.Ordinal))
         {
             if (!project.AuthoringMounts.Any(mount => !ProjectOutputFolders.Contains(mount) && string.Equals(mount.Name, group.Key, StringComparison.Ordinal)))
             {
                 continue;
             }
 
-            var root = roots.GetValueOrDefault(group.Key) ?? new(group.Key, publication.FindProjectRoot(group.Key), AssetUriHelper.GetVirtualPath(scope).Trim('/'), IsLocal: false);
+            var root = roots.GetValueOrDefault(group.Key) ?? new(group.Key, publication.FindProjectRoot(group.Key)?.FullPath, scope.VirtualPath.Trim('/'), IsLocal: false);
             roots[group.Key] = root with { ImportedScopes = [.. group.Select(static path => path.Trim('/'))] };
         }
 

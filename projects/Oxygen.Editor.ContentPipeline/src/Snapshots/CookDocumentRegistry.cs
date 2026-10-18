@@ -4,6 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
@@ -30,30 +31,30 @@ public sealed partial class CookDocumentRegistry(ILogger<CookDocumentRegistry>? 
     }
 
     /// <inheritdoc />
-    public ICookDocumentRegistration Register(string sourcePath, Func<CancellationToken, Task<CookDocumentReadLease?>> acquire)
+    public ICookDocumentRegistration Register(FileSystemPath sourcePath, Func<CancellationToken, Task<CookDocumentReadLease?>> acquire)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        ArgumentNullException.ThrowIfNull(sourcePath);
         ArgumentNullException.ThrowIfNull(acquire);
         lock (this.sync)
         {
-            var registration = new Registration(this, ++this.nextId, Path.GetFullPath(sourcePath), acquire);
+            var registration = new Registration(this, ++this.nextId, sourcePath, acquire);
             this.registrations.Add(registration.Id, registration);
             return registration;
         }
     }
 
     /// <inheritdoc />
-    public async Task<CookDocumentReadSet> AcquireAsync(IEnumerable<string> sourcePaths, CancellationToken cancellationToken)
+    public async Task<CookDocumentReadSet> AcquireAsync(IEnumerable<FileSystemPath> sourcePaths, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sourcePaths);
         cancellationToken.ThrowIfCancellationRequested();
-        var paths = sourcePaths.Select(Path.GetFullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        (Registration owner, string sourcePath)[] selected;
+        var paths = sourcePaths.ToHashSet();
+        (Registration owner, FileSystemPath sourcePath)[] selected;
         lock (this.sync)
         {
             selected = this.registrations.Values
                 .Where(entry => paths.Contains(entry.SourcePath))
-                .OrderBy(static entry => entry.SourcePath, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static entry => entry.SourcePath.FullPath, StringComparer.Ordinal)
                 .ThenBy(static entry => entry.Id)
                 .Select(static entry => (entry, entry.SourcePath))
                 .ToArray();
@@ -68,7 +69,7 @@ public sealed partial class CookDocumentRegistry(ILogger<CookDocumentRegistry>? 
                 if (await owner.Acquire(cancellationToken).ConfigureAwait(false) is { } lease)
                 {
                     leases.Add(lease);
-                    if (!SourcePathsMatch(lease.State.SourcePath, sourcePath))
+                    if (lease.State.SourcePath != sourcePath)
                     {
                         throw new OperationCanceledException("The document source moved while cook capture was waiting for it.", new CancellationToken(canceled: true));
                     }
@@ -85,20 +86,6 @@ public sealed partial class CookDocumentRegistry(ILogger<CookDocumentRegistry>? 
             }
 
             throw;
-        }
-    }
-
-    // Registrations and owner states are stored canonically, but a lease callback may report the
-    // same source with different separator spelling; only a genuinely different path is a move.
-    private static bool SourcePathsMatch(string stateSourcePath, string sourcePath)
-    {
-        try
-        {
-            return string.Equals(Path.GetFullPath(stateSourcePath), sourcePath, StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception invalid) when (invalid is ArgumentException or NotSupportedException or PathTooLongException)
-        {
-            return false;
         }
     }
 
@@ -124,14 +111,14 @@ public sealed partial class CookDocumentRegistry(ILogger<CookDocumentRegistry>? 
     private sealed partial class Registration(
         CookDocumentRegistry owner,
         long id,
-        string sourcePath,
+        FileSystemPath sourcePath,
         Func<CancellationToken, Task<CookDocumentReadLease?>> acquire) : ICookDocumentRegistration
     {
         private CookDocumentRegistry? owner = owner;
 
         public long Id { get; } = id;
 
-        public string SourcePath { get; set; } = sourcePath;
+        public FileSystemPath SourcePath { get; set; } = sourcePath;
 
         public Func<CancellationToken, Task<CookDocumentReadLease?>> Acquire { get; } = acquire;
 

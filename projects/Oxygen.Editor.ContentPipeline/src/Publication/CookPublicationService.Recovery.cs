@@ -32,7 +32,7 @@ public sealed partial class CookPublicationService
     public async Task RecoverAsync(ProjectContext project, CancellationToken cancellationToken)
     {
         using var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, cancellationToken).ConfigureAwait(false);
-        await Relocation.AssetRelocationTransaction.RecoverAsync(project.ProjectRoot, files, this.Logger, cancellationToken).ConfigureAwait(false);
+        await Relocation.AssetRelocationTransaction.RecoverAsync(project.ProjectRoot.FullPath, files, this.Logger, cancellationToken).ConfigureAwait(false);
         await CookPublicationTransaction.RecoverInterruptedMutationsAsync(
             project,
             files,
@@ -57,7 +57,7 @@ public sealed partial class CookPublicationService
             gate,
             operation.OperationId,
             cancellationToken).ConfigureAwait(false);
-        var saved = await projectManager.LoadProjectInfoAsync(operation.Project.ProjectRoot).ConfigureAwait(false)
+        var saved = await projectManager.LoadProjectInfoAsync(operation.Project.ProjectRoot.FullPath).ConfigureAwait(false)
             ?? throw new InvalidDataException("The saved project is unavailable.");
         var savedIdentity = CookPublicationDocument.ConfigurationIdentity(ProjectContext.FromProjectInfo(saved));
         if (saved.Id != operation.Project.ProjectId

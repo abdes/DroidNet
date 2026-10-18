@@ -41,7 +41,7 @@ public sealed record ScriptValue
     public Vector4 VectorValue { get; private init; }
 
     /// <summary>Gets the referenced asset.</summary>
-    public Uri? AssetUri { get; private init; }
+    public AssetPath? Asset { get; private init; }
 
     /// <summary>Gets the referenced node.</summary>
     public NodeId NodeId { get; private init; }
@@ -102,10 +102,10 @@ public sealed record ScriptValue
     /// <summary>Creates an asset reference value.</summary>
     /// <param name="asset">The asset identity.</param>
     /// <returns>The script value.</returns>
-    public static ScriptValue FromAsset(Uri asset)
+    public static ScriptValue FromAsset(AssetPath asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        return new(ScriptValueKind.AssetValue) { AssetUri = asset };
+        return new(ScriptValueKind.AssetValue) { Asset = asset };
     }
 
     /// <summary>Creates a node reference value.</summary>
@@ -141,7 +141,7 @@ public sealed record ScriptValue
             ScriptValueKind.StringValue => this.StringValue,
             ScriptValueKind.Vec2Value or ScriptValueKind.Vec3Value or ScriptValueKind.Vec4Value
                 => "(" + string.Join(", ", this.GetVectorComponents().Select(static component => component.ToString(CultureInfo.InvariantCulture))) + ")",
-            ScriptValueKind.AssetValue => this.AssetUri?.ToString() ?? string.Empty,
+            ScriptValueKind.AssetValue => this.Asset?.ToUriString() ?? string.Empty,
             ScriptValueKind.NodeValue => this.NodeId.ToString(),
             _ => string.Empty,
         };

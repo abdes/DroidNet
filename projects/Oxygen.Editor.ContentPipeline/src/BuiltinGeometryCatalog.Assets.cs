@@ -18,7 +18,7 @@ public sealed partial class BuiltinGeometryCatalog
         {
             Generated = CreateMetadata(definition.CanonicalName, definition.Contribution, definition.AuthoringCategory),
         }).ToList();
-        records.Add(new AssetRecord(AssetUris.BuildGeneratedUri("Materials/Default"))
+        records.Add(new AssetRecord(ProceduralGeometryDescriptorService.DefaultMaterial)
         {
             Generated = CreateMetadata("Default", this.DefaultMaterial, GeneratedAssetCategory.Standard),
         });
@@ -50,6 +50,6 @@ public sealed partial class BuiltinGeometryCatalog
         => new(
             canonicalName,
             contribution.Descriptor.GetProperty("$schema").GetString() ?? throw new InvalidDataException("A native recipe has no descriptor schema."),
-            contribution.VirtualPath,
+            AssetPath.Parse(contribution.VirtualPath),
             authoringCategory);
 }

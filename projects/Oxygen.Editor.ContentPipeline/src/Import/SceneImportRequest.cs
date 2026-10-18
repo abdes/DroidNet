@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
 
@@ -11,7 +12,7 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <param name="SourcePath">The selected primary source file.</param>
 /// <param name="Name">The source bundle and output folder name.</param>
 /// <param name="DestinationFolder">The authoring folder containing this model's output folder.</param>
-public sealed record SceneImportRequest(ProjectContext Project, string SourcePath, string Name, Uri DestinationFolder)
+public sealed record SceneImportRequest(ProjectContext Project, string SourcePath, string Name, AssetPath DestinationFolder)
 {
     /// <summary>Gets the existing source explicitly reviewed for replacement, or null for a new import.</summary>
     public SceneImportReplacement? Replacement { get; init; }

@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Numerics;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Scenes.Properties;
@@ -49,7 +50,7 @@ public static class SceneSkyFields
     public static PropertyId<Vector3> SolidColor { get; } = Id<Vector3>("/backdrop/solid_color");
 
     /// <summary>Gets the property for the sky sphere cubemap.</summary>
-    public static PropertyId<Uri?> SkySphereCubemap { get; } = Id<Uri?>("/sky_sphere/cubemap");
+    public static PropertyId<AssetPath?> SkySphereCubemap { get; } = Id<AssetPath?>("/sky_sphere/cubemap");
 
     /// <summary>Gets the property for the illuminance, in lux, the sky is calibrated to deliver; 0 keeps it raw.</summary>
     public static PropertyId<float> SkySphereIlluminanceLux { get; } = Id<float>("/sky_sphere/illuminance_lux");
@@ -70,7 +71,7 @@ public static class SceneSkyFields
     public static PropertyId<SkyLightSource> SkyLightSource { get; } = Id<SkyLightSource>("/sky_light/source");
 
     /// <summary>Gets the property for the sky light cubemap.</summary>
-    public static PropertyId<Uri?> SkyLightCubemap { get; } = Id<Uri?>("/sky_light/cubemap");
+    public static PropertyId<AssetPath?> SkyLightCubemap { get; } = Id<AssetPath?>("/sky_light/cubemap");
 
     /// <summary>Gets the property for the illuminance, in lux, the sky light cubemap is calibrated to deliver; 0 keeps it raw.</summary>
     public static PropertyId<float> SkyLightCubemapIlluminanceLux { get; } = Id<float>("/sky_light/cubemap_illuminance_lux");
@@ -141,7 +142,7 @@ public static class SceneSkyFields
         descriptors.Add(Environment(SolidColorLightsScene, SolidColorLightsSceneOf, WriteSolidColorLightsScene, static _ => ValidationResult.Ok, "toggle"));
         descriptors.Add(Environment(SolidColor, SolidColorOf, WriteSolidColor, value => ValidateVector("Solid color", 0f, null, value), "color-rgb"));
 
-        descriptors.Add(Sphere(SkySphereCubemap, static s => s.Cubemap, static (s, v) => s with { Cubemap = v }, static value => ValidateAssetUri("Sky sphere cubemap", value), "asset-picker"));
+        descriptors.Add(Sphere(SkySphereCubemap, static s => s.Cubemap, static (s, v) => s with { Cubemap = v }, static _ => ValidationResult.Ok, "asset-picker"));
         descriptors.Add(Sphere(SkySphereIlluminanceLux, static s => s.IlluminanceLux, static (s, v) => s with { IlluminanceLux = v }, static value => ValidateFloat("Sky illuminance", 0f, null, value), "numberbox"));
         descriptors.Add(Sphere(SkySphereIntensity, static s => s.Intensity, static (s, v) => s with { Intensity = v }, static value => ValidateFloat("Sky sphere intensity", 0f, null, value), "numberbox"));
         descriptors.Add(Sphere(SkySphereRotationRadians, static s => s.RotationRadians, static (s, v) => s with { RotationRadians = v }, static value => ValidateFloat("Sky sphere rotation", null, null, value), "numberbox"));
@@ -156,7 +157,7 @@ public static class SceneSkyFields
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.EnvironmentSkyInvalid, "Sky light source is not valid."),
             "segmented"));
-        descriptors.Add(Light(SkyLightCubemap, static s => s.Cubemap, static (s, v) => s with { Cubemap = v }, static value => ValidateAssetUri("Sky light cubemap", value), "asset-picker"));
+        descriptors.Add(Light(SkyLightCubemap, static s => s.Cubemap, static (s, v) => s with { Cubemap = v }, static _ => ValidationResult.Ok, "asset-picker"));
         descriptors.Add(Light(SkyLightCubemapIlluminanceLux, static s => s.CubemapIlluminanceLux, static (s, v) => s with { CubemapIlluminanceLux = v }, static value => ValidateFloat("Sky light cubemap illuminance", 0f, null, value), "numberbox"));
         descriptors.Add(Light(SkyLightIntensity, static s => s.Intensity, static (s, v) => s with { Intensity = v }, static value => ValidateFloat("Sky light intensity", 0f, null, value), "numberbox"));
         descriptors.Add(Light(SkyLightTintRgb, static s => s.TintRgb, static (s, v) => s with { TintRgb = v }, static value => ValidateVector("Sky light tint", 0f, null, value), "color-rgb"));
@@ -177,7 +178,6 @@ public static class SceneSkyFields
         => new[]
         {
             Enum.IsDefined(value.Source) ? ValidationResult.Ok : ValidationResult.Fail(SceneDiagnosticCodes.EnvironmentSkyInvalid, "Sky sphere source is not valid."),
-            ValidateAssetUri("Sky sphere cubemap", value.Cubemap),
             ValidateVector("Solid color", 0f, null, value.SolidColorRgb),
             ValidateFloat("Sky illuminance", 0f, null, value.IlluminanceLux),
             ValidateFloat("Sky sphere intensity", 0f, null, value.Intensity),
@@ -192,7 +192,6 @@ public static class SceneSkyFields
         => new[]
         {
             Enum.IsDefined(value.Source) ? ValidationResult.Ok : ValidationResult.Fail(SceneDiagnosticCodes.EnvironmentSkyInvalid, "Sky light source is not valid."),
-            ValidateAssetUri("Sky light cubemap", value.Cubemap),
             ValidateFloat("Sky light cubemap illuminance", 0f, null, value.CubemapIlluminanceLux),
             ValidateFloat("Sky light intensity", 0f, null, value.Intensity),
             ValidateVector("Sky light tint", 0f, null, value.TintRgb),
@@ -313,12 +312,6 @@ public static class SceneSkyFields
 
     private static SceneEnvironmentTarget Target(object target)
         => (SceneEnvironmentTarget)target;
-
-    private static ValidationResult ValidateAssetUri(string label, Uri? value)
-        => value is null || (value.IsAbsoluteUri && string.Equals(value.Scheme, "asset", StringComparison.OrdinalIgnoreCase)
-                && value.Query.Length == 0 && value.Fragment.Length == 0)
-            ? ValidationResult.Ok
-            : ValidationResult.Fail(SceneDiagnosticCodes.EnvironmentSkyInvalid, $"{label} must be an absolute asset URI without query or fragment, or empty.");
 
     private static ValidationResult ValidateVector(string label, float? minimum, float? maximum, Vector3 value)
     {

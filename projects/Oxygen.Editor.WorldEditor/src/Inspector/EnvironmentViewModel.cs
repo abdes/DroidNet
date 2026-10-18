@@ -37,8 +37,8 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         Func<NodeId, Task>? inspectSceneNode = null,
         IScheduler? observerScheduler = null,
         Func<Scene, CancellationToken, Task<SkyLightObservation?>>? observeEnvironment = null,
-        Func<Uri, InputContextSource>? inputContextSource = null,
-        Func<Uri, Task>? revealAsset = null)
+        Func<AssetPath, InputContextSource>? inputContextSource = null,
+        Func<AssetPath, Task>? revealAsset = null)
     {
         this.observeEnvironment = observeEnvironment;
         this.EditOwner = new(authoringProvider, this.RefreshFromScene, this.ValidationFeedback);

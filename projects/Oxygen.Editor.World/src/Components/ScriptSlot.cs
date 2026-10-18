@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Components;
 
@@ -17,7 +18,7 @@ public sealed record ScriptSlot
 
     /// <summary>Gets the script asset identity, such as <c>asset:///Content/Player/move.oscript</c>; null until one is
     /// picked. A reference to a script that no longer exists stays until changed.</summary>
-    public Uri? Script { get; init; }
+    public AssetPath? Script { get; init; }
 
     /// <summary>Gets the execution order; lower runs earlier, across all nodes.</summary>
     public int ExecutionOrder { get; init; }

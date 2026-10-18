@@ -17,16 +17,10 @@ public sealed partial class ContentPipelineService : IScriptDeclarationProvider
     private const byte ScriptAssetType = 4;
 
     /// <inheritdoc />
-    async Task<CookedScriptDeclarations?> IScriptDeclarationProvider.ReadAsync(ProjectContext project, Uri scriptUri, CancellationToken cancellationToken)
+    async Task<CookedScriptDeclarations?> IScriptDeclarationProvider.ReadAsync(ProjectContext project, AssetPath scriptUri, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(scriptUri);
-        if (!scriptUri.IsAbsoluteUri || !string.Equals(scriptUri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase)
-            || scriptUri.Query.Length != 0 || scriptUri.Fragment.Length != 0)
-        {
-            throw new ArgumentException("Script declarations require an asset URI without query or fragment.", nameof(scriptUri));
-        }
-
         if (!ReferenceEquals(this.projectContextService.ActiveProject, project) || this.engineContentPipelineApi is not ICookedScriptInspector inspector)
         {
             return null;
@@ -53,13 +47,13 @@ public sealed partial class ContentPipelineService : IScriptDeclarationProvider
         {
             await libraries.ValidateNativeAsync(this.engineContentPipelineApi, token).ConfigureAwait(false);
             var native = library.Asset.Cooked;
-            if (native is null || native.AssetType != ScriptAssetType || native.VirtualPath is not { Length: > 0 } virtualPath)
+            if (native is null || native.AssetType != ScriptAssetType || native.VirtualPath is not { } virtualPath)
             {
                 return null;
             }
 
-            var operationRoot = Path.Combine(project.ProjectRoot, ".build", "inspection");
-            var report = await inspector.InspectScriptsAsync(operationRoot, library.CookedRoot, virtualPath, token).ConfigureAwait(false);
+            var operationRoot = Path.Combine(project.ProjectRoot.FullPath, ".build", "inspection");
+            var report = await inspector.InspectScriptsAsync(operationRoot, library.CookedRoot, virtualPath.VirtualPath, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
             var declarations = report.SingleOrDefault(scriptUri);
             return declarations is not null && !string.Equals(declarations.NativeScriptKey.ToString("D"), native.AssetKey.ToString(), StringComparison.OrdinalIgnoreCase)

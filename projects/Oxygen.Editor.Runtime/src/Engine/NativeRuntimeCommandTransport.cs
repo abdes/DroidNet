@@ -5,6 +5,7 @@
 using Oxygen.Interop;
 using Oxygen.Interop.Input;
 using Oxygen.Interop.World;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
 

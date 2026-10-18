@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Inspector.Geometry;
 
 #pragma warning disable SA1402 // File may only contain a single type
@@ -22,7 +24,7 @@ public enum AssetPickerGroup
 /// Represents a single entry shown in the geometry asset picker.
 /// </summary>
 /// <param name="Name">The display name of the asset.</param>
-/// <param name="Uri">The absolute URI identifying the asset.</param>
+/// <param name="Asset">The asset.</param>
 /// <param name="DisplayType">A short description of the asset type (for example, "Static Mesh").</param>
 /// <param name="DisplayPath">The path shown in the UI for the asset location (for example, "/Content/Models/MyMesh").</param>
 /// <param name="Group">The group the asset belongs to (engine or content).</param>
@@ -30,7 +32,7 @@ public enum AssetPickerGroup
 /// <param name="ThumbnailModel">An optional model used to render the asset's thumbnail. May be <see langword="null"/>.</param>
 public sealed record AssetPickerItem(
     string Name,
-    Uri Uri,
+    AssetPath Asset,
     string DisplayType,
     string DisplayPath,
     AssetPickerGroup Group,
@@ -48,7 +50,7 @@ public sealed record AssetGroup(string Key, IReadOnlyList<AssetPickerRow> Items)
 /// Represents a single entry shown in the material assignment picker.
 /// </summary>
 /// <param name="Name">The display name of the material assignment.</param>
-/// <param name="Uri">The material URI, or <see langword="null"/> for the explicit none assignment.</param>
+/// <param name="Asset">The material, or <see langword="null"/> for the explicit none assignment.</param>
 /// <param name="DisplayType">A short description of the material entry.</param>
 /// <param name="DisplayPath">The path shown in the UI for the material location.</param>
 /// <param name="Group">The group the material belongs to.</param>
@@ -56,7 +58,7 @@ public sealed record AssetGroup(string Key, IReadOnlyList<AssetPickerRow> Items)
 /// <param name="ThumbnailModel">An optional model used to render the material's thumbnail.</param>
 public sealed record MaterialPickerItem(
     string Name,
-    Uri? Uri,
+    AssetPath? Asset,
     string DisplayType,
     string DisplayPath,
     AssetPickerGroup Group,

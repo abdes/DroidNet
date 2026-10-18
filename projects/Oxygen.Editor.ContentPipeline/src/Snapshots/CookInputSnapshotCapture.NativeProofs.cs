@@ -6,6 +6,7 @@ using System.Buffers;
 using System.Collections.Immutable;
 using System.Security.Cryptography;
 using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
@@ -19,13 +20,13 @@ public sealed partial class CookInputSnapshotCapture
     internal static async Task<ImmutableArray<NativeCapturedInput>> CaptureGeneratedAsync(IEnumerable<ContentCookInput> sources, CancellationToken cancellationToken)
     {
         var captured = ImmutableArray.CreateBuilder<NativeCapturedInput>();
-        foreach (var source in sources.DistinctBy(static input => input.SourceAbsolutePath, StringComparer.OrdinalIgnoreCase))
+        foreach (var source in sources.DistinctBy(static input => input.SourceAbsolutePath))
         {
-            var stream = new FileStream(source.SourceAbsolutePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous);
+            var stream = new FileStream(source.SourceAbsolutePath.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous);
             await using var lifetime = stream.ConfigureAwait(false);
-            var metadata = ReadNativeMetadata(source.SourceAbsolutePath, stream);
+            var metadata = ReadNativeMetadata(source.SourceAbsolutePath.FullPath, stream);
             var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
-            captured.Add(new(source.SourceAbsolutePath, true, metadata, new(source.SourceAbsolutePath, metadata.Size, hash)));
+            captured.Add(new(source.SourceAbsolutePath.FullPath, true, metadata, new(source.SourceAbsolutePath.FullPath, metadata.Size, hash)));
         }
 
         return captured.ToImmutable();
@@ -42,15 +43,15 @@ public sealed partial class CookInputSnapshotCapture
 
     private static CapturedSource ReadProbe(CookSnapshotInput input)
     {
-        var exists = CookSavedSourceReader.Exists(input.SourcePath);
+        var exists = CookSavedSourceReader.Exists(input.SourcePath.FullPath);
         var needsMetadata = input.Metadata is not null || input.NativeObservations.Any(static observation => observation.Metadata is not null);
-        return new(string.Empty, exists, exists && needsMetadata ? CookSavedSourceReader.ReadMetadata(input.SourcePath) : null);
+        return new(string.Empty, exists, exists && needsMetadata ? CookSavedSourceReader.ReadMetadata(input.SourcePath.FullPath) : null);
     }
 
     private static async Task<bool> VerifyNativeObservationsAsync(
         ImmutableArray<CookSnapshotInput> inputs,
         string capturedRoot,
-        Dictionary<string, CapturedSource> captured,
+        Dictionary<FileSystemPath, CapturedSource> captured,
         CancellationToken cancellationToken)
     {
         foreach (var input in inputs)

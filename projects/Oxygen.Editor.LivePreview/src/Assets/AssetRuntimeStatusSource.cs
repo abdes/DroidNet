@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Assets;
 
@@ -40,7 +41,7 @@ public sealed partial class AssetRuntimeStatusSource : IAssetRuntimeStatusSource
 
         AssetRuntimeRequest[] requests = projectId is not { } project ? [] : [.. this.world.AssetRequests
             .Where(status => status.Request.Target.RunId == content.RunId && status.Request.Target.ProjectId == project)
-            .Select(static status => AssetPath(status.Request.Command) is { } path ? new AssetRuntimeRequest(path, status.Succeeded, status.Reason) : null)
+            .Select(static status => AssetPath.TryParse(EnginePath(status.Request.Command), out var asset) ? new AssetRuntimeRequest(asset, status.Succeeded, status.Reason) : null)
             .OfType<AssetRuntimeRequest>()];
         var state = content.State switch
         {
@@ -49,7 +50,7 @@ public sealed partial class AssetRuntimeStatusSource : IAssetRuntimeStatusSource
             RuntimeContentState.Mounted => AssetRuntimeContentState.Mounted,
             _ => throw new InvalidOperationException($"Unknown runtime content state {content.State}."),
         };
-        return new(state, content.Roots, requests, content.Reason);
+        return new(state, [.. content.Roots.Select(FileSystemPath.From)], requests, content.Reason);
     }
 
     /// <inheritdoc />
@@ -66,7 +67,7 @@ public sealed partial class AssetRuntimeStatusSource : IAssetRuntimeStatusSource
         this.world.AssetStatusChanged -= this.OnAssetStatusChanged;
     }
 
-    private static string? AssetPath(RuntimeWorldCommand command) => command switch
+    private static string? EnginePath(RuntimeWorldCommand command) => command switch
     {
         RuntimeSetGeometry geometry => geometry.AssetPath,
         RuntimeSetMaterialOverride material => material.MaterialPath,

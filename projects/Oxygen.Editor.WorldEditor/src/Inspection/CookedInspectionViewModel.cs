@@ -12,6 +12,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Inspection;
@@ -25,7 +26,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
     private readonly IContentPipelineService pipeline;
     private readonly IAssetFeed assetProvider;
     private readonly IProjectContextService projects;
-    private readonly Func<Uri, Task<bool>> showAsset;
+    private readonly Func<AssetPath, Task<bool>> showAsset;
     private Func<Task>? cancelInspection;
     private Task currentWork = Task.CompletedTask;
     private long requestVersion;
@@ -39,7 +40,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
     /// <param name="assetProvider">Current shared catalog facts for a specifically opened asset.</param>
     /// <param name="projects">The active project lifetime.</param>
     /// <param name="showAsset">Explicit navigation in the owning workspace.</param>
-    public CookedInspectionViewModel(IContentPipelineService pipeline, IAssetFeed assetProvider, IProjectContextService projects, Func<Uri, Task<bool>> showAsset)
+    public CookedInspectionViewModel(IContentPipelineService pipeline, IAssetFeed assetProvider, IProjectContextService projects, Func<AssetPath, Task<bool>> showAsset)
     {
         this.pipeline = pipeline;
         this.assetProvider = assetProvider;
@@ -50,8 +51,8 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
     /// <summary>Gets the inspected scope's name, or what to do when nothing is inspected yet.</summary>
     public string Scope => this.scope is not { } current
         ? "Nothing inspected"
-        : current.ScopeUri is { } uri
-            ? current.Project.Name + " · " + Oxygen.Managed.Assets.Catalog.AssetUriHelper.GetVirtualPath(uri)
+        : current.Scope is { } scope
+            ? current.Project.Name + " · " + scope.VirtualPath
             : current.Project.Name;
 
     /// <summary>Gets the current read operation for lifecycle and workflow tests.</summary>
@@ -164,7 +165,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
     public Visibility OutputAssetsVisibility => this.AssetInformationVisibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>Gets the copyable identity of an asset opened without project output.</summary>
-    public string ScopedReferenceText => this.ScopedAsset?.IdentityUri.ToString() ?? string.Empty;
+    public string ScopedReferenceText => this.ScopedAsset?.Identity.ToString() ?? string.Empty;
 
     /// <summary>Gets validation visibility when there is a published output to check.</summary>
     public Visibility ValidationVisibility => this.Report is { } report && !report.Roots.Any(static root => root.IsPresent) ? Visibility.Collapsed : Visibility.Visible;
@@ -232,7 +233,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
 
     [RelayCommand]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Navigation failures remain visible in the report instead of escaping a UI command.")]
-    private async Task ShowAssetAsync(Uri? uri)
+    private async Task ShowAssetAsync(AssetPath? uri)
     {
         try
         {
@@ -319,11 +320,11 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
             await previous.ConfigureAwait(true);
             cancellation.Token.ThrowIfCancellationRequested();
             var project = this.GetCurrentProject(request);
-            var asset = request.AssetUri is { } uri ? await this.ResolveInspectedAssetAsync(uri, project, request, cancellation.Token).ConfigureAwait(true) : null;
-            var isUncopiedBuiltin = asset is { IsBuiltin: true, CookedUri: null, CookedCompanions.Count: 0 };
+            var asset = request.Asset is { } identity ? await this.ResolveInspectedAssetAsync(identity, project, request, cancellation.Token).ConfigureAwait(true) : null;
+            var isUncopiedBuiltin = asset is { IsBuiltin: true, CookedMetadata: null, CookedCompanions.Count: 0 };
             var report = isUncopiedBuiltin
-                ? new CookedOutputReport(request.Project.ProjectId, request.ScopeUri, DateTimeOffset.UtcNow, [])
-                : await this.pipeline.InspectCookedOutputAsync(request.ScopeUri, cancellation.Token, validate, project).ConfigureAwait(true);
+                ? new CookedOutputReport(request.Project.ProjectId, request.Scope, DateTimeOffset.UtcNow, [])
+                : await this.pipeline.InspectCookedOutputAsync(request.Scope, cancellation.Token, validate, project).ConfigureAwait(true);
             cancellation.Token.ThrowIfCancellationRequested();
             if (!ReferenceEquals(project, this.projects.ActiveProject))
             {
@@ -350,27 +351,26 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
 
     private ProjectContext GetCurrentProject(CookedInspectionScope request)
         => this.projects.ActiveProject is { } project && project.ProjectId == request.Project.ProjectId
-            && string.Equals(project.ProjectRoot, request.Project.ProjectRoot, StringComparison.OrdinalIgnoreCase)
+            && project.ProjectRoot == request.Project.ProjectRoot
             ? project : throw new OperationCanceledException("The inspection's project was closed or replaced.");
 
-    private async Task<AssetEntry?> ResolveInspectedAssetAsync(Uri uri, ProjectContext project, CookedInspectionScope request, CancellationToken cancellationToken)
+    private async Task<AssetEntry?> ResolveInspectedAssetAsync(AssetPath identity, ProjectContext project, CookedInspectionScope request, CancellationToken cancellationToken)
     {
-        var asset = await this.assetProvider.ResolveAsync(uri, cancellationToken).ConfigureAwait(true);
+        var asset = await this.assetProvider.ResolveAsync(identity, cancellationToken).ConfigureAwait(true);
         if (asset is not null && request.CookedSource is { } requested)
         {
             var source = asset.OverriddenCookedSources.Prepend(asset.CookedMetadata).OfType<Oxygen.Managed.Assets.Catalog.CookedAssetMetadata>()
-                .FirstOrDefault(candidate => string.Equals(candidate.RootFolderPath, requested.RootFolderPath, StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(candidate.VirtualPath, requested.VirtualPath, StringComparison.Ordinal));
+                .FirstOrDefault(candidate => candidate.RootFolderPath == requested.RootFolderPath && candidate.VirtualPath == requested.VirtualPath);
             return source is null ? null : AssetIdentity.FromCookedSource(asset, source, project);
         }
 
-        if (asset is not { IsBuiltin: true, BuiltinOriginUri: null })
+        if (asset is not { IsBuiltin: true, BuiltinOrigin: null })
         {
             return asset;
         }
 
         var items = await this.assetProvider.Items.FirstAsync().ToTask(cancellationToken).ConfigureAwait(true);
-        return AssetIdentity.GroupBuiltins(items).FirstOrDefault(row => row.IdentityUri == asset.IdentityUri) ?? asset;
+        return AssetIdentity.GroupBuiltins(items).FirstOrDefault(row => row.Identity == asset.Identity) ?? asset;
     }
 
     private void ApplyReport(CookedOutputReport report)
@@ -406,12 +406,12 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
     private InspectionAssetRow CreateAssetRow(CookedRootReport root, CookedAssetEntry asset)
     {
         var scoped = this.ScopedAsset is { CookedMetadata: { } metadata } candidate
-            && string.Equals(metadata.RootFolderPath, root.Inspection.CookedRoot, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(metadata.VirtualPath ?? candidate.CookedUri?.AbsolutePath, asset.VirtualPath, StringComparison.Ordinal) ? candidate : null;
-        return new(root, asset, root.Provenance.FirstOrDefault(origin => string.Equals(origin.CookedAssetUri.AbsolutePath, asset.VirtualPath, StringComparison.Ordinal)))
+            && metadata.RootFolderPath == FileSystemPath.From(root.Inspection.CookedRoot)
+            && string.Equals((metadata.VirtualPath ?? candidate.Identity).VirtualPath, asset.VirtualPath, StringComparison.Ordinal) ? candidate : null;
+        return new(root, asset, root.Provenance.FirstOrDefault(origin => string.Equals(origin.CookedAssetUri.VirtualPath, asset.VirtualPath, StringComparison.Ordinal)))
         {
             ResolutionText = scoped?.IsCookedSourceOverridden == true ? scoped.PrimaryBadgeTooltip : string.Empty,
-            OtherSources = scoped?.OverriddenCookedSources.Select(static source => source.RootFolderPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() ?? [],
+            OtherSources = scoped?.OverriddenCookedSources.Select(static source => source.RootFolderPath).Distinct().Select(static root => root.FullPath).ToArray() ?? [],
         };
     }
 }

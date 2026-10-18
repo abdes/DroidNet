@@ -14,13 +14,12 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 
 /// <summary>
 /// Reads and rewrites the asset references of authored files. Descriptor references are whole JSON string
-/// values naming an asset identity, either as a full <c>asset:///</c> URI or as a canonical virtual path;
-/// texture sources and geometry buffers are file-relative paths; import sidecars are typed settings.
+/// values naming an asset identity, either as an asset URI or as a canonical virtual path, each spelled by
+/// <see cref="AssetPath"/>; texture sources and geometry buffers are file-relative paths; import sidecars are typed
+/// settings.
 /// </summary>
 internal static class AuthoredReferenceFormat
 {
-    private const string UriPrefix = "asset://";
-
     private static readonly string[] DescriptorExtensions =
         [AssetFileTypes.SceneDescriptor, AssetFileTypes.MaterialDescriptor, AssetFileTypes.GeometryDescriptor, AssetFileTypes.TextureDescriptor, AssetFileTypes.PhysicsSceneDescriptor, AssetFileTypes.CollisionShapeDescriptor, AssetFileTypes.PhysicsMaterialDescriptor];
 
@@ -47,10 +46,10 @@ internal static class AuthoredReferenceFormat
     /// <param name="content">The descriptor bytes.</param>
     /// <param name="mounts">The authoring mount names that identify virtual paths.</param>
     /// <returns>The distinct referenced identities.</returns>
-    public static IReadOnlyList<string> ReadReferences(ReadOnlyMemory<byte> content, IReadOnlyCollection<string> mounts)
+    public static IReadOnlyList<AssetPath> ReadReferences(ReadOnlyMemory<byte> content, IReadOnlyCollection<string> mounts)
     {
         var root = JsonNode.Parse(StripBom(content.Span));
-        var identities = new List<string>();
+        var identities = new List<AssetPath>();
         Visit(root, value =>
         {
             if (TryParseIdentity(value, mounts, out var identity, out _))
@@ -60,7 +59,7 @@ internal static class AuthoredReferenceFormat
 
             return null;
         });
-        return [.. identities.Distinct(StringComparer.OrdinalIgnoreCase)];
+        return [.. identities.Distinct()];
     }
 
     /// <summary>Rewrites a descriptor for a relocation.</summary>
@@ -69,19 +68,19 @@ internal static class AuthoredReferenceFormat
     /// <param name="map">The relocation.</param>
     /// <param name="mounts">The authoring mount names that identify virtual paths.</param>
     /// <returns>The rewritten bytes, or null when nothing changes.</returns>
-    public static byte[]? RewriteDescriptor(string path, ReadOnlyMemory<byte> content, RelocationMap map, IReadOnlyCollection<string> mounts)
+    public static byte[]? RewriteDescriptor(FileSystemPath path, ReadOnlyMemory<byte> content, RelocationMap map, IReadOnlyCollection<string> mounts)
     {
         var root = JsonNode.Parse(StripBom(content.Span));
         var changed = false;
         Visit(root, value =>
         {
-            if (!TryParseIdentity(value, mounts, out var identity, out var form) || map.MapIdentity(identity) is not { } mapped)
+            if (!TryParseIdentity(value, mounts, out var identity, out var isUri) || map.MapIdentity(identity) is not { } mapped)
             {
                 return null;
             }
 
             changed = true;
-            return form.Format(mapped);
+            return Format(mapped, isUri);
         });
         changed |= RewriteFileReferences(root, path, map);
         return changed ? Serialize(root!, content.Span) : null;
@@ -106,19 +105,18 @@ internal static class AuthoredReferenceFormat
     /// <returns>The relocated settings; the same instance when nothing changes.</returns>
     public static NativeSceneImportSettings Relocate(string projectRoot, NativeSceneImportSettings settings, RelocationMap map)
     {
-        var bundle = Path.GetFullPath(Path.Combine(projectRoot, settings.BundleRoot));
+        var root = FileSystemPath.From(projectRoot);
+        var bundle = root.Combine(settings.BundleRoot);
         var newBundle = map.MapPath(bundle);
-        string Remap(string relative)
-            => Path.GetRelativePath(newBundle, map.MapPath(settings.ResolveFile(projectRoot, relative))).Replace('\\', '/');
+        string Remap(string relative) => map.MapPath(FileSystemPath.From(settings.ResolveFile(projectRoot, relative))).GetPathBelow(newBundle);
 
         var files = settings.Files.Select(Remap).ToArray();
         var primary = Remap(settings.PrimaryRelativePath);
-        var group = "/" + settings.MountPoint + "/" + RelocationPaths.ImportTypeFolders[0] + "/" + settings.OutputDirectory;
-        var mappedGroup = map.MapIdentity(group);
-        var output = mappedGroup is null ? settings.OutputDirectory : mappedGroup[(group.Length - settings.OutputDirectory.Length)..];
-        var bundleRoot = string.Equals(newBundle, bundle, StringComparison.Ordinal)
+        var typeFolder = AssetPath.Create(settings.MountPoint, RelocationPaths.ImportTypeFolders[0]);
+        var output = map.MapIdentity(typeFolder.Combine(settings.OutputDirectory)) is { } mappedGroup ? mappedGroup.GetPathBelow(typeFolder) : settings.OutputDirectory;
+        var bundleRoot = string.Equals(newBundle.FullPath, bundle.FullPath, StringComparison.Ordinal)
             ? settings.BundleRoot
-            : Path.GetRelativePath(Path.GetFullPath(projectRoot), newBundle).Replace('\\', '/');
+            : newBundle.GetPathBelow(root);
         return string.Equals(bundleRoot, settings.BundleRoot, StringComparison.Ordinal)
             && string.Equals(primary, settings.PrimaryRelativePath, StringComparison.Ordinal)
             && string.Equals(output, settings.OutputDirectory, StringComparison.Ordinal)
@@ -131,7 +129,7 @@ internal static class AuthoredReferenceFormat
     /// <param name="path">The texture descriptor.</param>
     /// <param name="content">Its bytes.</param>
     /// <returns>The absolute image paths; none when the descriptor cannot be parsed.</returns>
-    public static IReadOnlyList<string> ReadTextureSources(string path, ReadOnlyMemory<byte> content)
+    public static IReadOnlyList<FileSystemPath> ReadTextureSources(FileSystemPath path, ReadOnlyMemory<byte> content)
     {
         JsonNode? parsed;
         try
@@ -148,8 +146,8 @@ internal static class AuthoredReferenceFormat
             return [];
         }
 
-        var folder = Path.GetDirectoryName(Path.GetFullPath(path))!;
-        return [.. EnumerateFileReferences(root, path).Select(node => node.GetValue<string>()).Select(value => Path.GetFullPath(Path.IsPathRooted(value) ? value : Path.Combine(folder, value)))];
+        var folder = path.Parent!;
+        return [.. EnumerateFileReferences(root, path).Select(node => node.GetValue<string>()).Select(value => Path.IsPathRooted(value) ? FileSystemPath.From(value) : folder.Combine(value))];
     }
 
     /// <summary>Gives a copied descriptor its new identity and keeps its file-relative sources valid.</summary>
@@ -159,22 +157,22 @@ internal static class AuthoredReferenceFormat
     /// <param name="map">Maps the original identity and copied companions to the copy's.</param>
     /// <param name="mounts">The authoring mount names.</param>
     /// <returns>The copy's bytes.</returns>
-    public static byte[] RewriteCopy(string sourcePath, string targetPath, ReadOnlyMemory<byte> content, RelocationMap map, IReadOnlyCollection<string> mounts)
+    public static byte[] RewriteCopy(FileSystemPath sourcePath, FileSystemPath targetPath, ReadOnlyMemory<byte> content, RelocationMap map, IReadOnlyCollection<string> mounts)
     {
         var root = JsonNode.Parse(StripBom(content.Span));
         var changed = false;
         if (root is JsonObject descriptor && descriptor["virtual_path"] is JsonValue own && own.TryGetValue<string>(out var value)
-            && TryParseIdentity(value, mounts, out var identity, out var form) && map.MapIdentity(identity) is { } mapped)
+            && TryParseIdentity(value, mounts, out var identity, out var isUri) && map.MapIdentity(identity) is { } mapped)
         {
-            descriptor["virtual_path"] = form.Format(mapped);
+            descriptor["virtual_path"] = Format(mapped, isUri);
             changed = true;
         }
 
         // A copied scene is a scene of its own: it takes a new identity, and the name of its file.
-        if (root is JsonObject scene && targetPath.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase))
+        if (root is JsonObject scene && targetPath.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase))
         {
             scene["Id"] = Guid.NewGuid().ToString("D");
-            scene["Name"] = Path.GetFileName(targetPath)[..^AssetFileTypes.SceneDescriptor.Length];
+            scene["Name"] = targetPath.Name[..^AssetFileTypes.SceneDescriptor.Length];
             changed = true;
         }
 
@@ -201,34 +199,34 @@ internal static class AuthoredReferenceFormat
     }
 
     /// <summary>Maps one reference value through an identity mapping, keeping its form.</summary>
-    /// <param name="value">A full <c>asset:///</c> URI or a canonical virtual path.</param>
+    /// <param name="value">An asset URI or a canonical virtual path.</param>
     /// <param name="mapIdentity">Returns the new identity, or null when the identity does not move.</param>
     /// <returns>The mapped reference, or null when the value is not a reference or does not move.</returns>
-    public static string? MapReference(string value, Func<string, string?> mapIdentity)
-        => TryParseIdentity(value, mounts: null, out var identity, out var form) && mapIdentity(identity) is { } mapped ? form.Format(mapped) : null;
+    public static string? MapReference(string value, Func<AssetPath, AssetPath?> mapIdentity)
+        => TryParseIdentity(value, mounts: null, out var identity, out var isUri) && mapIdentity(identity) is { } mapped ? Format(mapped, isUri) : null;
 
-    private static bool RewriteFileReferences(JsonNode? root, string path, RelocationMap map, string? targetPath = null)
+    private static bool RewriteFileReferences(JsonNode? root, FileSystemPath path, RelocationMap map, FileSystemPath? targetPath = null)
     {
         if (root is not JsonObject descriptor)
         {
             return false;
         }
 
-        var folder = Path.GetDirectoryName(Path.GetFullPath(path))!;
-        var newFolder = Path.GetDirectoryName(targetPath is null ? map.MapPath(path) : Path.GetFullPath(targetPath))!;
+        var folder = path.Parent!;
+        var newFolder = (targetPath ?? map.MapPath(path)).Parent!;
         var changed = false;
         foreach (var node in EnumerateFileReferences(descriptor, path))
         {
             var value = node.GetValue<string>();
             var rooted = Path.IsPathRooted(value);
-            var absolute = Path.GetFullPath(rooted ? value : Path.Combine(folder, value));
+            var absolute = rooted ? FileSystemPath.From(value) : folder.Combine(value);
             var moved = map.MapPath(absolute);
-            if (string.Equals(moved, absolute, StringComparison.Ordinal) && string.Equals(newFolder, folder, StringComparison.OrdinalIgnoreCase))
+            if (!map.IsMoved(absolute) && newFolder == folder)
             {
                 continue;
             }
 
-            var replacement = rooted ? moved : Path.GetRelativePath(newFolder, moved).Replace('\\', '/');
+            var replacement = rooted ? moved.FullPath : Path.GetRelativePath(newFolder.FullPath, moved.FullPath).Replace('\\', '/');
             if (!string.Equals(replacement, value, StringComparison.Ordinal))
             {
                 node.ReplaceWith(JsonValue.Create(replacement));
@@ -239,10 +237,10 @@ internal static class AuthoredReferenceFormat
         return changed;
     }
 
-    private static JsonValue[] EnumerateFileReferences(JsonObject descriptor, string path)
+    private static JsonValue[] EnumerateFileReferences(JsonObject descriptor, FileSystemPath path)
     {
         var nodes = new List<JsonNode?>();
-        if (path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
+        if (path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
         {
             nodes.Add(descriptor["source"]);
             if (descriptor["sources"] is JsonArray sources)
@@ -250,7 +248,7 @@ internal static class AuthoredReferenceFormat
                 nodes.AddRange(sources.OfType<JsonObject>().Select(static source => source["file"]));
             }
         }
-        else if (path.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase) && descriptor["buffers"] is JsonArray buffers)
+        else if (path.Name.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase) && descriptor["buffers"] is JsonArray buffers)
         {
             nodes.AddRange(buffers.OfType<JsonObject>().Select(static buffer => buffer["uri"]));
         }
@@ -299,42 +297,15 @@ internal static class AuthoredReferenceFormat
         }
     }
 
-    private static bool TryParseIdentity(string value, IReadOnlyCollection<string>? mounts, out string identity, out IdentityForm form)
+    // A reference is an asset URI or a virtual path below one of the mounts, naming an asset rather than a mount.
+    private static bool TryParseIdentity(string value, IReadOnlyCollection<string>? mounts, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out AssetPath? identity, out bool isUri)
     {
-        identity = string.Empty;
-        form = default;
-        string path;
-        var isUri = value.StartsWith(UriPrefix, StringComparison.OrdinalIgnoreCase);
-        if (isUri)
-        {
-            path = value[UriPrefix.Length..];
-            if (!path.StartsWith('/'))
-            {
-                return false;
-            }
-        }
-        else if (value.StartsWith('/') && !value.StartsWith("//", StringComparison.Ordinal))
-        {
-            path = value;
-        }
-        else
-        {
-            return false;
-        }
-
-        var escaped = isUri && path.Contains('%', StringComparison.Ordinal);
-        var virtualPath = escaped ? Uri.UnescapeDataString(path) : path;
-        var segments = virtualPath.Split('/');
-        if (segments.Length < 3 || segments.Skip(1).Any(static segment => segment.Length == 0)
-            || (mounts?.Contains(segments[1], StringComparer.Ordinal) == false))
-        {
-            return false;
-        }
-
-        identity = RelocationPaths.ToIdentity(virtualPath);
-        form = new(isUri, escaped, virtualPath.Length != identity.Length);
-        return true;
+        isUri = value.StartsWith(AssetPath.UriScheme + ":", StringComparison.OrdinalIgnoreCase);
+        var parsed = isUri ? AssetPath.TryParseUri(value, out identity) : AssetPath.TryParse(value, out identity);
+        return parsed && !identity!.IsMount && mounts?.Contains(identity.Mount, StringComparer.Ordinal) != false;
     }
+
+    private static string Format(AssetPath identity, bool isUri) => isUri ? identity.ToUriString() : identity.VirtualPath;
 
     private static byte[] Serialize(JsonNode root, ReadOnlySpan<byte> original)
     {
@@ -358,17 +329,4 @@ internal static class AuthoredReferenceFormat
 
     private static ReadOnlySpan<byte> StripBom(ReadOnlySpan<byte> content)
         => content.StartsWith(Encoding.UTF8.Preamble) ? content[Encoding.UTF8.Preamble.Length..] : content;
-
-    /// <summary>How a reference spells an identity, so a rewrite keeps the same form.</summary>
-    /// <param name="IsUri">Whether the value is an <c>asset:///</c> URI rather than a virtual path.</param>
-    /// <param name="IsEscaped">Whether the URI percent-escapes its segments.</param>
-    /// <param name="HasJsonSuffix">Whether the value names the authored <c>.json</c> file.</param>
-    private readonly record struct IdentityForm(bool IsUri, bool IsEscaped, bool HasJsonSuffix)
-    {
-        public string Format(string identity)
-        {
-            var path = this.HasJsonSuffix ? identity + ".json" : identity;
-            return !this.IsUri ? path : UriPrefix + (this.IsEscaped ? string.Join('/', path.Split('/').Select(Uri.EscapeDataString)) : path);
-        }
-    }
 }

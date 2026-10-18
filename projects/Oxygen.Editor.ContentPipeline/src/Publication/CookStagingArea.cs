@@ -45,7 +45,7 @@ internal sealed class CookStagingArea : IAsyncDisposable
             for (var index = 0; index < names.Length; index++)
             {
                 var name = names[index];
-                var path = CookPublicationPaths.Generation(operation.Project.ProjectRoot, generations[index]);
+                var path = CookPublicationPaths.Generation(operation.Project.ProjectRoot.FullPath, generations[index]);
                 if (Directory.Exists(path) || File.Exists(path))
                 {
                     throw new IOException("A fresh generation identity already has an output path.");
@@ -55,7 +55,7 @@ internal sealed class CookStagingArea : IAsyncDisposable
                 var root = new CookStagingRoot(name, generations[index], path);
                 area.roots.Add(root);
                 _ = Directory.CreateDirectory(path);
-                if (emptyRoots?.Contains(name) != true && baseline.FindProjectRoot(name) is { } previous)
+                if (emptyRoots?.Contains(name) != true && baseline.FindProjectRoot(name)?.FullPath is { } previous)
                 {
                     await root.SeedAsync(previous, cancellationToken).ConfigureAwait(false);
                 }
@@ -187,7 +187,7 @@ internal sealed class CookStagingArea : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(mounts);
         var names = mounts.ToArray();
-        return names.Length == 0 || names.ToHashSet(StringComparer.OrdinalIgnoreCase).Count != names.Length
+        return names.Length == 0 || names.ToHashSet(StringComparer.Ordinal).Count != names.Length
             || names.Any(static name => string.IsNullOrWhiteSpace(name) || name is "." or ".."
                 || !string.Equals(name, name.TrimEnd(' ', '.'), StringComparison.Ordinal)
                 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.Contains('/', StringComparison.Ordinal) || name.Contains('\\', StringComparison.Ordinal))

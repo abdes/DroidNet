@@ -58,7 +58,7 @@ public sealed partial class ContentPipelineService(
     private readonly IEngineContentPipelineApi engineContentPipelineApi = engineContentPipelineApi ?? throw new ArgumentNullException(nameof(engineContentPipelineApi));
 
     /// <inheritdoc />
-    public Task<ContentCookResult> CookCurrentSceneAsync(Uri sceneAssetUri, CancellationToken cancellationToken)
+    public Task<ContentCookResult> CookCurrentSceneAsync(AssetPath sceneAssetUri, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sceneAssetUri);
         return this.cookCoordinator.RunCookAsync(
@@ -68,20 +68,20 @@ public sealed partial class ContentPipelineService(
     }
 
     /// <inheritdoc />
-    public Task<ContentCookResult> CookAssetAsync(Uri assetUri, CancellationToken cancellationToken, ProjectContext? expectedProject = null)
+    public Task<ContentCookResult> CookAssetAsync(AssetPath assetUri, CancellationToken cancellationToken, ProjectContext? expectedProject = null)
     {
         ArgumentNullException.ThrowIfNull(assetUri);
         return this.cookCoordinator.RunCookAsync(
             new(CookTargetKind.Asset, assetUri) { CoalescePending = true, OriginContext = expectedProject ?? this.projectContextService.ActiveProject },
             (operation, token) => expectedProject is not null && (operation.Project.ProjectId != expectedProject.ProjectId
-                || !string.Equals(operation.Project.ProjectRoot, expectedProject.ProjectRoot, StringComparison.OrdinalIgnoreCase))
+                || operation.Project.ProjectRoot != expectedProject.ProjectRoot)
                 ? Task.FromResult(CreateFailedCook(operation, CookTargetKind.Asset, new InvalidOperationException("The originating project is no longer active.")))
                 : this.CookAssetCoreAsync(operation, assetUri, token),
             cancellationToken);
     }
 
     /// <inheritdoc />
-    public Task<ContentCookResult> CookFolderAsync(Uri folderUri, CancellationToken cancellationToken)
+    public Task<ContentCookResult> CookFolderAsync(AssetPath folderUri, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(folderUri);
         return this.cookCoordinator.RunCookAsync(
@@ -111,7 +111,7 @@ public sealed partial class ContentPipelineService(
             string text;
             try
             {
-                text = File.ReadAllText(input.SourceAbsolutePath);
+                text = File.ReadAllText(input.SourceAbsolutePath.FullPath);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
@@ -127,8 +127,8 @@ public sealed partial class ContentPipelineService(
                     Domain = FailureDomain.ScriptAuthoring,
                     Severity = DiagnosticSeverity.Error,
                     Code = ScriptDiagnosticCodes.InputReferenceUnsupported,
-                    Message = $"{Path.GetFileName(input.SourceAbsolutePath)} uses {string.Join(", ", foreign.Select(static name => "'" + name + "'"))}, which it does not declare. Declare every action an input file uses in that file; input files cannot share actions yet.",
-                    AffectedPath = input.SourceAbsolutePath,
+                    Message = $"{input.SourceAbsolutePath.Name} uses {string.Join(", ", foreign.Select(static name => "'" + name + "'"))}, which it does not declare. Declare every action an input file uses in that file; input files cannot share actions yet.",
+                    AffectedPath = input.SourceAbsolutePath.FullPath,
                     AffectedVirtualPath = input.OutputVirtualPath,
                 });
             }
@@ -211,7 +211,7 @@ public sealed partial class ContentPipelineService(
         Guid operationId,
         IEnumerable<ContentCookInput> inputs)
         => inputs
-            .Where(static input => !File.Exists(input.SourceAbsolutePath))
+            .Where(static input => !File.Exists(input.SourceAbsolutePath.FullPath))
             .Select(input => new DiagnosticRecord
             {
                 OperationId = operationId,
@@ -219,8 +219,8 @@ public sealed partial class ContentPipelineService(
                 Severity = DiagnosticSeverity.Error,
                 Code = AssetImportDiagnosticCodes.SourceMissing,
                 Message = $"Cook source is missing: {input.SourceRelativePath}.",
-                AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
-                AffectedPath = input.SourceAbsolutePath,
+                AffectedVirtualPath = input.AssetUri.VirtualPath,
+                AffectedPath = input.SourceAbsolutePath.FullPath,
             })
             .ToList();
 
@@ -244,7 +244,7 @@ public sealed partial class ContentPipelineService(
     private static bool OwnsByReport(ContentCookInput input, CookedAssetEntry asset, NativeImportResult import)
         => asset.DescriptorRelativePath is not null
             && import.OutputsBySource.TryGetValue(input.SourceRelativePath, out var outputs)
-            && outputs.Contains(asset.DescriptorRelativePath, StringComparer.OrdinalIgnoreCase);
+            && outputs.Contains(asset.DescriptorRelativePath, StringComparer.Ordinal);
 
     private static List<ContentCookedAsset> CreateCookedAssets(
         ContentCookScope scope,
@@ -260,9 +260,9 @@ public sealed partial class ContentPipelineService(
             if (input is not null && (input.Kind is not (ContentCookAssetKind.ForeignSource or ContentCookAssetKind.Input)
                 || (asset.DescriptorRelativePath is not null
                     && import.OutputsBySource.TryGetValue(input.SourceRelativePath, out var outputs)
-                    && outputs.Contains(asset.DescriptorRelativePath, StringComparer.OrdinalIgnoreCase))))
+                    && outputs.Contains(asset.DescriptorRelativePath, StringComparer.Ordinal))))
             {
-                result.Add(new(input.AssetUri, ToAssetUri(asset.VirtualPath), asset.Kind, input.MountName, asset.VirtualPath)
+                result.Add(new(input.AssetUri, AssetPath.Parse(asset.VirtualPath), asset.Kind, input.MountName, asset.VirtualPath)
                 {
                     DescriptorRelativePath = asset.DescriptorRelativePath,
                 });
@@ -274,12 +274,12 @@ public sealed partial class ContentPipelineService(
             foreach (var input in scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.Texture))
             {
                 var virtualPath = input.OutputVirtualPath ?? throw new InvalidDataException("A texture requires an explicit output identity.");
-                var prefix = ContentPipelinePaths.GetVirtualMountRoot(input.MountName) + "/";
+                var prefix = AssetPath.Create(input.MountName).VirtualPath + "/";
                 var relative = virtualPath.StartsWith(prefix, StringComparison.Ordinal) ? virtualPath[prefix.Length..]
                     : throw new InvalidDataException("Texture output is outside its mount.");
                 var descriptor = inventory.Resources.SingleOrDefault(resource => string.Equals(resource.Kind, "texture", StringComparison.Ordinal) && string.Equals(resource.DescriptorPath, relative, StringComparison.Ordinal))
                     ?? throw new InvalidDataException($"Native cooking did not produce texture '{virtualPath}'.");
-                result.Add(new(input.AssetUri, ToAssetUri(virtualPath), ContentCookAssetKind.Texture, input.MountName, virtualPath)
+                result.Add(new(input.AssetUri, AssetPath.Parse(virtualPath), ContentCookAssetKind.Texture, input.MountName, virtualPath)
                 {
                     DescriptorRelativePath = descriptor.DescriptorPath,
                 });
@@ -289,15 +289,9 @@ public sealed partial class ContentPipelineService(
         return result;
     }
 
-    private static Uri ToAssetUri(string mountName, string mountRelativePath)
-        => new($"{AssetUris.Scheme}:///{mountName}/{mountRelativePath.Replace('\\', '/')}");
-
-    private static Uri ToAssetUri(string virtualPath)
-        => new($"{AssetUris.Scheme}://{(virtualPath.StartsWith('/') ? virtualPath : "/" + virtualPath)}");
-
-    private static ContentCookAssetKind GetAssetKind(Uri assetUri)
+    private static ContentCookAssetKind GetAssetKind(AssetPath assetUri)
     {
-        var path = Uri.UnescapeDataString(assetUri.AbsolutePath);
+        var path = assetUri.VirtualPath;
         return path switch
         {
             _ when path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
@@ -323,7 +317,7 @@ public sealed partial class ContentPipelineService(
 
     private static ContentCookInput ResolveInput(
         ProjectContext project,
-        Uri assetUri,
+        AssetPath assetUri,
         ContentCookAssetKind kind,
         ContentCookInputRole role)
     {
@@ -331,25 +325,16 @@ public sealed partial class ContentPipelineService(
         return input.Kind == kind ? input : throw new ArgumentException("The asset kind does not match its source identity.", nameof(assetUri));
     }
 
-    private static List<ContentCookInput> ResolveFolderInputs(ProjectContext project, Uri folderUri)
+    private static List<ContentCookInput> ResolveFolderInputs(ProjectContext project, AssetPath folderUri)
     {
-        if (!string.Equals(folderUri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ArgumentException("Cook folder URI must be an editor asset URI.", nameof(folderUri));
-        }
-
-        var path = Uri.UnescapeDataString(folderUri.AbsolutePath).Trim('/').Replace('\\', '/');
-        var slash = path.IndexOf('/', StringComparison.Ordinal);
-        var mountName = slash <= 0 ? path : path[..slash];
-        var mountRelativeFolder = slash <= 0 ? string.Empty : path[(slash + 1)..];
-        var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.Ordinal))
-                    ?? throw new InvalidOperationException($"Project does not declare authoring mount '{mountName}'.");
+        var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, folderUri.Mount, StringComparison.Ordinal))
+                    ?? throw new InvalidOperationException($"Project does not declare authoring mount '{folderUri.Mount}'.");
         if (ProjectOutputFolders.Contains(mount))
         {
             return [];
         }
 
-        var absoluteFolder = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath, mountRelativeFolder));
+        var absoluteFolder = project.Find(folderUri)!.File.FullPath;
         return !Directory.Exists(absoluteFolder) ? [] : Directory.EnumerateFiles(absoluteFolder, "*", SearchOption.AllDirectories)
             .Where(IsCookableDescriptorFile)
             .Select(file => ResolveFileInput(project, mount, file, ContentCookInputRole.Primary))
@@ -361,8 +346,8 @@ public sealed partial class ContentPipelineService(
         ProjectContext project,
         ProjectMountPoint mount)
     {
-        var mountRoot = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath));
-        return !Directory.Exists(mountRoot) ? [] : Directory.EnumerateFiles(mountRoot, "*", SearchOption.AllDirectories)
+        var mountRoot = project.ProjectRoot.Combine(mount.RelativePath);
+        return !Directory.Exists(mountRoot.FullPath) ? [] : Directory.EnumerateFiles(mountRoot.FullPath, "*", SearchOption.AllDirectories)
             .Where(IsCookableDescriptorFile)
             .Select(file => ResolveFileInput(project, mount, file, ContentCookInputRole.Primary))
             .OrderBy(static input => input.SourceRelativePath, StringComparer.Ordinal)
@@ -375,9 +360,7 @@ public sealed partial class ContentPipelineService(
         string sourceAbsolutePath,
         ContentCookInputRole role)
     {
-        var mountRoot = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath));
-        var mountRelativePath = Path.GetRelativePath(mountRoot, sourceAbsolutePath).Replace('\\', '/');
-        var assetUri = ToAssetUri(mount.Name, mountRelativePath);
+        var assetUri = AssetPath.Create(mount.Name, FileSystemPath.From(sourceAbsolutePath).GetPathBelow(project.ProjectRoot.Combine(mount.RelativePath)));
         return CookInputResolver.Resolve(project, assetUri, role);
     }
 
@@ -416,11 +399,11 @@ public sealed partial class ContentPipelineService(
     private static IEnumerable<DiagnosticRecord> MapSourceDiagnostics(ContentCookScope scope, IEnumerable<DiagnosticRecord> nativeDiagnostics)
         => nativeDiagnostics.Select(issue =>
         {
-            var input = scope.Inputs.FirstOrDefault(input => string.Equals(input.SourceAbsolutePath, issue.AffectedPath, StringComparison.OrdinalIgnoreCase));
+            var input = scope.Inputs.FirstOrDefault(input => issue.AffectedPath is { } affected && input.SourceAbsolutePath == FileSystemPath.From(affected));
             return input is null ? issue : issue with
             {
-                AffectedPath = Path.Combine(scope.Project.ProjectRoot, input.SourceRelativePath),
-                AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
+                AffectedPath = Path.Combine(scope.Project.ProjectRoot.FullPath, input.SourceRelativePath),
+                AffectedVirtualPath = input.AssetUri.VirtualPath,
             };
         });
 
@@ -438,13 +421,13 @@ public sealed partial class ContentPipelineService(
         };
     }
 
-    private Task<ContentCookResult> CookCurrentSceneCoreAsync(ContentCookOperation operation, Uri sceneAssetUri, CancellationToken cancellationToken)
+    private Task<ContentCookResult> CookCurrentSceneCoreAsync(ContentCookOperation operation, AssetPath sceneAssetUri, CancellationToken cancellationToken)
         => this.CookCapturedScopesAsync(operation, () => [this.CreateSceneScope(operation.Project, sceneAssetUri) with { ScopeUri = sceneAssetUri }], CookTargetKind.CurrentScene, cancellationToken);
 
-    private Task<ContentCookResult> CookAssetCoreAsync(ContentCookOperation operation, Uri assetUri, CancellationToken cancellationToken, bool allowImportedSourceChanges = true, bool isAutomatic = false)
+    private Task<ContentCookResult> CookAssetCoreAsync(ContentCookOperation operation, AssetPath assetUri, CancellationToken cancellationToken, bool allowImportedSourceChanges = true, bool isAutomatic = false)
         => this.CookCapturedScopesAsync(operation, () => [this.CreateScope(operation.Project, [ResolveInput(operation.Project, assetUri, GetAssetKind(assetUri), ContentCookInputRole.Primary)], CookTargetKind.Asset) with { ScopeUri = assetUri, AllowImportedSourceChanges = allowImportedSourceChanges, IsAutomatic = isAutomatic }], CookTargetKind.Asset, cancellationToken);
 
-    private Task<ContentCookResult> CookFolderCoreAsync(ContentCookOperation operation, Uri folderUri, CancellationToken cancellationToken)
+    private Task<ContentCookResult> CookFolderCoreAsync(ContentCookOperation operation, AssetPath folderUri, CancellationToken cancellationToken)
         => this.CookCapturedScopesAsync(operation, () => [this.CreateScope(operation.Project, ResolveFolderInputs(operation.Project, folderUri), CookTargetKind.Folder) with { ScopeUri = folderUri }], CookTargetKind.Folder, cancellationToken);
 
     private Task<ContentCookResult> CookProjectCoreAsync(ContentCookOperation operation, CancellationToken cancellationToken)
@@ -631,13 +614,13 @@ public sealed partial class ContentPipelineService(
         var execution = new ContentImportExecution(
             operationId,
             scope.InputRoot,
-            Path.Combine(scope.Project.ProjectRoot, ".build", "cook", operationId.ToString("N")),
+            Path.Combine(scope.Project.ProjectRoot.FullPath, ".build", "cook", operationId.ToString("N")),
             manifest)
         { Artifacts = scope.Artifacts, CapturedInputs = scope.CapturedInputs };
         return this.engineContentPipelineApi.ImportAsync(execution, cancellationToken);
     }
 
-    private ContentCookScope CreateSceneScope(ProjectContext project, Uri sceneAssetUri)
+    private ContentCookScope CreateSceneScope(ProjectContext project, AssetPath sceneAssetUri)
     {
         var input = ResolveInput(project, sceneAssetUri, ContentCookAssetKind.Scene, ContentCookInputRole.Primary);
         return new ContentCookScope(

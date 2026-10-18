@@ -40,8 +40,8 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     private readonly TimeProvider time;
     private readonly ILogger<AutomaticCookService> logger;
     private readonly Lock sync = new();
-    private readonly Dictionary<Uri, string> changed = [];
-    private readonly Dictionary<Uri, SourceCook> cooks = [];
+    private readonly Dictionary<AssetPath, string> changed = [];
+    private readonly Dictionary<AssetPath, SourceCook> cooks = [];
     private readonly ITimer window;
     private readonly IDisposable projectSubscription;
     private readonly IDisposable settingsSubscription;
@@ -101,7 +101,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
             return;
         }
 
-        await this.projectManager.SaveProjectSettingsAsync(current.ProjectRoot, settings, cancellationToken).ConfigureAwait(true);
+        await this.projectManager.SaveProjectSettingsAsync(current.ProjectRoot.FullPath, settings, cancellationToken).ConfigureAwait(true);
         if (ReferenceEquals(current, this.projects.ActiveProject))
         {
             this.projects.UpdateSettings(settings);
@@ -133,32 +133,13 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
 
     // A source name the catalog reports for a cooked record resolves to the same source; only a change to the source
     // file itself is cooked.
-    private static bool TryResolveSource(ProjectContext project, Uri uri, [NotNullWhen(true)] out string? source)
+    private static bool TryResolveSource(ProjectContext project, AssetPath uri, [NotNullWhen(true)] out string? source)
     {
-        source = null;
-        var path = Uri.UnescapeDataString(uri.AbsolutePath);
-        if (!string.Equals(uri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase) || path.Length < 2)
-        {
-            return false;
-        }
-
-        var slash = path.IndexOf('/', 1);
-        var mount = slash < 0 ? null : project.AuthoringMounts.FirstOrDefault(mount => !ProjectOutputFolders.Contains(mount)
-            && string.Equals(mount.Name, path[1..slash], StringComparison.Ordinal));
-        if (mount is null)
-        {
-            return false;
-        }
-
-        var root = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath)).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var absolute = Path.GetFullPath(Path.Combine(root, path[(slash + 1)..]));
-        if (!absolute.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !ContentPipelineService.IsCookableDescriptorFile(absolute))
-        {
-            return false;
-        }
-
-        source = absolute;
-        return true;
+        source = project.AuthoringMounts.Any(mount => !ProjectOutputFolders.Contains(mount) && string.Equals(mount.Name, uri.Mount, StringComparison.Ordinal))
+            && project.Find(uri) is { IsMountRoot: false } location && ContentPipelineService.IsCookableDescriptorFile(location.File.FullPath)
+                ? location.File.FullPath
+                : null;
+        return source is not null;
     }
 
     private static void Cancel(SourceCook cook) => cook.CancellationCompletion ??= cook.Cancellation.CancelAsync();
@@ -218,23 +199,23 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
             // A cook in flight for a source that is gone stops; the source is checked again, to remove its output.
             if (change.Kind is AssetChangeKind.Removed)
             {
-                this.Retire(change.Uri);
-                this.Note(current, change.Uri);
+                this.Retire(change.Identity);
+                this.Note(current, change.Identity);
                 return;
             }
 
-            if (change is { Kind: AssetChangeKind.Relocated, PreviousUri: { } previous })
+            if (change is { Kind: AssetChangeKind.Relocated, PreviousIdentity: { } previous })
             {
                 this.Retire(previous);
                 this.Note(current, previous);
             }
 
-            this.Note(current, change.Uri);
+            this.Note(current, change.Identity);
         }
     }
 
     // Called under sync.
-    private void Note(ProjectContext current, Uri uri)
+    private void Note(ProjectContext current, AssetPath uri)
     {
         if (!TryResolveSource(current, uri, out var source))
         {
@@ -256,7 +237,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
 
     private async Task CloseWindowAsync()
     {
-        KeyValuePair<Uri, string>[] closed;
+        KeyValuePair<AssetPath, string>[] closed;
         ProjectContext current;
         CancellationToken lifetime;
         lock (this.sync)
@@ -288,7 +269,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A failed status read cooks the sources instead of leaving them stale.")]
-    private async Task CookStaleAsync(ProjectContext current, List<Uri> changedSources, CancellationToken lifetime)
+    private async Task CookStaleAsync(ProjectContext current, List<AssetPath> changedSources, CancellationToken lifetime)
     {
         if (!this.CookOnChange)
         {
@@ -350,7 +331,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     {
         var resumed = false;
         foreach (var run in this.runs.Runs.Where(run => run.ProjectId == current.ProjectId && run.State == CookRunState.NeedsSave
-            && run.UnsavedDocuments.Any(document => string.Equals(document.SourcePath, source, StringComparison.OrdinalIgnoreCase))))
+            && run.UnsavedDocuments.Any(document => document.SourcePath == FileSystemPath.From(source))))
         {
             resumed |= this.runs.ResumeAfterSave(run.OperationId);
         }
@@ -358,7 +339,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         return resumed;
     }
 
-    private void Queue(ProjectContext current, Uri asset)
+    private void Queue(ProjectContext current, AssetPath asset)
     {
         SourceCook cook;
         lock (this.sync)
@@ -472,7 +453,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     }
 
     // Called under sync.
-    private void Retire(Uri asset)
+    private void Retire(AssetPath asset)
     {
         if (this.cooks.Remove(asset, out var cook))
         {
@@ -498,11 +479,11 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
             && this.cooks.TryGetValue(cook.AssetUri, out var current) && ReferenceEquals(current, cook)
             && !cook.Cancellation.IsCancellationRequested;
 
-    private sealed class SourceCook(ProjectContext project, Uri assetUri)
+    private sealed class SourceCook(ProjectContext project, AssetPath assetUri)
     {
         public ProjectContext Project { get; } = project;
 
-        public Uri AssetUri { get; } = assetUri;
+        public AssetPath AssetUri { get; } = assetUri;
 
         public bool Again { get; set; }
 

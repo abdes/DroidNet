@@ -11,28 +11,36 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 /// <summary>Resolves physical folder requests through the browser's declared mount identities.</summary>
 public partial class ProjectLayoutViewModel
 {
-    private async Task<string?> ResolveFolderNavigationPathAsync(ProjectRootTreeItemAdapter root, IFolder folder)
+    // The selection that shows a folder: none for the project, which browses every folder, the folder's virtual path
+    // otherwise, or null when no mount shows it.
+    private async Task<IReadOnlyList<AssetPath>?> ResolveFolderNavigationAsync(ProjectRootTreeItemAdapter root, IFolder folder)
     {
-        if (string.Equals(folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath), ".", StringComparison.Ordinal))
+        if (projectContextService.ActiveProject is not { } project)
         {
-            return "/";
+            return null;
+        }
+
+        var location = FileSystemPath.From(folder.Location);
+        if (location == project.ProjectRoot)
+        {
+            return [];
         }
 
         var children = await root.Children.ConfigureAwait(true);
         var cooked = children.OfType<VirtualFolderMountTreeItemAdapter>().FirstOrDefault(static mount => mount.CookedVirtualPaths is not null);
-        if (cooked is not null && projectContextService.ActiveProject is { } project)
+        if (cooked is not null)
         {
             using var selected = await publications.AcquireReadAsync(project, CancellationToken.None).ConfigureAwait(true);
-            foreach (var (name, path) in selected.ProjectRoots)
+            foreach (var (name, path) in selected.ProjectRoots.Where(pair => location.IsSameOrInside(pair.Value)))
             {
-                var relative = folder.GetPathRelativeTo(path).Replace('\\', '/');
-                if (Path.IsPathRooted(relative) || relative is ".." || relative.StartsWith("../", StringComparison.Ordinal))
+                var below = location.GetPathBelow(path);
+                if (cooked.VirtualRootPath.TryCombine(below.Length == 0 ? name : name + "/" + below, out var logical)
+                    && await this.FindAdapterByVirtualPathAsync(logical).ConfigureAwait(true) is not null)
                 {
-                    continue;
+                    return [logical];
                 }
 
-                var logical = VirtualPath.Combine(cooked.VirtualRootPath, relative is "." or "" ? name : name + "/" + relative);
-                return await this.FindAdapterByVirtualPathAsync(logical).ConfigureAwait(true) is not null ? logical : cooked.VirtualRootPath;
+                return [cooked.VirtualRootPath];
             }
         }
 
@@ -40,20 +48,17 @@ public partial class ProjectLayoutViewModel
         {
             AuthoringMountPointTreeItemAdapter authoring => (Root: authoring.RootFolder, Path: authoring.VirtualRootPath),
             VirtualFolderMountTreeItemAdapter { CookedVirtualPaths: null } mounted => (Root: mounted.RootFolder, Path: mounted.VirtualRootPath),
-            _ => (Root: (IFolder?)null, Path: (string?)null),
-        }).Where(static mount => mount.Root is not null).OrderByDescending(static mount => mount.Root!.Location.Length);
-        foreach (var mount in mounts)
+            _ => (Root: (IFolder?)null, Path: (AssetPath?)null),
+        }).Where(static mount => mount.Root is not null)
+            .Select(static mount => (Root: FileSystemPath.From(mount.Root!.Location), Path: mount.Path!))
+            .OrderByDescending(static mount => mount.Root.FullPath.Length);
+        foreach (var (mountRoot, mountPath) in mounts.Where(mount => location.IsSameOrInside(mount.Root)))
         {
-            var relative = folder.GetPathRelativeTo(mount.Root!.Location).Replace('\\', '/');
-            if (Path.IsPathRooted(relative) || relative is ".." || relative.StartsWith("../", StringComparison.Ordinal))
+            var below = location.GetPathBelow(mountRoot);
+            var path = below.Length == 0 ? mountPath : mountPath.TryCombine(below, out var inside) ? inside : null;
+            if (path is not null && await this.FindAdapterByVirtualPathAsync(path).ConfigureAwait(true) is not null)
             {
-                continue;
-            }
-
-            var path = relative is "." or "" ? mount.Path! : VirtualPath.Combine(mount.Path!, relative);
-            if (await this.FindAdapterByVirtualPathAsync(path).ConfigureAwait(true) is not null)
-            {
-                return path;
+                return [path];
             }
         }
 

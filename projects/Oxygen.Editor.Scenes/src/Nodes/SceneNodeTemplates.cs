@@ -29,7 +29,7 @@ public static class SceneNodeTemplates
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetUris.BuildGeneratedUri($"BasicShapes/{name}"),
+            Geometry = AssetPath.Generated.Combine($"BasicShapes/{name}"),
         });
         return Finish(node, placement);
     }

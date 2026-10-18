@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -14,4 +15,4 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="Contribution">The native descriptor and output mapping.</param>
 /// <param name="AuthoringCategory">The engine-owned authoring availability.</param>
 /// <param name="MaterialSlots">The native slot inventory for the authored builtin identity.</param>
-public sealed record BuiltinGeometryDefinition(Uri AssetUri, string Name, string CanonicalName, BuiltinDescriptorContribution Contribution, GeneratedAssetCategory AuthoringCategory, GeometryMaterialSlotMetadata MaterialSlots);
+public sealed record BuiltinGeometryDefinition(AssetPath AssetUri, string Name, string CanonicalName, BuiltinDescriptorContribution Contribution, GeneratedAssetCategory AuthoringCategory, GeometryMaterialSlotMetadata MaterialSlots);

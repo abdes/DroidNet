@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
@@ -17,5 +18,5 @@ public sealed record CookReferenceExpansion(
     ImmutableArray<DiagnosticRecord> Diagnostics)
 {
     /// <summary>Gets exact imported outputs required from the captured project sources.</summary>
-    public ImmutableArray<Uri> ImportedOutputs { get; init; } = [];
+    public ImmutableArray<AssetPath> ImportedOutputs { get; init; } = [];
 }

@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.World.Workspace;
 
@@ -24,20 +25,16 @@ public partial class WorkspaceViewModel
     public async Task<bool> InspectAsync(CookRunSnapshot run)
     {
         if (this.projectContextService.ActiveProject is not { } project || project.ProjectId != run.ProjectId
-            || !string.Equals(project.ProjectRoot, run.ProjectRoot, StringComparison.OrdinalIgnoreCase) || this.messenger is null)
+            || project.ProjectRoot != run.ProjectRoot || this.messenger is null)
         {
             return false;
         }
 
+        // An asset's run names its source; the inspection names the asset that source stands for.
         var scope = run.Request.TargetKind == CookTargetKind.Project ? null : run.Request.ScopeUri;
-        if (scope is not null && !string.Equals(scope.Scheme, "asset", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
         var request = this.messenger.Send(new OpenCookedInspectionRequestMessage(project, scope, validate: false)
         {
-            AssetUri = run.Request.TargetKind is CookTargetKind.Asset or CookTargetKind.CurrentScene ? scope : null,
+            Asset = run.Request.TargetKind is CookTargetKind.Asset or CookTargetKind.CurrentScene && scope is not null ? AssetFileTypes.ToIdentity(scope) : null,
             DisplayName = run.DisplayName,
         });
         return request.HasReceivedResponse && await request.Response.ConfigureAwait(true);
@@ -47,7 +44,7 @@ public partial class WorkspaceViewModel
     public async Task<bool> ShowImportedAssetsAsync(CookRunSnapshot run)
     {
         if (this.projectContextService.ActiveProject is not { } project || project.ProjectId != run.ProjectId
-            || !string.Equals(project.ProjectRoot, run.ProjectRoot, StringComparison.OrdinalIgnoreCase)
+            || project.ProjectRoot != run.ProjectRoot
             || run.ImportedOutputs.IsEmpty || Dockable.FromId("cb") is not { ViewModel: ContentBrowserViewModel browser } dockable
             || !await browser.ShowAssetsAsync(run.ImportedOutputs).ConfigureAwait(true))
         {
@@ -62,11 +59,11 @@ public partial class WorkspaceViewModel
     {
         if (this.projectContextService.ActiveProject is not { } project
             || request.Project.ProjectId != project.ProjectId
-            || !string.Equals(request.Project.ProjectRoot, project.ProjectRoot, StringComparison.OrdinalIgnoreCase)
+            || request.Project.ProjectRoot != project.ProjectRoot
             || Dockable.FromId("cb") is not { ViewModel: ContentBrowserViewModel browser } dockable
-            || !await (request.AssetUris is [var single]
+            || !await (request.Assets is [var single]
                 ? browser.ShowAssetAsync(single)
-                : browser.ShowAssetsAsync(request.AssetUris)).ConfigureAwait(true))
+                : browser.ShowAssetsAsync(request.Assets)).ConfigureAwait(true))
         {
             return false;
         }
@@ -106,9 +103,9 @@ public partial class WorkspaceViewModel
             return Task.FromResult(false);
         }
 
-        _ = inspector.InspectAsync(new Oxygen.Editor.World.Inspection.CookedInspectionScope(request.Project, request.ScopeUri, request.Validate)
+        _ = inspector.InspectAsync(new Oxygen.Editor.World.Inspection.CookedInspectionScope(request.Project, request.Scope, request.Validate)
         {
-            AssetUri = request.AssetUri,
+            Asset = request.Asset,
             CookedSource = request.CookedSource,
         });
         if (Dockable.FromId(InspectorDockId) is { } dockable)

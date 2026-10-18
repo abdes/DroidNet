@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Managed.Assets.Catalog.LooseCooked;
 
 /// <summary>
@@ -12,7 +14,7 @@ public sealed record LooseCookedIndexAssetCatalogOptions
     /// <summary>
     /// Gets the cooked root folder path containing <c>container.index.bin</c> and cooked payload files.
     /// </summary>
-    public required string CookedRootFolderPath { get; init; }
+    public required FileSystemPath CookedRootFolderPath { get; init; }
 
     /// <summary>
     /// Gets the index file name.

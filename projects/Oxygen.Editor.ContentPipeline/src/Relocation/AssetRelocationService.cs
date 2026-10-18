@@ -12,6 +12,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -87,7 +88,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<string>> FindReferrersAsync(string virtualPath, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AssetPath>> FindReferrersAsync(AssetPath virtualPath, CancellationToken cancellationToken)
     {
         var project = projects.ActiveProject;
         if (project is null)
@@ -113,22 +114,22 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<string>> FindReferrersOutsideAsync(IReadOnlyList<string> sources, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AssetPath>> FindReferrersOutsideAsync(IReadOnlyList<AssetPath> sources, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sources);
         this.Invalidate();
-        var referrers = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var referrers = new SortedSet<AssetPath>();
         foreach (var source in sources)
         {
             referrers.UnionWith((await this.FindReferrersAsync(source, cancellationToken).ConfigureAwait(false))
-                .Where(referrer => !sources.Any(deleted => RelocationPaths.IsSameOrInside(referrer, deleted))));
+                .Where(referrer => !sources.Any(referrer.IsSameOrInside)));
         }
 
         return [.. referrers];
     }
 
     /// <inheritdoc/>
-    public IReadOnlyList<(string Name, bool IsDirty)> FindOpenDocuments(IReadOnlyList<string> sources)
+    public IReadOnlyList<(string Name, bool IsDirty)> FindOpenDocuments(IReadOnlyList<AssetPath> sources)
     {
         ArgumentNullException.ThrowIfNull(sources);
         if (projects.ActiveProject is not { } project)
@@ -136,29 +137,27 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             return [];
         }
 
-        var deleted = sources.Select(source => RelocationPaths.ToPhysical(project, source)).OfType<string>().ToArray();
+        var deleted = sources.Select(source => RelocationPaths.ToPhysical(project, source)).OfType<FileSystemPath>().ToArray();
         return [.. documents.GetState().Documents
-            .Where(document => deleted.Any(path => string.Equals(document.SourcePath, path, StringComparison.OrdinalIgnoreCase)
-                || document.SourcePath.StartsWith(path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
+            .Where(document => deleted.Any(document.SourcePath.IsSameOrInside))
             .Select(static document => (document.DisplayName, document.IsDirty))
             .DistinctBy(static document => document.DisplayName, StringComparer.OrdinalIgnoreCase)
             .OrderBy(static document => document.DisplayName, StringComparer.OrdinalIgnoreCase)];
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<string>> CopyAsync(IReadOnlyList<string> sources, string targetFolder, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AssetPath>> CopyAsync(IReadOnlyList<AssetPath> sources, AssetPath targetFolder, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(targetFolder);
         var caller = SynchronizationContext.Current;
         RelocationFileMove[] created = [];
-        var copies = await coordinator.RunAsync<IReadOnlyList<string>>(
-            (operation, token) => this.LoggedAsync<IReadOnlyList<string>>("Copy", async () =>
+        var copies = await coordinator.RunAsync<IReadOnlyList<AssetPath>>(
+            (operation, token) => this.LoggedAsync<IReadOnlyList<AssetPath>>("Copy", async () =>
             {
                 var project = operation.Project;
                 var index = await this.BuildIndexAsync(project, token).ConfigureAwait(false);
-                var folder = RelocationPaths.FindWritableMount(project, targetFolder) is not null ? RelocationPaths.ToPhysical(project, targetFolder) : null;
-                if (folder is null || !Directory.Exists(folder))
+                if (RelocationPaths.ToPhysical(project, targetFolder) is not { } folder || !Directory.Exists(folder.FullPath))
                 {
                     throw new AssetRelocationException("Choose a destination under Content or another authoring folder.");
                 }
@@ -168,7 +167,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 {
                     var from = RelocationPaths.ToVirtual(project, move.Source)!;
                     var to = RelocationPaths.ToVirtual(project, move.Target)!;
-                    map.AddIdentity(move.IsDirectory ? from : RelocationPaths.ToIdentity(from), move.IsDirectory ? to : RelocationPaths.ToIdentity(to), move.IsDirectory);
+                    map.AddIdentity(move.IsDirectory ? from : AssetFileTypes.ToIdentity(from), move.IsDirectory ? to : AssetFileTypes.ToIdentity(to), move.IsDirectory);
                 }
 
                 coordinator.VerifyWriter(operation);
@@ -183,46 +182,44 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     }
 
     /// <inheritdoc/>
-    public async Task DeleteAsync(IReadOnlyList<string> sources, Func<IReadOnlyList<string>, Task> recycle, CancellationToken cancellationToken)
+    public async Task DeleteAsync(IReadOnlyList<AssetPath> sources, Func<IReadOnlyList<string>, Task> recycle, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(recycle);
         var caller = SynchronizationContext.Current;
-        List<string> deleted = [];
+        List<FileSystemPath> deleted = [];
         var foldersDeleted = false;
         _ = await coordinator.RunAsync(
             (operation, token) => this.LoggedAsync("Delete", async () =>
             {
                 var project = operation.Project;
                 var index = await this.BuildIndexAsync(project, token).ConfigureAwait(false);
-                var paths = new List<string>();
+                var paths = new List<FileSystemPath>();
                 foreach (var source in sources)
                 {
                     var path = ResolveExisting(project, source);
-                    var isDirectory = Directory.Exists(path);
-                    var segments = source.Trim('/').Split('/');
-                    if (isDirectory && segments.Length == 2 && RelocationPaths.ImportTypeFolders.Contains(segments[1], StringComparer.OrdinalIgnoreCase))
+                    var isDirectory = Directory.Exists(path.FullPath);
+                    if (isDirectory && source.Parent!.IsMount && RelocationPaths.ImportTypeFolders.Contains(source.Name, StringComparer.Ordinal))
                     {
-                        throw new AssetRelocationException($"'{segments[1]}' is one of the importer's fixed folders and cannot be deleted.");
+                        throw new AssetRelocationException($"'{source.Name}' is one of the importer's fixed folders and cannot be deleted.");
                     }
 
                     RejectStartSceneDelete(project, path, isDirectory);
                     paths.AddRange(GetDeletedFiles(project, index, path, isDirectory));
                 }
 
-                var distinct = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                _ = distinct.RemoveAll(path => distinct.Exists(other => !string.Equals(other, path, StringComparison.OrdinalIgnoreCase)
-                    && path.StartsWith(other + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)));
+                var distinct = paths.Distinct().ToList();
+                _ = distinct.RemoveAll(path => distinct.Exists(other => other != path && path.IsSameOrInside(other)));
                 coordinator.VerifyWriter(operation);
                 foreach (var path in distinct)
                 {
-                    this.LogRecycling(path);
+                    this.LogRecycling(path.FullPath);
                 }
 
-                foldersDeleted = distinct.Exists(Directory.Exists);
+                foldersDeleted = distinct.Exists(static path => Directory.Exists(path.FullPath));
                 try
                 {
-                    await recycle(distinct).ConfigureAwait(false);
+                    await recycle([.. distinct.Select(static path => path.FullPath)]).ConfigureAwait(false);
                     deleted = distinct;
                 }
                 finally
@@ -231,7 +228,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 }
 
                 this.LogRecycled(distinct.Count);
-                redirects?.RecordDeleted(distinct.Select(path => RelocationPaths.ToVirtual(project, path)).OfType<string>().Select(RelocationPaths.ToIdentity));
+                redirects?.RecordDeleted(distinct.Select(path => RelocationPaths.ToVirtual(project, path)).OfType<AssetPath>().Select(AssetFileTypes.ToIdentity));
                 return true;
             }),
             cancellationToken).ConfigureAwait(false);
@@ -241,31 +238,31 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         }
     }
 
-    private static async Task<(RelocationMap map, List<string> copies)> PlanCopiesAsync(
+    private static async Task<(RelocationMap map, List<AssetPath> copies)> PlanCopiesAsync(
         ProjectContext project,
         AuthoredReferenceIndex index,
-        IReadOnlyList<string> sources,
-        string targetFolder,
-        string folder,
+        IReadOnlyList<AssetPath> sources,
+        AssetPath targetFolder,
+        FileSystemPath folder,
         CancellationToken cancellationToken)
     {
         var map = new RelocationMap();
-        var copies = new List<string>();
-        var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var copies = new List<AssetPath>();
+        var reserved = new HashSet<FileSystemPath>();
         foreach (var source in sources)
         {
             var path = ResolveExisting(project, source);
-            var isDirectory = Directory.Exists(path);
+            var isDirectory = Directory.Exists(path.FullPath);
             RejectImportContent(project, index, path, isDirectory, "Import the model again instead of copying it.");
-            if (isDirectory && RelocationPaths.IsSameOrInside(targetFolder, source))
+            if (isDirectory && targetFolder.IsSameOrInside(source))
             {
                 throw new AssetRelocationException("A folder cannot be copied into itself.");
             }
 
-            var target = GetUniquePath(folder, Path.GetFileName(path), isDirectory, reserved);
+            var target = GetUniquePath(folder, path.Name, isDirectory, reserved);
             map.AddMove(new(path, target, isDirectory));
             copies.Add(RelocationPaths.ToVirtual(project, target)!);
-            if (!isDirectory && path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
+            if (!isDirectory && path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
             {
                 await AddTextureImageCopiesAsync(map, path, target, folder, reserved, cancellationToken).ConfigureAwait(false);
             }
@@ -274,21 +271,21 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         return (map, copies);
     }
 
-    private static async Task AddTextureImageCopiesAsync(RelocationMap map, string path, string target, string folder, HashSet<string> reserved, CancellationToken cancellationToken)
+    private static async Task AddTextureImageCopiesAsync(RelocationMap map, FileSystemPath path, FileSystemPath target, FileSystemPath folder, HashSet<FileSystemPath> reserved, CancellationToken cancellationToken)
     {
-        var stem = RelocationPaths.GetDisplayName(Path.GetFileName(path));
-        var newStem = RelocationPaths.GetDisplayName(Path.GetFileName(target));
-        foreach (var image in AuthoredReferenceFormat.ReadTextureSources(path, await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false))
-            .Where(image => string.Equals(Path.GetDirectoryName(image), Path.GetDirectoryName(path), StringComparison.OrdinalIgnoreCase) && File.Exists(image)))
+        var stem = RelocationPaths.GetDisplayName(path.Name);
+        var newStem = RelocationPaths.GetDisplayName(target.Name);
+        foreach (var image in AuthoredReferenceFormat.ReadTextureSources(path, await File.ReadAllBytesAsync(path.FullPath, cancellationToken).ConfigureAwait(false))
+            .Where(image => image.Parent == path.Parent && File.Exists(image.FullPath)))
         {
-            var name = Path.GetFileName(image);
-            var renamed = string.Equals(RelocationPaths.GetDisplayName(name), stem, StringComparison.OrdinalIgnoreCase) ? newStem + RelocationPaths.GetExtension(name) : name;
+            var name = image.Name;
+            var renamed = string.Equals(RelocationPaths.GetDisplayName(name), stem, FileSystemPath.NameComparison) ? newStem + RelocationPaths.GetExtension(name) : name;
             map.AddMove(new(image, GetUniquePath(folder, renamed, isDirectory: false, reserved), IsDirectory: false));
         }
     }
 
     // The project opens its start scene; deleting it, or a folder that holds it, would leave the project without one.
-    private static void RejectStartSceneDelete(ProjectContext project, string path, bool isDirectory)
+    private static void RejectStartSceneDelete(ProjectContext project, FileSystemPath path, bool isDirectory)
     {
         if (project.DefaultSceneId is not { } start)
         {
@@ -296,40 +293,41 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         }
 
         var scenes = isDirectory
-            ? Directory.EnumerateFiles(path, "*" + AssetFileTypes.SceneDescriptor, SearchOption.AllDirectories)
-            : path.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase) ? [path] : [];
+            ? Directory.EnumerateFiles(path.FullPath, "*" + AssetFileTypes.SceneDescriptor, SearchOption.AllDirectories)
+            : path.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase) ? [path.FullPath] : [];
         if (scenes.FirstOrDefault(scene => AuthoredReferenceFormat.ReadSceneId(File.ReadAllBytes(scene)) == start) is { } found)
         {
             throw new AssetRelocationException($"'{RelocationPaths.GetDisplayName(Path.GetFileName(found))}' is the project's start scene and cannot be deleted. Choose another start scene first.");
         }
     }
 
-    private static void RejectImportContent(ProjectContext project, AuthoredReferenceIndex index, string path, bool isDirectory, string advice)
+    private static void RejectImportContent(ProjectContext project, AuthoredReferenceIndex index, FileSystemPath path, bool isDirectory, string advice)
     {
+        var root = project.ProjectRoot;
         foreach (var import in index.Imports)
         {
-            var bundle = Path.GetFullPath(Path.Combine(project.ProjectRoot, import.Settings.BundleRoot));
+            var bundle = root.Combine(import.Settings.BundleRoot);
             var owned = isDirectory
-                ? bundle.StartsWith(path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || string.Equals(bundle, path, StringComparison.OrdinalIgnoreCase)
-                    || path.StartsWith(bundle + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                : string.Equals(path, import.SidecarPath, StringComparison.OrdinalIgnoreCase)
-                    || import.Settings.Files.Any(file => string.Equals(import.Settings.ResolveFile(project.ProjectRoot, file), path, StringComparison.OrdinalIgnoreCase));
+                ? bundle.IsSameOrInside(path) || path.IsSameOrInside(bundle)
+                : path == import.SidecarPath
+                    || import.Settings.Files.Any(file => FileSystemPath.From(import.Settings.ResolveFile(project.ProjectRoot.FullPath, file)) == path);
             if (owned)
             {
-                throw new AssetRelocationException($"'{Path.GetFileName(path)}' belongs to the imported model '{RelocationPaths.GetName(import.PrimaryVirtualPath)}'. {advice}");
+                throw new AssetRelocationException($"'{path.Name}' belongs to the imported model '{import.PrimaryVirtualPath.Name}'. {advice}");
             }
         }
     }
 
-    private static IEnumerable<string> GetDeletedFiles(ProjectContext project, AuthoredReferenceIndex index, string path, bool isDirectory)
+    private static IEnumerable<FileSystemPath> GetDeletedFiles(ProjectContext project, AuthoredReferenceIndex index, FileSystemPath path, bool isDirectory)
     {
+        var root = project.ProjectRoot;
         foreach (var import in index.Imports)
         {
-            var bundle = Path.GetFullPath(Path.Combine(project.ProjectRoot, import.Settings.BundleRoot));
-            var model = RelocationPaths.GetName(import.PrimaryVirtualPath);
-            if (isDirectory && path.StartsWith(bundle + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            var bundle = root.Combine(import.Settings.BundleRoot);
+            var model = import.PrimaryVirtualPath.Name;
+            if (isDirectory && path != bundle && path.IsSameOrInside(bundle))
             {
-                throw new AssetRelocationException($"'{Path.GetFileName(path)}' is part of the imported model '{model}'. Delete the model instead.");
+                throw new AssetRelocationException($"'{path.Name}' is part of the imported model '{model}'. Delete the model instead.");
             }
 
             if (isDirectory)
@@ -337,76 +335,77 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 continue;
             }
 
-            if (string.Equals(path, import.SidecarPath, StringComparison.OrdinalIgnoreCase))
+            if (path == import.SidecarPath)
             {
-                throw new AssetRelocationException($"'{Path.GetFileName(path)}' holds the import settings of '{model}'. Delete the model instead.");
+                throw new AssetRelocationException($"'{path.Name}' holds the import settings of '{model}'. Delete the model instead.");
             }
 
-            var bundleFiles = import.Settings.Files.Select(file => import.Settings.ResolveFile(project.ProjectRoot, file)).ToArray();
-            if (string.Equals(path, import.PrimaryPath, StringComparison.OrdinalIgnoreCase))
+            var bundleFiles = import.Settings.Files.Select(file => FileSystemPath.From(import.Settings.ResolveFile(project.ProjectRoot.FullPath, file))).ToArray();
+            if (path == import.PrimaryPath)
             {
-                var owned = bundleFiles.Append(import.SidecarPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var onlyThisModel = Directory.Exists(bundle) && Directory.EnumerateFiles(bundle, "*", SearchOption.AllDirectories).All(owned.Contains);
-                return onlyThisModel && !string.Equals(bundle, Path.GetFullPath(project.ProjectRoot), StringComparison.OrdinalIgnoreCase)
+                var owned = bundleFiles.Append(import.SidecarPath).ToHashSet();
+                var onlyThisModel = Directory.Exists(bundle.FullPath)
+                    && Directory.EnumerateFiles(bundle.FullPath, "*", SearchOption.AllDirectories).All(file => owned.Contains(FileSystemPath.From(file)));
+                return onlyThisModel && bundle != root
                     ? [bundle]
-                    : owned.Where(File.Exists);
+                    : owned.Where(static file => File.Exists(file.FullPath));
             }
 
-            if (bundleFiles.Contains(path, StringComparer.OrdinalIgnoreCase))
+            if (bundleFiles.Contains(path))
             {
-                throw new AssetRelocationException($"'{Path.GetFileName(path)}' is part of the imported model '{model}'. Delete the model instead.");
+                throw new AssetRelocationException($"'{path.Name}' is part of the imported model '{model}'. Delete the model instead.");
             }
         }
 
-        if (isDirectory || !path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
+        if (isDirectory || !path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
         {
-            var descriptors = isDirectory ? [] : index.Descriptors.Where(descriptor => descriptor.Path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(Path.GetDirectoryName(descriptor.Path), Path.GetDirectoryName(path), StringComparison.OrdinalIgnoreCase)
-                && AuthoredReferenceFormat.ReadTextureSources(descriptor.Path, File.ReadAllBytes(descriptor.Path)).Contains(path, StringComparer.OrdinalIgnoreCase))
-                .Select(static descriptor => descriptor.Path);
+            var descriptors = isDirectory ? [] : index.Descriptors.Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
+                && descriptor.Location.Parent == path.Parent
+                && AuthoredReferenceFormat.ReadTextureSources(descriptor.Location, File.ReadAllBytes(descriptor.Location.FullPath)).Contains(path))
+                .Select(static descriptor => descriptor.Location);
             return [path, .. descriptors];
         }
 
         // An image another texture still uses stays; only this texture's own images go with it.
-        var folder = Path.GetDirectoryName(path);
+        var folder = path.Parent;
         var shared = index.Descriptors
-            .Where(descriptor => descriptor.Path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(descriptor.Path, path, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(Path.GetDirectoryName(descriptor.Path), folder, StringComparison.OrdinalIgnoreCase))
-            .SelectMany(static descriptor => AuthoredReferenceFormat.ReadTextureSources(descriptor.Path, File.ReadAllBytes(descriptor.Path)))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var images = AuthoredReferenceFormat.ReadTextureSources(path, File.ReadAllBytes(path))
-            .Where(image => string.Equals(Path.GetDirectoryName(image), folder, StringComparison.OrdinalIgnoreCase) && File.Exists(image) && !shared.Contains(image));
+            .Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
+                && descriptor.Location != path
+                && descriptor.Location.Parent == folder)
+            .SelectMany(static descriptor => AuthoredReferenceFormat.ReadTextureSources(descriptor.Location, File.ReadAllBytes(descriptor.Location.FullPath)))
+            .ToHashSet();
+        var images = AuthoredReferenceFormat.ReadTextureSources(path, File.ReadAllBytes(path.FullPath))
+            .Where(image => image.Parent == folder && File.Exists(image.FullPath) && !shared.Contains(image));
         return [path, .. images];
     }
 
-    private static string GetUniquePath(string folder, string name, bool isDirectory, HashSet<string> reserved)
+    private static FileSystemPath GetUniquePath(FileSystemPath folder, string name, bool isDirectory, HashSet<FileSystemPath> reserved)
     {
         var extension = isDirectory ? string.Empty : RelocationPaths.GetExtension(name);
         var stem = name[..^extension.Length];
-        var candidate = Path.Combine(folder, name);
-        for (var index = 2; File.Exists(candidate) || Directory.Exists(candidate) || reserved.Contains(candidate) || ScriptSourceNames.FindCollision(candidate) is not null; index++)
+        var candidate = folder.Combine(name);
+        for (var index = 2; File.Exists(candidate.FullPath) || Directory.Exists(candidate.FullPath) || reserved.Contains(candidate) || ScriptSourceNames.FindCollision(candidate) is not null; index++)
         {
-            candidate = Path.Combine(folder, string.Create(CultureInfo.InvariantCulture, $"{stem} ({index}){extension}"));
+            candidate = folder.Combine(string.Create(CultureInfo.InvariantCulture, $"{stem} ({index}){extension}"));
         }
 
         _ = reserved.Add(candidate);
         return candidate;
     }
 
-    private static string ResolveExisting(ProjectContext project, string source)
+    private static FileSystemPath ResolveExisting(ProjectContext project, AssetPath source)
     {
-        if (RelocationPaths.FindWritableMount(project, source) is null || RelocationPaths.ToPhysical(project, source) is not { } path)
+        if (RelocationPaths.ToPhysical(project, source) is not { } path)
         {
             throw new AssetRelocationException($"'{source}' is read-only. Only project content can be changed.");
         }
 
-        if (source.Trim('/').Split('/').Length == 1)
+        if (source.IsMount)
         {
             throw new AssetRelocationException("A content mount is changed in Mounts, not here.");
         }
 
-        return File.Exists(path) || Directory.Exists(path)
+        return File.Exists(path.FullPath) || Directory.Exists(path.FullPath)
             ? path
             : throw new AssetRelocationException($"'{source}' does not exist as an authored file. Imported outputs belong to their model.");
     }
@@ -419,25 +418,27 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             foreach (var move in map.Moves)
             {
                 var pairs = move.IsDirectory
-                    ? Directory.EnumerateFiles(move.Source, "*", SearchOption.AllDirectories)
-                        .Where(file => !Path.GetRelativePath(move.Source, file).Split(Path.DirectorySeparatorChar).Any(static segment => segment.StartsWith('.')))
-                        .Select(file => (Source: file, Target: move.Target + file[move.Source.Length..]))
+                    ? Directory.EnumerateFiles(move.Source.FullPath, "*", SearchOption.AllDirectories)
+                        .Select(FileSystemPath.From)
+                        .Select(file => (Source: file, Below: file.GetPathBelow(move.Source)))
+                        .Where(static file => !file.Below.Split('/').Any(static segment => segment.StartsWith('.')))
+                        .Select(file => (file.Source, Target: move.Target.Combine(file.Below)))
                         .ToArray()
                     : [(move.Source, move.Target)];
                 if (move.IsDirectory)
                 {
-                    _ = Directory.CreateDirectory(move.Target);
-                    created.Add(move.Target);
+                    _ = Directory.CreateDirectory(move.Target.FullPath);
+                    created.Add(move.Target.FullPath);
                 }
 
                 foreach (var (source, target) in pairs)
                 {
-                    var content = await File.ReadAllBytesAsync(source, CancellationToken.None).ConfigureAwait(false);
-                    var bytes = AuthoredReferenceFormat.IsDescriptor(source) ? AuthoredReferenceFormat.RewriteCopy(source, target, content, map, mounts) : content;
-                    _ = Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                    _ = await files.WriteAsync(target, bytes, FileVersion.Missing, CancellationToken.None).ConfigureAwait(false);
-                    created.Add(target);
-                    this.LogCopied(source, target);
+                    var content = await File.ReadAllBytesAsync(source.FullPath, CancellationToken.None).ConfigureAwait(false);
+                    var bytes = AuthoredReferenceFormat.IsDescriptor(source.FullPath) ? AuthoredReferenceFormat.RewriteCopy(source, target, content, map, mounts) : content;
+                    _ = Directory.CreateDirectory(target.Parent!.FullPath);
+                    _ = await files.WriteAsync(target.FullPath, bytes, FileVersion.Missing, CancellationToken.None).ConfigureAwait(false);
+                    created.Add(target.FullPath);
+                    this.LogCopied(source.FullPath, target.FullPath);
                 }
             }
         }
@@ -482,12 +483,12 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             {
                 foreach (var move in request.Moves)
                 {
-                    this.LogRelocationRequested(move.SourcePath, move.TargetPath);
+                    this.LogRelocationRequested(move.Source.VirtualPath, move.Target.VirtualPath);
                 }
 
                 foreach (var move in request.GroupMoves)
                 {
-                    this.LogGroupRelocationRequested(move.SourcePath, move.Group);
+                    this.LogGroupRelocationRequested(move.Source.VirtualPath, move.Group);
                 }
 
                 var index = await this.BuildIndexAsync(operation.Project, token).ConfigureAwait(false);
@@ -505,7 +506,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 IReadOnlyList<RelocatedFile> written;
                 try
                 {
-                    written = await AssetRelocationTransaction.ApplyAsync(operation.Project.ProjectRoot, plan, files, this.logger, this.FailAfterStep, token).ConfigureAwait(false);
+                    written = await AssetRelocationTransaction.ApplyAsync(operation.Project.ProjectRoot.FullPath, plan, files, this.logger, this.FailAfterStep, token).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -587,7 +588,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         var index = await AuthoredReferenceIndex.BuildAsync(project, cancellationToken).ConfigureAwait(false);
         foreach (var path in index.Unreadable)
         {
-            this.LogUnreadableFile(path);
+            this.LogUnreadableFile(path.FullPath);
         }
 
         return index;

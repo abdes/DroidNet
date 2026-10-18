@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -59,9 +60,9 @@ public sealed partial class ContentPipelineService
 
     // An automatic cook whose sources are all gone, and at least one of them has a published product.
     private static bool IsRetiringRemovedSources(ProjectContext project, Incremental.CookProvenance previous, ContentCookInput[] primaryInputs)
-        => primaryInputs.Length != 0 && primaryInputs.All(static input => !File.Exists(input.SourceAbsolutePath))
+        => primaryInputs.Length != 0 && primaryInputs.All(static input => !File.Exists(input.SourceAbsolutePath.FullPath))
             && previous.Products.Any(product => primaryInputs.Any(input => input.AssetUri == product.SourceUri)
-                && Incremental.CookRootRepair.IsRetired(project.ProjectRoot, product));
+                && Incremental.CookRootRepair.IsRetired(project.ProjectRoot.FullPath, product));
 
     // Each removed source is reported as an Info diagnostic, so the run names what it removed.
     private static void ReportRetiredSources(Guid operationId, ContentCookInput[] inputs)
@@ -74,9 +75,9 @@ public sealed partial class ContentPipelineService
                 Domain = FailureDomain.AssetCook,
                 Severity = DiagnosticSeverity.Info,
                 Code = OutputRetiredCode,
-                Message = $"'{Path.GetFileName(input.SourceAbsolutePath)}' was moved or deleted after it was cooked; this cook removes its cooked output.",
-                AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
-                AffectedPath = input.SourceAbsolutePath,
+                Message = $"'{input.SourceAbsolutePath.Name}' was moved or deleted after it was cooked; this cook removes its cooked output.",
+                AffectedVirtualPath = input.AssetUri.VirtualPath,
+                AffectedPath = input.SourceAbsolutePath.FullPath,
             };
             CookRunContext.Report(new(retired.Message, retired.Severity, Diagnostic: retired));
         }
@@ -199,7 +200,7 @@ public sealed partial class ContentPipelineService
 
         // A save or preview may have queued this cook before its source, never cooked, was moved or deleted. There is
         // nothing to cook and no output to remove.
-        if (isAutomatic && primaryInputs.All(static input => !File.Exists(input.SourceAbsolutePath)))
+        if (isAutomatic && primaryInputs.All(static input => !File.Exists(input.SourceAbsolutePath.FullPath)))
         {
             var retired = CreateSourceMissingDiagnostics(operation.OperationId, primaryInputs).Select(diagnostic => diagnostic with
             {
@@ -293,7 +294,7 @@ public sealed partial class ContentPipelineService
                 input,
                 references,
                 this.engineContentPipelineApi as Inspection.ICookedDependencyInspector,
-                Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")),
+                Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N")),
                 artifacts,
                 token));
 
@@ -312,10 +313,10 @@ public sealed partial class ContentPipelineService
             return false;
         }
 
-        var streams = new Dictionary<string, FileStream>(StringComparer.OrdinalIgnoreCase);
+        var streams = new Dictionary<FileSystemPath, FileStream>();
         try
         {
-            var primary = graph.Assets.Where(static input => input.Role == ContentCookInputRole.Primary).Select(static input => input.SourceAbsolutePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var primary = graph.Assets.Where(static input => input.Role == ContentCookInputRole.Primary).Select(static input => input.SourceAbsolutePath).ToHashSet();
             if (!primary.SetEquals(resolveScopes().SelectMany(static scope => scope.Inputs).Select(static input => input.SourceAbsolutePath)))
             {
                 return false;
@@ -325,7 +326,7 @@ public sealed partial class ContentPipelineService
             {
                 if (!streams.ContainsKey(input.SourcePath))
                 {
-                    streams.Add(input.SourcePath, new(input.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous));
+                    streams.Add(input.SourcePath, new(input.SourcePath.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous));
                 }
             }
 

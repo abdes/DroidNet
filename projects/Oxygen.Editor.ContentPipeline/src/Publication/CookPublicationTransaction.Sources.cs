@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
@@ -13,10 +14,10 @@ internal sealed partial class CookPublicationTransaction
 {
     private static string CapturedSourcePath(ProjectContext project, Guid operationId, string published)
     {
-        var inputs = Path.Combine(project.ProjectRoot, ".build", "cook", operationId.ToString("N"), "inputs");
+        var inputs = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", operationId.ToString("N"), "inputs");
         CookOutputLease.RejectReparsePoint(inputs);
         var path = inputs;
-        foreach (var segment in Path.GetRelativePath(project.ProjectRoot, published).Split(Path.DirectorySeparatorChar))
+        foreach (var segment in Path.GetRelativePath(project.ProjectRoot.FullPath, published).Split(Path.DirectorySeparatorChar))
         {
             path = Path.Combine(path, segment);
             CookOutputLease.RejectReparsePoint(path);
@@ -65,7 +66,7 @@ internal sealed partial class CookPublicationTransaction
     private static string PublicationSourcePath(ProjectContext project, Guid operationId, string bundleName)
     {
         _ = ImportSourceRetention.ResolveDestination(project, bundleName);
-        var path = Path.Combine(project.ProjectRoot, ".build", "cook", operationId.ToString("N"), "source-output", bundleName);
+        var path = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", operationId.ToString("N"), "source-output", bundleName);
         CookOutputLease.RejectReparsePoint(Path.GetDirectoryName(path)!);
         CookOutputLease.RejectReparsePoint(path);
         return path;
@@ -73,8 +74,9 @@ internal sealed partial class CookPublicationTransaction
 
     private static bool IsWithinSourceBundle(ProjectContext project, string bundleName, string relativePath)
     {
-        var bundle = ImportSourceRetention.ResolveDestination(project, bundleName);
-        return Path.GetFullPath(Path.Combine(project.ProjectRoot, relativePath)).StartsWith(bundle + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        var bundle = FileSystemPath.From(ImportSourceRetention.ResolveDestination(project, bundleName));
+        var path = project.ProjectRoot.Combine(relativePath);
+        return path != bundle && path.IsSameOrInside(bundle);
     }
 
     private static string ProducedSourcePath(ProjectContext project, CookProducedSourceFile file)
@@ -97,18 +99,18 @@ internal sealed partial class CookPublicationTransaction
             throw new InvalidDataException("Native publication may update only its retained material-slot provenance.");
         }
 
-        var primary = Path.GetFullPath(Path.Combine(project.ProjectRoot, before.BundleRoot, before.PrimaryRelativePath));
+        var primary = project.ProjectRoot.Combine(Path.Combine(before.BundleRoot, before.PrimaryRelativePath));
         var sourceUri = CookInputResolver.FindAuthoringSourceUri(project, primary)
             ?? throw new InvalidDataException("Produced metadata does not belong to a project authoring source.");
         var source = CookInputResolver.Resolve(project, sourceUri, ContentCookInputRole.Dependency);
         if (source.Kind != ContentCookAssetKind.ForeignSource
-            || Path.GetExtension(primary).ToUpperInvariant() is not (".GLTF" or ".GLB" or ".FBX")
-            || !string.Equals(source.SourceAbsolutePath, primary, StringComparison.OrdinalIgnoreCase))
+            || Path.GetExtension(primary.Name).ToUpperInvariant() is not (".GLTF" or ".GLB" or ".FBX")
+            || source.SourceAbsolutePath != primary)
         {
             throw new InvalidDataException("Produced metadata does not identify its supported model source.");
         }
 
-        var path = project.ProjectRoot;
+        var path = project.ProjectRoot.FullPath;
         foreach (var segment in file.RelativePath.Split('/'))
         {
             path = Path.Combine(path, segment);

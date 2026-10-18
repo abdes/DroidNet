@@ -21,7 +21,6 @@ public sealed partial class CookDocumentRegistry
     private void UpdateState(long id, CookDocumentState state, bool relocate = false)
     {
         ArgumentNullException.ThrowIfNull(state);
-        state = state with { SourcePath = Path.GetFullPath(state.SourcePath) };
         CookDocumentStateChangedEventArgs change;
         lock (this.sync)
         {
@@ -30,7 +29,7 @@ public sealed partial class CookDocumentRegistry
                 return;
             }
 
-            if (!relocate && !string.Equals(registration.SourcePath, state.SourcePath, StringComparison.OrdinalIgnoreCase))
+            if (!relocate && registration.SourcePath != state.SourcePath)
             {
                 throw new ArgumentException("Document state must belong to this registered source.", nameof(state));
             }

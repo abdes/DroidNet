@@ -24,7 +24,7 @@ public sealed partial class MaterialEditorViewModel
         }
 
         await this.document.FollowRelocationAsync(relocation).ConfigureAwait(true);
-        this.LogFollowedRelocation(this.document.File.AssetUri);
+        this.LogFollowedRelocation(this.document.File.Asset);
     }
 
     private sealed class RelocationParticipant(MaterialEditorViewModel owner, DispatcherQueue? dispatcher) : IAssetRelocationParticipant

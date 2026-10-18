@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -20,11 +21,11 @@ public sealed partial class ContentPipelineService
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken = default)
         => this.statusReader.ReadAsync(project, assetUris, cancellationToken);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, Publication.ICookPublicationReadLease publication,
-        IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
+        IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken = default)
         => this.statusReader.ReadAsync(project, Publication.CookPublicationReadLease.Issued(publication), assetUris, cancellationToken);
 }

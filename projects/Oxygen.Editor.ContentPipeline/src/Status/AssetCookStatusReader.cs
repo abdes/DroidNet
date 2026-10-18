@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -35,7 +36,7 @@ public sealed partial class AssetCookStatusReader(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(assetUris);
@@ -50,7 +51,7 @@ public sealed partial class AssetCookStatusReader(
     }
 
     /// <inheritdoc />
-    Task<IReadOnlyList<AssetCookStatus>> IAssetCookStatusReader.ReadAsync(ProjectContext project, ICookPublicationReadLease publication, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken)
+    Task<IReadOnlyList<AssetCookStatus>> IAssetCookStatusReader.ReadAsync(ProjectContext project, ICookPublicationReadLease publication, IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken)
         => this.ReadAsync(project, CookPublicationReadLease.Issued(publication), assetUris, cancellationToken);
 
     /// <summary>Reads status while the caller retains the project's finite inspection lease.</summary>
@@ -59,10 +60,10 @@ public sealed partial class AssetCookStatusReader(
     /// <param name="assetUris">The requested authored identities.</param>
     /// <param name="cancellationToken">Cancels status reads.</param>
     /// <returns>The current source and output facts.</returns>
-    public async Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, CookPublicationReadLease snapshot, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, CookPublicationReadLease snapshot, IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken = default)
     {
         using var retained = snapshot.Retain();
-        if (snapshot.ProjectId != project.ProjectId || !string.Equals(snapshot.ProjectRoot, Path.GetFullPath(project.ProjectRoot), StringComparison.OrdinalIgnoreCase))
+        if (snapshot.ProjectId != project.ProjectId || snapshot.ProjectRoot != project.ProjectRoot)
         {
             throw new ArgumentException("The status publication belongs to another project.", nameof(snapshot));
         }
@@ -115,7 +116,7 @@ public sealed partial class AssetCookStatusReader(
     }
 
     // The cook input of a requested asset, or, when it cannot be one, the asset's invalid status.
-    private static (ContentCookInput? Input, AssetCookStatus? Unresolved) ResolveInput(ProjectContext project, Uri requested, ImportedSourceIndex.Resolution resolution)
+    private static (ContentCookInput? Input, AssetCookStatus? Unresolved) ResolveInput(ProjectContext project, AssetPath requested, ImportedSourceIndex.Resolution resolution)
     {
         if (resolution.Source is { } source)
         {
@@ -132,7 +133,7 @@ public sealed partial class AssetCookStatusReader(
         }
     }
 
-    private static AssetCookStatus CreateUnresolvedStatus(Uri requested, string reason)
+    private static AssetCookStatus CreateUnresolvedStatus(AssetPath requested, string reason)
         => new(
             requested,
             AssetCookFreshness.InvalidSource,
@@ -148,7 +149,7 @@ public sealed partial class AssetCookStatusReader(
                     Severity = DiagnosticSeverity.Error,
                     Code = "asset_status.input_unresolved",
                     Message = reason,
-                    AffectedVirtualPath = AssetUriHelper.GetVirtualPath(requested),
+                    AffectedVirtualPath = requested.VirtualPath,
                 },
             ]);
 
@@ -169,7 +170,7 @@ public sealed partial class AssetCookStatusReader(
         ContentCookInput input,
         CookDependencyGraph graph,
         FreshnessSnapshot plan,
-        Dictionary<Uri, CookProvenance.Product> products,
+        Dictionary<AssetPath, CookProvenance.Product> products,
         ImmutableArray<CookDocumentState> documents,
         bool nativeAvailable,
         IReadOnlyList<DiagnosticRecord> nativeDiagnostics,
@@ -177,8 +178,8 @@ public sealed partial class AssetCookStatusReader(
         HashSet<string> changed)
     {
         var closure = Closure(input.AssetUri, graph.Dependencies);
-        var paths = graph.Assets.Where(asset => closure.Contains(asset.AssetUri)).Select(static asset => asset.SourceAbsolutePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var issues = graph.Diagnostics.Where(diagnostic => diagnostic.AffectedPath is { } path && paths.Contains(path)).ToImmutableArray();
+        var paths = graph.Assets.Where(asset => closure.Contains(asset.AssetUri)).Select(static asset => asset.SourceAbsolutePath).ToHashSet();
+        var issues = graph.Diagnostics.Where(diagnostic => diagnostic.AffectedPath is { } path && paths.Contains(FileSystemPath.From(path))).ToImmutableArray();
         var inputChanged = graph.Assets.Any(asset => closure.Contains(asset.AssetUri)
             && graph.FileDependencies.TryGetValue(asset.AssetUri, out var dependencies) && dependencies.Any(changed.Contains));
         _ = products.TryGetValue(input.AssetUri, out var prior);
@@ -223,7 +224,7 @@ public sealed partial class AssetCookStatusReader(
             [.. issues, .. nativeDiagnostics])
         {
             SourcePaths = [.. paths],
-            SavedSourceHash = graph.Files.FirstOrDefault(file => string.Equals(file.SourcePath, input.SourceAbsolutePath, StringComparison.OrdinalIgnoreCase))?.DiscoveryHash,
+            SavedSourceHash = graph.Files.FirstOrDefault(file => file.SourcePath == input.SourceAbsolutePath)?.DiscoveryHash,
         };
     }
 
@@ -234,11 +235,11 @@ public sealed partial class AssetCookStatusReader(
         Severity = DiagnosticSeverity.Warning,
         Code = code,
         Message = message,
-        AffectedPath = input.SourceAbsolutePath,
-        AffectedVirtualPath = AssetUriHelper.GetVirtualPath(input.AssetUri),
+        AffectedPath = input.SourceAbsolutePath.FullPath,
+        AffectedVirtualPath = input.AssetUri.VirtualPath,
     };
 
-    private static AssetCookStatus MapImportedStatus(Uri requested, ImportedSourceIndex.Resolution resolution, AssetCookStatus status)
+    private static AssetCookStatus MapImportedStatus(AssetPath requested, ImportedSourceIndex.Resolution resolution, AssetCookStatus status)
     {
         if (resolution.Error is { } error)
         {
@@ -247,7 +248,7 @@ public sealed partial class AssetCookStatusReader(
                 AssetUri = requested,
                 Freshness = AssetCookFreshness.InvalidSource,
                 OutputAvailability = CookedOutputAvailability.Unknown,
-                Diagnostics = [new DiagnosticRecord { OperationId = Guid.Empty, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error, Code = "asset_status.import_conflict", Message = error, AffectedVirtualPath = AssetUriHelper.GetVirtualPath(requested) }],
+                Diagnostics = [new DiagnosticRecord { OperationId = Guid.Empty, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error, Code = "asset_status.import_conflict", Message = error, AffectedVirtualPath = requested.VirtualPath }],
             };
         }
 
@@ -266,10 +267,10 @@ public sealed partial class AssetCookStatusReader(
         };
     }
 
-    private static HashSet<Uri> Closure(Uri source, ImmutableDictionary<Uri, ImmutableArray<Uri>> dependencies)
+    private static HashSet<AssetPath> Closure(AssetPath source, ImmutableDictionary<AssetPath, ImmutableArray<AssetPath>> dependencies)
     {
-        var found = new HashSet<Uri>();
-        var pending = new Stack<Uri>();
+        var found = new HashSet<AssetPath>();
+        var pending = new Stack<AssetPath>();
         pending.Push(source);
         while (pending.TryPop(out var current))
         {
@@ -308,7 +309,7 @@ public sealed partial class AssetCookStatusReader(
                 }
                 else
                 {
-                    var hash = await CookSavedSourceReader.HashFileAsync(input.SourcePath, cancellationToken).ConfigureAwait(false);
+                    var hash = await CookSavedSourceReader.HashFileAsync(input.SourcePath.FullPath, cancellationToken).ConfigureAwait(false);
                     if (!string.Equals(hash, input.DiscoveryHash, StringComparison.Ordinal))
                     {
                         _ = changed.Add(input.RelativePath);

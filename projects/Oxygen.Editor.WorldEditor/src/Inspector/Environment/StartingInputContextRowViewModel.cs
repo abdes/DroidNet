@@ -5,6 +5,7 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -21,14 +22,14 @@ public sealed partial class StartingInputContextRowViewModel : ObservableObject
     /// <summary>Initializes a new instance of the <see cref="StartingInputContextRowViewModel"/> class.</summary>
     /// <param name="owner">The section that applies the row's edits.</param>
     /// <param name="context">The mapping context asset.</param>
-    internal StartingInputContextRowViewModel(PlaySectionViewModel owner, Uri context)
+    internal StartingInputContextRowViewModel(PlaySectionViewModel owner, AssetPath context)
     {
         this.owner = owner;
         this.Context = context;
     }
 
     /// <summary>Gets the mapping context asset.</summary>
-    public Uri Context { get; }
+    public AssetPath Context { get; }
 
     /// <summary>Gets the context name.</summary>
     [ObservableProperty]

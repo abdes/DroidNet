@@ -167,7 +167,7 @@ public sealed partial class CodeEditorService(
         ProcessStartInfo? start = null;
         try
         {
-            start = CodeEditorLaunch.Create(preference, path, line, column, projects.ActiveProject?.ProjectRoot, CodeEditorLaunch.FindVisualStudioCode());
+            start = CodeEditorLaunch.Create(preference, path, line, column, projects.ActiveProject?.ProjectRoot.FullPath, CodeEditorLaunch.FindVisualStudioCode());
             using var process = Process.Start(start);
             this.LogEditorStarted(path, start);
             return true;

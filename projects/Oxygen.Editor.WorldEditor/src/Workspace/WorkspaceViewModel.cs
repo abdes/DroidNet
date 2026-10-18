@@ -215,19 +215,18 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
     /// <param name="context">The project.</param>
     /// <returns>The scene's asset URI, or <see langword="null"/> when there is none to open.</returns>
-    internal static async Task<Uri?> ResolveInitialSceneAsync(IAssetCatalog catalog, ProjectContext context)
+    internal static async Task<AssetPath?> ResolveInitialSceneAsync(IAssetCatalog catalog, ProjectContext context)
     {
         // Fresh activation may carry an explicit scene request (template StarterScene or a workflow open).
-        if (context.InitialSceneAssetUri is { } initialSceneAssetUri
-            && context.FindByAssetUri(initialSceneAssetUri) is { IsMountRoot: false } requested && File.Exists(requested.FilePath))
+        if (context.InitialScene is { } initialScene && context.FindSource(initialScene) is { IsMountRoot: false } requested)
         {
-            return requested.AssetUri;
+            return requested.Identity;
         }
 
         // Otherwise the project's configured start scene, resolved by stable ID.
         // A missing or invalid start scene is not silently replaced by last-opened or first-listed.
         return context.DefaultSceneId is { } defaultSceneId
-            ? (await SceneFiles.FindByIdAsync(catalog, context, defaultSceneId).ConfigureAwait(true))?.AssetUri
+            ? (await SceneFiles.FindByIdAsync(catalog, context, defaultSceneId).ConfigureAwait(true))?.Identity
             : null;
     }
 
@@ -494,7 +493,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
         try
         {
-            var usage = await this.projectUsage.GetProjectUsageAsync(context.Name, context.ProjectRoot).ConfigureAwait(true);
+            var usage = await this.projectUsage.GetProjectUsageAsync(context.Name, context.ProjectRoot.FullPath).ConfigureAwait(true);
             if (string.IsNullOrWhiteSpace(usage?.LastOpenedScene))
             {
                 return;
@@ -502,7 +501,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
             var lastOpened = usage.LastOpenedScene;
             if (await ResolveSceneByNameOrIdAsync(catalog, context, lastOpened).ConfigureAwait(true) is not { } migrated
-                || await SceneFiles.ReadIdAsync(migrated.FilePath).ConfigureAwait(true) is not { } migratedId)
+                || await SceneFiles.ReadIdAsync(migrated.File).ConfigureAwait(true) is not { } migratedId)
             {
                 return;
             }

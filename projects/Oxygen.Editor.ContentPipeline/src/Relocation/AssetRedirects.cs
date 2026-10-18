@@ -5,6 +5,8 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -18,7 +20,7 @@ public sealed partial class AssetRedirects : IAssetRedirects, IDisposable
 {
     private readonly Lock sync = new();
     private readonly List<RelocationMap> relocations = [];
-    private readonly HashSet<string> deleted = [with(StringComparer.OrdinalIgnoreCase)];
+    private readonly HashSet<AssetPath> deleted = [];
     private readonly IProjectContextService projects;
     private readonly ILogger logger;
     private readonly IDisposable projectChanges;
@@ -60,19 +62,29 @@ public sealed partial class AssetRedirects : IAssetRedirects, IDisposable
     }
 
     /// <inheritdoc/>
-    public Uri Resolve(Uri reference)
+    public AssetPath Resolve(AssetPath reference)
     {
         ArgumentNullException.ThrowIfNull(reference);
-        var original = reference.ToString();
-        var resolved = this.Resolve(original);
-        return string.Equals(resolved, original, StringComparison.Ordinal) ? reference : new Uri(resolved);
+        RelocationMap[] snapshot;
+        lock (this.sync)
+        {
+            snapshot = [.. this.relocations];
+        }
+
+        if (snapshot.Length == 0 || this.ResolveIdentity(reference, snapshot) is not { } resolved)
+        {
+            return reference;
+        }
+
+        this.LogRedirected(reference.ToString(), resolved.ToString());
+        return resolved;
     }
 
     /// <inheritdoc/>
-    public bool WasDeleted(Uri reference)
+    public bool WasDeleted(AssetPath reference)
     {
         ArgumentNullException.ThrowIfNull(reference);
-        string[] snapshot;
+        AssetPath[] snapshot;
         lock (this.sync)
         {
             if (this.deleted.Count == 0)
@@ -83,8 +95,8 @@ public sealed partial class AssetRedirects : IAssetRedirects, IDisposable
             snapshot = [.. this.deleted];
         }
 
-        var identity = RelocationPaths.ToIdentity(Uri.UnescapeDataString(reference.AbsolutePath));
-        return !this.Exists(identity) && snapshot.Any(item => RelocationPaths.IsSameOrInside(identity, item));
+        var identity = AssetFileTypes.ToIdentity(reference);
+        return !this.Exists(identity) && snapshot.Any(identity.IsSameOrInside);
     }
 
     /// <inheritdoc/>
@@ -102,7 +114,7 @@ public sealed partial class AssetRedirects : IAssetRedirects, IDisposable
 
     /// <summary>Records deleted assets or folders.</summary>
     /// <param name="identities">The deleted identities.</param>
-    internal void RecordDeleted(IEnumerable<string> identities)
+    internal void RecordDeleted(IEnumerable<AssetPath> identities)
     {
         lock (this.sync)
         {
@@ -110,7 +122,7 @@ public sealed partial class AssetRedirects : IAssetRedirects, IDisposable
         }
     }
 
-    private string? ResolveIdentity(string identity, RelocationMap[] relocations)
+    private AssetPath? ResolveIdentity(AssetPath identity, RelocationMap[] relocations)
     {
         if (this.Exists(identity))
         {
@@ -123,18 +135,13 @@ public sealed partial class AssetRedirects : IAssetRedirects, IDisposable
             current = relocation.MapIdentity(current) ?? current;
         }
 
-        return string.Equals(current, identity, StringComparison.Ordinal) ? null : current;
+        return current == identity ? null : current;
     }
 
-    private bool Exists(string identity)
-    {
-        if (this.projects.ActiveProject is not { } project || RelocationPaths.ToPhysical(project, identity) is not { } path)
-        {
-            return false;
-        }
-
-        return File.Exists(path) || File.Exists(path + ".json") || Directory.Exists(path);
-    }
+    // An asset exists while its source does; a folder while it is on disk.
+    private bool Exists(AssetPath identity)
+        => this.projects.ActiveProject is { } project && RelocationPaths.FindWritableMount(project, identity) is not null
+            && (project.FindSource(identity) is not null || (RelocationPaths.ToPhysical(project, identity) is { } folder && Directory.Exists(folder.FullPath)));
 
     private void Clear()
     {

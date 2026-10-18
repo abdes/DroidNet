@@ -2,13 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Projects;
 
 /// <summary>Serializes writes to the same document path and releases unused coordination state.</summary>
 public sealed partial class DocumentWriteCoordinator
 {
     private readonly Lock sync = new();
-    private readonly Dictionary<string, WriteQueue> queues = [with(StringComparer.OrdinalIgnoreCase)];
+    private readonly Dictionary<FileSystemPath, WriteQueue> queues = [];
 
     /// <summary>Runs an operation after earlier writes to its destination have completed.</summary>
     /// <typeparam name="T">The operation result.</typeparam>
@@ -18,13 +20,14 @@ public sealed partial class DocumentWriteCoordinator
     /// <returns>The result of the serialized operation.</returns>
     public async Task<T> RunAsync<T>(string path, Func<Task<T>> operation, CancellationToken cancellationToken = default)
     {
+        var key = FileSystemPath.From(path);
         WriteQueue queue;
         lock (this.sync)
         {
-            if (!this.queues.TryGetValue(path, out queue!))
+            if (!this.queues.TryGetValue(key, out queue!))
             {
                 queue = new WriteQueue();
-                this.queues.Add(path, queue);
+                this.queues.Add(key, queue);
             }
 
             ++queue.Users;
@@ -48,7 +51,7 @@ public sealed partial class DocumentWriteCoordinator
 
                 if (--queue.Users == 0)
                 {
-                    _ = this.queues.Remove(path);
+                    _ = this.queues.Remove(key);
                     queue.Dispose();
                 }
             }

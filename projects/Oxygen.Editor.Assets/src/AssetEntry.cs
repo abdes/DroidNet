@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Assets;
@@ -12,29 +14,28 @@ namespace Oxygen.Editor.Assets;
 /// One logical asset of the project as every editor surface sees it: its identity, kind, states and cook facts.
 /// </summary>
 public sealed record AssetEntry(
-    Uri IdentityUri,
+    AssetPath Identity,
     string DisplayName,
     AssetKind Kind,
     AssetState PrimaryState,
     AssetState? DerivedState,
     AssetRuntimeAvailability RuntimeAvailability,
     string DisplayPath,
-    string? SourcePath,
-    string? DescriptorPath,
-    Uri? CookedUri,
-    string? CookedPath,
+    FileSystemPath? SourcePath,
+    FileSystemPath? DescriptorPath,
+    FileSystemPath? CookedPath,
     string? AssetGuid,
     IReadOnlyList<string> DiagnosticCodes,
     bool IsSelectable)
 {
     /// <summary>Gets the retained model that owns this source row or project-produced output.</summary>
-    public Uri? ImportSourceUri { get; init; }
+    public AssetPath? ImportSource { get; init; }
 
     /// <summary>Gets the retained model file for information and source navigation, not descriptor editing.</summary>
-    public string? ImportSourcePath { get; init; }
+    public FileSystemPath? ImportSourcePath { get; init; }
 
     /// <summary>Gets a value indicating whether explicit reimport can target the retained model.</summary>
-    public bool CanReimport => this.ImportSourceUri is not null && !this.IsBuiltin;
+    public bool CanReimport => this.ImportSource is not null && !this.IsBuiltin;
 
     /// <summary>Gets the engine-provided recipe and identity mapping for generated assets.</summary>
     public GeneratedAssetMetadata? Generated { get; init; }
@@ -56,10 +57,10 @@ public sealed record AssetEntry(
 
     /// <summary>Gets a value indicating whether ordinary assignments resolve to a different source than this displayed library copy.</summary>
     public bool IsCookedSourceOverridden => this.CookedMetadata is { } displayed && this.EffectiveCookedSource is { } effective
-        && (displayed.AssetKey != effective.AssetKey || !string.Equals(displayed.RootFolderPath, effective.RootFolderPath, StringComparison.OrdinalIgnoreCase));
+        && (displayed.AssetKey != effective.AssetKey || displayed.RootFolderPath != effective.RootFolderPath);
 
     /// <summary>Gets the engine identity that produced a verified project copy, when this is such a copy.</summary>
-    public Uri? BuiltinOriginUri { get; init; }
+    public AssetPath? BuiltinOrigin { get; init; }
 
     /// <summary>Gets verified cooked representations grouped with this logical built-in in discovery views.</summary>
     public IReadOnlyList<AssetEntry> CookedCompanions { get; init; } = [];
@@ -70,11 +71,17 @@ public sealed record AssetEntry(
     /// <summary>Gets the native availability explanation, independently of source and publication status.</summary>
     public string? RuntimeReason { get; init; }
 
+    /// <summary>
+    /// Gets a value indicating whether the asset is a cooked asset the engine loads: everything that cooks is known by
+    /// its cooked descriptor, so a source such as a model is not one.
+    /// </summary>
+    public bool IsCookedAsset => AssetFileTypes.Find(this.Identity.Name) is { Category: AssetFileCategory.Cooked or AssetFileCategory.CookedResource };
+
     /// <summary>Gets a value indicating whether this is engine-provided content rather than authored source.</summary>
     public bool IsBuiltin => this.Generated is not null || this.PrimaryState == AssetState.Generated;
 
     /// <summary>Gets a value indicating whether this selection owns an authored cook input.</summary>
-    public bool CanCook => !this.IsBuiltin && (this.DescriptorPath is not null || this.ImportSourceUri is not null) && this.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture;
+    public bool CanCook => !this.IsBuiltin && (this.DescriptorPath is not null || this.ImportSource is not null) && this.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture;
 
     /// <summary>Gets the shared saved-input and publication facts, independently of runtime availability.</summary>
     public AssetCookStatus? CookStatus { get; init; }
@@ -89,7 +96,7 @@ public sealed record AssetEntry(
     /// <summary>Gets the user-facing asset type.</summary>
     public string TypeDisplayName => this.Kind switch
     {
-        AssetKind.ForeignSource => Path.GetExtension(this.IdentityUri.AbsolutePath).ToUpperInvariant() switch { ".GLTF" => "glTF source", ".GLB" => "GLB source", ".FBX" => "FBX source", _ => "Source model" },
+        AssetKind.ForeignSource => Path.GetExtension(this.Identity.Name).ToUpperInvariant() switch { ".GLTF" => "glTF source", ".GLB" => "GLB source", ".FBX" => "FBX source", _ => "Source model" },
         AssetKind.CookedData => "Cooked Data",
         AssetKind.CookedTable => "Cooked Table",
         AssetKind.InputFile => "Input file",
@@ -98,7 +105,7 @@ public sealed record AssetEntry(
 
     /// <summary>Gets the primary asset-state badge.</summary>
     public string PrimaryBadge => this.IsCookedSourceOverridden ? "Overridden" : this.Generated?.IsLastKnown == true ? "Preview unavailable"
-        : this.IsBuiltin ? "Built-in" : this.Kind == AssetKind.ForeignSource && this.ImportSourceUri is null ? "Not imported"
+        : this.IsBuiltin ? "Built-in" : this.Kind == AssetKind.ForeignSource && this.ImportSource is null ? "Not imported"
         : AssetStatusText.GetText(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability) ?? GetBadge(this.PrimaryState);
 
     /// <summary>Gets a concise explanation of engine ownership or the current authored status.</summary>
@@ -107,7 +114,7 @@ public sealed record AssetEntry(
         : this.IsBuiltin
         ? this.Generated?.IsLastKnown == true ? "Built-in asset from the last-known Oxygen catalog. Preview unavailable."
             : "Built-in asset provided by Oxygen. No separate cooking is needed." + (this.RuntimeReason is null ? string.Empty : " Preview: " + this.RuntimeReason)
-        : this.Kind == AssetKind.ForeignSource && this.ImportSourceUri is null ? "Import this model to create usable geometry, materials and scenes."
+        : this.Kind == AssetKind.ForeignSource && this.ImportSource is null ? "Import this model to create usable geometry, materials and scenes."
         : AssetStatusText.GetDescription(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability, runtimeReason: this.RuntimeReason);
 
     /// <summary>Gets the optional cooked-state badge.</summary>
@@ -128,22 +135,21 @@ public sealed record AssetEntry(
     public string DiagnosticsText => string.Join(", ", this.DiagnosticCodes);
 
     /// <summary>Creates the entry of a referenced asset that no catalog provides.</summary>
-    /// <param name="uri">The referenced asset.</param>
+    /// <param name="identity">The referenced asset.</param>
     /// <returns>A missing, unselectable entry named after the reference.</returns>
-    public static AssetEntry Missing(Uri uri)
+    public static AssetEntry Missing(AssetPath identity)
     {
-        ArgumentNullException.ThrowIfNull(uri);
+        ArgumentNullException.ThrowIfNull(identity);
         return new(
-            IdentityUri: uri,
-            DisplayName: AssetIdentityReducer.GetDisplayName(uri),
-            Kind: AssetKinds.FromFileName(AssetUriHelper.GetRelativePath(uri)),
+            Identity: identity,
+            DisplayName: AssetIdentityReducer.GetDisplayName(identity),
+            Kind: AssetKinds.FromFileName(identity.Name),
             PrimaryState: AssetState.Missing,
             DerivedState: null,
             RuntimeAvailability: AssetRuntimeAvailability.Unknown,
-            DisplayPath: AssetUriHelper.GetVirtualPath(uri),
+            DisplayPath: identity.VirtualPath,
             SourcePath: null,
             DescriptorPath: null,
-            CookedUri: null,
             CookedPath: null,
             AssetGuid: null,
             DiagnosticCodes: [AssetIdentityDiagnosticCodes.ResolveMissing],

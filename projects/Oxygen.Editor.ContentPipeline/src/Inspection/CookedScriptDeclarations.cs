@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Inspection;
 
@@ -14,7 +15,7 @@ namespace Oxygen.Editor.ContentPipeline.Inspection;
 /// <param name="ScriptUri">The requested script identity.</param>
 /// <param name="NativeScriptKey">The native asset key.</param>
 /// <param name="Parameters">The declared parameters, in declaration order.</param>
-public sealed record CookedScriptDeclarations(Uri ScriptUri, Guid NativeScriptKey, ImmutableArray<CookedScriptParameter> Parameters);
+public sealed record CookedScriptDeclarations(AssetPath ScriptUri, Guid NativeScriptKey, ImmutableArray<CookedScriptParameter> Parameters);
 
 /// <summary>One parameter a cooked script declares.</summary>
 /// <param name="Name">The parameter name.</param>

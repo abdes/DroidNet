@@ -45,9 +45,9 @@ public sealed partial class ContentMountsViewModel : ObservableObject
 
         foreach (var mount in project.LocalFolderMounts)
         {
-            this.Mounts.Add(new(this, mount.Name, mount.AbsolutePath, ContentMountKind.LocalLibrary)
+            this.Mounts.Add(new(this, mount.Name, mount.Root.FullPath, ContentMountKind.LocalLibrary)
             {
-                AbsolutePath = mount.AbsolutePath,
+                AbsolutePath = mount.Root.FullPath,
                 IsExpanded = mount.IsExpanded,
             });
         }

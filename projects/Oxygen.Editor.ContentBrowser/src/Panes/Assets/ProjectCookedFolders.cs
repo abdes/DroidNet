@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
 
@@ -12,29 +13,25 @@ internal static class ProjectCookedFolders
     /// <summary>Gets browser roots that expose the project's cooked directory.</summary>
     /// <param name="project">The active project, if any.</param>
     /// <returns>The configured virtual paths.</returns>
-    public static string[] Roots(ProjectContext? project)
+    public static AssetPath[] Roots(ProjectContext? project)
         => project?.AuthoringMounts.Where(static mount => string.Equals(mount.RelativePath.Replace('\\', '/').Trim('/'), ".cooked", StringComparison.OrdinalIgnoreCase))
-            .Select(static mount => "/" + mount.Name).ToArray() ?? [];
+            .Select(static mount => AssetPath.Create(mount.Name)).ToArray() ?? [];
 
     /// <summary>Removes a configured cooked mount prefix from a browser folder.</summary>
     /// <param name="selectedFolder">The browser location.</param>
     /// <param name="roots">The saved cooked mount paths.</param>
-    /// <param name="runtimePath">The native virtual folder, when matched.</param>
+    /// <param name="runtimeFolder">The native virtual folder when matched; <see langword="null"/> for all of the output.</param>
     /// <returns>Whether this folder is a project-output projection.</returns>
-    public static bool TryMap(string selectedFolder, IReadOnlyCollection<string> roots, out string runtimePath)
+    public static bool TryMap(AssetPath selectedFolder, IReadOnlyCollection<AssetPath> roots, out AssetPath? runtimeFolder)
     {
-        var normalized = "/" + selectedFolder.Replace('\\', '/').Trim('/');
-        foreach (var root in roots)
+        ArgumentNullException.ThrowIfNull(selectedFolder);
+        foreach (var root in roots.Where(selectedFolder.IsSameOrInside))
         {
-            if (normalized.Equals(root, StringComparison.OrdinalIgnoreCase)
-                || normalized.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase))
-            {
-                runtimePath = normalized.Length == root.Length ? "/" : normalized[root.Length..];
-                return true;
-            }
+            runtimeFolder = selectedFolder == root ? null : AssetPath.Parse("/" + selectedFolder.GetPathBelow(root));
+            return true;
         }
 
-        runtimePath = string.Empty;
+        runtimeFolder = null;
         return false;
     }
 }

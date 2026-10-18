@@ -34,7 +34,7 @@ public sealed class MaterialDocumentKind(MaterialValidation validation) : IDocum
         }
         catch (AssetFormatException exception)
         {
-            return Task.FromResult(DocumentDecodeResult.Failed($"'{Path.GetFileName(file.Path)}' is not a valid material: {exception.Message}"));
+            return Task.FromResult(DocumentDecodeResult.Failed($"'{file.Path.Name}' is not a valid material: {exception.Message}"));
         }
 
         var named = source with { Name = DocumentKinds.TitleOf(this, file.Path) };

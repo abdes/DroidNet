@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.LooseCooked;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
@@ -23,8 +24,8 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     private IReadOnlyList<CookedContentSource> order = [];
     private string projectRoot = string.Empty;
     private ProjectContext project = null!;
-    private Func<Uri, ContentCookInput?>? resolveImported;
-    private IReadOnlyCollection<Uri> knownProjectOutputs = [];
+    private Func<AssetPath, ContentCookInput?>? resolveImported;
+    private IReadOnlyCollection<AssetPath> knownProjectOutputs = [];
     private ProjectAssetKeyIndex? projectIdentities;
 
     /// <summary>Gets a value indicating whether cached dependencies name keys absent from every declared library index.</summary>
@@ -38,15 +39,15 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <param name="resolveImported">Resolves retained project owners of imported outputs.</param>
     /// <param name="knownOutputs">Previously identified imported project output names.</param>
     /// <returns>The selected library readers and lookup facts.</returns>
-    public static async Task<CookedLibraryReadSet> AcquireAsync(ProjectContext project, CancellationToken cancellationToken, Func<Uri, ContentCookInput?>? resolveImported = null, IReadOnlyCollection<Uri>? knownOutputs = null)
+    public static async Task<CookedLibraryReadSet> AcquireAsync(ProjectContext project, CancellationToken cancellationToken, Func<AssetPath, ContentCookInput?>? resolveImported = null, IReadOnlyCollection<AssetPath>? knownOutputs = null)
     {
-        var result = new CookedLibraryReadSet { order = CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder), projectRoot = project.ProjectRoot, project = project, resolveImported = resolveImported, knownProjectOutputs = knownOutputs ?? [] };
+        var result = new CookedLibraryReadSet { order = CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder), projectRoot = project.ProjectRoot.FullPath, project = project, resolveImported = resolveImported, knownProjectOutputs = knownOutputs ?? [] };
         try
         {
             foreach (var source in result.order.Where(static source => source.Kind == CookedContentSourceKind.LocalFolder))
             {
                 var mount = project.LocalFolderMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
-                var path = Path.GetFullPath(mount.AbsolutePath);
+                var path = mount.Root.FullPath;
                 if (!File.Exists(Path.Combine(path, "container.index.bin")))
                 {
                     continue;
@@ -58,10 +59,10 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                     CookOutputLease.RejectReparsePoint(path);
                     files = await CookOutputReadLease.AcquireAsync(path, cancellationToken).ConfigureAwait(false);
                     var index = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
-                    using var catalog = new LooseCookedIndexAssetCatalog(index.Index, path);
+                    using var catalog = new LooseCookedIndexAssetCatalog(index.Index, mount.Root);
                     var records = await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
                     var fingerprint = index.Fingerprint;
-                    var metadata = await CookedDependencyCache.ReadAsync(project.ProjectRoot, fingerprint, records, cancellationToken).ConfigureAwait(false);
+                    var metadata = await CookedDependencyCache.ReadAsync(project.ProjectRoot.FullPath, fingerprint, records, cancellationToken).ConfigureAwait(false);
                     result.roots.Add(new(mount.Name, path, records, fingerprint, files) { SourceKey = index.Index.SourceGuid, Dependencies = metadata });
                     files = null;
                 }
@@ -93,7 +94,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <returns>The complete publication input identity.</returns>
     public static CookInputSnapshot CaptureDependencies(CookInputSnapshot snapshot, CookDependencyGraph graph)
     {
-        var dependencies = graph.CookedDependencies.Values.SelectMany(static dependencies => dependencies).Distinct().OrderBy(static dependency => dependency.AssetUri.AbsoluteUri, StringComparer.Ordinal).ThenBy(static dependency => dependency.AssetKey, StringComparer.Ordinal).ToImmutableArray();
+        var dependencies = graph.CookedDependencies.Values.SelectMany(static dependencies => dependencies).Distinct().OrderBy(static dependency => dependency.AssetUri).ThenBy(static dependency => dependency.AssetKey, StringComparer.Ordinal).ToImmutableArray();
         return dependencies.IsEmpty ? snapshot : snapshot with
         {
             CookedDependencies = dependencies,
@@ -102,23 +103,21 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     }
 
     /// <summary>Tests whether the saved order resolves this identity to a library instead of a project source.</summary>
-    /// <param name="uri">The authored or native identity.</param>
+    /// <param name="uri">The asset's identity.</param>
     /// <returns>Whether dependency discovery should retain the cooked identity.</returns>
-    public bool IsLibraryPreferred(Uri uri)
+    public bool IsLibraryPreferred(AssetPath uri)
     {
-        var nativeUri = uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri;
-        var (root, asset) = this.FindUri(nativeUri);
-        return asset is not null && !this.ProjectSourceWins(nativeUri, root);
+        var (root, asset) = this.FindUri(uri);
+        return asset is not null && !this.ProjectSourceWins(uri, root);
     }
 
     /// <summary>Finds the selected library asset while this read set retains its files.</summary>
-    /// <param name="uri">The authored or cooked identity.</param>
+    /// <param name="uri">The asset's identity.</param>
     /// <returns>The preferred physical root and index entry, or null when the project wins.</returns>
-    public PreferredLibraryAsset? FindPreferredAsset(Uri uri)
+    public PreferredLibraryAsset? FindPreferredAsset(AssetPath uri)
     {
-        var nativeUri = uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri;
-        var (root, asset) = this.FindUri(nativeUri);
-        if (asset is null || this.ProjectSourceWins(nativeUri, root))
+        var (root, asset) = this.FindUri(uri);
+        if (asset is null || this.ProjectSourceWins(uri, root))
         {
             return null;
         }
@@ -135,10 +134,10 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <param name="artifacts">Borrowed native artifact ownership.</param>
     /// <param name="cancellationToken">Cancels lookup and inspection.</param>
     /// <returns>Exact project and library identities required by this consumer.</returns>
-    public async Task<CookReferenceExpansion> ExpandReferencesAsync(ContentCookInput consumer, IReadOnlyList<Uri> references, ICookedDependencyInspector? inspector, string operationRoot, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+    public async Task<CookReferenceExpansion> ExpandReferencesAsync(ContentCookInput consumer, IReadOnlyList<AssetPath> references, ICookedDependencyInspector? inspector, string operationRoot, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
     {
-        var projects = new Dictionary<Uri, ContentCookInput>();
-        var importedOutputs = new HashSet<Uri>();
+        var projects = new Dictionary<AssetPath, ContentCookInput>();
+        var importedOutputs = new HashSet<AssetPath>();
         var libraries = new List<CookedDependencySnapshot>();
         var diagnostics = new List<DiagnosticRecord>();
         var pending = this.CreateReferenceQueue(references);
@@ -152,7 +151,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                 continue;
             }
 
-            libraries.Add(new(asset.Uri, root.Name, root.Path, key, asset.Cooked.AssetType, root.Fingerprint));
+            libraries.Add(new(asset.Identity, root.Name, root.Path, key, asset.Cooked.AssetType, root.Fingerprint));
             var metadata = await this.GetDependencyMetadataAsync(root, key, inspector, operationRoot, artifacts, cancellationToken).ConfigureAwait(false);
             if (metadata?.Complete != true)
             {
@@ -170,7 +169,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                     continue;
                 }
 
-                var candidate = found.asset is null || this.ProjectSourceWins(found.asset.Uri, found.root)
+                var candidate = found.asset is null || this.ProjectSourceWins(found.asset.Identity, found.root)
                     ? await this.ResolveProjectKeyAsync(dependency, inspector as ICookedAssetKeyProvider, operationRoot, artifacts, cancellationToken).ConfigureAwait(false) : null;
                 if (candidate is not null && (found.asset is null || this.ProjectHasPriority(found.root)))
                 {
@@ -178,7 +177,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                 }
                 else if (found.asset is not null)
                 {
-                    if (this.projectIdentities?.IsPending == true && this.ProjectSourceWins(found.asset.Uri, found.root))
+                    if (this.projectIdentities?.IsPending == true && this.ProjectSourceWins(found.asset.Identity, found.root))
                     {
                         diagnostics.Add(PendingIdentitiesIssue(consumer));
                     }
@@ -189,7 +188,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                 {
                     diagnostics.Add(this.projectIdentities?.IsPending == true
                         ? PendingIdentitiesIssue(consumer)
-                        : Issue(consumer, "asset_cook.library_dependency_missing", $"Library asset '{asset.Uri}' requires missing asset '{dependency}'."));
+                        : Issue(consumer, "asset_cook.library_dependency_missing", $"Library asset '{asset.Identity}' requires missing asset '{dependency}'."));
                 }
             }
         }
@@ -216,7 +215,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         var projectPriority = priority.Single(static item => item.source.Kind == CookedContentSourceKind.ProjectOutput).index;
         foreach (var uri in requested)
         {
-            var match = this.roots.AsEnumerable().Reverse().Select(root => (root, record: root.Assets.FirstOrDefault(record => record.Uri == uri))).FirstOrDefault(static item => item.record is not null);
+            var match = this.roots.AsEnumerable().Reverse().Select(root => (root, record: root.Assets.FirstOrDefault(record => record.Identity == uri))).FirstOrDefault(static item => item.record is not null);
             var owned = HasProjectOwner(graph, uri) || this.knownProjectOutputs.Contains(uri);
             if (match.record?.Cooked is { } asset)
             {
@@ -226,7 +225,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                     continue;
                 }
 
-                var expected = Path.GetExtension(uri.AbsolutePath).ToUpperInvariant() switch
+                var expected = Path.GetExtension(uri.Name).ToUpperInvariant() switch
                 {
                     ".OMAT" => 1,
                     ".OGEO" => 2,
@@ -251,7 +250,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
 
         return graph with { Diagnostics = diagnostics.ToImmutable() };
 
-        void AddIssue(Uri uri, string code, string message)
+        void AddIssue(AssetPath uri, string code, string message)
         {
             foreach (var consumer in graph.NativeReferences.Where(pair => pair.Value.Contains(uri)).Select(pair => graph.Assets.Single(input => input.AssetUri == pair.Key)))
             {
@@ -264,7 +263,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     {
         var paths = this.order.SelectMany(source => source.Kind == CookedContentSourceKind.ProjectOutput ? projectRoots.Order(StringComparer.Ordinal)
             : this.roots.Where(root => string.Equals(root.Name, source.Name, StringComparison.Ordinal)).Select(static root => root.Path));
-        return paths.Reverse().Distinct(StringComparer.OrdinalIgnoreCase).Reverse().ToArray();
+        return paths.Reverse().DistinctBy(FileSystemPath.From).Reverse().ToArray();
     }
 
     /// <summary>Validates native container structure before consumers can use library data.</summary>
@@ -332,11 +331,11 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             }
         }
 
-        return [.. result.AsEnumerable().Reverse().DistinctBy(root => root.ResolvePath(this.projectRoot), StringComparer.OrdinalIgnoreCase).Reverse()];
+        return [.. result.AsEnumerable().Reverse().DistinctBy(root => FileSystemPath.From(root.ResolvePath(this.projectRoot))).Reverse()];
     }
 
-    private static bool HasProjectOwner(CookDependencyGraph graph, Uri uri)
-        => graph.Assets.Any(input => input.OwnsOutput(AssetUriHelper.GetVirtualPath(uri)));
+    private static bool HasProjectOwner(CookDependencyGraph graph, AssetPath uri)
+        => graph.Assets.Any(input => input.OwnsOutput(uri.VirtualPath));
 
     private static DiagnosticRecord IncompleteInspectionIssue(ContentCookInput consumer, CookedAssetDependencies? metadata)
         => metadata is null
@@ -353,16 +352,15 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         => Issue(consumer, "asset_cook.library_inspection_required", "Project asset identities are awaiting inspection.") with { Severity = DiagnosticSeverity.Warning };
 
     private static DiagnosticRecord Issue(ContentCookInput consumer, string code, string message)
-        => new() { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = code, Message = message, AffectedPath = consumer.SourceAbsolutePath, AffectedVirtualPath = AssetUriHelper.GetVirtualPath(consumer.AssetUri) };
+        => new() { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = code, Message = message, AffectedPath = consumer.SourceAbsolutePath.FullPath, AffectedVirtualPath = consumer.AssetUri.VirtualPath };
 
-    private Queue<(Root root, AssetRecord asset)> CreateReferenceQueue(IReadOnlyList<Uri> references)
+    private Queue<(Root root, AssetRecord asset)> CreateReferenceQueue(IReadOnlyList<AssetPath> references)
     {
         var pending = new Queue<(Root root, AssetRecord asset)>();
         foreach (var uri in references)
         {
-            var nativeUri = uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri;
-            var (root, asset) = this.FindUri(nativeUri);
-            if (asset is not null && !this.ProjectSourceWins(nativeUri, root))
+            var (root, asset) = this.FindUri(uri);
+            if (asset is not null && !this.ProjectSourceWins(uri, root))
             {
                 pending.Enqueue(this.FindKey(asset.Cooked!.AssetKey.ToString()));
             }
@@ -381,7 +379,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         return root.Dependencies?.Assets[key];
     }
 
-    private async Task<Uri?> ResolveProjectKeyAsync(string key, ICookedAssetKeyProvider? provider, string operationRoot, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+    private async Task<AssetPath?> ResolveProjectKeyAsync(string key, ICookedAssetKeyProvider? provider, string operationRoot, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
     {
         this.projectIdentities ??= await ProjectAssetKeyIndex.ReadAsync(this.project, this.knownProjectOutputs, cancellationToken).ConfigureAwait(false);
         if (provider is not null)
@@ -393,7 +391,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     }
 
     // A project key wins over the library copy: the project source is cooked in its place.
-    private void AddProjectSource(Uri candidate, Dictionary<Uri, ContentCookInput> projects, HashSet<Uri> importedOutputs)
+    private void AddProjectSource(AssetPath candidate, Dictionary<AssetPath, ContentCookInput> projects, HashSet<AssetPath> importedOutputs)
     {
         var source = this.resolveImported?.Invoke(candidate) ?? CookInputResolver.Resolve(this.project, candidate, ContentCookInputRole.Dependency);
         projects[source.AssetUri] = source;
@@ -407,12 +405,12 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         => this.order.Last(source => source.Kind == CookedContentSourceKind.ProjectOutput
             || (source.Kind == CookedContentSourceKind.LocalFolder && string.Equals(source.Name, root.Name, StringComparison.Ordinal))).Kind == CookedContentSourceKind.ProjectOutput;
 
-    private bool ProjectSourceWins(Uri uri, Root root)
+    private bool ProjectSourceWins(AssetPath uri, Root root)
         => this.ProjectHasPriority(root) && (this.resolveImported?.Invoke(uri) is not null
             || CookInputResolver.HasProjectSource(this.project, uri));
 
-    private (Root root, AssetRecord asset) FindUri(Uri uri)
-        => this.roots.AsEnumerable().Reverse().SelectMany(root => root.Assets.Where(asset => asset.Uri == uri).Select(asset => (root, asset))).FirstOrDefault();
+    private (Root root, AssetRecord asset) FindUri(AssetPath uri)
+        => this.roots.AsEnumerable().Reverse().SelectMany(root => root.Assets.Where(asset => asset.Identity == uri).Select(asset => (root, asset))).FirstOrDefault();
 
     private (Root root, AssetRecord asset) FindKey(string key)
         => this.roots.AsEnumerable().Reverse().SelectMany(root => root.Assets.Where(asset => string.Equals(asset.Cooked?.AssetKey.ToString(), key, StringComparison.OrdinalIgnoreCase)).Select(asset => (root, asset))).FirstOrDefault();

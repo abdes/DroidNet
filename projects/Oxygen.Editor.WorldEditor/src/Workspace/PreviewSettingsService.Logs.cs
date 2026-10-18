@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Workspace;
 
@@ -10,5 +11,5 @@ namespace Oxygen.Editor.World.Workspace;
 public sealed partial class PreviewSettingsService
 {
     [LoggerMessage(Level = LogLevel.Error, Message = "Preview preferences failed ({Code}) for project {ProjectRoot}.")]
-    private partial void LogPreferenceFailure(Exception exception, string code, string? projectRoot);
+    private partial void LogPreferenceFailure(Exception exception, string code, FileSystemPath? projectRoot);
 }

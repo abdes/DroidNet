@@ -7,6 +7,7 @@ using System.Text;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Testably.Abstractions.Testing;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Documents.Tests;
 
@@ -47,16 +48,16 @@ public abstract class DocumentTestBase : IDisposable
 
     protected static string PathOf(string name) => Path.Combine(Folder, name + NoteKind.Suffix);
 
-    protected static Uri UriOf(string name) => new($"asset:///Content/{name}{NoteKind.Suffix}");
+    protected static AssetPath UriOf(string name) => AssetPath.Parse($"/Content/{name}{NoteKind.Suffix}");
 
     protected static DocumentFile FileOf(string name) => new(PathOf(name), UriOf(name));
 
-    protected void WriteNote(string name, string text, params Uri[] references)
+    protected void WriteNote(string name, string text, params AssetPath[] references)
         => this.FileSystem.File.WriteAllBytes(PathOf(name), NoteKind.Encode(UriOf(name), text, references));
 
     protected string ReadText(string name) => this.FileSystem.File.ReadAllText(PathOf(name), Encoding.UTF8).Split('\n')[1];
 
-    internal async Task<(Document Document, NoteContent Note)> OpenNoteAsync(string name, string text = "first", params Uri[] references)
+    internal async Task<(Document Document, NoteContent Note)> OpenNoteAsync(string name, string text = "first", params AssetPath[] references)
     {
         this.WriteNote(name, text, references);
         var result = await this.Documents.OpenAsync(FileOf(name), this.Token).ConfigureAwait(false);

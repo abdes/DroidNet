@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.Assets.Runtime;
 
 /// <summary>The preview's acknowledged cooked content and the outcomes of one project's asset requests.</summary>
@@ -11,7 +13,7 @@ namespace Oxygen.Editor.Assets.Runtime;
 /// <param name="Reason">Why content is unavailable, when the preview reported it.</param>
 public sealed record AssetRuntimeStatus(
     AssetRuntimeContentState State,
-    IReadOnlyList<string> Roots,
+    IReadOnlyList<FileSystemPath> Roots,
     IReadOnlyList<AssetRuntimeRequest> Requests,
     string? Reason = null)
 {

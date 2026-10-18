@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
@@ -21,7 +22,7 @@ public interface ICookPublicationReadLease : IDisposable
     public Guid ProjectId { get; }
 
     /// <summary>Gets the root folder of the project the publication belongs to.</summary>
-    public string ProjectRoot { get; }
+    public FileSystemPath ProjectRoot { get; }
 
     /// <summary>Gets the accepted roots in native precedence order.</summary>
     public ImmutableArray<CookPublicationRoot> Roots { get; }
@@ -30,7 +31,7 @@ public interface ICookPublicationReadLease : IDisposable
     public ImmutableArray<CookPublicationRoot> UnavailableRoots { get; }
 
     /// <summary>Gets the physical output folder of each project mount, by mount name.</summary>
-    public ImmutableDictionary<string, string> ProjectRoots { get; }
+    public ImmutableDictionary<string, FileSystemPath> ProjectRoots { get; }
 
     /// <summary>Opens the cooked index of every available root as a catalog tied to this publication.</summary>
     /// <param name="cancellationToken">Cancels reading the indexes.</param>

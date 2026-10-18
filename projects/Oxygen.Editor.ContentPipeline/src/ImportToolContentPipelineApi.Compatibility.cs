@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -36,7 +37,7 @@ public sealed partial class ImportToolContentPipelineApi
     private string GetCompatibleToolPath(NativeArtifactLease artifacts)
     {
         var compatible = artifacts.GetPath(NativeArtifactInventory.ImportToolId);
-        return string.Equals(Path.GetFullPath(this.toolLocator.GetImportToolPath()), compatible, StringComparison.OrdinalIgnoreCase)
+        return FileSystemPath.From(this.toolLocator.GetImportToolPath()) == FileSystemPath.From(compatible)
             ? compatible : throw new InvalidOperationException("The selected import tool is outside the compatible artifact set.");
     }
 }

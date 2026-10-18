@@ -300,7 +300,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
                     Message = failure.Message,
                     TechnicalMessage = failure.ToString(),
                     ExceptionType = failure.GetType().FullName,
-                    AffectedPath = Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")),
+                    AffectedPath = Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N")),
                 },
             ],
         };

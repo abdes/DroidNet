@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline.Cooking;
 
 /// <summary>The outcome of an identified asset inside a scoped cook.</summary>
@@ -9,4 +11,4 @@ namespace Oxygen.Editor.ContentPipeline.Cooking;
 /// <param name="Kind">The asset's type.</param>
 /// <param name="State">Its current execution state.</param>
 /// <param name="Reason">A failure or dependent-skip reason, when applicable.</param>
-public sealed record CookRunAsset(Uri AssetUri, ContentCookAssetKind Kind, CookAssetState State, string? Reason = null);
+public sealed record CookRunAsset(AssetPath AssetUri, ContentCookAssetKind Kind, CookAssetState State, string? Reason = null);

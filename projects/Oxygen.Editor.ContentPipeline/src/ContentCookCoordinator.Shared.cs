@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -28,18 +29,12 @@ public sealed partial class ContentCookCoordinator
             return true;
         }
 
-        if (pending.TargetKind != CookTargetKind.Folder || pending.ScopeUri is not { } folder || incoming.ScopeUri is not { } scope
-            || !string.Equals(folder.Scheme, scope.Scheme, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var root = folder.AbsolutePath.TrimEnd('/') + "/";
-        return scope.AbsolutePath.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+        return pending.TargetKind == CookTargetKind.Folder && pending.ScopeUri is { } folder && incoming.ScopeUri is { } scope
+            && scope != folder && scope.IsSameOrInside(folder);
     }
 
     private static string DescribeScope(CookRunRequest request)
-        => request.ScopeUri is { } scope ? Uri.UnescapeDataString(scope.AbsolutePath) : "the project";
+        => request.ScopeUri is { } scope ? scope.VirtualPath : "the project";
 
     private Task<T> RunSharedAsync<T>(CookRunRequest request, Func<ContentCookOperation, CancellationToken, Task<T>> work, CancellationToken cancellationToken)
     {
@@ -222,7 +217,7 @@ public sealed partial class ContentCookCoordinator
         }
     }
 
-    private sealed record SharedCookKey(long Lifetime, CookTargetKind Kind, Uri? Scope, Type ResultType, Projects.ProjectContext? Origin)
+    private sealed record SharedCookKey(long Lifetime, CookTargetKind Kind, AssetPath? Scope, Type ResultType, Projects.ProjectContext? Origin)
     {
         public bool Equals(SharedCookKey? other)
             => other is not null && this.Lifetime == other.Lifetime && this.Kind == other.Kind && this.Scope == other.Scope

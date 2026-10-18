@@ -14,6 +14,8 @@ using Oxygen.Editor.ContentBrowser.Relocation;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser;
 
@@ -129,7 +131,7 @@ public partial class AssetsViewModel
     public static string GetCopyPathText(IEnumerable<AssetEntry> assets)
     {
         ArgumentNullException.ThrowIfNull(assets);
-        return string.Join(Environment.NewLine, assets.Select(static asset => AssetUriHelper.GetVirtualPath(asset.IdentityUri)));
+        return string.Join(Environment.NewLine, assets.Select(static asset => asset.Identity.VirtualPath));
     }
 
     private static string Explain(string command, string? blocker, string description)
@@ -183,18 +185,18 @@ public partial class AssetsViewModel
         }
 
         var path = asset.Kind == AssetKind.Folder
-            ? RelocationPaths.ToPhysical(project, Uri.UnescapeDataString(asset.IdentityUri.AbsolutePath))
+            ? RelocationPaths.ToPhysical(project, asset.Identity)
             : asset.DescriptorPath ?? asset.SourcePath;
-        if (path is null || !(File.Exists(path) || Directory.Exists(path)))
+        if (path is null || !(File.Exists(path.FullPath) || Directory.Exists(path.FullPath)))
         {
-            return new(VirtualPath: null, PhysicalPath: null, IsFolder: false, IsImportedOutput: asset.ImportSourceUri is not null, ModelSourcePath: asset.ImportSourcePath);
+            return new(VirtualPath: null, PhysicalPath: null, IsFolder: false, IsImportedOutput: asset.ImportSource is not null, ModelSourcePath: asset.ImportSourcePath);
         }
 
-        var isModel = Path.GetExtension(path).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX" && File.Exists(path + NativeSceneImportSettings.SidecarSuffix);
+        var isModel = AssetFileTypes.Is(path.Name, AssetFileCategory.Model) && File.Exists(path.FullPath + NativeSceneImportSettings.SidecarSuffix);
         return new(
             RelocationPaths.ToVirtual(project, path),
             path,
-            Directory.Exists(path),
+            Directory.Exists(path.FullPath),
             IsImportedOutput: false,
             isModel ? path : asset.ImportSourcePath);
     }
@@ -292,7 +294,7 @@ public partial class AssetsViewModel
         }
 
         var target = this.DescribeSelection()[0];
-        var name = RelocationPaths.GetName(target.VirtualPath!);
+        var name = target.VirtualPath!.Name;
         var current = target.IsFolder ? name : RelocationPaths.GetDisplayName(name);
         if (await relocation.PromptNameAsync("Rename", current).ConfigureAwait(true) is { } newName)
         {
@@ -303,7 +305,7 @@ public partial class AssetsViewModel
 
     private bool CanRenameOutputGroup()
         => relocation is not null && this.DescribeSelection() is [{ ModelSourcePath: { } model }]
-            && File.Exists(model + NativeSceneImportSettings.SidecarSuffix);
+            && File.Exists(model.FullPath + NativeSceneImportSettings.SidecarSuffix);
 
     [RelayCommand(CanExecute = nameof(CanRenameOutputGroup))]
     private async Task RenameOutputGroupAsync()
@@ -317,7 +319,7 @@ public partial class AssetsViewModel
         NativeSceneImportSettings settings;
         try
         {
-            settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(model + NativeSceneImportSettings.SidecarSuffix).ConfigureAwait(true));
+            settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(model.FullPath + NativeSceneImportSettings.SidecarSuffix).ConfigureAwait(true));
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
         {
@@ -360,7 +362,7 @@ public partial class AssetsViewModel
             return;
         }
 
-        var folder = Uri.UnescapeDataString(this.GetSelectedFolderUri().AbsolutePath).TrimEnd('/');
+        var folder = this.GetSelectedFolder();
         var isCut = contentBrowserState.IsClipboardCut;
         if (await relocation.PasteAsync(contentBrowserState.Clipboard, isCut, folder).ConfigureAwait(true) is { Succeeded: true } && isCut)
         {
@@ -379,7 +381,7 @@ public partial class AssetsViewModel
         }
 
         var targets = this.DescribeSelection();
-        foreach (var group in targets.GroupBy(static target => RelocationPaths.GetParent(target.VirtualPath!), StringComparer.OrdinalIgnoreCase))
+        foreach (var group in targets.GroupBy(static target => target.VirtualPath!.Parent!))
         {
             if (await relocation.CopyAsync([.. group.Select(static target => target.VirtualPath!)], group.Key, "Duplicate").ConfigureAwait(true) is { Succeeded: false })
             {
@@ -451,7 +453,7 @@ public partial class AssetsViewModel
     [RelayCommand(CanExecute = nameof(CanShowInFileExplorer))]
     private async Task ShowInFileExplorerAsync()
     {
-        if (this.SelectedAssets is [var asset] && AssetFileFacts.GetPath(asset) is { } path && !shell.ShowInFileExplorer(path))
+        if (this.SelectedAssets is [var asset] && AssetFileFacts.GetPath(asset) is { } path && !shell.ShowInFileExplorer(path.FullPath))
         {
             await dialogService.ShowMessageAsync("Show in File Explorer", $"'{path}' no longer exists.").ConfigureAwait(true);
         }
@@ -466,5 +468,5 @@ public partial class AssetsViewModel
     /// <param name="IsFolder">Whether the row is a folder.</param>
     /// <param name="IsImportedOutput">Whether the row is a cooked-only output of a model import.</param>
     /// <param name="ModelSourcePath">The model source the row is, or was imported from.</param>
-    private readonly record struct AssetTarget(string? VirtualPath, string? PhysicalPath, bool IsFolder, bool IsImportedOutput, string? ModelSourcePath);
+    private readonly record struct AssetTarget(AssetPath? VirtualPath, FileSystemPath? PhysicalPath, bool IsFolder, bool IsImportedOutput, FileSystemPath? ModelSourcePath);
 }

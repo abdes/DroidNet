@@ -12,10 +12,15 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="catalogProvider">The engine authority for recipes, bounds, materials, and identity.</param>
 public sealed class ProceduralGeometryDescriptorService(IBuiltinGeometryCatalogProvider catalogProvider) : IProceduralGeometryDescriptorService
 {
+    private static readonly AssetPath BasicShapes = AssetPath.Generated.Combine("BasicShapes");
+
+    /// <summary>Gets the engine's default material, which geometry without a material of its own uses.</summary>
+    public static AssetPath DefaultMaterial { get; } = AssetPath.Generated.Combine("Materials/Default");
+
     /// <inheritdoc/>
     public async Task<IReadOnlyList<ContentCookInput>> EnsureDescriptorsAsync(
         ContentCookScope scope,
-        IReadOnlyList<Uri> geometryUris,
+        IReadOnlyList<AssetPath> geometryUris,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scope);
@@ -29,13 +34,13 @@ public sealed class ProceduralGeometryDescriptorService(IBuiltinGeometryCatalogP
         var preparationRoot = scope.PreparationRoot ?? scope.InputRoot;
         _ = Directory.CreateDirectory(preparationRoot);
         var catalog = scope.BuiltinCatalog
-            ?? await catalogProvider.GetBuiltinGeometryCatalogAsync(preparationRoot, AssetUris.ContentMountPoint, cancellationToken, scope.Artifacts).ConfigureAwait(false);
+            ?? await catalogProvider.GetBuiltinGeometryCatalogAsync(preparationRoot, AssetPath.Content.Mount, cancellationToken, scope.Artifacts).ConfigureAwait(false);
         var generated = new List<ContentCookInput>();
         foreach (var uri in geometryUris.Distinct())
         {
             cancellationToken.ThrowIfCancellationRequested();
             var definition = catalog.Find(uri);
-            if (definition is null && uri != AssetUris.BuildGeneratedUri("Materials/Default"))
+            if (definition is null && uri != DefaultMaterial)
             {
                 continue;
             }
@@ -46,7 +51,7 @@ public sealed class ProceduralGeometryDescriptorService(IBuiltinGeometryCatalogP
                     scope,
                     catalog.MountName,
                     catalog.DefaultMaterial,
-                    AssetUris.BuildGeneratedUri("Materials/Default"),
+                    DefaultMaterial,
                     ContentCookAssetKind.Material,
                     "Materials",
                     AssetFileTypes.MaterialDescriptor,
@@ -75,15 +80,14 @@ public sealed class ProceduralGeometryDescriptorService(IBuiltinGeometryCatalogP
     /// <summary>Identifies the authored generated-shape namespace without deciding generator support.</summary>
     /// <param name="uri">The authored identity.</param>
     /// <returns>Whether the identity belongs to the generated shape namespace.</returns>
-    internal static bool IsGeneratedBasicShape(Uri uri)
-        => string.Equals(uri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase)
-            && uri.AbsolutePath.StartsWith("/Engine/Generated/BasicShapes/", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsGeneratedBasicShape(AssetPath uri)
+        => uri != BasicShapes && uri.IsSameOrInside(BasicShapes);
 
     private static async Task<ContentCookInput> WriteContributionAsync(
         ContentCookScope scope,
         string mount,
         BuiltinDescriptorContribution contribution,
-        Uri authoredUri,
+        AssetPath authoredUri,
         ContentCookAssetKind kind,
         string folder,
         string extension,
@@ -103,6 +107,6 @@ public sealed class ProceduralGeometryDescriptorService(IBuiltinGeometryCatalogP
             await JsonSerializer.SerializeAsync(stream, contribution.Descriptor, SceneDescriptorJson.Options, cancellationToken).ConfigureAwait(false);
         }
 
-        return new(authoredUri, kind, mount, relative.Replace('\\', '/'), path, contribution.VirtualPath, ContentCookInputRole.GeneratedDescriptor);
+        return new(authoredUri, kind, mount, relative.Replace('\\', '/'), FileSystemPath.From(path), contribution.VirtualPath, ContentCookInputRole.GeneratedDescriptor);
     }
 }

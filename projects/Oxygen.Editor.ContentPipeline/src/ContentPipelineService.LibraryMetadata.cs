@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.LooseCooked;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -23,16 +24,16 @@ public sealed partial class ContentPipelineService : ICookedLibraryMetadataServi
                 (operation, token) => this.RefreshLibraryMetadataCoreAsync(operation, project, inspector, token), cancellationToken);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2025:Do not pass 'IDisposable' instances into unawaited tasks", Justification = "Failed termination transfers the reader into the returned drain task and clears local ownership before finally; the project coordinator retains that drain.")]
-    private async Task<bool> InspectLibraryMetadataAsync(ContentCookOperation operation, string root, ICookedDependencyInspector inspector, CancellationToken cancellationToken)
+    private async Task<bool> InspectLibraryMetadataAsync(ContentCookOperation operation, FileSystemPath root, ICookedDependencyInspector inspector, CancellationToken cancellationToken)
     {
-        var reader = await CookOutputReadLease.AcquireAsync(root, cancellationToken).ConfigureAwait(false);
+        var reader = await CookOutputReadLease.AcquireAsync(root.FullPath, cancellationToken).ConfigureAwait(false);
         try
         {
             using var catalog = new LooseCookedIndexAssetCatalog(new NativeStorageProvider(new RealFileSystem()), new LooseCookedIndexAssetCatalogOptions { CookedRootFolderPath = root });
             var records = await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
-            var index = await CookedIndexSnapshot.ReadAsync(root, cancellationToken).ConfigureAwait(false);
+            var index = await CookedIndexSnapshot.ReadAsync(root.FullPath, cancellationToken).ConfigureAwait(false);
             var fingerprint = index.Fingerprint;
-            if (await CookedDependencyCache.ReadAsync(operation.Project.ProjectRoot, fingerprint, records, cancellationToken).ConfigureAwait(false) is not null)
+            if (await CookedDependencyCache.ReadAsync(operation.Project.ProjectRoot.FullPath, fingerprint, records, cancellationToken).ConfigureAwait(false) is not null)
             {
                 return false;
             }
@@ -43,7 +44,7 @@ public sealed partial class ContentPipelineService : ICookedLibraryMetadataServi
                 throw new InvalidDataException("The cooked library failed native integrity verification.");
             }
 
-            _ = await CookedDependencyCache.EnsureAsync(operation.Project.ProjectRoot, root, fingerprint, records, inspector, Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")), cancellationToken).ConfigureAwait(false);
+            _ = await CookedDependencyCache.EnsureAsync(operation.Project.ProjectRoot.FullPath, root.FullPath, fingerprint, records, inspector, Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N")), cancellationToken).ConfigureAwait(false);
             _ = reader.GetFiles();
             return true;
         }
@@ -85,9 +86,9 @@ public sealed partial class ContentPipelineService : ICookedLibraryMetadataServi
         var changed = false;
         foreach (var library in project.LocalFolderMounts)
         {
-            if (File.Exists(Path.Combine(library.AbsolutePath, "container.index.bin")))
+            if (File.Exists(Path.Combine(library.Root.FullPath, "container.index.bin")))
             {
-                changed |= await InspectLibraryMetadataAsync(operation, library.AbsolutePath, inspector, cancellationToken).ConfigureAwait(false);
+                changed |= await InspectLibraryMetadataAsync(operation, library.Root, inspector, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -116,6 +117,6 @@ public sealed partial class ContentPipelineService : ICookedLibraryMetadataServi
 
         var imports = await Import.ImportedSourceIndex.ReadAsync(operation.Project, cookDocuments, previous, cancellationToken).ConfigureAwait(false);
         var candidates = await ProjectAssetKeyIndex.ReadAsync(operation.Project, imports.KnownOutputs, cancellationToken).ConfigureAwait(false);
-        return await candidates.EnsureAsync(provider, Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")), cancellationToken).ConfigureAwait(false);
+        return await candidates.EnsureAsync(provider, Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N")), cancellationToken).ConfigureAwait(false);
     }
 }

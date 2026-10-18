@@ -5,6 +5,7 @@
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
 
@@ -16,41 +17,36 @@ public static class CookedLibraryFolders
     /// <param name="project">The current source configuration.</param>
     /// <param name="folders">Selected browser scopes.</param>
     /// <returns>Rows ready for the ordinary folder and query filters.</returns>
-    public static IReadOnlyList<AssetEntry> ForFolders(IReadOnlyList<AssetEntry> items, ProjectContext project, IReadOnlyList<string> folders)
+    public static IReadOnlyList<AssetEntry> ForFolders(IReadOnlyList<AssetEntry> items, ProjectContext project, IReadOnlyCollection<AssetPath> folders)
     {
-        var libraries = project.LocalFolderMounts.Where(mount => folders.Any(folder => IsWithin(folder, "/" + mount.Name))
-            && File.Exists(Path.Combine(mount.AbsolutePath, "container.index.bin"))).ToArray();
+        var libraries = project.LocalFolderMounts.Where(mount => folders.Any(folder => string.Equals(folder.Mount, mount.Name, StringComparison.Ordinal))
+            && File.Exists(Path.Combine(mount.Root.FullPath, "container.index.bin"))).ToArray();
         if (libraries.Length == 0)
         {
             return items;
         }
 
-        var includeOrdinary = folders.Any(folder => !libraries.Any(mount => IsWithin(folder, "/" + mount.Name)));
+        var includeOrdinary = folders.Any(folder => !libraries.Any(mount => string.Equals(folder.Mount, mount.Name, StringComparison.Ordinal)));
         var rows = includeOrdinary ? items.ToList() : [];
         foreach (var item in items)
         {
             foreach (var source in item.OverriddenCookedSources.Prepend(item.CookedMetadata).OfType<CookedAssetMetadata>())
             {
-                foreach (var library in libraries.Where(mount => SameRoot(mount.AbsolutePath, source.RootFolderPath)))
+                foreach (var library in libraries.Where(mount => mount.Root == source.RootFolderPath))
                 {
-                    var projected = AssetIdentity.FromCookedSource(item, source, project) with { DisplayPath = "/" + library.Name + "/" + source.DescriptorRelativePath };
-                    if (folders.Any(folder => IsWithin(projected.DisplayPath, folder)))
+                    if (AssetPath.TryCreate(library.Name, source.DescriptorRelativePath, out var location) && folders.Any(location.IsSameOrInside))
                     {
-                        rows.Add(projected);
+                        rows.Add(AssetIdentity.FromCookedSource(item, source, project) with { DisplayPath = location.VirtualPath });
                     }
                 }
             }
         }
 
         var priority = CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder).Select((source, index) => (source, index)).ToArray();
-        return rows.GroupBy(static row => row.IdentityUri).Select(group => group.OrderByDescending(row =>
+        return rows.GroupBy(static row => row.Identity).Select(group => group.OrderByDescending(row =>
         {
-            var sourceName = project.LocalFolderMounts.FirstOrDefault(mount => row.CookedMetadata is { } metadata && SameRoot(mount.AbsolutePath, metadata.RootFolderPath))?.Name;
+            var sourceName = project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == row.CookedMetadata?.RootFolderPath)?.Name;
             return priority.First(item => sourceName is null ? item.source.Kind == CookedContentSourceKind.ProjectOutput : string.Equals(item.source.Name, sourceName, StringComparison.Ordinal)).index;
         }).First()).ToArray();
     }
-
-    private static bool SameRoot(string left, string right) => string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsWithin(string path, string parent) => string.Equals(path, parent, StringComparison.OrdinalIgnoreCase) || path.StartsWith(parent.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase);
 }

@@ -21,7 +21,7 @@ public sealed record SetGeometry : ISceneEdit
     /// <summary>Initializes a new instance of the <see cref="SetGeometry"/> class.</summary>
     /// <param name="nodes">The nodes whose geometry components change.</param>
     /// <param name="geometry">The geometry asset.</param>
-    public SetGeometry(IReadOnlyCollection<NodeId> nodes, Uri geometry)
+    public SetGeometry(IReadOnlyCollection<NodeId> nodes, AssetPath geometry)
     {
         ArgumentNullException.ThrowIfNull(nodes);
         this.Geometries = nodes.Distinct().ToDictionary(static id => id, _ => geometry);
@@ -30,14 +30,14 @@ public sealed record SetGeometry : ISceneEdit
     /// <summary>Initializes a new instance of the <see cref="SetGeometry"/> class, with one geometry per node.</summary>
     /// <param name="geometries">The geometry asset of each node.</param>
     [JsonConstructor]
-    public SetGeometry(IReadOnlyDictionary<NodeId, Uri> geometries)
+    public SetGeometry(IReadOnlyDictionary<NodeId, AssetPath> geometries)
     {
         ArgumentNullException.ThrowIfNull(geometries);
         this.Geometries = geometries.ToDictionary();
     }
 
     /// <summary>Gets the geometry asset of each node.</summary>
-    public IReadOnlyDictionary<NodeId, Uri> Geometries { get; }
+    public IReadOnlyDictionary<NodeId, AssetPath> Geometries { get; }
 
     /// <inheritdoc/>
     public string Label => "Edit Geometry";
@@ -80,7 +80,7 @@ public sealed record SetGeometry : ISceneEdit
     SceneEditApplication ISceneEdit.Apply(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var before = new Dictionary<NodeId, Uri>();
+        var before = new Dictionary<NodeId, AssetPath>();
         foreach (var (id, captured) in this.Geometries)
         {
             var component = GeometryOf(scope, id)!;

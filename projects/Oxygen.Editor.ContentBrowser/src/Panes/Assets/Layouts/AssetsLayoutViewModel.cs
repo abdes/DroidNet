@@ -12,6 +12,7 @@ using Microsoft.UI.Xaml;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 
@@ -45,8 +46,8 @@ public abstract partial class AssetsLayoutViewModel(
     private bool isLoading = true;
     private bool isReplacingRows;
     private bool hasSnapshot;
-    private Uri? pendingReveal;
-    private string[] projectCookedFolders = [];
+    private AssetPath? pendingReveal;
+    private AssetPath[] projectCookedFolders = [];
 
     /// <summary>
     /// Occurs when an item in the assets view is invoked.
@@ -106,10 +107,10 @@ public abstract partial class AssetsLayoutViewModel(
     public IReadOnlyList<AssetEntry> SelectedAssets => this.selectedAssets;
 
     /// <summary>Gets the current visual row so programmatic selection is reflected in every layout.</summary>
-    public AssetBrowserRow? SelectedRow => this.selectedAsset is { } selected ? this.FindRow(selected.IdentityUri) : null;
+    public AssetBrowserRow? SelectedRow => this.selectedAsset is { } selected ? this.FindRow(selected.Identity) : null;
 
     /// <summary>Gets the visual rows of every selected asset.</summary>
-    public IReadOnlyList<AssetBrowserRow> SelectedRows => [.. this.selectedAssets.Select(asset => this.FindRow(asset.IdentityUri)).OfType<AssetBrowserRow>()];
+    public IReadOnlyList<AssetBrowserRow> SelectedRows => [.. this.selectedAssets.Select(asset => this.FindRow(asset.Identity)).OfType<AssetBrowserRow>()];
 
     private bool IsActiveLayout => !this.disposed && ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this);
 
@@ -125,17 +126,17 @@ public abstract partial class AssetsLayoutViewModel(
 
         // A repeated asset keeps its latest position, so the most recent pick stays active.
         var selection = assets
-            .Select(asset => this.FindRow(asset.IdentityUri)?.Item)
+            .Select(asset => this.FindRow(asset.Identity)?.Item)
             .OfType<AssetEntry>()
             .Reverse()
-            .DistinctBy(static asset => asset.IdentityUri.AbsoluteUri, StringComparer.OrdinalIgnoreCase)
+            .DistinctBy(static asset => asset.Identity)
             .Reverse()
             .ToArray();
         var changed = !this.selectedAssets.SequenceEqual(selection);
         this.selectedAssets = selection;
         _ = this.SetProperty(ref this.selectedAsset, selection.Length == 0 ? null : selection[^1], nameof(this.SelectedAsset));
         this.PublishSelection();
-        if (this.pendingReveal != this.selectedAsset?.IdentityUri)
+        if (this.pendingReveal != this.selectedAsset?.Identity)
         {
             this.pendingReveal = null;
         }
@@ -152,7 +153,7 @@ public abstract partial class AssetsLayoutViewModel(
     /// <summary>Requests one reveal for explicit navigation, including a view that has not loaded yet.</summary>
     public void RevealSelection()
     {
-        this.pendingReveal = this.SelectedAsset?.IdentityUri;
+        this.pendingReveal = this.SelectedAsset?.Identity;
         this.SelectionRevealRequested?.Invoke(this, EventArgs.Empty);
     }
 
@@ -203,67 +204,34 @@ public abstract partial class AssetsLayoutViewModel(
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>Normalizes folder selections without letting a root selection broaden a concrete scope.</summary>
-    /// <param name="folders">The selected virtual folder paths.</param>
-    /// <returns>The distinct normalized folders.</returns>
-    internal static IReadOnlyList<string> NormalizeSelectedFolders(IEnumerable<string>? folders)
-    {
-        if (folders is null)
-        {
-            return [];
-        }
-
-        var normalized = folders
-            .Where(static folder => !string.IsNullOrWhiteSpace(folder))
-            .Select(NormalizeFolderPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (normalized.Count > 1)
-        {
-            _ = normalized.RemoveAll(static folder => string.Equals(folder, "/", StringComparison.Ordinal));
-        }
-
-        return normalized;
-    }
-
     /// <summary>Checks authored and cooked projections against the current browser scope.</summary>
     /// <param name="displayPath">The row's display location.</param>
-    /// <param name="identityAbsolutePath">The authored virtual path.</param>
-    /// <param name="selectedFolders">The normalized selected folders.</param>
+    /// <param name="identity">The asset's identity.</param>
+    /// <param name="selectedFolders">The selected folders; none selected is the whole project.</param>
     /// <param name="hasActiveProject">Whether the browser owns a project.</param>
-    /// <param name="cookedAbsolutePath">The known cooked virtual path.</param>
     /// <param name="hasCookedProjection">Whether a cooked projection exists.</param>
-    /// <param name="cookedFolders">The saved virtual mount paths exposing project output.</param>
+    /// <param name="cookedFolders">The mounts exposing project output.</param>
     /// <returns>Whether the asset belongs to this scope.</returns>
     internal static bool IsInSelectedFolders(
         string displayPath,
-        string identityAbsolutePath,
-        IReadOnlyCollection<string> selectedFolders,
+        AssetPath identity,
+        IReadOnlyCollection<AssetPath> selectedFolders,
         bool hasActiveProject,
-        string? cookedAbsolutePath = null,
         bool hasCookedProjection = false,
-        IReadOnlyCollection<string>? cookedFolders = null)
+        IReadOnlyCollection<AssetPath>? cookedFolders = null)
     {
-        if (selectedFolders.Count == 0
-            || selectedFolders.Contains(".", StringComparer.OrdinalIgnoreCase)
-            || selectedFolders.Contains("/", StringComparer.OrdinalIgnoreCase))
+        if (selectedFolders.Count == 0 || !hasActiveProject)
         {
             return true;
         }
 
-        if (!hasActiveProject)
-        {
-            return true;
-        }
-
+        // A library's copy shows under the library's mount, where its display path names it.
+        var shown = AssetPath.TryParse(displayPath, out var location) ? location : identity;
         foreach (var selected in selectedFolders)
         {
             if (ProjectCookedFolders.TryMap(selected, cookedFolders ?? [], out var cookedSelection))
             {
-                if (hasCookedProjection
-                    && (string.Equals(cookedSelection, "/", StringComparison.OrdinalIgnoreCase)
-                        || (cookedAbsolutePath is not null && IsSameOrChildPath(cookedAbsolutePath, cookedSelection))))
+                if (hasCookedProjection && (cookedSelection is null || identity.IsSameOrInside(cookedSelection)))
                 {
                     return true;
                 }
@@ -271,8 +239,7 @@ public abstract partial class AssetsLayoutViewModel(
                 continue;
             }
 
-            if (IsSameOrChildPath(displayPath, selected)
-                || IsSameOrChildPath(identityAbsolutePath, selected))
+            if (shown.IsSameOrInside(selected) || identity.IsSameOrInside(selected))
             {
                 return true;
             }
@@ -330,7 +297,7 @@ public abstract partial class AssetsLayoutViewModel(
     protected void OnItemInvoked(AssetEntry item)
     {
         if (!this.disposed && ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this)
-            && this.Assets.FirstOrDefault(row => AssetIdentity.Represents(row.Item, item.IdentityUri)) is { } current)
+            && this.Assets.FirstOrDefault(row => AssetIdentity.Represents(row.Item, item.Identity)) is { } current)
         {
             this.ItemInvoked?.Invoke(this, new AssetsViewItemInvokedEventArgs(current.Item));
         }
@@ -338,22 +305,9 @@ public abstract partial class AssetsLayoutViewModel(
 
     private static bool HasCookedProjection(AssetEntry asset)
         => asset.PrimaryState is AssetState.Cooked
-           || (asset.BuiltinOriginUri is not null && asset.CookedUri is not null)
+           || (asset.BuiltinOrigin is not null && asset.IsCookedAsset)
            || asset.DerivedState is AssetState.Cooked or AssetState.Stale
-           || (asset.PrimaryState is AssetState.Broken && asset.CookedUri == asset.IdentityUri);
-
-    private static string NormalizeFolderPath(string value)
-    {
-        var normalized = value.Replace('\\', '/').Trim('/');
-        return string.IsNullOrEmpty(normalized) || string.Equals(normalized, ".", StringComparison.Ordinal) ? "/" : "/" + normalized;
-    }
-
-    private static bool IsSameOrChildPath(string candidate, string folder)
-    {
-        var normalizedCandidate = NormalizeFolderPath(candidate);
-        return normalizedCandidate.Equals(folder, StringComparison.OrdinalIgnoreCase)
-               || normalizedCandidate.StartsWith(folder + "/", StringComparison.OrdinalIgnoreCase);
-    }
+           || (asset.PrimaryState is AssetState.Broken && asset.DescriptorPath is null && asset.IsCookedAsset);
 
     private void ApplyScriptProblems(AssetBrowserRow row)
     {
@@ -366,7 +320,7 @@ public abstract partial class AssetsLayoutViewModel(
     private void OnScriptAnalyzed(Scripts.ScriptAnalysisSnapshot analysis)
     {
         foreach (var row in this.Assets.Where(row => row.Item is { Kind: AssetKind.Script, SourcePath: { } source }
-            && string.Equals(source, analysis.SourcePath, StringComparison.OrdinalIgnoreCase)))
+            && source == analysis.SourcePath))
         {
             row.SetScriptProblems(analysis.IsRemoved ? null : analysis);
         }
@@ -442,11 +396,11 @@ public abstract partial class AssetsLayoutViewModel(
 
         this.latestItems = items;
         this.hasSnapshot = true;
-        var selectedUris = this.IsActiveLayout
-            ? this.contentBrowserState.SelectedAssetUris : [.. this.selectedAssets.Select(static asset => asset.IdentityUri)];
-        var existing = this.Assets.ToDictionary(static row => row.Item.IdentityUri.AbsoluteUri, StringComparer.OrdinalIgnoreCase);
+        var selectedIdentities = this.IsActiveLayout
+            ? this.contentBrowserState.SelectedIdentities : [.. this.selectedAssets.Select(static asset => asset.Identity)];
+        var existing = this.Assets.ToDictionary(static row => row.Item.Identity);
         var scopedItems = this.projectContextService.ActiveProject is { } project
-            ? CookedLibraryFolders.ForFolders(items, project, NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders)) : items;
+            ? CookedLibraryFolders.ForFolders(items, project, this.contentBrowserState.SelectedFolders) : items;
         var inScope = AssetIdentity.GroupBuiltins(scopedItems.Where(this.IsInSelectedFolders)).ToArray();
         this.scopeCount = inScope.Length;
         var visible = this.Presentation.Sort(inScope.Where(this.Query.Matches));
@@ -456,7 +410,7 @@ public abstract partial class AssetsLayoutViewModel(
             for (var index = 0; index < visible.Count; index++)
             {
                 var item = visible[index];
-                if (existing.TryGetValue(item.IdentityUri.AbsoluteUri, out var row))
+                if (existing.TryGetValue(item.Identity, out var row))
                 {
                     row.Update(item);
                     this.ApplyScriptProblems(row);
@@ -483,20 +437,20 @@ public abstract partial class AssetsLayoutViewModel(
             this.isReplacingRows = false;
         }
 
-        this.SetSelection(selectedUris.Select(uri => this.FindRow(uri)?.Item).OfType<AssetEntry>());
+        this.SetSelection(selectedIdentities.Select(identity => this.FindRow(identity)?.Item).OfType<AssetEntry>());
         this.PublishCounts();
         this.NotifyEmptyState();
     }
 
-    private AssetBrowserRow? FindRow(Uri identity)
+    private AssetBrowserRow? FindRow(AssetPath identity)
         => this.Assets.FirstOrDefault(row => AssetIdentity.Represents(row.Item, identity));
 
     private void PublishSelection()
     {
         if (this.IsActiveLayout)
         {
-            this.contentBrowserState.SelectedAssetUri = this.selectedAsset?.IdentityUri;
-            this.contentBrowserState.SelectedAssetUris = [.. this.selectedAssets.Select(static asset => asset.IdentityUri)];
+            this.contentBrowserState.SelectedIdentity = this.selectedAsset?.Identity;
+            this.contentBrowserState.SelectedIdentities = [.. this.selectedAssets.Select(static asset => asset.Identity)];
             this.contentBrowserState.PublishSelection(this.selectedAssets);
         }
     }
@@ -514,24 +468,24 @@ public abstract partial class AssetsLayoutViewModel(
     [RelayCommand]
     private void BrowseSource()
     {
-        var sourceFolders = NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders)
+        var sourceFolders = this.contentBrowserState.SelectedFolders
             .Select(folder => ProjectCookedFolders.TryMap(folder, this.projectCookedFolders, out var source) ? source : folder)
             .ToArray();
-        if (sourceFolders.Contains("/", StringComparer.Ordinal))
+        if (sourceFolders.Any(static folder => folder is null))
         {
-            var mounts = this.projectContextService.ActiveProject?.AuthoringMounts
+            // All of the output browses the sources of every authoring folder.
+            this.contentBrowserState.SetSelectedFolders(this.projectContextService.ActiveProject?.AuthoringMounts
                 .Where(static mount => !ProjectExplorer.ProjectLayoutViewModel.IsPersistedProjectRelativeVirtualMount(mount))
-                .Select(static mount => "/" + mount.Name).ToArray() ?? [];
-            this.contentBrowserState.SetSelectedFolders(mounts.Length == 0 ? ["/"] : mounts);
+                .Select(static mount => AssetPath.Create(mount.Name)) ?? []);
         }
         else
         {
-            this.contentBrowserState.SetSelectedFolders(sourceFolders);
+            this.contentBrowserState.SetSelectedFolders(sourceFolders.OfType<AssetPath>());
         }
     }
 
     private bool IsCookedScope()
-        => NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders).Any(folder => ProjectCookedFolders.TryMap(folder, this.projectCookedFolders, out _));
+        => this.contentBrowserState.SelectedFolders.Any(folder => ProjectCookedFolders.TryMap(folder, this.projectCookedFolders, out _));
 
     private void NotifyEmptyState()
     {
@@ -547,17 +501,13 @@ public abstract partial class AssetsLayoutViewModel(
     }
 
     private bool IsInSelectedFolders(AssetEntry asset)
-    {
-        var selectedFolders = NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders);
-        return IsInSelectedFolders(
+        => IsInSelectedFolders(
             asset.DisplayPath,
-            asset.IdentityUri.AbsolutePath,
-            selectedFolders,
+            asset.Identity,
+            this.contentBrowserState.SelectedFolders,
             this.projectContextService.ActiveProject is not null,
-            asset.CookedUri?.AbsolutePath,
             HasCookedProjection(asset),
             this.projectCookedFolders);
-    }
 
     [RelayCommand]
     private async Task RetryBuiltinCatalogAsync()
@@ -567,12 +517,8 @@ public abstract partial class AssetsLayoutViewModel(
     }
 
     private bool IncludesEngineChoices()
-    {
-        var folders = NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders);
-        return folders.Count == 0 || folders.Any(static folder => folder is "/" or "."
-            || folder.Equals("/Engine", StringComparison.OrdinalIgnoreCase)
-            || folder.StartsWith("/Engine/", StringComparison.OrdinalIgnoreCase));
-    }
+        => this.contentBrowserState.SelectedFolders.Count == 0
+            || this.contentBrowserState.SelectedFolders.Any(static folder => folder.IsSameOrInside(AssetPath.Engine));
 
     private void NotifyBuiltinStatus()
     {

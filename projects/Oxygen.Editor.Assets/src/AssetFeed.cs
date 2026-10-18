@@ -4,8 +4,8 @@
 
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Cooking;
@@ -15,6 +15,7 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Diagnostics;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets;
 
@@ -126,9 +127,9 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     }
 
     /// <inheritdoc />
-    public async Task<AssetEntry?> ResolveAsync(Uri uri, CancellationToken cancellationToken = default)
+    public async Task<AssetEntry?> ResolveAsync(AssetPath identity, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(uri);
+        ArgumentNullException.ThrowIfNull(identity);
         CancellationTokenSource cancellation;
         lock (this.refreshSync)
         {
@@ -144,23 +145,23 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
             ObjectDisposedException.ThrowIf(this.disposed, this);
             if (this.projectContextService.ActiveProject is not { } active)
             {
-                return AssetEntry.Missing(uri);
+                return AssetEntry.Missing(identity);
             }
 
             project = active;
             // The engine publishes its content changes asynchronously: the row takes the preview's state as it is now.
-            if (this.items.Value.Find(uri) is { } match)
+            if (this.items.Value.Find(identity) is { } match)
             {
                 return this.ApplyLiveState([match])[0];
             }
         }
 
-        if (TryResolveSourcePath(project, uri) is not { } sourcePath || !File.Exists(sourcePath))
+        if (project.FindSource(identity) is not { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } source || !File.Exists(source.File.FullPath))
         {
-            return AssetEntry.Missing(uri);
+            return AssetEntry.Missing(identity);
         }
 
-        AssetRecord[] matches = [new(uri)];
+        AssetRecord[] matches = [new(source.Path)];
         var cookScope = this.projectCookScopeProvider.CreateScope(project);
         var reduced = this.reducer.Reduce(matches, project, cookScope, includeMissing: true);
         var enriched = await this.ApplyCookStatusAsync(project, reduced, cancellation.Token).ConfigureAwait(false);
@@ -230,7 +231,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
                 AssetCookFreshness.MissingSource => AssetState.Missing,
                 AssetCookFreshness.InvalidSource => AssetState.Broken,
                 _ => item.Kind == AssetKind.ForeignSource ? AssetState.Source
-                    : item.ImportSourceUri is not null && item.DescriptorPath is null ? AssetState.Cooked : AssetState.Descriptor,
+                    : item.ImportSource is not null && item.DescriptorPath is null ? AssetState.Cooked : AssetState.Descriptor,
             },
             DerivedState = !state.HasPublishedOutput ? null
                 : state.OutputAvailability == CookedOutputAvailability.Missing ? AssetState.Missing
@@ -240,8 +241,8 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         };
 
     // Only the files of authoring mounts are project sources.
-    private static string? TryResolveSourcePath(ProjectContext project, Uri uri)
-        => project.FindByAssetUri(uri) is { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location ? location.FilePath : null;
+    private static FileSystemPath? TryResolveSourcePath(ProjectContext project, AssetPath path)
+        => project.Find(path) is { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location ? location.File : null;
 
     private async Task<IReadOnlyList<AssetEntry>> ApplyCookStatusAsync(
         ProjectContext project,
@@ -251,9 +252,9 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         string? publicationError = null)
     {
         source = source.Select(item => item.Kind == AssetKind.ForeignSource && item.SourcePath is { } path
-            && File.Exists(path + Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.SidecarSuffix)
-                ? item with { ImportSourceUri = item.IdentityUri, ImportSourcePath = path } : item).ToArray();
-        var candidates = source.Where(item => item.Generated is not null || item.ImportSourceUri is not null
+            && File.Exists(path.FullPath + Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.SidecarSuffix)
+                ? item with { ImportSource = item.Identity, ImportSourcePath = path } : item).ToArray();
+        var candidates = source.Where(item => item.Generated is not null || item.ImportSource is not null
             || (item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture)
             || IsProjectCookedOutput(publication?.ProjectRoots.Values ?? [], item)).ToArray();
         if (candidates.Length == 0)
@@ -261,7 +262,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
             return source;
         }
 
-        var identities = candidates.Select(static item => item.IdentityUri).ToArray();
+        var identities = candidates.Select(static item => item.Identity).ToArray();
         if (publicationError is not null)
         {
             var diagnostic = new DiagnosticRecord
@@ -272,20 +273,20 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
                 Code = "Cook.PublicationUnavailable",
                 Message = publicationError,
             };
-            var affected = candidates.Select(static item => item.IdentityUri).ToHashSet();
-            return source.Select(item => affected.Contains(item.IdentityUri)
-                ? ApplyCookStatus(item, new(item.IdentityUri, AssetCookFreshness.Unknown, false, CookedOutputAvailability.Unknown, [], [], [diagnostic]))
+            var affected = candidates.Select(static item => item.Identity).ToHashSet();
+            return source.Select(item => affected.Contains(item.Identity)
+                ? ApplyCookStatus(item, new(item.Identity, AssetCookFreshness.Unknown, false, CookedOutputAvailability.Unknown, [], [], [diagnostic]))
                 : item).ToArray();
         }
 
         var read = publication is null ? this.cookStatus.ReadAsync(project, identities, cancellationToken)
             : this.cookStatus.ReadAsync(project, publication, identities, cancellationToken);
         var states = (await read.ConfigureAwait(false)).ToDictionary(static state => state.AssetUri);
-        var origins = source.Where(item => item.Generated is not null && states.TryGetValue(item.IdentityUri, out var state) && state.HasAvailableOutput)
-            .SelectMany(item => states[item.IdentityUri].Outputs.Where(output => states[item.IdentityUri].OutputRoots.ContainsKey(output.MountName))
-                .Select(output => new VerifiedBuiltinSource(states[item.IdentityUri].OutputRoots[output.MountName], output.CookedAssetUri, item)))
-            .GroupBy(static entry => entry.CookedUri)
-            .Where(static group => group.Select(entry => entry.Origin.IdentityUri).Distinct().Take(2).Count() == 1)
+        var origins = source.Where(item => item.Generated is not null && states.TryGetValue(item.Identity, out var state) && state.HasAvailableOutput)
+            .SelectMany(item => states[item.Identity].Outputs.Where(output => states[item.Identity].OutputRoots.ContainsKey(output.MountName))
+                .Select(output => new VerifiedBuiltinSource(states[item.Identity].OutputRoots[output.MountName], output.CookedAssetUri, item)))
+            .GroupBy(static entry => entry.Identity)
+            .Where(static group => group.Select(entry => entry.Origin.Identity).Distinct().Take(2).Count() == 1)
             .ToDictionary(static group => group.Key, static group => group.ToArray());
         var projectedItems = source.Select(item =>
         {
@@ -295,16 +296,15 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
             }
 
             var proofs = origins.Values.SelectMany(static entries => entries).Where(proof =>
-                item.CookedUri == proof.CookedUri || string.Equals(item.CookedMetadata?.VirtualPath, proof.CookedUri.AbsolutePath, StringComparison.Ordinal)
-                    || item.OverriddenCookedSources.Any(metadata => string.Equals(metadata.VirtualPath, proof.CookedUri.AbsolutePath, StringComparison.Ordinal))).ToArray();
+                item.Identity == proof.Identity || item.CookedMetadata?.VirtualPath == proof.Identity
+                    || item.OverriddenCookedSources.Any(metadata => metadata.VirtualPath == proof.Identity)).ToArray();
             var projected = item with { VerifiedBuiltinSources = proofs };
             var origin = proofs.FirstOrDefault(proof => proof.Origin.Kind == item.Kind
-                && (item.CookedMetadata is { } metadata ? string.Equals(Path.GetFullPath(metadata.RootFolderPath), proof.Root, StringComparison.OrdinalIgnoreCase)
-                    && (metadata.VirtualPath is null || string.Equals(metadata.VirtualPath, proof.CookedUri.AbsolutePath, StringComparison.Ordinal))
-                    : item.CookedPath is { } path && Path.GetFullPath(path).StartsWith(proof.Root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))?.Origin;
+                && (item.CookedMetadata is { } metadata ? metadata.RootFolderPath == proof.Root && (metadata.VirtualPath is null || metadata.VirtualPath == proof.Identity)
+                    : item.CookedPath?.IsSameOrInside(proof.Root) == true))?.Origin;
             return item.SourcePath is null && item.DescriptorPath is null && origin is not null
-                ? projected with { Generated = origin.Generated, BuiltinOriginUri = origin.IdentityUri, DisplayName = origin.DisplayName, PrimaryState = AssetState.Generated, DerivedState = null }
-                : states.TryGetValue(item.IdentityUri, out var state) ? ApplyOwnedCookStatus(project, projected, state) : projected;
+                ? projected with { Generated = origin.Generated, BuiltinOrigin = origin.Identity, DisplayName = origin.DisplayName, PrimaryState = AssetState.Generated, DerivedState = null }
+                : states.TryGetValue(item.Identity, out var state) ? ApplyOwnedCookStatus(project, projected, state) : projected;
         }).ToArray();
         return AddKnownImportedOutputs(project, projectedItems, states.Values);
     }

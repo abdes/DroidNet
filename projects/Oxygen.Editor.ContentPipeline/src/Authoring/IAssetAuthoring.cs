@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Authoring;
 
@@ -32,7 +33,7 @@ public interface IAssetAuthoring
     /// A mount root is replaced by the kind's folder under it.</param>
     /// <param name="cancellationToken">Cancels reading the catalog.</param>
     /// <returns>The proposal.</returns>
-    public Task<AssetProposal> ProposeAsync(ProjectContext project, AuthoredAssetKind kind, string? selectedFolder, CancellationToken cancellationToken);
+    public Task<AssetProposal> ProposeAsync(ProjectContext project, AuthoredAssetKind kind, AssetPath? selectedFolder, CancellationToken cancellationToken);
 
     /// <summary>Checks a name and folder for a new file.</summary>
     /// <param name="project">The project.</param>
@@ -41,7 +42,7 @@ public interface IAssetAuthoring
     /// <param name="folder">The virtual folder.</param>
     /// <param name="cancellationToken">Cancels reading the catalog.</param>
     /// <returns>Why the name is rejected, or <see langword="null"/> when it is accepted.</returns>
-    public Task<string?> ValidateAsync(ProjectContext project, AuthoredAssetKind kind, string name, string folder, CancellationToken cancellationToken);
+    public Task<string?> ValidateAsync(ProjectContext project, AuthoredAssetKind kind, string name, AssetPath folder, CancellationToken cancellationToken);
 
     /// <summary>Checks the name and folder again and writes the template there.</summary>
     /// <param name="project">The project.</param>
@@ -52,5 +53,5 @@ public interface IAssetAuthoring
     /// <returns>The absolute path of the new file.</returns>
     /// <exception cref="AssetCreationException">The name is rejected, a file already exists there, or the file
     /// could not be written; nothing was created.</exception>
-    public Task<string> CreateAsync(ProjectContext project, AuthoredAssetKind kind, string name, string folder, CancellationToken cancellationToken);
+    public Task<FileSystemPath> CreateAsync(ProjectContext project, AuthoredAssetKind kind, string name, AssetPath folder, CancellationToken cancellationToken);
 }

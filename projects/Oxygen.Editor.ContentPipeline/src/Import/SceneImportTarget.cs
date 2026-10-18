@@ -33,34 +33,24 @@ public sealed record SceneImportTarget(string MountName, string OutputDirectory)
     /// <param name="folder">The destination authoring folder.</param>
     /// <param name="name">The model's unique folder name.</param>
     /// <returns>The validated native destination.</returns>
-    public static SceneImportTarget Resolve(ProjectContext project, Uri folder, string name)
+    public static SceneImportTarget Resolve(ProjectContext project, AssetPath folder, string name)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(folder);
-        if (!folder.IsAbsoluteUri || !string.Equals(folder.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase)
-            || !string.IsNullOrEmpty(folder.Host) || !string.IsNullOrEmpty(folder.Query) || !string.IsNullOrEmpty(folder.Fragment))
-        {
-            throw new ArgumentException("Choose a project content folder.", nameof(folder));
-        }
 
         ArgumentNullException.ThrowIfNull(name);
-        name = VirtualPath.NormalizeTypedName(name);
-        var path = Uri.UnescapeDataString(folder.AbsolutePath).Trim('/');
-        var parts = path.Split('/');
-        if (VirtualPath.ValidateMountName(parts[0]) is not null
-            || parts.Skip(1).Append(name).Any(static part => VirtualPath.ValidateSegment(part) is not null))
+        if (!folder.TryCombine(VirtualPath.NormalizeTypedName(name), out var output))
         {
             throw new ArgumentException("Use a valid model name and content folder.", nameof(name));
         }
 
-        var mount = project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.Ordinal))
+        var mount = project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, output.Mount, StringComparison.Ordinal))
             ?? throw new ArgumentException("Choose an authoring folder, not built-in or cooked content.", nameof(folder));
-        if (parts.Skip(1).Append(name).Any(VirtualPath.IsDerivedContent))
+        if (output.RelativePath.Split('/').Any(VirtualPath.IsDerivedContent))
         {
             throw new ArgumentException("Choose a content destination outside source-media and generated folders.", nameof(folder));
         }
 
-        var directory = string.Join('/', parts.Skip(1).Append(name));
-        return new(mount.Name, directory);
+        return new(mount.Name, output.RelativePath);
     }
 }

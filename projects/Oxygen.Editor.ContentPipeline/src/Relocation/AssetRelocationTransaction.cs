@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -44,9 +45,9 @@ internal static partial class AssetRelocationTransaction
         var journal = new Journal
         {
             Phase = Phase.Applying,
-            Moves = [.. plan.Moves.Select(static move => new JournalMove(move.Source, move.Target, move.IsDirectory))],
+            Moves = [.. plan.Moves.Select(static move => new JournalMove(move.Source.FullPath, move.Target.FullPath, move.IsDirectory))],
             CreatedDirectories = [.. GetMissingParents(plan.Moves)],
-            Edits = [.. plan.Edits.Select(static edit => new JournalEdit(edit.FinalPath, edit.Before.Sha256, Hash(edit.AfterContent), edit.BeforeContent))],
+            Edits = [.. plan.Edits.Select(static edit => new JournalEdit(edit.FinalPath.FullPath, edit.Before.Sha256, Hash(edit.AfterContent), edit.BeforeContent))],
         };
         var path = Path.Combine(projectRoot, ".build", JournalFolder, Guid.NewGuid().ToString("N"), JournalName);
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -132,19 +133,19 @@ internal static partial class AssetRelocationTransaction
     {
         foreach (var edit in plan.Edits)
         {
-            var current = await files.ReadAsync(edit.OriginalPath, cancellationToken).ConfigureAwait(false);
+            var current = await files.ReadAsync(edit.OriginalPath.FullPath, cancellationToken).ConfigureAwait(false);
             if (current.Version != edit.Before)
             {
-                throw new AssetRelocationException($"'{Path.GetFileName(edit.OriginalPath)}' changed while the move was prepared. Try again.");
+                throw new AssetRelocationException($"'{edit.OriginalPath.Name}' changed while the move was prepared. Try again.");
             }
         }
 
         foreach (var move in plan.Moves)
         {
-            var exists = move.IsDirectory ? Directory.Exists(move.Source) : File.Exists(move.Source);
-            if (!exists || (!string.Equals(move.Source, move.Target, StringComparison.OrdinalIgnoreCase) && (File.Exists(move.Target) || Directory.Exists(move.Target))))
+            var exists = move.IsDirectory ? Directory.Exists(move.Source.FullPath) : File.Exists(move.Source.FullPath);
+            if (!exists || (move.Source != move.Target && (File.Exists(move.Target.FullPath) || Directory.Exists(move.Target.FullPath))))
             {
-                throw new AssetRelocationException($"'{Path.GetFileName(move.Source)}' or its destination changed while the move was prepared. Try again.");
+                throw new AssetRelocationException($"'{move.Source.Name}' or its destination changed while the move was prepared. Try again.");
             }
         }
     }
@@ -172,8 +173,8 @@ internal static partial class AssetRelocationTransaction
         foreach (var edit in plan.Edits)
         {
             step();
-            written.Add(new(edit.OriginalPath, edit.FinalPath, await files.WriteAsync(edit.FinalPath, edit.AfterContent, edit.Before, CancellationToken.None).ConfigureAwait(false)));
-            LogRewrote(logger, edit.FinalPath);
+            written.Add(new(edit.OriginalPath, edit.FinalPath, await files.WriteAsync(edit.FinalPath.FullPath, edit.AfterContent, edit.Before, CancellationToken.None).ConfigureAwait(false)));
+            LogRewrote(logger, edit.FinalPath.FullPath);
         }
     }
 
@@ -233,7 +234,7 @@ internal static partial class AssetRelocationTransaction
             {
                 var targetExists = move.IsDirectory ? Directory.Exists(move.Target) : File.Exists(move.Target);
                 var sourceExists = move.IsDirectory ? Directory.Exists(move.Source) : File.Exists(move.Source);
-                var caseOnly = string.Equals(move.Source, move.Target, StringComparison.OrdinalIgnoreCase);
+                var caseOnly = FileSystemPath.From(move.Source) == FileSystemPath.From(move.Target);
                 if (caseOnly ? targetExists && !HasExactName(move.Source) : targetExists && !sourceExists)
                 {
                     Move(move.Target, move.Source, move.IsDirectory);
@@ -267,7 +268,8 @@ internal static partial class AssetRelocationTransaction
 
     private static void Move(string source, string target, bool isDirectory)
     {
-        if (string.Equals(source, target, StringComparison.OrdinalIgnoreCase))
+        // A change of case only goes through a temporary name, which the file system sees as a different file.
+        if (FileSystemPath.From(source) == FileSystemPath.From(target))
         {
             var temporary = Path.Combine(Path.GetDirectoryName(source)!, ".oxygen-relocate-" + Guid.NewGuid().ToString("N"));
             Move(source, temporary, isDirectory);
@@ -294,19 +296,19 @@ internal static partial class AssetRelocationTransaction
 
     private static List<string> GetMissingParents(IEnumerable<RelocationFileMove> moves)
     {
-        var created = new List<string>();
+        var created = new List<FileSystemPath>();
         foreach (var move in moves)
         {
-            var missing = new Stack<string>();
-            for (var folder = Path.GetDirectoryName(move.Target); folder is not null && !Directory.Exists(folder); folder = Path.GetDirectoryName(folder))
+            var missing = new Stack<FileSystemPath>();
+            for (var folder = move.Target.Parent; folder is not null && !Directory.Exists(folder.FullPath); folder = folder.Parent)
             {
                 missing.Push(folder);
             }
 
-            created.AddRange(missing.Where(folder => !created.Contains(folder, StringComparer.OrdinalIgnoreCase)));
+            created.AddRange(missing.Where(folder => !created.Contains(folder)));
         }
 
-        return created;
+        return [.. created.Select(static folder => folder.FullPath)];
     }
 
     private static string Hash(byte[] content) => Convert.ToHexString(SHA256.HashData(content));

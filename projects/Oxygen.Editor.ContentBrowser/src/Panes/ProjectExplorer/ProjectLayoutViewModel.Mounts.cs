@@ -9,6 +9,7 @@ using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
@@ -93,18 +94,8 @@ public partial class ProjectLayoutViewModel
             && selected.ProjectOutputPaths.Distinct(StringComparer.Ordinal).SequenceEqual(cooked.CookedVirtualPaths!, StringComparer.Ordinal);
     }
 
-    private static string? GetRelativeMountPath(string projectRoot, string path)
-    {
-        try
-        {
-            var relative = Path.GetRelativePath(projectRoot, path);
-            return relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative) ? null : relative.Replace('\\', '/');
-        }
-        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
-        {
-            return null;
-        }
-    }
+    private static string? GetRelativeMountPath(FileSystemPath projectRoot, FileSystemPath path)
+        => !path.IsSameOrInside(projectRoot) ? null : path == projectRoot ? "." : path.GetPathBelow(projectRoot);
 
     private async Task<bool> ShowLocalMountDialogAsync(LocalFolderMountDialogViewModel model)
     {
@@ -149,10 +140,11 @@ public partial class ProjectLayoutViewModel
                 return;
         }
 
-        var wasLocal = projectContextService.ActiveProject?.LocalFolderMounts.Any(mount => string.Equals(mount.AbsolutePath, path, StringComparison.OrdinalIgnoreCase)) == true;
+        var folder = FileSystemPath.From(path);
+        var wasLocal = projectContextService.ActiveProject?.LocalFolderMounts.Any(mount => mount.Root == folder) == true;
         if (!wasLocal)
         {
-            relative ??= GetRelativeMountPath(this.projectRoot!.ProjectRootFolder.Location, path);
+            relative ??= GetRelativeMountPath(FileSystemPath.From(this.projectRoot!.ProjectRootFolder.Location), folder);
         }
 
         if (relative is not null)
@@ -161,7 +153,7 @@ public partial class ProjectLayoutViewModel
         }
         else
         {
-            projectInfo.LocalFolderMounts.Add(new LocalFolderMount(name, path, child.IsExpanded));
+            projectInfo.LocalFolderMounts.Add(new LocalFolderMount(name, folder, child.IsExpanded));
         }
     }
 

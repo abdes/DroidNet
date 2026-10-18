@@ -171,7 +171,7 @@ public sealed partial class PreviewSession(
         using var accepted = await publication.ChangeMountsAsync(operation, next, MountChange.ProjectInfoOf(expected, projects.Settings), candidate, token).ConfigureAwait(true);
         if (!ReferenceEquals(expected, projects.ActiveProject))
         {
-            this.LogMountsChangeSuperseded(expected.ProjectRoot);
+            this.LogMountsChangeSuperseded(expected.ProjectRoot.FullPath);
             return false;
         }
 
@@ -185,7 +185,7 @@ public sealed partial class PreviewSession(
 
         this.project = next;
         projects.Activate(next);
-        this.LogMountsChanged(next.ProjectRoot, next.LocalFolderMounts.Count, next.CookedContentOrder.Count);
+        this.LogMountsChanged(next.ProjectRoot.FullPath, next.LocalFolderMounts.Count, next.CookedContentOrder.Count);
         await catalog.UsePublicationAsync(accepted, CancellationToken.None).ConfigureAwait(true);
         return true;
     }

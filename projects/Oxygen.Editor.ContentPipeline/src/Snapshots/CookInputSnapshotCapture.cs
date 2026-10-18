@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
@@ -28,7 +29,7 @@ public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry docum
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(discover);
         ArgumentException.ThrowIfNullOrWhiteSpace(buildFingerprint);
-        var operationRoot = Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N"));
+        var operationRoot = Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N"));
         var inputRoot = Path.Combine(operationRoot, "inputs");
         EnsureNewDirectory(inputRoot);
 
@@ -63,7 +64,7 @@ public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry docum
                 }
 
                 var changed = reads.Documents.Where(document =>
-                    !string.Equals(captured[Path.GetFullPath(document.SourcePath)].Hash, document.SavedContentHash, StringComparison.OrdinalIgnoreCase)).ToImmutableArray();
+                    !string.Equals(captured[document.SourcePath].Hash, document.SavedContentHash, StringComparison.OrdinalIgnoreCase)).ToImmutableArray();
                 if (!changed.IsEmpty)
                 {
                     return new(Snapshot: null, [], changed);
@@ -100,7 +101,7 @@ public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry docum
             Inputs = inputs.OrderBy(static input => input.RelativePath, StringComparer.Ordinal)
                 .Select(static input => new
                 {
-                    Uri = input.AssetUri?.AbsoluteUri,
+                    AssetPath = input.AssetUri?.ToUriString(),
                     input.RelativePath,
                     Hash = input.DiscoveryHash,
                     input.Kind,
@@ -118,23 +119,23 @@ public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry docum
         }
     }
 
-    private static async Task<Dictionary<string, CapturedSource>> CopyInputsAsync(
+    private static async Task<Dictionary<FileSystemPath, CapturedSource>> CopyInputsAsync(
         ImmutableArray<CookSnapshotInput> inputs,
         string attemptRoot,
         CancellationToken cancellationToken)
     {
-        var streams = new Dictionary<string, FileStream>(StringComparer.OrdinalIgnoreCase);
+        var streams = new Dictionary<FileSystemPath, FileStream>();
         try
         {
-            foreach (var input in inputs.Where(static input => input.Kind == CookSnapshotInputKind.File).OrderBy(static input => input.SourcePath, StringComparer.OrdinalIgnoreCase))
+            foreach (var input in inputs.Where(static input => input.Kind == CookSnapshotInputKind.File).OrderBy(static input => input.SourcePath.FullPath, StringComparer.Ordinal))
             {
                 if (!streams.ContainsKey(input.SourcePath))
                 {
-                    streams.Add(input.SourcePath, new FileStream(input.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan));
+                    streams.Add(input.SourcePath, new FileStream(input.SourcePath.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan));
                 }
             }
 
-            var captured = new Dictionary<string, CapturedSource>(StringComparer.OrdinalIgnoreCase);
+            var captured = new Dictionary<FileSystemPath, CapturedSource>();
             foreach (var input in inputs)
             {
                 if (input.Kind != CookSnapshotInputKind.File)
@@ -152,7 +153,7 @@ public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry docum
                 var source = streams[input.SourcePath];
                 source.Position = 0;
                 var hash = Convert.ToHexString(await SHA256.HashDataAsync(source, cancellationToken).ConfigureAwait(false));
-                captured[input.SourcePath] = new(hash, Exists: true, ReadNativeMetadata(input.SourcePath, source));
+                captured[input.SourcePath] = new(hash, Exists: true, ReadNativeMetadata(input.SourcePath.FullPath, source));
                 source.Position = 0;
                 var destination = Path.Combine(attemptRoot, input.RelativePath);
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
@@ -181,13 +182,12 @@ public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry docum
 
     private static ImmutableArray<CookSnapshotInput> NormalizeInputs(IReadOnlyList<CookSnapshotInput> inputs)
     {
-        var targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var targets = new HashSet<string>(FileSystemPath.NameComparer);
         var normalized = ImmutableArray.CreateBuilder<CookSnapshotInput>(inputs.Count);
         foreach (var input in inputs)
         {
             var relative = input.RelativePath.Replace('\\', '/');
-            if (!Path.IsPathFullyQualified(input.SourcePath)
-                || input.AssetUri is { IsAbsoluteUri: false }
+            if (input.AssetUri is null
                 || Path.IsPathRooted(relative)
                 || (!input.IsRootDirectoryProbe && relative.Split('/').Any(static part => part is ".." or "." or ""
                     || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
@@ -203,7 +203,7 @@ public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry docum
 
             normalized.Add(input with
             {
-                SourcePath = Path.GetFullPath(input.SourcePath),
+                SourcePath = input.SourcePath,
                 RelativePath = relative,
                 DiscoveryHash = input.DiscoveryHash.ToUpperInvariant(),
             });

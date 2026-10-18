@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Documents.Tests;
 
@@ -33,7 +34,7 @@ public sealed class OpenDocumentsTests : DocumentTestBase
         var (stone, _) = await this.OpenNoteAsync("Stone").ConfigureAwait(false);
 
         _ = this.Documents.Find(wood.Id).Should().BeSameAs(wood);
-        _ = this.Documents.FindByAsset(new Uri("asset:///Content/Stone" + NoteKind.Suffix)).Should().BeSameAs(stone);
+        _ = this.Documents.FindByAsset(AssetPath.Parse("/Content/Stone" + NoteKind.Suffix)).Should().BeSameAs(stone);
         _ = this.Documents.Find(DroidNet.Documents.DocumentId.New()).Should().BeNull();
         _ = this.Documents.FindByAsset(UriOf("Glass")).Should().BeNull();
 
@@ -62,7 +63,7 @@ public sealed class OpenDocumentsTests : DocumentTestBase
     {
         this.FileSystem.File.WriteAllText(Path.Combine(Folder, "readme.md"), "text");
 
-        var result = await this.Documents.OpenAsync(new DocumentFile(Path.Combine(Folder, "readme.md"), new Uri("asset:///Content/readme.md")), this.Token).ConfigureAwait(false);
+        var result = await this.Documents.OpenAsync(new DocumentFile(Path.Combine(Folder, "readme.md"), AssetPath.Parse("/Content/readme.md")), this.Token).ConfigureAwait(false);
 
         _ = result.Document.Should().BeNull();
         _ = result.Problem.Should().Contain("No editor opens 'readme.md'");

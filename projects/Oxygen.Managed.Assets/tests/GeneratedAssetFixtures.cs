@@ -9,13 +9,13 @@ namespace Oxygen.Managed.Assets.Tests;
 /// <summary>Asset URIs for generic generated-catalog and resolver tests.</summary>
 internal static class GeneratedAssetFixtures
 {
-    public static IEnumerable<Uri> Create()
+    public static IEnumerable<AssetPath> Create()
     {
         foreach (var name in new[] { "Cube", "Sphere", "Plane", "Cylinder" })
         {
-            yield return AssetUris.BuildGeneratedUri("BasicShapes/" + name);
+            yield return AssetPath.Generated.Combine("BasicShapes/" + name);
         }
 
-        yield return AssetUris.BuildGeneratedUri("Materials/Default");
+        yield return AssetPath.Generated.Combine("Materials/Default");
     }
 }

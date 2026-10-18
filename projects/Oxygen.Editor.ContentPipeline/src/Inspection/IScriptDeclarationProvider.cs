@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Inspection;
 
@@ -15,5 +16,5 @@ public interface IScriptDeclarationProvider
     /// <param name="scriptUri">The script identity.</param>
     /// <param name="cancellationToken">Cancels inspection and drains any native reader.</param>
     /// <returns>The declarations, or null when the script does not come from a mounted library.</returns>
-    public Task<CookedScriptDeclarations?> ReadAsync(ProjectContext project, Uri scriptUri, CancellationToken cancellationToken = default);
+    public Task<CookedScriptDeclarations?> ReadAsync(ProjectContext project, AssetPath scriptUri, CancellationToken cancellationToken = default);
 }

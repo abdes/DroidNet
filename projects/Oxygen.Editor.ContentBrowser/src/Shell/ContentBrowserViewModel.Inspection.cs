@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Shell;
 
@@ -17,29 +18,29 @@ namespace Oxygen.Editor.ContentBrowser.Shell;
 public sealed partial class ContentBrowserViewModel
 {
     /// <summary>Shows a source/dependency identity in its folder, clearing filters only when they would hide it.</summary>
-    /// <param name="assetUri">The asset to reveal.</param>
+    /// <param name="asset">The asset to reveal.</param>
     /// <returns>Whether the requested identity became the current browser selection.</returns>
-    public async Task<bool> ShowAssetAsync(Uri assetUri)
+    public async Task<bool> ShowAssetAsync(AssetPath asset)
     {
-        ArgumentNullException.ThrowIfNull(assetUri);
+        ArgumentNullException.ThrowIfNull(asset);
         if (this.isDisposed || this.childContainer is null || this.localRouter is null || this.browserState is null)
         {
             return false;
         }
 
         var project = projectContextService.ActiveProject;
-        var item = await this.childContainer.Resolve<IAssetFeed>().ResolveAsync(assetUri).ConfigureAwait(true);
+        var item = await this.childContainer.Resolve<IAssetFeed>().ResolveAsync(asset).ConfigureAwait(true);
         return item is not null && item.PrimaryState != AssetState.Missing && ReferenceEquals(project, projectContextService.ActiveProject)
             && !this.isDisposed && project is not null && await this.RevealAssetsAsync(project, [item]).ConfigureAwait(true);
     }
 
     /// <summary>Reveals available imported outputs together without resolving or rescanning each row individually.</summary>
-    /// <param name="assetUris">Actual native output identities from the selected cook.</param>
+    /// <param name="assets">Actual native output identities from the selected cook.</param>
     /// <returns>Whether any requested output became visible.</returns>
-    public async Task<bool> ShowAssetsAsync(IReadOnlyCollection<Uri> assetUris)
+    public async Task<bool> ShowAssetsAsync(IReadOnlyCollection<AssetPath> assets)
     {
-        ArgumentNullException.ThrowIfNull(assetUris);
-        if (assetUris.Count == 0 || this.isDisposed || this.childContainer is null || this.localRouter is null || this.browserState is null
+        ArgumentNullException.ThrowIfNull(assets);
+        if (assets.Count == 0 || this.isDisposed || this.childContainer is null || this.localRouter is null || this.browserState is null
             || projectContextService.ActiveProject is not { } project)
         {
             return false;
@@ -48,9 +49,8 @@ public sealed partial class ContentBrowserViewModel
         var provider = this.childContainer.Resolve<IAssetFeed>();
         await provider.RefreshAsync().ConfigureAwait(true);
         var items = await provider.Items.FirstAsync().ToTask().ConfigureAwait(true);
-        var requested = assetUris.ToHashSet();
-        var available = items.Where(item => item.PrimaryState != AssetState.Missing
-            && (requested.Contains(item.IdentityUri) || (item.CookedUri is { } cooked && requested.Contains(cooked)))).ToArray();
+        var requested = assets.ToHashSet();
+        var available = items.Where(item => item.PrimaryState != AssetState.Missing && requested.Contains(item.Identity)).ToArray();
         return available.Length > 0 && !this.isDisposed && ReferenceEquals(project, projectContextService.ActiveProject)
             && await this.RevealAssetsAsync(project, available).ConfigureAwait(true);
     }
@@ -58,26 +58,12 @@ public sealed partial class ContentBrowserViewModel
     private static bool IsCookedOnly(AssetEntry item)
         => item.SourcePath is null && item.DescriptorPath is null && !item.IsBuiltin;
 
-    private static string? LibraryFolder(ProjectContext project, AssetEntry item)
-    {
-        if (item.CookedMetadata is not { } source)
-        {
-            return null;
-        }
-
-        var library = project.LocalFolderMounts.FirstOrDefault(mount => string.Equals(
-            Path.TrimEndingDirectorySeparator(Path.GetFullPath(mount.AbsolutePath)),
-            Path.TrimEndingDirectorySeparator(Path.GetFullPath(source.RootFolderPath)),
-            StringComparison.OrdinalIgnoreCase));
-        if (library is null)
-        {
-            return null;
-        }
-
-        var relative = source.DescriptorRelativePath.Replace('\\', '/');
-        var slash = relative.LastIndexOf('/');
-        return "/" + library.Name + (slash < 0 ? string.Empty : "/" + relative[..slash]);
-    }
+    private static AssetPath? LibraryFolder(ProjectContext project, AssetEntry item)
+        => item.CookedMetadata is { } source
+            && project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == source.RootFolderPath) is { } library
+            && AssetPath.TryCreate(library.Name, source.DescriptorRelativePath, out var location)
+                ? location.Parent
+                : null;
 
     private async Task<bool> RevealAssetsAsync(ProjectContext project, AssetEntry[] items)
     {
@@ -92,7 +78,7 @@ public sealed partial class ContentBrowserViewModel
 
             await explorer.MountKnownLocationCommand.ExecuteAsync(KnownVirtualFolderMount.Cooked).ConfigureAwait(true);
             if (projectContextService.ActiveProject is not { } mounted || mounted.ProjectId != project.ProjectId
-                || !string.Equals(mounted.ProjectRoot, project.ProjectRoot, StringComparison.OrdinalIgnoreCase)
+                || mounted.ProjectRoot != project.ProjectRoot
                 || ProjectCookedFolders.Roots(mounted).Length == 0)
             {
                 return false;
@@ -102,12 +88,12 @@ public sealed partial class ContentBrowserViewModel
         }
 
         var cookedFolder = ProjectCookedFolders.Roots(project).FirstOrDefault();
+        // Project output shows under the mount of its cooked folder, at its native path.
         var folders = items.Select(item =>
         {
-            var path = AssetUriHelper.GetVirtualPath(item.IdentityUri);
-            var folder = path[..path.LastIndexOf('/')];
-            return IsCookedOnly(item) ? (LibraryFolder(project, item) ?? (cookedFolder + folder)) : folder;
-        }).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var folder = item.Identity.Parent!;
+            return IsCookedOnly(item) ? LibraryFolder(project, item) ?? cookedFolder?.Combine(folder.VirtualPath.TrimStart('/')) ?? folder : folder;
+        }).Distinct().ToArray();
         if (items.Any(item => !this.Query.Matches(item)))
         {
             this.Query.ClearAllCommand.Execute(parameter: null);
@@ -121,6 +107,6 @@ public sealed partial class ContentBrowserViewModel
 
         layout.SelectedAsset = items[0];
         layout.RevealSelection();
-        return layout.SelectedAsset is { } selected && AssetIdentity.Represents(selected, items[0].IdentityUri);
+        return layout.SelectedAsset is { } selected && AssetIdentity.Represents(selected, items[0].Identity);
     }
 }

@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Tests.Components;
 
@@ -16,7 +17,7 @@ namespace Oxygen.Editor.World.Tests.Components;
 [TestCategory(nameof(ScriptSlot))]
 public sealed class ScriptSlotTests
 {
-    private static readonly Uri TestScript = new("asset:///Content/Scripts/Test.oscript");
+    private static readonly AssetPath TestScript = AssetPath.Parse("/Content/Scripts/Test.oscript");
 
     [TestMethod]
     public void WithOverride_AddsAndReplacesOverrideValues()

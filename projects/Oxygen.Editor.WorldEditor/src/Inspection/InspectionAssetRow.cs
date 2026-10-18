@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspection;
 
@@ -31,7 +32,8 @@ public sealed record InspectionAssetRow(CookedRootReport Root, CookedAssetEntry 
     public string Key => this.Root.Inspection.CookedRoot + "|" + this.Asset.VirtualPath;
 
     /// <summary>Gets the human-readable asset name.</summary>
-    public string Name => InspectionAssetLink.DisplayName(this.Origin?.SourceAssetUri ?? new Uri("asset://" + this.Asset.VirtualPath));
+    public string Name => this.Origin is { } origin ? InspectionAssetLink.DisplayName(origin.SourceAssetUri)
+        : AssetPath.TryParse(this.Asset.VirtualPath, out var cooked) ? InspectionAssetLink.DisplayName(cooked) : this.Asset.VirtualPath;
 
     /// <summary>Gets the asset type and physical mount.</summary>
     public string Subtitle => this.Asset.Kind + " · " + this.Root.Name;
@@ -50,7 +52,7 @@ public sealed record InspectionAssetRow(CookedRootReport Root, CookedAssetEntry 
     public string ReferenceText => "asset://" + this.Asset.VirtualPath;
 
     /// <summary>Gets the source link or unavailable-source explanation.</summary>
-    public string SourceText => this.Origin?.SourceAssetUri.ToString() ?? "Verified source information is unavailable.";
+    public string SourceText => this.Origin?.SourceAssetUri.VirtualPath ?? "Verified source information is unavailable.";
 
     /// <summary>Gets the source action visibility.</summary>
     public Visibility SourceActionVisibility => this.Origin is null ? Visibility.Collapsed : Visibility.Visible;

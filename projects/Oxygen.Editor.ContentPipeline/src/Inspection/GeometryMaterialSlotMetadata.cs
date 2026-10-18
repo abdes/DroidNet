@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Inspection;
 
@@ -11,7 +12,7 @@ namespace Oxygen.Editor.ContentPipeline.Inspection;
 /// <param name="NativeGeometryKey">The native geometry key parsed from canonical UUID text.</param>
 /// <param name="LayoutRevision">The native SHA-256 layout revision.</param>
 /// <param name="Slots">The ordered native slots.</param>
-public sealed record GeometryMaterialSlotMetadata(Uri GeometryUri, Guid NativeGeometryKey, string LayoutRevision, ImmutableArray<GeometryMaterialSlot> Slots);
+public sealed record GeometryMaterialSlotMetadata(AssetPath GeometryUri, Guid NativeGeometryKey, string LayoutRevision, ImmutableArray<GeometryMaterialSlot> Slots);
 
 /// <summary>One opaque semantic slot and its exact surface bindings.</summary>
 /// <param name="SlotId">The native identity; labels and ordering do not establish identity.</param>

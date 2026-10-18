@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Status;
 
@@ -17,7 +18,7 @@ public interface IAssetCookStatusReader
     /// <param name="assetUris">Authored identities or engine built-ins whose optional published contributions are inspected.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The current cook-owned facts for each requested identity.</returns>
-    public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default);
+    public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken = default);
 
     /// <summary>Reads source freshness and output facts against an already captured publication.</summary>
     /// <param name="project">The owning project.</param>
@@ -25,5 +26,5 @@ public interface IAssetCookStatusReader
     /// <param name="assetUris">The requested identities.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>Facts bound to that publication's output identities.</returns>
-    public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, Publication.ICookPublicationReadLease publication, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default);
+    public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, Publication.ICookPublicationReadLease publication, IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken = default);
 }

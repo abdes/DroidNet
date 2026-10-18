@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Managed.Assets.Catalog;
 
 /// <summary>A catalog that knows the folders of its roots and reports when they change.</summary>
@@ -13,8 +15,8 @@ namespace Oxygen.Managed.Assets.Catalog;
 public interface IAssetFolderSource
 {
     /// <summary>
-    /// Gets the folders created or deleted under the catalog's roots, by virtual folder URI such as
-    /// <c>asset:///Content/Materials</c>. A rename or move reports the old folder and the new one.
+    /// Gets the folders created or deleted under the catalog's roots, such as <c>/Content/Materials</c>. A rename or
+    /// move reports the old folder and the new one.
     /// </summary>
-    public IObservable<Uri> FolderChanges { get; }
+    public IObservable<AssetPath> FolderChanges { get; }
 }

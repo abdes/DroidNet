@@ -70,8 +70,9 @@ public sealed partial class AssetDetailsViewModel
 
         if (asset.Kind is AssetKind.InputAction or AssetKind.InputMappingContext
             && this.projects?.ActiveProject is { } project
-            && RelocationPaths.ToPhysical(project, RelocationPaths.GetParent(asset.DisplayPath)) is { } folder
-            && InputSourceIndex.Find(folder, asset.DisplayName, asset.Kind == AssetKind.InputMappingContext) is { } declaration)
+            && asset.Identity.Parent is { } parent
+            && RelocationPaths.ToPhysical(project, parent) is { } folder
+            && InputSourceIndex.Find(folder.FullPath, asset.DisplayName, asset.Kind == AssetKind.InputMappingContext) is { } declaration)
         {
             return [new("Declared in", WithPathBreaks(declaration.SourcePath) + string.Create(CultureInfo.InvariantCulture, $" (line {declaration.Line})"))];
         }
@@ -82,7 +83,7 @@ public sealed partial class AssetDetailsViewModel
     private void OnScriptAnalyzed(ScriptAnalysisSnapshot analysis)
     {
         if (!this.disposed && this.Asset is { Kind: AssetKind.Script, SourcePath: { } source }
-            && string.Equals(source, analysis.SourcePath, StringComparison.OrdinalIgnoreCase))
+            && source == analysis.SourcePath)
         {
             this.Refresh();
         }

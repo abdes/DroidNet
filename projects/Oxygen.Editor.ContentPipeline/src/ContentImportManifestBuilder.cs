@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
@@ -32,7 +34,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         return new ContentImportManifest(
             Version: 1,
             Output: output.Path,
-            Layout: new ContentImportLayout(ContentPipelinePaths.GetVirtualMountRoot(mountName)),
+            Layout: new ContentImportLayout(AssetPath.Create(mountName).VirtualPath),
             Jobs: jobs)
         { SourceKey = output.SourceKey };
     }
@@ -84,7 +86,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
                 ContentCookAssetKind.Scene,
                 mountName,
                 ToProjectRelativePath(scope.InputRoot, descriptor.DescriptorPath),
-                descriptor.DescriptorPath,
+                FileSystemPath.From(descriptor.DescriptorPath),
                 descriptor.DescriptorVirtualPath,
                 ContentCookInputRole.GeneratedDescriptor);
             var sceneJob = scope.NativeJobs.GetValueOrDefault(descriptor.SceneAssetUri) ?? this.BuildJob(sceneDescriptorInput, dependencyIds);
@@ -98,7 +100,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         return new ContentImportManifest(
             Version: 1,
             Output: output.Path,
-            Layout: new ContentImportLayout(ContentPipelinePaths.GetVirtualMountRoot(mountName)),
+            Layout: new ContentImportLayout(AssetPath.Create(mountName).VirtualPath),
             Jobs: jobs)
         { SourceKey = output.SourceKey };
     }
@@ -111,7 +113,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         if (input.Kind == ContentCookAssetKind.ForeignSource)
         {
             ArgumentNullException.ThrowIfNull(modelSettings);
-            return this.BuildModelJob(input, dependsOn, modelSettings.Name, modelSettings.CreateLayout(), modelSettings.MaterialSlotProvenance) with
+            return this.BuildModelJob(input.SourceRelativePath, dependsOn, modelSettings.Name, modelSettings.CreateLayout(), modelSettings.MaterialSlotProvenance) with
             {
                 ContentPolicy = modelSettings.ContentPolicy,
                 UnitPolicy = modelSettings.UnitPolicy,
@@ -147,11 +149,11 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
     }
 
     /// <inheritdoc />
-    public ContentImportJob BuildModelJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string name, ContentImportLayout layout, Import.NativeMaterialSlotProvenance provenance)
+    public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, ContentImportLayout layout, Import.NativeMaterialSlotProvenance provenance)
         => new(
-            BuildJobId(input),
-            Path.GetExtension(input.SourceRelativePath).Equals(".fbx", StringComparison.OrdinalIgnoreCase) ? "fbx" : "gltf",
-            NormalizeSource(input.SourceRelativePath),
+            BuildJobId(ContentCookAssetKind.ForeignSource, sourceRelativePath),
+            Path.GetExtension(sourceRelativePath).Equals(".fbx", StringComparison.OrdinalIgnoreCase) ? "fbx" : "gltf",
+            NormalizeSource(sourceRelativePath),
             dependsOn,
             Output: null,
             name)
@@ -174,7 +176,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
     private static ContentImportJob BuildScriptSidecarJob(
         ContentImportJob sceneJob,
         SceneDescriptorGenerationResult descriptor,
-        Dictionary<Uri, string> jobIdsBySource)
+        Dictionary<AssetPath, string> jobIdsBySource)
         => new(
             "script-sidecar:" + NormalizeSource(sceneJob.AttributedSource),
             "script-sidecar",
@@ -209,7 +211,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             return null;
         }
 
-        var mount = ContentPipelinePaths.GetVirtualMountRoot(input.MountName);
+        var mount = AssetPath.Create(input.MountName).VirtualPath;
         if (!output.StartsWith(mount + "/", StringComparison.Ordinal))
         {
             throw new ArgumentException("The descriptor output must remain within its authoring mount.", nameof(input));
@@ -234,10 +236,10 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
     // authoring roots, so the path is recorded relative to the mount.
     private static string GetScriptSourceRoot(ContentCookInput input)
     {
-        var mount = ContentPipelinePaths.GetVirtualMountRoot(input.MountName);
+        var mount = AssetPath.Create(input.MountName).VirtualPath;
         var output = input.OutputVirtualPath ?? throw new ArgumentException("A script needs its output path.", nameof(input));
         var depth = output[(mount.Length + 1)..].Count(static character => character == '/');
-        var root = Path.GetDirectoryName(Path.GetFullPath(input.SourceAbsolutePath))!;
+        var root = input.SourceAbsolutePath.Parent!.FullPath;
         for (var level = 0; level < depth; level++)
         {
             root = Path.GetDirectoryName(root)!;
@@ -258,8 +260,10 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported manifest job asset kind."),
         };
 
-    private static string BuildJobId(ContentCookInput input)
-        => GetJobKindPrefix(input.Kind) + ":" + NormalizeSource(input.SourceRelativePath);
+    private static string BuildJobId(ContentCookInput input) => BuildJobId(input.Kind, input.SourceRelativePath);
+
+    private static string BuildJobId(ContentCookAssetKind kind, string sourceRelativePath)
+        => GetJobKindPrefix(kind) + ":" + NormalizeSource(sourceRelativePath);
 
     private static string GetJobKindPrefix(ContentCookAssetKind kind)
         => kind switch

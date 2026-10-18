@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Authoring;
 
@@ -11,11 +12,11 @@ namespace Oxygen.Editor.ContentPipeline.Authoring;
 public sealed partial class AssetAuthoring
 {
     [LoggerMessage(Level = LogLevel.Information, Message = "Created {Kind} '{Path}' from its template.")]
-    private partial void LogCreated(AuthoredAssetKind kind, string path);
+    private partial void LogCreated(AuthoredAssetKind kind, FileSystemPath path);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "'{Name}' was not created in {Folder}: {Reason}")]
-    private partial void LogNotCreated(string name, string folder, string reason);
+    private partial void LogNotCreated(string name, AssetPath folder, string reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not write the new file '{Path}'.")]
-    private partial void LogWriteFailed(Exception exception, string path);
+    private partial void LogWriteFailed(Exception exception, FileSystemPath path);
 }

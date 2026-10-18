@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
 using Oxygen.Interop.Scripting;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Play;
 
@@ -46,11 +47,11 @@ internal sealed class RuntimeProblemReader(ProjectContext project)
 
         if (sourceName.StartsWith('/'))
         {
-            return RelocationPaths.ToPhysical(project, sourceName) is { } physical && File.Exists(physical) ? physical : null;
+            return AssetPath.TryParse(sourceName, out var asset) && RelocationPaths.ToPhysical(project, asset) is { } physical && File.Exists(physical.FullPath) ? physical.FullPath : null;
         }
 
-        return project.AuthoringMounts.Select(mount => Path.Combine(project.ProjectRoot, mount.RelativePath, sourceName))
-            .Append(Path.Combine(project.ProjectRoot, sourceName))
+        return project.AuthoringMounts.Select(mount => Path.Combine(project.ProjectRoot.FullPath, mount.RelativePath, sourceName))
+            .Append(Path.Combine(project.ProjectRoot.FullPath, sourceName))
             .Select(Path.GetFullPath)
             .FirstOrDefault(File.Exists);
     }

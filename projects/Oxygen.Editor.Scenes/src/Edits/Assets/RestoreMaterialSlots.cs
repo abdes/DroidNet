@@ -69,7 +69,7 @@ public sealed record RestoreMaterialSlots : ISceneEdit
             var geometry = GeometryOf(scope, id)!;
             foreach (var slot in slots)
             {
-                var target = slot.Assignment.Target with { GeometryUri = scope.Resolve(slot.Assignment.Target.GeometryUri) };
+                var target = slot.Assignment.Target with { Geometry = scope.Resolve(slot.Assignment.Target.Geometry) };
 
                 // A removed override always named a material.
                 var material = scope.Resolve(slot.Assignment.Material) ?? throw new InvalidOperationException("A restored material override names no material.");

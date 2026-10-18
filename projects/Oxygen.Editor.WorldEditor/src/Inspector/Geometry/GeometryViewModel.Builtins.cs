@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
@@ -56,7 +57,7 @@ public sealed partial class GeometryViewModel
         {
             var category = definition.AuthoringCategory == GeneratedAssetCategory.Advanced ? " · Advanced" : string.Empty;
             var availability = snapshot.IsLastKnown ? " · Preview unavailable" : this.BuiltinAvailability(definition.AssetUri);
-            return CreateEngineItem(definition.Name, definition.AssetUri, definition.AssetUri.AbsolutePath)
+            return CreateEngineItem(definition.Name, definition.AssetUri)
                 with
             { DisplayType = "Built-in geometry" + category + availability, };
         }).ToArray() ?? [];
@@ -66,7 +67,7 @@ public sealed partial class GeometryViewModel
             {
                 this.engineItems.Add(new(geometries[index]));
             }
-            else if (this.engineItems[index].Item.Uri == geometries[index].Uri)
+            else if (this.engineItems[index].Item.Asset == geometries[index].Asset)
             {
                 this.engineItems[index].Update(geometries[index]);
             }
@@ -87,9 +88,9 @@ public sealed partial class GeometryViewModel
         }
         else
         {
-            var material = CreateEngineMaterialItem("Default", AssetUris.BuildGeneratedUri("Materials/Default"), "/Engine/Generated/Materials/Default")
+            var material = CreateEngineMaterialItem("Default", ProceduralGeometryDescriptorService.DefaultMaterial)
                 with
-            { DisplayType = snapshot.IsLastKnown ? "Built-in material · Preview unavailable" : "Built-in material" + this.BuiltinAvailability(AssetUris.BuildGeneratedUri("Materials/Default")), };
+            { DisplayType = snapshot.IsLastKnown ? "Built-in material · Preview unavailable" : "Built-in material" + this.BuiltinAvailability(ProceduralGeometryDescriptorService.DefaultMaterial), };
             if (this.engineMaterials.Count == 0)
             {
                 this.engineMaterials.Add(new(material));
