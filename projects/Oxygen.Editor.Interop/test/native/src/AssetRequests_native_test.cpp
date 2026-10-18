@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "pch.h"
+
 #pragma managed(push, off)
 
 #include <cstring>

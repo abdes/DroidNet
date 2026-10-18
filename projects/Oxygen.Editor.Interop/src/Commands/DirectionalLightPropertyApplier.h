@@ -16,42 +16,10 @@
 
 #include <Commands/IComponentPropertyApplier.h>
 #include <Commands/PropertyKeys.h>
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::interop::module {
-
-  enum class DirectionalLightField : std::uint16_t {
-    kColorR = 0,
-    kColorG = 1,
-    kColorB = 2,
-    kAffectsWorld = 3,
-    kCastsShadows = 5,
-    kShadowBias = 6,
-    kShadowNormalBias = 7,
-    kContactShadows = 8,
-    kShadowResolutionHint = 9,
-    kExposureCompensation = 10,
-    kIntensityLux = 11,
-    kAngularSizeRadians = 12,
-    kCascadeCount = 15,
-    kSplitMode = 16,
-    kMaxShadowDistance = 17,
-    kCascadeDistance0 = 18,
-    kCascadeDistance1 = 19,
-    kCascadeDistance2 = 20,
-    kCascadeDistance3 = 21,
-    kDistributionExponent = 22,
-    kTransitionFraction = 23,
-    kDistanceFadeoutFraction = 24,
-    kAtmosphereLightSlot = 25,
-    kUsePerPixelAtmosphereTransmittance = 26,
-    kDiskScaleR = 27,
-    kDiskScaleG = 28,
-    kDiskScaleB = 29,
-    kCount = 30,
-  };
 
   //! Applies one complete, validated light candidate without clamping or partial writes.
   class DirectionalLightPropertyApplier final : public IComponentPropertyApplier {

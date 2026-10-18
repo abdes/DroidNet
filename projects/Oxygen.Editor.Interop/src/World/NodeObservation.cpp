@@ -4,18 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma managed
+#include "pch_clr.h"
 
+#pragma managed(push, off)
 #include <functional>
 #include <memory>
 #include <string_view>
-#include <msclr/gcroot.h>
 
 #include <Oxygen/EditorInterface/EngineContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 
 #include <Commands/ObserveNodeCommand.h>
 #include <EditorModule/EditorModule.h>
+#pragma managed(pop)
+
+#pragma managed
+
+#include <msclr/gcroot.h>
+
 #include <World/OxygenWorld.h>
 
 using namespace System::Threading::Tasks;
@@ -75,7 +81,8 @@ private:
 auto MakeNodeObservationCallback(TaskCompletionSource<NodeStateManaged>^ completion)
   -> std::function<void(NodeObservation)>
 {
-  auto observer = std::make_shared<NodeObservationCompletion>(completion);
+  auto observer = std::shared_ptr<NodeObservationCompletion>(
+    new NodeObservationCompletion(completion));
   return [observer](NodeObservation value) { observer->Complete(value); };
 }
 

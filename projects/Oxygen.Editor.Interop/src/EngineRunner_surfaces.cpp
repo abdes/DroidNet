@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma managed
+#include "pch_clr.h"
 
+#pragma managed(push, off)
 #include <array>
 #include <cstdint>
 #include <fmt/base.h>
@@ -23,14 +24,17 @@
 #include <WinSock2.h> // include before any header that might include <windows.h>
 #endif
 
-#include <msclr/marshal.h>
-#include <msclr/marshal_cppstd.h>
-
 #include <dxgi.h>
 #include <dxgi1_3.h>
 
 #include <Oxygen/EditorInterface/Api.h>
 #include <Oxygen/Graphics/Common/Surface.h>
+#pragma managed(pop)
+
+#pragma managed
+
+#include <msclr/marshal.h>
+#include <msclr/marshal_cppstd.h>
 
 #include <EngineRunner.h>
 #include <Utils/TokenHelpers.h>

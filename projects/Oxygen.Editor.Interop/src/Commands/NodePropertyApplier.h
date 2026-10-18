@@ -20,13 +20,6 @@
 
 namespace oxygen::interop::module {
 
-  enum class NodeField : std::uint16_t {
-    kVisible = 0,
-    kCastsShadows = 1,
-    kReceivesShadows = 2,
-    kCount,
-  };
-
   //! Maps an authored node field onto its native scene flag.
   [[nodiscard]] inline auto ToSceneNodeFlag(const NodeField field) noexcept
     -> std::optional<scene::SceneNodeFlags>

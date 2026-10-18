@@ -67,35 +67,9 @@
   </PropertyGroup>
   <!-- Source Files -->
   <ItemGroup>
-    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetEnvironmentCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\EditorModule\SceneAssetRequests.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetGeometryCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetMaterialOverrideCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\EditorModule\EditorView.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\EditorModule\NodeRegistry.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\EditorModule\ViewFraming.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\EditorModule\TransformGizmo.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\EditorModule\SceneHelpers.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\EditorModule\PaneRenderPolicy.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
+    <ClCompile Include="src\pch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="src\AssetRequests_native_test.cpp" />
     <ClCompile Include="src\EditorCameraPlacement_native_test.cpp" />
@@ -107,6 +81,9 @@
     <ClCompile Include="src\SceneHelpers_native_test.cpp" />
     <ClCompile Include="src\TransformGizmo_native_test.cpp" />
     <ClCompile Include="src\ViewFraming_native_test.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\pch.h" />
   </ItemGroup>
   <!-- Intermediate Output -->
   <PropertyGroup>
@@ -129,12 +106,15 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>_DEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(OxygenEngineInstallDir)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_DEBUG;_WIN32_WINNT=0x0A00;WIN32_LEAN_AND_MEAN;NOMINMAX;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\src;$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(OxygenEngineInstallDir)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
-      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /FS %(AdditionalOptions)</AdditionalOptions>
       <DisableSpecificWarnings>4793;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
@@ -147,15 +127,20 @@
   <!-- Release Settings -->
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>NDEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_WIN32_WINNT=0x0A00;WIN32_LEAN_AND_MEAN;NOMINMAX;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>
+        $(MSBuildProjectDirectory)\src;
         $(ProjectsRoot)\Oxygen.Editor.Interop\src;
         $(OxygenEngineInstallDir)\include;
         %(AdditionalIncludeDirectories)
       </AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
+      <AdditionalOptions>/Zc:__cplusplus /FS %(AdditionalOptions)</AdditionalOptions>
       <DisableSpecificWarnings>4793;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
@@ -234,6 +219,7 @@
       File="$(RunSettingsFilePath)"
       Lines="@(_InteropNativeRunSettingsLine)"
       Overwrite="true"
+      WriteOnlyWhenDifferent="true"
       Encoding="UTF-8" />
   </Target>
   <!-- Debug target to display evaluated properties -->

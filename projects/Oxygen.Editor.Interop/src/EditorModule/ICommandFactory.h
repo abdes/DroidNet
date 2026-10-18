@@ -5,14 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed(push, on)
 
+#pragma managed(push, off)
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 
 #include <array>
 #include <cstddef>
-#include <optional>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -44,6 +44,9 @@ class AttachPerspectiveCameraCommand;
 class AttachOrthographicCameraCommand;
 class DetachCameraCommand;
 } // namespace oxygen::interop::module
+#pragma managed(pop)
+
+#pragma managed(push, on)
 
 namespace Oxygen::Interop::World {
 

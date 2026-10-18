@@ -7,15 +7,8 @@
 #pragma once
 
 #include <Commands/PropertyKeys.h>
-#include <Commands/TransformPropertyApplier.h>
-#include <Commands/NodePropertyApplier.h>
-#include <Commands/PerspectiveCameraPropertyApplier.h>
-#include <Commands/OrthographicCameraPropertyApplier.h>
-#include <Commands/DirectionalLightPropertyApplier.h>
-#include <Commands/LocalLightPropertyApplier.h>
-#include <Commands/LocalFogVolumePropertyApplier.h>
 
-#pragma managed
+#pragma managed(push, on)
 
 //! The editor module's property wire vocabulary, published to managed code.
 /*!
@@ -373,3 +366,5 @@ namespace Oxygen::Interop {
   };
 
 } // namespace Oxygen::Interop
+
+#pragma managed(pop)

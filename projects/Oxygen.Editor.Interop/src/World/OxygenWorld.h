@@ -5,12 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed(push, on)
 
 #include <EditorModule/ICommandFactory.h>
 #include <EngineContext.h>
 #include <World/EnvironmentStateManaged.h>
 #include <World/SkyEnvironmentManaged.h>
+
+#pragma managed(push, on)
 
 namespace Oxygen::Interop::World {
 

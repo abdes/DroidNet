@@ -6,9 +6,9 @@
 
 #pragma once
 
-#pragma managed(push, on)
-
 #include <Views/ViewIdManaged.h>
+
+#pragma managed(push, on)
 
 using namespace System;
 using namespace System::Numerics;

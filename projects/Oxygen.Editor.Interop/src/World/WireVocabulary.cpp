@@ -6,6 +6,8 @@
 
 // Emits the managed wire enums into the assembly.
 
+#include "pch_clr.h"
+
 #pragma managed
 
 #include <World/WireVocabulary.h>

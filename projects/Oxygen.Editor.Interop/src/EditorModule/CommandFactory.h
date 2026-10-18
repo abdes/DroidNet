@@ -5,14 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed(push, on)
 
+#pragma managed(push, off)
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 
 #include <array>
 #include <cstddef>
-#include <optional>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -20,7 +20,6 @@
 #include <glm/fwd.hpp>
 
 #include <Commands/SetEnvironmentCommand.h>
-#include <EditorModule/ICommandFactory.h>
 
 // Forward declarations for types used in method signatures to avoid heavy
 // includes
@@ -48,6 +47,11 @@ class DetachCameraCommand;
 namespace oxygen::scene {
   class NodeHandle;
 }
+#pragma managed(pop)
+
+#include <EditorModule/ICommandFactory.h>
+
+#pragma managed(push, on)
 
 namespace Oxygen::Interop::World {
 

@@ -14,6 +14,7 @@
 
 #include <EditorModule/EditorCommand.h>
 #include <EditorModule/SceneAssetRequests.h>
+#include <api_export.h>
 
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/PhaseRegistry.h>
@@ -174,7 +175,7 @@ namespace oxygen::interop::module {
     {
     }
 
-    void Execute(CommandContext& context) override;
+    OXGN_EI_API void Execute(CommandContext& context) override;
     void SetFailureCallback(SceneAssetRequests::FailureCallback callback) {
       failure_callback_ = std::move(callback);
     }

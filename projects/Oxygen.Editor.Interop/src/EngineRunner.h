@@ -5,47 +5,33 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed(push, on)
 
+#pragma managed(push, off)
 #include <memory>
 
-#include <Config.h>
 #include <EditorModule/SurfaceRegistry.h>
+
+namespace oxygen::graphics {
+  class Surface;
+} // namespace oxygen::graphics
+#pragma managed(pop)
+
+#include <Config.h>
 #include <EngineContext.h>
 #include <RenderThreadContext.h>
 #include <UiThreadDispatcher.h>
-#include <Views/ViewConfigManaged.h>
 #include <Views/CameraControlModeManaged.h>
 #include <Views/CameraViewPresetManaged.h>
-#include <Views/ViewModeManaged.h>
 #include <Views/EditorCameraStateManaged.h>
 #include <Views/GroundGridConfigManaged.h>
-#include <Views/ViewCameraPoseManaged.h>
-#include <Views/ViewIdManaged.h>
-#include <Views/ViewPickManaged.h>
 #include <Views/TransformGizmoManaged.h>
+#include <Views/ViewCameraPoseManaged.h>
+#include <Views/ViewConfigManaged.h>
+#include <Views/ViewIdManaged.h>
+#include <Views/ViewModeManaged.h>
+#include <Views/ViewPickManaged.h>
 
-namespace oxygen::graphics {
-
-  namespace System {
-    ref class Action;
-    ref class Object;
-    ref class String;
-    value struct Guid;
-  } // namespace System
-
-  namespace System::Threading {
-    ref class SynchronizationContext;
-    ref class Thread;
-    ref class SendOrPostCallback;
-  } // namespace System::Threading
-
-  namespace System::Threading::Tasks {
-    ref class Task;
-    generic<typename TResult> ref class TaskCompletionSource;
-  } // namespace System::Threading::Tasks
-  class Surface;
-} // namespace oxygen::graphics
+#pragma managed(push, on)
 
 namespace Oxygen::Interop {
 

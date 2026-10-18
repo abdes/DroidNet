@@ -4,22 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma managed
+#include "pch_clr.h"
 
+#pragma managed(push, off)
 #include <string>
 
-#ifdef _WIN32
-#include <WinSock2.h> // include before any header that might include <windows.h>
-#endif
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/EditorInterface/Api.h>
+#pragma managed(pop)
+
+#pragma managed
 
 #include <msclr/marshal.h>
 #include <msclr/marshal_cppstd.h>
-
-#pragma warning(push)
-#pragma warning(disable : 4793)
-#include <Oxygen/Base/Logging.h>
-#pragma warning(pop)
-#include <Oxygen/EditorInterface/Api.h>
 
 #include "Base/LoguruWrapper.h"
 #include "EngineRunner.h"
@@ -32,6 +29,11 @@ using namespace System::Threading::Tasks;
 using namespace Microsoft::Extensions::Logging;
 using namespace Oxygen::Interop::Logging;
 using namespace oxygen::interop::module;
+
+static_assert(
+  Oxygen::Interop::LoggingConfig::MinVerbosity == static_cast<int>(::loguru::Verbosity_OFF));
+static_assert(
+  Oxygen::Interop::LoggingConfig::MaxVerbosity == static_cast<int>(::loguru::Verbosity_MAX));
 
 // Map native logging verbosity to Microsoft.Extensions.Logging.LogLevel
 // integer.

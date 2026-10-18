@@ -4,22 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cmath>
-#include <memory>
-#include <vector>
+#include "pch.h"
 
-#include <glm/geometric.hpp>
-#include <glm/gtc/epsilon.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <glm/vector_relational.hpp>
-
-#include <Oxygen/Core/Constants.h>
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/ProceduralMeshes.h>
-#include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneNode.h>
+#pragma managed(push, off)
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
+#pragma managed(pop)
 
 #include <EditorModule/EditorView.h>
 #include <EditorModule/ViewFraming.h>

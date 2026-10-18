@@ -3,20 +3,22 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed
 
-#include <msclr/marshal_cppstd.h>
+#pragma managed(push, off)
 #include <optional>
+#include <string>
 
-#define WIN32_LEAN_AND_MEAN
 #include <EditorModule/EditorView.h>
-#include <Oxygen/Graphics/Common/Surface.h>
+#pragma managed(pop)
 
 #include "Views/CameraViewPresetManaged.h"
 #include "Views/ColorManaged.h"
 #include "Views/EditorCameraStateManaged.h"
 #include "Views/ViewIdManaged.h"
 #include "Views/ViewModeManaged.h"
+
+#pragma managed(push, on)
+#include <msclr/marshal_cppstd.h>
 
 namespace Oxygen::Interop {
 
@@ -140,3 +142,5 @@ namespace Oxygen::Interop {
   };
 
 } // namespace Oxygen::Interop
+
+#pragma managed(pop)

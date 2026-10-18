@@ -19,6 +19,7 @@
 #include <Oxygen/Vortex/Types/ViewOverlay.h>
 
 #include <EditorModule/NodeRegistry.h>
+#include <api_export.h>
 
 namespace oxygen::interop::module {
 
@@ -82,31 +83,31 @@ namespace oxygen::interop::module {
 
     //! Builds a camera from its matrices; the projection maps depth to [0, 1]
     //! in either direction.
-    [[nodiscard]] static auto Create(const glm::mat4& view,
+    OXGN_EI_NDAPI static auto Create(const glm::mat4& view,
       const glm::mat4& projection, const glm::vec2& viewport_origin,
       const glm::vec2& viewport_size) -> GizmoCamera;
 
-    [[nodiscard]] auto IsOrthographic() const noexcept -> bool;
-    [[nodiscard]] auto Position() const noexcept -> glm::vec3;
+    OXGN_EI_NDAPI auto IsOrthographic() const noexcept -> bool;
+    OXGN_EI_NDAPI auto Position() const noexcept -> glm::vec3;
     //! Unit view direction.
-    [[nodiscard]] auto Forward() const noexcept -> glm::vec3;
-    [[nodiscard]] auto Right() const noexcept -> glm::vec3;
-    [[nodiscard]] auto Up() const noexcept -> glm::vec3;
+    OXGN_EI_NDAPI auto Forward() const noexcept -> glm::vec3;
+    OXGN_EI_NDAPI auto Right() const noexcept -> glm::vec3;
+    OXGN_EI_NDAPI auto Up() const noexcept -> glm::vec3;
     //! Unit direction from `point` toward the eye.
-    [[nodiscard]] auto ToEye(const glm::vec3& point) const noexcept
+    OXGN_EI_NDAPI auto ToEye(const glm::vec3& point) const noexcept
       -> glm::vec3;
     //! Pixel position of `point`; none behind the eye.
-    [[nodiscard]] auto Project(const glm::vec3& point) const
+    OXGN_EI_NDAPI auto Project(const glm::vec3& point) const
       -> std::optional<glm::vec2>;
     //! The ray through a pixel, pointing into the scene.
-    [[nodiscard]] auto Ray(const glm::vec2& pixel) const -> GizmoRay;
+    OXGN_EI_NDAPI auto Ray(const glm::vec2& pixel) const -> GizmoRay;
     //! World length one pixel spans at `point`'s depth.
-    [[nodiscard]] auto PixelSize(const glm::vec3& point) const -> float;
+    OXGN_EI_NDAPI auto PixelSize(const glm::vec3& point) const -> float;
     //! The point under a pixel at mid-depth, inside the view volume whichever
     //! way depth runs; screen-space overlays are drawn through it.
-    [[nodiscard]] auto Unproject(const glm::vec2& pixel) const -> glm::vec3;
+    OXGN_EI_NDAPI auto Unproject(const glm::vec2& pixel) const -> glm::vec3;
     //! Device depth of `point`, as the depth buffer stores it.
-    [[nodiscard]] auto DeviceDepth(const glm::vec3& point) const -> float;
+    OXGN_EI_NDAPI auto DeviceDepth(const glm::vec3& point) const -> float;
 
   private:
     glm::mat4 view_projection_ { 1.0F };
@@ -120,7 +121,7 @@ namespace oxygen::interop::module {
     glm::quat orientation { 1.0F, 0.0F, 0.0F, 0.0F };
 
     //! Unit world direction of axis 0 (X), 1 (Y) or 2 (Z).
-    [[nodiscard]] auto Axis(int index) const -> glm::vec3;
+    OXGN_EI_NDAPI auto Axis(int index) const -> glm::vec3;
   };
 
   //! A manipulated node as it was when the drag began.
@@ -154,7 +155,7 @@ namespace oxygen::interop::module {
 
   //! The handle under `pointer`, preferring the centre, then planes, then the
   //! nearest axis; hit areas are larger than the drawn handles.
-  [[nodiscard]] auto HitTestGizmo(const GizmoCamera& camera,
+  OXGN_EI_NDAPI auto HitTestGizmo(const GizmoCamera& camera,
     TransformTool tool, const GizmoFrame& frame, const glm::vec2& pointer,
     float display_scale) -> GizmoHandle;
 
@@ -169,7 +170,7 @@ namespace oxygen::interop::module {
      space it snaps the offset along the gizmo axes. Rotation and scale snap
      the applied angle or factor in either space.
     */
-    [[nodiscard]] static auto Begin(const GizmoCamera& camera,
+    OXGN_EI_NDAPI static auto Begin(const GizmoCamera& camera,
       TransformTool tool, TransformSpace space, const GizmoFrame& frame,
       GizmoHandle handle,
       const glm::vec2& pointer, float display_scale,
@@ -183,7 +184,7 @@ namespace oxygen::interop::module {
      changes and `IsRepresentable` turns false until the pointer returns to a
      representable value.
     */
-    auto Update(const GizmoCamera& camera, const glm::vec2& pointer,
+    OXGN_EI_API auto Update(const GizmoCamera& camera, const glm::vec2& pointer,
       const TransformSnap& snap, bool invert_snap) -> bool;
 
     [[nodiscard]] auto Tool() const noexcept -> TransformTool { return tool_; }
@@ -284,7 +285,7 @@ namespace oxygen::interop::module {
 
   //! Adds the gizmo's geometry to `overlay`: idle handles to its scene layer,
   //! dimmed where hidden, and a drag's handle and feedback to its top layer.
-  void BuildGizmoOverlay(const GizmoCamera& camera, const GizmoVisual& visual,
+  OXGN_EI_API void BuildGizmoOverlay(const GizmoCamera& camera, const GizmoVisual& visual,
     vortex::ViewOverlay& overlay);
 
 } // namespace oxygen::interop::module

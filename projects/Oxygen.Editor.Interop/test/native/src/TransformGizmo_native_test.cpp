@@ -4,15 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cmath>
-#include <optional>
-#include <vector>
-
-#include <glm/geometric.hpp>
-#include <glm/gtc/epsilon.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <glm/vector_relational.hpp>
+#include "pch.h"
 
 #include <EditorModule/TransformGizmo.h>
 

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <glm/gtc/matrix_transform.hpp>
+#include "pch.h"
 
 #include <EditorModule/EditorCameraPlacement.h>
 

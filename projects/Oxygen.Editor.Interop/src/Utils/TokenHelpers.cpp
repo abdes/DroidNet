@@ -4,12 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma managed
+#include "pch_clr.h"
 
+#pragma managed(push, off)
 #include <functional>
 #include <list>
 #include <mutex>
 #include <utility>
+#pragma managed(pop)
+
+#pragma managed
 
 #include "Utils/TokenHelpers.h"
 

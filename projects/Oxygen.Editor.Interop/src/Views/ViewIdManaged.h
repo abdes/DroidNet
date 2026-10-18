@@ -6,9 +6,12 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed
 
+#pragma managed(push, off)
 #include <Oxygen/Core/Types/View.h>
+#pragma managed(pop)
+
+#pragma managed(push, on)
 
 namespace Oxygen::Interop {
 
@@ -90,3 +93,5 @@ namespace Oxygen::Interop {
   };
 
 } // namespace Oxygen::Interop
+
+#pragma managed(pop)

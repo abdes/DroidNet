@@ -13,6 +13,7 @@
 #include <glm/mat4x4.hpp>
 
 #include <Oxygen/Core/Types/View.h>
+#include <api_export.h>
 
 namespace oxygen::interop::module {
 
@@ -44,21 +45,21 @@ namespace oxygen::interop::module {
     }
 
     //! Marks one pane as needing a render this frame; an invalid id is ignored.
-    void Invalidate(ViewId view);
+    OXGN_EI_API void Invalidate(ViewId view);
 
     //! Whether the pane must render this frame to show what it should.
-    [[nodiscard]] auto NeedsRender(
+    OXGN_EI_NDAPI auto NeedsRender(
       ViewId view, const PaneFingerprint& fingerprint) const -> bool;
 
     //! Whether the pane last rendered exactly this camera image.
-    [[nodiscard]] auto IsCurrent(
+    OXGN_EI_NDAPI auto IsCurrent(
       ViewId view, const PaneFingerprint& fingerprint) const -> bool;
 
     //! Records that the pane renders `fingerprint` this frame.
-    void MarkRendered(ViewId view, const PaneFingerprint& fingerprint);
+    OXGN_EI_API void MarkRendered(ViewId view, const PaneFingerprint& fingerprint);
 
     //! Drops a pane's history so its next decision renders it.
-    void Forget(ViewId view) noexcept;
+    OXGN_EI_API void Forget(ViewId view) noexcept;
 
     void SetAlwaysRender(bool always_render) noexcept {
       always_render_ = always_render;

@@ -3,8 +3,9 @@
 // Separated to a dedicated compilation unit for clarity.
 //===----------------------------------------------------------------------===//
 
-#pragma managed
+#include "pch_clr.h"
 
+#pragma managed(push, off)
 #include <cstdint>
 #include <cmath>
 #include <functional>
@@ -13,20 +14,20 @@
 #include <string>
 #include <utility>
 
-#ifdef _WIN32
-#include <WinSock2.h> // include before any header that might include <windows.h>
-#endif
-
-#include <msclr/marshal.h>
-#include <msclr/marshal_cppstd.h>
-#include <vcclr.h>
-
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/EditorInterface/EngineContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 
 #include <EditorModule/EditorModule.h>
+#pragma managed(pop)
+
+#pragma managed
+
+#include <msclr/marshal.h>
+#include <msclr/marshal_cppstd.h>
+#include <vcclr.h>
+
 #include <EngineRunner.h>
 #include <Views/CameraControlModeManaged.h>
 #include <Views/CameraViewPresetManaged.h>

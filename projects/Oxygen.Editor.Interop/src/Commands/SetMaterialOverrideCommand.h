@@ -17,6 +17,7 @@
 
 #include <EditorModule/EditorCommand.h>
 #include <EditorModule/SceneAssetRequests.h>
+#include <api_export.h>
 
 namespace oxygen::interop::module {
 
@@ -33,7 +34,7 @@ namespace oxygen::interop::module {
     {
     }
 
-    void Execute(CommandContext& context) override;
+    OXGN_EI_API void Execute(CommandContext& context) override;
 
     //! Installs the observer carried by this specific material-slot intent.
     void SetFailureCallback(SceneAssetRequests::FailureCallback callback) {

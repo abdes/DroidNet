@@ -25,26 +25,6 @@
 
 namespace oxygen::interop::module {
 
-  //! Component-local field ids for `TransformComponent` properties.
-  /*!
-   These ids are *local* to the Transform applier; they are never
-   exposed on the wire alone — they always travel paired with
-   `ComponentId::kTransform`. Adding a field is one new enumerator
-   plus one row in `TransformPropertyApplier::kFieldTable`.
-  */
-  enum class TransformField : std::uint16_t {
-    kPositionX = 0,
-    kPositionY = 1,
-    kPositionZ = 2,
-    kRotationXDegrees = 3,
-    kRotationYDegrees = 4,
-    kRotationZDegrees = 5,
-    kScaleX = 6,
-    kScaleY = 7,
-    kScaleZ = 8,
-    kCount,
-  };
-
   //! Applies §5.3 property entries to `oxygen::scene::TransformComponent`.
   /*!
    Implementation note: all transform sub-fields read once, mutate a

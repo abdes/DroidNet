@@ -28,6 +28,7 @@
 #include <EditorModule/EditorViewportCameraControlMode.h>
 #include <EditorModule/NodeRegistry.h>
 #include <EditorModule/SurfaceRegistry.h>
+#include <api_export.h>
 
 namespace oxygen {
   class Graphics;
@@ -176,35 +177,35 @@ namespace oxygen::interop::module {
       EditorViewRenderOptions render_options {};
     };
 
-    explicit EditorView(Config config);
-    ~EditorView();
+    OXGN_EI_API explicit EditorView(Config config);
+    OXGN_EI_API ~EditorView();
 
     OXYGEN_MAKE_NON_COPYABLE(EditorView)
       OXYGEN_MAKE_NON_MOVABLE(EditorView)
 
       // Set rendering context (must be called before Initialize)
-      void SetRenderingContext(const EditorViewContext& ctx);
-    void
+      OXGN_EI_API void SetRenderingContext(const EditorViewContext& ctx);
+    OXGN_EI_API void
       ClearPhaseRecorder(); // Clear phase-specific pointers after OnSceneMutation
 
     // Phase hooks
     //! Binds the authored scene the view renders and creates the editor
     //! camera in `camera_scene`, which is editor-owned and outlives scene
     //! replacement.
-    void Initialize(scene::Scene& scene, scene::Scene& camera_scene);
+    OXGN_EI_API void Initialize(scene::Scene& scene, scene::Scene& camera_scene);
     //! Renders a replacement authored scene; the editor camera keeps its pose.
-    void RetargetScene(scene::Scene& scene);
-    void OnSceneMutation(); // Uses context from SetRenderingContext
-    auto OnPreRender(vortex::Renderer& renderer) -> oxygen::co::Co<>;
-    void EnsureRenderTarget(Graphics& graphics);
+    OXGN_EI_API void RetargetScene(scene::Scene& scene);
+    OXGN_EI_API void OnSceneMutation(); // Uses context from SetRenderingContext
+    OXGN_EI_API auto OnPreRender(vortex::Renderer& renderer) -> oxygen::co::Co<>;
+    OXGN_EI_API void EnsureRenderTarget(Graphics& graphics);
 
     // State management
-    void Show();
-    void Hide();
-    void ReleaseResources();
-    void Resize(uint32_t width, uint32_t height);
+    OXGN_EI_API void Show();
+    OXGN_EI_API void Hide();
+    OXGN_EI_API void ReleaseResources();
+    OXGN_EI_API void Resize(uint32_t width, uint32_t height);
 
-    [[nodiscard]] auto GetViewId() const -> ViewId;
+    OXGN_EI_NDAPI auto GetViewId() const -> ViewId;
     // Allow external owner (e.g. ViewManager) to set the engine-assigned ViewId
     // when the View is registered in FrameContext to avoid duplicate
     // registrations from EditorView::OnSceneMutation.
@@ -213,13 +214,13 @@ namespace oxygen::interop::module {
     [[nodiscard]] auto GetName() const -> const std::string& {
       return config_.name;
     }
-    [[nodiscard]] auto GetState() const -> ViewState;
-    [[nodiscard]] auto IsVisible() const -> bool;
+    OXGN_EI_NDAPI auto GetState() const -> ViewState;
+    OXGN_EI_NDAPI auto IsVisible() const -> bool;
     //! The editor's own navigation camera for this view.
-    [[nodiscard]] auto GetCameraNode() const -> scene::SceneNode;
+    OXGN_EI_NDAPI auto GetCameraNode() const -> scene::SceneNode;
 
     //! The editor camera's current state; none before the view is initialized.
-    [[nodiscard]] auto GetEditorCameraState() const
+    OXGN_EI_NDAPI auto GetEditorCameraState() const
       -> std::optional<EditorCameraState>;
 
     //! True for a camera preview inset composed over its host view.
@@ -235,29 +236,29 @@ namespace oxygen::interop::module {
      authored camera when the node does (for example after an undo). The
      authored camera is never modified.
     */
-    void SetSceneCamera(std::optional<UuidKey> node_id);
+    OXGN_EI_API void SetSceneCamera(std::optional<UuidKey> node_id);
 
     //! True when this frame renders through an authored scene camera.
-    [[nodiscard]] auto IsViewingSceneCamera() const -> bool;
+    OXGN_EI_NDAPI auto IsViewingSceneCamera() const -> bool;
 
     //! The camera node this view renders through this frame.
-    [[nodiscard]] auto GetRenderCameraNode() const -> scene::SceneNode;
+    OXGN_EI_NDAPI auto GetRenderCameraNode() const -> scene::SceneNode;
 
     //! Pilots the viewed scene camera: navigation drives the editor camera,
     //! which first takes the scene camera's world pose, and the scene camera
     //! follows it every frame. The view keeps rendering through the scene
     //! camera's own projection and framing.
-    void SetPilotSceneCamera(bool pilot);
+    OXGN_EI_API void SetPilotSceneCamera(bool pilot);
 
     //! True when navigation currently moves the viewed scene camera.
-    [[nodiscard]] auto IsPilotingSceneCamera() const -> bool;
+    OXGN_EI_NDAPI auto IsPilotingSceneCamera() const -> bool;
 
     //! Moves the piloted scene camera onto the editor camera's pose. Call after
     //! navigation has been applied for the frame.
-    void SyncPilotedCamera();
+    OXGN_EI_API void SyncPilotedCamera();
 
     //! Pose that would place `node` at this view's editor camera.
-    [[nodiscard]] auto ResolveEditorCameraPose(scene::SceneNode& node) const
+    OXGN_EI_NDAPI auto ResolveEditorCameraPose(scene::SceneNode& node) const
       -> std::optional<EditorCameraPose>;
     [[nodiscard]] auto GetFramebuffer() const
       -> std::shared_ptr<graphics::Framebuffer> {
@@ -287,11 +288,11 @@ namespace oxygen::interop::module {
      Navigation input during the move takes over and ends it. A view looking
      through a scene camera does not move: framing never edits authored data.
     */
-    [[nodiscard]] auto BeginFraming(const glm::vec3& center, float radius)
+    OXGN_EI_NDAPI auto BeginFraming(const glm::vec3& center, float radius)
       -> EditorFramingOutcome;
 
     //! Advances a framing move by `dt_seconds`; call before navigation.
-    void AdvanceFraming(float dt_seconds);
+    OXGN_EI_API void AdvanceFraming(float dt_seconds);
 
     //! Sets the camera to a predefined view preset.
     /*!
@@ -304,7 +305,7 @@ namespace oxygen::interop::module {
 
      @param preset The preset to apply.
     */
-    void SetCameraViewPreset(CameraViewPreset preset);
+    OXGN_EI_API void SetCameraViewPreset(CameraViewPreset preset);
 
     //! Gets the last requested camera view preset.
     [[nodiscard]] auto GetCameraViewPreset() const noexcept -> CameraViewPreset {
@@ -312,7 +313,7 @@ namespace oxygen::interop::module {
     }
 
     //! Sets the editor camera navigation mode for this view.
-    void SetCameraControlMode(EditorViewportCameraControlMode mode) noexcept;
+    OXGN_EI_API void SetCameraControlMode(EditorViewportCameraControlMode mode) noexcept;
 
     //! Gets the editor camera navigation mode for this view.
     [[nodiscard]] auto GetCameraControlMode() const noexcept
@@ -321,7 +322,7 @@ namespace oxygen::interop::module {
     }
 
     //! Sets the base movement speed used by fly camera navigation.
-    void SetCameraMovementSpeed(float speed_units_per_second) noexcept;
+    OXGN_EI_API void SetCameraMovementSpeed(float speed_units_per_second) noexcept;
 
     //! Gets the base movement speed used by fly camera navigation.
     [[nodiscard]] auto GetCameraMovementSpeed() const noexcept -> float {
@@ -329,17 +330,17 @@ namespace oxygen::interop::module {
     }
 
     //! Updates camera lens and clipping settings on the current camera.
-    void SetCameraViewSettings(
+    OXGN_EI_API void SetCameraViewSettings(
       float field_of_view_y_radians,
       float near_plane,
       float far_plane) noexcept;
 
   public:
     //! Gets the current orthographic half-height used to derive extents.
-    auto GetOrthoHalfHeight() const noexcept -> float;
+    OXGN_EI_NDAPI auto GetOrthoHalfHeight() const noexcept -> float;
 
     //! Sets the orthographic half-height used to derive extents.
-    auto SetOrthoHalfHeight(float half_height) noexcept -> void;
+    OXGN_EI_API auto SetOrthoHalfHeight(float half_height) noexcept -> void;
 
   private:
     void ResizeIfNeeded();

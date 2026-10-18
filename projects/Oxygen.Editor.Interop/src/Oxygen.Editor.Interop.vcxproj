@@ -19,12 +19,6 @@
     <ClCompile Include="Commands\CreateSceneCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
-    <ClCompile Include="Commands\DestroySceneCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="Commands\HideViewCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
     <ClCompile Include="EditorModule\SceneAssetRequests.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
@@ -35,18 +29,6 @@
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
     <ClCompile Include="Commands\SetMaterialOverrideCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="Commands\SetViewCameraControlModeCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="Commands\SetViewCameraMovementSpeedCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="Commands\SetViewRenderOptionsCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="Commands\FrameViewCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
     <ClCompile Include="EditorModule\ViewFraming.cpp">
@@ -67,33 +49,16 @@
     <ClCompile Include="EditorModule\PaneRenderPolicy.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
-    <ClCompile Include="Commands\SetViewCameraPresetCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
     <ClCompile Include="Commands\ViewCameraCommands.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="Commands\SetViewSceneCameraCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="Commands\SetViewCameraSettingsCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="Commands\ShowViewCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="Commands\DestroyViewCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="Commands\CreateViewCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
     <ClCompile Include="Commands\PropertyApplierRegistry.cpp">
       <CompileAsManaged>false</CompileAsManaged>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="EditorModule\CommandFactory.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="EditorModule\SurfaceFramebuffers.cpp">
       <CompileAsManaged>false</CompileAsManaged>
@@ -138,48 +103,80 @@
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
     <ClCompile Include="EngineRunner.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="EngineRunner_logging.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="EngineRunner_surfaces.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="EngineRunner_views.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="Input\OxygenInput.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="pch_clr.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
+    </ClCompile>
     <ClCompile Include="RenderThreadContext.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="UiThreadDispatcher.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="Utils\TokenHelpers.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="World\OxygenWorld.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="World\EnvironmentObservation.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="World\NodeObservation.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="World\WireVocabulary.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="Scripting\ScriptAnalysis.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -269,6 +266,7 @@
     <ClInclude Include="Input\OxygenInput.h" />
     <ClInclude Include="LogHandler.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="pch_clr.h" />
     <ClInclude Include="Utils\TokenHelpers.h" />
     <ClInclude Include="Views\ViewIdManaged.h" />
     <ClInclude Include="Views\ColorManaged.h" />
@@ -357,10 +355,11 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>_DEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;OXGN_EI_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_WIN32_WINNT=0x0A00;WIN32_LEAN_AND_MEAN;NOMINMAX;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;OXGN_EI_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\include</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4793;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -376,15 +375,16 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>NDEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;OXGN_EI_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_WIN32_WINNT=0x0A00;WIN32_LEAN_AND_MEAN;NOMINMAX;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;OXGN_EI_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\include</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4793;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
-      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /FS %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>

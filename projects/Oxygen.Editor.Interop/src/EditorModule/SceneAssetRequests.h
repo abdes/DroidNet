@@ -23,6 +23,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
+#include <api_export.h>
 
 namespace oxygen::content {
 class IAssetLoader;
@@ -104,51 +105,51 @@ public:
   //! Reports application of a current request, including native refresh retries.
   using SuccessCallback = std::function<void(uint64_t)>;
 
-  SceneAssetRequests(content::IAssetLoader &loader,
+  OXGN_EI_API SceneAssetRequests(content::IAssetLoader &loader,
                      content::VirtualPathResolver &resolver);
-  SceneAssetRequests(GeometryLoader geometry_loader,
+  OXGN_EI_API SceneAssetRequests(GeometryLoader geometry_loader,
                      MaterialLoader material_loader, Diagnostic diagnostic,
                      AssetAvailability available, TextureLoader texture_loader);
-  ~SceneAssetRequests();
+  OXGN_EI_API ~SceneAssetRequests();
 
   OXYGEN_MAKE_NON_COPYABLE(SceneAssetRequests)
   OXYGEN_MAKE_NON_MOVABLE(SceneAssetRequests)
 
   //! Begin before resolving or consulting caches, so failed requests supersede.
-  auto BeginGeometry(scene::NodeHandle node, const std::string &uri,
+  OXGN_EI_API auto BeginGeometry(scene::NodeHandle node, const std::string &uri,
                      FailureCallback on_failure = {}, SuccessCallback on_success = {})
       -> GeometryCompletion;
-  void LoadGeometry(const std::string &uri, GeometryCompletion complete);
-  void SetMaterial(scene::NodeHandle node, MaterialSlotTarget target,
+  OXGN_EI_API void LoadGeometry(const std::string &uri, GeometryCompletion complete);
+  OXGN_EI_API void SetMaterial(scene::NodeHandle node, MaterialSlotTarget target,
                    const std::optional<std::string>& uri, MaterialSlotAssignmentIntent intent,
                    FailureCallback on_failure = {},
                    SuccessCallback on_success = {});
-  void Detach(scene::NodeHandle node);
+  OXGN_EI_API void Detach(scene::NodeHandle node);
 
   //! Supersede pending environment texture work and apply the complete
   //! revision, with every slot's key, once all slots have loaded. A failed slot
   //! rejects the revision and retains the previously applied one.
-  void SetEnvironmentTextures(scene::Scene& scene,
+  OXGN_EI_API void SetEnvironmentTextures(scene::Scene& scene,
     EnvironmentTextureSources sources, EnvironmentApply apply,
     FailureCallback on_failure = {}, SuccessCallback on_success = {});
-  [[nodiscard]] auto InspectEnvironmentTexture(
+  OXGN_EI_NDAPI auto InspectEnvironmentTexture(
     EnvironmentTextureSlot slot) const -> EnvironmentTextureStatus;
 
   //! Accept the same immutable bindings as the native mount owners.
-  void SetCookedRoots(
+  OXGN_EI_API void SetCookedRoots(
     std::shared_ptr<const std::vector<CookedRootBinding>> roots) noexcept;
 
   //! Re-request current bindings after mounted sources have been refreshed.
   //! Existing scene objects remain usable until their replacements arrive.
-  void Refresh(scene::Scene &scene);
-  void SuspendLoads();
-  void ResumeLoads(scene::Scene &scene);
-  [[nodiscard]] auto IsRefreshPending() const -> bool;
-  [[nodiscard]] auto RefreshError() const -> std::string;
+  OXGN_EI_API void Refresh(scene::Scene &scene);
+  OXGN_EI_API void SuspendLoads();
+  OXGN_EI_API void ResumeLoads(scene::Scene &scene);
+  OXGN_EI_NDAPI auto IsRefreshPending() const -> bool;
+  OXGN_EI_NDAPI auto RefreshError() const -> std::string;
 
   //! Drain after authoring commands. Reject dead targets and obsolete results.
   //! Returns whether a completed load changed the scene.
-  auto Drain(scene::Scene &scene) -> bool;
+  OXGN_EI_API auto Drain(scene::Scene &scene) -> bool;
 
 private:
   void QueueMaterial(scene::NodeHandle node, MaterialSlotTarget target,

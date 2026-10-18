@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed(push, on)
+#pragma managed(push, off)
 
 #include <functional>
 #include <mutex>

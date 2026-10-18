@@ -15,6 +15,7 @@
 #include <unordered_map>
 
 #include <Oxygen/Scene/Types/NodeHandle.h>
+#include <api_export.h>
 
 namespace oxygen::interop::module {
 
@@ -32,19 +33,19 @@ namespace oxygen::interop::module {
 
   class NodeRegistry {
   public:
-    static void Register(const UuidKey& id,
+    OXGN_EI_API static void Register(const UuidKey& id,
       oxygen::scene::NodeHandle handle) noexcept;
 
-    static void Unregister(const UuidKey& id) noexcept;
+    OXGN_EI_API static void Unregister(const UuidKey& id) noexcept;
 
-    static std::optional<oxygen::scene::NodeHandle>
+    OXGN_EI_API static std::optional<oxygen::scene::NodeHandle>
       Lookup(const UuidKey& id) noexcept;
 
     //! The editor node id a native node was registered with.
-    static std::optional<UuidKey>
+    OXGN_EI_API static std::optional<UuidKey>
       ReverseLookup(const oxygen::scene::NodeHandle& handle) noexcept;
 
-    static void ClearAll() noexcept;
+    OXGN_EI_API static void ClearAll() noexcept;
 
   private:
     static std::mutex& Mutex();
