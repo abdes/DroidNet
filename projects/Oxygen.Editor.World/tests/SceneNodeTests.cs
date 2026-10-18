@@ -26,7 +26,7 @@ public sealed class SceneNodeTests
     {
         var scene = new Scene { Name = "Scene" };
 
-        var node = new SceneNode(scene) { Name = "NodeValue" };
+        var node = new SceneNode(scene) { Name = "Node" };
 
         _ = node.Components.Should().ContainSingle();
         var transform = node.Components[0] as TransformComponent;
@@ -39,7 +39,7 @@ public sealed class SceneNodeTests
     public void Hydrate_WhenMissingTransformComponent_ThrowsJsonException()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "NodeValue" };
+        var node = new SceneNode(scene) { Name = "Node" };
         var data = new SceneNodeData
         {
             Id = node.Id,
@@ -56,7 +56,7 @@ public sealed class SceneNodeTests
     public void Hydrate_WhenMultipleTransformComponents_ThrowsJsonException()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "NodeValue" };
+        var node = new SceneNode(scene) { Name = "Node" };
         var data = new SceneNodeData
         {
             Id = node.Id,
@@ -96,7 +96,7 @@ public sealed class SceneNodeTests
     public void Name_WhenNullEmptyOrWhitespace_ThrowsArgumentException(string? invalidName)
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "NodeValue" };
+        var node = new SceneNode(scene) { Name = "Node" };
 
         Action act = () => node.Name = invalidName!;
 

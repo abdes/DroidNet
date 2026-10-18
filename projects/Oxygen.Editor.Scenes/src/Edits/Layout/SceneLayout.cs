@@ -23,7 +23,7 @@ namespace Oxygen.Editor.Scenes.Edits.Layout;
 internal static class SceneLayout
 {
     /// <summary>The entry type of a node's entry.</summary>
-    public const string NodeType = "NodeValue";
+    public const string NodeType = "Node";
 
     /// <summary>The entry type of a folder.</summary>
     public const string FolderType = "Folder";

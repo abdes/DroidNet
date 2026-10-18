@@ -326,7 +326,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var referencesView = (SceneReferencesSectionView)scenario.View.FindName("SceneReferencesView");
         var section = referencesView.FindDescendant<Oxygen.Editor.Controls.PropertiesExpander>()!;
         var extraAssetCard = section.Items.OfType<Oxygen.Editor.Controls.PropertyCard>()
-            .Single(card => string.Equals(card.PropertyName, "Extra AssetValue", StringComparison.Ordinal));
+            .Single(card => string.Equals(card.PropertyName, "Extra Asset", StringComparison.Ordinal));
         _ = section.BringItemIntoView(extraAssetCard).Should().BeTrue();
 
         const string path = "/Content/Materials/Shared.omat";
@@ -335,7 +335,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
 
         // Bounded realization wait: a single render pass can miss the button while the repeater materializes it (recorded flake).
-        var add = await WaitForDescendantAsync(section, (Button button) => Equals(button.Content, "Add Extra AssetValue"), "add-extra-asset button", this.TestContext.CancellationToken).ConfigureAwait(true);
+        var add = await WaitForDescendantAsync(section, (Button button) => Equals(button.Content, "Add Extra Asset"), "add-extra-asset button", this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = add.IsEnabled.Should().BeTrue();
         ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(add)
             .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();

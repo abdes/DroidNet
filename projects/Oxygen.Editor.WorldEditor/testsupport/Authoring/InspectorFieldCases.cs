@@ -32,7 +32,7 @@ internal static class InspectorFieldCases
         var scale = transform.LocalScale;
         Add(1, [position.X, position.Y, position.Z, rotation.X, rotation.Y, rotation.Z, scale.X, scale.Y, scale.Z]);
 
-        // NodeValue rendering flags (NodeField order); native observation reports them for every node.
+        // Node rendering flags (NodeField order); native observation reports them for every node.
         Add(7, [node.IsVisible ? 1f : 0f, node.CastsShadows ? 1f : 0f, node.ReceivesShadows ? 1f : 0f]);
         if (node.Components.OfType<PerspectiveCamera>().FirstOrDefault() is { } camera)
         {

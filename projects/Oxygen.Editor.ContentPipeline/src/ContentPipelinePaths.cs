@@ -33,14 +33,14 @@ public static class ContentPipelinePaths
             || assetUri.Fragment.Length != 0)
         {
             throw new ArgumentException(
-                $"AssetValue URI must be an absolute path-only '{AssetUris.Scheme}' URI.",
+                $"Asset URI must be an absolute path-only '{AssetUris.Scheme}' URI.",
                 nameof(assetUri));
         }
 
         var path = Uri.UnescapeDataString(assetUri.AbsolutePath).Replace('\\', '/');
         if (!IsCanonicalVirtualPath(path))
         {
-            throw new ArgumentException("AssetValue URI path must be an absolute canonical virtual path.", nameof(assetUri));
+            throw new ArgumentException("Asset URI path must be an absolute canonical virtual path.", nameof(assetUri));
         }
 
         var nativePath = path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
@@ -49,7 +49,7 @@ public static class ContentPipelinePaths
 
         return !nativePath.EndsWith(expectedExtension, StringComparison.OrdinalIgnoreCase)
             ? throw new ArgumentException(
-                $"AssetValue URI '{assetUri}' does not normalize to '{expectedExtension}'.",
+                $"Asset URI '{assetUri}' does not normalize to '{expectedExtension}'.",
                 nameof(assetUri))
             : nativePath;
     }

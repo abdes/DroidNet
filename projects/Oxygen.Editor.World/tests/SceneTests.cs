@@ -246,8 +246,8 @@ public sealed class SceneTests
     {
         // Arrange
         var scene = new Scene { Name = "Scene Name" };
-        var node1 = new SceneNode(scene) { Name = "NodeValue 1" };
-        var node2 = new SceneNode(scene) { Name = "NodeValue 2" };
+        var node1 = new SceneNode(scene) { Name = "Node 1" };
+        var node2 = new SceneNode(scene) { Name = "Node 2" };
         scene.RootNodes.Add(node1);
         scene.RootNodes.Add(node2);
 
@@ -258,8 +258,8 @@ public sealed class SceneTests
         _ = dto.Should().NotBeNull();
         _ = dto.Name.Should().Be("Scene Name");
         _ = dto.RootNodes.Should().HaveCount(2);
-        _ = dto.RootNodes[0].Name.Should().Be("NodeValue 1");
-        _ = dto.RootNodes[1].Name.Should().Be("NodeValue 2");
+        _ = dto.RootNodes[0].Name.Should().Be("Node 1");
+        _ = dto.RootNodes[1].Name.Should().Be("Node 2");
         _ = dto.Environment.Should().Be(new SceneEnvironmentData());
     }
 

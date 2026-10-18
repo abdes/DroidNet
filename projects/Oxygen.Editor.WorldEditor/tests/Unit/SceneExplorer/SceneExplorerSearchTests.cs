@@ -79,7 +79,7 @@ public sealed partial class SceneExplorerSearchTests
                             FolderId = innerId,
                             Name = "Inner",
                             IsExpanded = false,
-                            Children = [new ExplorerEntryData { Type = "NodeValue", NodeId = node.Id }],
+                            Children = [new ExplorerEntryData { Type = "Node", NodeId = node.Id }],
                         },
                     ],
                 },
@@ -131,7 +131,7 @@ public sealed partial class SceneExplorerSearchTests
                 },
                 new ExplorerEntryData
                 {
-                    Type = "NodeValue",
+                    Type = "Node",
                     NodeId = NodeId.New(), // unknown to the scene graph: this seat never realizes
                     Children =
                     [
@@ -213,7 +213,7 @@ public sealed partial class SceneExplorerSearchTests
                     Type = "Folder",
                     Name = "Legacy FindMe Folder", // no FolderId: not stably addressable
                     IsExpanded = false,
-                    Children = [new ExplorerEntryData { Type = "NodeValue", NodeId = node.Id }],
+                    Children = [new ExplorerEntryData { Type = "Node", NodeId = node.Id }],
                 },
             ]);
         using var explorer = harness.Build();
@@ -247,9 +247,9 @@ public sealed partial class SceneExplorerSearchTests
                     FolderId = folderId,
                     Name = "Collapsed",
                     IsExpanded = false,
-                    Children = [new ExplorerEntryData { Type = "NodeValue", NodeId = find.Id }],
+                    Children = [new ExplorerEntryData { Type = "Node", NodeId = find.Id }],
                 },
-                new ExplorerEntryData { Type = "NodeValue", NodeId = other.Id },
+                new ExplorerEntryData { Type = "Node", NodeId = other.Id },
             ]);
         using var explorer = harness.Build();
 
@@ -285,7 +285,7 @@ public sealed partial class SceneExplorerSearchTests
                     FolderId = collapsed.Folder,
                     Name = "Collapsed",
                     IsExpanded = false,
-                    Children = [new ExplorerEntryData { Type = "NodeValue", NodeId = collapsed.Node }],
+                    Children = [new ExplorerEntryData { Type = "Node", NodeId = collapsed.Node }],
                 },
                 new ExplorerEntryData
                 {
@@ -301,7 +301,7 @@ public sealed partial class SceneExplorerSearchTests
                             FolderId = nested.Folder,
                             Name = "Nested",
                             IsExpanded = false,
-                            Children = [new ExplorerEntryData { Type = "NodeValue", NodeId = nested.Node }],
+                            Children = [new ExplorerEntryData { Type = "Node", NodeId = nested.Node }],
                         },
                     ],
                 },

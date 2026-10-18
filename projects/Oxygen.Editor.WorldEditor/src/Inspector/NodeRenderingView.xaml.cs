@@ -6,7 +6,7 @@ using DroidNet.Mvvm.Generators;
 
 namespace Oxygen.Editor.World.Inspector;
 
-/// <summary>NodeValue Rendering section view.</summary>
+/// <summary>Node Rendering section view.</summary>
 [ViewModel(typeof(NodeRenderingViewModel))]
 public sealed partial class NodeRenderingView
 {

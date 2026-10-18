@@ -39,7 +39,7 @@ public partial class MaterialsSlot : OverrideSlot
     /// </summary>
     /// <value>
     /// An asset reference to the material to apply. The reference can be unresolved (URI only)
-    /// or resolved (with AssetValue instance loaded).
+    /// or resolved (with Asset instance loaded).
     /// </value>
     public AssetReference<MaterialAsset> Material
     {

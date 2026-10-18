@@ -142,7 +142,7 @@ public sealed class InsertNodesTests
         var nested = FolderId.New();
         var entry = new ExplorerEntryData
         {
-            Type = "NodeValue",
+            Type = "Node",
             NodeId = node.Id,
             Children =
             [

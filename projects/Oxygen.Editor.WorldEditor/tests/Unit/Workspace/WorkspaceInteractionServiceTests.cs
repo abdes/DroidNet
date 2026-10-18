@@ -60,7 +60,7 @@ public sealed partial class WorkspaceInteractionServiceTests
         var child = new SceneNode(scene) { Name = "Child" };
         parent.AddChild(child);
         scene.RootNodes.Add(parent);
-        var otherSceneNode = new SceneNode(CreateScene()) { Name = "Other Scene NodeValue" };
+        var otherSceneNode = new SceneNode(CreateScene()) { Name = "Other Scene Node" };
 
         var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
         var service = new WorkspaceInteractionService(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());

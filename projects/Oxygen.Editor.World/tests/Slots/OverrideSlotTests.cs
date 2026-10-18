@@ -31,7 +31,7 @@ public sealed class OverrideSlotTests
     public void GetOrCreateSlot_ReturnsSameSlotOnSecondCallAndAddsOnlyOne()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "NodeValue" };
+        var node = new SceneNode(scene) { Name = "Node" };
 
         var first = node.GetOrCreateSlot<RenderingSlot>();
         var second = node.GetOrCreateSlot<RenderingSlot>();

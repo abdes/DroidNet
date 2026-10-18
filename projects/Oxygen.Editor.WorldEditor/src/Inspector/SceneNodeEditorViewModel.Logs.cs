@@ -51,7 +51,7 @@ public partial class SceneNodeEditorViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Trace,
-        Message = "Add component requested. TypeId={TypeId}, NodeValue={NodeName}, ComponentsVmCount={VmCount}, SelectedComponent={SelectedComponentName}")]
+        Message = "Add component requested. TypeId={TypeId}, Node={NodeName}, ComponentsVmCount={VmCount}, SelectedComponent={SelectedComponentName}")]
     private static partial void LogAddComponentRequested(ILogger logger, string typeId, string nodeName, int vmCount, string? selectedComponentName);
 
     [Conditional("DEBUG")]
@@ -70,7 +70,7 @@ public partial class SceneNodeEditorViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "ApplyAddComponent. NodeValue={NodeName}, ComponentType={ComponentType}, ComponentName={ComponentName}, NodeComponentsBefore={NodeComponentsBefore}")]
+        Message = "ApplyAddComponent. Node={NodeName}, ComponentType={ComponentType}, ComponentName={ComponentName}, NodeComponentsBefore={NodeComponentsBefore}")]
     private static partial void LogApplyAddComponent(ILogger logger, string nodeName, string componentType, string componentName, int nodeComponentsBefore);
 
     [Conditional("DEBUG")]
@@ -80,7 +80,7 @@ public partial class SceneNodeEditorViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "ApplyDeleteComponent. NodeValue={NodeName}, ComponentType={ComponentType}, ComponentName={ComponentName}, NodeComponentsBefore={NodeComponentsBefore}, SelectedComponent={SelectedComponentName}")]
+        Message = "ApplyDeleteComponent. Node={NodeName}, ComponentType={ComponentType}, ComponentName={ComponentName}, NodeComponentsBefore={NodeComponentsBefore}, SelectedComponent={SelectedComponentName}")]
     private static partial void LogApplyDeleteComponent(ILogger logger, string nodeName, string componentType, string componentName, int nodeComponentsBefore, string? selectedComponentName);
 
     [Conditional("DEBUG")]
@@ -90,7 +90,7 @@ public partial class SceneNodeEditorViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Trace,
-        Message = "Components rebuild. Reason={Reason}, NodeValue={NodeName}, VmCount={VmCount}, PrevSelected={PrevSelected}, NowSelected={NowSelected}")]
+        Message = "Components rebuild. Reason={Reason}, Node={NodeName}, VmCount={VmCount}, PrevSelected={PrevSelected}, NowSelected={NowSelected}")]
     private static partial void LogComponentsRebuilt(ILogger logger, string reason, string? nodeName, int vmCount, string? prevSelected, string? nowSelected);
 
     [Conditional("DEBUG")]
@@ -110,7 +110,7 @@ public partial class SceneNodeEditorViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Trace,
-        Message = "Components update enqueued. Reason={Reason}, NodeValue={NodeName}, Component={ComponentName}")]
+        Message = "Components update enqueued. Reason={Reason}, Node={NodeName}, Component={ComponentName}")]
     private static partial void LogComponentsUpdateEnqueued(ILogger logger, string reason, string nodeName, string componentName);
 
     [Conditional("DEBUG")]

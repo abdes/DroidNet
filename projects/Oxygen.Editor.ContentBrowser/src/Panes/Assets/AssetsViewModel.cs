@@ -117,7 +117,7 @@ public partial class AssetsViewModel(
             this.isInitialized = true;
         }
 
-        // AssetValue indexing runs automatically in background with file watching
+        // Asset indexing runs automatically in background with file watching
     }
 
     /// <summary>Combines an operation summary with its diagnostic details.</summary>
@@ -532,7 +532,7 @@ public partial class AssetsViewModel(
         {
             this.PublishFailure(
                 ContentPipelineOperationKinds.CookAsset,
-                "Cook AssetValue",
+                "Cook Asset",
                 $"{ineligible.DisplayName} has no retained source content. Select only assets with saved authored sources.",
                 AssetCookDiagnosticCodes.CookFailed,
                 ineligible.IdentityUri);
@@ -543,7 +543,7 @@ public partial class AssetsViewModel(
         {
             await this.RunCookAsync(
                     ContentPipelineOperationKinds.CookAsset,
-                    "Cook AssetValue",
+                    "Cook Asset",
                     asset.IdentityUri,
                     () => contentPipelineService.CookAssetAsync(asset.IdentityUri, CancellationToken.None))
                 .ConfigureAwait(true);

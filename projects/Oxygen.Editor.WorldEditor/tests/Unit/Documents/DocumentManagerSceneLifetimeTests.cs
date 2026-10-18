@@ -174,7 +174,7 @@ public sealed partial class DocumentManagerSceneLifetimeTests
         await fixture.Explorer.PasteItemsAsync(fixture.Explorer.Scene).ConfigureAwait(false);
         await fixture.Explorer.PasteItemsAsync(fixture.Explorer.Scene).ConfigureAwait(false);
 
-        var pasted = accepted.RootNodes.Where(node => string.Equals(node.Name, "NodeValue", StringComparison.Ordinal)).ToArray();
+        var pasted = accepted.RootNodes.Where(node => string.Equals(node.Name, "Node", StringComparison.Ordinal)).ToArray();
         _ = pasted.Should().HaveCount(2);
         _ = pasted.Should().OnlyHaveUniqueItems(node => node.Id);
         _ = pasted.Should().NotContain(node => node.Id == source.Id);
@@ -257,7 +257,7 @@ public sealed partial class DocumentManagerSceneLifetimeTests
             var selection = new SceneSelectionService();
             this.Files = new SceneDocumentFiles(this.Store);
             this.Contexts.Activate(this.Files.Context);
-            this.Files.Write("First", SceneDocumentFiles.Data(SceneId.New(), "First", "NodeValue"));
+            this.Files.Write("First", SceneDocumentFiles.Data(SceneId.New(), "First", "Node"));
             this.Files.Write("Second", SceneDocumentFiles.Data(SceneId.New(), "Second", "Destination"));
             this.Area = new DocumentArea(
                 this.Documents,

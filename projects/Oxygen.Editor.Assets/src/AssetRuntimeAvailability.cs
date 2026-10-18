@@ -20,12 +20,12 @@ public enum AssetRuntimeAvailability
     Unknown,
 
     /// <summary>
-    /// AssetValue is not known to be mounted.
+    /// Asset is not known to be mounted.
     /// </summary>
     NotMounted,
 
     /// <summary>
-    /// AssetValue is mounted in the runtime.
+    /// Asset is mounted in the runtime.
     /// </summary>
     Mounted,
 

@@ -53,7 +53,7 @@ public static class SceneEditCodes
     public const string NameEmpty = DiagnosticCodes.ScenePrefix + "Name.Empty";
 
     /// <summary>The scene already has a node with the identity.</summary>
-    public const string NodeExists = DiagnosticCodes.ScenePrefix + "NodeValue.Exists";
+    public const string NodeExists = DiagnosticCodes.ScenePrefix + "Node.Exists";
 
     /// <summary>A folder, or a layout entry or container, is no longer in the layout.</summary>
     public const string FolderMissing = DiagnosticCodes.ScenePrefix + "Folder.Missing";

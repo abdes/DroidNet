@@ -45,13 +45,13 @@ public sealed partial class SceneExplorerDropTests
         using var harness = CreateHarness(out var scene, out var parent, out var child, folderId: FolderId.New());
         harness.Metadata.ReplaceLayout(
             [
-                new ExplorerEntryData { Type = "NodeValue", NodeId = parent.Id },
+                new ExplorerEntryData { Type = "Node", NodeId = parent.Id },
                 new ExplorerEntryData
                 {
                     Type = "Folder",
                     FolderId = harness.FolderId,
                     Name = "Group",
-                    Children = [new ExplorerEntryData { Type = "NodeValue", NodeId = child.Id }],
+                    Children = [new ExplorerEntryData { Type = "Node", NodeId = child.Id }],
                 },
             ]);
         using var explorer = harness.Build();
@@ -94,9 +94,9 @@ public sealed partial class SceneExplorerDropTests
                     Type = "Folder",
                     FolderId = harness.FolderId,
                     Name = "Group",
-                    Children = [new ExplorerEntryData { Type = "NodeValue", NodeId = parent.Id }],
+                    Children = [new ExplorerEntryData { Type = "Node", NodeId = parent.Id }],
                 },
-                new ExplorerEntryData { Type = "NodeValue", NodeId = child.Id },
+                new ExplorerEntryData { Type = "Node", NodeId = child.Id },
             ]);
         using var explorer = harness.Build();
 

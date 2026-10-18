@@ -35,7 +35,7 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
     public SceneNode(Scene scene)
     {
         this.Scene = scene;
-        this.Name = "New NodeValue"; // Initialize required property
+        this.Name = "New Node"; // Initialize required property
 
         // Initialize the components collection with the always-present TransformComponent.
         // Use a concrete mutable collection that preserves insertion order.
@@ -382,7 +382,7 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
             }
 
             // 3. Component & node-level override slots
-            // NodeValue-level override slots are persisted separately from components.
+            // Node-level override slots are persisted separately from components.
             this.OverrideSlots.Clear();
             if (data.OverrideSlots is not null)
             {

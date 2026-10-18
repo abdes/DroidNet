@@ -104,7 +104,7 @@ public sealed partial class DocumentHostViewModelTests
 
         public async Task<Document> OpenSceneAsync(CancellationToken cancellationToken)
         {
-            this.files.Write("Main", SceneDocumentFiles.Data(SceneId.New(), "Main", "NodeValue"));
+            this.files.Write("Main", SceneDocumentFiles.Data(SceneId.New(), "Main", "Node"));
             return (await this.files.OpenAsync("Main", cancellationToken).ConfigureAwait(false)).Document;
         }
 

@@ -13,7 +13,7 @@ namespace Oxygen.Editor.LivePreview.Tests.Assets;
 
 /// <summary>Checks how the engine's content state and asset requests reach the asset services.</summary>
 [TestClass]
-[TestCategory("AssetValue Runtime Status")]
+[TestCategory("Asset Runtime Status")]
 public sealed class AssetRuntimeStatusSourceTests
 {
     private static readonly Guid ProjectId = Guid.NewGuid();

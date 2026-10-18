@@ -12,7 +12,7 @@ namespace Oxygen.Editor.World.Messages;
 /// <param name="nodes">The list of affected <see cref="SceneNode"/> instances. This collection is expected to contain the same number of entries as <paramref name="oldValues"/> and <paramref name="newValues"/>.</param>
 /// <param name="oldValues">The per-node snapshots representing the geometry state prior to the change.</param>
 /// <param name="newValues">The per-node snapshots representing the geometry state after the change.</param>
-/// <param name="property">The name of the property that was edited (for example, "AssetValue").</param>
+/// <param name="property">The name of the property that was edited (for example, "Asset").</param>
 internal sealed class SceneNodeGeometryAppliedMessage(IList<SceneNode> nodes, IList<GeometrySnapshot> oldValues, IList<GeometrySnapshot> newValues, string property)
 {
     /// <summary>
@@ -34,7 +34,7 @@ internal sealed class SceneNodeGeometryAppliedMessage(IList<SceneNode> nodes, IL
 
     /// <summary>
     /// Gets the property name that was edited. This can be used by handlers to determine
-    /// the nature of the change (for example, distinguishing between "AssetValue" and other
+    /// the nature of the change (for example, distinguishing between "Asset" and other
     /// hypothetical geometry-related properties).
     /// </summary>
     public string Property { get; } = property;

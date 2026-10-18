@@ -51,7 +51,7 @@ public partial class GeometryComponent : GameComponent
     /// </summary>
     /// <value>
     /// An asset reference to the geometry to render. The reference can be unresolved (URI only)
-    /// or resolved (with AssetValue instance loaded).
+    /// or resolved (with Asset instance loaded).
     /// </value>
     public AssetReference<GeometryAsset>? Geometry
     {

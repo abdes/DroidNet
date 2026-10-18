@@ -108,7 +108,7 @@ public class GameAsset
     public string Location { get; set; }
 
     /// <summary>
-    /// Gets or sets the virtual path of the asset (e.g., /Cooked/Folder/AssetValue).
+    /// Gets or sets the virtual path of the asset (e.g., /Cooked/Folder/Asset).
     /// </summary>
     public string? VirtualPath { get; set; }
 
@@ -197,11 +197,11 @@ public class GameAsset
         var ext = Path.GetExtension(location);
         if (string.IsNullOrWhiteSpace(ext))
         {
-            return "Foreign AssetValue";
+            return "Foreign Asset";
         }
 
         ext = ext.TrimStart('.').ToLowerInvariant();
-        return $"Foreign AssetValue ({ext})";
+        return $"Foreign Asset ({ext})";
     }
 
     private static string BuildTypedDisplayName(string baseName, string location)

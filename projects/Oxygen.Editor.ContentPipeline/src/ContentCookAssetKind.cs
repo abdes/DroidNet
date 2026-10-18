@@ -5,7 +5,7 @@
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
-/// AssetValue kinds used by ContentPipeline contracts.
+/// Asset kinds used by ContentPipeline contracts.
 /// </summary>
 public enum ContentCookAssetKind
 {

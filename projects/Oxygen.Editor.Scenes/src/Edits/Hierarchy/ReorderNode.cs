@@ -20,7 +20,7 @@ namespace Oxygen.Editor.Scenes.Edits.Hierarchy;
 public sealed record ReorderNode(NodeId Node, NodePosition At, LayoutPosition Layout) : ISceneEdit
 {
     /// <inheritdoc/>
-    public string Label => "Reorder NodeValue";
+    public string Label => "Reorder Node";
 
     /// <inheritdoc/>
     public IReadOnlyCollection<NodeId> Targets => this.At.Parent is { } parent ? [this.Node, parent] : [this.Node];

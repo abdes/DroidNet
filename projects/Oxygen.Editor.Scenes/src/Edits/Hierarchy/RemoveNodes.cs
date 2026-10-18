@@ -25,7 +25,7 @@ public sealed record RemoveNodes : ISceneEdit
     public IReadOnlyList<NodeId> Roots { get; }
 
     /// <inheritdoc/>
-    public string Label => this.Roots.Count == 1 ? "Delete NodeValue" : $"Delete {this.Roots.Count} nodes";
+    public string Label => this.Roots.Count == 1 ? "Delete Node" : $"Delete {this.Roots.Count} nodes";
 
     /// <inheritdoc/>
     public IReadOnlyCollection<NodeId> Targets => this.Roots;

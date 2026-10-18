@@ -40,7 +40,7 @@ public enum AssetState
     Missing,
 
     /// <summary>
-    /// AssetValue exists but cannot be read or validated.
+    /// Asset exists but cannot be read or validated.
     /// </summary>
     Broken,
 }

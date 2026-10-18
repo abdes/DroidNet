@@ -19,7 +19,7 @@ public sealed class ContentPipelineContractTests
         _ = ContentPipelineOperationKinds.DescriptorGenerate.Should().Be("Content.Descriptor.Generate");
         _ = ContentPipelineOperationKinds.ManifestGenerate.Should().Be("Content.Manifest.Generate");
         _ = ContentPipelineOperationKinds.Import.Should().Be("Content.Import");
-        _ = ContentPipelineOperationKinds.CookAsset.Should().Be("Content.Cook.AssetValue");
+        _ = ContentPipelineOperationKinds.CookAsset.Should().Be("Content.Cook.Asset");
         _ = ContentPipelineOperationKinds.CookScene.Should().Be("Content.Cook.Scene");
         _ = ContentPipelineOperationKinds.CookFolder.Should().Be("Content.Cook.Folder");
         _ = ContentPipelineOperationKinds.CookProject.Should().Be("Content.Cook.Project");

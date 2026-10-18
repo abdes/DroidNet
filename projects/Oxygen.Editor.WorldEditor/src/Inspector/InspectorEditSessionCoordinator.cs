@@ -22,7 +22,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
     private static readonly SceneEditResult Nothing = new(SceneEditOutcome.Applied, []);
     private readonly List<Task> pending = [];
 
-    // NodeValue targets; in environment mode the target is the bound scene and this stays empty.
+    // Node targets; in environment mode the target is the bound scene and this stays empty.
     private NodeId[] targets = [];
     private SceneAuthoring? boundAuthoring;
     private Gesture? active;

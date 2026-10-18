@@ -104,7 +104,7 @@ public sealed partial class SceneExplorerAuthoringTests
     public void BuildSelectionContext_ClassifiesRowKindsAndPrimary()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "NodeValue" };
+        var node = new SceneNode(scene) { Name = "Node" };
         var nodeAdapter = new SceneNodeAdapter(node);
         var folderAdapter = new FolderAdapter(FolderId.New(), "Folder");
         var sceneAdapter = new SceneAdapter(scene, []) { IsRoot = true };
@@ -148,7 +148,7 @@ public sealed partial class SceneExplorerAuthoringTests
         {
             var project = new Project(new ProjectInfo("Authoring", Category.Games, "H:/AuthoringTreeTests", "preview.png"));
             var built = new Scene { Name = "Scene" };
-            var builtNode = new SceneNode(built) { Name = "NodeValue" };
+            var builtNode = new SceneNode(built) { Name = "Node" };
             built.RootNodes.Add(builtNode);
 
             var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);

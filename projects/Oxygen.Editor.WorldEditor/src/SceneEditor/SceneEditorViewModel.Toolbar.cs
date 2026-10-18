@@ -18,7 +18,7 @@ namespace Oxygen.Editor.World.SceneEditor;
 
 /// <summary>
 /// The scene document toolbar: Quick Add, which creates nodes in front of the focused pane's
-/// camera; Browse to AssetValue, which reveals the assets the selected nodes use; and Environment,
+/// camera; Browse to Asset, which reveals the assets the selected nodes use; and Environment,
 /// which selects the scene for the Inspector.
 /// </summary>
 public partial class SceneEditorViewModel

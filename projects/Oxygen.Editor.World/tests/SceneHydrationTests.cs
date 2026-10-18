@@ -56,7 +56,7 @@ public sealed class SceneHydrationTests
     public void Hydrate_ReplacesExistingRootNodes_DoesNotAppend()
     {
         var scene = new Scene { Name = "Scene" };
-        var oldNode = new SceneNode(scene) { Name = "Old NodeValue" };
+        var oldNode = new SceneNode(scene) { Name = "Old Node" };
         scene.RootNodes.Add(oldNode);
 
         var newNodeId = NodeId.New();
@@ -69,7 +69,7 @@ public sealed class SceneHydrationTests
                 new SceneNodeData
                 {
                     Id = newNodeId,
-                    Name = "New NodeValue",
+                    Name = "New Node",
                     Components = [new TransformData { Name = "Transform" }],
                 },
             ],
@@ -79,7 +79,7 @@ public sealed class SceneHydrationTests
 
         _ = scene.RootNodes.Should().ContainSingle();
         _ = scene.RootNodes[0].Id.Should().Be(newNodeId);
-        _ = scene.RootNodes[0].Name.Should().Be("New NodeValue");
+        _ = scene.RootNodes[0].Name.Should().Be("New Node");
         _ = scene.RootNodes.Should().NotContain(oldNode);
     }
 
@@ -98,7 +98,7 @@ public sealed class SceneHydrationTests
                 new SceneNodeData
                 {
                     Id = NodeId.New(),
-                    Name = "NodeValue",
+                    Name = "Node",
                     Components = [new TransformData { Name = "Transform" }],
                 },
             ],
@@ -115,7 +115,7 @@ public sealed class SceneHydrationTests
     public void Hydrate_WhenLightsAreInvalid_RejectsBeforeTouchingSceneAndLeavesPreviousContentIntact()
     {
         var scene = new Scene { Name = "Initial Scene" };
-        var retained = new SceneNode(scene) { Name = "Retained NodeValue" };
+        var retained = new SceneNode(scene) { Name = "Retained Node" };
         scene.RootNodes.Add(retained);
 
         var candidate = new SceneData
@@ -183,7 +183,7 @@ public sealed class SceneHydrationTests
                 new()
                 {
                     Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000001")),
-                    Name = "NodeValue 1",
+                    Name = "Node 1",
                     Components =
                     [
                         new TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
@@ -192,7 +192,7 @@ public sealed class SceneHydrationTests
                 new()
                 {
                     Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000002")),
-                    Name = "NodeValue 2",
+                    Name = "Node 2",
                     Components =
                     [
                         new TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
@@ -207,8 +207,8 @@ public sealed class SceneHydrationTests
         // Assert - hydrate logic sets values and attaches created nodes to the scene
         _ = scene.Name.Should().Be("Scene Name");
         _ = scene.RootNodes.Should().HaveCount(2);
-        _ = scene.RootNodes[0].Name.Should().Be("NodeValue 1");
-        _ = scene.RootNodes[1].Name.Should().Be("NodeValue 2");
+        _ = scene.RootNodes[0].Name.Should().Be("Node 1");
+        _ = scene.RootNodes[1].Name.Should().Be("Node 2");
         foreach (var node in scene.RootNodes)
         {
             _ = node.Scene.Should().BeSameAs(scene);
@@ -242,7 +242,7 @@ public sealed class SceneHydrationTests
                 new()
                 {
                     Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000041")),
-                    Name = "NodeValue 1",
+                    Name = "Node 1",
                     Components =
                     [
                         new TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
@@ -251,7 +251,7 @@ public sealed class SceneHydrationTests
                 new()
                 {
                     Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000042")),
-                    Name = "NodeValue 2",
+                    Name = "Node 2",
                     Components =
                     [
                         new TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
@@ -275,8 +275,8 @@ public sealed class SceneHydrationTests
     {
         // Arrange
         var scene = new Scene { Name = "RoundTrip Scene" };
-        var node1 = new SceneNode(scene) { Name = "NodeValue A" };
-        var node2 = new SceneNode(scene) { Name = "NodeValue B" };
+        var node1 = new SceneNode(scene) { Name = "Node A" };
+        var node2 = new SceneNode(scene) { Name = "Node B" };
 
         // avoid adding abstract GameComponent; keep default transform only
         scene.RootNodes.Add(node1);
@@ -291,8 +291,8 @@ public sealed class SceneHydrationTests
         _ = deserialized.Should().NotBeNull();
         _ = deserialized!.Name.Should().Be(scene.Name);
         _ = deserialized.RootNodes.Should().HaveCount(2);
-        _ = deserialized.RootNodes[0].Name.Should().Be("NodeValue A");
-        _ = deserialized.RootNodes[1].Name.Should().Be("NodeValue B");
+        _ = deserialized.RootNodes[0].Name.Should().Be("Node A");
+        _ = deserialized.RootNodes[1].Name.Should().Be("Node B");
 
         // Nodes should reference their parent scene
         foreach (var n in deserialized.RootNodes)

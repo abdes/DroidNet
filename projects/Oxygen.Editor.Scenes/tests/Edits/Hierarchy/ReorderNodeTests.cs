@@ -50,7 +50,7 @@ public sealed class ReorderNodeTests
     }
 
     [TestMethod]
-    [DataRow(false, DisplayName = "NodeValue")]
+    [DataRow(false, DisplayName = "Node")]
     [DataRow(true, DisplayName = "Parent")]
     public async Task LockedNodeOrParent_IsRefused(bool lockParent)
     {

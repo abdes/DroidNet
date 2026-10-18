@@ -11,7 +11,7 @@ using Oxygen.Editor.World.Components;
 namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>
-/// NodeValue "Rendering" section: authored Scene Visibility and geometry Cast/Receive Shadows, edited as
+/// Node "Rendering" section: authored Scene Visibility and geometry Cast/Receive Shadows, edited as
 /// explicit local values on every selected node.
 /// </summary>
 /// <remarks>
