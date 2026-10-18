@@ -630,6 +630,9 @@ private:
   bool preview_authoring_pending_ { false };
   bool restore_scene_pending_ { false };
   bool transient_profile_ { false };
+  std::optional<bool> last_logged_preview_sun_active_;
+  std::optional<bool> last_logged_preview_sun_requested_;
+  std::string last_logged_preview_sun_help_text_;
 
   int update_depth_ { 0 };
   bool settings_loaded_ { false };

@@ -596,6 +596,9 @@ auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& scene) -> void
   config_.scene = observer_ptr { &scene };
   preview_authoring_pending_ = false;
   preview_sun_.Reset();
+  last_logged_preview_sun_active_.reset();
+  last_logged_preview_sun_requested_.reset();
+  last_logged_preview_sun_help_text_.clear();
   scene_snapshot_.Reset();
   // Ensure the next runtime config update runs scene-transition logic even
   // though config_.scene is pre-bound here for immediate HasScene()
@@ -898,8 +901,19 @@ auto EnvironmentSettingsService::ReconcilePreviewSun() -> void
     pending_changes_ = true;
     dirty_domains_ |= kSunDirtyMask;
   }
-  LOG_F(INFO, "Environment: preview sun requested={} active={}; {}",
-    preview_sun_enabled_, IsPreviewSunActive(), GetPreviewSunHelpText());
+  const auto active = IsPreviewSunActive();
+  const auto help_text = GetPreviewSunHelpText();
+  if (!last_logged_preview_sun_requested_.has_value()
+    || *last_logged_preview_sun_requested_ != preview_sun_enabled_
+    || !last_logged_preview_sun_active_.has_value()
+    || *last_logged_preview_sun_active_ != active
+    || last_logged_preview_sun_help_text_ != help_text) {
+    last_logged_preview_sun_requested_ = preview_sun_enabled_;
+    last_logged_preview_sun_active_ = active;
+    last_logged_preview_sun_help_text_ = help_text;
+    LOG_F(INFO, "Environment: preview sun requested={} active={}; {}",
+      preview_sun_enabled_, active, help_text);
+  }
 }
 
 auto EnvironmentSettingsService::SyncFromSceneIfNeeded() -> void
@@ -3015,6 +3029,9 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   }
 
   if (apply_sun) {
+    preview_reconciling_ = true;
+    const ScopeGuard finish_apply_sun(
+      [this] noexcept { preview_reconciling_ = false; });
     UpdateSunLightCandidate();
     if (sun_light_available_) {
       const bool accepted = sun_light_node_.EditLight<scene::DirectionalLight>(
