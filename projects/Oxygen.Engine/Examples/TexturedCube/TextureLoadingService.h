@@ -163,6 +163,8 @@ public:
   auto GetTextureMetadataJson(uint64_t hash) const -> std::string;
 
 private:
+  //! Import metadata file kept beside the cooked root.
+  [[nodiscard]] auto TexturesJsonPath() const -> std::filesystem::path;
   void LoadTexturesJson();
   void SaveTexturesJson();
 

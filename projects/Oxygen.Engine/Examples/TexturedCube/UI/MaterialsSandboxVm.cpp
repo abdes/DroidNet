@@ -24,6 +24,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 
@@ -534,7 +535,9 @@ auto MaterialsSandboxVm::UpdateCookedEntries() -> void
 auto MaterialsSandboxVm::ReloadAssignedTextures() -> void
 {
   const auto reload = [this](TextureSlotState& slot) -> void {
-    if (slot.mode != TextureIndexMode::kCustom) {
+    // Custom mode chosen before any cooked texture is assigned has nothing to
+    // reload; index 0 is the table's null entry.
+    if (slot.mode != TextureIndexMode::kCustom || slot.resource_index == 0U) {
       return;
     }
     texture_service_->StartLoadCookedTexture(slot.resource_index,
@@ -562,7 +565,10 @@ auto MaterialsSandboxVm::UpdateCookedMaterialEntries(
   cooked_material_entries_.clear();
   bool selection_cleared = false;
 
-  if (cooked_root.empty()) {
+  // A root nothing was cooked into yet has no index and no materials.
+  if (cooked_root.empty()
+    || !std::filesystem::exists(cooked_root
+      / oxygen::content::import::LooseCookedLayout {}.index_file_name)) {
     selection_cleared = selected_custom_material_key_.has_value();
     selected_custom_material_key_.reset();
     if (selection_cleared && use_custom_material_) {

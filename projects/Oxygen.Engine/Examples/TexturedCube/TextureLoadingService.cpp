@@ -42,6 +42,7 @@
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -418,6 +419,14 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
     }
     normalized_root = normalized_root.lexically_normal();
 
+    if (!std::filesystem::exists(normalized_root
+          / oxygen::content::import::LooseCookedLayout {}.index_file_name)) {
+      LOG_F(INFO, "TextureLoadingService: nothing is cooked in '{}' yet",
+        normalized_root.string());
+      cooked_entries_.clear();
+      return true;
+    }
+
     Inspection inspection;
     inspection.LoadFromRoot(normalized_root);
 
@@ -752,13 +761,23 @@ auto TextureLoadingService::StartLoadCookedTexture(
     });
 }
 
+auto TextureLoadingService::TexturesJsonPath() const -> std::filesystem::path
+{
+  // A cooked root holds only the files its index lists, so the example keeps
+  // its own import metadata beside the root.
+  auto path
+    = cooked_root_.has_filename() ? cooked_root_ : cooked_root_.parent_path();
+  path += ".textures.json";
+  return path;
+}
+
 void TextureLoadingService::LoadTexturesJson()
 {
   if (cooked_root_.empty()) {
     LOG_F(INFO, "TextureLoadingService: Skipping load, cooked_root is empty");
     return;
   }
-  std::filesystem::path json_path = cooked_root_ / "textures.json";
+  const auto json_path = TexturesJsonPath();
   if (!std::filesystem::exists(json_path)) {
     LOG_F(INFO, "TextureLoadingService: No textures.json found at '{}'",
       json_path.string());
@@ -832,7 +851,7 @@ void TextureLoadingService::SaveTexturesJson()
   if (cooked_root_.empty()) {
     return;
   }
-  std::filesystem::path json_path = cooked_root_ / "textures.json";
+  const auto json_path = TexturesJsonPath();
 
   nlohmann::json j;
   j["textures"] = nlohmann::json::array();
