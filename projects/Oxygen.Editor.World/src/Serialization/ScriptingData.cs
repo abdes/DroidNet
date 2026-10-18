@@ -37,11 +37,6 @@ public sealed record ScriptSlotData
 }
 
 /// <summary>Persisted script parameter value.</summary>
-/// <remarks>
-/// <see cref="Type"/> is <c>bool</c>, <c>int32</c>, <c>float</c>, <c>string</c>, <c>vec2</c>, <c>vec3</c>,
-/// <c>vec4</c>, <c>asset</c> or <c>node</c>. Vectors are arrays of numbers, assets are asset URIs and nodes are node
-/// identities.
-/// </remarks>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ScriptValueData
 {
