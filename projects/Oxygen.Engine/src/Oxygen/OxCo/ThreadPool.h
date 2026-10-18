@@ -185,8 +185,8 @@ private:
   // Main function of each worker thread.
   auto ThreadBody() -> void;
 
-  // Runs in main thread to trampoline to `processCQ()`. `arg` is this
-  // ThreadPool.
+  // Runs in main thread to trampoline to `DrainCompletionQueue()`. `arg` is
+  // the pool's `Data`, which outlives the pool while ticks are pending.
   static auto Tick(void* arg) -> void;
 
   // Runs in main thread to post a new task, which can be immediately serviced
@@ -273,9 +273,20 @@ private:
     std::atomic<Task*> cq_head { nullptr };
 
     // Interface allowing worker threads to enqueue a callback that will
-    // run on the main thread. The callback calls `tick()` on the
-    // ThreadPool.
+    // run on the main thread. The callback calls `Tick()` with this `Data`.
     std::unique_ptr<IThreadNotification> notification;
+
+    // The pool owning this `Data`; null once the pool is destroyed. Accessed
+    // only from main thread.
+    ThreadPool* pool = nullptr;
+
+    // Ticks posted but not yet run. A worker thread increments it before
+    // posting; the main thread decrements it when the tick runs.
+    std::atomic<size_t> pending_ticks = 0;
+
+    // Keeps this `Data` alive after the pool is destroyed until its last
+    // pending tick runs. Accessed only from main thread.
+    detail::IntrusivePtr<Data> keep_alive;
   };
   detail::IntrusivePtr<Data> d_;
 };
@@ -470,8 +481,9 @@ ThreadPool::ThreadPool(EventLoopT& el, const unsigned thread_count)
   // NOLINTNEXTLINE(bugprone-implicit-widening-of-multiplication-result)
   d_->sq_capacity = std::bit_ceil(thread_count) * 512;
   d_->sq.reset(new Slot[d_->sq_capacity]);
+  d_->pool = this;
   d_->notification = std::make_unique<ThreadNotificationImpl<EventLoopT>>(
-    el, &ThreadPool::Tick, this);
+    el, &ThreadPool::Tick, d_.Get());
 
   d_->threads.reserve(thread_count);
   for (size_t i = 0; i < thread_count; ++i) {
@@ -495,6 +507,13 @@ inline ThreadPool::~ThreadPool()
 
   DCHECK_F(d_->sq_head == d_->sq_tail);
   DCHECK_F(d_->cq_head == nullptr);
+
+  // A tick can still be queued on the event loop: a completion pushed while
+  // an earlier tick drained the queue posts a tick that finds nothing to do.
+  d_->pool = nullptr;
+  if (d_->pending_ticks.load(std::memory_order_acquire) != 0) {
+    d_->keep_alive = d_;
+  }
 }
 
 inline auto ThreadPool::ThreadBody() -> void
@@ -512,21 +531,26 @@ inline auto ThreadPool::ThreadBody() -> void
 
 /*static*/ inline auto ThreadPool::Tick(void* arg) -> void
 {
-  const auto self = static_cast<ThreadPool*>(arg);
+  // Holds the member variables alive even if the pool is gone or is
+  // destroyed below.
+  const detail::IntrusivePtr<Data> d { static_cast<Data*>(arg) };
+  const auto remaining
+    = d->pending_ticks.fetch_sub(1, std::memory_order_acq_rel) - 1;
 
-  // Grab a reference to member variables (see below)
-  const detail::IntrusivePtr<Data> d = self->d_;
+  if (d->pool == nullptr) {
+    if (remaining == 0) {
+      d->keep_alive = nullptr;
+    }
+    return;
+  }
 
-  self->DrainCompletionQueue(); // Note: this may destroy the ThreadPool
+  d->pool->DrainCompletionQueue(); // Note: this may destroy the ThreadPool
 
-  if (d->backoff_sq_head) {
-    // If we got here, the ThreadPool must not have been deleted yet
-    // (since the non-empty backoffSubmitQueue implies that some task is still
-    // blocked in run()).
+  if (d->pool != nullptr && d->backoff_sq_head) {
     // Hopefully worker thread consumed a few tasks from
     // the submission queue, so submit more tasks from the backoff
     // queue if possible.
-    self->SubmitBackoffSubmitQueue();
+    d->pool->SubmitBackoffSubmitQueue();
   }
 }
 
@@ -672,7 +696,8 @@ inline auto ThreadPool::PushToCompletionQueue(Task* task) -> void
     }
   }
   if (!head) {
-    d_->notification->Post(&ThreadPool::Tick, this);
+    d_->pending_ticks.fetch_add(1, std::memory_order_acq_rel);
+    d_->notification->Post(&ThreadPool::Tick, d_.Get());
   }
 }
 
