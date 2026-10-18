@@ -104,6 +104,21 @@ m_gtest_program(
 )
 
 m_gtest_program(PakFile SOURCES "PakFile_test.cpp")
+
+find_package(nlohmann_json CONFIG REQUIRED)
+m_gtest_program(VirtualPath SOURCES "VirtualPath_test.cpp")
+target_link_libraries(
+  "${META_MODULE_NAME}.VirtualPath.Tests"
+  PRIVATE
+    nlohmann_json::nlohmann_json
+)
+# The case table is the contract shared with the managed implementation; the
+# test reads it where it lives, beside VirtualPath.h.
+target_compile_definitions(
+  "${META_MODULE_NAME}.VirtualPath.Tests"
+  PRIVATE
+    OXYGEN_CONTENT_VIRTUAL_PATH_CASES="${CMAKE_CURRENT_SOURCE_DIR}/../VirtualPathCases.json"
+)
 m_gtest_program(PatchResolution SOURCES "PatchResolution_test.cpp")
 target_sources(
   "Oxygen.Content.PatchResolution.Tests"

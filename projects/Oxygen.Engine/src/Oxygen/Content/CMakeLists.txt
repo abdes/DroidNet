@@ -19,6 +19,7 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 
 find_package(glm CONFIG REQUIRED)
+find_package(utf8proc CONFIG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -77,6 +78,8 @@ set(
   "AssetLoaderLoading.cpp"
   "AssetValidation.cpp"
   "TextureResourceLocator.cpp"
+  "VirtualPath.cpp"
+  "Internal/Generated.UnicodeTables.h"
   "Internal/ContentIdentity.h"
   "Internal/ContentIdentity.cpp"
   "Internal/ContentIdentityRegistry.h"
@@ -168,7 +171,74 @@ target_link_libraries(
   PRIVATE
     glm::glm
     oxygen::input
+    utf8proc::utf8proc
 )
+
+# ------------------------------------------------------------------------------
+# Unicode tables of the virtual path rules
+# ------------------------------------------------------------------------------
+
+# UnicodeCodeGen writes Internal/Generated.UnicodeTables.h into the source tree,
+# where it is versioned, from the pinned Unicode Character Database. A stamp in
+# the build tree is the only declared output, so Clean never deletes the
+# versioned header. The generator writes the header only when its text changes,
+# so a regeneration that changes nothing recompiles nothing.
+set(_unicode_tool_dir "${CMAKE_CURRENT_SOURCE_DIR}/Tools/UnicodeCodeGen")
+set(_unicode_ucd_dir "${_unicode_tool_dir}/ucd/15.1.0")
+set(
+  _unicode_tables
+  "${CMAKE_CURRENT_SOURCE_DIR}/Internal/Generated.UnicodeTables.h"
+)
+file(
+  GLOB _unicode_tool_scripts
+  CONFIGURE_DEPENDS
+  "${_unicode_tool_dir}/src/unicode_codegen/*.py"
+)
+# MSBuild can already have loaded the old dependency list when ZERO_CHECK runs.
+# Track the scripts through CMake and expose one stable input to the build rule.
+set_property(
+  DIRECTORY
+  APPEND
+  PROPERTY
+    CMAKE_CONFIGURE_DEPENDS
+      ${_unicode_tool_scripts}
+)
+set(_unicode_tool_versions "")
+foreach(_script IN LISTS _unicode_tool_scripts)
+  file(SHA256 "${_script}" _script_hash)
+  string(APPEND _unicode_tool_versions "${_script} ${_script_hash}\n")
+endforeach()
+set(
+  _unicode_tool_inventory
+  "${CMAKE_CURRENT_BINARY_DIR}/unicode_generator_sources.txt"
+)
+file(
+  GENERATE
+  OUTPUT
+  "${_unicode_tool_inventory}"
+  CONTENT "${_unicode_tool_versions}"
+)
+set(_unicode_stamp "${CMAKE_CURRENT_BINARY_DIR}/unicode_tables.stamp")
+add_custom_command(
+  OUTPUT
+    ${_unicode_stamp}
+  COMMAND
+    ${Python3_EXECUTABLE} -m unicode_codegen.cli --ucd "${_unicode_ucd_dir}"
+    --cpp-out "${_unicode_tables}"
+  COMMAND
+    ${CMAKE_COMMAND} -E touch ${_unicode_stamp}
+  DEPENDS
+    "${_unicode_ucd_dir}/CaseFolding.txt"
+    "${_unicode_ucd_dir}/DerivedAge.txt"
+    "${_unicode_tool_inventory}"
+    "${_unicode_tool_dir}/pyproject.toml"
+    "${OXYGEN_PYTHON_LOCKFILE}"
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMENT "[UnicodeCodeGen] Generating the Unicode tables (source tree)"
+  VERBATIM
+)
+add_custom_target(oxygen-content_unicode_gen DEPENDS ${_unicode_stamp})
+add_dependencies(${META_MODULE_TARGET} oxygen-content_unicode_gen)
 
 # ------------------------------------------------------------------------------
 # Tests
@@ -176,6 +246,9 @@ target_link_libraries(
 
 if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test")
   add_subdirectory("test")
+endif()
+if(OXYGEN_BUILD_TESTS)
+  add_subdirectory("Tools/UnicodeCodeGen")
 endif()
 
 # ==============================================================================

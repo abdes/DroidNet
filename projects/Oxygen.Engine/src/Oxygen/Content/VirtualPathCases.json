@@ -1,0 +1,609 @@
+{
+  "unicode_version": "15.1.0",
+  "segments": [
+    {
+      "segment": "Red.omat",
+      "refusal": null
+    },
+    {
+      "segment": "Wet Rubber (2)",
+      "refusal": null
+    },
+    {
+      "segment": "Wood & Co, 'Oak' [x] +!",
+      "refusal": null
+    },
+    {
+      "segment": "v1.2",
+      "refusal": null
+    },
+    {
+      "segment": "Level.v2.oscene",
+      "refusal": null
+    },
+    {
+      "segment": "Player.input",
+      "refusal": null
+    },
+    {
+      "segment": ".hidden",
+      "refusal": null
+    },
+    {
+      "segment": "Mat\u00e9riaux",
+      "refusal": null
+    },
+    {
+      "segment": "\u6728\u6750",
+      "refusal": null
+    },
+    {
+      "segment": "\ud87a\udff0",
+      "refusal": null
+    },
+    {
+      "segment": "\ud884\udf50",
+      "refusal": null
+    },
+    {
+      "segment": "CONSOLE",
+      "refusal": null
+    },
+    {
+      "segment": "COM0",
+      "refusal": null
+    },
+    {
+      "segment": "LPT10",
+      "refusal": null
+    },
+    {
+      "segment": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "refusal": null
+    },
+    {
+      "segment": "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9a",
+      "refusal": null
+    },
+    {
+      "segment": "\ue000",
+      "refusal": null
+    },
+    {
+      "segment": "",
+      "refusal": "vpath.segment.empty"
+    },
+    {
+      "segment": ".",
+      "refusal": "vpath.segment.dot"
+    },
+    {
+      "segment": "..",
+      "refusal": "vpath.segment.dot"
+    },
+    {
+      "segment_hex": "61ff62",
+      "refusal": "vpath.segment.invalid_utf8"
+    },
+    {
+      "segment_hex": "c0af",
+      "refusal": "vpath.segment.invalid_utf8"
+    },
+    {
+      "segment_hex": "eda080",
+      "refusal": "vpath.segment.invalid_utf8"
+    },
+    {
+      "segment_hex": "f4908080",
+      "refusal": "vpath.segment.invalid_utf8"
+    },
+    {
+      "segment_hex": "e282",
+      "refusal": "vpath.segment.invalid_utf8"
+    },
+    {
+      "segment": "a\u0000b",
+      "refusal": "vpath.segment.control_character"
+    },
+    {
+      "segment": "a\u0007b",
+      "refusal": "vpath.segment.control_character"
+    },
+    {
+      "segment": "tab\tname",
+      "refusal": "vpath.segment.control_character"
+    },
+    {
+      "segment": "a\u007f",
+      "refusal": "vpath.segment.control_character"
+    },
+    {
+      "segment": "a\u0085",
+      "refusal": "vpath.segment.control_character"
+    },
+    {
+      "segment": " a\u0007",
+      "refusal": "vpath.segment.control_character"
+    },
+    {
+      "segment": "a\\b",
+      "refusal": "vpath.segment.reserved_character"
+    },
+    {
+      "segment": "a/b",
+      "refusal": "vpath.segment.reserved_character"
+    },
+    {
+      "segment": "a:b",
+      "refusal": "vpath.segment.reserved_character"
+    },
+    {
+      "segment": "a*b",
+      "refusal": "vpath.segment.reserved_character"
+    },
+    {
+      "segment": "a?b",
+      "refusal": "vpath.segment.reserved_character"
+    },
+    {
+      "segment": "a\"b",
+      "refusal": "vpath.segment.reserved_character"
+    },
+    {
+      "segment": "a<b",
+      "refusal": "vpath.segment.reserved_character"
+    },
+    {
+      "segment": "a>b",
+      "refusal": "vpath.segment.reserved_character"
+    },
+    {
+      "segment": "a|b",
+      "refusal": "vpath.segment.reserved_character"
+    },
+    {
+      "segment": " a:b",
+      "refusal": "vpath.segment.reserved_character"
+    },
+    {
+      "segment": "\u0378",
+      "refusal": "vpath.segment.unassigned_code_point"
+    },
+    {
+      "segment": "\ud87b\ude5e",
+      "refusal": "vpath.segment.unassigned_code_point"
+    },
+    {
+      "segment": "a\udb40\udc80",
+      "refusal": "vpath.segment.unassigned_code_point"
+    },
+    {
+      "segment": "u\u0308",
+      "refusal": "vpath.segment.not_nfc"
+    },
+    {
+      "segment": "\u212b",
+      "refusal": "vpath.segment.not_nfc"
+    },
+    {
+      "segment": "\u1100\u1161",
+      "refusal": "vpath.segment.not_nfc"
+    },
+    {
+      "segment": " u\u0308",
+      "refusal": "vpath.segment.not_nfc"
+    },
+    {
+      "segment": " a",
+      "refusal": "vpath.segment.edge_space"
+    },
+    {
+      "segment": "a ",
+      "refusal": "vpath.segment.edge_space"
+    },
+    {
+      "segment": " ",
+      "refusal": "vpath.segment.edge_space"
+    },
+    {
+      "segment": "a.",
+      "refusal": "vpath.segment.trailing_dot"
+    },
+    {
+      "segment": "...",
+      "refusal": "vpath.segment.trailing_dot"
+    },
+    {
+      "segment": "Red.omat.",
+      "refusal": "vpath.segment.trailing_dot"
+    },
+    {
+      "segment": "CON",
+      "refusal": "vpath.segment.device_name"
+    },
+    {
+      "segment": "con",
+      "refusal": "vpath.segment.device_name"
+    },
+    {
+      "segment": "Prn",
+      "refusal": "vpath.segment.device_name"
+    },
+    {
+      "segment": "AUX.txt",
+      "refusal": "vpath.segment.device_name"
+    },
+    {
+      "segment": "nul.omat",
+      "refusal": "vpath.segment.device_name"
+    },
+    {
+      "segment": "COM1",
+      "refusal": "vpath.segment.device_name"
+    },
+    {
+      "segment": "com9.log",
+      "refusal": "vpath.segment.device_name"
+    },
+    {
+      "segment": "LPT1",
+      "refusal": "vpath.segment.device_name"
+    },
+    {
+      "segment": "lpt9.tar.gz",
+      "refusal": "vpath.segment.device_name"
+    },
+    {
+      "segment": "CON ",
+      "refusal": "vpath.segment.edge_space"
+    },
+    {
+      "segment": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "refusal": "vpath.segment.too_long"
+    },
+    {
+      "segment": "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9",
+      "refusal": "vpath.segment.too_long"
+    }
+  ],
+  "mounts": [
+    {
+      "mount": "Content",
+      "refusal": null
+    },
+    {
+      "mount": "_Shared",
+      "refusal": null
+    },
+    {
+      "mount": "Game-2",
+      "refusal": null
+    },
+    {
+      "mount": ".cooked",
+      "refusal": null
+    },
+    {
+      "mount": "a",
+      "refusal": null
+    },
+    {
+      "mount": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "refusal": null
+    },
+    {
+      "mount": "",
+      "refusal": "vpath.mount.invalid"
+    },
+    {
+      "mount": ".",
+      "refusal": "vpath.mount.invalid"
+    },
+    {
+      "mount": "..cooked",
+      "refusal": "vpath.mount.invalid"
+    },
+    {
+      "mount": "1Content",
+      "refusal": "vpath.mount.invalid"
+    },
+    {
+      "mount": "-Content",
+      "refusal": "vpath.mount.invalid"
+    },
+    {
+      "mount": "Con tent",
+      "refusal": "vpath.mount.invalid"
+    },
+    {
+      "mount": "Content.v2",
+      "refusal": "vpath.mount.invalid"
+    },
+    {
+      "mount": "Cont\u00e9nt",
+      "refusal": "vpath.mount.invalid"
+    },
+    {
+      "mount": ".1cooked",
+      "refusal": "vpath.mount.invalid"
+    },
+    {
+      "mount": "Content/",
+      "refusal": "vpath.mount.invalid"
+    },
+    {
+      "mount": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "refusal": "vpath.segment.too_long"
+    }
+  ],
+  "paths": [
+    {
+      "path": "/Content/Materials/Red.omat",
+      "rules": "cooked",
+      "refusal": null
+    },
+    {
+      "path": "/Content/Input/Player.input/Jump.oiact",
+      "rules": "cooked",
+      "refusal": null
+    },
+    {
+      "path": "/Content/Models/Ship.glb/Hull.ogeo",
+      "rules": "cooked",
+      "refusal": null
+    },
+    {
+      "path": "/Content/Level.v2.oscene",
+      "rules": "cooked",
+      "refusal": null
+    },
+    {
+      "path": "/Content/v1.2/Rock.omat",
+      "rules": "cooked",
+      "refusal": null
+    },
+    {
+      "path": "/Content/Wet Rubber (2).opmat",
+      "rules": "cooked",
+      "refusal": null
+    },
+    {
+      "path": "/Content/Mat\u00e9riaux/Bois.omat",
+      "rules": "cooked",
+      "refusal": null
+    },
+    {
+      "path": "/.cooked/Materials/Wood.omat",
+      "rules": "cooked",
+      "refusal": null
+    },
+    {
+      "path": "/Content/.cooked/Wood.omat",
+      "rules": "cooked",
+      "refusal": null
+    },
+    {
+      "path": "/Content/SourceMedia/Wood.png",
+      "rules": "cooked",
+      "refusal": null
+    },
+    {
+      "path": "/Content/.hidden.omat",
+      "rules": "cooked",
+      "refusal": null
+    },
+    {
+      "path": "/Content/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.omat",
+      "rules": "cooked",
+      "refusal": null
+    },
+    {
+      "path": "/Content/Materials/Red.omat",
+      "rules": "authored",
+      "refusal": null
+    },
+    {
+      "path": "/.cooked/Materials/Wood.omat",
+      "rules": "authored",
+      "refusal": null
+    },
+    {
+      "path": "/Content/Sources/Media.omat",
+      "rules": "authored",
+      "refusal": null
+    },
+    {
+      "path": "",
+      "rules": "cooked",
+      "refusal": "vpath.empty"
+    },
+    {
+      "path": "Content/Red.omat",
+      "rules": "cooked",
+      "refusal": "vpath.not_absolute"
+    },
+    {
+      "path": "/Content/Red.omat/",
+      "rules": "cooked",
+      "refusal": "vpath.trailing_slash"
+    },
+    {
+      "path": "/",
+      "rules": "cooked",
+      "refusal": "vpath.segment.empty"
+    },
+    {
+      "path": "/Content//Red.omat",
+      "rules": "cooked",
+      "refusal": "vpath.segment.empty"
+    },
+    {
+      "path": "//Red.omat",
+      "rules": "cooked",
+      "refusal": "vpath.segment.empty"
+    },
+    {
+      "path": "/Content/./Red.omat",
+      "rules": "cooked",
+      "refusal": "vpath.segment.dot"
+    },
+    {
+      "path": "/Content/../Red.omat",
+      "rules": "cooked",
+      "refusal": "vpath.segment.dot"
+    },
+    {
+      "path": "/1Content/Red.omat",
+      "rules": "cooked",
+      "refusal": "vpath.mount.invalid"
+    },
+    {
+      "path": "/./Red.omat",
+      "rules": "cooked",
+      "refusal": "vpath.mount.invalid"
+    },
+    {
+      "path": "/Con tent/Red.omat",
+      "rules": "cooked",
+      "refusal": "vpath.mount.invalid"
+    },
+    {
+      "path": "/Content",
+      "rules": "cooked",
+      "refusal": "vpath.mount_only"
+    },
+    {
+      "path": "/.cooked",
+      "rules": "cooked",
+      "refusal": "vpath.mount_only"
+    },
+    {
+      "path": "/Content/Red",
+      "rules": "cooked",
+      "refusal": "vpath.leaf.missing_extension"
+    },
+    {
+      "path": "/Content/.omat",
+      "rules": "cooked",
+      "refusal": "vpath.leaf.missing_extension"
+    },
+    {
+      "path": "/Content/Materials",
+      "rules": "cooked",
+      "refusal": "vpath.leaf.missing_extension"
+    },
+    {
+      "path": "/Content/a\\b.omat",
+      "rules": "cooked",
+      "refusal": "vpath.segment.reserved_character"
+    },
+    {
+      "path": "/Content/CON.omat",
+      "rules": "cooked",
+      "refusal": "vpath.segment.device_name"
+    },
+    {
+      "path": "/Content/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Red.omat",
+      "rules": "cooked",
+      "refusal": "vpath.segment.too_long"
+    },
+    {
+      "path": "/Content/Red.omat ",
+      "rules": "cooked",
+      "refusal": "vpath.segment.edge_space"
+    },
+    {
+      "path": "/Content/.cooked/Wood.omat",
+      "rules": "authored",
+      "refusal": "vpath.segment.derived_content"
+    },
+    {
+      "path": "/Content/SourceMedia/Wood.png",
+      "rules": "authored",
+      "refusal": "vpath.segment.derived_content"
+    },
+    {
+      "path": "/Content/Materials/.hidden.omat",
+      "rules": "authored",
+      "refusal": "vpath.segment.derived_content"
+    },
+    {
+      "path": "/Content/.imported/x.omat",
+      "rules": "authored",
+      "refusal": "vpath.segment.derived_content"
+    },
+    {
+      "path": "/Content/Red",
+      "rules": "authored",
+      "refusal": "vpath.leaf.missing_extension"
+    }
+  ],
+  "nfc": [
+    {
+      "text": "u\u0308",
+      "nfc": "\u00fc"
+    },
+    {
+      "text": "\u212b",
+      "nfc": "\u00c5"
+    },
+    {
+      "text": "\u1100\u1161",
+      "nfc": "\uac00"
+    },
+    {
+      "text": "Mat\u00e9riaux",
+      "nfc": "Mat\u00e9riaux"
+    },
+    {
+      "text": "",
+      "nfc": ""
+    },
+    {
+      "text": "e\u0301\u0323",
+      "nfc": "\u1eb9\u0301"
+    }
+  ],
+  "fold": [
+    {
+      "text": "Paint",
+      "folded": "paint"
+    },
+    {
+      "text": "STRASSE",
+      "folded": "strasse"
+    },
+    {
+      "text": "\u1e9e",
+      "folded": "\u00df"
+    },
+    {
+      "text": "\u00df",
+      "folded": "\u00df"
+    },
+    {
+      "text": "\u0130",
+      "folded": "\u0130"
+    },
+    {
+      "text": "\u03a3\u03c2",
+      "folded": "\u03c3\u03c3"
+    },
+    {
+      "text": "\u01c5",
+      "folded": "\u01c6"
+    },
+    {
+      "text": "\u00c9COLE",
+      "folded": "\u00e9cole"
+    },
+    {
+      "text": "\ud801\udc00",
+      "folded": "\ud801\udc28"
+    },
+    {
+      "text": "",
+      "folded": ""
+    }
+  ]
+}

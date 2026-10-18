@@ -14,6 +14,7 @@
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/Internal/PakFileSource.h>
@@ -73,11 +74,9 @@ auto VirtualPathResolver::ClearMounts() -> void { impl_->sources.Clear(); }
 auto VirtualPathResolver::ResolveAssetKey(
   const std::string_view virtual_path) const -> std::optional<data::AssetKey>
 {
-  if (const auto error = ValidateCanonicalVirtualPath(
-        virtual_path, VirtualPathRuleSet::kSyntaxAndStandardMountRoot);
-    error.has_value()) {
-    throw std::invalid_argument(
-      "Virtual path is not canonical: " + std::string(*error));
+  if (const auto error = ValidateVirtualPath(virtual_path); error.has_value()) {
+    throw std::invalid_argument(std::string("Virtual path is not canonical: ")
+      + nostd::to_string(*error));
   }
 
   const internal::VirtualPathResolutionCallbacks callbacks {

@@ -16,6 +16,7 @@ members = [
     "oxygen-engine-tools",
     "oxygen-tools",
     "oxygen-vortex-tools",
+    "unicode-codegen",
 ]
 
 [[package]]
@@ -104,6 +105,7 @@ dependencies = [
     { name = "droidnet-tooling-scripts" },
     { name = "oxygen-engine-tools" },
     { name = "oxygen-tools", extra = ["codemod"] },
+    { name = "unicode-codegen" },
 ]
 
 [package.dev-dependencies]
@@ -116,6 +118,7 @@ dev = [
     { name = "pre-commit" },
     { name = "pyright", extra = ["nodejs"] },
     { name = "ruff" },
+    { name = "unicode-codegen", extra = ["test"] },
 ]
 graphics = [
     { name = "oxygen-atmosphere-tools" },
@@ -128,6 +131,7 @@ requires-dist = [
     { name = "droidnet-tooling-scripts", editable = "tooling/scripts" },
     { name = "oxygen-engine-tools", virtual = "projects/Oxygen.Engine" },
     { name = "oxygen-tools", extras = ["codemod"], editable = "projects/Oxygen.Engine/tools/oxytools" },
+    { name = "unicode-codegen", editable = "projects/Oxygen.Engine/src/Oxygen/Content/Tools/UnicodeCodeGen" },
 ]
 
 [package.metadata.requires-dev]
@@ -140,6 +144,7 @@ dev = [
     { name = "pre-commit", specifier = ">=4.5,<5" },
     { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.400,<2" },
     { name = "ruff", specifier = ">=0.15,<0.16" },
+    { name = "unicode-codegen", extras = ["test"], editable = "projects/Oxygen.Engine/src/Oxygen/Content/Tools/UnicodeCodeGen" },
 ]
 graphics = [
     { name = "oxygen-atmosphere-tools", virtual = "projects/Oxygen.Engine/tools/atmosphere" },
@@ -1049,6 +1054,20 @@ sdist = { url = "https://files.pythonhosted.org/packages/f6/cc/6253133b5bb138fc3
 wheels = [
     { url = "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl", hash = "sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8", size = 45571, upload-time = "2026-07-02T08:40:04.659Z" },
 ]
+
+[[package]]
+name = "unicode-codegen"
+version = "0.1.0"
+source = { editable = "projects/Oxygen.Engine/src/Oxygen/Content/Tools/UnicodeCodeGen" }
+
+[package.optional-dependencies]
+test = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pytest", marker = "extra == 'test'", specifier = ">=8,<10" }]
+provides-extras = ["test"]
 
 [[package]]
 name = "virtualenv"

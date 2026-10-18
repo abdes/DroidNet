@@ -29,32 +29,14 @@ path within the source**. The full string (mount root + asset path) is what is
 hashed to produce the `AssetKey`; the mount root is therefore part of the
 identity, not just a routing hint.
 
-**Syntax.** A canonical virtual path must conform to all of the following rules.
-Violation of any rule makes the string non-canonical and the behaviour of all
-consuming systems undefined.
-
-- Encoded as **UTF-8**.
-- Always **absolute**: begins with exactly one `/` character.
-- **Segments** are the non-empty substrings between consecutive `/` separators.
-  Empty segments (`//`) and a trailing `/` are prohibited.
-- The **only permitted characters** within any segment are: ASCII letters (A–Z,
-  a–z), ASCII digits (0–9), hyphens (`-`), underscores (`_`), and dots (`.`).
-  Spaces, control characters, and all other Unicode code points are prohibited
-  including in the leaf segment.
-- Dots are restricted to the **leaf segment only**, where exactly one dot
-  separates the asset name from its type suffix. Non-leaf segments must not
-  contain dots.
-- The segments `.` and `..` are prohibited — no relative traversal.
-- Total byte length must not exceed **512 bytes** (excluding any null
-  terminator).
-- **Case-sensitive** throughout, including the mount root. All tools must
-  preserve and compare casing exactly; platform case-folding must never be
-  applied silently.
+**Syntax.** The rules for segments, mounts and paths, with their refusal codes,
+are those of [virtual paths](../../Content/Docs/virtual_paths.md).
 
 **Mount roots.** A mount root is a short identifier registered with the
 `VirtualPathResolver` that maps to a physical content source namespace. Mount
-roots are not limited to a fixed allowlist: any valid identifier is accepted,
-plus the special core token `/.cooked`.
+roots are not limited to a fixed allowlist: any mount name the rules accept
+works, and names starting with `.`, such as `/.cooked`, are reserved by the
+engine.
 
 | Mount root | Source type                                                                                                     | Example                                        |
 | ---------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -95,7 +77,7 @@ Because the mount root is part of the identity,
 
 | Segment       | Convention                                                                                                                       | Examples                                                                          |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `MountRoot`   | Identifier `[A-Za-z_][A-Za-z0-9_-]*` or the special token `.cooked`                                                              | `/Engine`, `/Game`, `/.cooked`, `/Custom`, `/game`                                |
+| `MountRoot`   | A mount name; engine-reserved names start with `.`                                                                               | `/Engine`, `/Game`, `/.cooked`, `/Custom`, `/game`                                |
 | `Domain`      | **PascalCase**, one word, broad functional area that owns the asset class                                                        | `Physics`, `Rendering`, `Audio`, `Animation`, `World`, `UI`                       |
 | `Category`    | **PascalCase**, one or two words, logical sub-grouping within the domain                                                         | `Materials`, `Shapes`, `Joints`, `Vehicles`, `SoftBodies`, `Characters`, `Scenes` |
 | `Subcategory` | **PascalCase**, optional, for large categories                                                                                   | `Wheeled`, `Tracked`, `Ragdolls`                                                  |
@@ -137,24 +119,8 @@ convention. The following suffixes are defined by `LooseCookedLayout`:
 /Game/Physics/Materials/Wet Rubber (2).opmat
 ```
 
-Segments use ASCII letters and digits, `-`, `_`, `.`, the space and parentheses,
-so authored names such as `Wet Rubber (2)` cook as they are named. A segment
-must not start or end with a space.
-
-**Examples of invalid canonical virtual paths and the violated rule:**
-
-```text
-/9game/Physics/Materials/Rubber.opmat  (mount root must be a valid identifier)
-Physics/Materials/Rubber.opmat         (no leading slash — not absolute)
-/Game/Physics/Materials/Rubber.opmat/  (trailing slash — prohibited)
-/Game/Physics//Materials/Rubber.opmat  (empty segment — double slash)
-/Game/Physics/Materials/../Rubber.opmat (relative traversal — prohibited)
-/Game/Physics/Materials/Rubber[2].opmat (bracket — prohibited character)
-/Game/Physics /Materials/Rubber.opmat  (segment ends with a space)
-/Game/Physics.Materials/Rubber.opmat   (dot in non-leaf segment — prohibited)
-/Game/Physics/Materials/Rubber         (no type suffix — ambiguous asset class)
-/Pak/DLC.01/Game/Physics/Materials/Lava.opmat (dot in non-leaf segment — prohibited)
-```
+The rules refuse, for example, a mount starting with a digit, a relative
+segment, a reserved character such as `:` and a leaf without a type suffix.
 
 > **Implementation status (2026-03-04):** Phase 1 identity migration is now in
 > place. `AssetKey` is a dedicated 16-byte value type, deterministic minting is

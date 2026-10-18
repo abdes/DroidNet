@@ -9,171 +9,79 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 
+#include <Oxygen/Content/api_export.h>
+
+//! Rules for virtual paths, path segments and mount names.
+/*!
+ The rules, their order and their refusal codes are stated in
+ `Content/Docs/virtual_paths.md`. The managed implementation
+ (`Oxygen.Managed.Core`) agrees with this one exactly: both test suites run
+ `VirtualPathCases.json`, kept beside this header.
+*/
 namespace oxygen::content {
 
-enum class VirtualPathRuleSet : std::uint8_t {
-  kSyntaxOnly = 0,
-  kSyntaxAndStandardMountRoot,
+//! Why a virtual path, a segment or a mount name is refused.
+enum class VirtualPathError : std::uint8_t {
+  kEmpty,
+  kNotAbsolute,
+  kTrailingSlash,
+  kEmptySegment,
+  kDotSegment,
+  kInvalidUtf8,
+  kControlCharacter,
+  kReservedCharacter,
+  kUnassignedCodePoint,
+  kNotNfc,
+  kEdgeSpace,
+  kTrailingDot,
+  kDeviceName,
+  kSegmentTooLong,
+  kInvalidMountName,
+  kMountOnly,
+  kMissingExtension,
+  kDerivedContent,
 };
 
-constexpr std::size_t kMaxCanonicalVirtualPathBytes = 512;
+//! The stable refusal code, such as `vpath.segment.reserved_character`.
+OXGN_CNTT_NDAPI auto to_string(VirtualPathError error) noexcept -> const char*;
 
-namespace detail {
+//! Which rules a path is checked against.
+enum class VirtualPathRuleSet : std::uint8_t {
+  //! A path the engine writes or resolves.
+  kCooked,
+  //! A path being authored; adds the derived content rule.
+  kAuthored,
+};
 
-  [[nodiscard]] constexpr auto IsAsciiAlpha(const char c) noexcept -> bool
-  {
-    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
-  }
+//! The longest segment, in bytes of UTF-8: the portable file name bound.
+inline constexpr std::size_t kMaxVirtualPathSegmentBytes = 255;
 
-  [[nodiscard]] constexpr auto IsAsciiAlphaNumeric(const char c) noexcept
-    -> bool
-  {
-    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
-      || (c >= '0' && c <= '9');
-  }
+//! Checks one path segment against the segment rule.
+OXGN_CNTT_NDAPI auto ValidateVirtualPathSegment(std::string_view segment)
+  -> std::optional<VirtualPathError>;
 
-  //! Letters, digits, '-', '_', '.', and the space and parentheses that
-  //! authored names such as "Wet Rubber (2)" use.
-  [[nodiscard]] constexpr auto IsAllowedSegmentChar(const char c) noexcept
-    -> bool
-  {
-    return IsAsciiAlphaNumeric(c) || c == '-' || c == '_' || c == '.'
-      || c == ' ' || c == '(' || c == ')';
-  }
+//! Checks a mount name, without its leading `/`.
+OXGN_CNTT_NDAPI auto ValidateMountName(std::string_view mount)
+  -> std::optional<VirtualPathError>;
 
-  [[nodiscard]] constexpr auto DotCount(const std::string_view segment) noexcept
-    -> std::size_t
-  {
-    auto count = std::size_t { 0 };
-    for (const auto c : segment) {
-      if (c == '.') {
-        ++count;
-      }
-    }
-    return count;
-  }
+//! Checks a virtual path.
+OXGN_CNTT_NDAPI auto ValidateVirtualPath(std::string_view virtual_path,
+  VirtualPathRuleSet rules = VirtualPathRuleSet::kCooked)
+  -> std::optional<VirtualPathError>;
 
-  [[nodiscard]] constexpr auto IsValidMountRootIdentifier(
-    const std::string_view segment) noexcept -> bool
-  {
-    // Core engine mount root token.
-    if (segment == ".cooked") {
-      return true;
-    }
-    if (segment.empty()) {
-      return false;
-    }
+//! True when `ValidateVirtualPath` accepts the path.
+OXGN_CNTT_NDAPI auto IsCanonicalVirtualPath(std::string_view virtual_path,
+  VirtualPathRuleSet rules = VirtualPathRuleSet::kCooked) -> bool;
 
-    const auto first = segment.front();
-    if (!(IsAsciiAlpha(first) || first == '_')) {
-      return false;
-    }
+//! The NFC form of UTF-8 text, or nothing when the text is not valid UTF-8.
+OXGN_CNTT_NDAPI auto ToNfc(std::string_view text) -> std::optional<std::string>;
 
-    for (const auto c : segment.substr(1)) {
-      if (!(IsAsciiAlphaNumeric(c) || c == '_' || c == '-')) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-} // namespace detail
-
-[[nodiscard]] inline auto ValidateCanonicalVirtualPath(
-  const std::string_view virtual_path,
-  const VirtualPathRuleSet rules = VirtualPathRuleSet::kSyntaxOnly)
-  -> std::optional<std::string_view>
-{
-  if (virtual_path.empty()) {
-    return "path must not be empty";
-  }
-  if (virtual_path.size() > kMaxCanonicalVirtualPathBytes) {
-    return "path must be <= 512 bytes";
-  }
-  if (virtual_path.front() != '/') {
-    return "path must start with '/'";
-  }
-  if (virtual_path.find('\\') != std::string_view::npos) {
-    return "path must not contain '\\\\'";
-  }
-  if (virtual_path.size() > 1 && virtual_path.back() == '/') {
-    return "path must not have a trailing '/'";
-  }
-
-  auto first_segment = std::string_view {};
-  auto segment_index = std::size_t { 0 };
-
-  auto pos = std::size_t { 1 };
-  while (pos < virtual_path.size()) {
-    const auto next = virtual_path.find('/', pos);
-    const auto end
-      = next == std::string_view::npos ? virtual_path.size() : next;
-    const auto segment = virtual_path.substr(pos, end - pos);
-    const auto is_leaf = next == std::string_view::npos;
-    ++segment_index;
-
-    if (segment.empty()) {
-      return "path must not contain empty segments";
-    }
-    if (segment == "." || segment == "..") {
-      return "path must not contain '.' or '..' segments";
-    }
-
-    if (segment_index == 1) {
-      first_segment = segment;
-    }
-
-    for (const auto c : segment) {
-      if (!detail::IsAllowedSegmentChar(c)) {
-        return "segment contains disallowed characters";
-      }
-    }
-    // Windows drops a trailing space from file names, so such a segment could
-    // not name its source file. A leading space is rejected too, so that two
-    // names that read the same cannot both exist.
-    if (segment.front() == ' ' || segment.back() == ' ') {
-      return "segment must not start or end with a space";
-    }
-
-    if (is_leaf) {
-      const auto dot_count = detail::DotCount(segment);
-      if (dot_count != 1 || segment.front() == '.' || segment.back() == '.') {
-        return "leaf segment must contain exactly one '.' separator";
-      }
-    } else {
-      const auto allow_mount_dot = segment_index == 1 && segment == ".cooked";
-      if (!allow_mount_dot && segment.find('.') != std::string_view::npos) {
-        return "non-leaf segments must not contain '.'";
-      }
-    }
-
-    if (next == std::string_view::npos) {
-      break;
-    }
-    pos = next + 1;
-  }
-
-  if (segment_index == 0) {
-    return "path must contain at least one segment";
-  }
-
-  if (rules == VirtualPathRuleSet::kSyntaxAndStandardMountRoot) {
-    if (!detail::IsValidMountRootIdentifier(first_segment)) {
-      return "mount root must be a valid identifier";
-    }
-    return std::nullopt;
-  }
-
-  return std::nullopt;
-}
-
-[[nodiscard]] inline auto IsCanonicalVirtualPath(
-  const std::string_view virtual_path,
-  const VirtualPathRuleSet rules = VirtualPathRuleSet::kSyntaxOnly) -> bool
-{
-  return !ValidateCanonicalVirtualPath(virtual_path, rules).has_value();
-}
+//! The Unicode 15.1 simple case folding of UTF-8 text, or nothing when the text
+//! is not valid UTF-8.
+OXGN_CNTT_NDAPI auto FoldCase(std::string_view text)
+  -> std::optional<std::string>;
 
 } // namespace oxygen::content

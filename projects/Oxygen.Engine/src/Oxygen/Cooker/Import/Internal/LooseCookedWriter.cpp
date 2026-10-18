@@ -29,6 +29,7 @@
 #include <Oxygen/Base/Endian.h>
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Uuid.h>
@@ -131,14 +132,12 @@ namespace {
     }
   }
 
-  auto ValidateVirtualPath(const std::string_view virtual_path) -> void
+  auto RequireCanonicalVirtualPath(const std::string_view virtual_path) -> void
   {
-    if (const auto error
-      = oxygen::content::ValidateCanonicalVirtualPath(virtual_path,
-        oxygen::content::VirtualPathRuleSet::kSyntaxAndStandardMountRoot);
+    if (const auto error = oxygen::content::ValidateVirtualPath(virtual_path);
       error.has_value()) {
-      throw std::runtime_error(
-        "Virtual path is not canonical: " + std::string(*error));
+      throw std::runtime_error(std::string("Virtual path is not canonical: ")
+        + nostd::to_string(*error));
     }
   }
 
@@ -449,7 +448,7 @@ struct LooseCookedWriter::Impl final {
     std::string_view descriptor_relpath, std::span<const std::byte> bytes,
     const data::AssetReferences& references) -> void
   {
-    ValidateVirtualPath(virtual_path);
+    RequireCanonicalVirtualPath(virtual_path);
     ValidateRelativePath(descriptor_relpath);
     ValidateAssetDescriptor(asset_type, key, bytes, references);
 
@@ -542,7 +541,7 @@ struct LooseCookedWriter::Impl final {
     const data::AssetReferences& references,
     std::optional<base::Sha256Digest> descriptor_sha256) -> void
   {
-    ValidateVirtualPath(virtual_path);
+    RequireCanonicalVirtualPath(virtual_path);
     ValidateRelativePath(descriptor_relpath);
 
     const auto path_on_disk
@@ -613,7 +612,7 @@ struct LooseCookedWriter::Impl final {
 
   auto RemoveAssetDescriptor(const std::string_view virtual_path) -> void
   {
-    ValidateVirtualPath(virtual_path);
+    RequireCanonicalVirtualPath(virtual_path);
     removed_virtual_paths_.emplace(virtual_path);
   }
 

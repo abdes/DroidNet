@@ -1,6 +1,9 @@
 {
   "extends": "../../pyrightconfig.json",
   "typeCheckingMode": "basic",
-  "extraPaths": ["src/Oxygen/Core/Tools/BindlessCodeGen/src"],
+  "extraPaths": [
+    "src/Oxygen/Core/Tools/BindlessCodeGen/src",
+    "src/Oxygen/Content/Tools/UnicodeCodeGen/src"
+  ],
   "reportOptionalCall": "none"
 }

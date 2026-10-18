@@ -6,12 +6,13 @@ requires-python = ">=3.11"
 dependencies = [
     "droidnet-tooling-scripts",
     "bindless-codegen",
+    "unicode-codegen",
     "oxygen-tools[codemod]",
     "oxygen-engine-tools",
 ]
 
 [dependency-groups]
-dev = ["bindless-codegen[test]", "pre-commit>=4.5,<5", "pyright[nodejs]>=1.1.400,<2", "ruff>=0.15,<0.16"]
+dev = ["bindless-codegen[test]", "unicode-codegen[test]", "pre-commit>=4.5,<5", "pyright[nodejs]>=1.1.400,<2", "ruff>=0.15,<0.16"]
 build-tools = ["setuptools>=77,<83", "wheel"]
 graphics = ["oxygen-atmosphere-tools", "oxygen-vortex-tools[images,numerics]"]
 
@@ -28,11 +29,13 @@ members = [
     "projects/Oxygen.Engine/tools/atmosphere",
     "projects/Oxygen.Engine/tools/vortex",
     "projects/Oxygen.Engine/src/Oxygen/Core/Tools/BindlessCodeGen",
+    "projects/Oxygen.Engine/src/Oxygen/Content/Tools/UnicodeCodeGen",
 ]
 
 [tool.uv.sources]
 droidnet-tooling-scripts = { workspace = true }
 bindless-codegen = { workspace = true }
+unicode-codegen = { workspace = true }
 oxygen-tools = { workspace = true }
 oxygen-engine-tools = { workspace = true }
 oxygen-atmosphere-tools = { workspace = true }
@@ -43,4 +46,5 @@ oxygen-vortex-tools = { workspace = true }
 [tool.uv.extra-build-dependencies]
 droidnet-tooling-scripts = [{ requirement = "setuptools", match-runtime = true }, { requirement = "wheel", match-runtime = true }]
 bindless-codegen = [{ requirement = "setuptools", match-runtime = true }, { requirement = "wheel", match-runtime = true }]
+unicode-codegen = [{ requirement = "setuptools", match-runtime = true }, { requirement = "wheel", match-runtime = true }]
 oxygen-tools = [{ requirement = "setuptools", match-runtime = true }, { requirement = "wheel", match-runtime = true }]

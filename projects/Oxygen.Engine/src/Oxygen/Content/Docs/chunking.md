@@ -1,6 +1,7 @@
 # Chunking / Loading
 
-> Defines the PAK file format (layout, alignment, classification). For implementation status see `implementation_plan.md#detailed-feature-matrix`.
+> Defines the PAK file format (layout, alignment, classification). For
+> implementation status see `implementation_plan.md#detailed-feature-matrix`.
 
 This document defines a binary `.pak` container format optimized for GPU asset
 streaming, alignment, and fast loading. Inspired by Unreal Engine, Frostbite,
@@ -210,8 +211,8 @@ loading, but it is not sufficient for editor browsing because it does not
 contain canonical virtual paths.
 
 To support editor and tooling workflows (scene explorer, content browser,
-diagnostics), a pak file may embed a **Browse Index** that maps virtual paths
-to `AssetKey`.
+diagnostics), a pak file may embed a **Browse Index** that maps virtual paths to
+`AssetKey`.
 
 ### Location
 
@@ -256,9 +257,7 @@ All values are little-endian.
 
 ### Virtual Path Rules
 
-Single source of truth:
-
-- See [virtual-paths.md](../../../../../Oxygen.Assets/docs/virtual-paths.md).
+See [virtual paths](virtual_paths.md).
 
 ### Requirements
 

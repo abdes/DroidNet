@@ -18,6 +18,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/AssetValidation.h>
@@ -90,14 +91,12 @@ namespace {
   }
 
   //! Validate virtual path (e.g., "/.cooked/Materials/Wood").
-  auto ValidateVirtualPath(const std::string_view virtual_path) -> void
+  auto RequireCanonicalVirtualPath(const std::string_view virtual_path) -> void
   {
-    if (const auto error
-      = oxygen::content::ValidateCanonicalVirtualPath(virtual_path,
-        oxygen::content::VirtualPathRuleSet::kSyntaxAndStandardMountRoot);
+    if (const auto error = oxygen::content::ValidateVirtualPath(virtual_path);
       error.has_value()) {
-      throw std::runtime_error(
-        "Virtual path is not canonical: " + std::string(*error));
+      throw std::runtime_error(std::string("Virtual path is not canonical: ")
+        + nostd::to_string(*error));
     }
   }
 
@@ -132,7 +131,7 @@ auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
   }
 
   // Validate paths (must match PAK format requirements)
-  ValidateVirtualPath(virtual_path);
+  RequireCanonicalVirtualPath(virtual_path);
   ValidateRelativePath(descriptor_relpath);
   ValidateAssetDescriptor(asset_type, key, bytes, references);
 
@@ -174,7 +173,7 @@ auto AssetEmitter::EmitSync(const data::AssetKey& key,
     throw std::runtime_error("AssetEmitter is finalized");
   }
 
-  ValidateVirtualPath(virtual_path);
+  RequireCanonicalVirtualPath(virtual_path);
   ValidateRelativePath(descriptor_relpath);
   ValidateAssetDescriptor(asset_type, key, bytes, references);
 

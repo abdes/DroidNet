@@ -24,6 +24,7 @@
 #include <utility>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
@@ -187,13 +188,12 @@ auto ValidateRelativePath(const std::string_view relpath) -> void
   }
 }
 
-auto ValidateVirtualPath(const std::string_view virtual_path) -> void
+auto RequireCanonicalVirtualPath(const std::string_view virtual_path) -> void
 {
-  if (const auto error = content::ValidateCanonicalVirtualPath(
-        virtual_path, content::VirtualPathRuleSet::kSyntaxAndStandardMountRoot);
+  if (const auto error = content::ValidateVirtualPath(virtual_path);
     error.has_value()) {
-    throw std::runtime_error(
-      "Virtual path is not canonical: " + std::string(*error));
+    throw std::runtime_error(std::string("Virtual path is not canonical: ")
+      + nostd::to_string(*error));
   }
 }
 
@@ -495,7 +495,7 @@ auto LooseCookedIndexImpl::ReadAssetEntries(IndexLoadContext& context) -> void
       context.stored_table, entry.virtual_path_offset);
 
     ValidateRelativePath(descriptor_rel);
-    ValidateVirtualPath(virtual_path);
+    RequireCanonicalVirtualPath(virtual_path);
     if (!context.unique_file_paths.insert(descriptor_rel).second) {
       throw std::runtime_error("Duplicate content path in loose cooked index");
     }

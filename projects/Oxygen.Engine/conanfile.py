@@ -293,7 +293,12 @@ class OxygenConan(ConanFile):
                 "--no-header",
                 "--no-annotate",
             ]
-            tools = ["--package", "bindless-codegen"]
+            tools = [
+                "--package",
+                "bindless-codegen",
+                "--package",
+                "unicode-codegen",
+            ]
             for name, selection in (
                 ("build-backends.txt", ["--only-group", "build-tools"]),
                 ("build-requirements.txt", tools),
@@ -405,6 +410,8 @@ class OxygenConan(ConanFile):
                     "--no-build-isolation",
                     "--editable",
                     str(source / "src/Oxygen/Core/Tools/BindlessCodeGen"),
+                    "--editable",
+                    str(source / "src/Oxygen/Content/Tools/UnicodeCodeGen"),
                 ],
                 check=True,
             )
@@ -423,6 +430,8 @@ class OxygenConan(ConanFile):
                             for p in (
                                 source
                                 / "src/Oxygen/Core/Tools/BindlessCodeGen/pyproject.toml",
+                                source
+                                / "src/Oxygen/Content/Tools/UnicodeCodeGen/pyproject.toml",
                             )
                         },
                     },
@@ -480,6 +489,9 @@ class OxygenConan(ConanFile):
             "joltphysics/5.5.0", transitive_headers=True, transitive_libs=True
         )
         self.requires("xxhash/0.8.3")
+        # Content checks NFC in its virtual path rules; utf8proc 2.9.0 is
+        # Unicode 15.1, the version the rules pin.
+        self.requires("utf8proc/2.9.0")
         if self.options.with_tracy:
             self.requires("tracy/0.13.1")
 

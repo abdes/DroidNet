@@ -1,9 +1,12 @@
 # Loose cooked content (filesystem-backed cooked source)
 
-Read [published generations](#published-generations) for lifetime and replacement,
-[complete integrity inventory](#complete-integrity-inventory) for admission and validation.
+Read [published generations](#published-generations) for lifetime and
+replacement, [complete integrity inventory](#complete-integrity-inventory) for
+admission and validation.
 
-This document specifies how Oxygen Content loads **cooked Oxygen runtime formats** from a **directory of loose cooked files** (“loose cooked”), in addition to `.pak` containers.
+This document specifies how Oxygen Content loads **cooked Oxygen runtime
+formats** from a **directory of loose cooked files** (“loose cooked”), in
+addition to `.pak` containers.
 
 The goal is a single content model with two container forms:
 
@@ -12,7 +15,8 @@ The goal is a single content model with two container forms:
 
 Related:
 
-- Conceptual architecture and async pipeline: `truly-async-asset-loader.md` and `overview.md`
+- Conceptual architecture and async pipeline: `truly-async-asset-loader.md` and
+  `overview.md`
 - Dependency tracking and cache semantics: `deps_and_cache.md`
 - [Published generations](#published-generations)
 
@@ -23,47 +27,50 @@ generation, optionally replacing one active generation at the same source
 priority. It acquires the existing `.generation.lock` shared before reading the
 index. A new generation has a fresh cooked SourceKey and runtime source ID;
 reusing another generation's identity is rejected before changing the mount.
-`RetireLooseCookedGeneration(source_key)` removes it from ordinary winning lookup.
-Neither operation clears unrelated assets, resources or IBL caches.
-`AddLooseCookedRoot` dispatches roots carrying this marker to the same lease-aware
-mount operation.
+`RetireLooseCookedGeneration(source_key)` removes it from ordinary winning
+lookup. Neither operation clears unrelated assets, resources or IBL caches.
+`AddLooseCookedRoot` dispatches roots carrying this marker to the same
+lease-aware mount operation.
 
 Active sources have registry ownership. Retired sources have weak registry
 entries; decode operations and loaded asset/resource owners retain their actual
-source and shared marker lock. Old asset objects expose their exact SourceOrigin.
-Source-qualified operations select that source exactly. A new logical load and
-its AssetKey dependencies resolve through one immutable view of the declared
-layers, with later layers winning and tombstones masking lower definitions.
-Physical resource indices always address the container of the selected asset.
-Contextual reads and repeated publication preserve the object's recorded bindings;
-activating another layer never silently rebinds an existing object.
+source and shared marker lock. Old asset objects expose their exact
+SourceOrigin. Source-qualified operations select that source exactly. A new
+logical load and its AssetKey dependencies resolve through one immutable view of
+the declared layers, with later layers winning and tombstones masking lower
+definitions. Physical resource indices always address the container of the
+selected asset. Contextual reads and repeated publication preserve the object's
+recorded bindings; activating another layer never silently rebinds an existing
+object.
 
 Cache reuse must match both the selected descriptor and its binding view. An
 unchanged base scene must acquire patched dependencies on a new load, while a
 held earlier scene keeps its old dependencies. Async graph loading retains its
-view and source owners through publication; mount changes cannot mix views inside
-a graph. Physical resource cache identities remain source-local and reusable.
+view and source owners through publication; mount changes cannot mix views
+inside a graph. Physical resource cache identities remain source-local and
+reusable.
 
 Dependency graph nodes are the existing source-qualified asset cache identities,
 not bare AssetKeys. Old and new generations can therefore coexist, release and
-trim independently. Source instances and opaque content IDs are not recycled.
-A reopened generation uses an independent opening, allowing retired metadata to
+trim independently. Source instances and opaque content IDs are not recycled. A
+reopened generation uses an independent opening, allowing retired metadata to
 expire while the new instance remains mounted.
 
 For complete context changes, `IAssetLoader::PrepareLooseCookedRootsAsync` owns
 the candidate paths and reads source metadata on the worker pool. Its move-only
-`PreparedMountSet` binds the originating loader lifetime, restart epoch and mount
-revision. A stopped loader or changed mount set invalidates the candidate.
+`PreparedMountSet` binds the originating loader lifetime, restart epoch and
+mount revision. A stopped loader or changed mount set invalidates the candidate.
 
 `CommitPreparedMounts` requires drained loads and prepares cache retirements
 before changing active precedence. Validation/allocation failure leaves the old
 roots selected. The source registry switches without invoking observers and
-returns a `MountRetirement` owner. A caller with a `VirtualPathResolver` swaps its
-prepared resolver before finishing that retirement. Observer reloads therefore
-see one complete new context; late checkouts cannot debit replacement entries.
-Canceled subscriptions are skipped, and loader destruction ends delivery safely.
-Expired source/locator metadata is pruned during later preparation, outside the
-swap. Source-qualified objects retain their original generation leases.
+returns a `MountRetirement` owner. A caller with a `VirtualPathResolver` swaps
+its prepared resolver before finishing that retirement. Observer reloads
+therefore see one complete new context; late checkouts cannot debit replacement
+entries. Canceled subscriptions are skipped, and loader destruction ends
+delivery safely. Expired source/locator metadata is pruned during later
+preparation, outside the swap. Source-qualified objects retain their original
+generation leases.
 
 Content does not delete generation directories. A publisher can reclaim only an
 unselected generation after acquiring its existing marker exclusively. Loaded
@@ -76,10 +83,14 @@ lock primitive is owned by [Serio](../../Serio/README.md#file-locks).
 
 ## Scope and constraints
 
-- No runtime import of source formats (FBX/GLTF/PNG/etc.). The editor must cook to runtime formats first.
+- No runtime import of source formats (FBX/GLTF/PNG/etc.). The editor must cook
+  to runtime formats first.
 - Scenes can be handled in two editor workflows:
-  - **Live-edited scenes** (not cooked): scenes reference assets by **virtual path** and the editor resolves them to `data::AssetKey`.
-  - **Cooked scene descriptors** (optional): scenes are emitted as cooked descriptors (`AssetType::kScene`) and can be loaded from loose cooked roots or `.pak` like any other asset.
+  - **Live-edited scenes** (not cooked): scenes reference assets by **virtual
+    path** and the editor resolves them to `data::AssetKey`.
+  - **Cooked scene descriptors** (optional): scenes are emitted as cooked
+    descriptors (`AssetType::kScene`) and can be loaded from loose cooked roots
+    or `.pak` like any other asset.
 - Runtime loads assets by `data::AssetKey` and resources by `ResourceKey`.
 - Editor responsibilities bridge **virtual paths** to runtime identifiers.
 
@@ -87,12 +98,16 @@ lock primitive is owned by [Serio](../../Serio/README.md#file-locks).
 
 ## Goals
 
-- Provide a filesystem-backed cooked source that behaves like a container from the loader’s point of view.
-- Keep loader decode logic container-agnostic (loaders do not care whether bytes come from PAK or a directory).
+- Provide a filesystem-backed cooked source that behaves like a container from
+  the loader’s point of view.
+- Keep loader decode logic container-agnostic (loaders do not care whether bytes
+  come from PAK or a directory).
 - Preserve identity and caching semantics:
   - `data::AssetKey` is the canonical asset identifier.
-  - `ResourceKey` uniquely identifies a resource by `(source_id, resource_type, resource_index)`.
-- Enable deterministic editor workflows: stable identity, stable resolution, actionable diagnostics.
+  - `ResourceKey` uniquely identifies a resource by
+    `(source_id, resource_type, resource_index)`.
+- Enable deterministic editor workflows: stable identity, stable resolution,
+  actionable diagnostics.
 
 ## Non-goals
 
@@ -104,11 +119,16 @@ lock primitive is owned by [Serio](../../Serio/README.md#file-locks).
 
 ## Key terms
 
-- **Virtual path**: editor-facing identity persisted by scenes, e.g. `/Content/Materials/DarkWood.mat`.
-- **Cooked root**: a directory containing cooked artifacts (descriptors, resource tables/data, and an index).
-- **Content source**: runtime-facing provider of cooked bytes registered with `AssetLoader` (PAK or loose cooked).
-- **Descriptor**: per-asset cooked bytes consumed via `LoaderContext::desc_reader`.
-- **Resource tables/data**: cooked resource lookup tables and bulk payload streams consumed via `LoaderContext`.
+- **Virtual path**: editor-facing identity persisted by scenes, e.g.
+  `/Content/Materials/DarkWood.mat`.
+- **Cooked root**: a directory containing cooked artifacts (descriptors,
+  resource tables/data, and an index).
+- **Content source**: runtime-facing provider of cooked bytes registered with
+  `AssetLoader` (PAK or loose cooked).
+- **Descriptor**: per-asset cooked bytes consumed via
+  `LoaderContext::desc_reader`.
+- **Resource tables/data**: cooked resource lookup tables and bulk payload
+  streams consumed via `LoaderContext`.
 
 ---
 
@@ -126,16 +146,18 @@ lock primitive is owned by [Serio](../../Serio/README.md#file-locks).
    ResourceKey is an opaque loader-owned ID. Full identity equality includes the
    source instance, resource kind and table index. PAK, loose and synthetic
    resources share one ID namespace without encoding source ranges in the key.
-   [Identity ownership](deps_and_cache.md#identities)
-   defines lazy registration and metadata reclamation.
+   [Identity ownership](deps_and_cache.md#identities) defines lazy registration
+   and metadata reclamation.
 
 3. **Async loader contract applies equally to loose cooked**
 
    The loader is async-first:
 
    - Worker threads may perform blocking I/O and CPU decode.
-   - Only the owning thread may mutate loader state (mounts, cache publish, dependency graph mutation, callbacks).
-   - Loader decode must not call back into `AssetLoader` (dependencies are recorded via a collector).
+   - Only the owning thread may mutate loader state (mounts, cache publish,
+     dependency graph mutation, callbacks).
+   - Loader decode must not call back into `AssetLoader` (dependencies are
+     recorded via a collector).
 
 ---
 
@@ -143,10 +165,12 @@ lock primitive is owned by [Serio](../../Serio/README.md#file-locks).
 
 ### Content sources
 
-`AssetLoader` mounts cooked content sources and resolves assets by `data::AssetKey`.
+`AssetLoader` mounts cooked content sources and resolves assets by
+`data::AssetKey`.
 
 - `.pak` containers are adapted via an internal PAK-backed content source.
-- Loose cooked roots are adapted via an internal directory-backed content source.
+- Loose cooked roots are adapted via an internal directory-backed content
+  source.
 
 Both provide:
 
@@ -162,23 +186,29 @@ Both provide:
 - Mount operations are owning-thread only.
 - Asset resolution is **last-mounted-wins** in source registration order.
 
-This ordering is editor policy: if multiple mounted sources overlap (engine content, project content, overrides), the editor must register them deterministically.
+This ordering is editor policy: if multiple mounted sources overlap (engine
+content, project content, overrides), the editor must register them
+deterministically.
 
 ### Virtual paths are resolved above the loader
 
-Runtime Content APIs are keyed by `AssetKey`/`ResourceKey` and do not interpret virtual paths.
+Runtime Content APIs are keyed by `AssetKey`/`ResourceKey` and do not interpret
+virtual paths.
 
 For editor/tooling workflows, `VirtualPathResolver` exists as a helper:
 
-- It maps canonical virtual paths to `data::AssetKey` using mounted cooked indexes (and PAK browse indexes when available).
+- It maps canonical virtual paths to `data::AssetKey` using mounted cooked
+  indexes (and PAK browse indexes when available).
 - It uses **last-mounted-wins** in registration order.
-- It logs a `WARNING` when the same virtual path exists in multiple mounts but maps to different `AssetKey`s.
+- It logs a `WARNING` when the same virtual path exists in multiple mounts but
+  maps to different `AssetKey`s.
 
 ---
 
 ## Loose cooked on-disk layout
 
-Loose cooked content replicates the conceptual structure of a PAK, split across files.
+Loose cooked content replicates the conceptual structure of a PAK, split across
+files.
 
 Directory layout:
 
@@ -211,14 +241,16 @@ These are what `LoaderContext::desc_reader` reads.
 - `*.table` files provide resource descriptors/rows.
 - `*.data` files provide bulk payload byte streams.
 
-Offsets stored inside cooked descriptors are interpreted relative to the `AnyReader` stream opened by the mounted source for the relevant `*.data` file.
+Offsets stored inside cooked descriptors are interpreted relative to the
+`AnyReader` stream opened by the mounted source for the relevant `*.data` file.
 
 ### `container.index.bin` (required)
 
 The cooked index is required for loose cooked roots. It provides:
 
 - `AssetKey -> descriptor relative path`.
-- Optional virtual path mapping (`VirtualPath <-> AssetKey`) when enabled by index header flags.
+- Optional virtual path mapping (`VirtualPath <-> AssetKey`) when enabled by
+  index header flags.
 - Resource file metadata (names, sizes, mandatory SHA-256 digests).
 
 Mount-time expectations:
@@ -227,24 +259,30 @@ Mount-time expectations:
 - Index header flags must be self-consistent.
 - Section layout must be valid (no overlaps, no out-of-range spans).
 - Referenced descriptor and resource files must exist.
-- Normal mounts validate inventory membership, sizes and bounds. Full digest verification
-  is opt-in at runtime and required for cook/publication validation.
+- Normal mounts validate inventory membership, sizes and bounds. Full digest
+  verification is opt-in at runtime and required for cook/publication
+  validation.
 - All paths recorded in the index must be canonical:
   - container-relative, `/` separators
   - no `..`, no `\\`, no `//`
   - virtual paths start with `/` and contain no dot segments
-- Duplicate records are rejected (e.g. duplicate `AssetKey`, duplicate virtual-path strings).
+- Duplicate records are rejected (e.g. duplicate `AssetKey`, duplicate
+  virtual-path strings).
 
 ---
 
 ## Override/overlap policy and collision diagnostics
 
-Overlaps are expected (engine content + project content + user overrides), but must remain deterministic.
+Overlaps are expected (engine content + project content + user overrides), but
+must remain deterministic.
 
 Rules:
 
-- `AssetLoader` resolves `AssetKey` using last-mounted-wins in source registration order, with mount-level tombstone terminal masking.
-- `VirtualPathResolver` resolves `VirtualPath -> AssetKey` using the same last-mounted-wins + tombstone policy and logs collisions when the same virtual path maps to different `AssetKey`s.
+- `AssetLoader` resolves `AssetKey` using last-mounted-wins in source
+  registration order, with mount-level tombstone terminal masking.
+- `VirtualPathResolver` resolves `VirtualPath -> AssetKey` using the same
+  last-mounted-wins + tombstone policy and logs collisions when the same virtual
+  path maps to different `AssetKey`s.
 
 Strictness policy is editor-owned:
 
@@ -255,23 +293,26 @@ Strictness policy is editor-owned:
 
 ## Editor requirements (Play-in-Editor with loose cooked)
 
-This section merges the editor capabilities required to use loose cooked roots as a runtime content source.
+This section merges the editor capabilities required to use loose cooked roots
+as a runtime content source.
 
 ### 1) Mount points and namespace management
 
-- Maintain a mount registry mapping `virtual_root -> physical_root` for authoring.
+- Maintain a mount registry mapping `virtual_root -> physical_root` for
+  authoring.
 - Maintain a runtime mount list of cooked sources to register at PIE startup:
   - loose cooked roots (directories)
   - `.pak` containers when desired
-- Normalize physical roots to avoid duplicates (absolute/canonical/normalized separators).
-- Support multiple sources under one virtual root (engine + project + overrides).
+- Normalize physical roots to avoid duplicates (absolute/canonical/normalized
+  separators).
+- Support multiple sources under one virtual root (engine + project +
+  overrides).
 
 ### 2) Canonical virtual path rules
 
-- Normalize and validate virtual paths according to the single source of truth:
-  - [virtual-paths.md](../../../../../Oxygen.Managed.Assets/docs/virtual-paths.md)
-- Establish and enforce a case policy (recommended: case-sensitive for identity; handle platform case quirks in UI).
-- Use one canonicalization implementation consistently for browser, scenes, cook inputs, and lookup.
+- Validate virtual paths with the rules of [virtual paths](virtual_paths.md),
+  which also state the case policy: identity is case-sensitive and case-only
+  siblings are refused.
 
 ### 3) Cook pipeline must produce a valid loose cooked root
 
@@ -279,7 +320,8 @@ This section merges the editor capabilities required to use loose cooked roots a
   - `container.index.bin`
   - cooked descriptors under `assets/**`
   - cooked resource tables/data under `resources/*.table` and `resources/*.data`
-- Ensure directory layout and naming are stable and mirror the virtual-path hierarchy for descriptors.
+- Ensure directory layout and naming are stable and mirror the virtual-path
+  hierarchy for descriptors.
 - Support incremental cook (regenerate only impacted outputs).
 - Support atomic cook updates (stage then swap; avoid partial roots).
 - Ensure internal container consistency:
@@ -288,8 +330,10 @@ This section merges the editor capabilities required to use loose cooked roots a
 
 ### 4) Deterministic identity assignment and lookup
 
-- Assign `AssetKey` deterministically from virtual identity (per the project’s canonical hashing scheme).
-- Persist or regenerate mappings via `container.index.bin` so they are authoritative and reproducible.
+- Assign `AssetKey` deterministically from virtual identity (per the project’s
+  canonical hashing scheme).
+- Persist or regenerate mappings via `container.index.bin` so they are
+  authoritative and reproducible.
 - Provide lookup in both directions:
   - `VirtualPath -> AssetKey`
   - `AssetKey -> VirtualPath`
@@ -320,20 +364,25 @@ This section merges the editor capabilities required to use loose cooked roots a
 - Ensure source-id stability where needed by your workflow:
   - PAK ids depend on PAK registration order.
   - Loose cooked ids depend on loose cooked registration order.
-- Surface the registered source list in editor diagnostics (debug name, id, path).
+- Surface the registered source list in editor diagnostics (debug name, id,
+  path).
 
 ### 7) Descriptor and resource I/O expectations
 
-- Descriptors are readable as independent streams (one cooked descriptor per file).
+- Descriptors are readable as independent streams (one cooked descriptor per
+  file).
 - Resource tables are readable as independent streams (`*.table`).
 - Resource data is readable as independent streams (`*.data`).
-- Offsets encoded in descriptors must be meaningful relative to the `AnyReader` streams the runtime opens.
+- Offsets encoded in descriptors must be meaningful relative to the `AnyReader`
+  streams the runtime opens.
 
 ### 8) Content Browser integration
 
 - Provide hierarchical browsing of cooked assets based on virtual paths.
-- For loose cooked, browse using virtual-path mappings in `container.index.bin` (not filesystem scans).
-- For `.pak`, browse using embedded browse/trace indexes (container-relative paths; no physical paths).
+- For loose cooked, browse using virtual-path mappings in `container.index.bin`
+  (not filesystem scans).
+- For `.pak`, browse using embedded browse/trace indexes (container-relative
+  paths; no physical paths).
 
 ### 9) Override/overlap policy and collision diagnostics
 
@@ -348,7 +397,8 @@ This section merges the editor capabilities required to use loose cooked roots a
 ### 10) Dependency closure per container (authoring-time)
 
 - During cook, compute and enforce dependency closure:
-  - assets in one cooked root only reference dependencies also cooked into that same root
+  - assets in one cooked root only reference dependencies also cooked into that
+    same root
 - Provide diagnostics when dependency graphs cross source boundaries.
 
 ### 11) Error handling and developer-facing diagnostics
@@ -368,7 +418,8 @@ This section merges the editor capabilities required to use loose cooked roots a
 - Ensure referenced assets are cooked into a loose cooked root.
 - Resolve `VirtualPath -> AssetKey` using the cooked index.
 - Start PIE with deterministic source registration.
-- Request runtime loads by `AssetKey` and let the runtime resolve bytes via the mounted content sources.
+- Request runtime loads by `AssetKey` and let the runtime resolve bytes via the
+  mounted content sources.
 
 ---
 
@@ -376,22 +427,28 @@ This section merges the editor capabilities required to use loose cooked roots a
 
 - Mounts: virtual roots are registered; physical roots are canonicalized.
 - Virtual paths: normalization and case policy are enforced everywhere.
-- Cook outputs: `container.index.bin`, `assets/**`, `resources/*.table` + `resources/*.data` are present and complete.
-- Index correctness: required sections present; header flags match; no duplicates.
-- Path hygiene: recorded paths are canonical (container-relative, `/` separators, no dot segments).
-- Integrity: recorded sizes match; every member has a digest; full validation compares it with the file bytes.
+- Cook outputs: `container.index.bin`, `assets/**`, `resources/*.table` +
+  `resources/*.data` are present and complete.
+- Index correctness: required sections present; header flags match; no
+  duplicates.
+- Path hygiene: recorded paths are canonical (container-relative, `/`
+  separators, no dot segments).
+- Integrity: recorded sizes match; every member has a digest; full validation
+  compares it with the file bytes.
 - Container closure: cooked container includes full dependency closure.
 - Registration order: sources register deterministically.
-- Resolution: virtual-path lookup uses cooked index; collisions are diagnosed deterministically.
-- Diagnostics: mount failures and asset misses report searched sources (and virtual path when available).
+- Resolution: virtual-path lookup uses cooked index; collisions are diagnosed
+  deterministically.
+- Diagnostics: mount failures and asset misses report searched sources (and
+  virtual path when available).
 
 ## Complete integrity inventory
 
 The native loose index owns the complete output inventory. Published descriptors
-and resource table/data files have
-canonical relative paths, exact sizes and mandatory SHA-256 digests. Inventory
-membership is complete. The index's own digest lives in the selecting publication
-record; `.generation.lock` is the explicit non-content exception.
+and resource table/data files have canonical relative paths, exact sizes and
+mandatory SHA-256 digests. Inventory membership is complete. The index's own
+digest lives in the selecting publication record; `.generation.lock` is the
+explicit non-content exception.
 
 LooseCookedWriter finalization owns inventory production after all writes and
 resource tables finish. Reuse emitter hashes only for the exact finalized bytes;
@@ -401,9 +458,9 @@ membership and bounds. Neither timestamps nor zero digests establish integrity.
 Concurrent imports into one root retire participation before awaiting the shared
 index publication. Successful completion guarantees that publication finished;
 all participants receive its source identity. A participant's import diagnostics
-remain local, while publication failure or an aborted cohort reaches every waiter.
-The registry owns this barrier, so batch dependency scheduling uses job outcomes
-without a separate root-publication tracker.
+remain local, while publication failure or an aborted cohort reaches every
+waiter. The registry owns this barrier, so batch dependency scheduling uses job
+outcomes without a separate root-publication tracker.
 
 Inspector exports the native inventory. Protected readers may reuse verification
 only within the same valid read lease. Managed publication/provenance references
@@ -411,27 +468,28 @@ that inventory instead of duplicating descriptor/file proofs or rehashing merely
 to translate proof models. Keep consumed-input and reuse fingerprints distinct.
 
 The V2 format requires recooking earlier content. Qualification covers
-tampered/truncated data, absent/extra files, changed index, stale leases and measured
-removal of redundant file reads. This does not remove incremental staging copies;
-that is a different writer-granularity problem.
+tampered/truncated data, absent/extra files, changed index, stale leases and
+measured removal of redundant file reads. This does not remove incremental
+staging copies; that is a different writer-granularity problem.
 
 Runtime admission checks the current index format, canonical paths, complete
 membership, exact sizes and bounds. Full SHA-256 verification is mandatory for
 cook/publication validation and explicit integrity checks; normal mounts retain
-opt-in `verify_content_hashes`. Metadata-only admission does not detect same-size
-payload corruption. This avoids scanning every resource blob before normal loading.
-UE5.7's `IPlatformFilePak.cpp` likewise separates `ShouldCheckPak` whole-container
-checks from requested-block signature verification; Oxygen does not add block
-signatures in this slice.
+opt-in `verify_content_hashes`. Metadata-only admission does not detect
+same-size payload corruption. This avoids scanning every resource blob before
+normal loading. UE5.7's `IPlatformFilePak.cpp` likewise separates
+`ShouldCheckPak` whole-container checks from requested-block signature
+verification; Oxygen does not add block signatures in this slice.
 
 A verified result belongs to the exact index digest and protected file opening.
 The editor retains its write-denying member handles and rechecks membership;
-`.generation.lock` alone is cooperative generation-lifetime protection, not proof
-against member edits. Unprotected readers cannot cache verification by path,
-file timestamp or generation name. Input fingerprints remain separate.
+`.generation.lock` alone is cooperative generation-lifetime protection, not
+proof against member edits. Unprotected readers cannot cache verification by
+path, file timestamp or generation name. Input fingerprints remain separate.
 
 The maintained demo content store uses sibling containers: `.cooked/main` for
 shared cooked scenes and `.cooked/imports/<source>/<generation>` for retained
-models. Authored scenes and `imports/*.import.json` remain under Content.
-The physical relocation preserves asset keys and the existing virtual namespace.
-No container includes another container's files or ignores arbitrary nested indexes.
+models. Authored scenes and `imports/*.import.json` remain under Content. The
+physical relocation preserves asset keys and the existing virtual namespace. No
+container includes another container's files or ignores arbitrary nested
+indexes.

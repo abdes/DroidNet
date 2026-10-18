@@ -78,6 +78,7 @@ def check(source: Path, requirements: Path, tests: bool) -> dict:
             )
     for name, relative in (
         ("bindless_codegen", "src/Oxygen/Core/Tools/BindlessCodeGen"),
+        ("unicode_codegen", "src/Oxygen/Content/Tools/UnicodeCodeGen"),
     ):
         module = importlib.import_module(name)
         if module.__file__ is None:

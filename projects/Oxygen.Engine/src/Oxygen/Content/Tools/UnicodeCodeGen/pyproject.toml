@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "unicode-codegen"
+version = "0.1.0"
+description = "Unicode tables of the Oxygen virtual path rules"
+authors = [ {name = "Oxygen Dev"} ]
+readme = "README.md"
+license = { text = "BSD-3-Clause" }
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[project.scripts]
+unicode_codegen = "unicode_codegen.cli:main"
