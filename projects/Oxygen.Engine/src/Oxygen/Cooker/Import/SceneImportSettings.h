@@ -32,6 +32,9 @@ struct SceneImportSettings {
     -> std::optional<ImportRequest>;
 
   std::string source_path;
+  //! The model's identity, the virtual path of its source file
+  //! (`/Content/Ship/Ship.glb`); its products are named under it.
+  std::string virtual_path;
   std::string cooked_root;
   std::string job_name;
   std::string report_path;

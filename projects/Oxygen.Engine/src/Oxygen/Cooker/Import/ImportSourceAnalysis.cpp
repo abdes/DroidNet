@@ -49,6 +49,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Naming.h>
@@ -222,7 +223,10 @@ namespace {
     auto report = ImportSourceJobAnalysis {};
     report.source_path = request.source_path;
     const auto source_id = request.source_path.string();
-    const auto layout = request.loose_cooked_layout;
+    if (auto placement = internal::PlaceModel(request); !placement) {
+      report.diagnostics.push_back(std::move(placement.error()));
+      return report;
+    }
     auto naming = NamingService {};
     auto input = adapters::AdapterInput {};
     input.source_id_prefix = source_id;
@@ -242,10 +246,15 @@ namespace {
     AppendDiagnostics(report.diagnostics, std::move(materials.diagnostics));
     AppendDiagnostics(report.diagnostics, std::move(geometry.diagnostics));
     AppendDiagnostics(report.diagnostics, std::move(textures.diagnostics));
+    const auto product = [&](const std::string_view name,
+                           const std::string_view extension) -> std::string {
+      return internal::PlaceModelProduct(input.request, name, extension)
+        .virtual_path;
+    };
     for (const auto& material : materials.sources) {
       report.outputs.push_back({
-        .virtual_path
-        = layout.MaterialVirtualPath(material.material.storage_name),
+        .virtual_path = product(
+          material.material.storage_name, data::kMaterialDescriptorExtension),
         .kind = Kind::kMaterial,
         .object_path = {},
         .required = true,
@@ -253,7 +262,8 @@ namespace {
     }
     for (const auto& source : geometry.sources) {
       report.outputs.push_back({
-        .virtual_path = layout.GeometryVirtualPath(source.name),
+        .virtual_path
+        = product(source.name, data::kGeometryDescriptorExtension),
         .kind = Kind::kGeometry,
         .object_path = {},
         .required = true,
@@ -262,8 +272,7 @@ namespace {
     for (const auto& texture : textures.sources) {
       report.outputs.push_back({
         .virtual_path
-        = layout.DescriptorVirtualPath(layout.TextureDescriptorRelPath(
-          texture.source_id, texture.source_id)),
+        = product(texture.name, data::kTextureDescriptorExtension),
         .kind = Kind::kTexture,
         .object_path = {},
         .required = false,
@@ -279,7 +288,8 @@ namespace {
       }
     }
     report.outputs.push_back({
-      .virtual_path = layout.SceneVirtualPath(input.request.GetSceneName()),
+      .virtual_path
+      = product(input.request.GetSceneName(), data::kSceneDescriptorExtension),
       .kind = Kind::kScene,
       .object_path = {},
       .required = true,

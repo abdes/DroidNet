@@ -54,9 +54,11 @@
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
@@ -249,11 +251,13 @@ protected:
       for (const auto pass : { 0, 1 }) {
         ImportRequest request {};
         request.source_path = source_path;
+        request.asset_virtual_path
+          = oxygen::cooker::test::ModelVirtualPath(request.source_path);
         request.cooked_root = root / ("cooked_" + std::to_string(pass));
         request.options.coordinate.bake_transforms_into_meshes = false;
         request.options.node_pruning = pruning;
-        const auto scene_path = request.loose_cooked_layout.SceneVirtualPath(
-          request.GetSceneName());
+        const auto scene_path = request.ModelProductVirtualPath(
+          request.GetSceneName(), oxygen::data::kSceneDescriptorExtension);
         const auto imported = RunImportOnce(std::move(request), provenance);
         if (!imported.report.success) {
           error_ = "Camera attachment import failed (keep_empty="
@@ -715,6 +719,8 @@ NOLINT_TEST_F(
     source.close();
     ImportRequest request {};
     request.source_path = source_path;
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
     request.cooked_root = root / "cooked";
     request.options.gltf_omitted_light_range_m = fallback;
     const auto imported = RunImport(std::move(request));
@@ -794,6 +800,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
   }
   ImportRequest request {};
   request.source_path = source_path;
+  request.asset_virtual_path
+    = oxygen::cooker::test::ModelVirtualPath(request.source_path);
   request.cooked_root = root / "cooked";
   const auto imported = RunImport(std::move(request));
   ASSERT_TRUE(imported.report.success);
@@ -899,6 +907,8 @@ NOLINT_TEST_F(
     }
     ImportRequest request {};
     request.source_path = source_path;
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
     request.cooked_root = root / "cooked";
     const auto imported = RunImport(std::move(request));
     EXPECT_FALSE(imported.report.success);
@@ -1006,6 +1016,7 @@ protected:
 
     ImportRequest request {
       .source_path = source_path,
+      .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
       .additional_sources = {},
       .cooked_root = temp_dir / "Cooked",
       .loose_cooked_layout = LooseCookedLayout {},
@@ -1189,6 +1200,7 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, AsyncBackendImportsFullTabuleiroScene)
   const auto temp_dir = MakeTempDir("async_gltf_tabuleiro");
   ImportRequest request {
     .source_path = source_path,
+    .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
     .additional_sources = {},
     .cooked_root = temp_dir,
     .loose_cooked_layout = LooseCookedLayout {},
@@ -1235,6 +1247,7 @@ NOLINT_TEST_F(
   const auto temp_dir = MakeTempDir("async_gltf_light_overrides");
   ImportRequest request {
     .source_path = source_path,
+    .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
     .additional_sources = {},
     .cooked_root = temp_dir,
     .loose_cooked_layout = LooseCookedLayout {},
@@ -1259,6 +1272,75 @@ NOLINT_TEST_F(
   const auto& light = scene.point_lights.front();
   EXPECT_EQ(light.common.affects_world, 0U);
   EXPECT_EQ(light.common.casts_shadows, 0U);
+}
+
+//! Products are named flat under their model, so two models with the same
+//! product names share one cooked root; buffers are files beside the
+//! geometry, and the scene takes the model's stem.
+NOLINT_TEST_F(AsyncGltfImporterFullTest, ModelsShareACookedRootByIdentity)
+{
+  const auto source_path
+    = TestModelsDirFromFile() / "static_textured_triangle.gltf";
+  const auto cooked_root = MakeTempDir("async_gltf_two_models");
+  for (const auto* identity :
+    { "/.cooked/A/Triangle.gltf", "/.cooked/B/Triangle.gltf" }) {
+    ImportRequest request {};
+    request.source_path = source_path;
+    request.asset_virtual_path = identity;
+    request.cooked_root = cooked_root;
+    request.options.coordinate.bake_transforms_into_meshes = false;
+    const auto imported = RunImport(std::move(request));
+    ASSERT_TRUE(imported.report.success) << identity;
+  }
+
+  const auto inspection = LoadInspection(cooked_root);
+  auto paths = std::vector<std::string> {};
+  for (const auto& asset : inspection.Assets()) {
+    paths.push_back(asset.virtual_path);
+  }
+  // A texture descriptor is a resource file with a virtual path.
+  for (const auto& file : inspection.Files()) {
+    if (!file.virtual_path.empty()) {
+      paths.push_back(file.virtual_path);
+    }
+  }
+  for (const auto* model :
+    { "/.cooked/A/Triangle.gltf", "/.cooked/B/Triangle.gltf" }) {
+    const auto product = [model](const std::string_view leaf) -> std::string {
+      return std::string(model) + "/" + std::string(leaf);
+    };
+    EXPECT_THAT(paths,
+      ::testing::IsSupersetOf({
+        product("Scalar.omat"),
+        product("Triangle.ogeo"),
+        product("Triangle.oscene"),
+        product("static_textured_checker.base_color.otex"),
+      }));
+  }
+  for (const auto* buffer : {
+         "A/Triangle.gltf/Triangle.lod0.vertex.obuf",
+         "A/Triangle.gltf/Triangle.lod0.index.obuf",
+         "B/Triangle.gltf/Triangle.lod0.vertex.obuf",
+       }) {
+    EXPECT_TRUE(std::filesystem::is_regular_file(cooked_root / buffer))
+      << buffer;
+  }
+}
+
+//! A model's identity must name a file of the model's type.
+NOLINT_TEST_F(AsyncGltfImporterFullTest, ModelIdentityOfAnotherTypeIsRefused)
+{
+  ImportRequest request {};
+  request.source_path
+    = TestModelsDirFromFile() / "static_textured_triangle.gltf";
+  request.asset_virtual_path = "/.cooked/Triangle.fbx";
+  request.cooked_root = MakeTempDir("async_gltf_wrong_identity");
+  const auto imported = RunImport(std::move(request));
+  EXPECT_FALSE(imported.report.success);
+  EXPECT_TRUE(std::ranges::any_of(
+    imported.report.diagnostics, [](const auto& diagnostic) -> bool {
+      return diagnostic.code == "import.asset_virtual_path_invalid";
+    }));
 }
 
 } // namespace

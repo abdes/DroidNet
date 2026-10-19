@@ -54,6 +54,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
 #include <Oxygen/Cooker/Import/Internal/StaticSourceValidation.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/CoordTransform.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxMaterialTextures.h>
@@ -65,6 +66,7 @@
 #include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/MeshType.h>
@@ -1022,6 +1024,20 @@ namespace {
     return identity;
   }
 
+  //! The texture's authored name, or its image file's stem.
+  [[nodiscard]] auto TextureAuthoredName(const ufbx_texture& texture)
+    -> std::string
+  {
+    if (const auto name = ToStringView(texture.name); !name.empty()) {
+      return std::string(name);
+    }
+    auto file = ToStringView(texture.relative_filename);
+    if (file.empty()) {
+      file = ToStringView(texture.filename);
+    }
+    return std::filesystem::path(file).stem().string();
+  }
+
   struct ResolvedTextureSource final {
     TexturePipeline::SourceBytes bytes;
     std::filesystem::path source_path {};
@@ -1507,7 +1523,6 @@ namespace {
       return result;
     }
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
-    const auto scene_name = input.request.GetSceneName();
     const auto bake_plan
       = BuildFbxBakePlan(scene, input.request.options.coordinate);
     for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
@@ -1538,7 +1553,6 @@ namespace {
         .kind = ImportNameKind::kMesh,
         .ordinal = static_cast<uint32_t>(variant.mesh_index),
         .variant = variant.name_suffix,
-        .scene_namespace = scene_name,
       };
       auto name = input.naming_service->MakeUniqueName(authored_name, context);
       auto source_id = BuildSourceId(
@@ -1971,11 +1985,9 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
   result.sources.reserve(material_count == 0U ? 1U : material_count);
   if (material_count == 0) {
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
-    const auto scene_name = input.request.GetSceneName();
     const NamingContext material_context {
       .kind = ImportNameKind::kMaterial,
       .ordinal = 0,
-      .scene_namespace = scene_name,
     };
     const auto material_name
       = input.naming_service->MakeUniqueName("Default", material_context);
@@ -2005,7 +2017,6 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
     }
 
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
-    const auto scene_name = input.request.GetSceneName();
 
     const auto* material = ItemAt(scene.materials, i);
     const auto authored_name = material != nullptr
@@ -2014,7 +2025,6 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
     const NamingContext material_context {
       .kind = ImportNameKind::kMaterial,
       .ordinal = i,
-      .scene_namespace = scene_name,
     };
     const auto material_name
       = input.naming_service->MakeUniqueName(authored_name, material_context);
@@ -2399,6 +2409,10 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
       : TexturePipeline::FailurePolicy::kStrict;
     item.source_path = identity->resolved_path;
     item.embedded = identity->embedded;
+    item.image_key = identity->texture_id;
+    item.ordinal = identity->file_texture->typed_id;
+    item.usage = UsageLabel(usage);
+    item.authored_name = TextureAuthoredName(*identity->file_texture);
 
     work_items.emplace(tex_source_id, std::move(item));
   };
@@ -2451,6 +2465,7 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
   for (auto& [_, item] : work_items) {
     result.sources.push_back(std::move(item));
   }
+  NameModelTextures(result.sources);
   return result;
 }
 
@@ -2485,6 +2500,7 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag /*unused*/,
     auto item = TexturePipeline::WorkItem {};
     item.source_id = std::move(source.source_id);
     item.texture_id = item.source_id;
+    item.name = std::move(source.name);
     item.source_key = source.source_key;
     item.desc = std::move(source.desc);
     item.packing_policy_id = std::move(source.packing_policy_id);
@@ -2570,13 +2586,11 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     }
 
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
-    const auto scene_name = request.GetSceneName();
 
     const auto authored = ToStringView(node->name);
     const NamingContext node_context {
       .kind = ImportNameKind::kSceneNode,
       .ordinal = ordinal,
-      .scene_namespace = scene_name,
     };
     const auto base_name
       = input.naming_service->MakeUniqueName(authored, node_context);
@@ -2737,8 +2751,9 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   build.nodes.reserve(pruned_nodes.size());
 
   const auto scene_name = request.GetSceneName();
-  const auto virtual_path
-    = request.loose_cooked_layout.SceneVirtualPath(scene_name);
+  const auto virtual_path = internal::PlaceModelProduct(
+    request, scene_name, data::kSceneDescriptorExtension)
+                              .virtual_path;
 
   for (uint32_t i = 0; i < pruned_nodes.size(); ++i) {
     auto& node = pruned_nodes.at(i);

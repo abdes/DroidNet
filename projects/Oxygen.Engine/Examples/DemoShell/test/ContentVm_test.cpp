@@ -112,6 +112,7 @@ namespace {
       }
       content::import::SceneImportSettings recipe {};
       recipe.source_path = source.string();
+      recipe.virtual_path = "/.cooked/" + source.filename().generic_string();
       record_ = root_ / "imports" / "source.import.json";
       using content::import::RetainedModelImport;
       RetainedModelImport::SaveRecipe(

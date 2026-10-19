@@ -25,6 +25,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -50,6 +51,8 @@ NOLINT_TEST_F(StaticImportTest, NativeImportPreservesCoreTextureBindings)
     auto request = ImportRequest {};
     request.source_path = TestModelsDirFromFile()
       / (std::string("static_textured_triangle.") + extension);
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
     request.cooked_root
       = MakeTempDir(std::string("static_textured_") + extension);
     request.options.scene_content_policy = SceneContentPolicy::kStatic;
@@ -117,6 +120,8 @@ NOLINT_TEST_F(StaticImportTest, NativeImportAcceptsStaticGltfAndFbx)
     ASSERT_TRUE(std::filesystem::exists(source));
     ImportRequest request {};
     request.source_path = source;
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
     request.cooked_root
       = MakeTempDir(std::string("static_scalar_") + extension);
     request.options.scene_content_policy = SceneContentPolicy::kStatic;
@@ -142,6 +147,8 @@ NOLINT_TEST_F(
     ImportRequest request {};
     request.source_path = TestModelsDirFromFile()
       / (std::string("static_scalar_camera_sun.") + extension);
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
     ASSERT_TRUE(std::filesystem::exists(request.source_path));
     request.cooked_root
       = MakeTempDir(std::string("static_scalar_camera_sun_") + extension);
@@ -170,6 +177,8 @@ NOLINT_TEST_F(
     ASSERT_TRUE(std::filesystem::exists(source));
     ImportRequest request {};
     request.source_path = source;
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
     request.cooked_root
       = MakeTempDir(std::string("static_scalar_reject_") + extension);
     request.options.scene_content_policy = SceneContentPolicy::kStatic;
@@ -202,6 +211,8 @@ NOLINT_TEST_F(StaticImportTest, FbxWithoutAuthoredUnitsIsRejected)
   }
   ImportRequest request {};
   request.source_path = source;
+  request.asset_virtual_path
+    = oxygen::cooker::test::ModelVirtualPath(request.source_path);
   request.cooked_root = root / "cooked";
   request.options.scene_content_policy = SceneContentPolicy::kStatic;
   const auto result = RunImport(std::move(request));
@@ -225,6 +236,7 @@ NOLINT_TEST_F(StaticImportTest, ManifestSelectsPolicyAndRejectsUnknownValues)
       output
         << "{\"version\":1,\"output\":\"cooked\",\"jobs\":[{\"id\":\"model\","
            "\"type\":\"gltf\",\"source\":\"model.gltf\","
+           "\"virtual_path\":\"/.cooked/model.gltf\","
            "\"material_slot_source_identity\":\"01990000-0000-7000-8000-"
            "000000000001\","
            "\"content_policy\":\""

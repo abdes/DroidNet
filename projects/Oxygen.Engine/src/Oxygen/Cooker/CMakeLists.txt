@@ -382,7 +382,6 @@ set(
   "Import/TexturePackingPolicy.cpp"
   "Import/TextureSourceAssembly.cpp"
   "Loose/Inspection.cpp"
-  "Loose/LooseCookedLayout.cpp"
   "Pak/PakPlan.cpp"
   "Pak/PakPlanBuilder.cpp"
   "Pak/PakMeasureStore.cpp"

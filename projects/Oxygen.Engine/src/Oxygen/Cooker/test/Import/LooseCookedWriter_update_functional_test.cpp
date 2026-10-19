@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "LooseCookedWriterTestSupport.h"
@@ -17,7 +18,6 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -31,7 +31,11 @@ namespace fixtures = oxygen::content::test;
 
 namespace {
 
-  using oxygen::content::import::LooseCookedLayout;
+  //! A material descriptor's file name.
+  auto MaterialFile(const std::string_view name) -> std::string
+  {
+    return std::string(name) + ".omat";
+  }
   using oxygen::content::import::LooseCookedWriter;
   using oxygen::cooker::test::ScopedTempDir;
   using CollisionPolicy
@@ -56,10 +60,8 @@ namespace {
     {
       LooseCookedWriter writer(cooked_root);
       writer.WriteAssetDescriptor(key, AssetType::kMaterial,
-        "/.cooked/Materials/"
-          + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        first.bytes, first.references);
+        "/.cooked/Materials/" + MaterialFile("A"),
+        "Materials/" + MaterialFile("A"), first.bytes, first.references);
       (void)writer.Finish();
     }
 
@@ -69,10 +71,8 @@ namespace {
     {
       LooseCookedWriter writer(cooked_root);
       writer.WriteAssetDescriptor(key, AssetType::kMaterial,
-        "/.cooked/Materials/"
-          + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A2"),
-        second.bytes, second.references);
+        "/.cooked/Materials/" + MaterialFile("A"),
+        "Materials/" + MaterialFile("A2"), second.bytes, second.references);
       (void)writer.Finish();
     }
 
@@ -85,8 +85,7 @@ namespace {
 
     EXPECT_EQ(assets.size(), 1U);
     ASSERT_NE(it, assets.end());
-    EXPECT_EQ(it->descriptor_relpath,
-      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A2"));
+    EXPECT_EQ(it->descriptor_relpath, "Materials/" + MaterialFile("A2"));
     EXPECT_EQ(it->descriptor_size, second.bytes.size());
     EXPECT_EQ(it->references, second.references);
     EXPECT_EQ(it->descriptor_sha256, base::ComputeSha256(second.bytes));
@@ -107,10 +106,10 @@ namespace {
 
     const auto legacy_key = MakeFirstByteAssetKey(0x71);
     const auto native_key = MakeFirstByteAssetKey(0x72);
-    const auto virtual_path = std::string("/.cooked/Materials/")
-      + LooseCookedLayout::MaterialDescriptorFileName("A");
-    const auto descriptor_relpath = std::string("Materials/")
-      + LooseCookedLayout::MaterialDescriptorFileName("A");
+    const auto virtual_path
+      = std::string("/.cooked/Materials/") + MaterialFile("A");
+    const auto descriptor_relpath
+      = std::string("Materials/") + MaterialFile("A");
 
     const auto first_bytes = fixtures::MaterialDescriptor(
       "first_bytes", fixtures::MaterialVariant::kPlain)
@@ -162,17 +161,13 @@ namespace {
 
     LooseCookedWriter writer(cooked_root);
     writer.WriteAssetDescriptor(key0, AssetType::kMaterial,
-      "/.cooked/Materials/"
-        + LooseCookedLayout::MaterialDescriptorFileName("A"),
-      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"), bytes,
-      {});
+      "/.cooked/Materials/" + MaterialFile("A"),
+      "Materials/" + MaterialFile("A"), bytes, {});
 
     try {
       writer.WriteAssetDescriptor(key1, AssetType::kMaterial,
-        "/.cooked/Materials/"
-          + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"),
-        bytes, {});
+        "/.cooked/Materials/" + MaterialFile("A"),
+        "Materials/" + MaterialFile("B"), bytes, {});
       FAIL() << "Expected virtual path collision.";
     } catch (const std::runtime_error& ex) {
       const std::string message = ex.what();
@@ -260,15 +255,11 @@ namespace {
 
     LooseCookedWriter writer(cooked_root);
     writer.WriteAssetDescriptor(key, AssetType::kMaterial,
-      "/.cooked/Materials/"
-        + LooseCookedLayout::MaterialDescriptorFileName("A"),
-      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"), desc_a,
-      {});
+      "/.cooked/Materials/" + MaterialFile("A"),
+      "Materials/" + MaterialFile("A"), desc_a, {});
     writer.WriteAssetDescriptor(key, AssetType::kMaterial,
-      "/.cooked/Materials/"
-        + LooseCookedLayout::MaterialDescriptorFileName("A"),
-      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"), desc_b,
-      {});
+      "/.cooked/Materials/" + MaterialFile("A"),
+      "Materials/" + MaterialFile("B"), desc_b, {});
 
     writer.WriteFile(
       FileKind::kBuffersData, "Resources/buffers_a.data", file_a);
@@ -284,7 +275,7 @@ namespace {
 
     ASSERT_EQ(inspection.Assets().size(), 1U);
     EXPECT_EQ(inspection.Assets().front().descriptor_relpath,
-      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"));
+      "Materials/" + MaterialFile("B"));
     EXPECT_EQ(inspection.Assets().front().descriptor_size, desc_b.size());
 
     const auto files = inspection.Files();
@@ -414,20 +405,16 @@ namespace {
     {
       LooseCookedWriter writer(cooked_root);
       writer.WriteAssetDescriptor(key0, AssetType::kMaterial,
-        "/.cooked/Materials/"
-          + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        bytes, {});
+        "/.cooked/Materials/" + MaterialFile("A"),
+        "Materials/" + MaterialFile("A"), bytes, {});
       (void)writer.Finish();
     }
 
     {
       LooseCookedWriter writer(cooked_root);
       writer.WriteAssetDescriptor(key1, AssetType::kMaterial,
-        "/.cooked/Materials/"
-          + LooseCookedLayout::MaterialDescriptorFileName("B"),
-        "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"),
-        bytes, {});
+        "/.cooked/Materials/" + MaterialFile("B"),
+        "Materials/" + MaterialFile("B"), bytes, {});
       (void)writer.Finish();
     }
 
@@ -451,10 +438,8 @@ namespace {
 
     LooseCookedWriter writer(cooked_root);
     writer.WriteAssetDescriptor(key, AssetType::kMaterial,
-      "/.cooked/Materials/"
-        + LooseCookedLayout::MaterialDescriptorFileName("A"),
-      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"), bytes,
-      {});
+      "/.cooked/Materials/" + MaterialFile("A"),
+      "Materials/" + MaterialFile("A"), bytes, {});
 
     (void)writer.Finish();
 

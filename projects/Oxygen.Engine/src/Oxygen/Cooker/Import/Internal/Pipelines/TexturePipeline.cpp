@@ -1009,6 +1009,7 @@ namespace {
       .output = TexturePipeline::WorkResult {
         .source_id = std::move(item.source_id),
         .texture_id = std::move(item.texture_id),
+        .name = std::move(item.name),
         .source_key = item.source_key,
         .cooked = std::nullopt,
         .used_placeholder = false,
@@ -1132,6 +1133,7 @@ auto TexturePipeline::Collect() -> co::Co<WorkResult>
     co_return WorkResult {
       .source_id = {},
       .texture_id = {},
+      .name = {},
       .source_key = nullptr,
       .cooked = {},
       .used_placeholder = false,
@@ -1268,6 +1270,7 @@ auto TexturePipeline::ReportCancelled(WorkItem item) -> co::Co<>
   WorkResult canceled {
     .source_id = std::move(item.source_id),
     .texture_id = std::move(item.texture_id),
+    .name = std::move(item.name),
     .source_key = item.source_key,
     .cooked = std::nullopt,
     .used_placeholder = false,

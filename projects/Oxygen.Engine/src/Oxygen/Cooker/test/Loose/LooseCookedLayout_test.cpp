@@ -4,44 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Loose/LooseCookedLayout.cpp
+// Covers: Loose/LooseCookedLayout.h
 
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::content::import::LooseCookedLayout;
-using oxygen::data::AssetType;
 
 namespace {
-
-NOLINT_TEST(LooseCookedLayoutTest, SourceSidecarsPreserveStableIdentityNaming)
-{
-  const auto layout = LooseCookedLayout {};
-  EXPECT_EQ(
-    layout.TextureDescriptorRelPath("folder\\paint.albedo.png", "retained-id"),
-    layout.TextureDescriptorRelPath("paint_albedo_4c53d36a5b11011d"));
-  EXPECT_EQ(
-    layout.BufferDescriptorRelPath("folder/vertices.bin", "retained-id"),
-    layout.BufferDescriptorRelPath("vertices_4c53d36a5b11011d"));
-  EXPECT_EQ(layout.TextureDescriptorRelPath("textures/paint.png", ""),
-    layout.TextureDescriptorRelPath("paint_06852ab67af73db3"));
-  EXPECT_EQ(layout.TextureDescriptorRelPath("", ""),
-    layout.TextureDescriptorRelPath("texture_cbf29ce484222325"));
-  EXPECT_EQ(layout.BufferDescriptorRelPath("", ""),
-    layout.BufferDescriptorRelPath("buffer_cbf29ce484222325"));
-}
-
-NOLINT_TEST(LooseCookedLayoutTest, SourceSidecarsRespectConfiguredLayout)
-{
-  auto layout = LooseCookedLayout {};
-  layout.descriptors_dir = "Assets";
-  layout.resources_dir = "Resources2";
-  EXPECT_EQ(layout.TextureDescriptorRelPath("paint.png", "retained-id"),
-    layout.TextureDescriptorRelPath("paint_4c53d36a5b11011d"));
-  EXPECT_NE(layout.TextureDescriptorRelPath("paint.png", "first-source"),
-    layout.TextureDescriptorRelPath("paint.png", "second-source"));
-}
 
 NOLINT_TEST(LooseCookedLayoutTest, DefaultsToStandardFileAndDirectoryNames)
 {
@@ -56,86 +26,24 @@ NOLINT_TEST(LooseCookedLayoutTest, DefaultsToStandardFileAndDirectoryNames)
   EXPECT_EQ(layout.physics_data_file_name, "physics.data");
   EXPECT_EQ(layout.scripts_table_file_name, "scripts.table");
   EXPECT_EQ(layout.scripts_data_file_name, "scripts.data");
-  EXPECT_EQ(layout.descriptors_dir, "");
-  EXPECT_EQ(layout.scenes_subdir, "Scenes");
-  EXPECT_EQ(layout.geometry_subdir, "Geometry");
-  EXPECT_EQ(layout.materials_subdir, "Materials");
   EXPECT_EQ(layout.physics_dir, "Physics");
   EXPECT_EQ(layout.physics_resources_subdir, "Resources");
 }
 
-NOLINT_TEST(LooseCookedLayoutTest, AppendsAssetExtensionToDescriptorFileNames)
-{
-  EXPECT_EQ(
-    LooseCookedLayout::MaterialDescriptorFileName("MyMat"), "MyMat.omat");
-  EXPECT_EQ(
-    LooseCookedLayout::GeometryDescriptorFileName("MyGeo"), "MyGeo.ogeo");
-  EXPECT_EQ(
-    LooseCookedLayout::SceneDescriptorFileName("MyScene"), "MyScene.oscene");
-  EXPECT_EQ(LooseCookedLayout::PhysicsSceneDescriptorFileName("MyScene"),
-    "MyScene.opscene");
-  EXPECT_EQ(LooseCookedLayout::PhysicsResourceDescriptorFileName("JointA"),
-    "JointA.opres");
-}
-
-NOLINT_TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
-{
-  LooseCookedLayout layout {};
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kMaterial), "Materials");
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kGeometry), "Geometry");
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScene), "Scenes");
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kPhysicsScene), "Scenes");
-  // Input sources name their products under their own identity.
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputAction), "");
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputMappingContext), "");
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kUnknown), "");
-
-  layout.descriptors_dir = "Assets";
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kMaterial), "Assets/Materials");
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kGeometry), "Assets/Geometry");
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScene), "Assets/Scenes");
-
-  // Setting empty subdirs
-  layout.materials_subdir = "";
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kMaterial), "Assets");
-}
-
-NOLINT_TEST(LooseCookedLayoutTest, BuildsVirtualLeafFromSubdirAndDescriptorName)
-{
-  LooseCookedLayout layout {};
-  EXPECT_EQ(layout.MaterialVirtualLeaf("M1"), "Materials/M1.omat");
-  EXPECT_EQ(layout.GeometryVirtualLeaf("G1"), "Geometry/G1.ogeo");
-  EXPECT_EQ(layout.SceneVirtualLeaf("S1"), "Scenes/S1.oscene");
-  EXPECT_EQ(layout.PhysicsSceneVirtualLeaf("S1"), "Scenes/S1.opscene");
-}
-
-NOLINT_TEST(LooseCookedLayoutTest, BuildsDescriptorRelPathFromSubdirAndFileName)
-{
-  LooseCookedLayout layout {};
-  EXPECT_EQ(layout.MaterialDescriptorRelPath("M1"), "Materials/M1.omat");
-  EXPECT_EQ(layout.GeometryDescriptorRelPath("G1"), "Geometry/G1.ogeo");
-  EXPECT_EQ(layout.SceneDescriptorRelPath("S1"), "Scenes/S1.oscene");
-  EXPECT_EQ(layout.PhysicsSceneDescriptorRelPath("S1"), "Scenes/S1.opscene");
-  EXPECT_EQ(layout.PhysicsResourceDescriptorRelPath("JointA"),
-    "Physics/Resources/JointA.opres");
-}
-
-NOLINT_TEST(LooseCookedLayoutTest, VirtualPathsJoinCorrectly)
+NOLINT_TEST(LooseCookedLayoutTest, DescriptorVirtualPathJoinsTheMountRoot)
 {
   LooseCookedLayout layout {};
 
   layout.virtual_mount_root = "/MountRoot";
-
-  EXPECT_EQ(layout.MaterialVirtualPath("M1"), "/MountRoot/Materials/M1.omat");
-  EXPECT_EQ(layout.GeometryVirtualPath("G1"), "/MountRoot/Geometry/G1.ogeo");
+  EXPECT_EQ(layout.DescriptorVirtualPath("Ship.glb/Paint.omat"),
+    "/MountRoot/Ship.glb/Paint.omat");
 
   layout.virtual_mount_root = "/";
-  EXPECT_EQ(layout.SceneVirtualPath("S1"), "/Scenes/S1.oscene");
+  EXPECT_EQ(layout.DescriptorVirtualPath("Ship.glb/Ship.oscene"),
+    "/Ship.glb/Ship.oscene");
 
   layout.virtual_mount_root = "MyMount";
-  EXPECT_EQ(layout.MaterialVirtualPath("M1"), "/MyMount/Materials/M1.omat");
-  EXPECT_EQ(layout.PhysicsResourceVirtualPath("JointA"),
-    "/MyMount/Physics/Resources/JointA.opres");
+  EXPECT_EQ(layout.DescriptorVirtualPath("Wood.omat"), "/MyMount/Wood.omat");
 }
 
 NOLINT_TEST(

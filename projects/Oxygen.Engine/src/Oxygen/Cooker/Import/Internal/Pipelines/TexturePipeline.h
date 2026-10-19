@@ -125,6 +125,9 @@ public:
     //! Canonical dedupe key (normalized path or embedded hash).
     std::string texture_id;
 
+    //! The texture's product name in its model (`Paint.base_color`).
+    std::string name;
+
     //! Opaque correlation key (e.g., `ufbx_texture*`).
     const void* source_key = nullptr;
 
@@ -170,6 +173,9 @@ public:
 
     //! Echoed from WorkItem for dedupe mapping.
     std::string texture_id;
+
+    //! Echoed from WorkItem: the texture's product name.
+    std::string name;
 
     //! Echoed from WorkItem for correlation.
     const void* source_key = nullptr;

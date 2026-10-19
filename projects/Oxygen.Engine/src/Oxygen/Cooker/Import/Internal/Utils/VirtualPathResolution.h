@@ -155,6 +155,38 @@ inline auto PlaceAsset(
   };
 }
 
+//! Places a model job at its identity: the virtual path of its source file.
+/*!
+ The identity must end in the source file's extension (`Ship.glb`); the model's
+ products are named under it (`PlaceModelProduct`).
+
+ @return The placement, or the diagnostic `PlaceAsset` refuses the identity
+   with.
+*/
+inline auto PlaceModel(const ImportRequest& request)
+  -> std::expected<AssetPlacement, ImportDiagnostic>
+{
+  return PlaceAsset(request, request.source_path.extension().string());
+}
+
+//! Places a model's product at `ImportRequest::ModelProductVirtualPath`.
+/*!
+ The request's identity was accepted by `PlaceModel`, so the product's
+ descriptor is under the model's folder in the cooked root.
+*/
+inline auto PlaceModelProduct(const ImportRequest& request,
+  const std::string_view name, const std::string_view extension)
+  -> AssetPlacement
+{
+  auto placement = AssetPlacement {
+    .virtual_path = request.ModelProductVirtualPath(name, extension),
+    .descriptor_relpath = {},
+  };
+  static_cast<void>(TryVirtualPathToRelPath(
+    request, placement.virtual_path, placement.descriptor_relpath));
+  return placement;
+}
+
 inline auto BuildMountedCookedRoots(const ImportRequest& request)
   -> std::vector<std::filesystem::path>
 {

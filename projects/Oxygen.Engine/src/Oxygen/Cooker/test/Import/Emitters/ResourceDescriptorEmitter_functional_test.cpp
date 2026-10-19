@@ -56,7 +56,8 @@ NOLINT_TEST_F(WindowsFileWriterTest, EmitterRetainsErrorAfterSharedWriterFlush)
   }
   ResourceDescriptorEmitter emitter(*writer_, layout, TempDir());
   const oxygen::data::pak::core::TextureResourceDesc descriptor {};
-  static_cast<void>(emitter.EmitTexture("texture", "texture-source",
+  static_cast<void>(emitter.EmitTextureAtRelPath(
+    layout.resources_dir + "/Ship.glb/Paint.base_color.otex",
     oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
   co::Run(*loop_, [&] -> Co<> {
     const auto first_flush = co_await writer_->Flush();

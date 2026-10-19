@@ -265,26 +265,6 @@ namespace {
       .command = "demo.content.layout.resources_dir",
       .member = &LooseCookedLayout::resources_dir,
     },
-    LayoutField {
-      .label = "Descriptors Dir",
-      .command = "demo.content.layout.descriptors_dir",
-      .member = &LooseCookedLayout::descriptors_dir,
-    },
-    LayoutField {
-      .label = "Scenes Subdir",
-      .command = "demo.content.layout.scenes_subdir",
-      .member = &LooseCookedLayout::scenes_subdir,
-    },
-    LayoutField {
-      .label = "Geometry Subdir",
-      .command = "demo.content.layout.geometry_subdir",
-      .member = &LooseCookedLayout::geometry_subdir,
-    },
-    LayoutField {
-      .label = "Materials Subdir",
-      .command = "demo.content.layout.materials_subdir",
-      .member = &LooseCookedLayout::materials_subdir,
-    },
   };
 
   auto Name(const std::string_view name) -> std::string

@@ -46,6 +46,7 @@ protected:
   void SetUp() override
   {
     settings_.source_path = (TempDir() / "source.gltf").string();
+    settings_.virtual_path = "/.cooked/source.gltf";
     std::ofstream source(settings_.source_path);
     source
       << R"({"asset":{"version":"2.0"},"nodes":[{"name":"Root"}],"scenes":[{"nodes":[0]}],"scene":0})";
@@ -90,7 +91,8 @@ NOLINT_TEST_F(RetainedModelImportTest,
     recipe << R"({"version":1,"defaults":{"texture":{
       "output_format":"bc7_srgb","data_format":"bc7","mip_policy":"full",
       "mip_filter":"kaiser","bc7_quality":"high"}},
-      "jobs":[{"type":"gltf","source":"source.gltf","normals_policy":"generate"}]})";
+      "jobs":[{"type":"gltf","source":"source.gltf",
+        "virtual_path":"/.cooked/source.gltf","normals_policy":"generate"}]})";
   }
   const auto before = RetainedModelImport::Prepare(record_);
   RetainedModelImport::SaveRecipeFile(record_, TempDir(), recipe_path,

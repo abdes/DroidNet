@@ -7,6 +7,7 @@
 #pragma once
 
 #include <filesystem>
+#include <string>
 #include <string_view>
 
 namespace oxygen::cooker::test {
@@ -19,6 +20,11 @@ namespace oxygen::cooker::test {
 
 //! `Cooker/test/Assets/Models/<name>`. Throws if the file is missing.
 [[nodiscard]] auto ModelPath(std::string_view name) -> std::filesystem::path;
+
+//! The identity these tests give a model: its file name at the default mount
+//! root (`/.cooked/Tabuleiro.glb`), under which its products are named.
+[[nodiscard]] auto ModelVirtualPath(const std::filesystem::path& source)
+  -> std::string;
 
 //! A file under `Cooker/`, for example
 //! `"Import/Schemas/oxygen.input.schema.json"`. Throws if it is missing.

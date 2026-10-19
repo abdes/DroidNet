@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/Naming.h>
@@ -60,25 +61,6 @@ NOLINT_TEST_P(AssetNamingTest, SkipsOccupiedSuffixRegardlessOfCase)
   EXPECT_EQ(naming.MakeUniqueName("METALGREY", context), "METALGREY_3");
   EXPECT_TRUE(naming.HasName(GetParam(), "METALGREY_2"));
   EXPECT_EQ(naming.GetNameCount(GetParam()), 4U);
-}
-
-NOLINT_TEST_P(AssetNamingTest, NamespaceParticipatesInPortableStorageIdentity)
-{
-  NamingService naming;
-  auto context = NamingContext {
-    .kind = GetParam(),
-    .scene_namespace = "Town",
-  };
-
-  EXPECT_EQ(naming.MakeUniqueName("MetalGrey", context), "Town/MetalGrey");
-  context.scene_namespace = "TOWN";
-  EXPECT_EQ(naming.MakeUniqueName("metalgrey", context), "TOWN/metalgrey_1");
-  context.scene_namespace = "Other";
-  EXPECT_EQ(naming.MakeUniqueName("MetalGrey", context), "Other/MetalGrey");
-  EXPECT_TRUE(naming.HasName(GetParam(), "town/METALGREY"));
-  EXPECT_TRUE(naming.HasName(GetParam(), "town/METALGREY_1"));
-  EXPECT_TRUE(naming.HasName(GetParam(), "other/metalgrey"));
-  EXPECT_EQ(naming.GetNameCount(GetParam()), 3U);
 }
 
 NOLINT_TEST_P(AssetNamingTest, KeepsAuthoredNamesAndConventions)
@@ -137,38 +119,53 @@ NOLINT_TEST_P(AssetNamingTest, NormalizesToNfc)
   EXPECT_EQ(naming.MakeUniqueName("Cafe\xCC\x81", context), "Caf\xC3\xA9");
 }
 
+//! A name whose leaf exceeds the segment bound is shortened, at a code point
+//! boundary, so that the whole leaf fits: name, `_N`, the usage of each of a
+//! texture's usages, and the extension.
 NOLINT_TEST_P(AssetNamingTest, ShortensLongNamesToTheLeafBound)
 {
   NamingService naming;
   const auto context = NamingContext { .kind = GetParam() };
-  const auto extension = GetParam() == ImportNameKind::kMesh
-    ? oxygen::data::kGeometryDescriptorExtension
+  const auto suffixes = GetParam() == ImportNameKind::kMesh
+    ? std::vector<std::string> { std::string(
+        oxygen::data::kGeometryDescriptorExtension) }
     : GetParam() == ImportNameKind::kMaterial
-    ? oxygen::data::kMaterialDescriptorExtension
-    : oxygen::data::kSceneDescriptorExtension;
+    ? std::vector<std::string> { std::string(
+        oxygen::data::kMaterialDescriptorExtension) }
+    : std::vector<std::string> {
+        ".base_color.otex",
+        ".normal.otex",
+        ".metallic_roughness.otex",
+        ".clearcoat_normal.otex",
+      };
+  const auto fits = [&suffixes](const std::string& name) -> void {
+    for (const auto& suffix : suffixes) {
+      const auto leaf = name + suffix;
+      EXPECT_LE(leaf.size(), kMaxVirtualPathSegmentBytes) << suffix;
+      EXPECT_FALSE(ValidateVirtualPathSegment(leaf).has_value()) << suffix;
+    }
+  };
 
   const auto ascii = std::string(300, 'a');
   const auto first = naming.MakeUniqueName(ascii, context);
-  EXPECT_EQ(first.size() + extension.size(), kMaxVirtualPathSegmentBytes);
+  fits(first);
   const auto second = naming.MakeUniqueName(ascii, context);
   EXPECT_TRUE(second.ends_with("_1"));
-  EXPECT_EQ(second.size() + extension.size(), kMaxVirtualPathSegmentBytes);
+  fits(second);
   EXPECT_NE(first, second);
 
   auto accented = std::string {};
   for (auto i = 0; i < 200; ++i) {
-    accented.append("\xC3\xA9");
+    accented.append("Ã©");
   }
   const auto shortened = naming.MakeUniqueName(accented, context);
-  const auto leaf = shortened + std::string(extension);
-  EXPECT_LE(leaf.size(), kMaxVirtualPathSegmentBytes);
-  EXPECT_FALSE(ValidateVirtualPathSegment(leaf).has_value());
+  fits(shortened);
   EXPECT_EQ(shortened.size() % 2, 0U);
 }
 
 INSTANTIATE_TEST_SUITE_P(StorageKinds, AssetNamingTest,
-  testing::Values(
-    ImportNameKind::kMesh, ImportNameKind::kMaterial, ImportNameKind::kScene));
+  testing::Values(ImportNameKind::kMesh, ImportNameKind::kMaterial,
+    ImportNameKind::kTexture));
 
 NOLINT_TEST(NamingServiceTest, UnnamedAssetsTakeKindFallbacks)
 {
@@ -179,8 +176,8 @@ NOLINT_TEST(NamingServiceTest, UnnamedAssetsTakeKindFallbacks)
       "", NamingContext { .kind = ImportNameKind::kMaterial, .ordinal = 3 }),
     "Material_3");
   EXPECT_EQ(naming.MakeUniqueName("",
-              NamingContext { .kind = ImportNameKind::kScene, .ordinal = 0 }),
-    "Scene_0");
+              NamingContext { .kind = ImportNameKind::kTexture, .ordinal = 0 }),
+    "texture_0");
   EXPECT_EQ(naming.MakeUniqueName(
               "/", NamingContext { .kind = ImportNameKind::kMaterial }),
     "_");
@@ -213,7 +210,6 @@ NOLINT_TEST(NamingServiceTest, SceneNodesKeepVerbatimCaseSensitiveNames)
   const auto context = NamingContext {
     .kind = ImportNameKind::kSceneNode,
     .ordinal = 4,
-    .scene_namespace = "Town",
   };
 
   EXPECT_EQ(naming.MakeUniqueName("Light", context), "Light");
@@ -224,7 +220,6 @@ NOLINT_TEST(NamingServiceTest, SceneNodesKeepVerbatimCaseSensitiveNames)
   EXPECT_TRUE(naming.HasName(context.kind, "Light"));
   EXPECT_TRUE(naming.HasName(context.kind, "light"));
   EXPECT_FALSE(naming.HasName(context.kind, "LIGHT"));
-  EXPECT_FALSE(naming.HasName(context.kind, "Town/Light"));
   EXPECT_EQ(naming.GetNameCount(context.kind), 5U);
 }
 

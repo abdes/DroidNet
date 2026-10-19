@@ -122,6 +122,13 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
   const auto& settings = *this;
   ImportRequest request {};
   request.source_path = settings.source_path;
+  if (settings.virtual_path.empty()) {
+    error_stream << "ERROR [import.asset_virtual_path_missing]: a model import "
+                    "requires 'virtual_path', the identity of its source "
+                    "file\n";
+    return std::nullopt;
+  }
+  request.asset_virtual_path = settings.virtual_path;
   auto provenance_json = settings.material_slot_provenance_json;
   if (!settings.material_slot_provenance_path.empty()) {
     if (!provenance_json.empty()) {

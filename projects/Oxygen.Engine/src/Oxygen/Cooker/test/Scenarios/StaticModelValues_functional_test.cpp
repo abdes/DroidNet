@@ -53,6 +53,7 @@
 #include <Oxygen/Cooker/Loose/Validation.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -413,6 +414,8 @@ NOLINT_TEST_F(StaticModelValuesTest, FbxGeneratesMissingNormalMapTangents)
   }
   oxygen::content::import::ImportRequest request {};
   request.source_path = root / "static_normal_triangle.fbx";
+  request.asset_virtual_path
+    = oxygen::cooker::test::ModelVirtualPath(request.source_path);
   request.cooked_root = root / "cooked";
   request.options.scene_content_policy
     = oxygen::content::import::SceneContentPolicy::kStatic;
@@ -475,6 +478,8 @@ NOLINT_TEST_F(StaticModelValuesTest,
         WriteGltfSource(source, document);
         oxygen::content::import::ImportRequest request;
         request.source_path = source;
+        request.asset_virtual_path
+          = oxygen::cooker::test::ModelVirtualPath(request.source_path);
         request.cooked_root = root / "cooked";
         request.options.scene_content_policy
           = oxygen::content::import::SceneContentPolicy::kStatic;
@@ -567,6 +572,8 @@ NOLINT_TEST_F(StaticModelValuesTest, FbxCookPreservesUnitsHandednessAndValues)
         }
         oxygen::content::import::ImportRequest request;
         request.source_path = source;
+        request.asset_virtual_path
+          = oxygen::cooker::test::ModelVirtualPath(request.source_path);
         request.cooked_root = root / "cooked";
         request.options.scene_content_policy
           = oxygen::content::import::SceneContentPolicy::kStatic;

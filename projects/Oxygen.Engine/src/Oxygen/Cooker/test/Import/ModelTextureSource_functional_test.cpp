@@ -11,7 +11,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <filesystem>
+#include <iterator>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -134,6 +136,46 @@ namespace {
     ASSERT_EQ(prepared.sources.size(), 2U);
     EXPECT_NE(
       prepared.sources.at(0).source_path, prepared.sources.at(1).source_path);
+  }
+
+  //! A texture is named once per image, from the image file's stem when the
+  //! texture and image have no name, then takes its usage: two images with
+  //! one stem probe `_1`, and one image used twice keeps one name.
+  NOLINT_TEST(ModelTextureSourceTest, GltfTexturesAreNamedPerImageWithUsage)
+  {
+    constexpr auto document = std::string_view { R"({
+      "asset":{"version":"2.0"},
+      "images":[
+        {"uri":"a/diffuse.png"},
+        {"uri":"b/diffuse.png"},
+        {"uri":"c/Paint.png"},
+        {"uri":"data:image/png;base64,AAAA"}
+      ],
+      "textures":[{"source":0},{"source":1},{"source":2},{"source":3}],
+      "materials":[
+        {"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}},
+        {"pbrMetallicRoughness":{"baseColorTexture":{"index":1}}},
+        {"pbrMetallicRoughness":{"baseColorTexture":{"index":2}},
+         "normalTexture":{"index":2},
+         "emissiveTexture":{"index":3}}
+      ]
+    })" };
+    auto input = adapters::AdapterInput {};
+    input.source_id_prefix = "model";
+    input.request.source_path = "authoring/model.gltf";
+    auto adapter = adapters::GltfAdapter {};
+    ASSERT_TRUE(adapter
+        .Parse(
+          std::as_bytes(std::span(document.data(), document.size())), input)
+        .success);
+    const auto prepared = adapter.PrepareTextures(input);
+    ASSERT_TRUE(prepared.success);
+    auto names = std::vector<std::string> {};
+    std::ranges::transform(prepared.sources, std::back_inserter(names),
+      &adapters::ModelTextureSource::name);
+    EXPECT_THAT(names,
+      ::testing::ElementsAre("diffuse.base_color", "diffuse_1.base_color",
+        "Paint.base_color", "Paint.normal", "texture_3.emissive"));
   }
 
   NOLINT_TEST(ModelTextureSourceTest, GltfTexturesAreProducedInSourceKeyOrder)

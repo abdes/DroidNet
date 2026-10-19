@@ -143,13 +143,14 @@ namespace {
     EXPECT_EQ(desc.emissive_factor[2], 0.0F);
   }
 
+  //! A texture reference names the descriptor at the texture's identity.
   NOLINT_TEST_F(MaterialDescriptorImportJobTest,
-    ResolvesHashedTextureDescriptorVirtualPathAndEmitsMaterial)
+    ResolvesTextureDescriptorAtItsIdentityAndEmitsMaterial)
   {
-    const auto cooked_root = TempDir() / "resolve_hashed_texture_virtual_path";
+    const auto cooked_root = TempDir() / "resolve_texture_virtual_path";
     std::filesystem::create_directories(cooked_root);
-    const auto sidecar_path = cooked_root / "Resources" / "Textures"
-      / "woodfloor007_color_1234567890abcdef.otex";
+    const auto sidecar_path
+      = cooked_root / "Resources" / "Textures" / "woodfloor007_color.otex";
     constexpr auto kTextureIndex = ResourceIndexT { 7U };
     WriteTextureSidecar(sidecar_path, kTextureIndex);
 
@@ -188,6 +189,32 @@ namespace {
         .index = kTextureIndex,
       }));
     // NOLINTEND(bugprone-unchecked-optional-access)
+  }
+
+  //! A descriptor under another name, such as a hashed one, is not the
+  //! texture: the reference is missing.
+  NOLINT_TEST_F(
+    MaterialDescriptorImportJobTest, IgnoresDescriptorsUnderAnotherName)
+  {
+    const auto cooked_root = TempDir() / "ignore_hashed_texture_name";
+    std::filesystem::create_directories(cooked_root);
+    WriteTextureSidecar(cooked_root / "Resources" / "Textures"
+        / "woodfloor007_color_1234567890abcdef.otex",
+      ResourceIndexT { 7U });
+
+    const auto report = Import(MakeRequest(cooked_root, R"({
+      "name": "woodfloor007",
+      "domain": "opaque",
+      "textures": {
+        "base_color": {
+          "virtual_path": "/.cooked/Resources/Textures/woodfloor007_color.otex"
+        }
+      }
+    })"));
+
+    ASSERT_HAS_VALUE(report);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report->diagnostics, "material.descriptor.texture_descriptor_missing"));
   }
 
   //! A deleted texture leaves its slot unbound with a warning, so the material

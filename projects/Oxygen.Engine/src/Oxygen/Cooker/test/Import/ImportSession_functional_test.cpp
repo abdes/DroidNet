@@ -747,10 +747,9 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
         15,
         16,
       });
-    const auto descriptor_relpath
-      = request.loose_cooked_layout.MaterialDescriptorRelPath("Wood");
+    const auto descriptor_relpath = std::string("Wood.omat");
     const auto virtual_path
-      = request.loose_cooked_layout.MaterialVirtualPath("Wood");
+      = request.loose_cooked_layout.DescriptorVirtualPath(descriptor_relpath);
     const auto descriptor = oxygen::content::test::MaterialDescriptor("Wood");
 
     const auto tex_idx
@@ -855,11 +854,14 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeIncludesResourceSidecarOutputs)
       co_return;
     }
 
-    const auto texture_rel = session.ResourceDescriptorEmitter().EmitTexture(
-      "wood_albedo", "wood_albedo",
-      oxygen::data::pak::core::ResourceIndexT { texture_index }, *texture_desc);
+    const auto texture_rel
+      = session.ResourceDescriptorEmitter().EmitTextureAtRelPath(
+        "Wood.glb/wood.base_color.otex",
+        oxygen::data::pak::core::ResourceIndexT { texture_index },
+        *texture_desc);
     const auto buffer_rel
-      = session.ResourceDescriptorEmitter().EmitBuffer("mesh_vb", "mesh_vb",
+      = session.ResourceDescriptorEmitter().EmitBufferAtRelPath(
+        "Wood.glb/Mesh.lod0.vertex.obuf",
         oxygen::data::pak::core::ResourceIndexT { buffer_index }, *buffer_desc);
 
     const auto report = co_await session.Finalize();

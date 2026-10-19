@@ -19,6 +19,7 @@
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -52,6 +53,7 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest, ImportsTexturedFbxScene)
   const auto temp_dir = MakeTempDir("async_fbx_textured");
   ImportRequest request {
     .source_path = source_path,
+    .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
     .additional_sources = {},
     .cooked_root = temp_dir,
     .loose_cooked_layout = LooseCookedLayout {},
@@ -104,6 +106,7 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest,
   const auto temp_dir = MakeTempDir("async_fbx_light_overrides");
   ImportRequest request {
     .source_path = source_path,
+    .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
     .additional_sources = {},
     .cooked_root = temp_dir,
     .loose_cooked_layout = LooseCookedLayout {},

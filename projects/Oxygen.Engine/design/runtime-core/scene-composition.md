@@ -15,11 +15,11 @@ patched into import results.
 
 ## 1. Problem
 
-| Fact today                                                                                                                                                                                          | Consequence                                                                                                                 |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| A model import emits `Materials/<group>`, `Geometry/<group>` and `Scenes/<group>` ([content identity](../../../../design/editor/lld/content-browser-asset-identity.md)); nothing can use the scene. | The editor builds scenes from geometry one mesh at a time; the model's hierarchy, transforms, cameras and lights are lost.  |
-| Examples run import results directly and patch them with script sidecars (`rotating-gltf`).                                                                                                         | An import result becomes a runnable scene through a side door; Oxygen data such as start state has no proper home on it.    |
-| Removing input context `auto_activate` ([start state](scene-instantiation-and-player.md#scene-start-state)) needs a scene to name its starting contexts.                                            | A scene that is an import result cannot say which contexts start without adding Oxygen fields to the import or the sidecar. |
+| Fact today                                                                                                                                                                                                        | Consequence                                                                                                                 |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| A model import emits its materials, geometry and scene under the model (`Ship.glb/Ship.oscene`) ([content identity](../../../../design/editor/lld/content-browser-asset-identity.md)); nothing can use the scene. | The editor builds scenes from geometry one mesh at a time; the model's hierarchy, transforms, cameras and lights are lost.  |
+| Examples run import results directly and patch them with script sidecars (`rotating-gltf`).                                                                                                                       | An import result becomes a runnable scene through a side door; Oxygen data such as start state has no proper home on it.    |
+| Removing input context `auto_activate` ([start state](scene-instantiation-and-player.md#scene-start-state)) needs a scene to name its starting contexts.                                                          | A scene that is an import result cannot say which contexts start without adding Oxygen fields to the import or the sidecar. |
 
 The editor's own rules already settle ownership: scenes are authored content,
 and source media "remains source media until an import or descriptor workflow
@@ -43,7 +43,7 @@ imported one as a whole.
 {
   "name": "Backpack",
   "transform": { "translation": [-1.5, 0, 0] },
-  "instance": { "scene_ref": "/Content/Scenes/backpack/backpack.oscene" }
+  "instance": { "scene_ref": "/Content/Models/backpack.glb/backpack.oscene" }
 }
 ```
 

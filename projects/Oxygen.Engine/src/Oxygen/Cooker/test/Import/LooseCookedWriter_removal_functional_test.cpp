@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "LooseCookedWriterTestSupport.h"
@@ -17,7 +18,6 @@
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
 #include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
@@ -30,7 +30,11 @@ namespace fixtures = oxygen::content::test;
 
 namespace {
 
-  using oxygen::content::import::LooseCookedLayout;
+  //! A material descriptor's file name.
+  auto MaterialFile(const std::string_view name) -> std::string
+  {
+    return std::string(name) + ".omat";
+  }
   using oxygen::content::import::LooseCookedWriter;
   using oxygen::content::lc::Inspection;
   using oxygen::content::lc::IntegrityCheck;
@@ -41,13 +45,12 @@ namespace {
 
   auto VirtualPath(const std::string& name) -> std::string
   {
-    return "/.cooked/Materials/"
-      + LooseCookedLayout::MaterialDescriptorFileName(name);
+    return "/.cooked/Materials/" + MaterialFile(name);
   }
 
   auto DescriptorPath(const std::string& name) -> std::string
   {
-    return "Materials/" + LooseCookedLayout::MaterialDescriptorFileName(name);
+    return "Materials/" + MaterialFile(name);
   }
 
   //! Cooks materials A and B into a fresh root.

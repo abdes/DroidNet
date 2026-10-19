@@ -15,7 +15,6 @@
 #include "LooseCookedWriterTestSupport.h"
 
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Data/AssetType.h>
@@ -27,7 +26,11 @@ namespace fixtures = oxygen::content::test;
 
 namespace {
 
-  using oxygen::content::import::LooseCookedLayout;
+  //! A material descriptor's file name.
+  auto MaterialFile(const std::string_view name) -> std::string
+  {
+    return std::string(name) + ".omat";
+  }
   using oxygen::content::import::LooseCookedWriter;
   using oxygen::cooker::test::ScopedTempDir;
   using oxygen::data::AssetType;
@@ -62,10 +65,9 @@ namespace {
     const auto bytes
       = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
           .bytes;
-    const auto valid_virtual_path = std::string("/.cooked/Materials/")
-      + LooseCookedLayout::MaterialDescriptorFileName("A");
-    const auto valid_relpath
-      = "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A");
+    const auto valid_virtual_path
+      = std::string("/.cooked/Materials/") + MaterialFile("A");
+    const auto valid_relpath = "Materials/" + MaterialFile("A");
 
     LooseCookedWriter writer(cooked_root);
 
@@ -94,50 +96,42 @@ namespace {
       BadPathCase {
         .case_name = "MissingLeadingSlash",
         .target = PathTarget::kVirtualPath,
-        .path = std::string(".cooked/")
-          + LooseCookedLayout::MaterialDescriptorFileName("A"),
+        .path = std::string(".cooked/") + MaterialFile("A"),
       },
       BadPathCase {
         .case_name = "DotSegments",
         .target = PathTarget::kVirtualPath,
-        .path = std::string("/.cooked/../")
-          + LooseCookedLayout::MaterialDescriptorFileName("A"),
+        .path = std::string("/.cooked/../") + MaterialFile("A"),
       },
       BadPathCase {
         .case_name = "Backslashes",
         .target = PathTarget::kVirtualPath,
-        .path = std::string("\\\\.cooked\\\\")
-          + LooseCookedLayout::MaterialDescriptorFileName("A"),
+        .path = std::string("\\\\.cooked\\\\") + MaterialFile("A"),
       },
       BadPathCase {
         .case_name = "DoubleSlash",
         .target = PathTarget::kVirtualPath,
-        .path = std::string("/.cooked//")
-          + LooseCookedLayout::MaterialDescriptorFileName("A"),
+        .path = std::string("/.cooked//") + MaterialFile("A"),
       },
       BadPathCase {
         .case_name = "TrailingSlash",
         .target = PathTarget::kVirtualPath,
-        .path = std::string("/.cooked/")
-          + LooseCookedLayout::MaterialDescriptorFileName("A") + "/",
+        .path = std::string("/.cooked/") + MaterialFile("A") + "/",
       },
       BadPathCase {
         .case_name = "AbsoluteDescriptorRelPath",
         .target = PathTarget::kDescriptorRelPath,
-        .path
-        = "/Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"),
+        .path = "/Materials/" + MaterialFile("A"),
       },
       BadPathCase {
         .case_name = "DotDotDescriptorRelPath",
         .target = PathTarget::kDescriptorRelPath,
-        .path = "Materials/../materials/"
-          + LooseCookedLayout::MaterialDescriptorFileName("A"),
+        .path = "Materials/../materials/" + MaterialFile("A"),
       },
       BadPathCase {
         .case_name = "ColonDescriptorRelPath",
         .target = PathTarget::kDescriptorRelPath,
-        .path
-        = "C:/Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"),
+        .path = "C:/Materials/" + MaterialFile("A"),
       },
       BadPathCase {
         .case_name = "BackslashFileRelPath",
@@ -165,20 +159,16 @@ namespace {
     {
       LooseCookedWriter writer(cooked_root);
       writer.WriteAssetDescriptor(key0, AssetType::kMaterial,
-        "/.cooked/Materials/"
-          + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        bytes, {});
+        "/.cooked/Materials/" + MaterialFile("A"),
+        "Materials/" + MaterialFile("A"), bytes, {});
       (void)writer.Finish();
     }
 
     LooseCookedWriter writer(cooked_root);
     try {
       writer.WriteAssetDescriptor(key1, AssetType::kMaterial,
-        "/.cooked/Materials/"
-          + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"),
-        bytes, {});
+        "/.cooked/Materials/" + MaterialFile("A"),
+        "Materials/" + MaterialFile("B"), bytes, {});
       FAIL() << "Expected virtual path collision.";
     } catch (const std::runtime_error& ex) {
       const std::string message = ex.what();

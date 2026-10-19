@@ -31,6 +31,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -658,13 +659,10 @@ auto MaterialPipeline::Worker() -> co::Co<>
     };
 
     const auto cook_start = std::chrono::steady_clock::now();
-    const auto& layout = item.request.loose_cooked_layout;
-    const auto [virtual_path, descriptor_relpath]
-      = item.placement.value_or(internal::AssetPlacement {
-        .virtual_path = layout.MaterialVirtualPath(item.material.storage_name),
-        .descriptor_relpath
-        = layout.MaterialDescriptorRelPath(item.material.storage_name),
-      });
+    const auto [virtual_path, descriptor_relpath] = item.placement.has_value()
+      ? *item.placement
+      : internal::PlaceModelProduct(item.request, item.material.storage_name,
+          data::kMaterialDescriptorExtension);
     const auto material_key = ResolveMaterialKey(item.request, virtual_path);
 
     BuildOutcome build_outcome;

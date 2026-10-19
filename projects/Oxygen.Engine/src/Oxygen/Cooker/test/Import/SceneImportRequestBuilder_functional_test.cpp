@@ -28,6 +28,7 @@
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -56,6 +57,7 @@ protected:
   {
     auto settings = SceneImportSettings {};
     settings.source_path = Path("model.gltf").string();
+    settings.virtual_path = "/.cooked/model.gltf";
     settings.cooked_root = Path("cooked").string();
     settings.material_slot_source_identity = kSourceIdentity;
     return settings;
@@ -72,6 +74,28 @@ NOLINT_TEST_F(
     BuildSceneRequest(settings, ImportFormat::kGltf, errors).has_value());
   EXPECT_THAT(
     errors.str(), testing::HasSubstr("requires retained material-slot"));
+}
+
+//! A model request carries the model's identity, which names its scene.
+NOLINT_TEST_F(SceneImportRequestBuilderTest, CarriesTheModelIdentity)
+{
+  std::ostringstream errors;
+  const auto request
+    = BuildSceneRequest(Settings(), ImportFormat::kGltf, errors);
+  ASSERT_HAS_VALUE(request) << errors.str();
+  EXPECT_EQ(request->asset_virtual_path, "/.cooked/model.gltf");
+  EXPECT_EQ(request->GetSceneName(), "model");
+  EXPECT_EQ(request->ModelProductVirtualPath(
+              request->GetSceneName(), oxygen::data::kSceneDescriptorExtension),
+    "/.cooked/model.gltf/model.oscene");
+
+  auto settings = Settings();
+  settings.virtual_path.clear();
+  std::ostringstream refused;
+  EXPECT_FALSE(
+    BuildSceneRequest(settings, ImportFormat::kGltf, refused).has_value());
+  EXPECT_THAT(
+    refused.str(), testing::HasSubstr("import.asset_virtual_path_missing"));
 }
 
 NOLINT_TEST_F(SceneImportRequestBuilderTest, ForwardsCanonicalProvenance)
@@ -165,8 +189,16 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest,
       {
         "jobs",
         json::array({
-          { { "type", "gltf" }, { "source", "model.gltf" } },
-          { { "type", "fbx" }, { "source", "model.fbx" } },
+          {
+            { "type", "gltf" },
+            { "source", "model.gltf" },
+            { "virtual_path", "/.cooked/model.gltf" },
+          },
+          {
+            { "type", "fbx" },
+            { "source", "model.fbx" },
+            { "virtual_path", "/.cooked/model.fbx" },
+          },
         }),
       },
     };

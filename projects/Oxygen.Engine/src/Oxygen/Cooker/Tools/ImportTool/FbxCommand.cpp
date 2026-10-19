@@ -49,6 +49,15 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                        .StoreTo(&options_.cooked_root)
                        .Build();
 
+  auto virtual_path
+    = Option::WithKey("virtual-path")
+        .About("Identity of the model: the virtual path of its source file, "
+               "under which its products are named")
+        .Long("virtual-path")
+        .WithValue<std::string>()
+        .StoreTo(&options_.virtual_path)
+        .Build();
+
   auto with_content_hashing
     = Option::WithKey("content-hashing")
         .About("Enable or disable content hashing for outputs")
@@ -190,6 +199,7 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .About("Import a standalone FBX scene")
     .WithPositionalArguments(source_path)
     .WithOption(std::move(cooked_root))
+    .WithOption(std::move(virtual_path))
     .WithOption(std::move(job_name))
     .WithOption(std::move(report))
     .WithOption(std::move(record))

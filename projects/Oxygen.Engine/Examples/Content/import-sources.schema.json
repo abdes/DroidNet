@@ -19,7 +19,12 @@
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
           },
-          "source": { "type": "string", "minLength": 1 }
+          "source": { "type": "string", "minLength": 1 },
+          "virtual_path": {
+            "type": "string",
+            "pattern": "^/.+",
+            "description": "The model's identity: the virtual path of its source file, ending in its extension; its products are named under it. Default: /.cooked/Models/<name><extension>."
+          }
         }
       }
     }

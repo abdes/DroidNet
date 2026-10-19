@@ -14,8 +14,10 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MaterialSlotInventory.h>
 
@@ -28,10 +30,10 @@ auto AllocateMaterialSlots(const MeshBuildPipeline::WorkItem& item)
     throw std::invalid_argument(
       "Material slots require retained source provenance");
   }
-  const auto geometry_path
-    = item.request.loose_cooked_layout.GeometryVirtualPath(
-      item.storage_mesh_name);
-  const auto geometry_key = data::AssetKey::FromVirtualPath(geometry_path);
+  const auto geometry_key
+    = data::AssetKey::FromVirtualPath(internal::PlaceModelProduct(
+      item.request, item.storage_mesh_name, data::kGeometryDescriptorExtension)
+        .virtual_path);
   const auto& witness = item.source_layout_witness;
   if (base::IsAllZero(witness)) {
     throw std::invalid_argument(
@@ -49,12 +51,7 @@ auto AllocateMaterialSlots(const MeshBuildPipeline::WorkItem& item)
       result.allocations.try_emplace(range.source_slot);
     }
   }
-  const auto* previous = retained->FindGeometry(geometry_key);
-  if (previous != nullptr
-    && previous->source_geometry_anchor != result.source_geometry_anchor) {
-    throw std::invalid_argument(
-      "Material slot provenance geometry anchor mismatch");
-  }
+  const auto* previous = retained->FindGeometry(result.source_geometry_anchor);
   if (previous != nullptr && previous->source_layout_witness == witness) {
     if (previous->allocations.size() != result.allocations.size()) {
       throw std::invalid_argument(
@@ -72,10 +69,11 @@ auto AllocateMaterialSlots(const MeshBuildPipeline::WorkItem& item)
   const auto source_identity = retained->SourceIdentity().ToString();
   const auto witness_text = fmt::format("{:02x}", fmt::join(witness, ""));
   for (auto& [declaration, id] : result.allocations) {
+    // The geometry's place is not part of the slot's identity: moving the
+    // model keeps its ids.
     const auto identity = nlohmann::json::array({
-      "oxygen.material-slot/v1",
+      "oxygen.material-slot/v2",
       source_identity,
-      to_string(geometry_key),
       result.source_geometry_anchor,
       witness_text,
       declaration,

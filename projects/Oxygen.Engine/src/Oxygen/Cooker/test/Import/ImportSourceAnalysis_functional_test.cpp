@@ -374,6 +374,8 @@ namespace {
     auto job = ImportManifestJob {};
     job.job_type = "texture-descriptor";
     job.texture.source_path = path.string();
+    job.virtual_path = "/.cooked/Pixels.otex";
+    job.texture.virtual_path = job.virtual_path;
     manifest.jobs.push_back(job);
     const auto report = manifest.AnalyzeSources();
     ASSERT_TRUE(report.complete) << report.ToJson();
@@ -395,6 +397,9 @@ namespace {
       auto& settings = job.job_type == "gltf" ? job.gltf : job.fbx;
       settings.source_path
         = (models / (std::string("static_scalar_triangle.") + type)).string();
+      job.virtual_path
+        = std::string("/.cooked/Props/static_scalar_triangle.") + type;
+      settings.virtual_path = job.virtual_path;
       settings.material_slot_source_identity
         = "01990000-0000-7000-8000-000000000001";
       manifest.jobs.push_back(job);
@@ -402,7 +407,9 @@ namespace {
     const auto report = manifest.AnalyzeSources();
     ASSERT_TRUE(report.complete) << report.ToJson();
     ASSERT_EQ(report.jobs.size(), 2U);
-    for (const auto& job : report.jobs) {
+    for (size_t index = 0; index < report.jobs.size(); ++index) {
+      const auto& job = report.jobs.at(index);
+      const auto& identity = manifest.jobs.at(index).virtual_path;
       for (const auto kind : {
              ImportDependencyKind::kMaterial,
              ImportDependencyKind::kGeometry,
@@ -411,8 +418,46 @@ namespace {
         EXPECT_TRUE(std::ranges::any_of(job.outputs,
           [kind](const auto& output) -> auto { return output.kind == kind; }));
       }
+      // Every product is flat under the model; the scene takes its stem.
+      for (const auto& output : job.outputs) {
+        EXPECT_TRUE(output.virtual_path.starts_with(identity + "/"))
+          << output.virtual_path;
+        EXPECT_EQ(
+          output.virtual_path.find('/', identity.size() + 1), std::string::npos)
+          << output.virtual_path;
+      }
+      EXPECT_TRUE(std::ranges::any_of(
+        job.outputs, [&identity](const auto& output) -> auto {
+          return output.virtual_path
+            == identity + "/static_scalar_triangle.oscene";
+        }));
       ASSERT_EQ(job.observations.size(), 1U);
       EXPECT_FALSE(job.observations.front().reads.empty());
+    }
+  }
+
+  //! A model's identity is the virtual path of its source file: one without
+  //! it, or of another type, is refused before any product is named.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, ModelIdentityNamesItsSourceFile)
+  {
+    const auto source = oxygen::cooker::test::AssetsDir() / "Models"
+      / "static_scalar_triangle.gltf";
+    for (const auto* identity : { "", "/.cooked/static_scalar_triangle.fbx" }) {
+      SCOPED_TRACE(identity);
+      auto manifest = ImportManifest {};
+      auto job = ImportManifestJob {};
+      job.id = "model";
+      job.job_type = "gltf";
+      job.gltf.source_path = source.string();
+      job.virtual_path = identity;
+      job.gltf.virtual_path = identity;
+      job.gltf.material_slot_source_identity
+        = "01990000-0000-7000-8000-000000000001";
+      manifest.jobs.push_back(job);
+      const auto report = manifest.AnalyzeSources();
+      EXPECT_FALSE(report.complete);
+      ASSERT_EQ(report.jobs.size(), 1U);
+      EXPECT_TRUE(report.jobs.front().outputs.empty());
     }
   }
 
@@ -423,6 +468,8 @@ namespace {
     auto job = ImportManifestJob {};
     job.job_type = "texture";
     job.texture.source_path = Path("missing.png").string();
+    job.virtual_path = "/.cooked/missing.otex";
+    job.texture.virtual_path = job.virtual_path;
     manifest.jobs.push_back(job);
     const auto report = manifest.AnalyzeSources();
     EXPECT_FALSE(report.complete);
@@ -444,6 +491,8 @@ namespace {
     auto job = ImportManifestJob {};
     job.job_type = "texture";
     job.texture.source_path = directory.string();
+    job.virtual_path = "/.cooked/directory.otex";
+    job.texture.virtual_path = job.virtual_path;
     manifest.jobs.push_back(job);
     const auto report = manifest.AnalyzeSources();
     EXPECT_FALSE(report.complete);
@@ -500,6 +549,8 @@ namespace {
     auto job = ImportManifestJob {};
     job.job_type = "texture";
     job.texture.source_path = Path("sky.png").string();
+    job.virtual_path = "/.cooked/sky.otex";
+    job.texture.virtual_path = job.virtual_path;
     job.texture.cubemap = true;
     manifest.jobs.push_back(job);
     const auto report = manifest.AnalyzeSources();

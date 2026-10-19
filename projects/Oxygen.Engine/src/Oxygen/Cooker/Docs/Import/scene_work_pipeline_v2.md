@@ -267,8 +267,9 @@ follows this behavior (implementation notes & diagnostics below):
 5. On stage success the pipeline:
    - Sorts all component arrays by `node_index`.
    - Places the scene: a scene descriptor job's placement, or, for a model,
-     `request.GetSceneName()` in `request.loose_cooked_layout`. The asset key
-     derives from the resulting `virtual_path`.
+     the model's stem under the model (`Ship.glb/Ship.oscene`,
+     `ImportRequest::ModelProductVirtualPath`). The asset key derives from the
+     resulting `virtual_path`.
    - Serializes the payload (packed alignment=1) to an in-memory buffer in this
      order: `SceneAssetDesc`, `NodeRecord[]`, string-table bytes, component
      tables, component directory, then the SceneEnvironment block.

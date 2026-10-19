@@ -60,6 +60,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
 #include <Oxygen/Cooker/Tools/ImportTool/UI/BatchViewModel.h>
 #include <Oxygen/Cooker/Tools/ImportTool/UI/Screens/BatchImportScreen.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/SourceKey.h>
 
 #ifndef OXYGEN_IMPORT_TOOL_VERSION
@@ -175,8 +176,8 @@ namespace {
         if (!imports_scene) {
           return true;
         }
-        virtual_path = job.request.loose_cooked_layout.SceneVirtualPath(
-          job.request.GetSceneName());
+        virtual_path = job.request.ModelProductVirtualPath(
+          job.request.GetSceneName(), data::kSceneDescriptorExtension);
         return true;
       }
 

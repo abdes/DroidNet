@@ -449,24 +449,6 @@
         },
         "resources_dir": {
           "type": "string"
-        },
-        "descriptors_dir": {
-          "type": "string"
-        },
-        "scenes_subdir": {
-          "type": "string"
-        },
-        "geometry_subdir": {
-          "type": "string"
-        },
-        "materials_subdir": {
-          "type": "string"
-        },
-        "texture_descriptors_subdir": {
-          "type": "string"
-        },
-        "buffer_descriptors_subdir": {
-          "type": "string"
         }
       },
       "additionalProperties": false
@@ -915,7 +897,7 @@
         "virtual_path": {
           "type": "string",
           "minLength": 1,
-          "description": "Identity of the asset a single-asset job cooks, whose descriptor is written at this virtual path, or of the input source an input job cooks, whose actions and mapping contexts are named under it (`/Content/Input/Player.input/Jump.oiact`). Required for material, geometry, scene, script, texture, physics material, collision shape and input jobs, and refused on the others."
+          "description": "Identity of the asset a single-asset job cooks, whose descriptor is written at this virtual path, or of the container a container job cooks, whose products are named under it: an input source (`/Content/Input/Player.input/Jump.oiact`) or a model, whose identity ends in its source file's extension (`/Content/Ship/Ship.glb/Paint.omat`). Required for material, geometry, scene, script, texture, physics material, collision shape, input, glTF and FBX jobs, and refused on the others."
         },
         "name": {
           "type": "string"

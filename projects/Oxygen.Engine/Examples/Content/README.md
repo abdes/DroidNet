@@ -229,9 +229,15 @@ Distinct authored assets need distinct virtual paths: instancing uses
 version 9. Atmosphere sources use explicit per-light slots; scripted light
 changes apply validated whole-candidate updates.
 
-Imported meshes, materials and scenes keep their authored names: the importer
-adds no prefix and applies no naming convention, and it replaces only the
-characters a virtual path segment refuses. Names that collide after Unicode case
-folding get numeric suffixes: `MetalGrey` and `Metalgrey` become `MetalGrey` and
-`Metalgrey_1`. Namespaces and occupied suffixes participate in collision checks.
-Scene-node names are kept verbatim and compared case-sensitively.
+A model is identified by the virtual path of its source file, which each job
+names (`"virtual_path": "/.cooked/glb/chest.glb"`), and its products are named
+flat under it: `/.cooked/glb/chest.glb/chest.oscene` is the model's scene, named
+after the file. `import-sources.json` entries name theirs with `virtual_path`,
+by default `/.cooked/Models/<name><extension>`. Imported meshes, materials and
+textures keep their authored names: the importer adds no prefix and applies no
+naming convention, and it replaces only the characters a virtual path segment
+refuses. Names that collide after Unicode case folding get numeric suffixes:
+`MetalGrey` and `Metalgrey` become `MetalGrey` and `Metalgrey_1`, and occupied
+suffixes participate in collision checks. A texture adds its usage
+(`Paint.base_color.otex`). Scene-node names are kept verbatim and compared
+case-sensitively.

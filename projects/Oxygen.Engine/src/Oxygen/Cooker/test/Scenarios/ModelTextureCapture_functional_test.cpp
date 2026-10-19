@@ -29,6 +29,7 @@
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -60,6 +61,8 @@ namespace {
     auto job = ImportManifestJob {};
     job.job_type = "gltf";
     job.gltf.source_path = source_path.string();
+    job.virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path);
+    job.gltf.virtual_path = job.virtual_path;
     job.gltf.material_slot_source_identity
       = "01990000-0000-7000-8000-000000000001";
     manifest.jobs.push_back(job);
@@ -74,6 +77,8 @@ namespace {
       SCOPED_TRACE(placeholder);
       auto request = ImportRequest {};
       request.source_path = source_path;
+      request.asset_virtual_path
+        = oxygen::cooker::test::ModelVirtualPath(request.source_path);
       request.cooked_root
         = root / (placeholder ? "placeholder" : "error-index");
       request.options.texture_tuning.placeholder_on_failure = placeholder;
@@ -163,6 +168,8 @@ namespace {
     };
     auto request = ImportRequest {};
     request.source_path = logical;
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
     request.cooked_root = root / "cooked";
     request.captured_inputs
       = std::make_shared<const CapturedInputSet>(std::span(entries));
@@ -190,6 +197,8 @@ namespace {
       = WriteCapture(logical, root / "model.capture", document.dump());
     auto request = ImportRequest {};
     request.source_path = logical;
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
     request.cooked_root = root / "cooked";
     request.captured_inputs
       = std::make_shared<const CapturedInputSet>(std::span(&entry, 1));

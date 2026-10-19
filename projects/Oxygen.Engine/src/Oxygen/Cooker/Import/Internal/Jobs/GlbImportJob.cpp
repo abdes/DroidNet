@@ -33,6 +33,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Internal/WorkDispatcher.h>
 #include <Oxygen/Cooker/Import/Internal/WorkPayloadStore.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
@@ -152,6 +153,13 @@ auto GlbImportJob::ExecuteSessionAsync(ImportSession& session)
     report.telemetry = telemetry;
     co_return report;
   };
+
+  if (auto placement = internal::PlaceModel(Request()); !placement) {
+    session.AddDiagnostic(std::move(placement.error()));
+    ReportPhaseProgress(
+      ImportPhase::kFailed, 1.0F, "Model virtual path refused");
+    co_return co_await FinalizeWithTelemetry(session);
+  }
 
   ReportPhaseProgress(ImportPhase::kLoading, 0.0F, "Parsing glTF...");
   const auto load_start = std::chrono::steady_clock::now();

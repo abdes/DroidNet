@@ -28,14 +28,14 @@ auto FallbackName(const import::NamingContext& context) -> std::string
   case import::ImportNameKind::kSceneNode:
     kind = "Node";
     break;
-  case import::ImportNameKind::kScene:
-    kind = "Scene";
-    break;
   case import::ImportNameKind::kMesh:
     kind = "Mesh";
     break;
   case import::ImportNameKind::kMaterial:
     kind = "Material";
+    break;
+  case import::ImportNameKind::kTexture:
+    kind = "texture";
     break;
   }
   return fmt::format("{}_{}", kind, context.ordinal);
@@ -47,15 +47,19 @@ auto LeafExtension(const import::ImportNameKind kind) -> std::string_view
   switch (kind) {
   case import::ImportNameKind::kSceneNode:
     return {};
-  case import::ImportNameKind::kScene:
-    return oxygen::data::kSceneDescriptorExtension;
   case import::ImportNameKind::kMesh:
     return oxygen::data::kGeometryDescriptorExtension;
   case import::ImportNameKind::kMaterial:
     return oxygen::data::kMaterialDescriptorExtension;
+  case import::ImportNameKind::kTexture:
+    return oxygen::data::kTextureDescriptorExtension;
   }
   return {};
 }
+
+//! Bytes a texture name leaves for the longest usage it can take.
+constexpr std::size_t kTextureUsageReserve
+  = std::string_view(".metallic_roughness").size();
 
 //! Cuts UTF-8 text to at most `max_bytes`, at a code point boundary.
 auto ShortenUtf8(std::string text, const std::size_t max_bytes) -> std::string
@@ -88,8 +92,11 @@ auto AssetCandidate(const std::string_view base,
   const import::NamingContext& context, const std::string_view suffix)
   -> std::string
 {
+  const auto usage = context.kind == import::ImportNameKind::kTexture
+    ? kTextureUsageReserve
+    : std::size_t { 0 };
   const auto fixed = context.variant.size() + suffix.size()
-    + LeafExtension(context.kind).size();
+    + LeafExtension(context.kind).size() + usage;
   const auto budget = oxygen::content::kMaxVirtualPathSegmentBytes > fixed
     ? oxygen::content::kMaxVirtualPathSegmentBytes - fixed
     : std::size_t { 1 };
@@ -100,11 +107,7 @@ auto AssetCandidate(const std::string_view base,
   }
   name.append(context.variant);
   name.append(suffix);
-  if (context.scene_namespace.empty()) {
-    return name;
-  }
-  return fmt::format(
-    "{}/{}", oxygen::content::ToSegmentName(context.scene_namespace), name);
+  return name;
 }
 
 auto RegistryKey(const import::ImportNameKind kind, const std::string_view name)

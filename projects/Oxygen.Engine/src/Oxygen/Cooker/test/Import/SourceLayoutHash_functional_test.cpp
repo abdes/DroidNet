@@ -64,6 +64,8 @@ protected:
   {
     auto request = ImportRequest {};
     request.source_path = source;
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
     request.cooked_root = MakeTempDir("source_witness_cook_" + TestName() + "_"
       + std::to_string(capture_index_++));
     request.options.coordinate = coordinates;
@@ -232,11 +234,38 @@ NOLINT_TEST_F(
   }
   auto request = ImportRequest {};
   request.source_path = path;
+  request.asset_virtual_path
+    = oxygen::cooker::test::ModelVirtualPath(request.source_path);
   request.cooked_root = MakeTempDir("source_witness_rejected_mode");
   const auto failed = RunImport(std::move(request));
   EXPECT_FALSE(failed.report.success);
   EXPECT_TRUE(failed.report.material_slot_provenance_json.empty());
   EXPECT_EQ(source_provenance_->Serialize(), original.provenance->Serialize());
+}
+
+//! A geometry's slot ids are found by its name inside its model, so moving or
+//! renaming the model keeps them; only the inventory's key follows the move.
+NOLINT_TEST_F(SourceLayoutWitnessTest, MovingTheModelKeepsItsSlotIds)
+{
+  const auto original
+    = Capture(FixturePath("gltf"), CoordinateConversionPolicy {});
+  ASSERT_NE(original.provenance, nullptr);
+  ASSERT_EQ(original.provenance->Geometries().size(), 1U);
+  const auto before = original.provenance->Geometries().front();
+
+  auto request = ImportRequest {};
+  request.source_path = FixturePath("gltf");
+  request.asset_virtual_path = "/.cooked/Moved/Renamed.gltf";
+  request.cooked_root = MakeTempDir("source_witness_moved");
+  const auto moved = RunImport(std::move(request));
+  ASSERT_TRUE(moved.report.success);
+  ASSERT_EQ(source_provenance_->Geometries().size(), 1U);
+  const auto& after = source_provenance_->Geometries().front();
+
+  EXPECT_EQ(after.source_geometry_anchor, before.source_geometry_anchor);
+  EXPECT_EQ(after.allocations, before.allocations);
+  EXPECT_NE(
+    after.inventory.geometry_asset_key, before.inventory.geometry_asset_key);
 }
 
 } // namespace

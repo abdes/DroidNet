@@ -14,7 +14,6 @@
 #include <utility>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/TextureDescriptorPath.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -54,16 +53,11 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
   const auto in_output
     = TryVirtualPathToRelPath(*request, virtual_path, relpath);
   if (in_output) {
-    auto descriptor_path = std::optional<std::filesystem::path> {};
-    try {
-      descriptor_path = content::FindTextureResourceDescriptorPath(
-        output_root / std::filesystem::path(relpath));
-    } catch (const std::exception& error) {
-      report_error("texture_descriptor_ambiguous", error.what());
-      co_return std::nullopt;
-    }
-    if (descriptor_path) {
-      const auto read_result = co_await reader->ReadFile(*descriptor_path);
+    // The descriptor is at its identity; there is no other name for it.
+    const auto descriptor_path = output_root / std::filesystem::path(relpath);
+    auto exists_error = std::error_code {};
+    if (std::filesystem::is_regular_file(descriptor_path, exists_error)) {
+      const auto read_result = co_await reader->ReadFile(descriptor_path);
       if (!read_result.has_value()) {
         report_error("texture_descriptor_read_failed",
           "Failed reading texture descriptor: "

@@ -127,10 +127,13 @@ inline auto MakeSidecarRequest(const std::filesystem::path& source_path,
   return request;
 }
 
+//! The identity these tests give an authored scene: its name at the mount
+//! root.
 inline auto CanonicalSceneVirtualPath(std::string_view scene_name)
   -> std::string
 {
-  return ImportRequest {}.loose_cooked_layout.SceneVirtualPath(scene_name);
+  return ImportRequest {}.loose_cooked_layout.virtual_mount_root + "/"
+    + std::string(scene_name) + std::string(data::kSceneDescriptorExtension);
 }
 
 struct CallbackCapture final {
@@ -391,6 +394,8 @@ protected:
   {
     ImportRequest request {};
     request.source_path = source_path;
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(source_path);
     request.cooked_root = cooked_root;
     request.material_slot_provenance = source_provenance_;
     return request;

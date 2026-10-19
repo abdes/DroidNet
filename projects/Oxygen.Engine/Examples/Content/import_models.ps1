@@ -131,8 +131,14 @@ if ($SourceList) {
             '.gltf' { 'gltf' }
             default { throw "Expected original FBX, GLB, or glTF: $original" }
         }
+        $virtualPath = if ($source.virtual_path) {
+            $source.virtual_path
+        } else {
+            "/.cooked/Models/$($source.name)$([IO.Path]::GetExtension($original))"
+        }
         @{
             id = $source.name; name = $source.name; type = $type; source = $original
+            virtual_path = $virtualPath
             content_policy = 'default'
             content_flags = @{ textures = $true; materials = $true; geometry = $true; scene = $true }
             content_hashing = $true; unit_policy = 'normalize'; bake_transforms = $true

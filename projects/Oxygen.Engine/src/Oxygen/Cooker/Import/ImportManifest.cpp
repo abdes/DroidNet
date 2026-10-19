@@ -523,10 +523,11 @@ namespace {
   }
 
   //! True for a job named by its virtual path: one that cooks exactly one
-  //! asset, or an input source, whose products are named under it.
+  //! asset, or a container (an input source or a model) whose products are
+  //! named under it.
   auto IsIdentifiedJob(const std::string_view job_type) -> bool
   {
-    static constexpr auto kIdentifiedJobs = std::array<std::string_view, 9> {
+    static constexpr auto kIdentifiedJobs = std::array<std::string_view, 11> {
       "material-descriptor",
       "geometry-descriptor",
       "scene-descriptor",
@@ -536,11 +537,13 @@ namespace {
       "physics-material-descriptor",
       "collision-shape-descriptor",
       "input",
+      "gltf",
+      "fbx",
     };
     return std::ranges::contains(kIdentifiedJobs, job_type);
   }
 
-  //! Reads the identity a job cooks; a model job has none.
+  //! Reads the identity a job cooks.
   auto ReadJobVirtualPath(const json& job, ImportManifestJob& manifest_job,
     std::ostream& errors) -> bool
   {
@@ -569,6 +572,8 @@ namespace {
     manifest_job.virtual_path = job.at("virtual_path").get<std::string>();
     manifest_job.texture.virtual_path = manifest_job.virtual_path;
     manifest_job.input.virtual_path = manifest_job.virtual_path;
+    manifest_job.gltf.virtual_path = manifest_job.virtual_path;
+    manifest_job.fbx.virtual_path = manifest_job.virtual_path;
     return true;
   }
 
@@ -816,29 +821,6 @@ namespace {
       return false;
     }
     if (!ReadStringField(obj, "resources_dir", layout.resources_dir, errors)) {
-      return false;
-    }
-    if (!ReadStringField(
-          obj, "descriptors_dir", layout.descriptors_dir, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "scenes_subdir", layout.scenes_subdir, errors)) {
-      return false;
-    }
-    if (!ReadStringField(
-          obj, "geometry_subdir", layout.geometry_subdir, errors)) {
-      return false;
-    }
-    if (!ReadStringField(
-          obj, "materials_subdir", layout.materials_subdir, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "texture_descriptors_subdir",
-          layout.texture_descriptors_subdir, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "buffer_descriptors_subdir",
-          layout.buffer_descriptors_subdir, errors)) {
       return false;
     }
     return true;

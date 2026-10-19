@@ -145,8 +145,8 @@ struct ImportRequest final {
    shape job writes its descriptor at this virtual path, inside
    `loose_cooked_layout.virtual_mount_root`, and derives the asset key from it.
    An input job names each action and mapping context under it
-   (`/Content/Input/Player.input/Jump.oiact`). A model job leaves it empty and
-   names its products itself.
+   (`/Content/Input/Player.input/Jump.oiact`), and a model job each material,
+   geometry, texture and scene (`/Content/Ship/Ship.glb/Paint.omat`).
   */
   std::string asset_virtual_path {};
 
@@ -292,15 +292,26 @@ struct ImportRequest final {
   */
   std::vector<InflightSceneContext> inflight_scene_contexts {};
 
-  //! Derives a stable scene name from the source file stem.
+  //! The name of a model's scene: its identity's leaf without the extension.
   /*!
-   Used as the default namespace for imported assets and for scene virtual path
-   generation. Returns "Scene" if the source path has no stem.
+   `/Content/Ship/Ship.glb` names its scene `Ship`, so the scene is
+   `/Content/Ship/Ship.glb/Ship.oscene`. Empty without an identity.
   */
   OXGN_COOK_NDAPI auto GetSceneName() const -> std::string;
 
-  //! Resolve the texture descriptor identity without emitting or reading files.
-  //! Invalid explicit virtual paths throw std::invalid_argument.
+  //! The identity of a model's product: `<model identity>/<name><extension>`,
+  //! flat under the model.
+  /*!
+   Analysis, production and tools name every material, geometry, texture and
+   scene of a model with this function; `name` is a product name the naming
+   service assigned.
+  */
+  OXGN_COOK_NDAPI auto ModelProductVirtualPath(
+    std::string_view name, std::string_view extension) const -> std::string;
+
+  //! The descriptor path of a texture job's identity, without emitting or
+  //! reading files.
+  //! A missing or invalid identity throws std::invalid_argument.
   OXGN_COOK_NDAPI auto GetTextureDescriptorRelPath() const -> std::string;
 
   //! Resolve the explicit or source-derived output root without creating it.

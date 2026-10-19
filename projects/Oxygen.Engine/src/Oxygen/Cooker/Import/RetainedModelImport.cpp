@@ -45,6 +45,7 @@
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Serio/AtomicFile.h>
@@ -324,6 +325,7 @@ auto RetainedModelImport::MakeRecipe(const SceneImportSettings& settings,
     { "id", "model" },
     { "type", format == ImportFormat::kFbx ? "fbx" : "gltf" },
     { "source", Absolute(settings.source_path).generic_string() },
+    { "virtual_path", settings.virtual_path },
     { "content_hashing", settings.with_content_hashing },
     {
       "content_flags",
@@ -365,12 +367,6 @@ auto RetainedModelImport::MakeRecipe(const SceneImportSettings& settings,
       {
         { "virtual_mount_root", layout.virtual_mount_root },
         { "resources_dir", layout.resources_dir },
-        { "descriptors_dir", layout.descriptors_dir },
-        { "scenes_subdir", layout.scenes_subdir },
-        { "geometry_subdir", layout.geometry_subdir },
-        { "materials_subdir", layout.materials_subdir },
-        { "texture_descriptors_subdir", layout.texture_descriptors_subdir },
-        { "buffer_descriptors_subdir", layout.buffer_descriptors_subdir },
       },
     },
     { "jobs", json::array({ std::move(job) }) },
@@ -676,7 +672,10 @@ auto RetainedModelImport::ValidateCandidate(const ImportReport& report) -> void
       continue;
     }
     ++geometry_count;
-    const auto* retained = provenance->FindGeometry(asset.key);
+    const auto leaf = std::string_view(asset.virtual_path)
+                        .substr(asset.virtual_path.rfind('/') + 1);
+    const auto* retained = provenance->FindGeometry(
+      leaf.substr(0, leaf.size() - data::kGeometryDescriptorExtension.size()));
     if (retained == nullptr) {
       throw std::invalid_argument(
         "Cooked geometry has no matching retained provenance");

@@ -23,14 +23,15 @@ enum class ImportNameKind : uint8_t {
   //! A node in an imported scene graph.
   kSceneNode = 0,
 
-  //! A scene asset.
-  kScene,
-
   //! A geometry asset representing mesh data.
   kMesh,
 
   //! A material asset.
   kMaterial,
+
+  //! A texture, named once per source image; each usage of the image is a
+  //! texture asset that adds its usage to this name.
+  kTexture,
 };
 
 //! Number of distinct ImportNameKind values.
@@ -46,9 +47,6 @@ struct NamingContext final {
 
   //! Appended to the name, such as a mesh variant (`__baked_3`).
   std::string_view variant = {};
-
-  //! Scene namespace that asset names are placed under.
-  std::string_view scene_namespace = {};
 };
 
 //! Assigns the names of one import's products.
@@ -56,12 +54,13 @@ struct NamingContext final {
  Implements the product naming rule of the asset identity contract:
 
  - **Name.** An asset keeps its authored name. An unnamed one takes
-   `Mesh_<ordinal>`, `Material_<ordinal>` or `Scene_<ordinal>`; the context's
-   variant follows the name. No prefix or naming convention is applied.
+   `Mesh_<ordinal>`, `Material_<ordinal>` or `texture_<ordinal>`; the
+   context's variant follows the name. No prefix or naming convention is
+   applied. A model's scene is not named here: it takes the model's stem.
  - **Replacement.** Only what the virtual path segment rule refuses is changed
    (`content::ToSegmentName`). A name whose leaf, with its variant, `_N` suffix
    and extension, exceeds the segment bound is shortened at a code point
-   boundary.
+   boundary; a texture name also leaves room for the longest usage.
  - **Uniqueness.** One registry per kind compares asset names case-folded
    (Unicode simple case folding). A taken name gets `_N`, probing past every
    occupied name.

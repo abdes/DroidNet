@@ -53,21 +53,10 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ResourceDescriptorEmitter)
   OXYGEN_MAKE_NON_MOVABLE(ResourceDescriptorEmitter)
 
-  //! Emit a texture resource descriptor file and return its relative path.
-  OXGN_COOK_NDAPI auto EmitTexture(std::string_view name_hint,
-    std::string_view stable_id, data::pak::core::ResourceIndexT resource_index,
-    const data::pak::core::TextureResourceDesc& descriptor) -> std::string;
-
   //! Emit a texture descriptor at an explicit root-relative path.
   OXGN_COOK_NDAPI auto EmitTextureAtRelPath(std::string_view relpath,
     data::pak::core::ResourceIndexT resource_index,
     const data::pak::core::TextureResourceDesc& descriptor) -> std::string;
-
-  //! Emit a buffer resource descriptor file and return its relative path.
-  OXGN_COOK_NDAPI auto EmitBuffer(std::string_view name_hint,
-    std::string_view stable_id, data::pak::core::ResourceIndexT resource_index,
-    const data::pak::core::BufferResourceDesc& descriptor,
-    std::span<const internal::BufferDescriptorView> views = {}) -> std::string;
 
   //! Emit a buffer descriptor at an explicit relative path and return it.
   OXGN_COOK_NDAPI auto EmitBufferAtRelPath(std::string_view relpath,

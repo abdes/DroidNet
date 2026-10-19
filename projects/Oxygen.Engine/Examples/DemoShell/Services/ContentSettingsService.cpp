@@ -107,10 +107,6 @@ namespace {
   // Layout Keys
   constexpr auto kLayoutVirtualRootKey = "content.layout.virtual_root";
   constexpr auto kLayoutResourcesDirKey = "content.layout.resources_dir";
-  constexpr auto kLayoutDescriptorsDirKey = "content.layout.descriptors_dir";
-  constexpr auto kLayoutScenesSubdirKey = "content.layout.scenes_subdir";
-  constexpr auto kLayoutGeometrySubdirKey = "content.layout.geometry_subdir";
-  constexpr auto kLayoutMaterialsSubdirKey = "content.layout.materials_subdir";
 } // namespace
 
 auto ContentSettingsService::GetExplorerSettings() const
@@ -294,18 +290,6 @@ auto ContentSettingsService::GetDefaultLayout() const
   if (auto val = settings->GetString(kLayoutResourcesDirKey)) {
     l.resources_dir = *val;
   }
-  if (auto val = settings->GetString(kLayoutDescriptorsDirKey)) {
-    l.descriptors_dir = *val;
-  }
-  if (auto val = settings->GetString(kLayoutScenesSubdirKey)) {
-    l.scenes_subdir = *val;
-  }
-  if (auto val = settings->GetString(kLayoutGeometrySubdirKey)) {
-    l.geometry_subdir = *val;
-  }
-  if (auto val = settings->GetString(kLayoutMaterialsSubdirKey)) {
-    l.materials_subdir = *val;
-  }
 
   return l;
 }
@@ -318,10 +302,6 @@ auto ContentSettingsService::SetDefaultLayout(
 
   settings->SetString(kLayoutVirtualRootKey, l.virtual_mount_root);
   settings->SetString(kLayoutResourcesDirKey, l.resources_dir);
-  settings->SetString(kLayoutDescriptorsDirKey, l.descriptors_dir);
-  settings->SetString(kLayoutScenesSubdirKey, l.scenes_subdir);
-  settings->SetString(kLayoutGeometrySubdirKey, l.geometry_subdir);
-  settings->SetString(kLayoutMaterialsSubdirKey, l.materials_subdir);
   ++epoch_;
 }
 

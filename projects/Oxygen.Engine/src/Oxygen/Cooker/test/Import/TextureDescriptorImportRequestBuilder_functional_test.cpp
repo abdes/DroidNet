@@ -192,6 +192,7 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
 {
   auto settings = oxygen::content::import::TextureImportSettings {};
   settings.source_path = "authoring/texture.png";
+  settings.virtual_path = "/.cooked/Textures/Layered.otex";
   settings.job_name = "Layered";
   settings.sources
     = { { .file = "layer.png", .layer = 1, .mip = 0, .slice = 0 } };
@@ -203,9 +204,7 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
   EXPECT_EQ(request->additional_sources.front().path,
     std::filesystem::path("authoring/layer.png"));
   EXPECT_EQ(request->additional_sources.front().subresource.array_layer, 1U);
-  EXPECT_EQ(request->GetTextureDescriptorRelPath(),
-    request->loose_cooked_layout.TextureDescriptorRelPath(
-      "Layered", "Layered"));
+  EXPECT_EQ(request->GetTextureDescriptorRelPath(), "Textures/Layered.otex");
 }
 
 } // namespace

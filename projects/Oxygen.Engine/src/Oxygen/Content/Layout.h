@@ -15,8 +15,8 @@ namespace oxygen::content::import {
 /*!
  Defines conventions for building virtual paths recorded into cooked indexes.
 
- These values describe a virtual namespace and common virtual directory names.
- They do not prescribe any particular on-disk layout.
+ These values describe a virtual namespace and the resource folder's default
+ name. They do not prescribe any particular on-disk layout.
 
  @note This type is intended to be used as a base for concrete container
   layouts (eg. loose cooked).
@@ -34,17 +34,8 @@ struct Layout {
   */
   std::string virtual_mount_root = "/.cooked";
 
-  //! Default virtual/physical directory name for material assets.
-  static constexpr std::string_view kMaterialsDirName = "Materials";
-
-  //! Default virtual/physical directory name for geometry assets.
-  static constexpr std::string_view kGeometryDirName = "Geometry";
-
   //! Default virtual/physical directory name for resource blobs.
   static constexpr std::string_view kResourcesDirName = "Resources";
-
-  //! Default virtual/physical directory name for scene assets.
-  static constexpr std::string_view kScenesDirName = "Scenes";
 };
 
 } // namespace oxygen::content::import

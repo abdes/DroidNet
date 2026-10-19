@@ -25,6 +25,8 @@
 #include <variant>
 #include <vector>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
@@ -49,8 +51,10 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Internal/WorkDispatcher.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -93,16 +97,16 @@ namespace {
     }
   }
 
-  [[nodiscard]] auto ChooseStableId(std::string_view preferred,
-    std::string_view secondary, std::string_view fallback) -> std::string_view
+  //! The file of a model mesh's buffer, beside its geometry:
+  //! `Ship.glb/Hull.ogeo` keeps `Ship.glb/Hull.lod0.vertex.obuf`.
+  [[nodiscard]] auto GeometryBufferRelPath(std::string_view geometry_relpath,
+    const size_t lod_index, const std::string_view kind) -> std::string
   {
-    if (!preferred.empty()) {
-      return preferred;
+    if (geometry_relpath.ends_with(data::kGeometryDescriptorExtension)) {
+      geometry_relpath.remove_suffix(data::kGeometryDescriptorExtension.size());
     }
-    if (!secondary.empty()) {
-      return secondary;
-    }
-    return fallback;
+    return fmt::format("{}.lod{}.{}{}", geometry_relpath, lod_index, kind,
+      data::kBufferDescriptorExtension);
   }
 
   //! Strategy interface for selecting the next ready item to submit.
@@ -293,10 +297,8 @@ auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
 
     // Ensure the texture emitter is initialized so the fallback index is valid.
     session_.TextureEmitter().EnsureFallbackTexture();
-    const auto stable_id
-      = ChooseStableId(result.texture_id, result.source_id, "texture");
     if (!EmitTextureSidecarDescriptor(data::pak::core::kFallbackResourceIndex,
-          result.source_id, stable_id, stable_id)) {
+          result.source_id, result.name)) {
       return std::nullopt;
     }
     return data::pak::core::kFallbackResourceIndex;
@@ -327,28 +329,21 @@ auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
   auto emitted = emitter.Emit(std::move(*result.cooked), signature_salt);
   const auto emit_end = std::chrono::steady_clock::now();
   session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
-  const auto stable_id
-    = ChooseStableId(result.texture_id, result.source_id, "texture");
   if (!EmitTextureSidecarDescriptor(data::pak::core::ResourceIndexT { emitted },
-        result.source_id, stable_id, stable_id)) {
+        result.source_id, result.name)) {
     return std::nullopt;
   }
   return emitted;
 }
 
-auto WorkDispatcher::EmitBufferPayload(CookedBufferPayload payload,
-  const std::string_view source_id) -> std::optional<uint32_t>
+auto WorkDispatcher::EmitBufferPayload(
+  CookedBufferPayload payload, const std::string_view source_id) -> uint32_t
 {
   auto& emitter = session_.BufferEmitter();
   const auto emit_start = std::chrono::steady_clock::now();
   const auto emitted = emitter.Emit(std::move(payload), source_id);
   const auto emit_end = std::chrono::steady_clock::now();
   session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
-  const auto stable_id = ChooseStableId(source_id, source_id, "buffer");
-  if (!EmitBufferSidecarDescriptor(data::pak::core::ResourceIndexT { emitted },
-        source_id, stable_id, stable_id)) {
-    return std::nullopt;
-  }
   return emitted;
 }
 
@@ -366,8 +361,7 @@ auto WorkDispatcher::EmitBufferPayload(BufferPipeline::WorkResult result)
 
 auto WorkDispatcher::EmitTextureSidecarDescriptor(
   const data::pak::core::ResourceIndexT resource_index,
-  const std::string_view source_id, const std::string_view name_hint,
-  const std::string_view stable_id) -> bool
+  const std::string_view source_id, const std::string_view name) -> bool
 {
   auto& texture_emitter = session_.TextureEmitter();
   const auto descriptor
@@ -381,9 +375,11 @@ auto WorkDispatcher::EmitTextureSidecarDescriptor(
   }
 
   try {
+    const auto placement = internal::PlaceModelProduct(
+      session_.Request(), name, data::kTextureDescriptorExtension);
     [[maybe_unused]] const auto relpath
-      = session_.ResourceDescriptorEmitter().EmitTexture(
-        name_hint, stable_id, resource_index, *descriptor);
+      = session_.ResourceDescriptorEmitter().EmitTextureAtRelPath(
+        placement.descriptor_relpath, resource_index, *descriptor);
     return true;
   } catch (const std::exception& ex) {
     session_.AddDiagnostic(
@@ -396,8 +392,7 @@ auto WorkDispatcher::EmitTextureSidecarDescriptor(
 
 auto WorkDispatcher::EmitBufferSidecarDescriptor(
   const data::pak::core::ResourceIndexT resource_index,
-  const std::string_view source_id, const std::string_view name_hint,
-  const std::string_view stable_id) -> bool
+  const std::string_view source_id, const std::string_view relpath) -> bool
 {
   auto& buffer_emitter = session_.BufferEmitter();
   const auto descriptor
@@ -411,9 +406,9 @@ auto WorkDispatcher::EmitBufferSidecarDescriptor(
   }
 
   try {
-    [[maybe_unused]] const auto relpath
-      = session_.ResourceDescriptorEmitter().EmitBuffer(
-        name_hint, stable_id, resource_index, *descriptor);
+    [[maybe_unused]] const auto emitted
+      = session_.ResourceDescriptorEmitter().EmitBufferAtRelPath(
+        relpath, resource_index, *descriptor);
     return true;
   } catch (const std::exception& ex) {
     session_.AddDiagnostic(
@@ -1184,33 +1179,35 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       }
 
       const auto emitted = EmitBufferPayload(std::move(payload), buffer_id);
-      if (!emitted.has_value()) {
+      if (!EmitBufferSidecarDescriptor(
+            data::pak::core::ResourceIndexT { emitted }, buffer_id,
+            GeometryBufferRelPath(
+              result.cooked->descriptor_relpath, lod_index, suffix))) {
         return false;
       }
       auto& lod_binding = bindings.at(lod_index);
       switch (kind) {
       case GeometryBufferKind::kVertex:
-        lod_binding.vertex_buffer
-          = data::pak::core::ResourceIndexT { *emitted };
+        lod_binding.vertex_buffer = data::pak::core::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kIndex:
-        lod_binding.index_buffer = data::pak::core::ResourceIndexT { *emitted };
+        lod_binding.index_buffer = data::pak::core::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kJointIndex:
         lod_binding.joint_index_buffer
-          = data::pak::core::ResourceIndexT { *emitted };
+          = data::pak::core::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kJointWeight:
         lod_binding.joint_weight_buffer
-          = data::pak::core::ResourceIndexT { *emitted };
+          = data::pak::core::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kInverseBind:
         lod_binding.inverse_bind_buffer
-          = data::pak::core::ResourceIndexT { *emitted };
+          = data::pak::core::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kJointRemap:
         lod_binding.joint_remap_buffer
-          = data::pak::core::ResourceIndexT { *emitted };
+          = data::pak::core::ResourceIndexT { emitted };
         break;
       }
 
@@ -1236,11 +1233,11 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
         co_return false;
       }
       if (!EmitGeometryBuffer(std::move(lod.vertex_buffer),
-            GeometryBufferKind::kVertex, lod_index, "vb", bindings)) {
+            GeometryBufferKind::kVertex, lod_index, "vertex", bindings)) {
         co_return false;
       }
       if (!EmitGeometryBuffer(std::move(lod.index_buffer),
-            GeometryBufferKind::kIndex, lod_index, "ib", bindings)) {
+            GeometryBufferKind::kIndex, lod_index, "index", bindings)) {
         co_return false;
       }
       if (lod.auxiliary_buffers.size() == 4U) {

@@ -126,14 +126,15 @@ function Get-CookedScenes([string]$CookedDir, [string]$ContentDir) {
     $roots = @(Get-ChildItem -LiteralPath $CookedDir -Recurse -Filter 'container.index.bin' -File |
         ForEach-Object { $_.Directory } |
         Where-Object { -not $_.FullName.StartsWith($imports + [IO.Path]::DirectorySeparatorChar) -or $published -contains $_.Name })
+    # The cooked layout is the identity: a scene's descriptor lives at its
+    # virtual path under its root (/.cooked/glb/chest.glb/chest.oscene).
     foreach ($root in $roots) {
-        $scenesDir = Join-Path $root.FullName 'Scenes'
-        if (-not (Test-Path -LiteralPath $scenesDir -PathType Container)) { continue }
-        foreach ($file in Get-ChildItem -LiteralPath $scenesDir -Filter '*.oscene' -File) {
+        foreach ($file in Get-ChildItem -LiteralPath $root.FullName -Recurse -Filter '*.oscene' -File) {
+            $relative = [IO.Path]::GetRelativePath($root.FullName, $file.FullName).Replace([char]92, [char]47)
             [pscustomobject]@{
                 Name        = $file.BaseName
                 Root        = $root.FullName
-                VirtualPath = "/.cooked/Scenes/$($file.Name)"
+                VirtualPath = "/.cooked/$relative"
             }
         }
     }

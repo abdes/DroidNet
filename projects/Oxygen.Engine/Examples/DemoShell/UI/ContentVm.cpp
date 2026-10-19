@@ -313,13 +313,18 @@ auto ContentVm::StartImport(const std::filesystem::path& source_path) -> void
     }
     auto options = settings_->GetImportOptions();
     options.texture_tuning = settings_->GetTextureTuning();
+    const auto layout = settings_->GetDefaultLayout();
     auto model = content::import::SceneImportSettings::FromOptions(options);
     model.source_path = source_path.string();
+    // The model is identified by its file at the virtual root; its products
+    // are named under it.
+    model.virtual_path = layout.virtual_mount_root + "/"
+      + source_path.filename().generic_string();
     const auto content_root = file_browser_->GetContentRoots().content_root;
     const auto record = content::import::RetainedModelImport::RecordPath(
       content_root, source_path);
-    const auto recipe = content::import::RetainedModelImport::MakeRecipe(
-      model, settings_->GetDefaultLayout());
+    const auto recipe
+      = content::import::RetainedModelImport::MakeRecipe(model, layout);
     content::import::RetainedModelImport::SaveRecipe(
       record, content_root, recipe);
     auto publication = content::import::RetainedModelImport::Prepare(record);

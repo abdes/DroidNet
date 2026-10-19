@@ -100,7 +100,7 @@ The following facts were confirmed during the documentation pass:
 | Manifest job type exists                       | `src/Oxygen/Cooker/Import/ImportManifest.cpp`: `if (job_type == "material-descriptor")`                                                                  |
 | Schema is embedded                             | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kMaterialDescriptorSchema`)                                                                |
 | Binary format is locked                        | `src/Oxygen/Data/PakFormat_render.h` (`MaterialAssetDesc`, `static_assert(sizeof(...))==311)`, `ShaderReferenceDesc`, `static_assert(sizeof(...))==21)`) |
-| Loose cooked layout for materials              | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`kMaterialDescriptorExtension = ".omat"`, `MaterialDescriptorRelPath()`, `MaterialVirtualPath()`)         |
+| Loose cooked layout for materials              | The descriptor lives at its identity: `/.cooked/Wood/Floor.omat` is `Wood/Floor.omat` under the cooked root (`internal::PlaceAsset`)                     |
 | Texture sidecar reader exists                  | `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp` (`TextureSidecarFile`, `ResolveTextureIndexFromVirtualPath`)                    |
 | Runtime loader for materials exists            | `src/Oxygen/Content/Loaders/MaterialLoader.h` (`LoadMaterialAsset`)                                                                                      |
 | Runtime material asset container               | `src/Oxygen/Data/MaterialAsset.h` (`MaterialAsset`)                                                                                                      |
@@ -309,8 +309,8 @@ Architectural split:
      `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
    - role: async coroutine. Validates canonical virtual path (no `..`, no `//`),
      strips mount root to a rel-path, searches `cooked_root` and
-     `cooked_context_roots` in reverse-priority order, falls back to hashed
-     variant lookup (`<name>_<16hexchars>.otex`), reads `TextureSidecarFile`
+     `cooked_context_roots` in reverse-priority order, reads the descriptor at
+     the texture's identity (there is no other name for it), reads `TextureSidecarFile`
      binary (`magic="OTEX"`, version, `resource_index`), returns
      `ResourceIndexT`.
 
@@ -808,16 +808,13 @@ order (LSB first = lowest `ShaderType` value first).
 
 Key layout constants:
 
-| Constant                       | Value         | Role                                    |
-| ------------------------------ | ------------- | --------------------------------------- |
-| `kMaterialDescriptorExtension` | `".omat"`     | File extension for material descriptors |
-| `kMaterialsDirName`            | `"Materials"` | Subfolder under cooked root             |
+| Constant                       | Value     | Role                                    |
+| ------------------------------ | --------- | --------------------------------------- |
+| `kMaterialDescriptorExtension` | `".omat"` | File extension for material descriptors |
 
-Virtual path for runtime mounting: `MaterialVirtualPath(name)` =
-`<virtual_mount_root>/Materials/<name>.omat`
-
-Relative path for file emission: `MaterialDescriptorRelPath(name)` =
-`Materials/<name>.omat`
+A material descriptor job writes at its `virtual_path`; a model's material is
+named under the model (`ImportRequest::ModelProductVirtualPath`):
+`/.cooked/Ship.glb/Paint.omat`, written at `Ship.glb/Paint.omat`.
 
 ---
 

@@ -40,16 +40,6 @@ ResourceDescriptorEmitter::ResourceDescriptorEmitter(
 {
 }
 
-auto ResourceDescriptorEmitter::EmitTexture(std::string_view name_hint,
-  std::string_view stable_id,
-  const data::pak::core::ResourceIndexT resource_index,
-  const data::pak::core::TextureResourceDesc& descriptor) -> std::string
-{
-  return EmitTextureAtRelPath(
-    layout_.TextureDescriptorRelPath(name_hint, stable_id), resource_index,
-    descriptor);
-}
-
 auto ResourceDescriptorEmitter::EmitTextureAtRelPath(
   const std::string_view relpath,
   const data::pak::core::ResourceIndexT resource_index,
@@ -76,26 +66,6 @@ auto ResourceDescriptorEmitter::EmitTextureAtRelPath(
     });
   QueueWrite(std::string(relpath), std::move(bytes));
   return std::string(relpath);
-}
-
-auto ResourceDescriptorEmitter::EmitBuffer(std::string_view name_hint,
-  std::string_view stable_id,
-  const data::pak::core::ResourceIndexT resource_index,
-  const data::pak::core::BufferResourceDesc& descriptor,
-  const std::span<const internal::BufferDescriptorView> views) -> std::string
-{
-  auto relpath = layout_.BufferDescriptorRelPath(name_hint, stable_id);
-  auto bytes = std::make_shared<std::vector<std::byte>>(
-    internal::SerializeBufferDescriptorSidecar(
-      resource_index, descriptor, views));
-  records_.insert_or_assign(relpath,
-    Record {
-      .relpath = relpath,
-      .size_bytes = bytes->size(),
-      .virtual_path = {},
-    });
-  QueueWrite(relpath, std::move(bytes));
-  return relpath;
 }
 
 auto ResourceDescriptorEmitter::EmitBufferAtRelPath(

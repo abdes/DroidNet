@@ -18,7 +18,7 @@
       "transform": {
         "translation": [-1.0, 0.0, 0.0]
       },
-      "instance": { "scene_ref": "/.cooked/Scenes/backpack.oscene" }
+      "instance": { "scene_ref": "/.cooked/glb/backpack.glb/backpack.oscene" }
     },
     {
       "name": "Chest",
@@ -26,7 +26,7 @@
       "transform": {
         "translation": [1.0, 0.0, 0.0]
       },
-      "instance": { "scene_ref": "/.cooked/Scenes/chest.oscene" }
+      "instance": { "scene_ref": "/.cooked/glb/chest.glb/chest.oscene" }
     },
     {
       "name": "MainCamera",

@@ -22,6 +22,11 @@
 namespace oxygen::content::import {
 
 //! Retained identity evidence for one source geometry.
+/*!
+ A geometry is found by its anchor, its name inside its model (`Hull`), so its
+ slot ids survive moving or renaming the model. The inventory's geometry key is
+ the one of the cook that recorded it.
+*/
 struct MaterialSlotGeometryProvenance final {
   std::string source_geometry_anchor;
   base::Sha256Digest source_layout_witness {};
@@ -56,7 +61,8 @@ public:
     return geometries_;
   }
 
-  OXGN_COOK_NDAPI auto FindGeometry(data::AssetKey key) const noexcept
+  //! The geometry named `anchor` in its model, or null.
+  OXGN_COOK_NDAPI auto FindGeometry(std::string_view anchor) const noexcept
     -> const MaterialSlotGeometryProvenance*;
 
 private:

@@ -159,19 +159,20 @@ MaterialSlotProvenance::MaterialSlotProvenance(
       "Material slots require a retained source UUIDv7");
   }
   std::ranges::sort(geometries_, {}, [](const auto& geometry) -> auto {
-    return geometry.inventory.geometry_asset_key;
+    return std::string_view(geometry.source_geometry_anchor);
   });
-  auto previous = data::AssetKey {};
+  const MaterialSlotGeometryProvenance* previous = nullptr;
   for (const auto& geometry : geometries_) {
     const auto& inventory = geometry.inventory;
     if (inventory.geometry_asset_key.IsNil()
-      || inventory.geometry_asset_key == previous
       || geometry.source_geometry_anchor.empty()
+      || (previous != nullptr
+        && previous->source_geometry_anchor == geometry.source_geometry_anchor)
       || base::IsAllZero(geometry.source_layout_witness)) {
       throw std::invalid_argument(
         "Invalid or duplicate geometry material slot provenance");
     }
-    previous = inventory.geometry_asset_key;
+    previous = &geometry;
     std::set<data::MaterialSlotId> allocated;
     for (const auto& [declaration, id] : geometry.allocations) {
       static_cast<void>(declaration);
@@ -231,15 +232,14 @@ auto MaterialSlotProvenance::Serialize() const -> std::string
 }
 
 auto MaterialSlotProvenance::FindGeometry(
-  const data::AssetKey key) const noexcept
+  const std::string_view anchor) const noexcept
   -> const MaterialSlotGeometryProvenance*
 {
   const auto found = std::ranges::lower_bound(
-    geometries_, key, {}, [](const auto& geometry) -> auto {
-      return geometry.inventory.geometry_asset_key;
+    geometries_, anchor, {}, [](const auto& geometry) -> auto {
+      return std::string_view(geometry.source_geometry_anchor);
     });
-  return found != geometries_.end()
-      && found->inventory.geometry_asset_key == key
+  return found != geometries_.end() && found->source_geometry_anchor == anchor
     ? &*found
     : nullptr;
 }

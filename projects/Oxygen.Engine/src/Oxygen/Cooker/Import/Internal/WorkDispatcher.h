@@ -103,19 +103,22 @@ private:
   [[nodiscard]] auto EmitTexturePayload(TexturePipeline::WorkResult& result)
     -> std::optional<uint32_t>;
 
-  [[nodiscard]] auto EmitBufferPayload(CookedBufferPayload payload,
-    std::string_view source_id) -> std::optional<uint32_t>;
+  [[nodiscard]] auto EmitBufferPayload(
+    CookedBufferPayload payload, std::string_view source_id) -> uint32_t;
 
   [[nodiscard]] auto EmitBufferPayload(BufferPipeline::WorkResult result)
     -> std::optional<uint32_t>;
 
+  //! Emits the descriptor of a model's texture, named `name` in the model.
   [[nodiscard]] auto EmitTextureSidecarDescriptor(
     data::pak::core::ResourceIndexT resource_index, std::string_view source_id,
-    std::string_view name_hint, std::string_view stable_id) -> bool;
+    std::string_view name) -> bool;
 
+  //! Emits the descriptor file of a model's buffer at `relpath`; a buffer is
+  //! a file, not an asset.
   [[nodiscard]] auto EmitBufferSidecarDescriptor(
     data::pak::core::ResourceIndexT resource_index, std::string_view source_id,
-    std::string_view name_hint, std::string_view stable_id) -> bool;
+    std::string_view relpath) -> bool;
 
   [[nodiscard]] auto EmitMaterialPayload(MaterialPipeline::WorkResult result)
     -> bool;

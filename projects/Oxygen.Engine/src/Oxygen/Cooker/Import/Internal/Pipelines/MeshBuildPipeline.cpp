@@ -42,8 +42,10 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline_tangents.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -1330,12 +1332,10 @@ namespace {
     }
 
     auto cooked_payload = MeshBuildPipeline::CookedGeometryPayload {};
-    cooked_payload.virtual_path
-      = item.request.loose_cooked_layout.GeometryVirtualPath(
-        item.storage_mesh_name);
-    cooked_payload.descriptor_relpath
-      = item.request.loose_cooked_layout.GeometryDescriptorRelPath(
-        item.storage_mesh_name);
+    auto placement = internal::PlaceModelProduct(
+      item.request, item.storage_mesh_name, data::kGeometryDescriptorExtension);
+    cooked_payload.virtual_path = std::move(placement.virtual_path);
+    cooked_payload.descriptor_relpath = std::move(placement.descriptor_relpath);
     cooked_payload.geometry_key
       = ResolveGeometryKey(item.request, cooked_payload.virtual_path);
     cooked_payload.descriptor_bytes = std::move(descriptor_bytes);

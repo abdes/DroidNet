@@ -69,6 +69,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
 #include <Oxygen/Cooker/Import/Internal/StaticSourceValidation.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
 #include <Oxygen/Cooker/Import/Naming.h>
@@ -78,6 +79,7 @@
 #include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/MeshType.h>
@@ -1124,7 +1126,6 @@ namespace {
       return result;
     }
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
-    const auto scene_name = input.request.GetSceneName();
     const auto bake_plan
       = BuildGltfBakePlan(data, input.request.options.coordinate);
     for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
@@ -1157,7 +1158,6 @@ namespace {
         .kind = ImportNameKind::kMesh,
         .ordinal = static_cast<uint32_t>(variant.mesh_index),
         .variant = variant.name_suffix,
-        .scene_namespace = scene_name,
       };
       auto name = input.naming_service->MakeUniqueName(authored_name, context);
       auto source_id = BuildSourceId(
@@ -2125,7 +2125,6 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
     return result;
   }
 
-  const auto scene_name = input.request.GetSceneName();
   const auto& data = *impl_->data_owner;
   const auto material_count = static_cast<uint32_t>(data.materials_count);
   result.sources.reserve(material_count);
@@ -2142,7 +2141,6 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
     const NamingContext material_context {
       .kind = ImportNameKind::kMaterial,
       .ordinal = i,
-      .scene_namespace = scene_name,
     };
     const auto material_name
       = input.naming_service->MakeUniqueName(authored, material_context);
@@ -2439,6 +2437,18 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
           = ExternalSourcePath(image->uri, input.request.source_path);
       }
     }
+    item.image_key = BuildTextureSourceKey(data, *view.texture);
+    item.ordinal = static_cast<uint32_t>(image != nullptr
+        ? cgltf_image_index(&data, image)
+        : cgltf_texture_index(&data, view.texture));
+    item.usage = UsageLabel(usage);
+    if (view.texture->name != nullptr) {
+      item.authored_name = view.texture->name;
+    } else if (image != nullptr && image->name != nullptr) {
+      item.authored_name = image->name;
+    } else {
+      item.authored_name = item.source_path.stem().string();
+    }
 
     work_items.emplace(source_id, std::move(item));
   };
@@ -2467,6 +2477,7 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
   for (auto& [_, item] : work_items) {
     result.sources.push_back(std::move(item));
   }
+  NameModelTextures(result.sources);
   return result;
 }
 
@@ -2511,6 +2522,7 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag /*unused*/,
     auto item = TexturePipeline::WorkItem {};
     item.source_id = std::move(source.source_id);
     item.texture_id = item.source_id;
+    item.name = std::move(source.name);
     item.source_key = source.source_key;
     item.desc = std::move(source.desc);
     item.packing_policy_id = std::move(source.packing_policy_id);
@@ -2618,7 +2630,6 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     const NamingContext node_context {
       .kind = ImportNameKind::kSceneNode,
       .ordinal = ordinal,
-      .scene_namespace = scene_name,
     };
     const auto base_name
       = input.naming_service->MakeUniqueName(authored, node_context);
@@ -2785,8 +2796,9 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   build.nodes.reserve(pruned_nodes.size());
   std::vector<NodeRecord> component_attachments;
 
-  const auto virtual_path
-    = request.loose_cooked_layout.SceneVirtualPath(scene_name);
+  const auto virtual_path = internal::PlaceModelProduct(
+    request, scene_name, data::kSceneDescriptorExtension)
+                              .virtual_path;
 
   // Register generated names only after every source name, and append these
   // nodes after all source nodes to preserve authored identities and indices.
@@ -2798,7 +2810,6 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     const NamingContext context {
       .kind = ImportNameKind::kSceneNode,
       .ordinal = index,
-      .scene_namespace = scene_name,
     };
     const auto name = input.naming_service->MakeUniqueName(
       owner.base_name + "_" + std::string(role), context);

@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
@@ -48,6 +49,11 @@ auto AssetsDir() -> const std::filesystem::path&
 auto ModelPath(const std::string_view name) -> std::filesystem::path
 {
   return RequireExisting(AssetsDir() / "Models" / std::filesystem::path(name));
+}
+
+auto ModelVirtualPath(const std::filesystem::path& source) -> std::string
+{
+  return "/.cooked/" + source.filename().generic_string();
 }
 
 auto SchemaPath(const std::string_view relative_to_cooker)

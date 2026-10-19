@@ -35,37 +35,34 @@ namespace oxygen::content::import {
 
 auto ImportRequest::GetSceneName() const -> std::string
 {
-  const auto stem = source_path.stem().string();
-  return stem.empty() ? "Scene" : stem;
+  const auto leaf = std::string_view(asset_virtual_path)
+                      .substr(asset_virtual_path.rfind('/') + 1);
+  const auto dot = leaf.rfind('.');
+  return std::string(
+    dot == std::string_view::npos || dot == 0 ? leaf : leaf.substr(0, dot));
+}
+
+auto ImportRequest::ModelProductVirtualPath(const std::string_view name,
+  const std::string_view extension) const -> std::string
+{
+  auto path = asset_virtual_path;
+  path.push_back('/');
+  path.append(name);
+  path.append(extension);
+  return path;
 }
 
 auto ImportRequest::GetTextureDescriptorRelPath() const -> std::string
 {
-  if (!asset_virtual_path.empty()) {
-    auto relative = std::string {};
-    if (!internal::IsCanonicalVirtualPath(asset_virtual_path)
-      || !internal::TryVirtualPathToRelPath(*this, asset_virtual_path, relative)
-      || std::filesystem::path(relative).extension() != ".otex") {
-      throw std::invalid_argument(
-        "Texture virtual_path must name an .otex descriptor within its mount: "
-        + asset_virtual_path);
-    }
-    return relative;
+  auto relative = std::string {};
+  if (!internal::IsCanonicalVirtualPath(asset_virtual_path)
+    || !internal::TryVirtualPathToRelPath(*this, asset_virtual_path, relative)
+    || std::filesystem::path(relative).extension() != ".otex") {
+    throw std::invalid_argument(
+      "Texture virtual_path must name an .otex descriptor within its mount: "
+      + asset_virtual_path);
   }
-  if (job_name.has_value() && !job_name->empty()) {
-    return loose_cooked_layout.TextureDescriptorRelPath(*job_name, *job_name);
-  }
-  auto normalized = source_path.lexically_normal();
-  normalized.make_preferred();
-  auto identity = normalized.generic_string();
-  auto name = source_path.stem().string();
-  if (name.empty()) {
-    name = identity;
-  }
-  if (identity.empty()) {
-    identity = name;
-  }
-  return loose_cooked_layout.TextureDescriptorRelPath(name, identity);
+  return relative;
 }
 
 auto ImportRequest::ResolveCookedRoot() const -> std::filesystem::path

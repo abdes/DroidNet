@@ -103,8 +103,7 @@ For a named texture consumed by material or scene references, use a
 `"virtual_path": "/Content/Textures/Meter.otex"` under a `/Content` virtual
 mount. The producer writes that exact descriptor location and keeps texture
 tables/data in the configured resource directory. The path is validated before
-import work; both normal and fallback output use it. Omitting `virtual_path`
-retains hashed naming for anonymous resources.
+import work; both normal and fallback output use it.
 
 ### `fbx`
 
@@ -113,6 +112,11 @@ Imports one FBX scene.
 Required:
 
 - positional `source`, or `--record <path>` to replay a retained recipe
+- `--virtual-path <path>` with `source`: the model's identity, the virtual path
+  of its source file (`/Content/Ship/Ship.glb`). Its materials, geometry,
+  textures and scene are named flat under it (`/Content/Ship/Ship.glb/Paint.omat`,
+  `/Content/Ship/Ship.glb/Ship.oscene`); its buffers are files beside its
+  geometry (`Ship.glb/Hull.lod0.vertex.obuf`).
 - raw staging imports require `--material-slot-source-identity <uuid-v7>`
 
 Common options:
@@ -144,6 +148,7 @@ Imports one glTF/GLB scene.
 Required:
 
 - positional `source`
+- `--virtual-path <path>`, as for `fbx`
 
 Options are the same shape as `fbx`. A retained record can be replayed without
 supplying `source`.
@@ -589,10 +594,13 @@ Job rules:
   (`/.cooked/Input/Player.input`); each action and mapping context is named
   under it (`/.cooked/Input/Player.input/Jump.oiact`, written at
   `Input/Player.input/Jump.oiact`).
-- a model job (`gltf`, `fbx`) takes no `virtual_path`; the layout names its
-  products.
+- a model job (`gltf`, `fbx`) requires `virtual_path`, the model's identity: the
+  virtual path of its source file, ending in its extension
+  (`/.cooked/Ship.glb`). Each material, geometry, texture and scene is named
+  flat under it (`/.cooked/Ship.glb/Paint.omat`, written at
+  `Ship.glb/Paint.omat`); the scene takes the model's stem (`Ship.oscene`).
 - the single-file `texture`, `script` and `input` commands require
-  `--virtual-path`
+  `--virtual-path`, as do `gltf` and `fbx` without `--record`
 - `texture-descriptor` jobs:
   - use `source` as descriptor JSON path
   - support texture tuning keys (`intent`, `mip_policy`, `output_format`, etc.)
@@ -620,9 +628,8 @@ Job rules:
   - allowed keys are exactly: `id`, `type`, `source`, `virtual_path`,
     `depends_on`, `output`, `layout`, `source_key`
 - layout overrides are shared across all importers via manifest `layout` or
-  `defaults.layout` (for example `materials_subdir`). They place the products of
-  models and resource tables; they do not place a single-asset job's descriptor
-  or an input source's products.
+  `defaults.layout`: `virtual_mount_root` and `resources_dir`. They place the
+  resource tables; every descriptor is placed by its identity.
 - `script-sidecar` requires exactly one of:
   - `source`
   - `bindings` (inline array)
@@ -647,18 +654,20 @@ Batch example with one output shared at manifest level:
     {
       "type": "gltf",
       "source": "Examples/Content/backpack.glb",
+      "virtual_path": "/.cooked/backpack.glb",
       "name": "backpack_scene"
     },
     {
       "type": "script",
       "source": "Examples/Content/backpack_rotate.lua",
+      "virtual_path": "/Descriptors/Scripts/backpack_rotate.oscript",
       "compile": true,
       "script_storage": "embedded",
       "name": "backpack_rotate"
     },
     {
       "type": "script-sidecar",
-      "target_scene_virtual_path": "/Scenes/backpack.oscene",
+      "target_scene_virtual_path": "/.cooked/backpack.glb/backpack.oscene",
       "bindings": [
         {
           "node_index": 0,
@@ -671,7 +680,7 @@ Batch example with one output shared at manifest level:
     },
     {
       "type": "physics-sidecar",
-      "target_scene_virtual_path": "/Scenes/backpack.oscene",
+      "target_scene_virtual_path": "/.cooked/backpack.glb/backpack.oscene",
       "bindings": {
         "rigid_bodies": [
           {

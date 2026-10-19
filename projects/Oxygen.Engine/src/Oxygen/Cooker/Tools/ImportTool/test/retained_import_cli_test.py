@@ -82,6 +82,7 @@ class RetainedImportCliTests(unittest.TestCase):
                         {
                             "type": "gltf",
                             "source": source.relative_to(root).as_posix(),
+                            "virtual_path": "/.cooked/source.gltf",
                         }
                     ],
                 }

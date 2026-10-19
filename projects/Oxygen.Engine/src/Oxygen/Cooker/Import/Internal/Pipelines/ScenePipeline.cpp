@@ -31,6 +31,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
@@ -108,15 +109,14 @@ namespace {
     return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
   }
 
-  //! A scene descriptor job's identity, or a model scene's layout by name.
+  //! A scene descriptor job's identity, or the scene of a model.
   [[nodiscard]] auto ScenePlacement(const ScenePipeline::WorkItem& item,
     const std::string_view scene_name) -> internal::AssetPlacement
   {
-    const auto& layout = item.request.loose_cooked_layout;
-    return item.placement.value_or(internal::AssetPlacement {
-      .virtual_path = layout.SceneVirtualPath(scene_name),
-      .descriptor_relpath = layout.SceneDescriptorRelPath(scene_name),
-    });
+    return item.placement.has_value()
+      ? *item.placement
+      : internal::PlaceModelProduct(
+          item.request, scene_name, data::kSceneDescriptorExtension);
   }
 
   auto SortSceneComponents(SceneBuild& build) -> void
