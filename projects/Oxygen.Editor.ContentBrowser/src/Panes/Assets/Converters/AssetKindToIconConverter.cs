@@ -4,14 +4,13 @@
 
 using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Models;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Converters;
 
 /// <summary>
-///     Converts an <see cref="AssetType" /> to a corresponding icon glyph.
+///     Converts an <see cref="AssetKind" /> to a corresponding icon glyph.
 /// </summary>
-public partial class AssetTypeToIconConverter : IValueConverter
+public partial class AssetKindToIconConverter : IValueConverter
 {
     /// <inheritdoc />
     public object Convert(object value, Type targetType, object parameter, string language)
@@ -31,25 +30,6 @@ public partial class AssetTypeToIconConverter : IValueConverter
                 AssetKind.Material => "\uE790",
                 AssetKind.Texture => "\uE8B9",
                 AssetKind.Folder => "\uE8B7",
-                _ => "\uE8A5",
-            };
-        }
-
-        if (value is AssetType assetType)
-        {
-            return assetType switch
-            {
-                AssetType.Image => "\uE8B9", // image
-                AssetType.Scene => "\uE914", // scene
-                AssetType.Mesh => "\uF158", // mesh
-                AssetType.Material => "\uE790", // material surface
-                AssetType.Texture => "\uE8B9", // texture (same as image for now)
-                AssetType.Folder => "\uE8B7", // folder (filled)
-                AssetType.ImportSettings => "\uE8A5", // use unknown glyph for now
-                AssetType.CookedData => "\uE8A5", // use unknown glyph for now
-                AssetType.CookedTable => "\uE8A5", // use unknown glyph for now
-                AssetType.ForeignAsset => "\uE8A5", // use unknown glyph for now
-                AssetType.Unknown => "\uE8A5", // unknown
                 _ => "\uE8A5",
             };
         }

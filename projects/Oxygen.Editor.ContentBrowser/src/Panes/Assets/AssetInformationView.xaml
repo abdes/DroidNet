@@ -7,7 +7,7 @@
     xmlns:localcvt="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Converters">
 
     <UserControl.Resources>
-        <localcvt:AssetTypeToIconConverter x:Key="AssetTypeToIconConverter" />
+        <localcvt:AssetKindToIconConverter x:Key="AssetKindToIconConverter" />
     </UserControl.Resources>
 
     <StackPanel MaxWidth="400" Spacing="8">
@@ -19,7 +19,7 @@
             <FontIcon
                 VerticalAlignment="Top"
                 FontSize="16"
-                Glyph="{x:Bind ViewModel.Kind, Mode=OneWay, Converter={StaticResource AssetTypeToIconConverter}}" />
+                Glyph="{x:Bind ViewModel.Kind, Mode=OneWay, Converter={StaticResource AssetKindToIconConverter}}" />
             <TextBlock
                 Grid.Column="1"
                 Style="{ThemeResource BodyStrongTextBlockStyle}"

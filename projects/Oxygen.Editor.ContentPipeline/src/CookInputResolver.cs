@@ -57,17 +57,11 @@ internal static class CookInputResolver
 
         // A missing source is still the descriptor the asset would cook from, so the cook reports it missing.
         var location = FindAuthoringFile(project.LocateSource(identity));
-        var type = location is null ? null : AssetFileTypes.Find(location.Path.Name);
-        var kind = type switch
+        var kind = location is null || AssetFileTypes.Is(location.Path.Name, AssetFileCategory.Cooked) ? ContentCookAssetKind.Unknown : ContentCookAssetKinds.Of(location.Path.Name);
+        if (kind == ContentCookAssetKind.Unknown)
         {
-            { Category: AssetFileCategory.Input } => ContentCookAssetKind.Input,
-            { Category: AssetFileCategory.Model } => ContentCookAssetKind.ForeignSource,
-            { Category: AssetFileCategory.Descriptor, CookedExtension: AssetFileTypes.Texture } => ContentCookAssetKind.Texture,
-            { Category: AssetFileCategory.Descriptor, CookedExtension: AssetFileTypes.Material } => ContentCookAssetKind.Material,
-            { Category: AssetFileCategory.Descriptor, CookedExtension: AssetFileTypes.Geometry } => ContentCookAssetKind.Geometry,
-            { Category: AssetFileCategory.Descriptor, CookedExtension: AssetFileTypes.Scene } => ContentCookAssetKind.Scene,
-            _ => throw new InvalidDataException($"Unsupported cook dependency '{uri}'."),
-        };
+            throw new InvalidDataException($"Unsupported cook dependency '{uri}'.");
+        }
 
         var relative = Path.GetRelativePath(project.ProjectRoot.FullPath, location!.File.FullPath).Replace('\\', '/');
         if (Path.IsPathRooted(relative) || relative.StartsWith("../", StringComparison.Ordinal)

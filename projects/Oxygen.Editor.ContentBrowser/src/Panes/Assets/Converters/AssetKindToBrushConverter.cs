@@ -7,14 +7,13 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Models;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Converters;
 
 /// <summary>
-///     Converts an <see cref="AssetType" /> to a Brush for icon foregrounds.
+///     Converts an <see cref="AssetKind" /> to a Brush for icon foregrounds.
 /// </summary>
-public sealed partial class AssetTypeToBrushConverter : IValueConverter
+public sealed partial class AssetKindToBrushConverter : IValueConverter
 {
     /// <inheritdoc />
     public object Convert(object value, Type targetType, object parameter, string language)
@@ -31,26 +30,6 @@ public sealed partial class AssetTypeToBrushConverter : IValueConverter
                 AssetKind.Geometry => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x86, 0xC0, 0x44)),
                 AssetKind.Material => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xB5, 0x77, 0xF2)),
                 AssetKind.Folder => TryGetResourceBrush("FolderAssetBrush") ?? new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE6, 0xB8, 0x00)),
-                _ => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x9E, 0x9E, 0x9E)),
-            };
-        }
-
-        if (value is AssetType assetType)
-        {
-            // Distinct colors per asset type, inspired by editor UIs
-            return assetType switch
-            {
-                AssetType.Image => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x3C, 0x9D, 0xD0)), // teal/blue
-                AssetType.Texture => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x3C, 0x9D, 0xD0)), // teal/blue (same as Image)
-                AssetType.Scene => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xF7, 0xB5, 0x00)), // orange/yellow
-                AssetType.Mesh => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x86, 0xC0, 0x44)), // green
-                AssetType.Folder => TryGetResourceBrush("FolderAssetBrush") ??
-                                    new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE6, 0xB8, 0x00)), // theme-aware if resource exists
-                AssetType.ImportSettings => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x9E, 0x9E, 0x9E)), // gray
-                AssetType.CookedData => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x9E, 0x9E, 0x9E)), // gray
-                AssetType.CookedTable => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x9E, 0x9E, 0x9E)), // gray
-                AssetType.ForeignAsset => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x9E, 0x9E, 0x9E)), // gray
-                AssetType.Unknown => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x9E, 0x9E, 0x9E)), // gray
                 _ => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x9E, 0x9E, 0x9E)),
             };
         }

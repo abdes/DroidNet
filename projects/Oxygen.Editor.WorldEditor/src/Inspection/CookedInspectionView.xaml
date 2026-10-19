@@ -8,7 +8,7 @@
     xmlns:dnc="using:DroidNet.Controls"
     xmlns:local="using:Oxygen.Editor.World.Inspection">
     <UserControl.Resources>
-        <assetcvt:AssetTypeToIconConverter x:Key="AssetTypeToIconConverter" />
+        <assetcvt:AssetKindToIconConverter x:Key="AssetKindToIconConverter" />
     </UserControl.Resources>
     <Grid
         Padding="12"
@@ -101,7 +101,7 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <FontIcon FontSize="18" Glyph="{x:Bind Kind, Converter={StaticResource AssetTypeToIconConverter}}" />
+                            <FontIcon FontSize="18" Glyph="{x:Bind Kind, Converter={StaticResource AssetKindToIconConverter}}" />
                             <StackPanel Grid.Column="1">
                                 <TextBlock
                                     Text="{x:Bind Name}"

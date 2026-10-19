@@ -10,8 +10,8 @@
     mc:Ignorable="d">
 
     <UserControl.Resources>
-        <localcvt:AssetTypeToIconConverter x:Key="AssetTypeToIconConverter" />
-        <localcvt:AssetTypeToBrushConverter x:Key="AssetTypeToBrushConverter" />
+        <localcvt:AssetKindToIconConverter x:Key="AssetKindToIconConverter" />
+        <localcvt:AssetKindToBrushConverter x:Key="AssetKindToBrushConverter" />
         <localcvt:StatusToneToBrushConverter x:Key="StatusToneToBrushConverter" />
         <localcvt:MaterialPreviewColorToBrushConverter x:Key="MaterialPreviewColorToBrushConverter" />
 
@@ -43,7 +43,7 @@
                         MaxHeight="56"
                         Margin="16"
                         Visibility="{x:Bind HasGlyph, Mode=OneWay}">
-                        <FontIcon Foreground="{x:Bind Kind, Mode=OneWay, Converter={StaticResource AssetTypeToBrushConverter}}" Glyph="{x:Bind Kind, Mode=OneWay, Converter={StaticResource AssetTypeToIconConverter}}" />
+                        <FontIcon Foreground="{x:Bind Kind, Mode=OneWay, Converter={StaticResource AssetKindToBrushConverter}}" Glyph="{x:Bind Kind, Mode=OneWay, Converter={StaticResource AssetKindToIconConverter}}" />
                     </Viewbox>
                 </Grid>
 

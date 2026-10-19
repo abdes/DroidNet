@@ -189,11 +189,9 @@ public sealed partial class ContentCookCoordinator
         };
         if (request.ScopeUri is { } assetUri && request.TargetKind is CookTargetKind.Asset or CookTargetKind.CurrentScene)
         {
-            var kind = request.TargetKind == CookTargetKind.CurrentScene || assetUri.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal)
-                ? ContentCookAssetKind.Scene : assetUri.Name.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.Ordinal)
-                    ? ContentCookAssetKind.Material : assetUri.Name.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.Ordinal)
-                        ? ContentCookAssetKind.Geometry : assetUri.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)
-                            ? ContentCookAssetKind.Texture : request.Import is not null || request.IsReimport || IsModelSource(assetUri) ? ContentCookAssetKind.ForeignSource : ContentCookAssetKind.Unknown;
+            var kind = request.TargetKind == CookTargetKind.CurrentScene ? ContentCookAssetKind.Scene
+                : request.Import is not null || request.IsReimport ? ContentCookAssetKind.ForeignSource
+                : ContentCookAssetKinds.Of(assetUri.Name);
             snapshot = snapshot with { Assets = snapshot.Assets.Add(assetUri, new(assetUri, kind, CookAssetState.Preparing)) };
         }
 

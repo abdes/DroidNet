@@ -7,8 +7,8 @@
     xmlns:localcvt="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Converters">
 
     <UserControl.Resources>
-        <localcvt:AssetTypeToIconConverter x:Key="AssetTypeToIconConverter" />
-        <localcvt:AssetTypeToBrushConverter x:Key="AssetTypeToBrushConverter" />
+        <localcvt:AssetKindToIconConverter x:Key="AssetKindToIconConverter" />
+        <localcvt:AssetKindToBrushConverter x:Key="AssetKindToBrushConverter" />
         <localcvt:StatusToneToBrushConverter x:Key="StatusToneToBrushConverter" />
         <localcvt:MaterialPreviewColorToBrushConverter x:Key="MaterialPreviewColorToBrushConverter" />
     </UserControl.Resources>
@@ -48,8 +48,8 @@
                         <FontIcon
                             VerticalAlignment="Center"
                             FontSize="16"
-                            Foreground="{x:Bind Kind, Mode=OneWay, Converter={StaticResource AssetTypeToBrushConverter}}"
-                            Glyph="{x:Bind Kind, Mode=OneWay, Converter={StaticResource AssetTypeToIconConverter}}"
+                            Foreground="{x:Bind Kind, Mode=OneWay, Converter={StaticResource AssetKindToBrushConverter}}"
+                            Glyph="{x:Bind Kind, Mode=OneWay, Converter={StaticResource AssetKindToIconConverter}}"
                             Visibility="{x:Bind HasGlyph, Mode=OneWay}" />
                         <TextBlock
                             Grid.Column="1"
