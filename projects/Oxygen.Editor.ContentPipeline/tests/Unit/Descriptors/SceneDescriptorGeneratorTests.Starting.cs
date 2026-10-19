@@ -18,7 +18,7 @@ public sealed partial class SceneDescriptorGeneratorTests
 {
     private const string InputFile = """
         {
-          "actions": [ { "name": "Jump", "value_type": "bool" } ],
+          "actions": [ { "name": "Jump", "type": "bool" } ],
           "contexts": [
             { "name": "Gameplay", "priority": 3, "mappings": [] },
             { "name": "Menu", "mappings": [] }
@@ -92,7 +92,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     }
 
     /// <summary>Starting input contexts cook in order, each with the priority it starts with: its override, else the
-    /// priority its input file declares, else the schema default.</summary>
+    /// priority its input source declares, else the schema default.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task StartingInputContextsCookInOrderWithTheirEffectivePriorities()
@@ -103,9 +103,9 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = AddNode(scene, "Camera", camera: true);
         scene.SetStartingInputContexts(
         [
-            new StartingInputContextData(AssetPath.Parse("/Content/Input/Menu.oimap")),
-            new StartingInputContextData(AssetPath.Parse("/Content/Input/Gameplay.oimap")),
-            new StartingInputContextData(AssetPath.Parse("/Content/Input/Overlay.oimap"), Priority: 7),
+            new StartingInputContextData(AssetPath.Parse("/Content/Input/Controls.input/Menu.oimap")),
+            new StartingInputContextData(AssetPath.Parse("/Content/Input/Controls.input/Gameplay.oimap")),
+            new StartingInputContextData(AssetPath.Parse("/Content/Input/Overlay.input/Overlay.oimap"), Priority: 7),
         ]);
         File.WriteAllText(
             Path.Combine(workspace.Root, "Content", "Input", "Overlay.input.json"),
@@ -117,12 +117,12 @@ public sealed partial class SceneDescriptorGeneratorTests
             .Select(static context => (context.GetProperty("context_ref").GetString(), context.GetProperty("priority").GetInt32()))
             .ToArray();
         _ = contexts.Should().Equal(
-            ("/Content/Input/Menu.oimap", InputContextSources.DefaultPriority),
-            ("/Content/Input/Gameplay.oimap", 3),
-            ("/Content/Input/Overlay.oimap", 7));
+            ("/Content/Input/Controls.input/Menu.oimap", InputContextSources.DefaultPriority),
+            ("/Content/Input/Controls.input/Gameplay.oimap", 3),
+            ("/Content/Input/Overlay.input/Overlay.oimap", 7));
     }
 
-    /// <summary>A starting input context that no input file declares fails the cook with Go To Property.</summary>
+    /// <summary>A starting input context that its input source does not declare fails the cook with Go To Property.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task UndeclaredStartingInputContextFailsWithGoToProperty()
@@ -132,7 +132,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         WriteInputFile(workspace);
         var scene = CreateScene();
         _ = AddNode(scene, "Camera", camera: true);
-        scene.SetStartingInputContexts([new StartingInputContextData(AssetPath.Parse("/Content/Input/Vehicle.oimap"))]);
+        scene.SetStartingInputContexts([new StartingInputContextData(AssetPath.Parse("/Content/Input/Controls.input/Vehicle.oimap"))]);
         var generator = new SceneDescriptorGenerator();
 
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);

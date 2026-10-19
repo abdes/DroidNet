@@ -46,12 +46,11 @@ public sealed partial class AssetIdentityReducerTests
         _ = row.IsSelectable.Should().BeTrue("the user renames one of the files to resolve the collision");
     }
 
-    /// <summary>Hand-written input files are Input file assets named after the file.</summary>
+    /// <summary>Input sources are Input file assets named after the file.</summary>
     [TestMethod]
-    [DataRow("Player.input.json")]
-    [DataRow("Jump.input-action.json")]
-    public void ReduceInputSourceIsAnInputFile(string fileName)
+    public void ReduceInputSourceIsAnInputFile()
     {
+        const string fileName = "Player.input.json";
         using var workspace = new TempWorkspace();
 
         var row = Reduce(workspace, [new AssetRecord(AssetPath.Parse("/Content/Gameplay/" + fileName))]).Single();

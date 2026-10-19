@@ -30,16 +30,6 @@ public static class ScriptDiagnosticCodes
     public const string IdentityCollision = DiagnosticCodes.ScriptPrefix + "IDENTITY_COLLISION";
 
     /// <summary>
-    /// An input file is not valid JSON or does not match the engine's input schema.
-    /// </summary>
-    public const string InputInvalid = DiagnosticCodes.ScriptPrefix + "INPUT_INVALID";
-
-    /// <summary>
-    /// An input file names an action that another file declares; only self-contained input files cook.
-    /// </summary>
-    public const string InputReferenceUnsupported = DiagnosticCodes.ScriptPrefix + "INPUT_REFERENCE_UNSUPPORTED";
-
-    /// <summary>
     /// The project's script tooling files (<c>.luaurc</c>, type definitions, VS Code settings) could not be updated.
     /// </summary>
     public const string ToolingUpdateFailed = DiagnosticCodes.ScriptPrefix + "TOOLING_UPDATE_FAILED";

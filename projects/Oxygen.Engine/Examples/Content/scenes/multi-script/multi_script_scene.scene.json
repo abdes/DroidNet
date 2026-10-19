@@ -3,7 +3,7 @@
   "name": "multi_script_scene",
   "starting_input_contexts": [
     {
-      "context_ref": "/.cooked/Input/RotateRuntimeInputContext.oimap",
+      "context_ref": "/.cooked/Input/multi_script_scene.input/RotateRuntimeInputContext.oimap",
       "priority": 0
     }
   ],
@@ -113,14 +113,16 @@
       "/.cooked/Scripts/day-night.oscript"
     ],
     "input_actions": [
-      "/.cooked/Input/CycleShapeAction.oiact",
-      "/.cooked/Input/PulseScaleAction.oiact",
-      "/.cooked/Input/RotateInvertAction.oiact",
-      "/.cooked/Input/RotateSpeedDownAction.oiact",
-      "/.cooked/Input/RotateSpeedUpAction.oiact",
-      "/.cooked/Input/RotateStopAction.oiact",
-      "/.cooked/Input/SpawnOrbAction.oiact"
+      "/.cooked/Input/multi_script_scene.input/CycleShapeAction.oiact",
+      "/.cooked/Input/multi_script_scene.input/PulseScaleAction.oiact",
+      "/.cooked/Input/multi_script_scene.input/RotateInvertAction.oiact",
+      "/.cooked/Input/multi_script_scene.input/RotateSpeedDownAction.oiact",
+      "/.cooked/Input/multi_script_scene.input/RotateSpeedUpAction.oiact",
+      "/.cooked/Input/multi_script_scene.input/RotateStopAction.oiact",
+      "/.cooked/Input/multi_script_scene.input/SpawnOrbAction.oiact"
     ],
-    "input_mapping_contexts": ["/.cooked/Input/RotateRuntimeInputContext.oimap"]
+    "input_mapping_contexts": [
+      "/.cooked/Input/multi_script_scene.input/RotateRuntimeInputContext.oimap"
+    ]
   }
 }

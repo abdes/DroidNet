@@ -248,11 +248,16 @@ Script import writes script descriptors (`*.oscript`) and script payload tables:
 
 ### `input`
 
-Imports one input authoring document (`*.input.json` or `*.input-action.json`).
+Imports one input source (`*.input.json`): its actions and mapping contexts,
+each named under the source's identity
+(`/Content/Input/Player.input/Jump.oiact`). A mapping names an action of the
+same source by its name, and an action of another source by its virtual path.
 
 Required:
 
 - positional `source`
+- `--virtual-path <path>`: the source's identity, its path without the authoring
+  `.json` (`/Content/Input/Player.input`)
 
 Optional:
 
@@ -275,8 +280,6 @@ Shipped JSON schemas:
   `src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json`
 - source-of-truth:
-  `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json`
-- source-of-truth:
   `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
 - installed for users as: `schemas/oxygen.import-manifest.schema.json`
 - installed for users as: `schemas/oxygen.texture-descriptor.schema.json`
@@ -284,7 +287,6 @@ Shipped JSON schemas:
 - installed for users as: `schemas/oxygen.geometry-descriptor.schema.json`
 - installed for users as: `schemas/oxygen.scene-descriptor.schema.json`
 - installed for users as: `schemas/oxygen.input.schema.json`
-- installed for users as: `schemas/oxygen.input-action.schema.json`
 - installed for users as: `schemas/oxygen.physics-sidecar.schema.json`
 
 Editor association examples (VSCode):
@@ -317,10 +319,6 @@ Repository checkout:
     {
       "fileMatch": ["*.input.json"],
       "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json"
-    },
-    {
-      "fileMatch": ["*.input-action.json"],
-      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json"
     },
     {
       "fileMatch": ["*.physics-sidecar.json"],
@@ -358,10 +356,6 @@ Installed package layout:
     {
       "fileMatch": ["*.input.json"],
       "url": "./schemas/oxygen.input.schema.json"
-    },
-    {
-      "fileMatch": ["*.input-action.json"],
-      "url": "./schemas/oxygen.input-action.schema.json"
     },
     {
       "fileMatch": ["*.physics-sidecar.json"],
@@ -557,7 +551,7 @@ Top-level fields:
   },
   "defaults": {
     "layout": {
-      "input_subdir": "Input"
+      "virtual_mount_root": "/Content"
     },
     "texture": { "output": "..." },
     "scene": { "output": "..." },
@@ -590,9 +584,15 @@ Job rules:
   `virtual_path`, the asset's identity. Its descriptor is written at that path
   below the mount (`/.cooked/Materials/Wood.omat` lives at
   `Materials/Wood.omat`), and its key derives from it. A descriptor that states
-  its own `virtual_path` must name the same one. A job that produces several
-  assets (`gltf`, `fbx`, `input`) takes none; the layout names its products.
-- the single-file `texture` and `script` commands require `--virtual-path`
+  its own `virtual_path` must name the same one.
+- an `input` job requires `virtual_path`, the input source's identity
+  (`/.cooked/Input/Player.input`); each action and mapping context is named
+  under it (`/.cooked/Input/Player.input/Jump.oiact`, written at
+  `Input/Player.input/Jump.oiact`).
+- a model job (`gltf`, `fbx`) takes no `virtual_path`; the layout names its
+  products.
+- the single-file `texture`, `script` and `input` commands require
+  `--virtual-path`
 - `texture-descriptor` jobs:
   - use `source` as descriptor JSON path
   - support texture tuning keys (`intent`, `mip_policy`, `output_format`, etc.)
@@ -613,13 +613,16 @@ Job rules:
 - `input` jobs require:
   - `id`
   - `source`
-  - optional `depends_on` (array of job ids)
+  - `virtual_path`
+  - optional `depends_on` (array of job ids): the jobs producing the actions of
+    other sources this source maps
   - optional `output`
-  - allowed keys are exactly: `id`, `type`, `source`, `depends_on`, `output`
+  - allowed keys are exactly: `id`, `type`, `source`, `virtual_path`,
+    `depends_on`, `output`, `layout`, `source_key`
 - layout overrides are shared across all importers via manifest `layout` or
-  `defaults.layout` (for example `input_subdir`). They place the products of
-  models and input files, and resource tables; they do not place a single-asset
-  job's descriptor.
+  `defaults.layout` (for example `materials_subdir`). They place the products of
+  models and resource tables; they do not place a single-asset job's descriptor
+  or an input source's products.
 - `script-sidecar` requires exactly one of:
   - `source`
   - `bindings` (inline array)

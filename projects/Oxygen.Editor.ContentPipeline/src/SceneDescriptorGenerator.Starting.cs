@@ -62,7 +62,7 @@ public sealed partial class SceneDescriptorGenerator
             {
                 site.Report(
                     SceneStartingPropertyPaths.StartingInputContexts,
-                    $"No input file in {Path.GetDirectoryName(path)?.Replace('\\', '/')} declares the starting input context '{Path.GetFileNameWithoutExtension(path)}'. Remove it, or declare it in an input file.");
+                    $"No input source declares the starting input context '{path}'. Remove it, or declare it in the input source it is named under.");
                 continue;
             }
 

@@ -138,13 +138,15 @@ struct ImportRequest final {
   //! Pending synchronous preparation reads, transferred to the job observer.
   std::vector<ImportSourceObservation> preparation_inputs {};
 
-  //! Identity of the one asset a single-asset job cooks.
+  //! Identity of the one asset a single-asset job cooks, or of the input
+  //! source an input job cooks.
   /*!
    A material, geometry, scene, script, texture, physics material or collision
    shape job writes its descriptor at this virtual path, inside
    `loose_cooked_layout.virtual_mount_root`, and derives the asset key from it.
-   A container job (a model or an input file) leaves it empty and names its
-   products itself.
+   An input job names each action and mapping context under it
+   (`/Content/Input/Player.input/Jump.oiact`). A model job leaves it empty and
+   names its products itself.
   */
   std::string asset_virtual_path {};
 

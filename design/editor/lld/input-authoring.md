@@ -1,7 +1,16 @@
 # Input Authoring LLD
 
 Status: `design approved (ED-M09.1, 2026-10-11)`; delivered by
-[ED-M09](../plan/ED-M09-input-authoring.md).
+[ED-M09](../plan/ED-M09-input-authoring.md). Its identity model (sections 4 and
+7: `*.input-action.json`, single-asset form, products in the source's folder) is
+superseded by the input source contract of [asset identity][aid-input]: one
+`*.input.json` format, products named under their source
+(`/Content/Input/Player.input/Jump.oiact`) and actions of other sources named by
+virtual path. The Input module of
+[asset family modules](../review/asset-family-modules.md) redesigns the editors
+on it.
+
+[aid-input]: ../review/asset-identity.md#12-sources-that-produce-one-asset-and-containers
 
 Summary: users create input actions and input mapping contexts from the Content
 Browser and edit them in two focused editors. A context lists its mappings in
@@ -61,21 +70,15 @@ relocation), [content pipeline](content-pipeline.md),
 
 Engine, verified in source:
 
-- **Formats.** `oxygen.input.schema.json` (`*.input.json`: optional `actions`,
-  at least one `contexts` entry) and `oxygen.input-action.schema.json`
-  (`*.input-action.json`: one action). The cooker validates against the primary
-  schema, then the action schema.
-- **Output location.** An action cooks to
-  `<virtual_mount_root>/<descriptors_dir>/<input_subdir>/<name>.oiact` and a
-  context to the same folder with `.oimap` (`LooseCookedLayout`); the asset key
-  derives from that virtual path. The default layout puts every input asset of a
-  mount in one `Input` folder, by declared name. A manifest job may set its own
-  layout, which is how the editor places materials, geometry and scenes at their
-  source folder.
-- **References are bare names, resolved globally.** Mapping `action`, trigger
-  `chord_action` and combo step `action` resolve first against the file's own
-  `actions`, then against any action of that name in the cooked root and its
-  `cooked_context_roots` ([IF-12][mf]).
+- **Format.** `oxygen.input.schema.json` (`*.input.json`): optional `actions`
+  and optional `contexts`.
+- **Output location.** An input job names the source's identity; each action
+  cooks to `<source identity>/<name>.oiact` and each context to
+  `<source identity>/<name>.oimap`, and the asset key derives from that virtual
+  path.
+- **References.** Mapping `action`, trigger `chord_action` and combo step
+  `action` name an action of the same source by name, or any action by virtual
+  path, resolved through the mounted cooked roots like a scene reference.
 - **Runtime identity is the name.** `InputSystem` keys actions and contexts by
   name; hydration merges distinct action assets that share a name, and script
   input events are named after the action ([IF-12][mf]).

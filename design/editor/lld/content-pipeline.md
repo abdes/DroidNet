@@ -324,15 +324,15 @@ Mount layout rules:
 
 Required job type mapping:
 
-| Input                                                | Manifest job type                 |
-| ---------------------------------------------------- | --------------------------------- |
-| scalar material descriptor `*.omat.json`             | `material-descriptor`             |
-| authored/imported geometry descriptor `*.ogeo.json`  | `geometry-descriptor`             |
-| generated native scene descriptor                    | `scene-descriptor`                |
-| glTF/GLB source media import                         | `gltf`                            |
-| FBX source media import                              | `fbx`                             |
-| texture source or descriptor                         | `texture` or `texture-descriptor` |
-| input source `*.input.json` or `*.input-action.json` | `input` (section 24)              |
+| Input                                               | Manifest job type                 |
+| --------------------------------------------------- | --------------------------------- |
+| scalar material descriptor `*.omat.json`            | `material-descriptor`             |
+| authored/imported geometry descriptor `*.ogeo.json` | `geometry-descriptor`             |
+| generated native scene descriptor                   | `scene-descriptor`                |
+| glTF/GLB source media import                        | `gltf`                            |
+| FBX source media import                             | `fbx`                             |
+| texture source or descriptor                        | `texture` or `texture-descriptor` |
+| input source `*.input.json`                         | `input` (section 24)              |
 
 Scene jobs depend on the material and geometry jobs needed by their renderables.
 Folder/project cook generates a manifest and validates it against the native
@@ -1399,31 +1399,40 @@ perpetual stale loop, exact analysis/cook closure and bounded process launches.
 [Input authoring](input-authoring.md) owns the input asset model; this section
 owns how the pipeline cooks it.
 
-- **Jobs.** Every `*.input.json` and `*.input-action.json` under an authoring
-  mount is one `input` job.
-- **Placement.** The job's layout sets `descriptors_dir` empty and
-  `input_subdir` to the source file's mount-relative folder, until the file's
-  products are named under it. `Jump` declared in
-  `Content/Gameplay/Player.input.json` cooks to `/Content/Gameplay/Jump.oiact`
-  and round-trips to `asset:///Content/Gameplay/Jump.oiact`.
+- **Jobs.** Every `*.input.json` under an authoring mount is one `input` job,
+  named by the source's identity (`virtual_path`, the path without the authoring
+  `.json`).
+- **Placement.** An input source is a container: the cooker names each product
+  under the source's identity ([asset identity 1.2][aid]). `Jump` declared in
+  `Content/Gameplay/Player.input.json` cooks to
+  `/Content/Gameplay/Player.input/Jump.oiact` and round-trips to
+  `asset:///Content/Gameplay/Player.input/Jump.oiact`. Two sources in one folder
+  that declare the same name produce two assets. Moving a source moves its
+  products: relocation maps the source's identity as a folder.
 - **Several outputs per source.** The import report lists every asset an input
-  job produced; provenance records them under the input file, never by the
-  folder they cook into. The project input index is built from the same facts.
-  An output whose declaration disappears by any route (rename, delete, Move
-  asset, file move, hand edit, file removal) is retired at the next publication;
-  Split transfers the key to its new file without retiring it.
-- **Dependencies.** A reference to an action in another file is a `.oiact`
-  virtual path once the engine supports it (input authoring IF-12 b). The
-  manifest then adds `depends_on` on the job that produces it and, across
-  mounts, that mount's root in `cooked_context_roots` in content priority order,
-  as for any descriptor reference. Until then only self-contained files cook: a
-  reference to another file's action fails that file's job before the cooker
-  runs with `OXE.SCRIPT.INPUT_REFERENCE_UNSUPPORTED`
-  ([script authoring §4](script-authoring.md#4-script-assets)); ED-M09.4 lifts
-  the restriction.
-- **Collisions.** Two declarations producing the same virtual path fail both
-  jobs before the cooker runs (`OXE.INPUT.IDENTITY_COLLISION`).
+  job produced; provenance records them under the input source. A product's
+  source follows from its identity, so the declaration of an action or context
+  (go to declaration, a context's declared priority) is read from that one file
+  (`InputSourceFiles`); nothing scans a folder.
+- **References.** A mapping names an action of its own source by name and an
+  action of another source by virtual path
+  (`/Content/Input/Common.input/Fire.oiact`). The source analysis reports those
+  paths as references; discovery resolves a product named under a project input
+  source to that source, so the manifest gives the job `depends_on` on it, and
+  input jobs receive the cook's `cooked_context_roots` for actions of cooked
+  libraries. The cooker resolves each path like a scene reference.
+- **Checks.** The input reader (`InputSourceReader`, Managed.Assets) checks
+  JSON, the engine schema, duplicate names and undeclared local names, each at
+  its position; `InputSourceFiles.CheckActionPaths` checks that a path names an
+  action a project source declares. Script analysis reports both on save
+  (`OXE.INPUT.Source.*`).
+- **Renames.** Renaming an action or context is a relocation request
+  (`InputProductRename`): the source is rewritten, local references included,
+  the old and new product identities enter the relocation map, and every
+  referrer is rewritten, with undo through the history.
 - **Diagnostics.** Native `input.*` codes keep their codes and map to properties
   through their `$`-rooted object path.
 
 Gates: input authoring IA-7 and IA-14.
+
+[aid]: ../review/asset-identity.md#12-sources-that-produce-one-asset-and-containers

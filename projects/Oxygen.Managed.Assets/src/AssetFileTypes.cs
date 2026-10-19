@@ -83,11 +83,8 @@ public static class AssetFileTypes
     /// <summary>The Luau script source suffix.</summary>
     public const string LuauScript = ".luau";
 
-    /// <summary>The suffix of an input file, which declares actions and mapping contexts.</summary>
+    /// <summary>The suffix of an input source, a container of actions and mapping contexts.</summary>
     public const string InputFile = ".input.json";
-
-    /// <summary>The suffix of an input file that declares actions only.</summary>
-    public const string InputActionFile = ".input-action.json";
 
     /// <summary>The suffix of the import settings stored beside a model.</summary>
     public const string ImportSettings = ".import.json";
@@ -111,7 +108,6 @@ public static class AssetFileTypes
     [
         .. new AssetFileType[]
         {
-            new(InputActionFile, AssetFileCategory.Input, CookedExtension: null, AssetType.Unknown) { ProductExtensions = [InputAction] },
             new(InputFile, AssetFileCategory.Input, CookedExtension: null, AssetType.Unknown) { ProductExtensions = [InputAction, InputMappingContext] },
             new(ImportSettings, AssetFileCategory.ImportSettings, CookedExtension: null, AssetType.Unknown),
             new(LuaScript, AssetFileCategory.Script, Script, AssetType.Script),
@@ -173,6 +169,24 @@ public static class AssetFileTypes
     public static bool IsProductOf(string path, AssetFileCategory container)
         => Find(path) is { Category: AssetFileCategory.Cooked, CookedExtension: { } extension }
             && Types.Any(type => type.Category == container && type.ProductExtensions.Contains(extension, StringComparer.Ordinal));
+
+    /// <summary>
+    /// Finds the container a product is named under: the input source <c>/Content/Input/Player.input</c> of
+    /// <c>/Content/Input/Player.input/Jump.oiact</c>.
+    /// </summary>
+    /// <param name="product">The product's identity.</param>
+    /// <returns>The container's identity, or <see langword="null"/> when the path is not named under a container that
+    /// produces its type.</returns>
+    public static AssetPath? ContainerOf(AssetPath product)
+    {
+        ArgumentNullException.ThrowIfNull(product);
+        return product.Parent is { IsMount: false } container
+            && Find(product.Name) is { Category: AssetFileCategory.Cooked, CookedExtension: { } extension }
+            && Find(container.WithAuthoringSuffix().Name) is { Category: AssetFileCategory.Input } type
+            && type.ProductExtensions.Contains(extension, StringComparer.Ordinal)
+                ? container
+                : null;
+    }
 
     /// <summary>Gets the suffixes of every file type of a category, such as the image formats textures import from.</summary>
     /// <param name="category">The category.</param>

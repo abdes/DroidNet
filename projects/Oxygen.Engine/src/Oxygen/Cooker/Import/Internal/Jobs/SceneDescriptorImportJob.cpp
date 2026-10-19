@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cctype>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -16,7 +15,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -142,14 +140,6 @@ namespace {
     }
   }
 
-  auto ToLowerAscii(std::string value) -> std::string
-  {
-    for (auto& ch : value) {
-      ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    }
-    return value;
-  }
-
   auto MakeDuration(const std::chrono::steady_clock::time_point start,
     const std::chrono::steady_clock::time_point end)
     -> std::chrono::microseconds
@@ -167,35 +157,6 @@ namespace {
     return oxygen::data::AssetKey::FromVirtualPath(key_path);
   }
 
-  auto InferAssetTypeFromRelPath(const std::string_view relpath)
-    -> std::optional<data::AssetType>
-  {
-    const auto ext
-      = ToLowerAscii(std::filesystem::path(relpath).extension().string());
-    if (ext == data::kGeometryDescriptorExtension) {
-      return data::AssetType::kGeometry;
-    }
-    if (ext == data::kMaterialDescriptorExtension) {
-      return data::AssetType::kMaterial;
-    }
-    if (ext == data::kScriptDescriptorExtension) {
-      return data::AssetType::kScript;
-    }
-    if (ext == data::kInputActionDescriptorExtension) {
-      return data::AssetType::kInputAction;
-    }
-    if (ext == data::kInputMappingContextDescriptorExtension) {
-      return data::AssetType::kInputMappingContext;
-    }
-    if (ext == data::kPhysicsSceneDescriptorExtension) {
-      return data::AssetType::kPhysicsScene;
-    }
-    if (ext == data::kSceneDescriptorExtension) {
-      return data::AssetType::kScene;
-    }
-    return std::nullopt;
-  }
-
   template <typename RecordT>
   auto PackRecordBytes(const RecordT& record) -> std::vector<std::byte>
   {
@@ -205,110 +166,63 @@ namespace {
 
   auto ResolveAssetReference(SceneDescriptorExecutionContext& context,
     std::string_view virtual_path, std::optional<data::AssetType> expected_type,
-    bool require_asset_key, std::string object_path)
+    std::string object_path)
     -> std::optional<std::pair<data::AssetKey, data::AssetType>>
   {
-    if (!internal::IsCanonicalVirtualPath(virtual_path)) {
+    const auto type_mismatch = [&](const data::AssetType found) -> void {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_virtual_path_invalid",
-        "Reference virtual_path must be canonical", std::move(object_path));
-      return std::nullopt;
-    }
-
+        "scene.descriptor.reference_type_mismatch",
+        "Reference type mismatch; expected "
+          + std::string(data::to_string(*expected_type)) + " but found "
+          + std::string(data::to_string(found)),
+        std::move(object_path));
+    };
     if (const auto it = context.index_cache.find(std::string(virtual_path));
       it != context.index_cache.end()) {
-      const auto type = it->second.second;
-      if (expected_type.has_value() && type != *expected_type) {
-        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "scene.descriptor.reference_type_mismatch",
-          "Reference type mismatch; expected "
-            + std::string(data::to_string(*expected_type)) + " but found "
-            + std::string(data::to_string(type)),
-          std::move(object_path));
+      if (expected_type.has_value() && it->second.second != *expected_type) {
+        type_mismatch(it->second.second);
         return std::nullopt;
       }
       return it->second;
     }
 
-    auto relpath = std::string {};
-    const auto is_mounted = internal::TryVirtualPathToRelPath(
-      context.request, virtual_path, relpath);
-    auto found_descriptor = false;
-    for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
-      if (it->inspection.has_value()) {
-        for (const auto& asset : it->inspection->Assets()) {
-          if (asset.virtual_path != virtual_path) {
-            continue;
-          }
-          const auto type = static_cast<data::AssetType>(asset.asset_type);
-          if (expected_type.has_value() && type != *expected_type) {
-            AddDiagnostic(context.session, context.request,
-              ImportSeverity::kError,
-              "scene.descriptor.reference_type_mismatch",
-              "Reference type mismatch; expected "
-                + std::string(data::to_string(*expected_type)) + " but found "
-                + std::string(data::to_string(type)),
-              std::move(object_path));
-            return std::nullopt;
-          }
-          const auto resolved = std::make_pair(asset.key, type);
-          context.index_cache.insert_or_assign(
-            std::string(virtual_path), resolved);
-          return resolved;
-        }
-      }
-      if (is_mounted) {
-        const auto candidate = it->root / std::filesystem::path(relpath);
-        std::error_code ec;
-        if (std::filesystem::exists(candidate, ec)) {
-          found_descriptor = true;
-          break;
-        }
-      }
+    const auto resolved = internal::ResolveMountedAssetReference(
+      context.mounts, context.request, virtual_path, expected_type);
+    if (resolved.has_value()) {
+      const auto entry = std::make_pair(resolved->key, resolved->type);
+      context.index_cache.insert_or_assign(std::string(virtual_path), entry);
+      return entry;
     }
-
-    if (!is_mounted) {
+    switch (resolved.error().reason) {
+    case internal::AssetReferenceRefusal::kInvalidVirtualPath:
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        "scene.descriptor.reference_virtual_path_invalid",
+        "Reference virtual_path must be canonical", std::move(object_path));
+      break;
+    case internal::AssetReferenceRefusal::kUnmounted:
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "scene.descriptor.reference_virtual_path_unmounted",
         "Reference virtual_path is outside mounted cooked roots",
         std::move(object_path));
-      return std::nullopt;
-    }
-
-    if (!found_descriptor) {
+      break;
+    case internal::AssetReferenceRefusal::kMissing:
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "scene.descriptor.reference_missing",
         "Reference virtual_path was not found: " + std::string(virtual_path),
         std::move(object_path));
-      return std::nullopt;
-    }
-
-    const auto inferred_type = InferAssetTypeFromRelPath(relpath);
-    if (!inferred_type.has_value()) {
+      break;
+    case internal::AssetReferenceRefusal::kTypeUnknown:
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "scene.descriptor.reference_type_unknown",
         "Unable to infer reference asset type from extension: "
           + std::string(virtual_path),
         std::move(object_path));
-      return std::nullopt;
+      break;
+    case internal::AssetReferenceRefusal::kTypeMismatch:
+      type_mismatch(*resolved.error().found_type);
+      break;
     }
-
-    if (expected_type.has_value() && *inferred_type != *expected_type) {
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_type_mismatch",
-        "Reference type mismatch; expected "
-          + std::string(data::to_string(*expected_type)) + " but found "
-          + std::string(data::to_string(*inferred_type)),
-        std::move(object_path));
-      return std::nullopt;
-    }
-
-    static_cast<void>(require_asset_key);
-
-    const auto key = oxygen::data::AssetKey::FromVirtualPath(virtual_path);
-    const auto resolved = std::make_pair(key, *inferred_type);
-    context.index_cache.insert_or_assign(std::string(virtual_path), resolved);
-    return resolved;
+    return std::nullopt;
   }
 
   //! A cooked descriptor looked up in the mounted sources' listings.
@@ -369,8 +283,8 @@ namespace {
       if (context.geometries.contains(path)) {
         continue;
       }
-      const auto resolved = ResolveAssetReference(context, path,
-        data::AssetType::kGeometry, true, "renderables.geometry_ref");
+      const auto resolved = ResolveAssetReference(
+        context, path, data::AssetType::kGeometry, "renderables.geometry_ref");
       if (!resolved) {
         co_return false;
       }
@@ -636,7 +550,7 @@ namespace {
       const auto object_path = "renderables[" + std::to_string(i) + "]";
       const auto resolved_geometry
         = ResolveAssetReference(context, source_renderable.geometry,
-          data::AssetType::kGeometry, true, object_path + ".geometry_ref");
+          data::AssetType::kGeometry, object_path + ".geometry_ref");
       if (!resolved_geometry.has_value()) {
         return std::nullopt;
       }
@@ -651,9 +565,9 @@ namespace {
               object_path + ".material_overrides");
             return std::nullopt;
           }
-          const auto material = ResolveAssetReference(context,
-            assignment.material, data::AssetType::kMaterial, true,
-            object_path + ".material_overrides");
+          const auto material
+            = ResolveAssetReference(context, assignment.material,
+              data::AssetType::kMaterial, object_path + ".material_overrides");
           if (!material.has_value()) {
             return std::nullopt;
           }
@@ -676,8 +590,8 @@ namespace {
     const auto scene_key = data::AssetKey::FromVirtualPath(scene_virtual_path);
     prepared.build.instances.reserve(source.instances.size());
     for (auto& instance : source.instances) {
-      const auto resolved = ResolveAssetReference(context, instance.scene,
-        data::AssetType::kScene, true, instance.object_path);
+      const auto resolved = ResolveAssetReference(
+        context, instance.scene, data::AssetType::kScene, instance.object_path);
       if (!resolved.has_value()) {
         return std::nullopt;
       }
@@ -696,7 +610,7 @@ namespace {
     auto starting_contexts = std::unordered_set<data::AssetKey> {};
     for (auto& starting : source.starting_input_contexts) {
       const auto resolved = ResolveAssetReference(context, starting.context,
-        data::AssetType::kInputMappingContext, true, starting.object_path);
+        data::AssetType::kInputMappingContext, starting.object_path);
       if (!resolved.has_value()) {
         return std::nullopt;
       }
@@ -768,7 +682,7 @@ namespace {
     prepared.environment_references = std::move(references).Build();
     for (const auto& reference : source.references) {
       if (!ResolveAssetReference(context, reference.virtual_path,
-            reference.type, false, reference.object_path)
+            reference.type, reference.object_path)
             .has_value()) {
         return std::nullopt;
       }

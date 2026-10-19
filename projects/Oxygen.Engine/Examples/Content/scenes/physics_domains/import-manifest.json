@@ -215,7 +215,8 @@
     {
       "id": "input.physics_domains",
       "type": "input",
-      "source": "./physics_domains.input.json"
+      "source": "./physics_domains.input.json",
+      "virtual_path": "/.cooked/Input/physics_domains.input"
     },
     {
       "id": "script.sidecar.physics_domains_controller",
@@ -237,32 +238,32 @@
             {
               "key": "forward",
               "type": "asset",
-              "value": "/.cooked/Input/VehicleForwardAction.oiact"
+              "value": "/.cooked/Input/physics_domains.input/VehicleForwardAction.oiact"
             },
             {
               "key": "reverse",
               "type": "asset",
-              "value": "/.cooked/Input/VehicleReverseAction.oiact"
+              "value": "/.cooked/Input/physics_domains.input/VehicleReverseAction.oiact"
             },
             {
               "key": "steer_left",
               "type": "asset",
-              "value": "/.cooked/Input/VehicleSteerLeftAction.oiact"
+              "value": "/.cooked/Input/physics_domains.input/VehicleSteerLeftAction.oiact"
             },
             {
               "key": "steer_right",
               "type": "asset",
-              "value": "/.cooked/Input/VehicleSteerRightAction.oiact"
+              "value": "/.cooked/Input/physics_domains.input/VehicleSteerRightAction.oiact"
             },
             {
               "key": "brake",
               "type": "asset",
-              "value": "/.cooked/Input/VehicleBrakeAction.oiact"
+              "value": "/.cooked/Input/physics_domains.input/VehicleBrakeAction.oiact"
             },
             {
               "key": "hand_brake",
               "type": "asset",
-              "value": "/.cooked/Input/VehicleHandbrakeAction.oiact"
+              "value": "/.cooked/Input/physics_domains.input/VehicleHandbrakeAction.oiact"
             }
           ]
         }
@@ -289,32 +290,32 @@
             {
               "key": "forward",
               "type": "asset",
-              "value": "/.cooked/Input/VehicleForwardAction.oiact"
+              "value": "/.cooked/Input/physics_domains.input/VehicleForwardAction.oiact"
             },
             {
               "key": "reverse",
               "type": "asset",
-              "value": "/.cooked/Input/VehicleReverseAction.oiact"
+              "value": "/.cooked/Input/physics_domains.input/VehicleReverseAction.oiact"
             },
             {
               "key": "steer_left",
               "type": "asset",
-              "value": "/.cooked/Input/VehicleSteerLeftAction.oiact"
+              "value": "/.cooked/Input/physics_domains.input/VehicleSteerLeftAction.oiact"
             },
             {
               "key": "steer_right",
               "type": "asset",
-              "value": "/.cooked/Input/VehicleSteerRightAction.oiact"
+              "value": "/.cooked/Input/physics_domains.input/VehicleSteerRightAction.oiact"
             },
             {
               "key": "brake",
               "type": "asset",
-              "value": "/.cooked/Input/VehicleBrakeAction.oiact"
+              "value": "/.cooked/Input/physics_domains.input/VehicleBrakeAction.oiact"
             },
             {
               "key": "hand_brake",
               "type": "asset",
-              "value": "/.cooked/Input/VehicleHandbrakeAction.oiact"
+              "value": "/.cooked/Input/physics_domains.input/VehicleHandbrakeAction.oiact"
             }
           ]
         },

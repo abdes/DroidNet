@@ -11,11 +11,11 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
-/// Reads what a mapping context declares about itself in its hand-written input file.
+/// Reads what a mapping context declares about itself in its input source.
 /// </summary>
 /// <remarks>
-/// Input files cook their contexts into their own folder, so a context's declaring file is one of the input files
-/// next to the cooked context.
+/// A context is named under the source that declares it (<c>/Content/Input/Player.input/OnFoot.oimap</c>), so its
+/// declaration is found in that one file.
 /// </remarks>
 public static class InputContextSources
 {
@@ -30,7 +30,8 @@ public static class InputContextSources
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(context);
-        // A context of the project is cooked from an input file next to it; one that no file declares is gone.
+        // A context of the project is cooked from the input source it is named under; one its source does not declare
+        // is gone.
         return RelocationPaths.ToPhysical(project, context) is null
             ? InputContextSource.External
             : new InputContextSource(IsProjectContext: true, FindDeclaredPriority(project, context));
@@ -39,39 +40,15 @@ public static class InputContextSources
     /// <summary>Finds the priority a mapping context declares.</summary>
     /// <param name="project">The project whose authoring mounts hold the input files.</param>
     /// <param name="context">The mapping context asset.</param>
-    /// <returns>The declared priority, or <see langword="null"/> when no input file in the context's folder declares
-    /// it.</returns>
+    /// <returns>The declared priority, or <see langword="null"/> when no input source of the project declares it.</returns>
     public static int? FindDeclaredPriority(ProjectContext project, AssetPath context)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(context);
-        if (!context.Name.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.Ordinal)
-            || RelocationPaths.ToPhysical(project, context.Parent!) is not { } folder
-            || !Directory.Exists(folder.FullPath))
-        {
-            return null;
-        }
-
-        var name = Path.GetFileNameWithoutExtension(context.Name);
-        foreach (var file in Directory.EnumerateFiles(folder.FullPath, "*" + AssetFileTypes.InputFile).Order(StringComparer.Ordinal))
-        {
-            string text;
-            try
-            {
-                text = File.ReadAllText(file);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                continue;
-            }
-
-            if (InputFileReferences.FindContextPriority(text, name) is { } priority)
-            {
-                return priority;
-            }
-        }
-
-        return null;
+        return context.Name.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.Ordinal)
+            && InputSourceFiles.FindDeclaration(project, context) is { } declaration
+                ? declaration.Source.FindContext(context.Name[..^AssetFileTypes.InputMappingContext.Length])!.Priority
+                : null;
     }
 
     /// <summary>Gets the priority a starting input context is added with.</summary>

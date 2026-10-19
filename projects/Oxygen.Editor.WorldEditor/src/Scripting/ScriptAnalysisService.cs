@@ -10,14 +10,12 @@ using System.Reactive.Subjects;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using DroidNet.Hosting.WinUI;
-using Json.Schema;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Scripting;
 using Oxygen.Interop.Scripting;
 using Oxygen.Managed.Assets;
@@ -58,7 +56,6 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
     private readonly Lazy<string?> definitions;
     private readonly IEngineService engine;
     private readonly TaskCompletionSource nativeReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly ConcurrentDictionary<string, JsonSchema?> inputSchemas = new(StringComparer.OrdinalIgnoreCase);
     private int unavailableReported;
     private FileSystemPath? scannedProjectRoot;
     private bool disposed;
@@ -256,7 +253,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
 
         if (AssetFileTypes.Is(path.Name, AssetFileCategory.Input))
         {
-            return await this.CheckInputFileAsync(path, virtualPath, force, cancellationToken).ConfigureAwait(false);
+            return await this.CheckInputFileAsync(project, path, virtualPath, force, cancellationToken).ConfigureAwait(false);
         }
 
         if (!AssetFileTypes.Is(path.Name, AssetFileCategory.Script))
@@ -307,7 +304,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         return snapshot;
     }
 
-    private async Task<ScriptAnalysisSnapshot?> CheckInputFileAsync(FileSystemPath path, AssetPath virtualPath, bool force, CancellationToken cancellationToken)
+    private async Task<ScriptAnalysisSnapshot?> CheckInputFileAsync(ProjectContext project, FileSystemPath path, AssetPath virtualPath, bool force, CancellationToken cancellationToken)
     {
         byte[] bytes;
         try
@@ -331,28 +328,12 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
             return previous.Snapshot;
         }
 
-        var schema = this.inputSchemas.GetOrAdd(
-            path.Name.EndsWith(AssetFileTypes.InputActionFile, StringComparison.Ordinal) ? "oxygen.input-action.schema.json" : "oxygen.input.schema.json",
-            this.LoadInputSchema);
-        var problems = InputFileCheck.Check(path.FullPath, System.Text.Encoding.UTF8.GetString(bytes), schema);
-        var snapshot = new ScriptAnalysisSnapshot(path, AssetFileTypes.ToIdentity(virtualPath), problems, [], ParametersOutOfDate: false);
+        var identity = AssetFileTypes.ToIdentity(virtualPath);
+        var problems = InputFileCheck.Check(project, path.FullPath, identity, bytes);
+        var snapshot = new ScriptAnalysisSnapshot(path, identity, problems, [], ParametersOutOfDate: false);
         this.entries[path] = new Entry(hash, snapshot, []);
         this.changes.OnNext(snapshot);
         return snapshot;
-    }
-
-    private JsonSchema? LoadInputSchema(string fileName)
-    {
-        try
-        {
-            // The catalog resolves the schema's reference to the shared name definition beside it.
-            return EditorSchemaCatalog.LoadFromDirectory(this.paths.SchemaDirectory).GetValidationSchema(fileName);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or KeyNotFoundException or System.Text.Json.JsonException or JsonSchemaException)
-        {
-            this.LogInputSchemaUnavailable(fileName, exception);
-            return null;
-        }
     }
 
     // Loading the Interop assembly fails when the method that uses its types is compiled, so those types stay in

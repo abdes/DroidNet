@@ -75,6 +75,11 @@ public static class DiagnosticCodes
     public const string TexturePrefix = "OXE.TEXTURE.";
 
     /// <summary>
+    /// Input source authoring diagnostic code prefix: actions and mapping contexts.
+    /// </summary>
+    public const string InputPrefix = "OXE.INPUT.";
+
+    /// <summary>
     /// Asset identity diagnostic code prefix.
     /// </summary>
     public const string AssetIdentityPrefix = "OXE.ASSETID.";
@@ -95,7 +100,7 @@ public static class DiagnosticCodes
     public const string AssetCookPrefix = "OXE.ASSETCOOK.";
 
     /// <summary>
-    /// Script authoring diagnostic code prefix: script assets, analysis, code-editor launch and input files.
+    /// Script authoring diagnostic code prefix: script assets, analysis and code-editor launch.
     /// </summary>
     public const string ScriptPrefix = "OXE.SCRIPT.";
 

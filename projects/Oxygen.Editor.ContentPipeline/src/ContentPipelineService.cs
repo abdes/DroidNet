@@ -103,51 +103,6 @@ public sealed partial class ContentPipelineService(
     public Task<ContentCookResult> CookProjectAsync(CancellationToken cancellationToken)
         => this.cookCoordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null) { CoalescePending = true, OriginContext = this.projectContextService.ActiveProject }, this.CookProjectCoreAsync, cancellationToken);
 
-    /// <summary>Removes the jobs of input files that use actions declared in other files, reporting each file.</summary>
-    /// <param name="operationId">The cook operation.</param>
-    /// <param name="scope">The cook scope.</param>
-    /// <param name="manifest">The manifest.</param>
-    /// <returns>The manifest without those jobs, and one error per rejected file.</returns>
-    internal static (ContentImportManifest Manifest, IReadOnlyList<DiagnosticRecord> Diagnostics) RejectInputFilesWithForeignActions(
-        Guid operationId,
-        ContentCookScope scope,
-        ContentImportManifest manifest)
-    {
-        var rejected = new HashSet<string>(StringComparer.Ordinal);
-        var diagnostics = new List<DiagnosticRecord>();
-        foreach (var input in scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.Input))
-        {
-            string text;
-            try
-            {
-                text = File.ReadAllText(input.SourceAbsolutePath.FullPath);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                continue; // The cooker reports the unreadable source.
-            }
-
-            if (InputFileReferences.FindUndeclaredActions(text) is { Count: > 0 } foreign)
-            {
-                _ = rejected.Add(input.SourceRelativePath.Replace('\\', '/').TrimStart('/'));
-                diagnostics.Add(new DiagnosticRecord
-                {
-                    OperationId = operationId,
-                    Domain = FailureDomain.ScriptAuthoring,
-                    Severity = DiagnosticSeverity.Error,
-                    Code = ScriptDiagnosticCodes.InputReferenceUnsupported,
-                    Message = $"{input.SourceAbsolutePath.Name} uses {string.Join(", ", foreign.Select(static name => "'" + name + "'"))}, which it does not declare. Declare every action an input file uses in that file; input files cannot share actions yet.",
-                    AffectedPath = input.SourceAbsolutePath.FullPath,
-                    AffectedVirtualPath = input.AssetUri.VirtualPath,
-                });
-            }
-        }
-
-        return rejected.Count == 0
-            ? (manifest, diagnostics)
-            : (manifest with { Jobs = [.. manifest.Jobs.Where(job => !(string.Equals(job.Type, "input", StringComparison.Ordinal) && rejected.Contains(job.AttributedSource)))] }, diagnostics);
-    }
-
     internal static bool IsCookableDescriptorFile(string path)
         => ContentCookAssetKinds.Of(path) switch
         {
@@ -370,7 +325,7 @@ public sealed partial class ContentPipelineService(
             Jobs = keptJobs.Select(job => job with
             {
                 DependsOn = job.DependsOn.Where(keptIds.Contains).ToArray(),
-                CookedContextRoots = job.Type is "material-descriptor" or "scene-descriptor" or "geometry-descriptor" or "script-sidecar" && scope.CookedContextRoots.Count > 0 ? scope.CookedContextRoots : null,
+                CookedContextRoots = job.Type is "material-descriptor" or "scene-descriptor" or "geometry-descriptor" or "script-sidecar" or "input" && scope.CookedContextRoots.Count > 0 ? scope.CookedContextRoots : null,
             }).ToArray(),
         };
     }
@@ -493,13 +448,6 @@ public sealed partial class ContentPipelineService(
         var output = scope.Output ?? throw new InvalidOperationException("The cook has no generation owner.");
         manifest = PruneReusableJobs(scope, manifest, output.SourceKey);
         scope = scope with { Inputs = scope.Inputs.Where(input => !scope.ReusableSources.Contains(input.AssetUri)).ToArray() };
-        (manifest, var inputDiagnostics) = RejectInputFilesWithForeignActions(operationId, scope, manifest);
-        diagnostics = [.. diagnostics, .. inputDiagnostics];
-        if (manifest.Jobs.Count == 0 && inputDiagnostics.Count > 0)
-        {
-            return CreateFailedImport(operationId, targetKind, [.. diagnostics]);
-        }
-
         var manifestDiagnostics = this.manifestValidator.Validate(operationId, manifest);
         if (HasError(manifestDiagnostics))
         {

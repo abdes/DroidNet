@@ -130,10 +130,11 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             Output: null,
             Name: input.Kind == ContentCookAssetKind.Input ? null : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(input.SourceRelativePath)))
         {
-            Layout = CreateJobLayout(input),
+            Layout = new ContentImportLayout(AssetPath.Create(input.MountName).VirtualPath),
 
-            // A source that cooks one asset names it; the cooker places its descriptor there.
-            VirtualPath = input.Kind == ContentCookAssetKind.Input ? null : input.AssetUri.VirtualPath,
+            // A source that cooks one asset names it, and the cooker places its descriptor there; an input source
+            // names itself, and the cooker names its actions and contexts under it.
+            VirtualPath = input.AssetUri.VirtualPath,
         };
 
         // Scripts cook to debug bytecode that records their source, so the player runs the bytecode and reloads
@@ -203,18 +204,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         return scope.Inputs.Any(input => !string.Equals(input.MountName, mountName, StringComparison.Ordinal))
             ? throw new InvalidOperationException("One content import manifest cannot span multiple authoring mounts.")
             : mountName;
-    }
-
-    // A job cooks into its source's mount. An input file's actions and contexts also cook into the file's own folder
-    // until they are named under it.
-    private static ContentImportLayout CreateJobLayout(ContentCookInput input)
-    {
-        var layout = new ContentImportLayout(AssetPath.Create(input.MountName).VirtualPath);
-        return input.Kind != ContentCookAssetKind.Input ? layout : layout with
-        {
-            DescriptorsDirectory = string.Empty,
-            InputDirectory = input.AssetUri.Parent is { IsMount: false } folder ? folder.RelativePath : string.Empty,
-        };
     }
 
     // The authoring mount's folder: the player resolves a script's recorded source path against the project's

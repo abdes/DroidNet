@@ -33,7 +33,8 @@
     {
       "id": "input.camera_switch",
       "type": "input",
-      "source": "./camera_switch.input.json"
+      "source": "./camera_switch.input.json",
+      "virtual_path": "/.cooked/Input/camera_switch.input"
     },
     {
       "id": "scene.camera_switch",
@@ -74,27 +75,27 @@
             {
               "key": "play_context",
               "type": "asset",
-              "value": "/.cooked/Input/CameraSwitchPlay.oimap"
+              "value": "/.cooked/Input/camera_switch.input/CameraSwitchPlay.oimap"
             },
             {
               "key": "menu_context",
               "type": "asset",
-              "value": "/.cooked/Input/CameraSwitchMenu.oimap"
+              "value": "/.cooked/Input/camera_switch.input/CameraSwitchMenu.oimap"
             },
             {
               "key": "next_camera",
               "type": "asset",
-              "value": "/.cooked/Input/CameraSwitchNext.oiact"
+              "value": "/.cooked/Input/camera_switch.input/CameraSwitchNext.oiact"
             },
             {
               "key": "open_menu",
               "type": "asset",
-              "value": "/.cooked/Input/CameraSwitchOpenMenu.oiact"
+              "value": "/.cooked/Input/camera_switch.input/CameraSwitchOpenMenu.oiact"
             },
             {
               "key": "close_menu",
               "type": "asset",
-              "value": "/.cooked/Input/CameraSwitchCloseMenu.oiact"
+              "value": "/.cooked/Input/camera_switch.input/CameraSwitchCloseMenu.oiact"
             }
           ]
         }

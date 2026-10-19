@@ -5,6 +5,7 @@
 using DroidNet.Storage;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
@@ -58,17 +59,25 @@ internal static class AssetRelocationPlanner
         ExpandImportGroups(project, index, map, groupFolders, moving);
         CheckGroupOverlaps(index, map, moving);
 
-        // A file's references name the asset it stands for; a script source's name the script it cooks to.
+        // A file's references name the asset it stands for; a script source's name the script it cooks to. A
+        // container's products are named under it, so they move with it as a folder's files do.
         foreach (var move in map.Moves)
         {
             var source = RelocationPaths.ToVirtual(project, move.Source)!;
             var target = RelocationPaths.ToVirtual(project, move.Target)!;
             map.AddPath(source, target, move.IsDirectory);
-            map.AddIdentity(move.IsDirectory ? source : AssetFileTypes.ToIdentity(source), move.IsDirectory ? target : AssetFileTypes.ToIdentity(target), move.IsDirectory);
+            var isContainer = !move.IsDirectory && AssetFileTypes.Find(source.Name) is { ProductExtensions.Count: > 0 };
+            map.AddIdentity(move.IsDirectory ? source : AssetFileTypes.ToIdentity(source), move.IsDirectory ? target : AssetFileTypes.ToIdentity(target), move.IsDirectory || isContainer);
         }
 
-        var edits = await PlanEditsAsync(project, index, map, files, cancellationToken).ConfigureAwait(false);
-        var referrers = edits.Where(edit => !map.IsMoved(edit.OriginalPath))
+        var renames = new Dictionary<FileSystemPath, List<InputProductRename>>();
+        foreach (var rename in request.ProductRenames.Where(static rename => rename.Product != rename.Target))
+        {
+            AddProductRename(project, index, map, renames, rename);
+        }
+
+        var edits = await PlanEditsAsync(project, index, map, renames, files, cancellationToken).ConfigureAwait(false);
+        var referrers = edits.Where(edit => !map.IsMoved(edit.OriginalPath) && !renames.ContainsKey(edit.OriginalPath))
             .Select(edit => RelocationPaths.ToVirtual(project, edit.OriginalPath)!)
             .Order().ToArray();
         return new(request, map, edits, referrers, [.. groupFolders.Distinct(StringComparer.Ordinal)], previousGroups);
@@ -246,6 +255,47 @@ internal static class AssetRelocationPlanner
         }
     }
 
+    // An action or a context is renamed inside its source: the source is rewritten, and the product's new identity
+    // retargets every reference to it.
+    private static void AddProductRename(
+        ProjectContext project,
+        AuthoredReferenceIndex index,
+        RelocationMap map,
+        Dictionary<FileSystemPath, List<InputProductRename>> renames,
+        InputProductRename rename)
+    {
+        if (AssetFileTypes.ContainerOf(rename.Product) is null || RelocationPaths.FindWritableMount(project, rename.Product) is null)
+        {
+            throw new AssetRelocationException($"'{rename.Product}' is not an action or a mapping context of the project's input sources.");
+        }
+
+        var file = InputSourceFiles.FindSourceFile(project, rename.Product)
+            ?? throw new AssetRelocationException($"The input source of '{rename.Product.Name}' no longer exists.");
+        if (map.IsMoved(file) || !index.Descriptors.Any(descriptor => descriptor.Location == file))
+        {
+            throw new AssetRelocationException($"Rename '{rename.CurrentName}' on its own, not while its input source moves.");
+        }
+
+        var pending = renames.TryGetValue(file, out var existing) ? existing : renames[file] = [];
+        try
+        {
+            var content = File.ReadAllBytes(file.FullPath);
+            foreach (var earlier in pending)
+            {
+                content = AuthoredReferenceFormat.RenameInputProduct(content, earlier);
+            }
+
+            _ = AuthoredReferenceFormat.RenameInputProduct(content, rename);
+        }
+        catch (AssetFormatException error)
+        {
+            throw new AssetRelocationException(error.Problem.Message, error);
+        }
+
+        pending.Add(rename);
+        map.AddIdentity(rename.Product, rename.Target, isFolder: false);
+    }
+
     private static void ValidateGroup(string group)
     {
         var segments = group.Replace('\\', '/').Split('/');
@@ -339,6 +389,7 @@ internal static class AssetRelocationPlanner
         ProjectContext project,
         AuthoredReferenceIndex index,
         RelocationMap map,
+        Dictionary<FileSystemPath, List<InputProductRename>> renames,
         IAtomicFileStore files,
         CancellationToken cancellationToken)
     {
@@ -347,7 +398,14 @@ internal static class AssetRelocationPlanner
         {
             var snapshot = await files.ReadAsync(descriptor.Location.FullPath, cancellationToken).ConfigureAwait(false);
             var content = snapshot.Content.ToArray();
-            if (AuthoredReferenceFormat.RewriteDescriptor(descriptor.Location, content, map, index.Mounts) is { } rewritten)
+            var renamed = content;
+            foreach (var rename in renames.GetValueOrDefault(descriptor.Location) ?? [])
+            {
+                renamed = AuthoredReferenceFormat.RenameInputProduct(renamed, rename);
+            }
+
+            if ((AuthoredReferenceFormat.RewriteDescriptor(descriptor.Location, renamed, map, index.Mounts)
+                ?? (ReferenceEquals(renamed, content) ? null : renamed)) is { } rewritten)
             {
                 edits.Add(new(descriptor.Location, map.MapPath(descriptor.Location), snapshot.Version, content, rewritten));
             }

@@ -22,6 +22,9 @@ public sealed partial class AssetRelocationService
     [LoggerMessage(Level = LogLevel.Information, Message = "Output group relocation requested: model '{Model}' -> group '{Group}'.")]
     private partial void LogGroupRelocationRequested(string model, string group);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Input product rename requested: '{Product}' -> '{Name}'.")]
+    private partial void LogProductRenameRequested(string product, string name);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "'{Label}' recorded in the history; undoing it runs the reverse relocation.")]
     private partial void LogRecorded(string label);
 

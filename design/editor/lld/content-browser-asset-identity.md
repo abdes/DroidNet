@@ -573,12 +573,13 @@ identity and must update every authored referrer in one transaction.
   starting input contexts and script parameter overrides of input kinds.
   Identities compare without the scheme and `.json` suffix; a rewrite keeps the
   field's form (full URI, virtual path or file-relative path).
-- **Input assets.** An input file may declare several assets; each one's
-  identity is its source folder plus its declared name, not the file. Moving the
-  file relocates all of its assets, Rename file changes none, and Move asset
-  extracts one declaration into its own file. The rules, collision checks and
-  confirmations are owned by
-  [input authoring §7.2 and §8.4](input-authoring.md#72-asset-identity).
+- **Input assets.** An input source is a container: each action and context it
+  declares is named under the source's identity
+  (`/Content/Input/Player.input/Jump.oiact`). Moving or renaming the source
+  relocates all of its assets, since relocation maps the source's identity as a
+  folder; renaming an action or context is a relocation request of its own
+  (`InputProductRename`) that rewrites the source and every referrer
+  ([content pipeline §24](content-pipeline.md#24-input-sources)).
 - **Plan.** Source moves with their companion files (a texture's image, a
   model's sidecar), a folder prefix mapping and the rewritten references of
   every referrer, including a moved descriptor's own `virtual_path`. Rejected:

@@ -286,6 +286,76 @@ public sealed class AssetRelocationTests
         _ = copies.Should().ContainSingle().Which.Should().Be(AssetPath.Parse("/Content/Input/Player (2).input.json"));
     }
 
+    /// <summary>An input source's products are named under it, so moving the source retargets every reference to
+    /// them, by path in another input source and by URI in a scene.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task MovingAnInputSourceMovesItsProductsInTheirReferrers()
+    {
+        using var workspace = CreateInput();
+        _ = Directory.CreateDirectory(Path.Combine(workspace.Root, "Content", "Controls"));
+
+        var plan = await workspace.Service.RelocateAsync(Move("/Content/Input/Player.input.json", "/Content/Controls/Player.input.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = plan.Referrers.Should().BeEquivalentTo([AssetPath.Parse("/Content/Input/Vehicle.input.json"), AssetPath.Parse("/Content/Scenes/Main.oscene.json")]);
+        _ = VehicleAction(workspace).Should().Be("/Content/Controls/Player.input/Jump.oiact");
+        _ = StartingContext(workspace).Should().Be("asset:///Content/Controls/Player.input/OnFoot.oimap");
+    }
+
+    /// <summary>Renaming an action renames it in its source, where mappings name it, and in every referrer; undo
+    /// restores both.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task RenamingAnActionRewritesItsSourceAndReferrers()
+    {
+        using var workspace = CreateInput();
+        var history = new HistoryKeeper(this);
+
+        var plan = await workspace.Service.RelocateAsync(Rename("/Content/Input/Player.input/Jump.oiact", "Leap"), "Rename", history, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = plan.Referrers.Should().Equal(AssetPath.Parse("/Content/Input/Vehicle.input.json"));
+        var player = workspace.ReadJson("Content/Input/Player.input.json");
+        _ = player["actions"]![0]!["name"]!.GetValue<string>().Should().Be("Leap");
+        _ = player["contexts"]![0]!["mappings"]![0]!["action"]!.GetValue<string>().Should().Be("Leap");
+        _ = VehicleAction(workspace).Should().Be("/Content/Input/Player.input/Leap.oiact");
+
+        await history.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = workspace.ReadJson("Content/Input/Player.input.json")["actions"]![0]!["name"]!.GetValue<string>().Should().Be("Jump");
+        _ = VehicleAction(workspace).Should().Be("/Content/Input/Player.input/Jump.oiact");
+    }
+
+    /// <summary>Renaming a mapping context retargets the scenes that start with it.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task RenamingAContextRetargetsTheScenesThatUseIt()
+    {
+        using var workspace = CreateInput();
+
+        _ = await workspace.Service.RelocateAsync(Rename("/Content/Input/Player.input/OnFoot.oimap", "Driving"), "Rename", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = workspace.ReadJson("Content/Input/Player.input.json")["contexts"]![0]!["name"]!.GetValue<string>().Should().Be("Driving");
+        _ = StartingContext(workspace).Should().Be("asset:///Content/Input/Player.input/Driving.oimap");
+    }
+
+    /// <summary>A rename the source cannot take changes nothing.</summary>
+    /// <param name="product">The renamed product.</param>
+    /// <param name="name">The new name.</param>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    [DataRow("/Content/Input/Player.input/Jump.oiact", "dash")]
+    [DataRow("/Content/Input/Player.input/Fly.oiact", "Soar")]
+    [DataRow("/Content/Input/Jump.oiact", "Leap")]
+    public async Task ARenameTheSourceRefusesChangesNothing(string product, string name)
+    {
+        using var workspace = CreateInput();
+        var before = Snapshot(workspace.Root);
+
+        Func<Task> rename = async () => await workspace.Service.RelocateAsync(Rename(product, name), "Rename", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = await rename.Should().ThrowAsync<AssetRelocationException>().ConfigureAwait(false);
+        _ = Snapshot(workspace.Root).Should().BeEquivalentTo(before);
+    }
+
     /// <summary>Renaming a script rewrites the slots and parameters that refer to the script it cooks to.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
@@ -684,7 +754,34 @@ public sealed class AssetRelocationTests
         return workspace;
     }
 
+    private static RelocationWorkspace CreateInput()
+    {
+        var workspace = new RelocationWorkspace();
+        _ = workspace.Write("Content/Input/Player.input.json", """
+            {
+              "actions": [ { "name": "Jump", "type": "bool" }, { "name": "Dash", "type": "bool" } ],
+              "contexts": [ { "name": "OnFoot", "mappings": [ { "action": "Jump", "slot": "Space" } ] } ]
+            }
+            """);
+        _ = workspace.Write("Content/Input/Vehicle.input.json", """
+            { "contexts": [ { "name": "Driving", "mappings": [ { "action": "/Content/Input/Player.input/Jump.oiact", "slot": "Space" } ] } ] }
+            """);
+        _ = workspace.Write("Content/Scenes/Main.oscene.json", """
+            { "Id": "6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10", "Name": "Main", "RootNodes": [],
+              "StartingInputContexts": [ { "Context": "asset:///Content/Input/Player.input/OnFoot.oimap" } ] }
+            """);
+        return workspace;
+    }
+
+    private static string VehicleAction(RelocationWorkspace workspace)
+        => workspace.ReadJson("Content/Input/Vehicle.input.json")["contexts"]![0]!["mappings"]![0]!["action"]!.GetValue<string>();
+
+    private static string StartingContext(RelocationWorkspace workspace)
+        => workspace.ReadJson("Content/Scenes/Main.oscene.json")["StartingInputContexts"]![0]!["Context"]!.GetValue<string>();
+
     private static AssetRelocationRequest Move(string source, string target) => new() { Moves = [new(AssetPath.Parse(source), AssetPath.Parse(target))] };
+
+    private static AssetRelocationRequest Rename(string product, string name) => new() { ProductRenames = [new(AssetPath.Parse(product), name)] };
 
     private static Dictionary<string, string> Snapshot(string root)
         => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)

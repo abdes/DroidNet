@@ -25,8 +25,7 @@ internal static class DescriptorFormat
     {
         try
         {
-            var content = jsonUtf8.StartsWith(Encoding.UTF8.Preamble) ? jsonUtf8[Encoding.UTF8.Preamble.Length..] : jsonUtf8;
-            return JsonDocument.Parse(content.ToArray(), new JsonDocumentOptions
+            return JsonDocument.Parse(WithoutByteOrderMark(jsonUtf8).ToArray(), new JsonDocumentOptions
             {
                 AllowTrailingCommas = true,
                 CommentHandling = JsonCommentHandling.Skip,
@@ -44,6 +43,12 @@ internal static class DescriptorFormat
         }
     }
 
+    /// <summary>Removes a UTF-8 byte order mark, which the cooker accepts.</summary>
+    /// <param name="jsonUtf8">The descriptor bytes.</param>
+    /// <returns>The bytes after the byte order mark, if any.</returns>
+    public static ReadOnlySpan<byte> WithoutByteOrderMark(ReadOnlySpan<byte> jsonUtf8)
+        => jsonUtf8.StartsWith(Encoding.UTF8.Preamble) ? jsonUtf8[Encoding.UTF8.Preamble.Length..] : jsonUtf8;
+
     /// <summary>Loads an engine schema embedded in this assembly, with the shared name definitions it references.</summary>
     /// <param name="fileName">The schema's file name.</param>
     /// <returns>The schema.</returns>
@@ -60,7 +65,27 @@ internal static class DescriptorFormat
     /// <summary>Describes the errors of a failed schema evaluation, one per line.</summary>
     /// <param name="evaluation">The evaluation, in list output format.</param>
     /// <returns>The errors.</returns>
-    public static string Describe(EvaluationResults evaluation) => string.Join(Environment.NewLine, Errors(evaluation));
+    public static string Describe(EvaluationResults evaluation)
+        => string.Join(Environment.NewLine, Issues(evaluation).Select(static issue => $"{issue.Location}: {issue.Error}"));
+
+    /// <summary>Lists the errors of a failed schema evaluation with the JSON pointer of the value each is about.</summary>
+    /// <param name="evaluation">The evaluation, in list output format.</param>
+    /// <returns>The errors, each with its value's pointer; empty for the document itself.</returns>
+    public static IEnumerable<(string Location, string Error)> Issues(EvaluationResults evaluation)
+    {
+        foreach (var (keyword, error) in evaluation.Errors ?? new Dictionary<string, string>(StringComparer.Ordinal))
+        {
+            yield return (evaluation.InstanceLocation.ToString(), $"{keyword} {error}");
+        }
+
+        foreach (var detail in evaluation.Details ?? [])
+        {
+            foreach (var issue in Issues(detail))
+            {
+                yield return issue;
+            }
+        }
+    }
 
     /// <summary>Creates the exception for an error problem.</summary>
     /// <param name="code">The problem's code.</param>
@@ -69,22 +94,6 @@ internal static class DescriptorFormat
     /// <returns>The exception to throw.</returns>
     public static AssetFormatException Problem(string code, string message, string? explanation = null)
         => new(new AssetProblem(DiagnosticSeverity.Error, code, message) { Explanation = explanation });
-
-    private static IEnumerable<string> Errors(EvaluationResults evaluation)
-    {
-        foreach (var (keyword, error) in evaluation.Errors ?? new Dictionary<string, string>(StringComparer.Ordinal))
-        {
-            yield return $"{evaluation.InstanceLocation}: {keyword} {error}";
-        }
-
-        foreach (var detail in evaluation.Details ?? [])
-        {
-            foreach (var error in Errors(detail))
-            {
-                yield return error;
-            }
-        }
-    }
 
     private static string ReadSchemaResource(string fileName)
     {

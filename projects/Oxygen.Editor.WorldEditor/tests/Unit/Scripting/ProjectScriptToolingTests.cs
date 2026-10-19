@@ -27,7 +27,6 @@ public sealed partial class ProjectScriptToolingTests : IDisposable
         _ = Directory.CreateDirectory(Path.Combine(this.root, "Project"));
         File.WriteAllText(this.DefinitionsPath, "declare oxygen: any\n");
         File.WriteAllText(Path.Combine(this.root, "Sdk", "schemas", "oxygen.input.schema.json"), "{}");
-        File.WriteAllText(Path.Combine(this.root, "Sdk", "schemas", "oxygen.input-action.schema.json"), "{}");
         File.WriteAllText(Path.Combine(this.root, "Sdk", "schemas", "oxygen.name.schema.json"), "{}");
     }
 
@@ -48,7 +47,7 @@ public sealed partial class ProjectScriptToolingTests : IDisposable
     {
         var changes = this.CreateTooling().Ensure(this.CreateProject());
 
-        _ = changes.Should().HaveCount(6);
+        _ = changes.Should().HaveCount(5);
         _ = File.Exists(Path.Combine(this.ProjectRoot, "Types", "oxygen.name.schema.json")).Should().BeTrue();
         _ = File.ReadAllText(Path.Combine(this.ProjectRoot, ".luaurc")).Should().Contain("nonstrict");
         _ = File.ReadAllText(Path.Combine(this.ProjectRoot, "Types", "oxygen.d.luau")).Should().Be("declare oxygen: any\n");
@@ -94,8 +93,8 @@ public sealed partial class ProjectScriptToolingTests : IDisposable
 
         _ = settings["luau-lsp.platform.type"]!.GetValue<string>().Should().Be("roblox");
         _ = settings["files.associations"]!["*.lua"]!.GetValue<string>().Should().Be("lua");
-        _ = settings["json.schemas"]!.AsArray().Should().HaveCount(2);
-        _ = added.Should().BeEquivalentTo("luau-lsp.types.definitionFiles", "luau-lsp.sourcemap.enabled", "json.schemas *.input-action.json");
+        _ = settings["json.schemas"]!.AsArray().Should().ContainSingle();
+        _ = added.Should().BeEquivalentTo("luau-lsp.types.definitionFiles", "luau-lsp.sourcemap.enabled");
     }
 
     [TestMethod]

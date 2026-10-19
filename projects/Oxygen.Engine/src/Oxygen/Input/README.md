@@ -192,9 +192,9 @@ Delivered:
   cancellation on context switches.
 - Engine-integrated timing (physical clock), fixed-step latch, immutable
   snapshots.
-- Authoring: actions and contexts cooked from JSON (`oxygen.input.schema.json`,
-  `oxygen.input-action.schema.json`) and hydrated at load, including scale,
-  bias, consumption and accumulation.
+- Authoring: actions and contexts cooked from input sources
+  (`oxygen.input.schema.json`) and hydrated at load, including scale, bias,
+  consumption and accumulation.
 
 Not yet provided (known gaps against current engines):
 

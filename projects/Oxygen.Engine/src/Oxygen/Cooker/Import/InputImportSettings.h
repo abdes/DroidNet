@@ -7,6 +7,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace oxygen::content::import {
 
@@ -16,10 +17,16 @@ namespace oxygen::content::import {
  authored in source JSON and parsed by `InputImportPipeline`.
 */
 struct InputImportSettings final {
-  //! Source input JSON file path (`*.input.json` or `*.input-action.json`).
+  //! Source input JSON file path (`*.input.json`).
   std::string source_path;
+  //! The source's identity, its path without the authoring `.json`
+  //! (`/Content/Input/Player.input`); its products are named under it.
+  std::string virtual_path;
   //! Destination cooked root directory (absolute path when provided).
   std::string cooked_root;
+  //! Published cooked roots, lowest precedence first, that hold the actions
+  //! of other sources this source maps by virtual path.
+  std::vector<std::string> cooked_context_roots;
 };
 
 } // namespace oxygen::content::import

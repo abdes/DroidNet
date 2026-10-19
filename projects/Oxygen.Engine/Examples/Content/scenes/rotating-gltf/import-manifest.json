@@ -32,7 +32,8 @@
     {
       "id": "rotate.input",
       "type": "input",
-      "source": "./rotate.input.json"
+      "source": "./rotate.input.json",
+      "virtual_path": "/.cooked/Input/rotate.input"
     },
     {
       "id": "scene.rotating_gltf",
@@ -63,12 +64,12 @@
             {
               "key": "speed_up",
               "type": "asset",
-              "value": "/.cooked/Input/RotateSpeedUpAction.oiact"
+              "value": "/.cooked/Input/rotate.input/RotateSpeedUpAction.oiact"
             },
             {
               "key": "speed_down",
               "type": "asset",
-              "value": "/.cooked/Input/RotateSpeedDownAction.oiact"
+              "value": "/.cooked/Input/rotate.input/RotateSpeedDownAction.oiact"
             }
           ]
         },
@@ -86,12 +87,12 @@
             {
               "key": "speed_up",
               "type": "asset",
-              "value": "/.cooked/Input/RotateSpeedUpAction.oiact"
+              "value": "/.cooked/Input/rotate.input/RotateSpeedUpAction.oiact"
             },
             {
               "key": "speed_down",
               "type": "asset",
-              "value": "/.cooked/Input/RotateSpeedDownAction.oiact"
+              "value": "/.cooked/Input/rotate.input/RotateSpeedDownAction.oiact"
             }
           ]
         }

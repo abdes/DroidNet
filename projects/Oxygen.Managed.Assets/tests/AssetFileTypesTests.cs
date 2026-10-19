@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Tests;
 
@@ -19,7 +20,6 @@ public sealed class AssetFileTypesTests
     [DataRow("/Content/Scripts/Door.lua", AssetFileCategory.Script, "/Content/Scripts/Door.oscript", AssetType.Script)]
     [DataRow("/Content/Scripts/Door.luau", AssetFileCategory.Script, "/Content/Scripts/Door.oscript", AssetType.Script)]
     [DataRow("/Content/Input/Player.input.json", AssetFileCategory.Input, null, AssetType.Unknown)]
-    [DataRow("/Content/Input/Jump.input-action.json", AssetFileCategory.Input, null, AssetType.Unknown)]
     [DataRow("C:/Models/Crate.gltf.import.json", AssetFileCategory.ImportSettings, null, AssetType.Unknown)]
     [DataRow("C:/Models/Crate.FBX", AssetFileCategory.Model, null, AssetType.Unknown)]
     [DataRow("C:/Images/Sky.hdr", AssetFileCategory.Image, null, AssetType.Unknown)]
@@ -37,7 +37,6 @@ public sealed class AssetFileTypesTests
     [TestMethod]
     [DataRow("Red.omat.json", "Red")]
     [DataRow("Player.input.json", "Player")]
-    [DataRow("Jump.input-action.json", "Jump")]
     [DataRow("Door.luau", "Door")]
     [DataRow("notes.txt", "notes.txt")]
     public void RemovingTheSuffixLeavesTheAssetName(string fileName, string expected)
@@ -53,7 +52,6 @@ public sealed class AssetFileTypesTests
 
     [TestMethod]
     [DataRow("/Content/Input/Player.input.json", new[] { ".oiact", ".oimap" })]
-    [DataRow("/Content/Input/Jump.input-action.json", new[] { ".oiact" })]
     [DataRow("C:/Models/Ship.glb", new[] { ".ogeo", ".omat", ".otex", ".oscene" })]
     public void ContainerNamesTheAssetTypesItProduces(string path, string[] products)
     {
@@ -62,6 +60,16 @@ public sealed class AssetFileTypesTests
         _ = type.ProductExtensions.Should().BeEquivalentTo(products);
         _ = AssetFileTypes.ToCookedPath(path).Should().BeNull();
     }
+
+    [TestMethod]
+    [DataRow("/Content/Input/Player.input/Jump.oiact", "/Content/Input/Player.input")]
+    [DataRow("/Content/Input/Player.input/OnFoot.oimap", "/Content/Input/Player.input")]
+    [DataRow("/Content/Input/Jump.oiact", null)]
+    [DataRow("/Content/Input/Player.input/Red.omat", null)]
+    [DataRow("/Content/Materials/Red.omat", null)]
+    [DataRow("/Content/Input/Player.input", null)]
+    public void ProductIsNamedUnderItsContainer(string product, string? container)
+        => _ = (AssetFileTypes.ContainerOf(AssetPath.Parse(product))?.VirtualPath).Should().Be(container);
 
     [TestMethod]
     [DataRow("/Content/Materials/Red.omat.json")]

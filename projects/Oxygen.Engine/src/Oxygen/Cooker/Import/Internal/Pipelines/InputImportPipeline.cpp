@@ -13,7 +13,6 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
-#include <filesystem>
 #include <ios>
 #include <limits>
 #include <optional>
@@ -43,9 +42,10 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -148,80 +148,39 @@ namespace {
 
   constexpr size_t kMaxSchemaDiagnostics = 12;
 
-  enum class InputDocumentKind : uint8_t {
-    kPrimary = 0,
-    kStandaloneAction,
-  };
+  //! The last extension of an input source's identity (`Player.input`).
+  constexpr std::string_view kInputSourceSuffix = ".input";
 
-  auto PrimaryInputSchemaValidator() -> nlohmann::json_schema::json_validator&
+  auto InputSchemaValidator() -> nlohmann::json_schema::json_validator&
   {
     thread_local auto validator
       = internal::MakeJsonSchemaValidator(json::parse(kInputSchema));
     return validator;
   }
 
-  auto StandaloneInputActionSchemaValidator()
-    -> nlohmann::json_schema::json_validator&
-  {
-    thread_local auto validator
-      = internal::MakeJsonSchemaValidator(json::parse(kInputActionSchema));
-    return validator;
-  }
-
   auto ValidateInputSchema(const json& doc, ImportSession& session,
-    const ImportRequest& request) -> std::optional<InputDocumentKind>
+    const ImportRequest& request) -> bool
   {
-    auto primary_issues = std::vector<internal::JsonSchemaIssue> {};
+    auto issues = std::vector<internal::JsonSchemaIssue> {};
     auto internal_error = std::string {};
     if (!internal::CollectJsonSchemaIssues(
-          PrimaryInputSchemaValidator(), doc, primary_issues, internal_error)) {
+          InputSchemaValidator(), doc, issues, internal_error)) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "input.schema.validator_failure",
-        "Input primary schema validator failure: " + internal_error);
-      return std::nullopt;
+        "Input schema validator failure: " + internal_error);
+      return false;
     }
-    if (primary_issues.empty()) {
-      return InputDocumentKind::kPrimary;
-    }
-
-    auto action_issues = std::vector<internal::JsonSchemaIssue> {};
-    if (!internal::CollectJsonSchemaIssues(
-          StandaloneInputActionSchemaValidator(), doc, action_issues,
-          internal_error)) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "input.schema.validator_failure",
-        "Input action schema validator failure: " + internal_error);
-      return std::nullopt;
-    }
-    if (action_issues.empty()) {
-      return InputDocumentKind::kStandaloneAction;
-    }
-
-    const bool likely_primary = doc.is_object() && doc.contains("contexts");
-    if (likely_primary) {
-      internal::EmitCollectedJsonSchemaIssues(primary_issues,
-        "input.schema.validation_failed",
-        "Schema validation failed (oxygen.input.schema.json): ",
-        "Schema validation (oxygen.input.schema.json) reported ",
-        kMaxSchemaDiagnostics,
-        [&](const std::string_view code, std::string message,
-          std::string object_path) -> void {
-          AddDiagnostic(session, request, ImportSeverity::kError,
-            std::string(code), std::move(message), std::move(object_path));
-        });
-    } else {
-      internal::EmitCollectedJsonSchemaIssues(action_issues,
-        "input.schema.validation_failed",
-        "Schema validation failed (oxygen.input-action.schema.json): ",
-        "Schema validation (oxygen.input-action.schema.json) reported ",
-        kMaxSchemaDiagnostics,
-        [&](const std::string_view code, std::string message,
-          std::string object_path) -> void {
-          AddDiagnostic(session, request, ImportSeverity::kError,
-            std::string(code), std::move(message), std::move(object_path));
-        });
-    }
-    return std::nullopt;
+    internal::EmitCollectedJsonSchemaIssues(issues,
+      "input.schema.validation_failed",
+      "Schema validation failed (oxygen.input.schema.json): ",
+      "Schema validation (oxygen.input.schema.json) reported ",
+      kMaxSchemaDiagnostics,
+      [&](const std::string_view code, std::string message,
+        std::string object_path) -> void {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          std::string(code), std::move(message), std::move(object_path));
+      });
+    return issues.empty();
   }
 
   [[nodiscard]] auto SecondsToNanoseconds(const float seconds, uint64_t& out)
@@ -304,13 +263,6 @@ namespace {
       return InputTriggerBehavior::kBlocker;
     }
     return std::nullopt;
-  }
-
-  [[nodiscard]] auto MakeAssetKey(const ImportRequest& request,
-    const std::string_view virtual_path) -> data::AssetKey
-  {
-    static_cast<void>(request);
-    return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
   }
 
   [[nodiscard]] auto CanonicalizeInputSlotName(
@@ -505,82 +457,30 @@ namespace {
     return known;
   }
 
-  //! A mounted input action's descriptor and name.
-  struct MountedActionDescriptor final {
-    InputActionAssetDesc desc {};
-    std::string name;
+  //! Where an input source's products are named: under its identity.
+  /*!
+   The source's identity is its path without the authoring `.json`
+   (`/Content/Input/Player.input`); each product is named under it
+   (`/Content/Input/Player.input/Jump.oiact`), and its descriptor lives at
+   the same place under the cooked root.
+  */
+  struct InputContainer final {
+    internal::AssetPlacement placement;
+
+    [[nodiscard]] auto ProductVirtualPath(const std::string_view name,
+      const std::string_view extension) const -> std::string
+    {
+      return placement.virtual_path + "/" + std::string(name)
+        + std::string(extension);
+    }
+
+    [[nodiscard]] auto ProductRelPath(const std::string_view name,
+      const std::string_view extension) const -> std::string
+    {
+      return placement.descriptor_relpath + "/" + std::string(name)
+        + std::string(extension);
+    }
   };
-
-  auto TryReadInputActionDescriptor(std::span<const std::byte> bytes)
-    -> std::optional<MountedActionDescriptor>
-  {
-    auto result = MountedActionDescriptor {};
-    if (bytes.size() < sizeof(result.desc)) {
-      return std::nullopt;
-    }
-    std::memcpy(&result.desc, bytes.data(), sizeof(result.desc));
-    try {
-      result.name = std::string { data::DescriptorStrings::FromDescriptor(
-        bytes, result.desc.header.strings)
-          .Get(result.desc.header.name_offset) };
-    } catch (const std::invalid_argument&) {
-      return std::nullopt;
-    }
-    return result;
-  }
-
-  auto BuildMountedActions(ImportSession& session, const ImportRequest& request)
-    -> std::unordered_map<std::string, std::pair<data::AssetKey, uint8_t>>
-  {
-    auto mounted
-      = std::unordered_map<std::string, std::pair<data::AssetKey, uint8_t>> {};
-    auto roots = std::vector<std::filesystem::path> {};
-    roots.reserve(1U + request.cooked_context_roots.size());
-    roots.push_back(session.CookedRoot());
-    roots.insert(roots.end(), request.cooked_context_roots.begin(),
-      request.cooked_context_roots.end());
-
-    auto visited = std::unordered_set<std::string> {};
-    for (const auto& root : roots) {
-      const auto normalized = root.lexically_normal();
-      if (!visited.insert(normalized.string()).second) {
-        continue;
-      }
-      if (!lc::Inspection::IsCookedSource(normalized)) {
-        continue;
-      }
-
-      auto inspection = lc::Inspection {};
-      try {
-        inspection.Load(normalized);
-      } catch (const std::exception& ex) {
-        AddDiagnostic(session, request, ImportSeverity::kWarning,
-          "input.import.context_index_unreadable",
-          "Failed to load mounted index '" + normalized.string()
-            + "': " + ex.what());
-        continue;
-      }
-
-      for (const auto& entry : inspection.Assets()) {
-        if (entry.asset_type != static_cast<uint8_t>(AssetType::kInputAction)) {
-          continue;
-        }
-        auto bytes = std::vector<std::byte> {};
-        try {
-          bytes = inspection.ReadAssetDescriptor(entry.key);
-        } catch (const std::exception&) {
-          continue;
-        }
-        const auto action = TryReadInputActionDescriptor(bytes);
-        if (!action.has_value() || action->name.empty()) {
-          continue;
-        }
-        mounted.insert_or_assign(
-          action->name, std::pair { entry.key, action->desc.value_type });
-      }
-    }
-    return mounted;
-  }
 
   auto PatchContentHash(std::vector<std::byte>& bytes,
     const data::pak::core::ContentHashDigest& hash) -> void
@@ -674,30 +574,29 @@ namespace {
 
   struct ParsedInputSource final {
     std::vector<DeclaredAction> declared_actions;
+    //! The key of each declared action, by its name and by its virtual path.
     std::unordered_map<std::string, data::AssetKey> local_action_keys;
     std::vector<ContextSource> context_sources;
   };
 
-  auto ParseInputSourceDocument(const json& doc, const bool is_standalone,
-    ImportSession& session, const ImportRequest& request,
-    const std::unordered_set<std::string>& known_slots,
-    const std::unordered_map<std::string, std::pair<data::AssetKey, uint8_t>>&
-      mounted_actions,
-    ParsedInputSource& out) -> bool
+  auto ParseInputSourceDocument(const json& doc,
+    const InputContainer& container, ImportSession& session,
+    const ImportRequest& request,
+    const std::unordered_set<std::string>& known_slots, ParsedInputSource& out)
+    -> bool
   {
     out.declared_actions.clear();
     out.local_action_keys.clear();
     out.context_sources.clear();
 
-    auto local_action_types = std::unordered_map<std::string, uint8_t> {};
-
     const auto parse_action
       = [&](const json& node, const std::string& path) -> bool {
       auto action = DeclaredAction {};
       action.name = node.at("name").get<std::string>();
-      if (auto refused = internal::CheckAssetVirtualPath(request,
-            request.loose_cooked_layout.InputActionVirtualPath(action.name),
-            path + ".name")) {
+      action.virtual_path = container.ProductVirtualPath(
+        action.name, data::kInputActionDescriptorExtension);
+      if (auto refused = internal::CheckAssetVirtualPath(
+            request, action.virtual_path, path + ".name")) {
         session.AddDiagnostic(std::move(*refused));
         return false;
       }
@@ -724,29 +623,18 @@ namespace {
       }
       action.cumulative = accumulation == "cumulative";
 
-      if (local_action_types.contains(action.name)) {
+      if (out.local_action_keys.contains(action.name)) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "input.asset.action_conflict",
           "Duplicate action declaration '" + action.name + "'", path + ".name");
         return false;
       }
 
-      if (const auto it = mounted_actions.find(action.name);
-        it != mounted_actions.end() && it->second.second != action.value_type) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "input.asset.action_conflict",
-          "Action '" + action.name + "' conflicts with mounted action type",
-          path + ".type");
-        return false;
-      }
-
-      action.descriptor_relpath
-        = request.loose_cooked_layout.InputActionDescriptorRelPath(action.name);
-      action.virtual_path
-        = request.loose_cooked_layout.InputActionVirtualPath(action.name);
-      action.key = MakeAssetKey(request, action.virtual_path);
-      local_action_types.emplace(action.name, action.value_type);
+      action.descriptor_relpath = container.ProductRelPath(
+        action.name, data::kInputActionDescriptorExtension);
+      action.key = data::AssetKey::FromVirtualPath(action.virtual_path);
       out.local_action_keys.emplace(action.name, action.key);
+      out.local_action_keys.emplace(action.virtual_path, action.key);
       out.declared_actions.push_back(std::move(action));
       return true;
     };
@@ -918,8 +806,8 @@ namespace {
                                  ContextSource& out_context) -> bool {
       out_context.name = node.at("name").get<std::string>();
       if (auto refused = internal::CheckAssetVirtualPath(request,
-            request.loose_cooked_layout.InputMappingContextVirtualPath(
-              out_context.name),
+            container.ProductVirtualPath(
+              out_context.name, data::kInputMappingContextDescriptorExtension),
             path + ".name")) {
         session.AddDiagnostic(std::move(*refused));
         return false;
@@ -941,36 +829,32 @@ namespace {
 
     bool parse_ok = true;
     try {
-      if (is_standalone) {
-        parse_ok = parse_action(doc, "$");
-      } else {
-        if (doc.contains("actions")) {
-          for (size_t i = 0; i < doc["actions"].size(); ++i) {
-            parse_ok = parse_action(doc["actions"][i],
-                         "$.actions[" + std::to_string(i) + "]")
-              && parse_ok;
-          }
+      if (doc.contains("actions")) {
+        for (size_t i = 0; i < doc["actions"].size(); ++i) {
+          parse_ok = parse_action(doc["actions"][i],
+                       "$.actions[" + std::to_string(i) + "]")
+            && parse_ok;
         }
+      }
 
-        auto context_names = std::unordered_set<std::string> {};
-        const auto& contexts = doc.at("contexts");
-        for (size_t i = 0; i < contexts.size(); ++i) {
-          auto context = ContextSource {};
-          if (!parse_context(contexts[i],
-                "$.contexts[" + std::to_string(i) + "]", context)) {
-            parse_ok = false;
-            continue;
-          }
-          if (!context_names.insert(context.name).second) {
-            AddDiagnostic(session, request, ImportSeverity::kError,
-              "input.context.name_duplicate",
-              "Duplicate context name '" + context.name + "'",
-              "$.contexts[" + std::to_string(i) + "].name");
-            parse_ok = false;
-            continue;
-          }
-          out.context_sources.push_back(std::move(context));
+      auto context_names = std::unordered_set<std::string> {};
+      const auto contexts = doc.value("contexts", json::array());
+      for (size_t i = 0; i < contexts.size(); ++i) {
+        auto context = ContextSource {};
+        if (!parse_context(
+              contexts[i], "$.contexts[" + std::to_string(i) + "]", context)) {
+          parse_ok = false;
+          continue;
         }
+        if (!context_names.insert(context.name).second) {
+          AddDiagnostic(session, request, ImportSeverity::kError,
+            "input.context.name_duplicate",
+            "Duplicate context name '" + context.name + "'",
+            "$.contexts[" + std::to_string(i) + "].name");
+          parse_ok = false;
+          continue;
+        }
+        out.context_sources.push_back(std::move(context));
       }
     } catch (const std::exception& ex) {
       AddDiagnostic(session, request, ImportSeverity::kError,
@@ -984,46 +868,93 @@ namespace {
     return parse_ok;
   }
 
-  auto BuildInputContextAssets(
-    const std::vector<ContextSource>& context_sources,
-    const std::unordered_map<std::string, data::AssetKey>& local_action_keys,
-    const std::unordered_map<std::string, std::pair<data::AssetKey, uint8_t>>&
-      mounted_actions,
-    ImportSession& session, const ImportRequest& request)
-    -> std::optional<std::vector<BuiltContextAsset>>
-  {
-    const auto resolve_action_key
-      = [&](const std::string& action_name,
-          const std::string& object_path) -> std::optional<data::AssetKey> {
-      if (const auto it = local_action_keys.find(action_name);
-        it != local_action_keys.end()) {
+  //! Resolves a mapping's action: a name this source declares, or the
+  //! virtual path of an action, resolved like every authored reference.
+  class ActionResolver final {
+  public:
+    ActionResolver(const ParsedInputSource& source, ImportSession& session,
+      const ImportRequest& request)
+      : source_(source)
+      , session_(session)
+      , request_(request)
+    {
+    }
+
+    [[nodiscard]] auto Resolve(const std::string& reference,
+      const std::string& object_path) -> std::optional<data::AssetKey>
+    {
+      if (const auto it = source_.local_action_keys.find(reference);
+        it != source_.local_action_keys.end()) {
         return it->second;
       }
-      if (const auto it = mounted_actions.find(action_name);
-        it != mounted_actions.end()) {
-        return it->second.first;
+      if (!reference.starts_with('/')) {
+        Refuse("input.context.action_unresolved",
+          "No action of this source is named '" + reference + "'", object_path);
+        return std::nullopt;
       }
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "input.context.action_unresolved",
-        "Could not resolve action reference '" + action_name + "'",
-        object_path);
+      if (!mounts_.has_value()) {
+        mounts_ = internal::LoadMountedCookedSources(
+          session_, request_, "input.import.");
+      }
+      const auto resolved = internal::ResolveMountedAssetReference(
+        *mounts_, request_, reference, AssetType::kInputAction);
+      if (resolved.has_value()) {
+        return resolved->key;
+      }
+      using internal::AssetReferenceRefusal;
+      const auto reason = resolved.error().reason;
+      if (reason == AssetReferenceRefusal::kTypeMismatch
+        || reason == AssetReferenceRefusal::kTypeUnknown) {
+        Refuse("input.context.action_type_mismatch",
+          "'" + reference + "' does not name an input action", object_path);
+      } else {
+        Refuse("input.context.action_unresolved",
+          "No mounted input action has the virtual path '" + reference + "'",
+          object_path);
+      }
       return std::nullopt;
+    }
+
+  private:
+    auto Refuse(std::string code, std::string message,
+      const std::string& object_path) -> void
+    {
+      AddDiagnostic(session_, request_, ImportSeverity::kError, std::move(code),
+        std::move(message), object_path);
+    }
+
+    // NOLINTBEGIN(*-avoid-const-or-ref-data-members)
+    const ParsedInputSource& source_;
+    ImportSession& session_;
+    const ImportRequest& request_;
+    // NOLINTEND(*-avoid-const-or-ref-data-members)
+    std::optional<std::vector<internal::MountedCookedSource>> mounts_;
+  };
+
+  auto BuildInputContextAssets(const ParsedInputSource& source,
+    const InputContainer& container, ImportSession& session,
+    const ImportRequest& request)
+    -> std::optional<std::vector<BuiltContextAsset>>
+  {
+    auto actions = ActionResolver { source, session, request };
+    const auto resolve_action_key
+      = [&](const std::string& reference,
+          const std::string& object_path) -> std::optional<data::AssetKey> {
+      return actions.Resolve(reference, object_path);
     };
 
     auto built_contexts = std::vector<BuiltContextAsset> {};
-    built_contexts.reserve(context_sources.size());
-    for (const auto& source_ctx : context_sources) {
+    built_contexts.reserve(source.context_sources.size());
+    for (const auto& source_ctx : source.context_sources) {
       auto context = BuiltContextAsset {};
       context.name = source_ctx.name;
       context.flags = InputMappingContextFlags::kNone;
       context.default_priority = source_ctx.default_priority;
-      context.descriptor_relpath
-        = request.loose_cooked_layout.InputMappingContextDescriptorRelPath(
-          context.name);
-      context.virtual_path
-        = request.loose_cooked_layout.InputMappingContextVirtualPath(
-          context.name);
-      context.key = MakeAssetKey(request, context.virtual_path);
+      context.descriptor_relpath = container.ProductRelPath(
+        context.name, data::kInputMappingContextDescriptorExtension);
+      context.virtual_path = container.ProductVirtualPath(
+        context.name, data::kInputMappingContextDescriptorExtension);
+      context.key = data::AssetKey::FromVirtualPath(context.virtual_path);
 
       const auto intern_slot
         = [&](const std::string& slot_name) -> std::optional<uint32_t> {
@@ -1361,6 +1292,13 @@ auto InputImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
+  auto placement = internal::PlaceAsset(request, kInputSourceSuffix);
+  if (!placement.has_value()) {
+    session->AddDiagnostic(std::move(placement.error()));
+    co_return false;
+  }
+  const auto container = InputContainer { .placement = std::move(*placement) };
+
   std::string source_text {};
   source_text.resize(item.source_bytes.size());
   if (!item.source_bytes.empty()) {
@@ -1378,21 +1316,18 @@ auto InputImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  const auto document_kind = ValidateInputSchema(doc, *session, request);
-  if (!document_kind.has_value()) {
+  if (!ValidateInputSchema(doc, *session, request)) {
     co_return false;
   }
   const auto known_slots = BuildKnownSlotNames();
-  const auto mounted_actions = BuildMountedActions(*session, request);
   auto parsed_source = ParsedInputSource {};
-  if (!ParseInputSourceDocument(doc,
-        *document_kind == InputDocumentKind::kStandaloneAction, *session,
-        request, known_slots, mounted_actions, parsed_source)) {
+  if (!ParseInputSourceDocument(
+        doc, container, *session, request, known_slots, parsed_source)) {
     co_return false;
   }
 
-  auto built_contexts = BuildInputContextAssets(parsed_source.context_sources,
-    parsed_source.local_action_keys, mounted_actions, *session, request);
+  auto built_contexts
+    = BuildInputContextAssets(parsed_source, container, *session, request);
   if (!built_contexts.has_value()) {
     co_return false;
   }

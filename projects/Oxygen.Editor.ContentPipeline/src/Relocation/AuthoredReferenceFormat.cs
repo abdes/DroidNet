@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Authoring.Input;
 using Oxygen.Managed.Assets.Authoring.Textures;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
@@ -67,6 +68,18 @@ internal static class AuthoredReferenceFormat
             return null;
         });
         return [.. identities.Distinct()];
+    }
+
+    /// <summary>Renames an action or a mapping context inside its input source, keeping the rest of the file.</summary>
+    /// <param name="content">The input source bytes.</param>
+    /// <param name="rename">The rename.</param>
+    /// <returns>The rewritten bytes.</returns>
+    /// <exception cref="AssetFormatException">The source cannot be read or refuses the rename.</exception>
+    public static byte[] RenameInputProduct(ReadOnlyMemory<byte> content, InputProductRename rename)
+    {
+        ArgumentNullException.ThrowIfNull(rename);
+        var renamed = InputSourceWriter.RenameProduct(content.Span, rename.Extension, rename.CurrentName, rename.Name);
+        return Serialize(renamed, content.Span);
     }
 
     /// <summary>Rewrites a descriptor for a relocation.</summary>

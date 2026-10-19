@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://oxygen-engine.dev/schemas/oxygen.input.schema.json",
   "title": "Oxygen Input Source Schema",
-  "description": "Primary input source format (actions + contexts).",
+  "description": "An input source: a container of input actions and mapping contexts. Each product is named under the source's identity (`/Content/Input/Player.input/Jump.oiact`). A mapping names an action of this source by its name, and an action of another source by its virtual path.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -12,7 +12,7 @@
     },
     "actions": {
       "type": "array",
-      "description": "Shared action declarations for this file.",
+      "description": "The actions this source declares.",
       "items": {
         "$ref": "#/$defs/action"
       },
@@ -20,15 +20,26 @@
     },
     "contexts": {
       "type": "array",
-      "minItems": 1,
-      "description": "Input mapping contexts emitted from this source.",
+      "description": "The mapping contexts this source declares.",
       "items": {
         "$ref": "#/$defs/context"
-      }
+      },
+      "default": []
     }
   },
-  "required": ["contexts"],
   "$defs": {
+    "action_reference": {
+      "description": "An action: the name of an action this source declares, or the virtual path of an action of another source.",
+      "anyOf": [
+        {
+          "$ref": "oxygen.name.schema.json#/definitions/segment"
+        },
+        {
+          "type": "string",
+          "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.oiact$"
+        }
+      ]
+    },
     "action": {
       "type": "object",
       "additionalProperties": false,
@@ -57,8 +68,7 @@
       "additionalProperties": false,
       "properties": {
         "action": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "#/$defs/action_reference"
         },
         "completion_states": {
           "type": "integer",
@@ -111,8 +121,7 @@
           "minimum": 0
         },
         "chord_action": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "#/$defs/action_reference"
         },
         "combo_actions": {
           "type": "array",
@@ -204,8 +213,7 @@
       "additionalProperties": false,
       "properties": {
         "action": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "#/$defs/action_reference"
         },
         "slot": {
           "type": "string",

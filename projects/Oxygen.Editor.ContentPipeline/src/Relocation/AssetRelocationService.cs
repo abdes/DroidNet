@@ -493,6 +493,11 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                     this.LogGroupRelocationRequested(move.Source.VirtualPath, move.Group);
                 }
 
+                foreach (var rename in request.ProductRenames)
+                {
+                    this.LogProductRenameRequested(rename.Product.VirtualPath, rename.Name);
+                }
+
                 var index = await this.BuildIndexAsync(operation.Project, token).ConfigureAwait(false);
                 var plan = await AssetRelocationPlanner.PlanAsync(operation.Project, request, index, files, token).ConfigureAwait(false);
                 if (plan.IsEmpty)

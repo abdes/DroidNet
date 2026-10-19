@@ -4,8 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Import/Schemas/oxygen.input.schema.json,
-//   Import/Schemas/oxygen.input-action.schema.json
+// Covers: Import/Schemas/oxygen.input.schema.json
 
 #include <string>
 
@@ -24,13 +23,6 @@ auto PrimarySchema() -> const json&
 {
   static const auto schema
     = LoadSchema("Import/Schemas/oxygen.input.schema.json");
-  return schema;
-}
-
-auto ActionSchema() -> const json&
-{
-  static const auto schema
-    = LoadSchema("Import/Schemas/oxygen.input-action.schema.json");
   return schema;
 }
 
@@ -83,7 +75,58 @@ INSTANTIATE_TEST_SUITE_P(Cases, InputSchemaCaseTest,
       "",
     },
     SchemaCase {
-      "PrimarySchemaRejectsUnknownFields",
+      "AcceptsActionsWithoutContexts",
+      R"({ "actions": [ { "name": "Jump", "type": "bool" } ] })",
+      true,
+      "",
+    },
+    SchemaCase {
+      "AcceptsEmptySource",
+      R"({})",
+      true,
+      "",
+    },
+    SchemaCase {
+      "AcceptsActionReferenceByVirtualPath",
+      R"({
+    "contexts": [
+      {
+        "name": "Gameplay",
+        "mappings": [
+          {
+            "action": "/Content/Input/Common.input/Jump.oiact",
+            "slot": "Space",
+            "triggers": [
+              {
+                "type": "chord",
+                "chord_action": "/Content/Input/Common.input/Modifier.oiact"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  })",
+      true,
+      "",
+    },
+    SchemaCase {
+      "RejectsActionReferenceToAnotherAssetType",
+      R"({
+    "contexts": [
+      {
+        "name": "Gameplay",
+        "mappings": [
+          { "action": "/Content/Input/Common.input/Gameplay.oimap", "slot": "W" }
+        ]
+      }
+    ]
+  })",
+      false,
+      "/contexts/0/mappings/0/action",
+    },
+    SchemaCase {
+      "RejectsUnknownFields",
       R"({
     "actions": [
       { "name": "Move", "type": "axis2d", "unknown": true }
@@ -99,49 +142,22 @@ INSTANTIATE_TEST_SUITE_P(Cases, InputSchemaCaseTest,
   })",
       false,
       "'unknown'",
-    }),
-  oxygen::cooker::test::SchemaCaseName);
-
-class InputActionSchemaCaseTest : public ::testing::TestWithParam<SchemaCase> {
-};
-
-NOLINT_TEST_P(InputActionSchemaCaseTest, ValidatesDocument)
-{
-  oxygen::cooker::test::ExpectSchemaCase(ActionSchema(), GetParam());
-}
-
-INSTANTIATE_TEST_SUITE_P(Cases, InputActionSchemaCaseTest,
-  ::testing::Values(
-    SchemaCase {
-      "ActionSchemaAcceptsCanonicalDocument",
-      R"({
-    "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json",
-    "name": "Move",
-    "type": "axis2d",
-    "consumes_input": true,
-    "accumulation": "highest_absolute"
-  })",
-      true,
-      "",
     },
     SchemaCase {
-      "ActionSchemaRejectsInvalidAccumulation",
+      "RejectsInvalidAccumulation",
       R"({
-    "name": "Move",
-    "type": "axis2d",
-    "accumulation": "average"
+    "actions": [
+      { "name": "Move", "type": "axis2d", "accumulation": "average" }
+    ]
   })",
       false,
-      "/accumulation: ",
+      "/actions/0/accumulation",
     },
     SchemaCase {
-      "ActionSchemaRejectsInvalidType",
-      R"({
-    "name": "Move",
-    "type": "axis3d"
-  })",
+      "RejectsInvalidActionType",
+      R"({ "actions": [ { "name": "Move", "type": "axis3d" } ] })",
       false,
-      "/type: ",
+      "/actions/0/type",
     }),
   oxygen::cooker::test::SchemaCaseName);
 

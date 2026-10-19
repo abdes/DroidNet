@@ -296,23 +296,24 @@ namespace {
     EXPECT_TRUE(buffer->reads.empty());
   }
 
-  //! An input file is the only input of its job; every declared action and
-  //! mapping context is an output in the job's layout.
+  //! An input source is the only input of its job; every declared action and
+  //! mapping context is an output named under the source's identity, and an
+  //! action of another source named by virtual path is a reference.
   NOLINT_TEST_F(
     ImportSourceAnalysisTest, InputFileDeclaresItsActionsAndContextsAsOutputs)
   {
     const auto input = Write("Player.input.json", R"({
       "actions":[{"name":"Jump","type":"bool"},{"name":"Dash","type":"bool"}],
       "contexts":[{"name":"Gameplay","mappings":[
-        {"action":"Jump","slot":"Space","trigger":"pressed"}]}]})");
+        {"action":"Jump","slot":"Space","trigger":"pressed"},
+        {"action":"/Content/Common.input/Fire.oiact","slot":"F"}]}]})");
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.id = "input:Gameplay/Player.input.json";
     job.job_type = "input";
     job.input.source_path = input.string();
+    job.virtual_path = "/Content/Gameplay/Player.input";
     job.loose_cooked_layout.virtual_mount_root = "/Content";
-    job.loose_cooked_layout.descriptors_dir = "";
-    job.loose_cooked_layout.input_subdir = "Gameplay";
     manifest.jobs.push_back(job);
 
     const auto report = manifest.AnalyzeSources();
@@ -323,9 +324,14 @@ namespace {
     std::ranges::transform(result.outputs, std::back_inserter(outputs),
       [](const auto& output) -> std::string { return output.virtual_path; });
     EXPECT_THAT(outputs,
-      ::testing::ElementsAre("/Content/Gameplay/Jump.oiact",
-        "/Content/Gameplay/Dash.oiact", "/Content/Gameplay/Gameplay.oimap"));
-    EXPECT_TRUE(result.references.empty());
+      ::testing::ElementsAre("/Content/Gameplay/Player.input/Jump.oiact",
+        "/Content/Gameplay/Player.input/Dash.oiact",
+        "/Content/Gameplay/Player.input/Gameplay.oimap"));
+    ASSERT_EQ(result.references.size(), 1U);
+    EXPECT_EQ(result.references.front().virtual_path,
+      "/Content/Common.input/Fire.oiact");
+    EXPECT_EQ(result.references.front().object_path,
+      "$.contexts[0].mappings[1].action");
     ASSERT_EQ(result.observations.size(), 1U);
   }
 

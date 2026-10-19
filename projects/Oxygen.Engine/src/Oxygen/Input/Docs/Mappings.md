@@ -155,8 +155,8 @@ close it: Sprint is canceled when the menu opens and stays idle afterwards
 
 ## Authored data
 
-Contexts and actions are cooked from JSON (`oxygen.input.schema.json`,
-`oxygen.input-action.schema.json`) and hydrated by
-`Content/Internal/InputContextHydration.cpp`. Authored per-mapping `scale` and
-`bias`, and per-action `consumes_input` and `accumulation` (`"highest_absolute"`
-or `"cumulative"`), map to the runtime settings above.
+Contexts and actions are cooked from input sources (`oxygen.input.schema.json`)
+and hydrated by `Content/Internal/InputContextHydration.cpp`. Authored
+per-mapping `scale` and `bias`, and per-action `consumes_input` and
+`accumulation` (`"highest_absolute"` or `"cumulative"`), map to the runtime
+settings above.

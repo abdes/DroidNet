@@ -204,6 +204,7 @@ internal sealed class CookDependencyDiscovery(
             var external = source.References.Where(reference => !localOutputs.Contains(reference.VirtualPath)).ToArray();
             var references = external.Where(static reference => !string.Equals(reference.Kind, "buffer", StringComparison.Ordinal))
                 .Select(static reference => AssetPath.Parse(reference.VirtualPath))
+                .Where(reference => AssetFileTypes.ContainerOf(reference) != input.AssetUri)
                 .Distinct().ToArray();
             this.nativeReferences[input.AssetUri] = [.. references];
             var resolved = references.Select(this.ResolveReference).ToHashSet();
@@ -259,6 +260,15 @@ internal sealed class CookDependencyDiscovery(
             {
                 this.AddAsset(script);
                 return this.assets[script.SourceAbsolutePath].AssetUri;
+            }
+
+            // An action or mapping context is named under its input source, which cooks it first.
+            if (AssetFileTypes.ContainerOf(uri) is { } container && CookInputResolver.IsAuthoringUri(project, container)
+                && CookInputResolver.HasProjectSource(project, container))
+            {
+                var source = CookInputResolver.Resolve(project, container, ContentCookInputRole.Dependency);
+                this.AddAsset(source);
+                return this.assets[source.SourceAbsolutePath].AssetUri;
             }
 
             if (AssetFileTypes.Find(uri.Name) is { Category: AssetFileCategory.Cooked, CookedExtension: AssetFileTypes.Script or AssetFileTypes.InputAction or AssetFileTypes.InputMappingContext or AssetFileTypes.PhysicsScene })

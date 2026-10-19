@@ -5,7 +5,7 @@
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Scripts;
-using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Editor.ContentPipeline;
 
 namespace Oxygen.Editor.ContentBrowser;
 
@@ -35,15 +35,12 @@ public partial class AssetsViewModel
             return new InputDeclaration(source.FullPath, 1);
         }
 
-        if (asset.Kind is not (AssetKind.InputAction or AssetKind.InputMappingContext)
-            || projectContextService.ActiveProject is not { } project
-            || asset.Identity.Parent is not { } parent
-            || RelocationPaths.ToPhysical(project, parent) is not { } folder)
-        {
-            return null;
-        }
-
-        return InputSourceIndex.Find(folder.FullPath, asset.DisplayName, isContext: asset.Kind == AssetKind.InputMappingContext);
+        // An action or a context is named under the input source that declares it.
+        return asset.Kind is AssetKind.InputAction or AssetKind.InputMappingContext
+            && projectContextService.ActiveProject is { } project
+            && InputSourceFiles.FindDeclaration(project, asset.Identity) is { } declaration
+                ? new InputDeclaration(declaration.File.FullPath, declaration.Position.Line)
+                : null;
     }
 
     private bool CanEditSelected() => codeEditor is not null && this.SelectedAssets.Count == 1 && this.FindCodeSource(this.SelectedAssets[0]) is not null;

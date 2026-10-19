@@ -35,12 +35,14 @@ NOLINT_TEST(ImportManifestInputTest, AcceptsInputJobWithDependencies)
         {
           "id": "core.actions",
           "type": "input",
-          "source": "Content/Input/Core.input.json"
+          "source": "Content/Input/Core.input.json",
+          "virtual_path": "/Content/Input/Core.input"
         },
         {
           "id": "vehicle.contexts",
           "type": "input",
           "source": "Content/Input/Vehicle.input.json",
+          "virtual_path": "/Content/Input/Vehicle.input",
           "depends_on": ["core.actions"]
         }
       ]
@@ -62,40 +64,6 @@ NOLINT_TEST(ImportManifestInputTest, AcceptsInputJobWithDependencies)
   EXPECT_EQ(request->orchestration->depends_on.at(0), "core.actions");
 }
 
-//! A job layout places the actions and contexts of one input file in its own
-//! folder, as the editor cooks hand-written input files next to their source.
-NOLINT_TEST(ImportManifestInputTest, AppliesInputJobLayout)
-{
-  const ScopedTempDir temp;
-  const auto manifest_path
-    = temp.Path() / "input_job_layout" / "import_manifest.json";
-
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
-      "layout": { "virtual_mount_root": "/Content" },
-      "jobs": [
-        {
-          "id": "input:Gameplay/Player.input.json",
-          "type": "input",
-          "source": "Content/Gameplay/Player.input.json",
-          "layout": { "descriptors_dir": "", "input_subdir": "Gameplay" }
-        }
-      ]
-    })");
-
-  std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
-
-  std::ostringstream req_errors;
-  const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
-  ASSERT_HAS_VALUE(request) << req_errors.str();
-  EXPECT_EQ(request->loose_cooked_layout.InputActionVirtualPath("Jump"),
-    "/Content/Gameplay/Jump.oiact");
-}
-
 NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithDisallowedKeys)
 {
   const ScopedTempDir temp;
@@ -110,6 +78,7 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithDisallowedKeys)
           "id": "core.actions",
           "type": "input",
           "source": "Content/Input/Core.input.json",
+          "virtual_path": "/Content/Input/Core.input",
           "verbose": true
         }
       ]
@@ -149,6 +118,7 @@ NOLINT_TEST(ImportManifestInputTest, InputOutputPrecedenceIsConsistent)
           "id": "core.actions",
           "type": "input",
           "source": "Content/Input/Core.input.json",
+          "virtual_path": "/Content/Input/Core.input",
           "output": ")"
       + job_input.generic_string() + R"("
         }
@@ -192,7 +162,8 @@ NOLINT_TEST(ImportManifestInputTest, InputDefaultsOverrideTopLevelOutput)
         {
           "id": "core.actions",
           "type": "input",
-          "source": "Content/Input/Core.input.json"
+          "source": "Content/Input/Core.input.json",
+          "virtual_path": "/Content/Input/Core.input"
         }
       ]
     })");
@@ -227,7 +198,8 @@ NOLINT_TEST(ImportManifestInputTest, InputFallsBackToTopLevelOutput)
         {
           "id": "core.actions",
           "type": "input",
-          "source": "Content/Input/Core.input.json"
+          "source": "Content/Input/Core.input.json",
+          "virtual_path": "/Content/Input/Core.input"
         }
       ]
     })");
@@ -263,7 +235,8 @@ NOLINT_TEST(
         {
           "id": "core.actions",
           "type": "input",
-          "source": "Content/Input/Core.input.json"
+          "source": "Content/Input/Core.input.json",
+          "virtual_path": "/Content/Input/Core.input"
         }
       ]
     })");
@@ -303,6 +276,7 @@ NOLINT_TEST(ImportManifestInputTest, ResolvesRelativeJobOutputAgainstManifest)
           "id": "core.actions",
           "type": "input",
           "source": "Content/Input/Core.input.json",
+          "virtual_path": "/Content/Input/Core.input",
           "output": ".cooked/job-level"
         }
       ]
@@ -320,20 +294,23 @@ NOLINT_TEST(ImportManifestInputTest, ResolvesRelativeJobOutputAgainstManifest)
   EXPECT_EQ(request->cooked_root->lexically_normal(), expected_cooked_root);
 }
 
-NOLINT_TEST(ImportManifestInputTest, InputUsesSharedLayoutDefaultsByDefault)
+//! An input job names the source's identity; its products are named under it.
+NOLINT_TEST(ImportManifestInputTest, CarriesInputSourceIdentity)
 {
   const ScopedTempDir temp;
   const auto manifest_path
-    = temp.Path() / "input_shared_layout_defaults" / "import_manifest.json";
+    = temp.Path() / "input_identity" / "import_manifest.json";
 
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "layout": { "virtual_mount_root": "/Content" },
       "jobs": [
         {
-          "id": "core.actions",
+          "id": "input:Gameplay/Player.input.json",
           "type": "input",
-          "source": "Content/Input/Core.input.json"
+          "source": "Content/Gameplay/Player.input.json",
+          "virtual_path": "/Content/Gameplay/Player.input"
         }
       ]
     })");
@@ -342,31 +319,59 @@ NOLINT_TEST(ImportManifestInputTest, InputUsesSharedLayoutDefaultsByDefault)
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
-  ASSERT_EQ(manifest->jobs.size(), 1U);
 
   std::ostringstream req_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
   ASSERT_HAS_VALUE(request) << req_errors.str();
-  EXPECT_EQ(request->loose_cooked_layout.input_subdir, "Input");
+  EXPECT_EQ(request->asset_virtual_path, "/Content/Gameplay/Player.input");
 }
 
-NOLINT_TEST(ImportManifestInputTest, InputHonorsManifestLayoutOverrides)
+//! An input job reads the actions of other sources from its cooked context
+//! roots, as a scene reads its references.
+NOLINT_TEST(ImportManifestInputTest, CarriesCookedContextRoots)
 {
   const ScopedTempDir temp;
   const auto manifest_path
-    = temp.Path() / "input_layout_overrides" / "import_manifest.json";
+    = temp.Path() / "input_context_roots" / "import_manifest.json";
+  const auto library = (temp.Path() / "library").lexically_normal();
 
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "layout": {
-        "input_subdir": "InputCustom"
-      },
-      "defaults": {
-        "layout": {
-          "input_subdir": "InputOverride"
+      "jobs": [
+        {
+          "id": "player",
+          "type": "input",
+          "source": "Content/Input/Player.input.json",
+          "virtual_path": "/Content/Input/Player.input",
+          "cooked_context_roots": [")"
+      + library.generic_string() + R"("]
         }
-      },
+      ]
+    })");
+
+  std::ostringstream errors;
+  const auto manifest
+    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  ASSERT_HAS_VALUE(manifest) << errors.str();
+
+  std::ostringstream req_errors;
+  const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
+  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_EQ(request->cooked_context_roots.size(), 1U);
+  EXPECT_EQ(request->cooked_context_roots.front(), library);
+}
+
+//! An input job without its identity is refused: its products have no name.
+NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutVirtualPath)
+{
+  const ScopedTempDir temp;
+  const auto manifest_path
+    = temp.Path() / "rejects_input_missing_identity" / "import_manifest.json";
+
+  WriteText(manifest_path,
+    R"({
+      "version": 1,
       "jobs": [
         {
           "id": "core.actions",
@@ -379,13 +384,9 @@ NOLINT_TEST(ImportManifestInputTest, InputHonorsManifestLayoutOverrides)
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
-  ASSERT_EQ(manifest->jobs.size(), 1U);
-
-  std::ostringstream req_errors;
-  const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
-  ASSERT_HAS_VALUE(request) << req_errors.str();
-  EXPECT_EQ(request->loose_cooked_layout.input_subdir, "InputOverride");
+  EXPECT_FALSE(manifest.has_value());
+  EXPECT_THAT(
+    errors.str(), ::testing::HasSubstr("import.manifest.virtual_path_missing"));
 }
 
 NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutId)
@@ -400,7 +401,8 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutId)
       "jobs": [
         {
           "type": "input",
-          "source": "Content/Input/Core.input.json"
+          "source": "Content/Input/Core.input.json",
+          "virtual_path": "/Content/Input/Core.input"
         }
       ]
     })");

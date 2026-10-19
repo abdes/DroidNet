@@ -108,28 +108,24 @@ per-user editor setting. **Open with** on the Edit button changes it later
 diagnostic counts, read from analysis (section 5). Rename, move and delete
 follow the existing transactions and retarget slot references.
 
-**Input files**: users write the cooker's input files by hand (`*.input.json`
-for mapping contexts with their actions, `*.input-action.json` for single
-actions, validated by `oxygen.input.schema.json`). **New Input File** in the New
-menu writes `<Name>.input.json` with its `$schema` set, one sample action and
-one sample context, and opens it in the code editor. Files under authoring
-mounts are Input sources, shown as one Input tile; the cook emits one `input`
-job per file, and each declared action and mapping context then appears as its
-own tile in the file's folder (SD-12) and in asset and Play-section pickers. The
-details pane of an action or context names its file. Edit on the file or on any
-of its assets opens the file in the code editor (the input editor once
-[ED-M09](../plan/ED-M09-input-authoring.md) delivers it, with **Open in code
-editor** kept), and schema or import errors fail the cook in the cooking panel.
-Input assets are identified by their source location, like every other asset
-([input authoring §7.2](input-authoring.md#72-asset-identity)): each job's
-layout places its outputs in the source file's folder, so `Jump` declared in
-`Content/Gameplay/Player.input.json` is `/Content/Gameplay/Jump.oiact`. Until
-the engine resolves references between input files by virtual path
-([ED-M09](../plan/ED-M09-input-authoring.md) IF-12), only self-contained files
-cook: a mapping, chain or combo step that names an action the file does not
-declare fails that file's job before the cooker runs
-(`OXE.SCRIPT.INPUT_REFERENCE_UNSUPPORTED`), so the result never depends on job
-order. ED-M09.4 retires that code when it enables references by virtual path.
+**Input files**: users write the cooker's input sources by hand (`*.input.json`,
+actions and mapping contexts, validated by `oxygen.input.schema.json`). **New
+Input File** in the New menu writes `<Name>.input.json` with its `$schema` set,
+one sample action and one sample context, and opens it in the code editor. Files
+under authoring mounts are Input sources, shown as one Input tile; the cook
+emits one `input` job per file, and each declared action and mapping context
+then appears as its own tile in the file's folder (SD-12) and in asset and
+Play-section pickers. The details pane of an action or context names its file.
+Edit on the file or on any of its assets opens the file in the code editor (the
+input editor once [ED-M09](../plan/ED-M09-input-authoring.md) delivers it, with
+**Open in code editor** kept), and schema or import errors fail the cook in the
+cooking panel. Each declared action and context is named under its source
+([content pipeline §24](content-pipeline.md#24-input-sources)): `Jump` declared
+in `Content/Gameplay/Player.input.json` is
+`/Content/Gameplay/Player.input/Jump.oiact`. A mapping names an action of its
+own source by name and an action of another source by virtual path; saving a
+source reports undeclared names and paths that name no action at their position
+(`OXE.INPUT.Source.*`).
 
 **Project tooling** (SD-11): projects contain `.luaurc`, `Types/oxygen.d.luau`
 copied from the SDK and `.vscode/settings.json` pointing `luau-lsp` at those
@@ -243,9 +239,9 @@ overrides.
   ([hosting §6](../../../projects/Oxygen.Engine/design/scripting/scene-script-hosting.md#6-source-reload)).
   The scene depends on the scripts and asset values of its slots, so a scene
   cook includes them.
-- Every input file under an authoring mount gets an `input` job with its outputs
-  at the source folder (section 4); scenes and sidecars that reference its
-  actions or contexts depend on it.
+- Every input source under an authoring mount gets an `input` job that names its
+  products under the source (section 4); scenes, sidecars and other sources that
+  reference its actions or contexts depend on it.
 - Every scene with scripted nodes gets one `script-sidecar` job generated from
   the scene model, with inline bindings: node index from the descriptor
   generator, `slot_id` from the slot GUID, execution order, and typed overrides
@@ -460,12 +456,11 @@ editor; runtime errors during Play do (SD-10).
 ## 10. Operation results
 
 Editor-side codes: `OXE.SCRIPT.*` (create, launch the code editor, analysis
-unavailable, identity collision, input file referencing another file's action,
-project tooling not updated, slot script missing, slot node missing, slot
-without script) and `OXE.PLAY.*` (cook failed, player missing from the SDK,
-launch failed, session ended unexpectedly). Engine diagnostic codes (`S0xxx`,
-and the cooker's `script.sidecar.*`) stay as reported; sidecar diagnostics name
-the node, slot and parameter they are about.
+unavailable, identity collision, project tooling not updated, slot script
+missing, slot node missing, slot without script) and `OXE.PLAY.*` (cook failed,
+player missing from the SDK, launch failed, session ended unexpectedly). Engine
+diagnostic codes (`S0xxx`, and the cooker's `script.sidecar.*`) stay as
+reported; sidecar diagnostics name the node, slot and parameter they are about.
 
 ## 11. Exit gates
 

@@ -27,9 +27,6 @@ public sealed partial class ScriptAnalysisService
     [LoggerMessage(Level = LogLevel.Error, Message = "Could not analyze script `{Path}`")]
     private partial void LogScriptAnalysisFailed(FileSystemPath path, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Input files are checked without the schema: the SDK has no `{FileName}`")]
-    private partial void LogInputSchemaUnavailable(string fileName, Exception exception);
-
     [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Could not read script `{Path}`; it is analyzed again on its next change")]
     private static partial void LogScriptUnreadable(ILogger logger, FileSystemPath path, Exception exception);
 

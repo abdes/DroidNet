@@ -7,8 +7,8 @@ using System.Text.Json.Serialization;
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
-/// Loose cooked layout fields serialized to the native manifest schema: where a model's or an input file's products
-/// go by type. A source that cooks one asset names its identity on its job instead.
+/// Loose cooked layout fields serialized to the native manifest schema: where a model's products go by type. A source
+/// that cooks one asset, or an input source whose products are named under it, names its identity on its job instead.
 /// </summary>
 /// <param name="VirtualMountRoot">The native virtual mount root, for example <c>/Content</c>.</param>
 public sealed record ContentImportLayout(
@@ -33,9 +33,4 @@ public sealed record ContentImportLayout(
     [JsonPropertyName("scenes_subdir")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ScenesDirectory { get; init; }
-
-    /// <summary>Gets the folder for input actions and mapping contexts, relative to the descriptors directory.</summary>
-    [JsonPropertyName("input_subdir")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? InputDirectory { get; init; }
 }

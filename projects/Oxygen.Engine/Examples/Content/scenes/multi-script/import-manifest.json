@@ -42,7 +42,8 @@
     {
       "id": "input.multi_script_scene",
       "type": "input",
-      "source": "./multi_script_scene.input.json"
+      "source": "./multi_script_scene.input.json",
+      "virtual_path": "/.cooked/Input/multi_script_scene.input"
     },
     {
       "id": "scene.multi_script_scene",
@@ -103,37 +104,37 @@
             {
               "key": "speed_up",
               "type": "asset",
-              "value": "/.cooked/Input/RotateSpeedUpAction.oiact"
+              "value": "/.cooked/Input/multi_script_scene.input/RotateSpeedUpAction.oiact"
             },
             {
               "key": "speed_down",
               "type": "asset",
-              "value": "/.cooked/Input/RotateSpeedDownAction.oiact"
+              "value": "/.cooked/Input/multi_script_scene.input/RotateSpeedDownAction.oiact"
             },
             {
               "key": "stop",
               "type": "asset",
-              "value": "/.cooked/Input/RotateStopAction.oiact"
+              "value": "/.cooked/Input/multi_script_scene.input/RotateStopAction.oiact"
             },
             {
               "key": "invert",
               "type": "asset",
-              "value": "/.cooked/Input/RotateInvertAction.oiact"
+              "value": "/.cooked/Input/multi_script_scene.input/RotateInvertAction.oiact"
             },
             {
               "key": "cycle_shape",
               "type": "asset",
-              "value": "/.cooked/Input/CycleShapeAction.oiact"
+              "value": "/.cooked/Input/multi_script_scene.input/CycleShapeAction.oiact"
             },
             {
               "key": "spawn_orb",
               "type": "asset",
-              "value": "/.cooked/Input/SpawnOrbAction.oiact"
+              "value": "/.cooked/Input/multi_script_scene.input/SpawnOrbAction.oiact"
             },
             {
               "key": "pulse_scale",
               "type": "asset",
-              "value": "/.cooked/Input/PulseScaleAction.oiact"
+              "value": "/.cooked/Input/multi_script_scene.input/PulseScaleAction.oiact"
             }
           ]
         },

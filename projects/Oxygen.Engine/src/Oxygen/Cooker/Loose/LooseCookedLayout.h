@@ -30,9 +30,12 @@ namespace oxygen::content::import {
  the descriptor of `/Mount/X/Y.ext` lives at `X/Y.ext` under the cooked root.
  The layout has no folder for those.
 
- The layout still names the products of containers by type: a model's
- materials, geometry, scenes, textures and buffers, and an input file's
- actions and mapping contexts. It also places the shared resource tables.
+ An input source is a container whose products are named under its identity
+ (`X/Player.input/Jump.oiact`); the layout has no folder for them either.
+
+ The layout still names the products of models by type: their materials,
+ geometry, scenes, textures and buffers. It also places the shared resource
+ tables.
 
  - Keep resource blob files (tables/data) under a dedicated resources folder.
  - Keep a virtual mount root that anchors virtual paths recorded in the index.
@@ -73,20 +76,6 @@ struct LooseCookedLayout final : Layout {
   {
     return std::string(scene_name)
       + std::string(data::kPhysicsSceneDescriptorExtension);
-  }
-
-  [[nodiscard]] static auto InputActionDescriptorFileName(std::string_view name)
-    -> std::string
-  {
-    return std::string(name)
-      + std::string(data::kInputActionDescriptorExtension);
-  }
-
-  [[nodiscard]] static auto InputMappingContextDescriptorFileName(
-    std::string_view name) -> std::string
-  {
-    return std::string(name)
-      + std::string(data::kInputMappingContextDescriptorExtension);
   }
 
   [[nodiscard]] static auto TextureDescriptorFileName(std::string_view name)
@@ -145,20 +134,6 @@ struct LooseCookedLayout final : Layout {
       PhysicsSceneDescriptorFileName(scene_name));
   }
 
-  [[nodiscard]] auto InputActionVirtualLeaf(std::string_view name) const
-    -> std::string
-  {
-    return JoinRelPath(DescriptorDirFor(data::AssetType::kInputAction),
-      InputActionDescriptorFileName(name));
-  }
-
-  [[nodiscard]] auto InputMappingContextVirtualLeaf(std::string_view name) const
-    -> std::string
-  {
-    return JoinRelPath(DescriptorDirFor(data::AssetType::kInputMappingContext),
-      InputMappingContextDescriptorFileName(name));
-  }
-
   [[nodiscard]] auto TextureVirtualLeaf(std::string_view name) const
     -> std::string
   {
@@ -200,18 +175,6 @@ struct LooseCookedLayout final : Layout {
     std::string_view scene_name) const -> std::string
   {
     return PhysicsSceneVirtualLeaf(scene_name);
-  }
-
-  [[nodiscard]] auto InputActionDescriptorRelPath(std::string_view name) const
-    -> std::string
-  {
-    return InputActionVirtualLeaf(name);
-  }
-
-  [[nodiscard]] auto InputMappingContextDescriptorRelPath(
-    std::string_view name) const -> std::string
-  {
-    return InputMappingContextVirtualLeaf(name);
   }
 
   [[nodiscard]] auto TextureDescriptorRelPath(std::string_view name) const
@@ -273,19 +236,6 @@ struct LooseCookedLayout final : Layout {
   {
     return JoinVirtualPath(
       virtual_mount_root, PhysicsSceneVirtualLeaf(scene_name));
-  }
-
-  [[nodiscard]] auto InputActionVirtualPath(std::string_view name) const
-    -> std::string
-  {
-    return JoinVirtualPath(virtual_mount_root, InputActionVirtualLeaf(name));
-  }
-
-  [[nodiscard]] auto InputMappingContextVirtualPath(std::string_view name) const
-    -> std::string
-  {
-    return JoinVirtualPath(
-      virtual_mount_root, InputMappingContextVirtualLeaf(name));
   }
 
   [[nodiscard]] auto TextureVirtualPath(std::string_view name) const
@@ -367,12 +317,6 @@ struct LooseCookedLayout final : Layout {
   //! Subfolder for material descriptors.
   /*! Set to empty to place materials directly under `descriptors_dir`. */
   std::string materials_subdir = std::string(kMaterialsDirName);
-
-  //! Subfolder for all input descriptors (`.oiact`, `.oimap`).
-  /*! Set to empty to place input descriptors directly under
-   *
-   * `descriptors_dir`. */
-  std::string input_subdir = "Input";
 
   //! Subfolder for texture resource descriptors (`.otex`).
   /*! Set to empty to place texture descriptors directly under
@@ -481,9 +425,8 @@ struct LooseCookedLayout final : Layout {
     case data::AssetType::kMaterial:
       return JoinRelPath(descriptors_dir, materials_subdir);
     case data::AssetType::kInputAction:
-      return JoinRelPath(descriptors_dir, input_subdir);
     case data::AssetType::kInputMappingContext:
-      return JoinRelPath(descriptors_dir, input_subdir);
+      // Input sources name their products under their own identity.
     case data::AssetType::kScript:
     case data::AssetType::kPhysicsMaterial:
     case data::AssetType::kCollisionShape:

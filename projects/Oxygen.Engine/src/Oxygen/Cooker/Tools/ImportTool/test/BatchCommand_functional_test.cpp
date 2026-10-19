@@ -258,7 +258,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
     R"({"version":1,"output":")" + cooked_root.generic_string() + R"(",
     "jobs":[{"type":"material-descriptor","source":"Wood.material.json",
       "virtual_path":"/.cooked/Wood.omat"},
-      {"id":"input","type":"input","source":"Input/Player.input.json"}]})");
+      {"id":"input","type":"input","source":"Input/Player.input.json",
+        "virtual_path":"/.cooked/Input/Player.input"}]})");
 
   ASSERT_TRUE(RunBatch(manifest_path, std::nullopt, report_path).has_value())
     << Messages();
@@ -277,16 +278,109 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
   EXPECT_EQ(material.at(0).at("virtual_path"), "/.cooked/Wood.omat");
 
   auto input_types = std::vector<uint8_t> {};
+  auto input_paths = std::vector<std::string> {};
   for (const auto& product : jobs.at(1).at("products")) {
     EXPECT_FALSE(product.at("asset_key").get<std::string>().empty());
     EXPECT_TRUE(std::filesystem::exists(
       cooked_root / product.at("descriptor_relative_path").get<std::string>()));
     input_types.push_back(product.at("asset_type").get<uint8_t>());
+    input_paths.push_back(product.at("virtual_path").get<std::string>());
   }
   EXPECT_THAT(input_types,
     ::testing::UnorderedElementsAre(
       static_cast<uint8_t>(oxygen::data::AssetType::kInputAction),
       static_cast<uint8_t>(oxygen::data::AssetType::kInputMappingContext)));
+  EXPECT_THAT(input_paths,
+    ::testing::UnorderedElementsAre("/.cooked/Input/Player.input/Jump.oiact",
+      "/.cooked/Input/Player.input/OnFoot.oimap"));
+}
+
+//! Two input sources in one folder that declare the same action name cook two
+//! actions: each product is named under its own source.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, InputSourcesInOneFolderKeepTheirKeys)
+{
+  const auto root = MakeScenarioDir("input_same_name");
+  const auto cooked_root = root / ".cooked";
+  const auto manifest_path = root / "import-manifest.json";
+  const auto report_path = root / "report.json";
+  for (const auto* name : { "Player", "Vehicle" }) {
+    WriteText(root / "Input" / (std::string(name) + ".input.json"), R"({
+      "actions":[{"name":"Jump","type":"bool"}]})");
+  }
+  WriteText(manifest_path,
+    R"({"version":1,"output":")" + cooked_root.generic_string() + R"(",
+    "jobs":[
+      {"id":"player","type":"input","source":"Input/Player.input.json",
+        "virtual_path":"/.cooked/Input/Player.input"},
+      {"id":"vehicle","type":"input","source":"Input/Vehicle.input.json",
+        "virtual_path":"/.cooked/Input/Vehicle.input"}]})");
+
+  ASSERT_TRUE(RunBatch(manifest_path, std::nullopt, report_path).has_value())
+    << Messages();
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open());
+  const auto report = nlohmann::json::parse(stream);
+  auto keys = std::vector<std::string> {};
+  auto paths = std::vector<std::string> {};
+  for (const auto& job : report.at("jobs")) {
+    for (const auto& product : job.at("products")) {
+      keys.push_back(product.at("asset_key").get<std::string>());
+      paths.push_back(product.at("virtual_path").get<std::string>());
+    }
+  }
+  EXPECT_THAT(paths,
+    ::testing::UnorderedElementsAre("/.cooked/Input/Player.input/Jump.oiact",
+      "/.cooked/Input/Vehicle.input/Jump.oiact"));
+  ASSERT_EQ(keys.size(), 2U);
+  EXPECT_NE(keys.at(0), keys.at(1));
+}
+
+//! A mapping names an action of another input source by its virtual path; the
+//! cooker resolves it like any authored reference.
+NOLINT_TEST_F(
+  BatchCommandPhysicsDagTest, MappingReferencesAnotherSourcesActionByPath)
+{
+  const auto root = MakeScenarioDir("input_cross_source");
+  const auto cooked_root = root / ".cooked";
+  const auto manifest_path = root / "import-manifest.json";
+  WriteText(root / "Input" / "Common.input.json", R"({
+    "actions":[{"name":"Jump","type":"bool"}]})");
+  WriteText(root / "Input" / "Player.input.json", R"({
+    "contexts":[{"name":"OnFoot","mappings":[
+      {"action":"/.cooked/Input/Common.input/Jump.oiact","slot":"Space"}]}]})");
+  WriteText(manifest_path,
+    R"({"version":1,"output":")" + cooked_root.generic_string() + R"(",
+    "jobs":[
+      {"id":"common","type":"input","source":"Input/Common.input.json",
+        "virtual_path":"/.cooked/Input/Common.input"},
+      {"id":"player","type":"input","source":"Input/Player.input.json",
+        "virtual_path":"/.cooked/Input/Player.input",
+        "depends_on":["common"]}]})");
+
+  EXPECT_TRUE(RunBatch(manifest_path).has_value()) << Messages();
+  EXPECT_TRUE(std::filesystem::exists(
+    cooked_root / "Input" / "Player.input" / "OnFoot.oimap"));
+}
+
+//! A mapping naming an action that no mounted source declares is refused.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, MappingToAMissingActionIsRefused)
+{
+  const auto root = MakeScenarioDir("input_missing_action");
+  const auto cooked_root = root / ".cooked";
+  const auto manifest_path = root / "import-manifest.json";
+  WriteText(root / "Input" / "Player.input.json", R"({
+    "contexts":[{"name":"OnFoot","mappings":[
+      {"action":"/.cooked/Input/Common.input/Jump.oiact","slot":"Space"},
+      {"action":"Dash","slot":"LeftShift"}]}]})");
+  WriteText(manifest_path,
+    R"({"version":1,"output":")" + cooked_root.generic_string() + R"(",
+    "jobs":[
+      {"id":"player","type":"input","source":"Input/Player.input.json",
+        "virtual_path":"/.cooked/Input/Player.input"}]})");
+
+  EXPECT_FALSE(RunBatch(manifest_path).has_value());
+  EXPECT_THAT(
+    Messages(), ::testing::HasSubstr("input.context.action_unresolved"));
 }
 
 //! A single-asset job without `virtual_path` has no identity: the manifest is
@@ -752,7 +846,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "id": "input.rotate",
           "depends_on": ["physics.sidecar.main"],
           "type": "input",
-          "source": "Input/rotate.input.json"
+          "source": "Input/rotate.input.json",
+          "virtual_path": "/.cooked/Input/rotate.input"
         },
         {
           "id": "physics.sidecar.main",
@@ -823,13 +918,15 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleStillUsesLegacyCode)
           "id": "input.a",
           "depends_on": ["input.b"],
           "type": "input",
-          "source": "Input/a.input.json"
+          "source": "Input/a.input.json",
+          "virtual_path": "/.cooked/Input/a.input"
         },
         {
           "id": "input.b",
           "depends_on": ["input.a"],
           "type": "input",
-          "source": "Input/b.input.json"
+          "source": "Input/b.input.json",
+          "virtual_path": "/.cooked/Input/b.input"
         }
       ]
     })");

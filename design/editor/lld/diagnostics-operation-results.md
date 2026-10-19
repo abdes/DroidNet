@@ -117,9 +117,9 @@ This LLD owns common vocabulary and contracts. It does not own every feature's
 presentation layout.
 
 Target placement: ED-M01 puts operation-result and diagnostic contracts in
-`Oxygen.Managed.Core` because Project Browser, WorldEditor, Runtime, Content Browser,
-and later pipeline code already need a shared non-UI contract layer. The
-host-level store, publisher, and output-log wiring are composed by
+`Oxygen.Managed.Core` because Project Browser, WorldEditor, Runtime, Content
+Browser, and later pipeline code already need a shared non-UI contract layer.
+The host-level store, publisher, and output-log wiring are composed by
 `Oxygen.Editor`. Neither the contracts nor host services may depend on feature
 UI projects such as `Oxygen.Editor.WorldEditor` or
 `Oxygen.Editor.ProjectBrowser`.
@@ -133,8 +133,8 @@ Top-level result for one user-triggered workflow.
 Required fields:
 
 - `OperationId`: correlation ID.
-- `OperationKind`: stable operation name, e.g. `Project.Open`,
-  `Scene.Save`, `Content.Cook`.
+- `OperationKind`: stable operation name, e.g. `Project.Open`, `Scene.Save`,
+  `Content.Cook`.
 - `Status`: `Succeeded`, `SucceededWithWarnings`, `PartiallySucceeded`,
   `Failed`, or `Cancelled`.
 - `Severity`: maximum diagnostic severity.
@@ -156,8 +156,8 @@ Rules:
 - Long-running progress is out of ED-M01 scope and must use a separate channel
   if introduced later.
 - `AffectedScope` is the primary operation scope. Diagnostics carry narrower
-  `AffectedEntity`, `AffectedPath`, or `AffectedVirtualPath` values for
-  per-item failures.
+  `AffectedEntity`, `AffectedPath`, or `AffectedVirtualPath` values for per-item
+  failures.
 
 ### Primary Action
 
@@ -174,8 +174,7 @@ owners resolve the handler.
 
 For inline presentation, the operation result `PrimaryAction` is the primary
 button. Diagnostic-level `SuggestedAction` values appear only in details or
-per-diagnostic views unless the owning workflow promotes one to
-`PrimaryAction`.
+per-diagnostic views unless the owning workflow promotes one to `PrimaryAction`.
 
 ### Diagnostic Record
 
@@ -217,8 +216,8 @@ ED-M05 prefix allocations:
 | `OXE.ASSETID.*`         | Content browser / asset picker identity and resolve diagnostics.           |
 | `OXE.CONTENTPIPELINE.*` | Content-pipeline orchestration diagnostics surfaced by material workflows. |
 
-ED-M05 may also add material-specific codes under existing ED-M03 prefixes
-when the owning domain remains unchanged:
+ED-M05 may also add material-specific codes under existing ED-M03 prefixes when
+the owning domain remains unchanged:
 
 - `OXE.DOCUMENT.MATERIAL.*` for material document save/open failures.
 - `OXE.LIVESYNC.MATERIAL.*` for material assignment sync warnings.
@@ -257,10 +256,10 @@ operation is still material-document scoped.
 
 ED-M08 prefix allocations:
 
-| Prefix         | Owner                                                                                                                                           |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OXE.SCRIPT.*` | Script assets, script analysis, code-editor launch and hand-written input files ([script authoring](script-authoring.md#10-operation-results)). |
-| `OXE.PLAY.*`   | Play sessions: cook before play, player launch and session control ([script authoring](script-authoring.md#8-play)).                            |
+| Prefix         | Owner                                                                                                                 |
+| -------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `OXE.SCRIPT.*` | Script assets, script analysis and code-editor launch ([script authoring](script-authoring.md#10-operation-results)). |
+| `OXE.PLAY.*`   | Play sessions: cook before play, player launch and session control ([script authoring](script-authoring.md#8-play)).  |
 
 ED-M09 prefix allocations:
 
@@ -371,8 +370,8 @@ Examples:
 - project validation result -> `Project.Open` or `Project.Create`.
 - asset import result -> `Content.Import`.
 - cook result -> `Content.Cook`.
-- runtime service failure -> `Runtime.Start`,
-  `Runtime.CookedRoot.Refresh`, `Runtime.View.Create`, etc.
+- runtime service failure -> `Runtime.Start`, `Runtime.CookedRoot.Refresh`,
+  `Runtime.View.Create`, etc.
 
 ### Log Correlation Adapter
 
@@ -441,9 +440,9 @@ Workspace output panel shows:
 ED-M01 should use the existing output console infrastructure and define how
 operation results appear in or link to that panel.
 
-Project Browser does not need a separate compact output panel in ED-M01. It
-uses inline results with details and writes the same operation result into the
-host store for later workspace/output-panel inspection.
+Project Browser does not need a separate compact output panel in ED-M01. It uses
+inline results with details and writes the same operation result into the host
+store for later workspace/output-panel inspection.
 
 ### Blocking Modal Policy
 
@@ -551,8 +550,8 @@ ED-M05 producers and operation kinds:
 | material picker/content browser              | `Material.Pick`             | `AssetIdentity`                                 |
 
 ED-M05 implementation adds the corresponding `FailureDomain` values and
-diagnostic-code constants to `Oxygen.Managed.Core` before material workflows publish
-results.
+diagnostic-code constants to `Oxygen.Managed.Core` before material workflows
+publish results.
 
 ED-M06 producers and operation kinds:
 
@@ -614,8 +613,8 @@ mapped to the nearest editor code above for the user-facing result.
 
 ### Status Reduction Rule
 
-The owning workflow reports whether the primary state changed. The shared
-status reducer combines that primary-state flag with diagnostics:
+The owning workflow reports whether the primary state changed. The shared status
+reducer combines that primary-state flag with diagnostics:
 
 - cancellation before the primary state changes: `Cancelled`.
 - cancellation of downstream sync after a successful authoring commit: a child
@@ -667,9 +666,9 @@ Forbidden:
 
 - diagnostics contracts must not depend on WinUI controls.
 - diagnostics contracts must not depend on WorldEditor-specific types.
-- diagnostics contracts in `Oxygen.Managed.Core` must not depend on feature projects
-  such as `Oxygen.Editor.WorldEditor`, `Oxygen.Editor.ProjectBrowser`, or
-  `Oxygen.Editor.ContentBrowser`.
+- diagnostics contracts in `Oxygen.Managed.Core` must not depend on feature
+  projects such as `Oxygen.Editor.WorldEditor`, `Oxygen.Editor.ProjectBrowser`,
+  or `Oxygen.Editor.ContentBrowser`.
 - host diagnostics services in `Oxygen.Editor` must not depend on feature UI
   projects for their public contracts.
 - low-level domain libraries must not depend on feature UI to report errors.
@@ -706,8 +705,8 @@ ED-M02 diagnostics are complete when:
 - cooked-root mount failure or missing cooked index is visible as `AssetMount`
   when it affects runtime content availability.
 - FPS/logging setting failure is visible as `Settings`.
-- output/log entries carry enough document/viewport/runtime state to correlate
-  a blank or failed viewport with the failed runtime operation.
+- output/log entries carry enough document/viewport/runtime state to correlate a
+  blank or failed viewport with the failed runtime operation.
 
 ED-M03 diagnostics are complete when:
 
@@ -716,10 +715,10 @@ ED-M03 diagnostics are complete when:
 - scene save failures are visible as `Document`.
 - command-triggered live-sync failures are visible as `LiveSync` without hiding
   the successful authoring mutation.
-- undo/redo failures are visible as `SceneAuthoring` or `Document` depending
-  on the failed operation.
-- scene explorer invalid operations, such as stale IDs or invalid reparent,
-  fail without partial mutation and publish scoped diagnostics.
+- undo/redo failures are visible as `SceneAuthoring` or `Document` depending on
+  the failed operation.
+- scene explorer invalid operations, such as stale IDs or invalid reparent, fail
+  without partial mutation and publish scoped diagnostics.
 
 Straightforward tests should cover:
 
@@ -731,27 +730,27 @@ Straightforward tests should cover:
 - output-log adapter: result summary entry includes `OperationId`.
 - failure-domain mapper: ED-M01 project/workspace domains and ED-M02
   runtime/viewport domains where the mapper is touched by the milestone.
-- project activation integration is validated through the
-  `project-services.md` `IProjectContextService` gates and
-  `project-workspace-shell.md` activation-coordinator gates.
+- project activation integration is validated through the `project-services.md`
+  `IProjectContextService` gates and `project-workspace-shell.md`
+  activation-coordinator gates.
 
 UI tests are appropriate for Project Browser inline failure display once ED-M01
 implements the surface.
 
 ED-M06 diagnostics are complete when:
 
-- content browser query failure publishes `Asset.Browse` or `Asset.Query`
-  under `AssetIdentity` with selected folder and search/filter facts.
+- content browser query failure publishes `Asset.Browse` or `Asset.Query` under
+  `AssetIdentity` with selected folder and search/filter facts.
 - broken descriptor rows carry `OXE.ASSETID.Descriptor.Broken` diagnostics
   without crashing browser refresh.
-- missing referenced assets carry `OXE.ASSETID.Resolve.Missing` and preserve
-  the unresolved URI in `AffectedScope.AssetVirtualPath`.
+- missing referenced assets carry `OXE.ASSETID.Resolve.Missing` and preserve the
+  unresolved URI in `AffectedScope.AssetVirtualPath`.
 - invalid selected/restored browser roots publish
   `OXE.PROJECT.CONTENT_ROOT.InvalidSelection` under `ProjectContentRoots`.
-- stale source/cooked state is a warning diagnostic under `ContentPipeline`,
-  not an `AssetCook` failure.
-- Content Browser output/log summaries include operation ID and selected
-  virtual folder for failed browse/refresh operations.
+- stale source/cooked state is a warning diagnostic under `ContentPipeline`, not
+  an `AssetCook` failure.
+- Content Browser output/log summaries include operation ID and selected virtual
+  folder for failed browse/refresh operations.
 
 ED-M07 diagnostics are complete when:
 
@@ -774,21 +773,22 @@ ED-M07 diagnostics are complete when:
 ## 15. Closed V0.1 Decisions
 
 Long-running save/validation uses feature-local busy/phase/cancel state and
-finalized shared operation results. ED-M07B cooking uses cook-specific observable
-run state owned by its coordinator and the dockable
+finalized shared operation results. ED-M07B cooking uses cook-specific
+observable run state owned by its coordinator and the dockable
 [Cooking panel](cooking-panel.md) for progress and recovery; finalized outcomes
-remain shared operation results. Cooking also presents the selected run's ordered
-progress messages and technical output directly, using shared logging capture
-where applicable; it does not require navigating the global Logs view.
-No general progress bus is required. Project
-Browser uses existing inline details; workspace/viewport show pending/failure
-state and output details. ED-M07A.3 owns current field diagnostic replacement by
-revision/target; historical operation results remain separate. There is no full
-validation dashboard in V0.1; the scoped Cooking panel provides the accepted
-run filtering and asset/property recovery actions.
+remain shared operation results. Cooking also presents the selected run's
+ordered progress messages and technical output directly, using shared logging
+capture where applicable; it does not require navigating the global Logs view.
+No general progress bus is required. Project Browser uses existing inline
+details; workspace/viewport show pending/failure state and output details.
+ED-M07A.3 owns current field diagnostic replacement by revision/target;
+historical operation results remain separate. There is no full validation
+dashboard in V0.1; the scoped Cooking panel provides the accepted run filtering
+and asset/property recovery actions.
 
-ED-M07B distinguishes staged cook, publication, rollback and mount outcomes, with
-input/output/build identities and freshness. An unsupported required field is an
-error blocking publication. ED-M08 adds exact-request/native-load/observation/
-capture/comparison/timeout results. Cancellation is final only after owned work
-is drained or publication reaches a safe commit/rollback state.
+ED-M07B distinguishes staged cook, publication, rollback and mount outcomes,
+with input/output/build identities and freshness. An unsupported required field
+is an error blocking publication. ED-M08 adds
+exact-request/native-load/observation/ capture/comparison/timeout results.
+Cancellation is final only after owned work is drained or publication reaches a
+safe commit/rollback state.

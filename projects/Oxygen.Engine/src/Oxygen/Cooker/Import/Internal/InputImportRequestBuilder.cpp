@@ -49,8 +49,7 @@ namespace {
     if (ext != ".json") {
       return false;
     }
-    const auto stem = path.stem().string();
-    return stem.ends_with(".input") || stem.ends_with(".input-action");
+    return path.stem().string().ends_with(".input");
   }
 
 } // namespace
@@ -72,6 +71,7 @@ auto BuildInputImportRequest(const InputImportSettings& settings,
 
   auto request = ImportRequest {};
   request.source_path = settings.source_path;
+  request.asset_virtual_path = settings.virtual_path;
   request.input = ImportRequest::InputPayload {};
 
   if (!settings.cooked_root.empty()) {
@@ -81,6 +81,15 @@ auto BuildInputImportRequest(const InputImportSettings& settings,
       return std::nullopt;
     }
     request.cooked_root = std::move(cooked_root);
+  }
+
+  for (const auto& root : settings.cooked_context_roots) {
+    const auto path = std::filesystem::path(root);
+    if (!path.is_absolute()) {
+      error_stream << "ERROR: cooked context roots must be absolute paths\n";
+      return std::nullopt;
+    }
+    request.cooked_context_roots.push_back(path.lexically_normal());
   }
 
   // Keep the currently requested hashing default for input jobs.
@@ -107,8 +116,7 @@ auto BuildInputImportRequest(const InputImportSettings& settings,
   }
 
   if (!IsLikelyInputSourcePath(request.source_path)) {
-    error_stream << "ERROR: input source must be '*.input.json' or "
-                    "'*.input-action.json'\n";
+    error_stream << "ERROR: input source must be '*.input.json'\n";
     return std::nullopt;
   }
 

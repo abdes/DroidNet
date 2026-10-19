@@ -243,6 +243,8 @@ namespace {
       manifest_dir, defaults.geometry_descriptor.cooked_context_roots);
     ResolveContextRootsRelativeToManifest(
       manifest_dir, defaults.scripting_sidecar.cooked_context_roots);
+    ResolveContextRootsRelativeToManifest(
+      manifest_dir, defaults.input.cooked_context_roots);
   }
 
   auto ResolveCookedRootsRelativeToManifest(
@@ -271,6 +273,8 @@ namespace {
       manifest_dir, job.geometry_descriptor.cooked_context_roots);
     ResolveContextRootsRelativeToManifest(
       manifest_dir, job.scripting_sidecar.cooked_context_roots);
+    ResolveContextRootsRelativeToManifest(
+      manifest_dir, job.input.cooked_context_roots);
   }
 
   auto ReadStringField(const json& obj, const char* name, std::string& target,
@@ -365,7 +369,8 @@ namespace {
   auto IsAllowedInputJobKey(const std::string_view key) -> bool
   {
     return key == "id" || key == "type" || key == "source"
-      || key == "depends_on" || key == "output" || key == "layout"
+      || key == "virtual_path" || key == "depends_on" || key == "output"
+      || key == "layout" || key == "cooked_context_roots"
       || key == "source_key";
   }
 
@@ -397,11 +402,11 @@ namespace {
       if (job_type == "input") {
         for (auto it = job.begin(); it != job.end(); ++it) {
           if (!IsAllowedInputJobKey(it.key())) {
-            errors << "ERROR [input.manifest.key_not_allowed]: key '"
-                   << it.key()
-                   << "' is not allowed for input jobs; allowed keys are "
-                      "'id', 'type', 'source', 'depends_on', 'output', "
-                      "'source_key'\n";
+            errors
+              << "ERROR [input.manifest.key_not_allowed]: key '" << it.key()
+              << "' is not allowed for input jobs; allowed keys are "
+                 "'id', 'type', 'source', 'virtual_path', 'depends_on', "
+                 "'output', 'layout', 'cooked_context_roots', 'source_key'\n";
             return true;
           }
         }
@@ -517,10 +522,11 @@ namespace {
     return true;
   }
 
-  //! True for a job that cooks exactly one asset, named by its virtual path.
-  auto IsSingleAssetJob(const std::string_view job_type) -> bool
+  //! True for a job named by its virtual path: one that cooks exactly one
+  //! asset, or an input source, whose products are named under it.
+  auto IsIdentifiedJob(const std::string_view job_type) -> bool
   {
-    static constexpr auto kSingleAssetJobs = std::array<std::string_view, 8> {
+    static constexpr auto kIdentifiedJobs = std::array<std::string_view, 9> {
       "material-descriptor",
       "geometry-descriptor",
       "scene-descriptor",
@@ -529,26 +535,27 @@ namespace {
       "texture-descriptor",
       "physics-material-descriptor",
       "collision-shape-descriptor",
+      "input",
     };
-    return std::ranges::contains(kSingleAssetJobs, job_type);
+    return std::ranges::contains(kIdentifiedJobs, job_type);
   }
 
-  //! Reads the identity a single-asset job cooks; a container job has none.
+  //! Reads the identity a job cooks; a model job has none.
   auto ReadJobVirtualPath(const json& job, ImportManifestJob& manifest_job,
     std::ostream& errors) -> bool
   {
-    const auto single = IsSingleAssetJob(manifest_job.job_type);
+    const auto identified = IsIdentifiedJob(manifest_job.job_type);
     if (!job.contains("virtual_path")) {
-      if (single) {
+      if (identified) {
         errors << "ERROR [import.manifest.virtual_path_missing]: "
                << manifest_job.job_type
-               << " job requires 'virtual_path', the identity of the asset "
-                  "it cooks\n";
+               << " job requires 'virtual_path', the identity of what it "
+                  "cooks\n";
         return false;
       }
       return true;
     }
-    if (!single) {
+    if (!identified) {
       errors << "ERROR [import.manifest.virtual_path_not_allowed]: "
              << manifest_job.job_type
              << " job produces several assets and takes no 'virtual_path'\n";
@@ -561,6 +568,7 @@ namespace {
     }
     manifest_job.virtual_path = job.at("virtual_path").get<std::string>();
     manifest_job.texture.virtual_path = manifest_job.virtual_path;
+    manifest_job.input.virtual_path = manifest_job.virtual_path;
     return true;
   }
 
@@ -829,9 +837,6 @@ namespace {
           obj, "materials_subdir", layout.materials_subdir, errors)) {
       return false;
     }
-    if (!ReadStringField(obj, "input_subdir", layout.input_subdir, errors)) {
-      return false;
-    }
     if (!ReadStringField(obj, "texture_descriptors_subdir",
           layout.texture_descriptors_subdir, errors)) {
       return false;
@@ -998,7 +1003,9 @@ namespace {
   auto ApplyCommonInputOverrides(const json& obj, InputImportSettings& settings,
     std::ostream& errors) -> bool
   {
-    return ReadStringField(obj, "output", settings.cooked_root, errors);
+    return ReadStringField(obj, "output", settings.cooked_root, errors)
+      && ReadStringArrayField(
+        obj, "cooked_context_roots", settings.cooked_context_roots, errors);
   }
 
   auto ApplyCommonMaterialDescriptorOverrides(const json& obj,
@@ -1556,10 +1563,13 @@ auto ImportManifest::Parse(const std::string_view text,
           error_stream
             << "ERROR [input.manifest.key_not_allowed]: key '" << it.key()
             << "' is not allowed for input jobs; allowed keys are "
-               "'id', 'type', 'source', 'depends_on', 'output', 'layout', "
-               "'source_key'\n";
+               "'id', 'type', 'source', 'virtual_path', 'depends_on', "
+               "'output', 'layout', 'cooked_context_roots', 'source_key'\n";
           return std::nullopt;
         }
+      }
+      if (!ReadJobVirtualPath(job, manifest_job, error_stream)) {
+        return std::nullopt;
       }
 
       if (!job.contains("source") || !job.at("source").is_string()) {
@@ -1977,6 +1987,7 @@ auto ImportManifest::AddBaseCookedContextRoots(
     prepend(job.scene_descriptor.cooked_context_roots);
     prepend(job.geometry_descriptor.cooked_context_roots);
     prepend(job.scripting_sidecar.cooked_context_roots);
+    prepend(job.input.cooked_context_roots);
   }
 }
 

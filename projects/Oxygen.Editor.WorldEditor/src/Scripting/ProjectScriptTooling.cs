@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Scripting;
@@ -46,9 +47,8 @@ public sealed class ProjectScriptTooling(ScriptToolingPaths paths, IOperationRes
 
             CopyFromSdk(paths.DefinitionsPath, Path.Combine(root, TypesFolder, "oxygen.d.luau"), changes);
             CopyFromSdk(Path.Combine(paths.SchemaDirectory, "oxygen.input.schema.json"), Path.Combine(root, TypesFolder, "oxygen.input.schema.json"), changes);
-            CopyFromSdk(Path.Combine(paths.SchemaDirectory, "oxygen.input-action.schema.json"), Path.Combine(root, TypesFolder, "oxygen.input-action.schema.json"), changes);
 
-            // Both input schemas reference the shared name definition beside them.
+            // The input schema references the shared name definition beside it.
             CopyFromSdk(Path.Combine(paths.SchemaDirectory, "oxygen.name.schema.json"), Path.Combine(root, TypesFolder, "oxygen.name.schema.json"), changes);
             this.MergeVsCodeSettings(Path.Combine(root, ".vscode", "settings.json"), changes);
         }
@@ -102,14 +102,11 @@ public sealed class ProjectScriptTooling(ScriptToolingPaths paths, IOperationRes
 
         if (schemas is not null)
         {
-            foreach (var (pattern, schema) in new[] { ("*.input.json", "oxygen.input.schema.json"), ("*.input-action.json", "oxygen.input-action.schema.json") })
+            const string url = $"./{TypesFolder}/oxygen.input.schema.json";
+            if (!schemas.OfType<JsonObject>().Any(entry => string.Equals(entry["url"]?.GetValue<string>(), url, StringComparison.OrdinalIgnoreCase)))
             {
-                var url = $"./{TypesFolder}/{schema}";
-                if (!schemas.OfType<JsonObject>().Any(entry => string.Equals(entry["url"]?.GetValue<string>(), url, StringComparison.OrdinalIgnoreCase)))
-                {
-                    schemas.Add(new JsonObject { ["fileMatch"] = new JsonArray(pattern), ["url"] = url });
-                    added.Add("json.schemas " + pattern);
-                }
+                schemas.Add(new JsonObject { ["fileMatch"] = new JsonArray("*" + AssetFileTypes.InputFile), ["url"] = url });
+                added.Add("json.schemas *" + AssetFileTypes.InputFile);
             }
         }
 

@@ -4,25 +4,12 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentBrowser.Scripts;
-using Oxygen.Editor.ContentPipeline.Authoring;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
 [TestClass]
-public sealed class ScriptAuthoringTests : IDisposable
+public sealed class ScriptAuthoringTests
 {
-    private readonly string root = Path.Combine(Path.GetTempPath(), "oxygen-script-authoring-tests", Guid.NewGuid().ToString("N"));
-
-    public ScriptAuthoringTests() => Directory.CreateDirectory(Path.Combine(this.root, "Content", "Player"));
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.root))
-        {
-            Directory.Delete(this.root, recursive: true);
-        }
-    }
-
     [TestMethod]
     public void CreateVisualStudioCodeOpensTheProjectAtTheLine()
     {
@@ -74,20 +61,6 @@ public sealed class ScriptAuthoringTests : IDisposable
     [TestMethod]
     public void PreferenceWithoutCustomCommandIsInvalid()
         => _ = new CodeEditorPreference(CodeEditorPreference.CurrentVersion, CodeEditorKind.Custom, " ").IsValid.Should().BeFalse();
-
-    [TestMethod]
-    public void InputSourceIndexFindsTheDeclaringFileAndLine()
-    {
-        var file = Path.Combine(this.root, "Content", "Player", "Player.input.json");
-        File.WriteAllText(file, AssetTemplates.InputFile("Gameplay"));
-
-        var action = InputSourceIndex.Find(Path.GetDirectoryName(file)!, "Jump", isContext: false);
-        var context = InputSourceIndex.Find(Path.GetDirectoryName(file)!, "Gameplay", isContext: true);
-
-        _ = action.Should().Be(new InputDeclaration(file, 4));
-        _ = context!.SourcePath.Should().Be(file);
-        _ = InputSourceIndex.Find(Path.GetDirectoryName(file)!, "Gameplay", isContext: false).Should().BeNull();
-    }
 
     [TestMethod]
     public void SnapshotDescribesProblemCounts()

@@ -6,7 +6,7 @@ using System.Globalization;
 using System.Numerics;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Scripts;
-using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Editor.ContentPipeline;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
 
@@ -70,11 +70,9 @@ public sealed partial class AssetDetailsViewModel
 
         if (asset.Kind is AssetKind.InputAction or AssetKind.InputMappingContext
             && this.projects?.ActiveProject is { } project
-            && asset.Identity.Parent is { } parent
-            && RelocationPaths.ToPhysical(project, parent) is { } folder
-            && InputSourceIndex.Find(folder.FullPath, asset.DisplayName, asset.Kind == AssetKind.InputMappingContext) is { } declaration)
+            && InputSourceFiles.FindDeclaration(project, asset.Identity) is { } declaration)
         {
-            return [new("Declared in", WithPathBreaks(declaration.SourcePath) + string.Create(CultureInfo.InvariantCulture, $" (line {declaration.Line})"))];
+            return [new("Declared in", WithPathBreaks(declaration.File.FullPath) + string.Create(CultureInfo.InvariantCulture, $" (line {declaration.Position.Line})"))];
         }
 
         return [];

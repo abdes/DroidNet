@@ -43,6 +43,16 @@ auto InputCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                        .StoreTo(&options_.source_path)
                        .Build();
 
+  auto virtual_path
+    = Option::WithKey("virtual-path")
+        .About("The source's identity (/Content/Input/Player.input); its "
+               "actions and mapping contexts are named under it")
+        .Long("virtual-path")
+        .Required()
+        .WithValue<std::string>()
+        .StoreTo(&options_.virtual_path)
+        .Build();
+
   auto cooked_root = Option::WithKey("output")
                        .About("Destination cooked root directory")
                        .Short("i")
@@ -77,6 +87,7 @@ auto InputCommand::BuildCommand() -> std::shared_ptr<clap::Command>
   return CommandBuilder("input")
     .About("Import input authoring JSON")
     .WithPositionalArguments(source_path)
+    .WithOption(std::move(virtual_path))
     .WithOption(std::move(cooked_root))
     .WithOption(std::move(job_name))
     .WithOption(std::move(report))
@@ -96,6 +107,7 @@ auto InputCommand::Run() -> std::expected<void, std::error_code>
 
   auto settings = InputImportSettings {
     .source_path = options_.source_path,
+    .virtual_path = options_.virtual_path,
     .cooked_root = effective_cooked_root,
   };
 

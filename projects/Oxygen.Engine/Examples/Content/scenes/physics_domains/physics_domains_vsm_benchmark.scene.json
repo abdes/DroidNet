@@ -3,7 +3,7 @@
   "name": "physics_domains_vsm_benchmark",
   "starting_input_contexts": [
     {
-      "context_ref": "/.cooked/Input/PhysicsDomainsVehicleContext.oimap",
+      "context_ref": "/.cooked/Input/physics_domains.input/PhysicsDomainsVehicleContext.oimap",
       "priority": 120
     }
   ],

@@ -4,40 +4,44 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Authoring;
+using Oxygen.Managed.Assets.Authoring.Input;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 
 /// <summary>
-/// Hand-written input files cook as self-contained <c>input</c> jobs whose outputs land next to the file.
+/// Input sources cook as <c>input</c> jobs named by their identity, and their actions and contexts are found in the
+/// source they are named under.
 /// </summary>
 [TestClass]
 public sealed class InputFileCookingTests : IDisposable
 {
-    private const string SelfContained = """
+    private const string Player = """
         {
           "actions": [ { "name": "Jump", "type": "bool" }, { "name": "Dash", "type": "bool" } ],
-          "contexts": [ { "name": "Gameplay", "mappings": [
-            { "action": "Jump", "slot": "Space", "trigger": "pressed" },
-            { "action": "Dash", "slot": "LeftShift", "trigger": { "type": "chord", "chord_action": "Jump" } }
-          ] } ]
+          "contexts": [
+            { "name": "Gameplay", "priority": 3, "mappings": [
+              { "action": "Jump", "slot": "Space", "trigger": "pressed" },
+              { "action": "/Content/Common/Common.input/Fire.oiact", "slot": "F" },
+              { "action": "/Content/Common/Common.input/Missing.oiact", "slot": "G" },
+              { "action": "/Engine/Input/Engine.input/Pause.oiact", "slot": "Escape" }
+            ] }
+          ]
         }
         """;
 
-    private const string UsesForeignActions = """
-        {
-          "actions": [ { "name": "Jump", "type": "bool" } ],
-          "contexts": [ { "name": "Vehicle", "mappings": [
-            { "action": "Boost", "slot": "W" },
-            { "action": "Jump", "slot": "Space", "triggers": [ { "type": "combo", "combo_actions": [ { "action": "Brake" } ] } ] }
-          ] } ]
-        }
+    private const string Common = """
+        { "actions": [ { "name": "Fire", "type": "bool" } ] }
         """;
 
     private readonly string root = Path.Combine(Path.GetTempPath(), "oxygen-input-cooking-tests", Guid.NewGuid().ToString("N"));
 
-    public InputFileCookingTests() => Directory.CreateDirectory(Path.Combine(this.root, "Content", "Gameplay"));
+    public InputFileCookingTests()
+    {
+        _ = Directory.CreateDirectory(Path.Combine(this.root, "Content", "Gameplay"));
+        _ = Directory.CreateDirectory(Path.Combine(this.root, "Content", "Common"));
+    }
 
     public void Dispose()
     {
@@ -48,25 +52,17 @@ public sealed class InputFileCookingTests : IDisposable
     }
 
     [TestMethod]
-    public void FindUndeclaredActionsAcceptsASelfContainedFile()
-        => _ = InputFileReferences.FindUndeclaredActions(SelfContained).Should().BeEmpty();
-
-    [TestMethod]
-    public void FindUndeclaredActionsNamesMappingAndComboReferences()
-        => _ = InputFileReferences.FindUndeclaredActions(UsesForeignActions).Should().Equal("Boost", "Brake");
-
-    [TestMethod]
-    public void ResolveInputFileKeepsItsIdentityAndFolder()
+    public void ResolveInputFileKeepsItsIdentity()
     {
         var input = CookInputResolver.Resolve(this.CreateProject(), AssetPath.Parse("/Content/Gameplay/Player.input.json"), ContentCookInputRole.Primary);
 
         _ = input.Kind.Should().Be(ContentCookAssetKind.Input);
         _ = input.SourceRelativePath.Should().Be("Content/Gameplay/Player.input.json");
-        _ = input.AssetUri.Should().Be(AssetPath.Parse("/Content/Gameplay/Player.input"), "an input file stands for its path without the authoring .json");
+        _ = input.AssetUri.Should().Be(AssetPath.Parse("/Content/Gameplay/Player.input"), "an input source stands for its path without the authoring .json");
     }
 
     [TestMethod]
-    public void BuildJobPlacesInputOutputsInTheSourceFolder()
+    public void BuildJobNamesTheSourceIdentity()
     {
         var input = CookInputResolver.Resolve(this.CreateProject(), AssetPath.Parse("/Content/Gameplay/Player.input.json"), ContentCookInputRole.Primary);
 
@@ -75,32 +71,58 @@ public sealed class InputFileCookingTests : IDisposable
         _ = job.Type.Should().Be("input");
         _ = job.Id.Should().Be("input:Content/Gameplay/Player.input.json");
         _ = job.Name.Should().BeNull("input jobs accept no name");
-        _ = job.Layout.Should().Be(new ContentImportLayout("/Content") { DescriptorsDirectory = string.Empty, InputDirectory = "Gameplay" });
+        _ = job.VirtualPath.Should().Be("/Content/Gameplay/Player.input", "the cooker names the source's products under its identity");
+        _ = job.Layout.Should().Be(new ContentImportLayout("/Content"));
     }
 
     [TestMethod]
-    public void RejectInputFilesWithForeignActionsDropsOnlyThatFilesJob()
+    public void AProductIsDeclaredInTheSourceItIsNamedUnder()
     {
         var project = this.CreateProject();
-        var good = this.WriteInput(project, "Player.input.json", SelfContained);
-        var bad = this.WriteInput(project, "Vehicle.input.json", UsesForeignActions);
-        var builder = new ContentImportManifestBuilder();
-        var manifest = new ContentImportManifest(1, Path.Combine(this.root, ".cooked"), new ContentImportLayout("/Content"), [builder.BuildJob(good, []), builder.BuildJob(bad, [])]);
-        var scope = new ContentCookScope(project, new ProjectCookScope(project.ProjectId, FileSystemPath.From(this.root), Path.Combine(this.root, ".cooked")), [good, bad], CookTargetKind.Folder);
+        var file = this.Write("Gameplay/Player.input.json", Player);
 
-        var (kept, diagnostics) = ContentPipelineService.RejectInputFilesWithForeignActions(Guid.NewGuid(), scope, manifest);
+        var action = InputSourceFiles.FindDeclaration(project, AssetPath.Parse("/Content/Gameplay/Player.input/Dash.oiact"));
+        var context = InputSourceFiles.FindDeclaration(project, AssetPath.Parse("/Content/Gameplay/Player.input/Gameplay.oimap"));
 
-        _ = kept.Jobs.Select(static job => job.Source).Should().Equal("Content/Gameplay/Player.input.json");
-        var diagnostic = diagnostics.Should().ContainSingle().Subject;
-        _ = diagnostic.Code.Should().Be(ScriptDiagnosticCodes.InputReferenceUnsupported);
-        _ = diagnostic.Message.Should().Contain("'Boost'").And.Contain("'Brake'");
-        _ = diagnostic.AffectedPath.Should().Be(bad.SourceAbsolutePath.FullPath);
+        _ = action.Should().NotBeNull();
+        _ = action!.File.FullPath.Should().Be(file);
+        _ = action.Position.Should().Be(new SourcePosition(2, 62));
+        _ = context!.Position.Line.Should().Be(4);
+        _ = InputSourceFiles.FindDeclaration(project, AssetPath.Parse("/Content/Gameplay/Player.input/Gameplay.oiact")).Should().BeNull();
+        _ = InputSourceFiles.FindDeclaration(project, AssetPath.Parse("/Content/Gameplay/Vehicle.input/Dash.oiact")).Should().BeNull();
     }
 
-    private ContentCookInput WriteInput(ProjectContext project, string name, string text)
+    [TestMethod]
+    public void AContextTakesThePriorityItsSourceDeclares()
     {
-        File.WriteAllText(Path.Combine(this.root, "Content", "Gameplay", name), text);
-        return CookInputResolver.Resolve(project, AssetPath.Parse("/Content/Gameplay/" + name), ContentCookInputRole.Primary);
+        var project = this.CreateProject();
+        _ = this.Write("Gameplay/Player.input.json", Player);
+
+        _ = InputContextSources.Find(project, AssetPath.Parse("/Content/Gameplay/Player.input/Gameplay.oimap"))
+            .Should().Be(new InputContextSource(IsProjectContext: true, DeclaredPriority: 3));
+        _ = InputContextSources.Find(project, AssetPath.Parse("/Content/Gameplay/Player.input/Menu.oimap")).IsUndeclared.Should().BeTrue();
+        _ = InputContextSources.Find(project, AssetPath.Parse("/Content/Gameplay/Gameplay.oimap")).IsUndeclared.Should().BeTrue("a context is declared only by the source it is named under");
+    }
+
+    [TestMethod]
+    public void AnActionNamedByPathMustBeDeclaredByAProjectSource()
+    {
+        var project = this.CreateProject();
+        _ = this.Write("Common/Common.input.json", Common);
+        var source = InputSourceReader.Read(File.ReadAllBytes(this.Write("Gameplay/Player.input.json", Player)));
+
+        var problems = InputSourceFiles.CheckActionPaths(project, AssetPath.Parse("/Content/Gameplay/Player.input"), source).ToList();
+
+        var problem = problems.Should().ContainSingle("Fire is declared, and the engine content is resolved by the cook").Subject;
+        _ = problem.Code.Should().Be(InputSourceCodes.ActionMissing);
+        _ = problem.Line.Should().Be(7);
+    }
+
+    private string Write(string relativePath, string text)
+    {
+        var path = Path.GetFullPath(Path.Combine(this.root, "Content", relativePath));
+        File.WriteAllText(path, text);
+        return path;
     }
 
     private ProjectContext CreateProject()

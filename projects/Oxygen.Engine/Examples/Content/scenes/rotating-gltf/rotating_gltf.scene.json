@@ -4,7 +4,7 @@
   "starting_camera": 3,
   "starting_input_contexts": [
     {
-      "context_ref": "/.cooked/Input/RotateInputContext.oimap",
+      "context_ref": "/.cooked/Input/rotate.input/RotateInputContext.oimap",
       "priority": 100
     }
   ],

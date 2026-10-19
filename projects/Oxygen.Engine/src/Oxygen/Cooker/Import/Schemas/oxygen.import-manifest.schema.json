@@ -381,9 +381,11 @@
                 "id",
                 "type",
                 "source",
+                "virtual_path",
                 "depends_on",
                 "output",
                 "layout",
+                "cooked_context_roots",
                 "source_key"
               ]
             }
@@ -460,9 +462,6 @@
         "materials_subdir": {
           "type": "string"
         },
-        "input_subdir": {
-          "type": "string"
-        },
         "texture_descriptors_subdir": {
           "type": "string"
         },
@@ -477,6 +476,9 @@
       "properties": {
         "output": {
           "type": "string"
+        },
+        "cooked_context_roots": {
+          "$ref": "#/definitions/cooked_context_roots"
         }
       },
       "additionalProperties": false
@@ -916,7 +918,7 @@
         "virtual_path": {
           "type": "string",
           "minLength": 1,
-          "description": "Identity of the asset a single-asset job cooks; its descriptor is written at this virtual path. Required for material, geometry, scene, script, texture, physics material and collision shape jobs, and refused on the others."
+          "description": "Identity of the asset a single-asset job cooks, whose descriptor is written at this virtual path, or of the input source an input job cooks, whose actions and mapping contexts are named under it (`/Content/Input/Player.input/Jump.oiact`). Required for material, geometry, scene, script, texture, physics material, collision shape and input jobs, and refused on the others."
         },
         "name": {
           "type": "string"

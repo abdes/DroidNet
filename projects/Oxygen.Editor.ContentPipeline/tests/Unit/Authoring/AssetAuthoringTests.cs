@@ -94,7 +94,7 @@ public sealed class AssetAuthoringTests : IDisposable
     public async Task ProposalSkipsCatalogedNames()
     {
         this.Catalog("/Content/Input/NewInput1.input.json");
-        this.Catalog("/Content/Input/NewInput2.input-action.json");
+        this.Catalog("/Content/Input/NewInput2.input.json");
 
         var proposal = await this.Authoring.ProposeAsync(this.Project, AuthoredAssetKind.InputFile, AssetPath.Parse("/Content"), this.TestContext.CancellationToken).ConfigureAwait(false);
 

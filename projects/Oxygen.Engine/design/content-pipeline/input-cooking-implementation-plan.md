@@ -1,18 +1,24 @@
 # Input Cooking Implementation Plan (Execution Locked)
 
-> Historical implementation ledger. Current format and tooling work is tracked in
+> Historical implementation ledger. Current format and tooling work is tracked
+> in
 > [ED-M08.F1](../../../../design/editor/plan/ED-M08.F1-descriptor-local-references.md).
 > PakGen and its fixtures are removed; historical paths below are not build or
-> validation requirements.
+> validation requirements. The standalone action format and action resolution by
+> name are removed too: an input source is a container whose products are named
+> under its identity, and a mapping names another source's action by virtual
+> path
+> ([architecture §7.4.0](input-cooking-architecture.md#740-authoring-model)).
 
-**Date:** 2026-03-02
-**Status:** Design / Implementation Plan
+**Date:** 2026-03-02 **Status:** Design / Implementation Plan
 
-This is the implementation plan for `design/content-pipeline/input-cooking-architecture.md`.
+This is the implementation plan for
+`design/content-pipeline/input-cooking-architecture.md`.
 
 ## 1. Rules of Engagement Compliance
 
-This plan follows `.github/instructions/cpp_coding_style.instructions.md` collaboration rules.
+This plan follows `.github/instructions/cpp_coding_style.instructions.md`
+collaboration rules.
 
 1. No shortcuts.
 2. Truthful progress only.
@@ -28,9 +34,12 @@ This plan follows `.github/instructions/cpp_coding_style.instructions.md` collab
 2. `AsyncImportService` must route input requests only to `InputImportJob`.
 3. No direct import execution branch outside the job/pipeline path.
 4. New binary serialization/deserialization logic must use `oxygen::serio`.
-5. A single input job class is used for both input asset kinds (`InputImportJob`).
-6. A single input pipeline class is used for both input asset kinds (`InputImportPipeline`).
-7. Manifest-mode mapping-context jobs must express explicit dependencies on required action jobs.
+5. A single input job class is used for both input asset kinds
+   (`InputImportJob`).
+6. A single input pipeline class is used for both input asset kinds
+   (`InputImportPipeline`).
+7. Manifest-mode mapping-context jobs must express explicit dependencies on
+   required action jobs.
 
 ## 3. File-Level Change Map
 
@@ -73,30 +82,45 @@ This plan follows `.github/instructions/cpp_coding_style.instructions.md` collab
 
 ### Data/runtime
 
-1. `src/Oxygen/Data/PakFormat_input.h` (add flags/priority; remove `InputContextBindingRecord` + `InputContextBindingFlags`)
-2. `src/Oxygen/Data/ToStringConverters.cpp` (update `InputMappingContextFlags`; remove `InputContextBindingFlags` + `kInputContextBinding` case)
-3. `src/Oxygen/Data/SceneAsset.h` (remove `ComponentTraits<InputContextBindingRecord>`)
-4. `src/Oxygen/Data/PakFormatSerioLoaders.h` (remove `InputContextBindingRecord` loader)
+1. `src/Oxygen/Data/PakFormat_input.h` (add flags/priority; remove
+   `InputContextBindingRecord` + `InputContextBindingFlags`)
+2. `src/Oxygen/Data/ToStringConverters.cpp` (update `InputMappingContextFlags`;
+   remove `InputContextBindingFlags` + `kInputContextBinding` case)
+3. `src/Oxygen/Data/SceneAsset.h` (remove
+   `ComponentTraits<InputContextBindingRecord>`)
+4. `src/Oxygen/Data/PakFormatSerioLoaders.h` (remove `InputContextBindingRecord`
+   loader)
 5. `src/Oxygen/Core/Meta/Data/ComponentType.inc` (remove `kInputContextBinding`)
 6. `src/Oxygen/Core/Meta/Input/PakFormat.inc` (remove `kInputContextBinding`)
 7. `src/Oxygen/Content/Loaders/SceneLoader.h` (remove INPT handling)
-8. `src/Oxygen/Content/AssetLoader.cpp` (remove `publish_scene_input_mapping_context_dependencies`)
-9. `src/Oxygen/Content/IAssetLoader.h` (add `EnumerateMountedInputContexts` declaration)
-10. `src/Oxygen/Content/AssetLoader.cpp` (implement `EnumerateMountedInputContexts`; remove scene-binding dependency publishing)
-11. `src/Oxygen/Data/InputMappingContextAsset.h` (add `GetDefaultPriority` accessor)
-12. `Examples/DemoShell/Services/SceneLoaderService.cpp` (remove `AttachInputMappings`)
-13. `src/Oxygen/Cooker/Tools/PakDump/SceneAssetDumper.h` (remove `kInputContextBinding` dump)
-14. `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/packing/packers.py` (remove binding record packing)
-15. `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/spec/validator.py` (remove binding validation)
+8. `src/Oxygen/Content/AssetLoader.cpp` (remove
+   `publish_scene_input_mapping_context_dependencies`)
+9. `src/Oxygen/Content/IAssetLoader.h` (add `EnumerateMountedInputContexts`
+   declaration)
+10. `src/Oxygen/Content/AssetLoader.cpp` (implement
+    `EnumerateMountedInputContexts`; remove scene-binding dependency publishing)
+11. `src/Oxygen/Data/InputMappingContextAsset.h` (add `GetDefaultPriority`
+    accessor)
+12. `Examples/DemoShell/Services/SceneLoaderService.cpp` (remove
+    `AttachInputMappings`)
+13. `src/Oxygen/Cooker/Tools/PakDump/SceneAssetDumper.h` (remove
+    `kInputContextBinding` dump)
+14. `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/packing/packers.py` (remove
+    binding record packing)
+15. `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/spec/validator.py` (remove
+    binding validation)
 
 ### Tests
 
 1. `src/Oxygen/Cooker/test/Import/*` (new input import tests)
 2. `src/Oxygen/Content/test/AssetLoader_scene_test.cpp` (remove binding tests)
-3. `src/Oxygen/Content/test/SceneLoader_test.cpp` (remove `kInputContextBinding` tests)
+3. `src/Oxygen/Content/test/SceneLoader_test.cpp` (remove `kInputContextBinding`
+   tests)
 4. `src/Oxygen/Content/test/AssetLoader_lifetime_test.cpp` (remove binding test)
-5. `src/Oxygen/Content/test/TestData/scene_with_input_context_binding.yaml` (remove)
-6. `src/Oxygen/Cooker/Tools/PakGen/tests/test_v6_input_assets.py` (remove binding tests)
+5. `src/Oxygen/Content/test/TestData/scene_with_input_context_binding.yaml`
+   (remove)
+6. `src/Oxygen/Cooker/Tools/PakGen/tests/test_v6_input_assets.py` (remove
+   binding tests)
 7. `src/Oxygen/Content/test/*` (new context enumeration/hydration tests)
 
 ## 4. Phase Plan and Status Ledger
@@ -127,16 +151,27 @@ Status update rule:
 
 Implemented now:
 
-1. Input import routing and orchestration metadata are implemented end-to-end (`ImportOptions::input`, `ImportRequest::orchestration`, `BuildInputImportRequest`, async routing to `InputImportJob`).
-2. Manifest/ImportTool wiring is implemented for `type: "input"` including key whitelist enforcement and dependency-aware batch scheduling (`id`, `depends_on`, duplicate/missing/cycle checks, failure propagation).
-3. Runtime input bootstrap APIs are implemented: `EnumerateMountedInputContexts()` and `HydrateInputContext(...)`, including trigger hydration and slot alias normalization.
-4. Scene-binding infrastructure removal is complete in runtime/tooling paths (`INPT`, `InputContextBinding*`, `input_context_bindings`, and PakGen packing/validation hooks removed).
-5. Input JSON schemas are shipped under `schemas/` and covered by schema validation tests.
-6. Documentation was synchronized for implementation status and ImportTool schema usage.
+1. Input import routing and orchestration metadata are implemented end-to-end
+   (`ImportOptions::input`, `ImportRequest::orchestration`,
+   `BuildInputImportRequest`, async routing to `InputImportJob`).
+2. Manifest/ImportTool wiring is implemented for `type: "input"` including key
+   whitelist enforcement and dependency-aware batch scheduling (`id`,
+   `depends_on`, duplicate/missing/cycle checks, failure propagation).
+3. Runtime input bootstrap APIs are implemented:
+   `EnumerateMountedInputContexts()` and `HydrateInputContext(...)`, including
+   trigger hydration and slot alias normalization.
+4. Scene-binding infrastructure removal is complete in runtime/tooling paths
+   (`INPT`, `InputContextBinding*`, `input_context_bindings`, and PakGen
+   packing/validation hooks removed).
+5. Input JSON schemas are shipped under `schemas/` and covered by schema
+   validation tests.
+6. Documentation was synchronized for implementation status and ImportTool
+   schema usage.
 
 Remaining backlog:
 
-1. Execution-policy caveat only: no local full build/test pass was run in this implementation loop.
+1. Execution-policy caveat only: no local full build/test pass was run in this
+   implementation loop.
 
 ## 5. Detailed Work Packages
 
@@ -145,7 +180,8 @@ Remaining backlog:
 Tasks:
 
 1. Add `kAutoLoad` and `kAutoActivate` to `InputMappingContextFlags`.
-2. Add `default_priority` to `InputMappingContextAssetDesc` and rebalance reserved bytes.
+2. Add `default_priority` to `InputMappingContextAssetDesc` and rebalance
+   reserved bytes.
 3. Update `to_string(InputMappingContextFlags)` converter.
 4. Add/adjust tests validating struct size and flag strings.
 
@@ -158,18 +194,23 @@ Acceptance:
 
 Tasks:
 
-1. Add top-level `InputPayload` marker in `ImportRequest` (orchestration-only; presence signals input import routing). Do NOT add `InputImportKind`; document structure is determined solely inside `InputImportPipeline` from source JSON structure.
-2. Add `InputImportSettings` DTO in `InputImportSettings.h` (orchestration-only fields: `source_path` only).
-3. Implement `BuildInputImportRequest(...)`:
-   with validation:
+1. Add top-level `InputPayload` marker in `ImportRequest` (orchestration-only;
+   presence signals input import routing). Do NOT add `InputImportKind`;
+   document structure is determined solely inside `InputImportPipeline` from
+   source JSON structure.
+2. Add `InputImportSettings` DTO in `InputImportSettings.h` (orchestration-only
+   fields: `source_path` only).
+3. Implement `BuildInputImportRequest(...)`: with validation:
    - required source
    - dependency metadata pass-through (`id`, `depends_on`) for batch scheduling
-   - kind-agnostic: builder does NOT inspect source content or determine asset kind
+   - kind-agnostic: builder does NOT inspect source content or determine asset
+     kind
 4. Add request builder tests.
 
 Acceptance:
 
-1. Builder emits normalized `ImportRequest` for any input source (kind-agnostic).
+1. Builder emits normalized `ImportRequest` for any input source
+   (kind-agnostic).
 2. Invalid settings produce deterministic diagnostics/errors.
 3. No `InputImportKind` enum exists in `ImportOptions` or `ImportRequest`.
 
@@ -178,41 +219,58 @@ Acceptance:
 Tasks:
 
 1. Implement `InputImportJob` from `ImportJob`.
-2. Implement `InputImportPipeline` from `ImportPipeline` concept with standard API:
+2. Implement `InputImportPipeline` from `ImportPipeline` concept with standard
+   API:
    - `Start`
    - `Submit`
    - `TrySubmit`
    - `Collect`
    - `Close`
 3. Implement document structure detection:
-   - if source JSON has `contexts` key → primary format (parse `actions[]` + `contexts[]`, emit N+M assets)
-   - if source JSON has `name` + `type` at top level, no `contexts` → standalone action (emit 1 asset)
+   - if source JSON has `contexts` key → primary format (parse `actions[]` +
+     `contexts[]`, emit N+M assets)
+   - if source JSON has `name` + `type` at top level, no `contexts` → standalone
+     action (emit 1 asset)
    - otherwise → reject with `input.import.unknown_document_structure`
 4. Implement strict source JSON parsers for:
-   - Primary format: extract shared `actions[]` and iterate `contexts[]`, emitting N action assets + M context assets
-   - Standalone action: emit 1 action asset
-     including:
+   - Primary format: extract shared `actions[]` and iterate `contexts[]`,
+     emitting N action assets + M context assets
+   - Standalone action: emit 1 action asset including:
    - action declaration parsing and dedup/conflict checking
    - `contexts[]` array iteration with per-context name uniqueness validation
-   - action name resolution: resolve `action` string against `actions[]` first, then mounted/inflight content
+   - action name resolution: resolve `action` string against `actions[]` first,
+     then mounted/inflight content
    - per-context mapping / trigger / slot validation
-5. Implement `trigger` shorthand expansion: string → `[{ type: <value>, behavior: "implicit", actuation_threshold: 0.5 }]`. Reject if both `trigger` and `triggers` present on same mapping (`input.context.trigger_ambiguous`).
-6. Validate `slot` names against registered `InputSlots`. Emit `input.context.slot_unknown` for unrecognized names (warning, not error — allows forward-compat with future slot additions).
+5. Implement `trigger` shorthand expansion: string →
+   `[{ type: <value>, behavior: "implicit", actuation_threshold: 0.5 }]`. Reject
+   if both `trigger` and `triggers` present on same mapping
+   (`input.context.trigger_ambiguous`).
+6. Validate `slot` names against registered `InputSlots`. Emit
+   `input.context.slot_unknown` for unrecognized names (warning, not error —
+   allows forward-compat with future slot additions).
 7. Parse source and serialize descriptors with `oxygen::serio`.
-8. Emit all assets through `AssetEmitter` and register in index (one source file may produce N action assets + M context assets).
-9. Add import diagnostics codes (including `input.asset.action_conflict` for cross-file name/type conflicts).
+8. Emit all assets through `AssetEmitter` and register in index (one source file
+   may produce N action assets + M context assets).
+9. Add import diagnostics codes (including `input.asset.action_conflict` for
+   cross-file name/type conflicts).
 10. Add parser-focused tests with invalid document coverage.
 
 Acceptance:
 
 1. Path is strictly `InputImportJob -> InputImportPipeline`.
 2. No scene patching code is part of input import pipeline.
-3. Source schema validation follows `design/content-pipeline/input-cooking-architecture.md` Section 7.4 exactly.
-4. A primary format source file with `actions[]` and `contexts[]` emits N+M assets (N action descs + M context descs) from a single import job.
-5. Action names in any context's mappings resolve against declared actions first, then mounted content and successful predecessor jobs.
-6. Conflicting action definitions (same name, different type) produce `input.asset.action_conflict` and fail.
-7. One `InputImportPipeline` instance processes mixed standalone-action and primary-format inputs in the same queue/run.
-8. Context names within a single file must be unique; duplicates produce `input.context.name_duplicate` and fail.
+3. Source schema validation follows
+   `design/content-pipeline/input-cooking-architecture.md` Section 7.4 exactly.
+4. A primary format source file with `actions[]` and `contexts[]` emits N+M
+   assets (N action descs + M context descs) from a single import job.
+5. Action names in any context's mappings resolve against declared actions
+   first, then mounted content and successful predecessor jobs.
+6. Conflicting action definitions (same name, different type) produce
+   `input.asset.action_conflict` and fail.
+7. One `InputImportPipeline` instance processes mixed standalone-action and
+   primary-format inputs in the same queue/run.
+8. Context names within a single file must be unique; duplicates produce
+   `input.context.name_duplicate` and fail.
 9. `trigger` shorthand correctly expands to full trigger specification.
 10. Document structure detection correctly routes to the right parser.
 
@@ -226,38 +284,59 @@ Tasks:
 4. Extend manifest parser with `id` and `depends_on` fields for input jobs.
 5. Add dependency graph builder + topological scheduler in batch flow:
    - validate unique `id` values (diagnostic: `input.manifest.job_id_duplicate`)
-   - validate every `depends_on` target exists (diagnostic: `input.manifest.dep_missing_target`)
+   - validate every `depends_on` target exists (diagnostic:
+     `input.manifest.dep_missing_target`)
    - detect cycles (diagnostic: `input.manifest.dep_cycle`)
-   - skip dependents deterministically on predecessor failure (diagnostic: `input.import.skipped_predecessor_failed`)
-   - (wrong-type detection removed: both primary-format and standalone-action files produce action assets, so kind-level checks are invalid; unresolved refs caught at pipeline parse time)
-6. Extend `ImportManifest` defaults/job parsing/build request path for `input` only.
-7. Enforce input-job whitelist keys only: `id`, `type`, `source`, `depends_on`. Reject any other key with diagnostic `input.manifest.key_not_allowed`. Explicitly rejected keys include but are not limited to: `output`, `name`, `verbose`, `content_hashing`, `report`, and all source-document fields (`actions`, `contexts`, `mappings`, `triggers`, `trigger`, `slot`, `priority`, `consumes_input`, `auto_load`, `auto_activate`).
+   - skip dependents deterministically on predecessor failure (diagnostic:
+     `input.import.skipped_predecessor_failed`)
+   - (wrong-type detection removed: both primary-format and standalone-action
+     files produce action assets, so kind-level checks are invalid; unresolved
+     refs caught at pipeline parse time)
+6. Extend `ImportManifest` defaults/job parsing/build request path for `input`
+   only.
+7. Enforce input-job whitelist keys only: `id`, `type`, `source`, `depends_on`.
+   Reject any other key with diagnostic `input.manifest.key_not_allowed`.
+   Explicitly rejected keys include but are not limited to: `output`, `name`,
+   `verbose`, `content_hashing`, `report`, and all source-document fields
+   (`actions`, `contexts`, `mappings`, `triggers`, `trigger`, `slot`,
+   `priority`, `consumes_input`, `auto_load`, `auto_activate`).
 8. Update ImportTool README.
 
 Acceptance:
 
-1. Single-job and batch imports support one manifest job type (`input`) through the same import service path.
+1. Single-job and batch imports support one manifest job type (`input`) through
+   the same import service path.
 2. Batch execution honors `depends_on` ordering and failure propagation.
 3. Report job type output is correct for input requests.
-4. Input job parser rejects any key outside `id/type/source/depends_on` with `input.manifest.key_not_allowed`.
+4. Input job parser rejects any key outside `id/type/source/depends_on` with
+   `input.manifest.key_not_allowed`.
 5. Cycle detection prevents circular dependency chains.
-6. Unresolved action references from cross-file imports are caught at pipeline parse time via `input.context.action_unresolved`.
+6. Unresolved action references from cross-file imports are caught at pipeline
+   parse time via `input.context.action_unresolved`.
 
 ## P5: Runtime Enumeration and Hydration
 
 Tasks:
 
-1. Add `MountedInputContextEntry` struct and `EnumerateMountedInputContexts()` declaration to `IAssetLoader.h`.
-2. Implement `EnumerateMountedInputContexts()` in `AssetLoader.cpp` — iterate sources, read headers, filter `kInputMappingContext`, decode descriptor for name/flags/priority.
+1. Add `MountedInputContextEntry` struct and `EnumerateMountedInputContexts()`
+   declaration to `IAssetLoader.h`.
+2. Implement `EnumerateMountedInputContexts()` in `AssetLoader.cpp` — iterate
+   sources, read headers, filter `kInputMappingContext`, decode descriptor for
+   name/flags/priority.
 3. Add `GetDefaultPriority()` accessor to `InputMappingContextAsset`.
-4. Add `HydrateInputContext()` free function in `InputContextHydration.h/.cpp` — resolve actions, build triggers, return live `InputMappingContext`.
-5. Add unit tests for `EnumerateMountedInputContexts` (correct entries, empty sources, mixed asset types).
-6. Add unit tests for `HydrateInputContext` (action resolution, trigger chain building, error paths).
+4. Add `HydrateInputContext()` free function in `InputContextHydration.h/.cpp` —
+   resolve actions, build triggers, return live `InputMappingContext`.
+5. Add unit tests for `EnumerateMountedInputContexts` (correct entries, empty
+   sources, mixed asset types).
+6. Add unit tests for `HydrateInputContext` (action resolution, trigger chain
+   building, error paths).
 
 Acceptance:
 
-1. `EnumerateMountedInputContexts` returns correct entries for all mounted sources.
-2. `HydrateInputContext` produces a live `InputMappingContext` from a binary asset.
+1. `EnumerateMountedInputContexts` returns correct entries for all mounted
+   sources.
+2. `HydrateInputContext` produces a live `InputMappingContext` from a binary
+   asset.
 3. Auto-load/auto-activate scenario works end-to-end without scene bindings.
 4. No `InputBootstrapService` class exists.
 
@@ -265,29 +344,42 @@ Acceptance:
 
 Tasks:
 
-1. Remove `AttachInputMappings` and all scene-driven context activation from `SceneLoaderService`.
-2. Remove `publish_scene_input_mapping_context_dependencies` and all call sites in `AssetLoader.cpp`.
-3. Remove `INPT` component table handling from `SceneLoader` entirely (no compatibility parsing).
+1. Remove `AttachInputMappings` and all scene-driven context activation from
+   `SceneLoaderService`.
+2. Remove `publish_scene_input_mapping_context_dependencies` and all call sites
+   in `AssetLoader.cpp`.
+3. Remove `INPT` component table handling from `SceneLoader` entirely (no
+   compatibility parsing).
 4. Remove `InputContextBindingRecord` struct from `PakFormat_input.h`.
-5. Remove `InputContextBindingFlags` enum and `to_string(InputContextBindingFlags)` from `PakFormat_input.h` / `ToStringConverters.cpp`.
+5. Remove `InputContextBindingFlags` enum and
+   `to_string(InputContextBindingFlags)` from `PakFormat_input.h` /
+   `ToStringConverters.cpp`.
 6. Remove `ComponentTraits<InputContextBindingRecord>` from `SceneAsset.h`.
 7. Remove `kInputContextBinding` from `ComponentType.inc` and `PakFormat.inc`.
-8. Remove `InputContextBindingRecord` serio loader from `PakFormatSerioLoaders.h`.
+8. Remove `InputContextBindingRecord` serio loader from
+   `PakFormatSerioLoaders.h`.
 9. Remove `kInputContextBinding` dump branch from `PakDump/SceneAssetDumper.h`.
-10. Remove `input_context_bindings` packing/validation from PakGen `packers.py` and `validator.py`.
+10. Remove `input_context_bindings` packing/validation from PakGen `packers.py`
+    and `validator.py`.
 11. Remove `pack_input_context_binding_record` from PakGen `packers.py`.
-12. Remove or update `test_v6_input_assets.py` tests that reference `input_context_bindings`.
-13. Remove or update `AssetLoader_scene_test.cpp` tests that reference `InputContextBindingRecord`.
-14. Remove or update `SceneLoader_test.cpp` tests that reference `kInputContextBinding`.
-15. Remove or update `AssetLoader_lifetime_test.cpp` tests that reference `scene_with_input_context_binding`.
+12. Remove or update `test_v6_input_assets.py` tests that reference
+    `input_context_bindings`.
+13. Remove or update `AssetLoader_scene_test.cpp` tests that reference
+    `InputContextBindingRecord`.
+14. Remove or update `SceneLoader_test.cpp` tests that reference
+    `kInputContextBinding`.
+15. Remove or update `AssetLoader_lifetime_test.cpp` tests that reference
+    `scene_with_input_context_binding`.
 16. Remove test data `scene_with_input_context_binding.yaml`.
 
 Acceptance:
 
-1. `InputContextBindingRecord` and `InputContextBindingFlags` do not exist in the codebase.
+1. `InputContextBindingRecord` and `InputContextBindingFlags` do not exist in
+   the codebase.
 2. `kInputContextBinding` component type does not exist in the codebase.
 3. No code path reads, writes, packs, or dumps scene input context binding data.
-4. Runtime behavior is driven exclusively by standalone contexts + app-driven enumeration/hydration.
+4. Runtime behavior is driven exclusively by standalone contexts + app-driven
+   enumeration/hydration.
 5. All tests pass without any scene-binding infrastructure.
 
 ## P7: Compatibility Verification
@@ -295,14 +387,19 @@ Acceptance:
 Tasks:
 
 1. Verify importer-emitted input descriptors are consumable by runtime loaders.
-2. Verify existing PakDump inspection still decodes input action and mapping-context descriptors without tool changes.
-3. Validate binary compatibility against `design/content-pipeline/pak-v7-input-format-historical-reference.md` record sizes/offset contracts for all non-removed record types.
-4. Verify scene loader gracefully skips unknown component types in PAK files that contain legacy `INPT` records.
+2. Verify existing PakDump inspection still decodes input action and
+   mapping-context descriptors without tool changes.
+3. Validate binary compatibility against
+   `design/content-pipeline/pak-v7-input-format-historical-reference.md` record
+   sizes/offset contracts for all non-removed record types.
+4. Verify scene loader gracefully skips unknown component types in PAK files
+   that contain legacy `INPT` records.
 5. Document any gaps as follow-up items outside this plan.
 
 Acceptance:
 
-1. PakGen and PakDump source files changed only for scene-binding removal (no other modifications).
+1. PakGen and PakDump source files changed only for scene-binding removal (no
+   other modifications).
 2. Compatibility checks pass for importer output and runtime consumption.
 3. Legacy PAK files with `INPT` scene component tables do not crash on load.
 
@@ -310,21 +407,29 @@ Acceptance:
 
 Tasks:
 
-1. Update/remove content tests that referenced scene binding dependency behavior (handled in P6).
-2. Add context enumeration and hydration tests (enumeration correctness, hydration action resolution, error paths).
+1. Update/remove content tests that referenced scene binding dependency behavior
+   (handled in P6).
+2. Add context enumeration and hydration tests (enumeration correctness,
+   hydration action resolution, error paths).
 3. Add importer integration tests for both document structures.
-4. Reconcile docs (`design/content-pipeline/pak-v7-input-format-historical-reference.md` references and new docs links).
+4. Reconcile docs
+   (`design/content-pipeline/pak-v7-input-format-historical-reference.md`
+   references and new docs links).
 5. Add manifest key whitelist enforcement tests:
    - verify `input` jobs accept exactly `id`, `type`, `source`, `depends_on`
-   - verify rejection with `input.manifest.key_not_allowed` for `output`, `name`, `verbose`, `content_hashing`, and source-document fields
+   - verify rejection with `input.manifest.key_not_allowed` for `output`,
+     `name`, `verbose`, `content_hashing`, and source-document fields
 6. Add dependency DAG tests:
    - topological ordering verification
    - cycle detection and rejection
    - missing target detection and rejection
-   - wrong-type dependency detection removed (both formats produce actions; unresolved refs caught at parse time)
-   - failure propagation (predecessor fails -> all transitive dependents skipped)
+   - wrong-type dependency detection removed (both formats produce actions;
+     unresolved refs caught at parse time)
+   - failure propagation (predecessor fails -> all transitive dependents
+     skipped)
 7. Add mixed processing tests:
-   - single `InputImportPipeline` instance processes both document structures in one run
+   - single `InputImportPipeline` instance processes both document structures in
+     one run
    - interleaved standalone-action and primary-format work items
    - action refs resolve against predecessor results
 8. Add trigger shorthand tests:
@@ -342,8 +447,10 @@ Tasks:
     - unknown fields rejected
     - invalid enum values rejected
 12. Generate and ship JSON Schema files:
-    - `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json` (primary format)
-    - `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json` (standalone action)
+    - `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json` (primary
+      format)
+    - `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json`
+      (standalone action)
     - slot enum generated from `InputSlots` registered names
     - trigger type enum matches `ActionTriggers.inc`
 
@@ -368,21 +475,25 @@ Required concrete diagnostics:
 1. `input.request.type_invalid`
 2. `input.request.source_missing`
 3. `input.asset.action_conflict` (same name, different type across files)
-4. `input.context.flags_invalid` (auto_activate without auto_load — auto-corrected with warning)
+4. `input.context.flags_invalid` (auto_activate without auto_load —
+   auto-corrected with warning)
 5. `input.context.action_unresolved` (action name not found)
 6. `input.context.name_duplicate` (duplicate context names within one file)
-7. `input.context.trigger_ambiguous` (both `trigger` and `triggers` on same mapping)
+7. `input.context.trigger_ambiguous` (both `trigger` and `triggers` on same
+   mapping)
 8. `input.context.slot_unknown` (slot name not in registered InputSlots)
 9. `input.context.hydration_failed`
 10. `input.context.name_conflict`
 11. `input.import.index_registration_failed`
-12. `input.import.unknown_document_structure` (source JSON matches neither format)
+12. `input.import.unknown_document_structure` (source JSON matches neither
+    format)
 13. `input.import.skipped_predecessor_failed`
 14. `input.manifest.job_id_missing`
 15. `input.manifest.job_id_duplicate`
 16. `input.manifest.dep_missing_target`
 17. `input.manifest.dep_cycle`
-18. `input.manifest.dep_wrong_type` (reserved — not emitted; kept for diagnostic code stability)
+18. `input.manifest.dep_wrong_type` (reserved — not emitted; kept for diagnostic
+    code stability)
 19. `input.manifest.key_not_allowed`
 
 ## 7. Regression Protection
@@ -403,7 +514,8 @@ Must-not-regress areas:
 
 1. targeted unit tests for modified modules.
 2. importer integration tests for input command and manifest path.
-3. dependency scheduling tests for manifest batches (ordering + failure propagation + cycle rejection).
+3. dependency scheduling tests for manifest batches (ordering + failure
+   propagation + cycle rejection).
 4. compatibility checks on importer output with existing runtime/tool readers.
 
 (Exact command lines will be logged in Section 11 as phases complete.)
@@ -414,8 +526,12 @@ Done requires:
 
 1. All phase exit gates satisfied.
 2. Input import path locked to `InputImportJob -> InputImportPipeline`.
-3. Scene input binding infrastructure fully removed (`InputContextBindingRecord`, `InputContextBindingFlags`, `kInputContextBinding`, all code paths).
-4. Runtime lifecycle aligned with app-driven model (`EnumerateMountedInputContexts` + `HydrateInputContext`). PAK tool compatibility preserved for all non-removed record types.
+3. Scene input binding infrastructure fully removed
+   (`InputContextBindingRecord`, `InputContextBindingFlags`,
+   `kInputContextBinding`, all code paths).
+4. Runtime lifecycle aligned with app-driven model
+   (`EnumerateMountedInputContexts` + `HydrateInputContext`). PAK tool
+   compatibility preserved for all non-removed record types.
 5. Status ledger and evidence log fully updated.
 
 ## 11. Evidence Log
@@ -425,11 +541,15 @@ This section is updated during implementation.
 Current:
 
 1. P1 completed:
-   - `src/Oxygen/Data/InputMappingContextAsset.h`: `GetDefaultPriority()` accessor is present.
-   - `src/Oxygen/Data/ToStringConverters.cpp`: `InputMappingContextFlags` now stringifies `AutoLoad` and `AutoActivate`.
+   - `src/Oxygen/Data/InputMappingContextAsset.h`: `GetDefaultPriority()`
+     accessor is present.
+   - `src/Oxygen/Data/ToStringConverters.cpp`: `InputMappingContextFlags` now
+     stringifies `AutoLoad` and `AutoActivate`.
 2. P2 completed:
-   - `src/Oxygen/Cooker/Import/ImportRequest.h`: added `ImportRequest::InputPayload`.
-   - `src/Oxygen/Cooker/Import/ImportRequest.h`: added `OrchestrationMetadata` (`job_id`, `depends_on`).
+   - `src/Oxygen/Cooker/Import/ImportRequest.h`: added
+     `ImportRequest::InputPayload`.
+   - `src/Oxygen/Cooker/Import/ImportRequest.h`: added `OrchestrationMetadata`
+     (`job_id`, `depends_on`).
    - Added request-builder/files:
      - `src/Oxygen/Cooker/Import/InputImportSettings.h`
      - `src/Oxygen/Cooker/Import/InputImportRequestBuilder.h`
@@ -438,7 +558,8 @@ Current:
    - Input job/pipeline are implemented and wired:
      - `src/Oxygen/Cooker/Import/Internal/Jobs/InputImportJob.h/.cpp`
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h/.cpp`
-   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp` routes `request.input` to `InputImportJob`.
+   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp` routes `request.input` to
+     `InputImportJob`.
 4. P4 completed:
    - Manifest support for `type: "input"` implemented:
      - `src/Oxygen/Cooker/Import/ImportManifest.h/.cpp`
@@ -454,9 +575,11 @@ Current:
      - `src/Oxygen/Content/AssetLoader.h/.cpp`
      - `src/Oxygen/Content/InputContextHydration.h`
      - `src/Oxygen/Content/Internal/InputContextHydration.cpp`
-   - Added runtime coverage in `src/Oxygen/Content/test/AssetLoader_loading_test.cpp`.
+   - Added runtime coverage in
+     `src/Oxygen/Content/test/AssetLoader_loading_test.cpp`.
 6. P6 completed:
-   - No `INPT`/`InputContextBinding*` usage remains in `src` and `Examples` code paths.
+   - No `INPT`/`InputContextBinding*` usage remains in `src` and `Examples` code
+     paths.
    - Removed scene binding packing/validation from PakGen:
      - `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/packing/packers.py`
      - `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/packing/planner.py`
@@ -466,14 +589,17 @@ Current:
      - `src/Oxygen/Cooker/Tools/PakGen/tests/test_v6_input_assets.py`
      - `src/Oxygen/Cooker/Tools/PakGen/tests/_golden/input_scene_spec.yaml`
 7. P7 completed (static compatibility checks in this pass):
-   - Verified no remaining runtime/tool references to removed scene-binding component (`rg` scan under `src` + `Examples`).
-   - Verified modified PakGen Python sources/tests compile (`python -m py_compile` on touched files).
+   - Verified no remaining runtime/tool references to removed scene-binding
+     component (`rg` scan under `src` + `Examples`).
+   - Verified modified PakGen Python sources/tests compile
+     (`python -m py_compile` on touched files).
 8. P8 completed:
    - Shipped JSON schemas:
      - `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json`
      - `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json`
    - Install packaging ships schemas:
-     - `cmake/Install.cmake` installs `${PROJECT_SOURCE_DIR}/schemas` under `${OXYGEN_INSTALL_DATA}`.
+     - `cmake/Install.cmake` installs `${PROJECT_SOURCE_DIR}/schemas` under
+       `${OXYGEN_INSTALL_DATA}`.
    - Added schema validation tests:
      - `src/Oxygen/Cooker/test/Import/InputJsonSchema_test.cpp`
      - wired in `src/Oxygen/Cooker/test/CMakeLists.txt`.
@@ -481,13 +607,18 @@ Current:
      - `src/Oxygen/Cooker/Tools/ImportTool/README.md`
      - `design/content-pipeline/input-cooking-architecture.md`
 9. Additional remediation:
-   - Removed hard runtime symbol dependency on `platform::InputSlots` from cooker import pipeline by using canonical slot-name table + alias normalization (`src/Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.cpp`).
+   - Removed hard runtime symbol dependency on `platform::InputSlots` from
+     cooker import pipeline by using canonical slot-name table + alias
+     normalization
+     (`src/Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.cpp`).
 10. Verification caveat:
-    - No local build/test execution was performed in this loop per explicit instruction.
+    - No local build/test execution was performed in this loop per explicit
+      instruction.
 
 ## 12. Compliance Checklist
 
-This checklist proves each non-negotiable requirement is satisfied by the design.
+This checklist proves each non-negotiable requirement is satisfied by the
+design.
 
 | #   | Non-Negotiable Requirement                                                         | Satisfied By                                                                                                                                                                                          | Verified In                        |
 | --- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |

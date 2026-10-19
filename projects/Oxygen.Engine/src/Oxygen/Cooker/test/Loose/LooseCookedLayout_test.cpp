@@ -60,7 +60,6 @@ NOLINT_TEST(LooseCookedLayoutTest, DefaultsToStandardFileAndDirectoryNames)
   EXPECT_EQ(layout.scenes_subdir, "Scenes");
   EXPECT_EQ(layout.geometry_subdir, "Geometry");
   EXPECT_EQ(layout.materials_subdir, "Materials");
-  EXPECT_EQ(layout.input_subdir, "Input");
   EXPECT_EQ(layout.physics_dir, "Physics");
   EXPECT_EQ(layout.physics_resources_subdir, "Resources");
 }
@@ -75,11 +74,6 @@ NOLINT_TEST(LooseCookedLayoutTest, AppendsAssetExtensionToDescriptorFileNames)
     LooseCookedLayout::SceneDescriptorFileName("MyScene"), "MyScene.oscene");
   EXPECT_EQ(LooseCookedLayout::PhysicsSceneDescriptorFileName("MyScene"),
     "MyScene.opscene");
-  EXPECT_EQ(
-    LooseCookedLayout::InputActionDescriptorFileName("Jump"), "Jump.oiact");
-  EXPECT_EQ(
-    LooseCookedLayout::InputMappingContextDescriptorFileName("Gameplay"),
-    "Gameplay.oimap");
   EXPECT_EQ(LooseCookedLayout::PhysicsResourceDescriptorFileName("JointA"),
     "JointA.opres");
 }
@@ -91,8 +85,9 @@ NOLINT_TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kGeometry), "Geometry");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScene), "Scenes");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kPhysicsScene), "Scenes");
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputAction), "Input");
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputMappingContext), "Input");
+  // Input sources name their products under their own identity.
+  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputAction), "");
+  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputMappingContext), "");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kUnknown), "");
 
   layout.descriptors_dir = "Assets";

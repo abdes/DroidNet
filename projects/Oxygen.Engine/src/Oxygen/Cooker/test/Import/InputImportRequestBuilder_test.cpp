@@ -19,10 +19,13 @@ namespace {
 using oxygen::content::import::InputImportSettings;
 using oxygen::content::import::internal::BuildInputImportRequest;
 
-NOLINT_TEST(InputImportRequestBuilderTest, AcceptsPrimaryInputDocument)
+//! The request carries the source's identity, under which its products are
+//! named.
+NOLINT_TEST(InputImportRequestBuilderTest, AcceptsInputSource)
 {
   auto settings = InputImportSettings {};
   settings.source_path = "Content/Input/Player.input.json";
+  settings.virtual_path = "/Content/Input/Player.input";
   std::ostringstream errors;
 
   const auto request = BuildInputImportRequest(settings, errors);
@@ -30,10 +33,13 @@ NOLINT_TEST(InputImportRequestBuilderTest, AcceptsPrimaryInputDocument)
   ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_TRUE(errors.str().empty());
   EXPECT_TRUE(request->input.has_value());
+  EXPECT_EQ(request->asset_virtual_path, "/Content/Input/Player.input");
   EXPECT_FALSE(request->orchestration.has_value());
 }
 
-NOLINT_TEST(InputImportRequestBuilderTest, AcceptsStandaloneActionDocument)
+//! The standalone action format is gone: an action is declared by an input
+//! source like any other.
+NOLINT_TEST(InputImportRequestBuilderTest, RejectsStandaloneActionDocument)
 {
   auto settings = InputImportSettings {};
   settings.source_path = "Content/Input/Move.input-action.json";
@@ -41,8 +47,7 @@ NOLINT_TEST(InputImportRequestBuilderTest, AcceptsStandaloneActionDocument)
 
   const auto request = BuildInputImportRequest(settings, errors);
 
-  ASSERT_HAS_VALUE(request) << errors.str();
-  EXPECT_TRUE(request->input.has_value());
+  EXPECT_FALSE(request.has_value());
 }
 
 NOLINT_TEST(InputImportRequestBuilderTest, RejectsMissingSourcePath)

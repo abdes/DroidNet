@@ -3,7 +3,10 @@
   "name": "camera_switch",
   "starting_camera": 2,
   "starting_input_contexts": [
-    { "context_ref": "/.cooked/Input/CameraSwitchPlay.oimap", "priority": 100 }
+    {
+      "context_ref": "/.cooked/Input/camera_switch.input/CameraSwitchPlay.oimap",
+      "priority": 100
+    }
   ],
   "nodes": [
     { "name": "Root" },

@@ -93,20 +93,24 @@ inline auto TryVirtualPathToRelPath(const ImportRequest& request,
   return TryVirtualPathToRelPath(mount_root, virtual_path, relpath);
 }
 
-//! Where a single-asset job writes its descriptor.
+//! Where a job's identity lives in the cooked root.
 struct AssetPlacement final {
-  //! The asset's identity, from which its key derives.
+  //! The identity: a single asset, from which its key derives, or the
+  //! container an input job names its products under.
   std::string virtual_path;
 
-  //! The descriptor's path, relative to the cooked root.
+  //! The identity's path, relative to the cooked root: the descriptor of a
+  //! single asset, the folder of an input source's products.
   std::string descriptor_relpath;
 };
 
-//! Places a single-asset job's descriptor at the identity its request carries.
+//! Places a job at the identity its request carries.
 /*!
  The cooked layout is the identity: the descriptor of `/Mount/X/Y.ext` lives at
- `X/Y.ext` under the mount's cooked root. The identity must be a virtual path
- the engine accepts, inside the job's mount and ending in `extension`.
+ `X/Y.ext` under the mount's cooked root, and the products of the input source
+ `/Mount/X/Player.input` live under `X/Player.input/`. The identity must be a
+ virtual path the engine accepts, inside the job's mount and ending in
+ `extension`.
 
  @return The placement, or the diagnostic refusing the identity:
    `import.asset_virtual_path_missing`, the rule's `vpath.*` code, or

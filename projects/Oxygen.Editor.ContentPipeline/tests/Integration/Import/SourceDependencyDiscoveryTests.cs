@@ -72,7 +72,35 @@ public sealed class SourceDependencyDiscoveryTests
         _ = materialOnly.Files.Should().NotContain(input => input.RelativePath.EndsWith(".oscene.json", StringComparison.Ordinal));
     }
 
-    /// <summary>Typed scene references and starting input contexts remain cooked identities rather than becoming
+    /// <summary>An action or a mapping context named under a project input source cooks with that source, which the
+    /// scene that uses it then depends on.</summary>
+    /// <returns>The asynchronous dependency-discovery operation.</returns>
+    [TestMethod]
+    public async Task DiscoveryCooksTheInputSourceOfAReferencedProduct()
+    {
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene");
+        var controls = AssetPath.Parse("/Content/Input/Controls.input");
+        workspace.Scene.SetReferences(new SceneReferencesData { InputActions = [AssetPath.Parse("/Content/Input/Controls.input/Jump.oiact")] });
+        workspace.Scene.SetStartingInputContexts([new StartingInputContextData(AssetPath.Parse("/Content/Input/Controls.input/Gameplay.oimap"))]);
+        workspace.WriteText(
+            "Content/Input/Controls.input.json",
+            """{ "actions": [ { "name": "Jump", "type": "bool" } ], "contexts": [ { "name": "Gameplay", "priority": 3, "mappings": [] } ] }""");
+        await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
+        var discovery = new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
+
+        var graph = await discovery.DiscoverAsync(
+            workspace.ProjectContext,
+            [CookInputResolver.Resolve(workspace.ProjectContext, sceneUri, ContentCookInputRole.Primary)],
+            this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = graph.Diagnostics.Should().BeEmpty();
+        _ = graph.Assets.Should().Contain(input => input.AssetUri == controls && input.Kind == ContentCookAssetKind.Input);
+        _ = graph.Dependencies[sceneUri].Should().Equal(controls);
+        _ = graph.PublishedReferences.Should().BeEmpty();
+    }
+
+    /// <summary>Typed scene references that no project source produces remain cooked identities rather than becoming
     /// source jobs.</summary>
     /// <returns>The asynchronous dependency-discovery operation.</returns>
     [TestMethod]
@@ -82,17 +110,14 @@ public sealed class SourceDependencyDiscoveryTests
         var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene");
         var scriptOutputUri = AssetPath.Parse("/Content/Scripts/Orbit.oscript");
         var actionOutputUri = AssetPath.Parse("/Content/Input/Jump.oiact");
-        var mappingOutputUri = AssetPath.Parse("/Content/Input/Gameplay.oimap");
         var physicsOutputUri = AssetPath.Parse("/Content/Physics/Main.opscene");
-        AssetPath[] typedReferences = [scriptOutputUri, actionOutputUri, mappingOutputUri, physicsOutputUri];
+        AssetPath[] typedReferences = [scriptOutputUri, actionOutputUri, physicsOutputUri];
         workspace.Scene.SetReferences(new SceneReferencesData
         {
             Scripts = [scriptOutputUri],
             InputActions = [actionOutputUri],
             PhysicsSidecars = [physicsOutputUri],
         });
-        workspace.Scene.SetStartingInputContexts([new StartingInputContextData(mappingOutputUri)]);
-        workspace.WriteText("Content/Input/Controls.input.json", """{ "contexts": [ { "name": "Gameplay", "priority": 3, "mappings": [] } ] }""");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var discovery = new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
 

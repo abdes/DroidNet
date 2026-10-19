@@ -54,6 +54,7 @@
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Core/Version.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/OxCo/Algorithms.h>
@@ -287,15 +288,64 @@ namespace {
     return report;
   }
 
-  //! Analyzes a hand-written input file: the file is the only input, and each
-  //! declared action and mapping context is an output in the job's layout. A
-  //! file that is not valid JSON declares nothing here; the import reports
-  //! why.
+  //! The array `field` of `parent`, or an empty array.
+  auto JsonItems(const nlohmann::json& parent, const std::string_view field)
+    -> nlohmann::json
+  {
+    return parent.is_object() && parent.contains(field)
+        && parent.at(field).is_array()
+      ? parent.at(field)
+      : nlohmann::json::array();
+  }
+
+  //! Reports each action an input source names by virtual path: another
+  //! source's product, which the cook resolves, so that source cooks first.
+  auto ReportInputActionReferences(
+    const nlohmann::json& root, const AnalysisContext& context) -> void
+  {
+    const auto reference
+      = [&](const nlohmann::json& parent, const std::string_view field,
+          const std::string& location) -> void {
+      if (parent.is_object() && parent.contains(field)
+        && parent.at(field).is_string()
+        && parent.at(field).get_ref<const std::string&>().starts_with('/')) {
+        context.Reference(parent.at(field).get<std::string>(),
+          Kind::kInputAction, location + "." + std::string(field));
+      }
+    };
+    const auto contexts = JsonItems(root, "contexts");
+    for (size_t c = 0; c < contexts.size(); ++c) {
+      const auto mappings = JsonItems(contexts[c], "mappings");
+      for (size_t m = 0; m < mappings.size(); ++m) {
+        const auto mapping_path = "$.contexts[" + std::to_string(c)
+          + "].mappings[" + std::to_string(m) + "]";
+        reference(mappings[m], "action", mapping_path);
+        const auto triggers = JsonItems(mappings[m], "triggers");
+        for (size_t t = 0; t < triggers.size(); ++t) {
+          const auto trigger_path
+            = mapping_path + ".triggers[" + std::to_string(t) + "]";
+          reference(triggers[t], "chord_action", trigger_path);
+          for (const std::string_view list : { "combo_actions", "aux" }) {
+            const auto steps = JsonItems(triggers[t], list);
+            for (size_t i = 0; i < steps.size(); ++i) {
+              reference(steps[i], "action",
+                trigger_path + "." + std::string(list) + "[" + std::to_string(i)
+                  + "]");
+            }
+          }
+        }
+      }
+    }
+  }
+
+  //! Analyzes an input source: the file is the only input, and each declared
+  //! action and mapping context is an output named under the source's
+  //! identity. Actions it names by virtual path are its references. A file
+  //! that is not valid JSON declares nothing here; the import reports why.
   auto PrepareInputJob(const ImportManifestJob& job, AnalysisContext& context)
     -> co::Co<bool>
   {
     auto& report = *context.report;
-    const auto& layout = job.loose_cooked_layout;
     report.source_path = job.input.source_path;
     const auto text = co_await context.ReadText(report.source_path);
     const auto root = nlohmann::json::parse(text, nullptr, false, true);
@@ -311,31 +361,35 @@ namespace {
       }
       return item.at("name").get<std::string>();
     };
-    const auto file_name = report.source_path.filename().string();
-    if (file_name.ends_with(".input-action.json")) {
-      if (const auto name = declared_name(root); name.has_value()) {
-        context.Output(
-          layout.InputActionVirtualPath(*name), Kind::kInputAction);
-      }
-      co_return true;
-    }
-
-    for (const auto& [key, kind] : {
-           std::pair { "actions", Kind::kInputAction },
-           std::pair { "contexts", Kind::kInputMappingContext },
+    struct ProductKind final {
+      std::string_view key;
+      std::string_view extension;
+      Kind kind = Kind::kInputAction;
+    };
+    for (const auto& product : {
+           ProductKind {
+             .key = "actions",
+             .extension = data::kInputActionDescriptorExtension,
+             .kind = Kind::kInputAction,
+           },
+           ProductKind {
+             .key = "contexts",
+             .extension = data::kInputMappingContextDescriptorExtension,
+             .kind = Kind::kInputMappingContext,
+           },
          }) {
-      if (!root.contains(key) || !root.at(key).is_array()) {
+      if (!root.contains(product.key) || !root.at(product.key).is_array()) {
         continue;
       }
-      for (const auto& item : root.at(key)) {
+      for (const auto& item : root.at(product.key)) {
         if (const auto name = declared_name(item); name.has_value()) {
-          context.Output(kind == Kind::kInputAction
-              ? layout.InputActionVirtualPath(*name)
-              : layout.InputMappingContextVirtualPath(*name),
-            kind);
+          context.Output(
+            job.virtual_path + "/" + *name + std::string(product.extension),
+            product.kind);
         }
       }
     }
+    ReportInputActionReferences(root, context);
     co_return true;
   }
 
