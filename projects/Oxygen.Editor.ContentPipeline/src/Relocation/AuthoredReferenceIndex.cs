@@ -52,7 +52,7 @@ internal sealed class AuthoredReferenceIndex
         foreach (var path in mounts.SelectMany(mount => EnumerateFiles(root.Combine(mount.RelativePath))))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var isDescriptor = AuthoredReferenceFormat.IsDescriptor(path.FullPath);
+            var isDescriptor = AuthoredReferenceFormat.IsReferencingSource(path.FullPath);
             if ((!isDescriptor && !AuthoredReferenceFormat.IsImportSettings(path.FullPath)) || RelocationPaths.ToVirtual(project, path) is not { } virtualPath)
             {
                 continue;

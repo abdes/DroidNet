@@ -67,7 +67,7 @@ public sealed class SceneContent : IDocumentContent, IDisposable
     public static string NameOf(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
-        return name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
+        return name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal)
             ? name[..^AssetFileTypes.SceneDescriptor.Length]
             : Path.GetFileNameWithoutExtension(name);
     }

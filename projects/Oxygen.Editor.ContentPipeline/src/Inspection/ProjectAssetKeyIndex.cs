@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using DroidNet.Storage.Native;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Testably.Abstractions;
@@ -74,7 +75,7 @@ internal sealed class ProjectAssetKeyIndex(string cachePath, string[] paths)
             var root = project.ProjectRoot.Combine(mount.RelativePath).FullPath;
             var relative = Path.GetRelativePath(project.ProjectRoot.FullPath, root).Replace('\\', '/');
             if (Path.IsPathRooted(relative) || relative.StartsWith("..", StringComparison.Ordinal)
-                || relative.Split('/')[0].ToUpperInvariant() is ".COOKED" or ".IMPORTED" or ".BUILD" or ".PIPELINE" || !Directory.Exists(root))
+                || ProjectOutputFolders.Contains(relative) || !Directory.Exists(root))
             {
                 continue;
             }
@@ -84,7 +85,7 @@ internal sealed class ProjectAssetKeyIndex(string cachePath, string[] paths)
             foreach (var file in Directory.EnumerateFiles(root, "*.json", options))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (Path.GetExtension(file[..^5]).ToUpperInvariant() is ".OMAT" or ".OGEO" or ".OSCENE" or ".OSCRIPT" or ".OIACT" or ".OIMAP" or ".OPSCENE")
+                if (AssetFileTypes.Find(file) is { Category: AssetFileCategory.Descriptor, AssetType: not AssetType.Unknown })
                 {
                     yield return "/" + mount.Name + "/" + Path.GetRelativePath(root, file[..^5]).Replace('\\', '/');
                 }

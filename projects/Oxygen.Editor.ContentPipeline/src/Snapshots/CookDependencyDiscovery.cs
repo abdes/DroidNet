@@ -8,6 +8,7 @@ using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -260,7 +261,7 @@ internal sealed class CookDependencyDiscovery(
                 return this.assets[script.SourceAbsolutePath].AssetUri;
             }
 
-            if (Path.GetExtension(uri.Name).ToUpperInvariant() is ".OSCRIPT" or ".OIACT" or ".OIMAP" or ".OPSCENE")
+            if (AssetFileTypes.Find(uri.Name) is { Category: AssetFileCategory.Cooked, CookedExtension: AssetFileTypes.Script or AssetFileTypes.InputAction or AssetFileTypes.InputMappingContext or AssetFileTypes.PhysicsScene })
             {
                 _ = this.published.Add(uri);
                 return uri;

@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
@@ -227,7 +228,7 @@ public sealed partial class ContentPipelineService
         var mount = operation.Project.AuthoringMounts.Single(mount => string.Equals(mount.Name, settings.MountPoint, StringComparison.Ordinal));
         var conflict = settings.OutputDirectories.Select(directory => Path.Combine(operation.Project.ProjectRoot.FullPath, mount.RelativePath, directory))
             .Where(Directory.Exists).SelectMany(static directory => Directory.EnumerateFiles(directory, "*.json", SearchOption.AllDirectories))
-            .FirstOrDefault(static path => Path.GetExtension(Path.GetFileNameWithoutExtension(path)).ToUpperInvariant() is ".OMAT" or ".OGEO" or ".OSCENE");
+            .FirstOrDefault(static path => AssetFileTypes.ToCookedPath(Path.GetFileName(path)) is { } cooked && AssetFileTypes.IsProductOf(cooked, AssetFileCategory.Model));
         if (conflict is not null)
         {
             throw new InvalidDataException($"The replacement destination contains authored asset '{conflict}'. Keep it in a separate destination before replacing the model.");

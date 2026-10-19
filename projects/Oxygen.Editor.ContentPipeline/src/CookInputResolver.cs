@@ -58,24 +58,20 @@ internal static class CookInputResolver
         // A missing source is still the descriptor the asset would cook from, so the cook reports it missing.
         var location = FindAuthoringFile(project.LocateSource(identity));
         var type = location is null ? null : AssetFileTypes.Find(location.Path.Name);
-        var kind = type?.Category switch
+        var kind = type switch
         {
-            AssetFileCategory.Input => ContentCookAssetKind.Input,
-            AssetFileCategory.Model => ContentCookAssetKind.ForeignSource,
-            AssetFileCategory.Descriptor => Path.GetExtension(identity.Name).ToUpperInvariant() switch
-            {
-                ".OTEX" => ContentCookAssetKind.Texture,
-                ".OMAT" => ContentCookAssetKind.Material,
-                ".OGEO" => ContentCookAssetKind.Geometry,
-                ".OSCENE" => ContentCookAssetKind.Scene,
-                _ => throw new InvalidDataException($"Unsupported cook dependency '{uri}'."),
-            },
+            { Category: AssetFileCategory.Input } => ContentCookAssetKind.Input,
+            { Category: AssetFileCategory.Model } => ContentCookAssetKind.ForeignSource,
+            { Category: AssetFileCategory.Descriptor, CookedExtension: AssetFileTypes.Texture } => ContentCookAssetKind.Texture,
+            { Category: AssetFileCategory.Descriptor, CookedExtension: AssetFileTypes.Material } => ContentCookAssetKind.Material,
+            { Category: AssetFileCategory.Descriptor, CookedExtension: AssetFileTypes.Geometry } => ContentCookAssetKind.Geometry,
+            { Category: AssetFileCategory.Descriptor, CookedExtension: AssetFileTypes.Scene } => ContentCookAssetKind.Scene,
             _ => throw new InvalidDataException($"Unsupported cook dependency '{uri}'."),
         };
 
         var relative = Path.GetRelativePath(project.ProjectRoot.FullPath, location!.File.FullPath).Replace('\\', '/');
         if (Path.IsPathRooted(relative) || relative.StartsWith("../", StringComparison.Ordinal)
-            || relative.Split('/')[0].ToUpperInvariant() is ".COOKED" or ".BUILD" or ".PIPELINE" or ".IMPORTED")
+            || ProjectOutputFolders.Contains(relative))
         {
             throw new InvalidDataException($"Cook dependency '{uri}' does not resolve to a retained authoring file in this project.");
         }

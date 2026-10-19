@@ -205,7 +205,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             return await SceneFiles.FindByIdAsync(catalog, project, SceneId.FromValue(id)).ConfigureAwait(true);
         }
 
-        var sceneName = lastOpenedScene.EndsWith(Oxygen.Managed.Assets.AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
+        var sceneName = lastOpenedScene.EndsWith(Oxygen.Managed.Assets.AssetFileTypes.SceneDescriptor, StringComparison.Ordinal)
             ? lastOpenedScene[..^Oxygen.Managed.Assets.AssetFileTypes.SceneDescriptor.Length]
             : lastOpenedScene;
         return await SceneFiles.FindByNameAsync(catalog, project, sceneName).ConfigureAwait(true);

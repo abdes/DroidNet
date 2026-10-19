@@ -200,7 +200,7 @@ internal sealed class AssetIdentityReducer
 
     private bool CanReadMaterialDescriptor(FileSystemPath descriptorPath)
     {
-        if (!descriptorPath.Name.EndsWith(AssetFileTypes.Material + AssetFileTypes.DescriptorSuffix, StringComparison.OrdinalIgnoreCase))
+        if (!descriptorPath.Name.EndsWith(AssetFileTypes.Material + AssetFileTypes.DescriptorSuffix, StringComparison.Ordinal))
         {
             return true;
         }

@@ -78,7 +78,7 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
         var contentRoot = project.ProjectRoot.Combine(content.RelativePath).FullPath;
         var relative = Path.GetRelativePath(projectRoot, contentRoot).Replace('\\', '/');
         if (Path.IsPathRooted(relative) || string.Equals(relative, "..", StringComparison.Ordinal) || relative.StartsWith("../", StringComparison.Ordinal)
-            || relative.Split('/')[0].ToUpperInvariant() is ".BUILD" or ".COOKED" or ".IMPORTED" or ".PIPELINE")
+            || ProjectOutputFolders.Contains(relative))
         {
             throw new InvalidOperationException("The Content authoring mount must remain inside the project and outside derived output.");
         }

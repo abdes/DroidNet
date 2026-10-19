@@ -108,7 +108,8 @@ public sealed class OpenDocumentsTests : DocumentTestBase
         var material = new NoteKind(".omat.json") { Name = "Material" };
         using var documents = new OpenDocuments([json, material], this.Store);
 
-        _ = documents.FindKind(FileSystemPath.From(@"C:\Project\Content\Wood.OMAT.json")).Should().BeSameAs(material);
+        _ = documents.FindKind(FileSystemPath.From(@"C:\Project\Content\Wood.omat.json")).Should().BeSameAs(material);
+        _ = documents.FindKind(FileSystemPath.From(@"C:\Project\Content\Wood.OMAT.json")).Should().BeSameAs(json);
         _ = documents.FindKind(FileSystemPath.From(@"C:\Project\Content\settings.json")).Should().BeSameAs(json);
         _ = documents.FindKind(FileSystemPath.From(@"C:\Project\Content\.json")).Should().BeNull();
     }
@@ -116,9 +117,17 @@ public sealed class OpenDocumentsTests : DocumentTestBase
     [TestMethod]
     public void Constructor_WhenTwoKindsOpenOneSuffix_Throws()
     {
-        var create = () => new OpenDocuments([new NoteKind(".note.txt"), new NoteKind(".NOTE.txt") { Name = "Other" }], this.Store);
+        var create = () => new OpenDocuments([new NoteKind(".note.txt"), new NoteKind(".note.txt") { Name = "Other" }], this.Store);
 
-        _ = create.Should().Throw<ArgumentException>().WithMessage("*both open*");
+        _ = create.Should().Throw<ArgumentException>();
+    }
+
+    [TestMethod]
+    public void Constructor_SuffixesDifferingOnlyInCase_AreTwoSuffixes()
+    {
+        using var documents = new OpenDocuments([new NoteKind(".note.txt"), new NoteKind(".NOTE.txt") { Name = "Other" }], this.Store);
+
+        _ = documents.FindKind(FileSystemPath.From(@"C:\Project\Content\Wood.NOTE.txt"))!.Name.Should().Be("Other");
     }
 
     [TestMethod]

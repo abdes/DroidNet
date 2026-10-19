@@ -90,7 +90,7 @@ internal sealed partial class CookSourceAnalyzer(
         => scene?.ScriptReferences.Select(static uri =>
         {
             var path = uri.VirtualPath;
-            var kind = path.EndsWith(AssetFileTypes.Script, StringComparison.OrdinalIgnoreCase) ? "script" : "asset";
+            var kind = path.EndsWith(AssetFileTypes.Script, StringComparison.Ordinal) ? "script" : "asset";
             return new NativeLogicalDependency(path, kind, ObjectPath: "scripting", Required: true);
         }) ?? [];
 

@@ -179,7 +179,7 @@ internal static class AssetRelocationPlanner
             throw new AssetRelocationException("A folder cannot be moved into itself.");
         }
 
-        if (!isDirectory && !string.Equals(RelocationPaths.GetExtension(move.Source.Name), RelocationPaths.GetExtension(name), StringComparison.OrdinalIgnoreCase))
+        if (!isDirectory && !string.Equals(AssetFileTypes.GetSuffix(move.Source.Name), AssetFileTypes.GetSuffix(name), StringComparison.OrdinalIgnoreCase))
         {
             throw new AssetRelocationException("A rename keeps the asset's type; change only its name.");
         }
@@ -221,10 +221,10 @@ internal static class AssetRelocationPlanner
         var newStem = RelocationPaths.GetDisplayName(target.Name);
         FileSystemPath Companion(FileSystemPath file)
             => targetFolder.Combine(string.Equals(RelocationPaths.GetDisplayName(file.Name), stem, FileSystemPath.NameComparison)
-                ? newStem + RelocationPaths.GetExtension(file.Name)
+                ? newStem + AssetFileTypes.GetSuffix(file.Name)
                 : file.Name);
 
-        if (source.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
+        if (source.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal))
         {
             var content = File.ReadAllBytes(source.FullPath);
             foreach (var image in AuthoredReferenceFormat.ReadTextureSources(source, content)
@@ -236,7 +236,7 @@ internal static class AssetRelocationPlanner
             return;
         }
 
-        foreach (var descriptor in index.Descriptors.Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
+        foreach (var descriptor in index.Descriptors.Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)
             && descriptor.Location.Parent == folder && !map.IsMoved(descriptor.Location)))
         {
             if (AuthoredReferenceFormat.ReadTextureSources(descriptor.Location, File.ReadAllBytes(descriptor.Location.FullPath)).Contains(source))

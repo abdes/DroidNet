@@ -41,7 +41,7 @@ public sealed class SceneImportReplacement
         ArgumentNullException.ThrowIfNull(project);
         var root = ImportSourceRetention.ResolveDestination(project, bundleName);
         var before = await CookRootImage.CaptureAsync(root, copyTo: null, cancellationToken).ConfigureAwait(false);
-        var sidecars = before.Files.Keys.Where(static path => path.EndsWith(NativeSceneImportSettings.SidecarSuffix, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var sidecars = before.Files.Keys.Where(static path => path.EndsWith(NativeSceneImportSettings.SidecarSuffix, StringComparison.Ordinal)).ToArray();
         if (!before.Exists || sidecars.Length != 1)
         {
             throw new InvalidDataException("The existing folder must contain one configured model. Choose another name or import the existing source in place.");

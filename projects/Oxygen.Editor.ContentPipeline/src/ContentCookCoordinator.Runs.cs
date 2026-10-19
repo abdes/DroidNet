@@ -120,7 +120,7 @@ public sealed partial class ContentCookCoordinator
         }
     }
 
-    private static bool IsModelSource(AssetPath uri) => Path.GetExtension(uri.Name).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX";
+    private static bool IsModelSource(AssetPath uri) => AssetFileTypes.Is(uri.Name, AssetFileCategory.Model);
 
     private static string GetScopeName(ContentCookOperation operation, CookRunRequest request)
     {
@@ -189,10 +189,10 @@ public sealed partial class ContentCookCoordinator
         };
         if (request.ScopeUri is { } assetUri && request.TargetKind is CookTargetKind.Asset or CookTargetKind.CurrentScene)
         {
-            var kind = request.TargetKind == CookTargetKind.CurrentScene || assetUri.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
-                ? ContentCookAssetKind.Scene : assetUri.Name.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
-                    ? ContentCookAssetKind.Material : assetUri.Name.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase)
-                        ? ContentCookAssetKind.Geometry : assetUri.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
+            var kind = request.TargetKind == CookTargetKind.CurrentScene || assetUri.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal)
+                ? ContentCookAssetKind.Scene : assetUri.Name.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.Ordinal)
+                    ? ContentCookAssetKind.Material : assetUri.Name.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.Ordinal)
+                        ? ContentCookAssetKind.Geometry : assetUri.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)
                             ? ContentCookAssetKind.Texture : request.Import is not null || request.IsReimport || IsModelSource(assetUri) ? ContentCookAssetKind.ForeignSource : ContentCookAssetKind.Unknown;
             snapshot = snapshot with { Assets = snapshot.Assets.Add(assetUri, new(assetUri, kind, CookAssetState.Preparing)) };
         }

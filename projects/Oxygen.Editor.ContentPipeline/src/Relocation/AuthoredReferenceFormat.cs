@@ -20,27 +20,24 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// </summary>
 internal static class AuthoredReferenceFormat
 {
-    private static readonly string[] DescriptorExtensions =
-        [AssetFileTypes.SceneDescriptor, AssetFileTypes.MaterialDescriptor, AssetFileTypes.GeometryDescriptor, AssetFileTypes.TextureDescriptor, AssetFileTypes.PhysicsSceneDescriptor, AssetFileTypes.CollisionShapeDescriptor, AssetFileTypes.PhysicsMaterialDescriptor];
-
     private static readonly JsonSerializerOptions WriteOptions = new()
     {
         WriteIndented = true,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    /// <summary>Tests whether a file is an authored descriptor whose JSON may reference other assets.</summary>
+    /// <summary>Tests whether a file is an authored source whose JSON may reference other assets.</summary>
     /// <param name="path">The file path.</param>
-    /// <returns>Whether the file is a scene, material, geometry, texture or physics descriptor.</returns>
-    public static bool IsDescriptor(string path)
-        => DescriptorExtensions.Any(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
+    /// <returns>Whether the file is an authored descriptor or an input file.</returns>
+    public static bool IsReferencingSource(string path)
+        => AssetFileTypes.Find(path)?.Category is AssetFileCategory.Descriptor or AssetFileCategory.Input;
 
     /// <summary>Tests whether a file is a model import sidecar.</summary>
     /// <param name="path">The file path.</param>
     /// <returns>Whether the file is <c>&lt;model&gt;.import.json</c> for a glTF, GLB or FBX source.</returns>
     public static bool IsImportSettings(string path)
-        => path.EndsWith(NativeSceneImportSettings.SidecarSuffix, StringComparison.OrdinalIgnoreCase)
-            && Path.GetExtension(path[..^NativeSceneImportSettings.SidecarSuffix.Length]).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX";
+        => AssetFileTypes.Is(path, AssetFileCategory.ImportSettings)
+            && AssetFileTypes.Is(path[..^AssetFileTypes.ImportSettings.Length], AssetFileCategory.Model);
 
     /// <summary>Reads the asset identities a descriptor references.</summary>
     /// <param name="content">The descriptor bytes.</param>
@@ -169,7 +166,7 @@ internal static class AuthoredReferenceFormat
         }
 
         // A copied scene is a scene of its own: it takes a new identity, and the name of its file.
-        if (root is JsonObject scene && targetPath.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase))
+        if (root is JsonObject scene && targetPath.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal))
         {
             scene["Id"] = Guid.NewGuid().ToString("D");
             scene["Name"] = targetPath.Name[..^AssetFileTypes.SceneDescriptor.Length];
@@ -233,7 +230,7 @@ internal static class AuthoredReferenceFormat
     private static JsonValue[] EnumerateFileReferences(JsonObject descriptor, FileSystemPath path)
     {
         var nodes = new List<JsonNode?>();
-        if (path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
+        if (path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal))
         {
             nodes.Add(descriptor["source"]);
             if (descriptor["sources"] is JsonArray sources)
@@ -241,7 +238,7 @@ internal static class AuthoredReferenceFormat
                 nodes.AddRange(sources.OfType<JsonObject>().Select(static source => source["file"]));
             }
         }
-        else if (path.Name.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase) && descriptor["buffers"] is JsonArray buffers)
+        else if (path.Name.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.Ordinal) && descriptor["buffers"] is JsonArray buffers)
         {
             nodes.AddRange(buffers.OfType<JsonObject>().Select(static buffer => buffer["uri"]));
         }

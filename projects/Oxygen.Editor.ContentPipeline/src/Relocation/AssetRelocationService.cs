@@ -262,7 +262,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             var target = GetUniquePath(folder, path.Name, isDirectory, reserved);
             map.AddMove(new(path, target, isDirectory));
             copies.Add(RelocationPaths.ToVirtual(project, target)!);
-            if (!isDirectory && path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
+            if (!isDirectory && path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal))
             {
                 await AddTextureImageCopiesAsync(map, path, target, folder, reserved, cancellationToken).ConfigureAwait(false);
             }
@@ -279,7 +279,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             .Where(image => image.Parent == path.Parent && File.Exists(image.FullPath)))
         {
             var name = image.Name;
-            var renamed = string.Equals(RelocationPaths.GetDisplayName(name), stem, FileSystemPath.NameComparison) ? newStem + RelocationPaths.GetExtension(name) : name;
+            var renamed = string.Equals(RelocationPaths.GetDisplayName(name), stem, FileSystemPath.NameComparison) ? newStem + AssetFileTypes.GetSuffix(name) : name;
             map.AddMove(new(image, GetUniquePath(folder, renamed, isDirectory: false, reserved), IsDirectory: false));
         }
     }
@@ -294,7 +294,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
 
         var scenes = isDirectory
             ? Directory.EnumerateFiles(path.FullPath, "*" + AssetFileTypes.SceneDescriptor, SearchOption.AllDirectories)
-            : path.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase) ? [path.FullPath] : [];
+            : path.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal) ? [path.FullPath] : [];
         if (scenes.FirstOrDefault(scene => AuthoredReferenceFormat.ReadSceneId(File.ReadAllBytes(scene)) == start) is { } found)
         {
             throw new AssetRelocationException($"'{RelocationPaths.GetDisplayName(Path.GetFileName(found))}' is the project's start scene and cannot be deleted. Choose another start scene first.");
@@ -357,9 +357,9 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             }
         }
 
-        if (isDirectory || !path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase))
+        if (isDirectory || !path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal))
         {
-            var descriptors = isDirectory ? [] : index.Descriptors.Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
+            var descriptors = isDirectory ? [] : index.Descriptors.Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)
                 && descriptor.Location.Parent == path.Parent
                 && AuthoredReferenceFormat.ReadTextureSources(descriptor.Location, File.ReadAllBytes(descriptor.Location.FullPath)).Contains(path))
                 .Select(static descriptor => descriptor.Location);
@@ -369,7 +369,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         // An image another texture still uses stays; only this texture's own images go with it.
         var folder = path.Parent;
         var shared = index.Descriptors
-            .Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
+            .Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)
                 && descriptor.Location != path
                 && descriptor.Location.Parent == folder)
             .SelectMany(static descriptor => AuthoredReferenceFormat.ReadTextureSources(descriptor.Location, File.ReadAllBytes(descriptor.Location.FullPath)))
@@ -381,7 +381,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
 
     private static FileSystemPath GetUniquePath(FileSystemPath folder, string name, bool isDirectory, HashSet<FileSystemPath> reserved)
     {
-        var extension = isDirectory ? string.Empty : RelocationPaths.GetExtension(name);
+        var extension = isDirectory ? string.Empty : AssetFileTypes.GetSuffix(name);
         var stem = name[..^extension.Length];
         var candidate = folder.Combine(name);
         for (var index = 2; File.Exists(candidate.FullPath) || Directory.Exists(candidate.FullPath) || reserved.Contains(candidate) || ScriptSourceNames.FindCollision(candidate) is not null; index++)
@@ -434,7 +434,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 foreach (var (source, target) in pairs)
                 {
                     var content = await File.ReadAllBytesAsync(source.FullPath, CancellationToken.None).ConfigureAwait(false);
-                    var bytes = AuthoredReferenceFormat.IsDescriptor(source.FullPath) ? AuthoredReferenceFormat.RewriteCopy(source, target, content, map, mounts) : content;
+                    var bytes = AuthoredReferenceFormat.IsReferencingSource(source.FullPath) ? AuthoredReferenceFormat.RewriteCopy(source, target, content, map, mounts) : content;
                     _ = Directory.CreateDirectory(target.Parent!.FullPath);
                     _ = await files.WriteAsync(target.FullPath, bytes, FileVersion.Missing, CancellationToken.None).ConfigureAwait(false);
                     created.Add(target.FullPath);

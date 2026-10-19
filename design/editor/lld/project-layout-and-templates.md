@@ -246,7 +246,9 @@ Rules:
 - rooted paths are rejected.
 - paths containing `..` segments are rejected.
 - paths resolving outside `<ProjectRoot>` are rejected.
-- paths under `.cooked`, `.imported`, `.build`, or `.oxygen` are rejected.
+- paths in a pipeline output folder, any folder whose name starts with a dot
+  (`.cooked`, `.imported`, `.build`, `.pipeline`), are rejected
+  (`ProjectOutputFolders`).
 - mount names are unique case-insensitively across authoring and local mounts.
 - mount names match `^[A-Za-z][A-Za-z0-9_-]{0,63}$`.
 - reserved mount names are rejected case-insensitively: `Engine`, `Project`,

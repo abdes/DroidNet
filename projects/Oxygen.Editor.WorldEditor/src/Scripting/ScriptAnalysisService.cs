@@ -332,7 +332,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         }
 
         var schema = this.inputSchemas.GetOrAdd(
-            path.Name.EndsWith(AssetFileTypes.InputActionFile, StringComparison.OrdinalIgnoreCase) ? "oxygen.input-action.schema.json" : "oxygen.input.schema.json",
+            path.Name.EndsWith(AssetFileTypes.InputActionFile, StringComparison.Ordinal) ? "oxygen.input-action.schema.json" : "oxygen.input.schema.json",
             this.LoadInputSchema);
         var problems = InputFileCheck.Check(path.FullPath, System.Text.Encoding.UTF8.GetString(bytes), schema);
         var snapshot = new ScriptAnalysisSnapshot(path, AssetFileTypes.ToIdentity(virtualPath), problems, [], ParametersOutOfDate: false);

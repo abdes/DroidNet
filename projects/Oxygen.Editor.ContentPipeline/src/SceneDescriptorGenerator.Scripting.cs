@@ -54,7 +54,7 @@ public sealed partial class SceneDescriptorGenerator
                 }
 
                 var scriptPath = script.VirtualPath;
-                if (!scriptPath.EndsWith(AssetFileTypes.Script, StringComparison.OrdinalIgnoreCase)
+                if (!scriptPath.EndsWith(AssetFileTypes.Script, StringComparison.Ordinal)
                     || (CookInputResolver.IsAuthoringUri(scope.Project, script) && CookInputResolver.TryResolveScript(scope.Project, script, ContentCookInputRole.Dependency) is null))
                 {
                     _ = At(parameter: null, DiagnosticSeverity.Error, ScriptDiagnosticCodes.SlotScriptMissing, $"{Capitalize(ScriptSlotDiagnostics.Describe(site))} runs '{scriptPath}', which no longer exists. Pick another script.");

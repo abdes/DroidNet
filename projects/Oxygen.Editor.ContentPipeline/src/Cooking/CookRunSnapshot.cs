@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -61,7 +62,7 @@ public sealed record CookRunSnapshot
         :
         [
             .. this.Assets.Values.Where(static asset => asset.State is CookAssetState.Updated or CookAssetState.Reused
-            && Path.GetExtension(asset.AssetUri.Name).ToUpperInvariant() is ".OGEO" or ".OMAT" or ".OSCENE")
+            && AssetFileTypes.IsProductOf(asset.AssetUri.Name, AssetFileCategory.Model))
             .Select(static asset => asset.AssetUri).Order(),
         ];
 }

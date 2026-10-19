@@ -17,6 +17,15 @@ public static class ProjectOutputFolders
     public static bool Contains(ProjectMountPoint mount)
     {
         ArgumentNullException.ThrowIfNull(mount);
-        return mount.RelativePath.Trim().Replace('\\', '/').Trim('/').Split('/').Any(static segment => segment.StartsWith('.'));
+        return Contains(mount.RelativePath);
+    }
+
+    /// <summary>Checks whether a path below the project root lies in one of the pipeline's output folders.</summary>
+    /// <param name="projectRelativePath">A folder or file path relative to the project root.</param>
+    /// <returns><see langword="true"/> when a segment of the path starts with a dot, such as <c>.cooked/Content</c>.</returns>
+    public static bool Contains(string projectRelativePath)
+    {
+        ArgumentNullException.ThrowIfNull(projectRelativePath);
+        return projectRelativePath.Trim().Replace('\\', '/').Trim('/').Split('/').Any(static segment => segment.StartsWith('.') && !string.Equals(segment, ".", StringComparison.Ordinal));
     }
 }

@@ -18,7 +18,7 @@ public static class DocumentKinds
         ArgumentNullException.ThrowIfNull(path);
         var name = path.Name;
         return kind.FileSuffixes
-            .Where(suffix => name.Length > suffix.Length && name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            .Where(suffix => name.Length > suffix.Length && name.EndsWith(suffix, StringComparison.Ordinal))
             .MaxBy(static suffix => suffix.Length);
     }
 

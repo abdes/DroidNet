@@ -4,6 +4,7 @@
 
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets;
@@ -50,8 +51,8 @@ public static class AssetKinds
         { Category: AssetFileCategory.Image } => AssetKind.Image,
         { Category: AssetFileCategory.Model } => AssetKind.ForeignSource,
         { Category: AssetFileCategory.ImportSettings } => AssetKind.ImportSettings,
-        { Category: AssetFileCategory.CookedResource } type => type.Suffix.Equals(".table", StringComparison.OrdinalIgnoreCase) ? AssetKind.CookedTable : AssetKind.CookedData,
-        { CookedExtension: AssetFileTypes.Texture } => AssetKind.Texture,
+        { Category: AssetFileCategory.CookedResource } type => type.Suffix.Equals(".table", StringComparison.Ordinal) ? AssetKind.CookedTable : AssetKind.CookedData,
+        { CookedFileKind: FileKind.TextureDescriptor } => AssetKind.Texture,
         { AssetType: var assetType } => FromCookedType((byte)assetType),
     };
 }

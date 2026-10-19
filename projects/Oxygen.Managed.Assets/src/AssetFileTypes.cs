@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets;
@@ -91,12 +92,11 @@ public static class AssetFileTypes
     /// <summary>The suffix of the import settings stored beside a model.</summary>
     public const string ImportSettings = ".import.json";
 
-    private static readonly (string Extension, AssetType Type)[] CookedDescriptors =
+    private static readonly (string Extension, AssetType Type)[] CookedAssets =
     [
         (Material, AssetType.Material),
         (Geometry, AssetType.Geometry),
         (Scene, AssetType.Scene),
-        (Texture, AssetType.Unknown),
         (Script, AssetType.Script),
         (InputAction, AssetType.InputAction),
         (InputMappingContext, AssetType.InputMappingContext),
@@ -105,22 +105,26 @@ public static class AssetFileTypes
         (CollisionShape, AssetType.CollisionShape),
     ];
 
+    private static readonly string[] ModelProducts = [Geometry, Material, Texture, Scene];
+
     private static readonly AssetFileType[] Types =
     [
         .. new AssetFileType[]
         {
-            new(InputActionFile, AssetFileCategory.Input, CookedExtension: null, AssetType.Unknown),
-            new(InputFile, AssetFileCategory.Input, CookedExtension: null, AssetType.Unknown),
+            new(InputActionFile, AssetFileCategory.Input, CookedExtension: null, AssetType.Unknown) { ProductExtensions = [InputAction] },
+            new(InputFile, AssetFileCategory.Input, CookedExtension: null, AssetType.Unknown) { ProductExtensions = [InputAction, InputMappingContext] },
             new(ImportSettings, AssetFileCategory.ImportSettings, CookedExtension: null, AssetType.Unknown),
             new(LuaScript, AssetFileCategory.Script, Script, AssetType.Script),
             new(LuauScript, AssetFileCategory.Script, Script, AssetType.Script),
+            new(TextureDescriptor, AssetFileCategory.Descriptor, Texture, AssetType.Unknown) { CookedFileKind = FileKind.TextureDescriptor },
+            new(Texture, AssetFileCategory.Cooked, Texture, AssetType.Unknown) { CookedFileKind = FileKind.TextureDescriptor },
             new(Buffer, AssetFileCategory.Cooked, Buffer, AssetType.Unknown),
             new(PhysicsResource, AssetFileCategory.Cooked, PhysicsResource, AssetType.Unknown),
             new(".table", AssetFileCategory.CookedResource, CookedExtension: null, AssetType.Unknown),
             new(".data", AssetFileCategory.CookedResource, CookedExtension: null, AssetType.Unknown),
-            new(".gltf", AssetFileCategory.Model, CookedExtension: null, AssetType.Unknown),
-            new(".glb", AssetFileCategory.Model, CookedExtension: null, AssetType.Unknown),
-            new(".fbx", AssetFileCategory.Model, CookedExtension: null, AssetType.Unknown),
+            new(".gltf", AssetFileCategory.Model, CookedExtension: null, AssetType.Unknown) { ProductExtensions = ModelProducts },
+            new(".glb", AssetFileCategory.Model, CookedExtension: null, AssetType.Unknown) { ProductExtensions = ModelProducts },
+            new(".fbx", AssetFileCategory.Model, CookedExtension: null, AssetType.Unknown) { ProductExtensions = ModelProducts },
             new(".png", AssetFileCategory.Image, CookedExtension: null, AssetType.Unknown),
             new(".jpg", AssetFileCategory.Image, CookedExtension: null, AssetType.Unknown),
             new(".jpeg", AssetFileCategory.Image, CookedExtension: null, AssetType.Unknown),
@@ -128,8 +132,8 @@ public static class AssetFileTypes
             new(".bmp", AssetFileCategory.Image, CookedExtension: null, AssetType.Unknown),
             new(".hdr", AssetFileCategory.Image, CookedExtension: null, AssetType.Unknown),
         },
-        .. CookedDescriptors.Select(static entry => new AssetFileType(entry.Extension + DescriptorSuffix, AssetFileCategory.Descriptor, entry.Extension, entry.Type)),
-        .. CookedDescriptors.Select(static entry => new AssetFileType(entry.Extension, AssetFileCategory.Cooked, entry.Extension, entry.Type)),
+        .. CookedAssets.Select(static entry => new AssetFileType(entry.Extension + DescriptorSuffix, AssetFileCategory.Descriptor, entry.Extension, entry.Type)),
+        .. CookedAssets.Select(static entry => new AssetFileType(entry.Extension, AssetFileCategory.Cooked, entry.Extension, entry.Type)),
     ];
 
     // Longest suffix first, so that ".omat.json" matches as a descriptor rather than as an unknown ".json".
@@ -138,14 +142,37 @@ public static class AssetFileTypes
     /// <summary>Gets every file type the pipeline knows.</summary>
     public static IReadOnlyList<AssetFileType> All => Types;
 
-    /// <summary>Finds the type of a file from its name or path.</summary>
+    /// <summary>
+    /// Finds the type of a file from its name or path. Oxygen's suffixes match exactly, as the engine hashes the
+    /// identity they end; model and image formats match in any case, as the cooker detects them.
+    /// </summary>
     /// <param name="path">A file name, path or virtual path.</param>
     /// <returns>The file's type, or null when the pipeline does not know it.</returns>
     public static AssetFileType? Find(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
-        return BySuffixLength.FirstOrDefault(type => path.EndsWith(type.Suffix, StringComparison.OrdinalIgnoreCase));
+        return BySuffixLength.FirstOrDefault(type => type.Matches(path));
     }
+
+    /// <summary>
+    /// Gets a file name's suffix: its known type's suffix as the name spells it, keeping compound suffixes such as
+    /// <c>.omat.json</c> and <c>.input.json</c> whole, and otherwise its last extension.
+    /// </summary>
+    /// <param name="fileName">The file name.</param>
+    /// <returns>The suffix, such as <c>.omat.json</c> or <c>.png</c>; empty for a name without one.</returns>
+    public static string GetSuffix(string fileName)
+    {
+        ArgumentNullException.ThrowIfNull(fileName);
+        return Find(fileName) is { } type && fileName.Length > type.Suffix.Length ? fileName[^type.Suffix.Length..] : Path.GetExtension(fileName);
+    }
+
+    /// <summary>Checks whether a file is a cooked asset that containers of a category produce, such as a model's geometry.</summary>
+    /// <param name="path">A file name, path or virtual path.</param>
+    /// <param name="container">The category of the containers, such as <see cref="AssetFileCategory.Model"/>.</param>
+    /// <returns><see langword="true"/> when the file is a cooked descriptor of a type those containers produce.</returns>
+    public static bool IsProductOf(string path, AssetFileCategory container)
+        => Find(path) is { Category: AssetFileCategory.Cooked, CookedExtension: { } extension }
+            && Types.Any(type => type.Category == container && type.ProductExtensions.Contains(extension, StringComparer.Ordinal));
 
     /// <summary>Gets the suffixes of every file type of a category, such as the image formats textures import from.</summary>
     /// <param name="category">The category.</param>

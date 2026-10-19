@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
@@ -104,7 +105,7 @@ internal sealed partial class CookPublicationTransaction
             ?? throw new InvalidDataException("Produced metadata does not belong to a project authoring source.");
         var source = CookInputResolver.Resolve(project, sourceUri, ContentCookInputRole.Dependency);
         if (source.Kind != ContentCookAssetKind.ForeignSource
-            || Path.GetExtension(primary.Name).ToUpperInvariant() is not (".GLTF" or ".GLB" or ".FBX")
+            || !AssetFileTypes.Is(primary.Name, AssetFileCategory.Model)
             || source.SourceAbsolutePath != primary)
         {
             throw new InvalidDataException("Produced metadata does not identify its supported model source.");

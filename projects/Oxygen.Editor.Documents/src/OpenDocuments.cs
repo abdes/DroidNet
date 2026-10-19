@@ -138,7 +138,7 @@ public sealed partial class OpenDocuments : IDisposable
 
     private static void ValidateSuffixes(IReadOnlyList<IDocumentKind> kinds)
     {
-        var owners = new Dictionary<string, IDocumentKind>(StringComparer.OrdinalIgnoreCase);
+        var owners = new Dictionary<string, IDocumentKind>(StringComparer.Ordinal);
         foreach (var kind in kinds)
         {
             foreach (var suffix in kind.FileSuffixes)

@@ -52,6 +52,62 @@ public sealed class AssetFileTypesTests
     }
 
     [TestMethod]
+    [DataRow("/Content/Input/Player.input.json", new[] { ".oiact", ".oimap" })]
+    [DataRow("/Content/Input/Jump.input-action.json", new[] { ".oiact" })]
+    [DataRow("C:/Models/Ship.glb", new[] { ".ogeo", ".omat", ".otex", ".oscene" })]
+    public void ContainerNamesTheAssetTypesItProduces(string path, string[] products)
+    {
+        var type = AssetFileTypes.Find(path)!;
+
+        _ = type.ProductExtensions.Should().BeEquivalentTo(products);
+        _ = AssetFileTypes.ToCookedPath(path).Should().BeNull();
+    }
+
+    [TestMethod]
+    [DataRow("/Content/Materials/Red.omat.json")]
+    [DataRow("/Content/Scripts/Door.lua")]
+    [DataRow("/Content/Textures/Sky.otex.json")]
+    public void SingleAssetSourceIsNoContainer(string path)
+        => _ = AssetFileTypes.Find(path)!.ProductExtensions.Should().BeEmpty();
+
+    [TestMethod]
+    [DataRow("/Content/Textures/Sky.otex.json")]
+    [DataRow("/Content/Textures/Sky.otex")]
+    public void TextureDescriptorHasItsCookedFileKind(string path)
+        => _ = AssetFileTypes.Find(path)!.CookedFileKind.Should().Be(Persistence.LooseCooked.FileKind.TextureDescriptor);
+
+    [TestMethod]
+    [DataRow("/Content/Materials/Red.OMAT.json")]
+    [DataRow("/Content/Scenes/Level.OSCENE")]
+    [DataRow("/Content/Input/Player.INPUT.json")]
+    public void OxygenSuffixesMatchExactly(string path)
+        => _ = AssetFileTypes.Find(path).Should().BeNull();
+
+    [TestMethod]
+    [DataRow("C:/Models/Crate.FBX", AssetFileCategory.Model)]
+    [DataRow("C:/Images/Sky.PNG", AssetFileCategory.Image)]
+    public void ForeignFormatsMatchInAnyCase(string path, AssetFileCategory category)
+        => _ = AssetFileTypes.Find(path)!.Category.Should().Be(category);
+
+    [TestMethod]
+    [DataRow("Red.omat.json", ".omat.json")]
+    [DataRow("Player.input.json", ".input.json")]
+    [DataRow("Crate.glb.import.json", ".import.json")]
+    [DataRow("Sky.PNG", ".PNG")]
+    [DataRow("notes.txt", ".txt")]
+    [DataRow("Folder", "")]
+    public void SuffixKeepsCompoundSuffixesWhole(string fileName, string expected)
+        => _ = AssetFileTypes.GetSuffix(fileName).Should().Be(expected);
+
+    [TestMethod]
+    [DataRow("/Content/Models/Hull.ogeo", true)]
+    [DataRow("/Content/Models/Paint.otex", true)]
+    [DataRow("/Content/Models/Paint.omat.json", false)]
+    [DataRow("/Content/Input/Jump.oiact", false)]
+    public void ModelProductsAreTheCookedTypesModelsProduce(string path, bool expected)
+        => _ = AssetFileTypes.IsProductOf(path, AssetFileCategory.Model).Should().Be(expected);
+
+    [TestMethod]
     public void EverySuffixNamesOneType()
         => _ = AssetFileTypes.All.Select(static type => type.Suffix.ToUpperInvariant()).Should().OnlyHaveUniqueItems();
 

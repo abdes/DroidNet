@@ -253,6 +253,19 @@ public sealed class AssetRelocationTests
         _ = copies.Should().ContainSingle().Which.Name.Should().Be("move (2).lua");
     }
 
+    /// <summary>A copied input file keeps its compound suffix, so the copy is still an input file.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task InputCopyKeepsTheInputSuffix()
+    {
+        using var workspace = CreateContent();
+        _ = workspace.Write("Content/Input/Player.input.json", "{}");
+
+        var copies = await workspace.Service.CopyAsync([AssetPath.Parse("/Content/Input/Player.input.json")], AssetPath.Parse("/Content/Input"), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = copies.Should().ContainSingle().Which.Should().Be(AssetPath.Parse("/Content/Input/Player (2).input.json"));
+    }
+
     /// <summary>Renaming a script rewrites the slots and parameters that refer to the script it cooks to.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]

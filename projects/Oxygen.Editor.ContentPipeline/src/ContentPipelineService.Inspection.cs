@@ -167,7 +167,7 @@ public sealed partial class ContentPipelineService
 
     private static InspectionRoot[] ResolveImportedInspectionRoots(ProjectContext project, CookPublicationReadLease publication, AssetPath scope, InspectionRoot[] ordinary, IEnumerable<string> outputScopes)
     {
-        var isModel = Path.GetExtension(scope.Name).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX";
+        var isModel = AssetFileTypes.Is(scope.Name, AssetFileCategory.Model);
         var roots = (isModel ? [] : ordinary).ToDictionary(static root => root.Name, StringComparer.Ordinal);
         foreach (var group in outputScopes.GroupBy(static path => path.Trim('/').Split('/')[0], StringComparer.Ordinal))
         {

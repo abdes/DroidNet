@@ -61,7 +61,7 @@ public static partial class InputSourceIndex
                 return false;
             }
 
-            if (file.EndsWith(AssetFileTypes.InputActionFile, StringComparison.OrdinalIgnoreCase))
+            if (file.EndsWith(AssetFileTypes.InputActionFile, StringComparison.Ordinal))
             {
                 return !isContext && HasName(root, name);
             }

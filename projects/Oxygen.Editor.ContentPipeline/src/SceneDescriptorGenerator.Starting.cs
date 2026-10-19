@@ -52,7 +52,7 @@ public sealed partial class SceneDescriptorGenerator
         foreach (var entry in scene.StartingInputContexts)
         {
             var path = entry.Context.VirtualPath;
-            if (!path.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.OrdinalIgnoreCase))
+            if (!path.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.Ordinal))
             {
                 site.Report(SceneStartingPropertyPaths.StartingInputContexts, $"'{path}' is not an input mapping context. Remove it from the scene's starting input contexts.");
                 continue;

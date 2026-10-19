@@ -219,18 +219,8 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                     continue;
                 }
 
-                var expected = Path.GetExtension(uri.Name).ToUpperInvariant() switch
-                {
-                    ".OMAT" => 1,
-                    ".OGEO" => 2,
-                    ".OSCENE" => 3,
-                    ".OSCRIPT" => 4,
-                    ".OIACT" => 5,
-                    ".OIMAP" => 6,
-                    ".OPSCENE" => 9,
-                    _ => 0,
-                };
-                if (expected != 0 && asset.AssetType != expected)
+                if (AssetFileTypes.Find(uri.Name) is { Category: AssetFileCategory.Cooked, AssetType: not AssetType.Unknown and var expected }
+                    && asset.AssetType != (byte)expected)
                 {
                     AddIssue(uri, "asset_cook.library_type_mismatch", "The selected library asset has the wrong type.");
                     continue;

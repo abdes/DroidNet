@@ -17,28 +17,13 @@ public static class RelocationPaths
     /// <summary>The importer's fixed output type folders at an authoring mount root.</summary>
     public static readonly IReadOnlyList<string> ImportTypeFolders = ["Materials", "Geometry", "Scenes"];
 
-    private static readonly string[] CompoundExtensions =
-        [AssetFileTypes.SceneDescriptor, AssetFileTypes.MaterialDescriptor, AssetFileTypes.GeometryDescriptor, AssetFileTypes.TextureDescriptor, AssetFileTypes.PhysicsSceneDescriptor, AssetFileTypes.CollisionShapeDescriptor, AssetFileTypes.PhysicsMaterialDescriptor, AssetFileTypes.ImportSettings];
-
-    /// <summary>Gets a file name's extension, keeping Oxygen's compound authoring extensions whole.</summary>
-    /// <param name="fileName">The file name.</param>
-    /// <returns>The extension, such as <c>.omat.json</c> or <c>.png</c>; empty for a folder name.</returns>
-    public static string GetExtension(string fileName)
-    {
-        ArgumentNullException.ThrowIfNull(fileName);
-        return CompoundExtensions.FirstOrDefault(extension => fileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase)
-            && fileName.Length > extension.Length) is { } compound
-            ? fileName[^compound.Length..]
-            : Path.GetExtension(fileName);
-    }
-
     /// <summary>Gets the display name of a file or folder: its name without the extension.</summary>
     /// <param name="fileName">The file or folder name.</param>
     /// <returns>The name a user edits when renaming.</returns>
     public static string GetDisplayName(string fileName)
     {
         ArgumentNullException.ThrowIfNull(fileName);
-        return fileName[..^GetExtension(fileName).Length];
+        return fileName[..^AssetFileTypes.GetSuffix(fileName).Length];
     }
 
     /// <summary>Returns the path of a file or folder renamed in place, keeping its extension.</summary>
@@ -51,7 +36,7 @@ public static class RelocationPaths
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(newName);
-        return path.WithName(VirtualPath.NormalizeTypedName(newName) + (isFolder ? string.Empty : GetExtension(path.Name)));
+        return path.WithName(VirtualPath.NormalizeTypedName(newName) + (isFolder ? string.Empty : AssetFileTypes.GetSuffix(path.Name)));
     }
 
     /// <summary>Gets the writable authoring mount that owns a virtual path.</summary>

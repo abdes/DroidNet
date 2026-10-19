@@ -45,7 +45,7 @@ public static class InputContextSources
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(context);
-        if (!context.Name.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.OrdinalIgnoreCase)
+        if (!context.Name.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.Ordinal)
             || RelocationPaths.ToPhysical(project, context.Parent!) is not { } folder
             || !Directory.Exists(folder.FullPath))
         {

@@ -5,6 +5,7 @@
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
@@ -43,7 +44,7 @@ internal sealed class ImportedSourceIndex
             var root = project.ProjectRoot.Combine(mount.RelativePath).FullPath;
             var relative = Path.GetRelativePath(project.ProjectRoot.FullPath, root).Replace('\\', '/');
             if (Path.IsPathRooted(relative) || relative.StartsWith("..", StringComparison.Ordinal)
-                || relative.Split('/')[0].ToUpperInvariant() is ".COOKED" or ".IMPORTED" or ".BUILD" or ".PIPELINE" || !Directory.Exists(root))
+                || ProjectOutputFolders.Contains(relative) || !Directory.Exists(root))
             {
                 continue;
             }
@@ -53,7 +54,7 @@ internal sealed class ImportedSourceIndex
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var primary = path[..^NativeSceneImportSettings.SidecarSuffix.Length];
-                if (Path.GetExtension(primary).ToUpperInvariant() is not (".GLTF" or ".GLB" or ".FBX"))
+                if (!AssetFileTypes.Is(primary, AssetFileCategory.Model))
                 {
                     continue;
                 }
@@ -122,7 +123,7 @@ internal sealed class ImportedSourceIndex
     /// <returns>The source, a conflict, or an unowned output.</returns>
     public Resolution ResolveOutputFacts(ProjectContext project, AssetPath uri, ContentCookInputRole role)
     {
-        if (Path.GetExtension(uri.Name).ToUpperInvariant() is not (".OGEO" or ".OMAT" or ".OSCENE"))
+        if (!AssetFileTypes.IsProductOf(uri.Name, AssetFileCategory.Model))
         {
             return new(Source: null, Error: null);
         }

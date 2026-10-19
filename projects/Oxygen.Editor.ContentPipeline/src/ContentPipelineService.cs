@@ -143,10 +143,10 @@ public sealed partial class ContentPipelineService(
     }
 
     internal static bool IsCookableDescriptorFile(string path)
-        => path.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
-           || path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
-           || path.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase)
-           || path.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
+        => path.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.Ordinal)
+           || path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)
+           || path.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.Ordinal)
+           || path.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal)
            || AssetFileTypes.Is(path, AssetFileCategory.Input)
            || (AssetFileTypes.Is(path, AssetFileCategory.Model)
                && File.Exists(path + Import.NativeSceneImportSettings.SidecarSuffix));
@@ -294,14 +294,14 @@ public sealed partial class ContentPipelineService(
         var path = assetUri.VirtualPath;
         return path switch
         {
-            _ when path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.OrdinalIgnoreCase)
-                || path.EndsWith(AssetFileTypes.Texture, StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Texture,
-            _ when path.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.OrdinalIgnoreCase)
-                || path.EndsWith(AssetFileTypes.Material, StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Material,
-            _ when path.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.OrdinalIgnoreCase)
-                || path.EndsWith(AssetFileTypes.Geometry, StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Geometry,
-            _ when path.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.OrdinalIgnoreCase)
-                || path.EndsWith(AssetFileTypes.Scene, StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Scene,
+            _ when path.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)
+                || path.EndsWith(AssetFileTypes.Texture, StringComparison.Ordinal) => ContentCookAssetKind.Texture,
+            _ when path.EndsWith(AssetFileTypes.MaterialDescriptor, StringComparison.Ordinal)
+                || path.EndsWith(AssetFileTypes.Material, StringComparison.Ordinal) => ContentCookAssetKind.Material,
+            _ when path.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.Ordinal)
+                || path.EndsWith(AssetFileTypes.Geometry, StringComparison.Ordinal) => ContentCookAssetKind.Geometry,
+            _ when path.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal)
+                || path.EndsWith(AssetFileTypes.Scene, StringComparison.Ordinal) => ContentCookAssetKind.Scene,
             _ when AssetFileTypes.Is(path, AssetFileCategory.Model) => ContentCookAssetKind.ForeignSource,
             _ when AssetFileTypes.Is(path, AssetFileCategory.Input) => ContentCookAssetKind.Input,
             _ => throw new ArgumentException($"Unsupported content cook asset URI '{assetUri}'.", nameof(assetUri)),
