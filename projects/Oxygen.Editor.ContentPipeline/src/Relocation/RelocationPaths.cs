@@ -14,9 +14,6 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// </summary>
 public static class RelocationPaths
 {
-    /// <summary>The importer's fixed output type folders at an authoring mount root.</summary>
-    public static readonly IReadOnlyList<string> ImportTypeFolders = ["Materials", "Geometry", "Scenes"];
-
     /// <summary>Gets the display name of a file or folder: its name without the extension.</summary>
     /// <param name="fileName">The file or folder name.</param>
     /// <returns>The name a user edits when renaming.</returns>

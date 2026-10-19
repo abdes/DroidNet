@@ -114,23 +114,20 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
             await model.ReviewReplacementCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
             _ = model.CanAccept.Should().BeTrue();
             _ = model.PrimaryButtonText.Should().Be("Replace and import");
-            _ = warning.Message.Should().Contain("/Content/SourceMedia/DCC/Crate/model.gltf");
-            _ = warning.Message.Should().Contain("/Content/Materials/Models/Crate");
+            _ = warning.Message.Should().Contain("/Content/Models/Crate/model.gltf");
         }
     }
 
     private async Task CreateRetainedSourceAsync(ProjectContext project)
     {
-        const string relative = "Content/SourceMedia/DCC/Crate";
+        const string relative = "Content/Models/Crate";
         var root = Path.Combine(project.ProjectRoot.FullPath, relative);
         _ = Directory.CreateDirectory(root);
         var bytes = System.Text.Encoding.UTF8.GetBytes("original source");
         await File.WriteAllBytesAsync(Path.Combine(root, "model.gltf"), bytes, this.TestContext.CancellationToken).ConfigureAwait(false);
         var settings = Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.Create(
             new(relative, "model.gltf", [new("model.gltf", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)))]),
-            "Content",
-            "Crate",
-            "Models/Crate");
+            "Crate");
         await File.WriteAllBytesAsync(Path.Combine(root, "model.gltf.import.json"), settings.ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

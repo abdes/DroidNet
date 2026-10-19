@@ -67,8 +67,7 @@ internal sealed partial class CookSourceAnalyzer
                 || product.SourceInput is not { } prior
                 || prior.Kind != facts.Input.Kind
                 || !string.Equals(prior.MountName, facts.Input.MountName, StringComparison.Ordinal)
-                || !string.Equals(prior.SourceRelativePath, facts.Input.SourceRelativePath, StringComparison.Ordinal)
-                || !prior.OutputNamespaces.SequenceEqual(facts.Input.OutputNamespaces))
+                || !string.Equals(prior.SourceRelativePath, facts.Input.SourceRelativePath, StringComparison.Ordinal))
             {
                 continue;
             }

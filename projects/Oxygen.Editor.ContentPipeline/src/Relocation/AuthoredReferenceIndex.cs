@@ -135,11 +135,5 @@ internal sealed class AuthoredReferenceIndex
     /// <param name="PrimaryPath">The model's primary source file.</param>
     /// <param name="PrimaryVirtualPath">The primary source's virtual path.</param>
     /// <param name="Settings">The saved import settings.</param>
-    internal sealed record ImportSource(FileSystemPath SidecarPath, FileSystemPath PrimaryPath, AssetPath PrimaryVirtualPath, NativeSceneImportSettings Settings)
-    {
-        /// <summary>Gets the output group's identity folder under one type folder.</summary>
-        /// <param name="typeFolder">One of <see cref="RelocationPaths.ImportTypeFolders"/>.</param>
-        /// <returns>The folder, such as <c>/Content/Geometry/Robot</c>.</returns>
-        public AssetPath GetGroupFolder(string typeFolder) => AssetPath.Create(this.Settings.MountPoint, typeFolder + "/" + this.Settings.OutputDirectory);
-    }
+    internal sealed record ImportSource(FileSystemPath SidecarPath, FileSystemPath PrimaryPath, AssetPath PrimaryVirtualPath, NativeSceneImportSettings Settings);
 }

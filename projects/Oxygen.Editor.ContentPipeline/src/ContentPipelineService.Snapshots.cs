@@ -101,11 +101,12 @@ public sealed partial class ContentPipelineService
 
         using var baselineLifetime = baseline;
         Incremental.CookProvenance previous;
-        Import.ImportedSourceIndex imports;
         ContentCookInput[] primaryInputs;
         try
         {
-            (previous, imports, resolveScopes) = await this.ResolveImportOwnershipAsync(operation, baseline, resolveScopes, cancellationToken).ConfigureAwait(false);
+            previous = baseline.ProductState;
+            var requestedScopes = resolveScopes;
+            resolveScopes = () => [.. requestedScopes().Select(Import.ImportedOutputs.ResolveScope)];
             primaryInputs = resolveScopes().SelectMany(static scope => scope.Inputs).ToArray();
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
@@ -133,7 +134,7 @@ public sealed partial class ContentPipelineService
             return new(operation.OperationId, targetKind, OperationStatus.Failed, compatibility.Diagnostics, [], Inspection: null, Validation: null);
         }
 
-        return await this.ExecuteWithArtifactsAsync(operation, baseline, resolveScopes, targetKind, compatibility.Artifacts!, previous, imports, cancellationToken).ConfigureAwait(false);
+        return await this.ExecuteWithArtifactsAsync(operation, baseline, resolveScopes, targetKind, compatibility.Artifacts!, previous, cancellationToken).ConfigureAwait(false);
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2025:Do not pass IDisposable instances into unawaited tasks", Justification = "the drain task takes ownership of the retained baseline and disposes it when the drain completes")]
@@ -144,13 +145,12 @@ public sealed partial class ContentPipelineService
         CookTargetKind targetKind,
         NativeArtifactLease artifacts,
         Incremental.CookProvenance previous,
-        Import.ImportedSourceIndex imports,
         CancellationToken cancellationToken)
     {
         Task? retainedDrain = null;
         try
         {
-            var result = await this.ExecuteIncrementalCookAsync(operation, baseline, resolveScopes, targetKind, artifacts, previous, imports, cancellationToken).ConfigureAwait(false);
+            var result = await this.ExecuteIncrementalCookAsync(operation, baseline, resolveScopes, targetKind, artifacts, previous, cancellationToken).ConfigureAwait(false);
             baseline.Dispose();
             return await this.ReclaimUnusedCookedOutputAsync(operation, result).ConfigureAwait(false);
         }
@@ -225,26 +225,17 @@ public sealed partial class ContentPipelineService
         return missing.Count == 0 ? null : new(operation.OperationId, targetKind, OperationStatus.Failed, NormalizeDiagnostics(operation.OperationId, missing), [], Inspection: null, Validation: null);
     }
 
-    private async Task<(Incremental.CookProvenance previous, Import.ImportedSourceIndex imports, Func<IReadOnlyList<ContentCookScope>> scopes)> ResolveImportOwnershipAsync(
-        ContentCookOperation operation, CookPublicationReadLease baseline, Func<IReadOnlyList<ContentCookScope>> scopes, CancellationToken cancellationToken)
-    {
-        var previous = baseline.ProductState;
-        var imports = await Import.ImportedSourceIndex.ReadAsync(operation.Project, cookDocuments, previous, cancellationToken).ConfigureAwait(false);
-        return (previous, imports, () => scopes().Select(imports.ResolveScope).ToArray());
-    }
-
     private async Task<(CookInputSnapshot snapshot, CookDependencyGraph graph)> CaptureScopesAsync(
         ContentCookOperation operation,
         Func<IReadOnlyList<ContentCookScope>> resolveScopes,
         Oxygen.Managed.Core.Compatibility.NativeArtifactLease artifacts,
         Oxygen.Editor.ContentPipeline.Incremental.CookProvenance previous,
-        Import.ImportedSourceIndex imports,
         Publication.CookedLibraryReadSet libraries,
         CancellationToken cancellationToken)
     {
         if (resolveScopes().SingleOrDefault(static scope => scope.ImportReplacement is not null) is { } replacement)
         {
-            return await this.CaptureReplacementAsync(operation, replacement, resolveScopes, artifacts, previous, imports, libraries, cancellationToken).ConfigureAwait(false);
+            return await this.CaptureReplacementAsync(operation, replacement, resolveScopes, artifacts, previous, libraries, cancellationToken).ConfigureAwait(false);
         }
 
         CookDependencyGraph? graph = null;
@@ -255,7 +246,7 @@ public sealed partial class ContentPipelineService
             {
                 var scopes = resolveScopes();
                 var inputs = scopes.SelectMany(static scope => scope.Inputs).ToArray();
-                graph = await this.CreateDependencyDiscovery(operation, artifacts, previous, imports, libraries)
+                graph = await this.CreateDependencyDiscovery(operation, artifacts, previous, libraries)
                     .DiscoverAsync(operation.Project, inputs, token).ConfigureAwait(false);
                 graph = graph with { ImportedReferences = [.. graph.ImportedReferences.Union(scopes.SelectMany(static scope => scope.RequiredImportedOutputs))] };
                 return HasError(graph.Diagnostics) ? throw new CookInputDiscoveryException(graph.Diagnostics) : graph.Files;
@@ -275,7 +266,6 @@ public sealed partial class ContentPipelineService
         ContentCookOperation operation,
         NativeArtifactLease artifacts,
         Incremental.CookProvenance previous,
-        Import.ImportedSourceIndex imports,
         CookedLibraryReadSet libraries)
         => new(
             new CookSourceAnalyzer(
@@ -287,7 +277,7 @@ public sealed partial class ContentPipelineService
                 this.cookScopeProvider,
                 cookDocuments,
                 previous),
-            resolveImported: uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency),
+            resolveImported: uri => Import.ImportedOutputs.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency),
             resolveBufferOwner: path => previous.FindBufferOwner(operation.Project, path),
             preferCookedReference: libraries.IsLibraryPreferred,
             expandCookedReferences: (input, references, token) => libraries.ExpandReferencesAsync(

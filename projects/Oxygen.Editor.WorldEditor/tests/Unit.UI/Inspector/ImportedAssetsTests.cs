@@ -77,7 +77,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         updates.OnNext([CreateImportedSourceRow(configured: true)]);
         await WaitForRenderAsync().ConfigureAwait(true);
         var names = details.Facts.Single(static fact => string.Equals(fact.Label, "Outputs", StringComparison.Ordinal)).Value;
-        _ = names.Should().Contain("Main (Geometry)").And.Contain("Paint (Material)").And.Contain("Crate (Scene)");
+        _ = names.Should().Contain("Main (Geometry)").And.Contain("Paint (Material)").And.Contain("model (Scene)");
         _ = selector.SelectedItem.Should().BeSameAs(selected);
         _ = pane.FindDescendants().OfType<TextBlock>().Should().Contain(text => text.Text == names);
         provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -109,10 +109,13 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         _ = content.Rows.Should().NotContain(row => row.Choice.Asset == material || row.Choice.Asset == source.Identity);
     });
 
-    /// <summary>The existing Cook menu offers source navigation and reimport for a selected imported output.</summary>
+    /// <summary>
+    /// A model is one row in the browser, its products are not listed: the Import menu reimports the selected model,
+    /// and inspection opens the model's cooked output.
+    /// </summary>
     /// <returns>The asynchronous rendered action regression.</returns>
     [TestMethod]
-    public Task ImportedOutputCommandsUseTheRetainedSourceAndSelectedInspection() => EnqueueAsync(async () =>
+    public Task ImportedModelCommandsReimportAndInspectTheSelectedModel() => EnqueueAsync(async () =>
     {
         var source = CreateImportedSourceRow(configured: true);
         var output = CreateImportedOutputRows(source).Single(static row => row.Kind == AssetKind.Geometry);
@@ -149,14 +152,14 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
             ViewModel = browser,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
-        layout.SelectedAsset = output;
+        _ = layout.Assets.Select(static row => row.Item.Identity).Should().Equal(source.Identity);
+        layout.SelectedAsset = source;
         await WaitForRenderAsync().ConfigureAwait(true);
-        await InvokeImportMenuActionAsync(view, "Show import source", () => browser.ShowImportSourceCommand.ExecutionTask).ConfigureAwait(true);
-        _ = revealed.Should().Be(source.Identity);
         await InvokeImportMenuActionAsync(view, "Reimport", () => browser.ReimportSelectedSourceCommand.ExecutionTask).ConfigureAwait(true);
         pipeline.Verify(value => value.ReimportSourceAsync(source.Identity, projects.ActiveProject!, It.IsAny<CancellationToken>()), Times.Once);
         await browser.InspectCookedOutputCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-        _ = inspected.Should().Be(output.Identity);
+        _ = inspected.Should().Be(source.Identity);
+        _ = revealed.Should().BeNull();
     });
 
     private static async Task InvokeImportMenuActionAsync(AssetsView view, string text, Func<Task?> execution)
@@ -173,11 +176,11 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
 
     private static AssetEntry CreateImportedSourceRow(bool configured)
     {
-        var asset = AssetPath.Parse("/Content/SourceMedia/DCC/Crate/model.gltf");
-        return new(asset, "model.gltf", AssetKind.ForeignSource, AssetState.Source, DerivedState: null, AssetRuntimeAvailability.NotApplicable, asset.VirtualPath, FileSystemPath.From("C:/Project/Content/SourceMedia/DCC/Crate/model.gltf"), DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true)
+        var asset = AssetPath.Parse("/Content/Models/Crate/model.gltf");
+        return new(asset, "model.gltf", AssetKind.ForeignSource, AssetState.Source, DerivedState: null, AssetRuntimeAvailability.NotApplicable, asset.VirtualPath, FileSystemPath.From("C:/Project/Content/Models/Crate/model.gltf"), DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true)
         {
             ImportSource = configured ? asset : null,
-            CookStatus = configured ? new(asset, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [new(asset, AssetPath.Parse("/Content/Models/Crate/Geometry/Main.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Models/Crate/Geometry/Main.ogeo"), new(asset, AssetPath.Parse("/Content/Models/Crate/Materials/Paint.omat"), ContentCookAssetKind.Material, "Content", "/Content/Models/Crate/Materials/Paint.omat"), new(asset, AssetPath.Parse("/Content/Models/Crate/Scenes/Crate.oscene"), ContentCookAssetKind.Scene, "Content", "/Content/Models/Crate/Scenes/Crate.oscene"),], [], []) : null,
+            CookStatus = configured ? new(asset, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [new(asset, AssetPath.Parse("/Content/Models/Crate/model.gltf/Main.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Models/Crate/model.gltf/Main.ogeo"), new(asset, AssetPath.Parse("/Content/Models/Crate/model.gltf/Paint.omat"), ContentCookAssetKind.Material, "Content", "/Content/Models/Crate/model.gltf/Paint.omat"), new(asset, AssetPath.Parse("/Content/Models/Crate/model.gltf/model.oscene"), ContentCookAssetKind.Scene, "Content", "/Content/Models/Crate/model.gltf/model.oscene"),], [], []) : null,
         };
     }
 

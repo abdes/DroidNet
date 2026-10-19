@@ -40,8 +40,9 @@ public sealed partial class ContentPipelineService
             var requestedRoots = ResolveInspectionRoots(project, publicationRead, scopeUri);
             if (scopeUri is not null && requestedRoots.All(static root => !root.IsLocal))
             {
-                var imports = await Import.ImportedSourceIndex.ReadAsync(project, cookDocuments, provenance, token).ConfigureAwait(false);
-                requestedRoots = ResolveImportedInspectionRoots(project, publicationRead, scopeUri, requestedRoots, imports.GetInspectionOutputScopes(scopeUri));
+                // A model's products are named under it, so the model is its own output scope.
+                var outputScopes = AssetFileTypes.Is(scopeUri.Name, AssetFileCategory.Model) ? [scopeUri.VirtualPath] : Array.Empty<string>();
+                requestedRoots = ResolveImportedInspectionRoots(project, publicationRead, scopeUri, requestedRoots, outputScopes);
             }
 
             var roots = new List<CookedRootReport>();

@@ -45,5 +45,5 @@ internal static class PublicationScenario
         _ = File.ReadAllText(Path.Combine(root, "keep.bin")).Should().Be("keep:" + mount);
     }
 
-    internal const string SourceBundle = "Content/SourceMedia/DCC/Model";
+    internal const string SourceBundle = "Content/Models/Model";
 }

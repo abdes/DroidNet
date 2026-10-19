@@ -61,18 +61,21 @@ public sealed class ContentImportManifestBuilderTests
         _ = texture.Output.Should().BeNull();
     }
 
-    /// <summary>Model queries and cooking retain one complete native recipe.</summary>
+    /// <summary>
+    /// Model queries and cooking retain one complete native recipe, which names the model's identity: the virtual path
+    /// of its file, under which its products are named.
+    /// </summary>
     [TestMethod]
-    public void BuildJobPreservesRetainedModelOptionsAndLayout()
+    public void BuildJobPreservesRetainedModelOptionsAndIdentity()
     {
         var input = new ContentCookInput(
-            AssetPath.Parse("/Content/SourceMedia/model.gltf"),
+            AssetPath.Parse("/Content/Vehicles/Ship/model.gltf"),
             ContentCookAssetKind.ForeignSource,
             "Content",
-            "Content/SourceMedia/model.gltf",
+            "Content/Vehicles/Ship/model.gltf",
             FileSystemPath.From(Path.GetFullPath("model.gltf")),
             ContentCookInputRole.Primary);
-        var settings = new ContentPipeline.Import.NativeSceneImportSettings(4, global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.ImporterIdentity, "Content", "RetainedName", "Content/SourceMedia", "model.gltf", new string('a', 64), ["model.gltf"], "Models/Retained")
+        var settings = new ContentPipeline.Import.NativeSceneImportSettings(global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.CurrentSchemaVersion, global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.ImporterIdentity, "RetainedName", "Content/Vehicles/Ship", "model.gltf", new string('a', 64), ["model.gltf"])
         {
             MaterialSlotProvenance = global::Oxygen.Editor.ContentPipeline.Import.NativeMaterialSlotProvenance.Create(),
             BakeTransforms = true,
@@ -82,7 +85,8 @@ public sealed class ContentImportManifestBuilderTests
         var job = new ContentImportManifestBuilder().BuildJob(input, ["prior"], settings);
         _ = job.Type.Should().Be("gltf");
         _ = job.Name.Should().Be(settings.Name);
-        _ = job.Layout.Should().Be(settings.CreateLayout());
+        _ = job.Layout.Should().Be(new ContentImportLayout("/Content"));
+        _ = job.VirtualPath.Should().Be("/Content/Vehicles/Ship/model.gltf");
         _ = job.DependsOn.Should().Equal("prior");
         _ = job.BakeTransforms.Should().BeTrue();
         _ = job.NormalsPolicy.Should().Be(settings.NormalsPolicy);

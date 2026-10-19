@@ -68,13 +68,6 @@ public sealed partial class AssetDetailsViewModel
             return BuildScriptFacts(this.scripts.Find(source));
         }
 
-        if (asset.Kind is AssetKind.InputAction or AssetKind.InputMappingContext
-            && this.projects?.ActiveProject is { } project
-            && InputSourceFiles.FindDeclaration(project, asset.Identity) is { } declaration)
-        {
-            return [new("Declared in", WithPathBreaks(declaration.File.FullPath) + string.Create(CultureInfo.InvariantCulture, $" (line {declaration.Position.Line})"))];
-        }
-
         return [];
     }
 

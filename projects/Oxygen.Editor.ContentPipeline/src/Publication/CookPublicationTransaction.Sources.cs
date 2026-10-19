@@ -29,7 +29,7 @@ internal sealed partial class CookPublicationTransaction
 
     private static async Task<CookPublicationJournal.SourceBundle> CaptureSourceReplacementAsync(ContentCookOperation operation, CookSourceReplacement source, ImmutableArray<CookProducedSourceFile> produced, CancellationToken cancellationToken)
     {
-        var published = ImportSourceRetention.ResolveDestination(operation.Project, source.BundleName);
+        var published = ImportSourceRetention.ResolveBundleRoot(operation.Project, source.BundleRoot);
         ValidateImage(source.Before);
         if (!source.Before.Exists || source.Before.Files.IsEmpty)
         {
@@ -43,9 +43,9 @@ internal sealed partial class CookPublicationTransaction
         }
 
         var captured = CapturedSourcePath(operation.Project, operation.OperationId, published);
-        var staged = PublicationSourcePath(operation.Project, operation.OperationId, source.BundleName);
+        var staged = PublicationSourcePath(operation.Project, operation.OperationId, source.BundleRoot);
         _ = await CookRootImage.CaptureAsync(captured, staged, cancellationToken).ConfigureAwait(false);
-        foreach (var update in produced.Where(file => IsWithinSourceBundle(operation.Project, source.BundleName, file.RelativePath)))
+        foreach (var update in produced.Where(file => IsWithinSourceBundle(operation.Project, source.BundleRoot, file.RelativePath)))
         {
             var relative = Path.GetRelativePath(published, ProducedSourcePath(operation.Project, update));
             var path = Path.Combine(staged, relative);
@@ -61,21 +61,21 @@ internal sealed partial class CookPublicationTransaction
         var after = await CookRootImage.CaptureAsync(staged, copyTo: null, cancellationToken).ConfigureAwait(false);
         return !after.Exists || after.Files.IsEmpty
             ? throw new InvalidDataException("The replacement source bundle was not captured with the cook inputs.")
-            : new(source.BundleName, source.Before, after);
+            : new(source.BundleRoot, source.Before, after);
     }
 
-    private static string PublicationSourcePath(ProjectContext project, Guid operationId, string bundleName)
+    private static string PublicationSourcePath(ProjectContext project, Guid operationId, string bundleRoot)
     {
-        _ = ImportSourceRetention.ResolveDestination(project, bundleName);
-        var path = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", operationId.ToString("N"), "source-output", bundleName);
+        var bundle = ImportSourceRetention.ResolveBundleRoot(project, bundleRoot);
+        var path = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", operationId.ToString("N"), "source-output", Path.GetFileName(bundle));
         CookOutputLease.RejectReparsePoint(Path.GetDirectoryName(path)!);
         CookOutputLease.RejectReparsePoint(path);
         return path;
     }
 
-    private static bool IsWithinSourceBundle(ProjectContext project, string bundleName, string relativePath)
+    private static bool IsWithinSourceBundle(ProjectContext project, string bundleRoot, string relativePath)
     {
-        var bundle = FileSystemPath.From(ImportSourceRetention.ResolveDestination(project, bundleName));
+        var bundle = FileSystemPath.From(ImportSourceRetention.ResolveBundleRoot(project, bundleRoot));
         var path = project.ProjectRoot.Combine(relativePath);
         return path != bundle && path.IsSameOrInside(bundle);
     }
@@ -145,15 +145,16 @@ internal sealed partial class CookPublicationTransaction
     {
         if (this.journal.SourceReplacement is { } source)
         {
-            var published = ImportSourceRetention.ResolveDestination(this.project, source.BundleName);
+            var published = ImportSourceRetention.ResolveBundleRoot(this.project, source.BundleRoot);
+            var name = Path.GetFileName(published);
             yield return new(
-                "Source:" + source.BundleName,
+                "Source:" + name,
                 source.Before,
                 source.After,
                 published,
-                PublicationSourcePath(this.project, this.journal.OperationId, source.BundleName),
-                this.RootPath("previous-source", source.BundleName),
-                this.RootPath("discarded-source", source.BundleName));
+                PublicationSourcePath(this.project, this.journal.OperationId, source.BundleRoot),
+                this.RootPath("previous-source", name),
+                this.RootPath("discarded-source", name));
         }
     }
 

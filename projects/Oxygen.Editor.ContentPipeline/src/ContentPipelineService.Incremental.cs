@@ -155,18 +155,18 @@ public sealed partial class ContentPipelineService
         };
     }
 
-    private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, CookPublicationReadLease baseline, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, Import.ImportedSourceIndex imports, CancellationToken cancellationToken)
+    private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, CookPublicationReadLease baseline, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, CancellationToken cancellationToken)
     {
         var mounts = operation.Project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount))
             .Select(static mount => mount.Name).Concat(previous.Roots.Select(static root => root.Mount)).Distinct(StringComparer.Ordinal).ToArray();
         var inventories = await CookIncrementalPlanner.ReadInventoriesAsync(baseline, mounts, this.engineContentPipelineApi, cancellationToken, artifacts).ConfigureAwait(false);
-        var repair = CookRootRepair.Create(baseline, previous, mounts, inventories, imports.IsRelocated);
-        resolveScopes = this.ExpandRepairScopes(operation, resolveScopes, repair, imports, targetKind);
-        var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, this.engineContent, cancellationToken, uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency), [.. previous.ProducedAssets]).ConfigureAwait(false);
+        var repair = CookRootRepair.Create(baseline, previous, mounts, inventories);
+        resolveScopes = this.ExpandRepairScopes(operation, resolveScopes, repair, targetKind);
+        var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, this.engineContent, cancellationToken, uri => Import.ImportedOutputs.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency), [.. previous.ProducedAssets]).ConfigureAwait(false);
         try
         {
             await libraries.ValidateNativeAsync(this.engineContentPipelineApi, cancellationToken).ConfigureAwait(false);
-            var (snapshot, graph) = await this.CaptureScopesAsync(operation, resolveScopes, artifacts, previous, imports, libraries, cancellationToken).ConfigureAwait(false);
+            var (snapshot, graph) = await this.CaptureScopesAsync(operation, resolveScopes, artifacts, previous, libraries, cancellationToken).ConfigureAwait(false);
             var captured = graph.Assets.Select(static input => input.AssetUri).ToHashSet();
             if (!repair.Sources.All(captured.Contains))
             {
@@ -386,7 +386,6 @@ public sealed partial class ContentPipelineService
         ContentCookOperation operation,
         Func<IReadOnlyList<ContentCookScope>> resolveScopes,
         CookRootRepair repair,
-        Import.ImportedSourceIndex imports,
         CookTargetKind targetKind)
     {
         if (repair.Sources.IsEmpty)
@@ -405,7 +404,7 @@ public sealed partial class ContentPipelineService
                     operation.Project,
                     [CookInputResolver.Resolve(operation.Project, uri, ContentCookInputRole.Primary)],
                     targetKind);
-                return imports.ResolveScope(repairScope with
+                return Import.ImportedOutputs.ResolveScope(repairScope with
                 {
                     ScopeUri = uri,
                     AllowImportedSourceChanges = requested.All(static scope => scope.AllowImportedSourceChanges),

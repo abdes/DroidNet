@@ -4,7 +4,6 @@
 
 using System.Collections.Immutable;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Json.Schema;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
@@ -12,26 +11,30 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ContentPipeline.Import;
 
 /// <summary>Portable native import settings stored beside the retained source.</summary>
-/// <param name="SchemaVersion">The native sidecar version; legacy managed sidecars are not rewritten.</param>
+/// <remarks>
+/// The model is identified by the virtual path of its primary file, and its products are named under that identity
+/// (<c>/Content/Ship/Ship.glb/Paint.omat</c>); the settings name no output location. An older settings version is
+/// refused, not migrated.
+/// </remarks>
+/// <param name="SchemaVersion">The native sidecar version; older versions are refused.</param>
 /// <param name="Importer">The native importer contract identity.</param>
-/// <param name="MountPoint">The authoring mount owning the generated output namespace.</param>
-/// <param name="Name">The stable native scene/name namespace.</param>
+/// <param name="Name">The import's name, shown for its cook job.</param>
 /// <param name="BundleRoot">The project-relative retained source bundle.</param>
 /// <param name="PrimaryRelativePath">The primary source relative to its bundle.</param>
 /// <param name="SourceHash">The primary bytes used to discover the initial dependency set.</param>
 /// <param name="Files">The discovered bundle-relative files, including the primary.</param>
-/// <param name="OutputDirectory">The model's relative group within each type folder.</param>
 public sealed record NativeSceneImportSettings(
     int SchemaVersion,
     string Importer,
-    string MountPoint,
     string Name,
     string BundleRoot,
     string PrimaryRelativePath,
     string SourceHash,
-    ImmutableArray<string> Files,
-    string OutputDirectory)
+    ImmutableArray<string> Files)
 {
+    /// <summary>The settings version this editor writes and reads.</summary>
+    public const int CurrentSchemaVersion = 5;
+
     /// <summary>The sidecar suffix already used for source import configuration.</summary>
     public const string SidecarSuffix = AssetFileTypes.ImportSettings;
 
@@ -77,37 +80,21 @@ public sealed record NativeSceneImportSettings(
     /// <summary>Gets the native tangent preservation or generation policy.</summary>
     public string TangentsPolicy { get; init; } = DefaultTangentsPolicy;
 
-    /// <summary>Gets the source-owned output directories for the persisted layout version.</summary>
-    [JsonIgnore]
-    public ImmutableArray<string> OutputDirectories => ["Materials/" + this.OutputDirectory, "Geometry/" + this.OutputDirectory, "Scenes/" + this.OutputDirectory];
-
-    /// <summary>Gets every native namespace owned by the imported source.</summary>
-    [JsonIgnore]
-    public ImmutableArray<string> OutputPrefixes => [.. this.OutputDirectories.Select(directory => "/" + this.MountPoint + "/" + directory + "/")];
-
-    /// <summary>Builds the native layout without rewriting older imported asset identities.</summary>
-    /// <returns>The layout used for this source's next cook.</returns>
-    public ContentImportLayout CreateLayout() => new SceneImportTarget(this.MountPoint, this.OutputDirectory).CreateLayout(this.PrimaryRelativePath);
-
     /// <summary>Creates settings from a retained bundle, preserving native naming and source identities.</summary>
     /// <param name="source">The retained source and hashes.</param>
-    /// <param name="mountPoint">The selected authoring mount.</param>
-    /// <param name="name">The stable import name.</param>
-    /// <param name="outputDirectory">The mount-relative destination owned by this source.</param>
+    /// <param name="name">The import's name.</param>
     /// <returns>The portable settings.</returns>
-    public static NativeSceneImportSettings Create(RetainedImportSource source, string mountPoint, string name, string outputDirectory)
+    public static NativeSceneImportSettings Create(RetainedImportSource source, string name)
     {
         ArgumentNullException.ThrowIfNull(source);
         var settings = new NativeSceneImportSettings(
-            4,
+            CurrentSchemaVersion,
             ImporterIdentity,
-            mountPoint,
             name,
             source.DirectoryRelativePath,
             source.PrimaryRelativePath,
             source.Files.Single(file => string.Equals(file.RelativePath, source.PrimaryRelativePath, StringComparison.Ordinal)).Sha256,
-            source.Files.Select(static file => file.RelativePath).ToImmutableArray(),
-            outputDirectory)
+            source.Files.Select(static file => file.RelativePath).ToImmutableArray())
         {
             MaterialSlotProvenance = NativeMaterialSlotProvenance.Create(),
         };
@@ -123,7 +110,7 @@ public sealed record NativeSceneImportSettings(
         using var document = JsonDocument.Parse(bytes);
         if (!Schema.Value.Evaluate(document.RootElement).IsValid)
         {
-            throw new InvalidDataException("This source does not have valid native import settings. Import it into a new destination without replacing existing asset identities.");
+            throw new InvalidDataException($"This source does not have valid native import settings of version {CurrentSchemaVersion}. Import it again into a new destination.");
         }
 
         var settings = JsonSerializer.Deserialize<NativeSceneImportSettings>(bytes.Span, JsonOptions)!;
@@ -162,18 +149,16 @@ public sealed record NativeSceneImportSettings(
 
     private static void ValidatePaths(NativeSceneImportSettings settings)
     {
-        // The source files are physical paths inside the retained bundle; the mount, output folder and name are
-        // virtual path segments, checked by the virtual path rules.
+        // The source files are physical paths inside the retained bundle; the name is a virtual path segment,
+        // checked by the virtual path rules.
         var files = settings.Files.Append(settings.BundleRoot).Append(settings.PrimaryRelativePath);
         if (files.Any(static path => Path.IsPathRooted(path) || path.Split('/').Any(static part => string.IsNullOrEmpty(part)
                 || part is "." or ".." || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || part.EndsWith('.') || part.EndsWith(' ')))
             || settings.Files.ToHashSet(FileSystemPath.NameComparer).Count != settings.Files.Length
             || !settings.Files.Contains(settings.PrimaryRelativePath, FileSystemPath.NameComparer)
-            || VirtualPath.ValidateMountName(settings.MountPoint) is not null
-            || settings.OutputDirectory.Split('/').Append(settings.Name)
-                .Any(static segment => VirtualPath.ValidateSegment(segment, VirtualPathRuleSet.Authored) is not null))
+            || VirtualPath.ValidateSegment(settings.Name, VirtualPathRuleSet.Authored) is not null)
         {
-            throw new InvalidDataException("Native import settings require contained source paths, a unique output directory and valid names.");
+            throw new InvalidDataException("Native import settings require contained source paths and a valid name.");
         }
     }
 }

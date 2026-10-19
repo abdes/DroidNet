@@ -4,7 +4,6 @@
 
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
-using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.RetainedModelScenario;
@@ -13,14 +12,12 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal static class CookScenario
 {
-    internal static async Task<AssetPath> WriteCrossMountModelAsync(CookWorkspace workspace, CancellationToken cancellationToken)
-    {
-        var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", cancellationToken).ConfigureAwait(false);
-        var path = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf.import.json");
-        var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false));
-        await File.WriteAllBytesAsync(path, (settings with { MountPoint = "Art" }).ToBytes(), cancellationToken).ConfigureAwait(false);
-        return source;
-    }
+    /// <summary>Writes an imported model in the <c>Art</c> mount, beside scenes authored in <c>Content</c>.</summary>
+    /// <param name="workspace">A workspace with <c>Content</c> and <c>Art</c> mounts.</param>
+    /// <param name="cancellationToken">Cancels the writes.</param>
+    /// <returns>The model's identity.</returns>
+    internal static Task<AssetPath> WriteCrossMountModelAsync(CookWorkspace workspace, CancellationToken cancellationToken)
+        => WriteRetainedModelAsync(workspace, "Model", "gltf", cancellationToken, mount: "Art");
 
     internal static ContentPipelineService CreateService(CookWorkspace workspace, ISceneDescriptorGenerator generator, IEngineContentPipelineApi api, Managed.Core.Compatibility.INativeCompatibilityService? compatibility = null, CookPublicationService? publication = null) => new(workspace.ContextService, workspace.CookCoordinator, new FixedCookScopeProvider(workspace.Root), generator, new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, workspace.Documents, compatibility ?? workspace.Compatibility, workspace.Files, publication ?? workspace.Publication, workspace.EngineContent);
 

@@ -62,7 +62,7 @@ public sealed class ProducedSourceMetadataTests
         var transaction = await project.PrepareAsync(
             staging,
             this.TestContext.CancellationToken,
-            sourceReplacement: new("Model", before),
+            sourceReplacement: new(SourceBundle, before),
             producedSourceFiles: [update]).ConfigureAwait(false);
         using var accepted = await transaction.PublishAsync(preview: null, project.Baseline, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = (await File.ReadAllBytesAsync(Path.Combine(captured, "model.gltf.import.json"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(update.Before);
@@ -155,13 +155,13 @@ public sealed class ProducedSourceMetadataTests
     {
         using var project = new PublicationProject(hadPrevious: true);
         var update = await this.CreateSourceUpdateAsync(project, "Model").ConfigureAwait(false);
-        var uri = AssetPath.Parse("/Content/SourceMedia/DCC/Model/model.gltf");
+        var uri = AssetPath.Parse("/Content/Models/Model/model.gltf");
         var input = new ContentCookInput(
             uri,
             ContentCookAssetKind.ForeignSource,
             "Content",
-            "Content/SourceMedia/DCC/Model/model.gltf",
-            FileSystemPath.From(Path.Combine(project.Root, "Content/SourceMedia/DCC/Model/model.gltf")),
+            "Content/Models/Model/model.gltf",
+            FileSystemPath.From(Path.Combine(project.Root, "Content/Models/Model/model.gltf")),
             ContentCookInputRole.Primary);
         ImmutableArray<CookSnapshotInput> consumed = [new(AssetUri: null, FileSystemPath.From(Path.Combine(project.Root, update.RelativePath)), update.RelativePath, update.BeforeHash)];
         var graph = new CookDependencyGraph(
@@ -203,9 +203,9 @@ public sealed class ProducedSourceMetadataTests
     private async Task<CookProducedSourceFile> CreateSourceUpdateAsync(PublicationProject project, string bundle, bool projectOwned = false)
     {
         var primary = projectOwned ? bundle + ".gltf" : "model.gltf";
-        var root = projectOwned ? "Content/SourceMedia/DCC" : "Content/SourceMedia/DCC/" + bundle;
+        var root = projectOwned ? "Content/Models" : "Content/Models/" + bundle;
         var source = new RetainedImportSource(root, primary, [new(primary, Convert.ToHexString(SHA256.HashData("source"u8)))]);
-        var settings = NativeSceneImportSettings.Create(source, "Content", bundle, bundle);
+        var settings = NativeSceneImportSettings.Create(source, bundle);
         var candidate = NativeMaterialSlotProvenance.Parse(JsonSerializer.SerializeToElement(new
         {
             schema_version = 1,

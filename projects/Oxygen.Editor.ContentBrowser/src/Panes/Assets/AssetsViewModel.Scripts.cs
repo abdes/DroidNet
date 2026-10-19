@@ -20,9 +20,9 @@ public partial class AssetsViewModel
     /// <summary>Gets the reason Edit is unavailable for the selection, or a description of what it opens.</summary>
     public string EditToolTip
         => codeEditor is null ? "Code editing is unavailable."
-            : this.SelectedAssets.Count != 1 ? "Select one script or input asset to edit it in your code editor."
+            : this.SelectedAssets.Count != 1 ? "Select one script or input file to edit it in your code editor."
             : this.FindCodeSource(this.SelectedAssets[0]) is { } source ? $"Edit {Path.GetFileName(source.SourcePath)} in your code editor"
-            : "Only scripts, input files and their actions and contexts open in the code editor.";
+            : "Only scripts and input files open in the code editor.";
 
     /// <summary>Finds the file the code editor opens for an asset.</summary>
     /// <param name="asset">The asset.</param>
@@ -30,17 +30,9 @@ public partial class AssetsViewModel
     internal InputDeclaration? FindCodeSource(AssetEntry asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        if (asset is { Kind: AssetKind.Script or AssetKind.InputFile, SourcePath: { } source } && File.Exists(source.FullPath))
-        {
-            return new InputDeclaration(source.FullPath, 1);
-        }
-
-        // An action or a context is named under the input source that declares it.
-        return asset.Kind is AssetKind.InputAction or AssetKind.InputMappingContext
-            && projectContextService.ActiveProject is { } project
-            && InputSourceFiles.FindDeclaration(project, asset.Identity) is { } declaration
-                ? new InputDeclaration(declaration.File.FullPath, declaration.Position.Line)
-                : null;
+        return asset is { Kind: AssetKind.Script or AssetKind.InputFile, SourcePath: { } source } && File.Exists(source.FullPath)
+            ? new InputDeclaration(source.FullPath, 1)
+            : null;
     }
 
     private bool CanEditSelected() => codeEditor is not null && this.SelectedAssets.Count == 1 && this.FindCodeSource(this.SelectedAssets[0]) is not null;

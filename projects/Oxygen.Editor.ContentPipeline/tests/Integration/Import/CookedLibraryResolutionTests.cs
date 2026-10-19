@@ -61,7 +61,7 @@ public sealed class CookedLibraryResolutionTests
         _ = (await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
         _ = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.Current);
 
-        var modelPath = Path.Combine(library.Root, "Content/SourceMedia/DCC/Model/model.gltf");
+        var modelPath = Path.Combine(library.Root, "Art/Models/Model/model.gltf");
         var model = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(modelPath, this.TestContext.CancellationToken).ConfigureAwait(false))!;
         model["materials"]![0]!["pbrMetallicRoughness"]!["roughnessFactor"] = 0.1;
         await File.WriteAllTextAsync(modelPath, model.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);

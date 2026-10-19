@@ -6,7 +6,9 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -82,24 +84,23 @@ public sealed partial class ContentPipelineService
         })];
     }
 
-    private static ContentCookResult ValidateImportedIdentities(Guid operationId, ContentCookScope scope, ContentCookInput source, NativeSceneImportSettings settings, ContentCookResult result)
+    private static ContentCookResult ValidateImportedIdentities(Guid operationId, ContentCookScope scope, ContentCookInput source, ContentCookResult result)
     {
         if (result.Status is not (OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings))
         {
             return result;
         }
 
-        // Outputs outside the sidecar's current group were relocated with it on purpose; only outputs that
-        // stay in the group keep their identities.
+        // A reimport keeps every product the model produced before, named under the same identity.
         var previous = scope.PreviousProvenance?.Products.FirstOrDefault(product => product.SourceUri == source.AssetUri);
-        var kept = previous?.Outputs.Where(output => settings.OutputPrefixes.Any(prefix => output.Asset.VirtualPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))).ToArray() ?? [];
+        var kept = previous?.Outputs.ToArray() ?? [];
         var produced = result.CookedAssets.Select(static asset => asset.VirtualPath).ToHashSet(StringComparer.Ordinal);
         var missing = kept.FirstOrDefault(output => !produced.Contains(output.Asset.VirtualPath));
         if (result.CookedAssets.Count == 0 || missing is not null)
         {
             var message = missing is not null
                 ? $"Reimport would remove or rename '{missing.Asset.VirtualPath}'. Keep existing asset identities or import into a new destination."
-                : "The model import produced no assets in its declared destination.";
+                : "The model import produced no assets.";
             return IdentityFailure(operationId, source, result, message);
         }
 
@@ -167,13 +168,14 @@ public sealed partial class ContentPipelineService
             }
 
             var sourceScope = scope with { Inputs = [input] };
+            var job = scope.NativeJobs.GetValueOrDefault(input.AssetUri) ?? this.manifestBuilder.BuildJob(input, [], settings);
             var manifest = new ContentImportManifest(
                 1,
                 (scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path,
-                settings.CreateLayout(),
-                [scope.NativeJobs.GetValueOrDefault(input.AssetUri) ?? this.manifestBuilder.BuildJob(input, [], settings)]);
+                job.Layout ?? new ContentImportLayout(AssetPath.Create(input.AssetUri.Mount).VirtualPath),
+                [job]);
             var result = await this.ExecuteManifestAsync(operationId, scope.TargetKind, sourceScope, manifest, [], cancellationToken).ConfigureAwait(false);
-            results.Add(ValidateImportedIdentities(operationId, scope, input, settings, result));
+            results.Add(ValidateImportedIdentities(operationId, scope, input, result));
         }
 
         var authored = scope.Inputs.Where(static input => input.Kind != ContentCookAssetKind.ForeignSource).ToArray();
@@ -186,36 +188,21 @@ public sealed partial class ContentPipelineService
         return merged with { VerifiedRoot = results[^1].VerifiedRoot, NativeInventory = results[^1].NativeInventory, Inspection = results[^1].Inspection, Validation = results[^1].Validation };
     }
 
+    // A product identity under the model that the output already holds, and that the model did not produce before,
+    // belongs to something else: an earlier model imported at the same path.
     private async Task<DiagnosticRecord?> FindImportedOutputCollisionAsync(Guid operationId, ContentCookScope scope, ContentCookInput source, NativeSceneImportSettings settings, CancellationToken cancellationToken)
     {
-        var prefixes = settings.OutputPrefixes;
-        var conflictingInput = scope.Inputs.FirstOrDefault(input => input.AssetUri != source.AssetUri && input.Kind != ContentCookAssetKind.ForeignSource
-            && prefixes.Any(prefix => input.AssetUri.VirtualPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
-        if (conflictingInput is not null)
-        {
-            return Collision(conflictingInput.AssetUri.ToString());
-        }
-
-        foreach (var other in scope.Inputs.Where(input => input.Kind == ContentCookAssetKind.ForeignSource && input.AssetUri != source.AssetUri))
-        {
-            var otherSettingsPath = Path.Combine(scope.Snapshot!.InputRoot, other.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix);
-            var otherSettings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(otherSettingsPath, cancellationToken).ConfigureAwait(false));
-            if (prefixes.Any(prefix => otherSettings.OutputPrefixes.Any(otherPrefix => prefix.StartsWith(otherPrefix, StringComparison.OrdinalIgnoreCase)
-                || otherPrefix.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))))
-            {
-                return Collision(other.AssetUri.ToString());
-            }
-        }
-
-        if (!File.Exists(Path.Combine((scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path, "container.index.bin")))
+        var output = (scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path;
+        if (!File.Exists(Path.Combine(output, "container.index.bin")))
         {
             return null;
         }
 
-        var inspection = await this.engineContentPipelineApi.InspectLooseCookedRootAsync((scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path, cancellationToken).ConfigureAwait(false);
+        var inspection = await this.engineContentPipelineApi.InspectLooseCookedRootAsync(output, cancellationToken).ConfigureAwait(false);
         var owned = scope.PreviousProvenance?.Products.FirstOrDefault(product => product.SourceUri == source.AssetUri)?.Outputs
-            .Select(static output => output.Asset.VirtualPath).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [with(StringComparer.OrdinalIgnoreCase)];
-        var conflict = inspection.Assets.FirstOrDefault(asset => prefixes.Any(prefix => asset.VirtualPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) && !owned.Contains(asset.VirtualPath));
+            .Select(static output => output.Asset.VirtualPath).ToHashSet(StringComparer.Ordinal) ?? [with(StringComparer.Ordinal)];
+        var conflict = inspection.Assets.FirstOrDefault(asset => AssetPath.TryParse(asset.VirtualPath, out var product)
+            && AssetFileTypes.ContainerOf(product) == source.AssetUri && !owned.Contains(asset.VirtualPath));
         return conflict is null ? null : Collision(conflict.VirtualPath);
 
         DiagnosticRecord Collision(string path) => new()

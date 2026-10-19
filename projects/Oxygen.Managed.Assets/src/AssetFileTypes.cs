@@ -172,7 +172,8 @@ public static class AssetFileTypes
 
     /// <summary>
     /// Finds the container a product is named under: the input source <c>/Content/Input/Player.input</c> of
-    /// <c>/Content/Input/Player.input/Jump.oiact</c>.
+    /// <c>/Content/Input/Player.input/Jump.oiact</c>, or the model <c>/Content/Ship/Ship.glb</c> of
+    /// <c>/Content/Ship/Ship.glb/Paint.omat</c>.
     /// </summary>
     /// <param name="product">The product's identity.</param>
     /// <returns>The container's identity, or <see langword="null"/> when the path is not named under a container that
@@ -182,7 +183,7 @@ public static class AssetFileTypes
         ArgumentNullException.ThrowIfNull(product);
         return product.Parent is { IsMount: false } container
             && Find(product.Name) is { Category: AssetFileCategory.Cooked, CookedExtension: { } extension }
-            && Find(container.WithAuthoringSuffix().Name) is { Category: AssetFileCategory.Input } type
+            && ContainerType(container) is { } type
             && type.ProductExtensions.Contains(extension, StringComparer.Ordinal)
                 ? container
                 : null;
@@ -264,4 +265,11 @@ public static class AssetFileTypes
     /// <returns>The cooked descriptor's path, or null when the file cooks into no descriptor of its own.</returns>
     public static string? ToCookedPath(string path)
         => Find(path) is { CookedExtension: { } extension } type ? path[..^type.Suffix.Length] + extension : null;
+
+    // A model is identified by its source file (Ship.glb); an input source by its file without the authoring
+    // suffix (Player.input for Player.input.json).
+    private static AssetFileType? ContainerType(AssetPath container)
+        => Find(container.Name) is { Category: AssetFileCategory.Model } model
+            ? model
+            : Find(container.WithAuthoringSuffix().Name) is { Category: AssetFileCategory.Input } input ? input : null;
 }

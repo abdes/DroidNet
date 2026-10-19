@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using DroidNet.Controls;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
@@ -43,7 +44,13 @@ public sealed class CookedFolderTreeItemAdapter : TreeItemAdapter
         var roots = new Dictionary<string, CookedFolderTreeItemAdapter>(StringComparer.Ordinal);
         foreach (var path in paths)
         {
+            // A container's segment (Ship.glb, Player.input) is not a folder: its products are not listed.
             var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (mount.VirtualRootPath.TryCombine(path.Trim('/'), out var identity) && AssetFileTypes.ContainerOf(identity) is not null)
+            {
+                continue;
+            }
+
             var children = roots;
             var prefix = string.Empty;
             foreach (var part in parts.Take(Math.Max(0, parts.Length - 1)))

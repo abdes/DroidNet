@@ -334,36 +334,6 @@ public sealed class CookRepairTests
         _ = result.Diagnostics.Should().NotContain(static diagnostic => diagnostic.Severity >= DiagnosticSeverity.Error);
     }
 
-    /// <summary>A relocated output group rebuilds the model's outputs in the new group and retires the old ones.</summary>
-    /// <returns>The asynchronous native group relocation regression.</returns>
-    [TestMethod]
-    [TestCategory("NativeContent")]
-    public async Task RelocatedImportGroupRebuildsOutputsInNewGroup()
-    {
-        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
-        _ = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
-        var api = CreateRecordingApi(compatibility);
-        var pipeline = CreateIncrementalService(workspace, api, compatibility);
-        var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        AssertCookSucceeded(first);
-        var sidecar = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf" + NativeSceneImportSettings.SidecarSuffix);
-        var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(sidecar, this.TestContext.CancellationToken).ConfigureAwait(false));
-        await File.WriteAllBytesAsync(sidecar, (settings with { OutputDirectory = "Moved/Model" }).ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        var result = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        AssertCookSucceeded(result);
-        _ = result.IsPublished.Should().BeTrue();
-        var paths = (await api.ReadInventoryAsync(workspace.CookedRoot("Content"), artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false))
-            .Assets.Select(static asset => asset.VirtualPath).ToArray();
-        _ = paths.Should().Contain("/Content/Materials/Blue.omat").And.NotContain(static path => path.Contains("/Models/Model/", StringComparison.Ordinal));
-        _ = paths.Where(static path => path.Contains("/Moved/Model/", StringComparison.Ordinal)).Should()
-            .HaveCount(first.CookedAssets.Count(static asset => !string.Equals(asset.VirtualPath, "/Content/Materials/Blue.omat", StringComparison.Ordinal)));
-        _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
-    }
-
     /// <summary>An asset request reconstructs the complete damaged root or preserves the prior publication.</summary>
     /// <param name="failure">A missing source, failed native job, or successful repair.</param>
     /// <returns>The asynchronous native repair regression.</returns>
@@ -396,7 +366,7 @@ public sealed class CookRepairTests
         var damaged = ReadOutputIdentities(workspace.Root);
         if (string.Equals(failure, "missing source", StringComparison.Ordinal))
         {
-            File.Delete(Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf"));
+            File.Delete(Path.Combine(workspace.Root, "Content/Models/Model/model.gltf"));
         }
 
         api.FailNextImport = string.Equals(failure, "native", StringComparison.Ordinal);

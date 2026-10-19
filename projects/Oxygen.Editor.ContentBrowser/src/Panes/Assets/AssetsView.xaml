@@ -518,14 +518,6 @@
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutItem
-                            Command="{x:Bind ViewModel.RenameOutputGroupCommand}"
-                            Text="Rename output group…"
-                            ToolTipService.ToolTip="{x:Bind ViewModel.RenameOutputGroupToolTip, Mode=OneWay}">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE8F4;" />
-                            </MenuFlyoutItem.Icon>
-                        </MenuFlyoutItem>
-                        <MenuFlyoutItem
                             Command="{x:Bind ViewModel.FindReferencesCommand}"
                             Text="Find references"
                             ToolTipService.ToolTip="{x:Bind ViewModel.FindReferencesToolTip, Mode=OneWay}">

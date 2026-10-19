@@ -170,7 +170,7 @@ public sealed class SourceReplacementTests
         _ = await project.PrepareAsync(staging, this.TestContext.CancellationToken, sourceReplacement: source).ConfigureAwait(false);
         var path = Path.Combine(project.Root, ".build/cook", project.Operation.OperationId.ToString("N"), "publication.json");
         var journal = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false))!;
-        journal["sourceReplacement"]!["bundleName"] = "../Other";
+        journal["sourceReplacement"]!["bundleRoot"] = "../Other";
         await File.WriteAllTextAsync(path, journal.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);
         using var writer = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         Func<Task> load = async () => _ = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -201,6 +201,6 @@ public sealed class SourceReplacementTests
             }
         }
 
-        return new("Model", await CookRootImage.CaptureAsync(published, copyTo: null, this.TestContext.CancellationToken).ConfigureAwait(false));
+        return new(SourceBundle, await CookRootImage.CaptureAsync(published, copyTo: null, this.TestContext.CancellationToken).ConfigureAwait(false));
     }
 }

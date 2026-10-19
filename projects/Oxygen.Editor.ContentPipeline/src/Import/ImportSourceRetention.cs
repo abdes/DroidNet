@@ -17,12 +17,14 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
 {
     /// <summary>Captures all discovered dependencies, then installs the new bundle without overwriting an existing source.</summary>
     /// <param name="operation">The operation owning the project writer.</param>
-    /// <param name="bundleName">One directory name beneath Content/SourceMedia/DCC.</param>
+    /// <param name="folder">The authoring folder the user chose for the model.</param>
+    /// <param name="bundleName">The bundle folder's name inside <paramref name="folder"/>.</param>
     /// <param name="discover">Complete source/dependency discovery, including hashes and preserved relative paths.</param>
     /// <param name="cancellationToken">Cancels capture before the bundle is installed.</param>
     /// <returns>The retained portable source facts or the participating document blockers.</returns>
     public async Task<ImportSourceRetentionResult> RetainAsync(
         ContentCookOperation operation,
+        AssetPath folder,
         string bundleName,
         Func<CancellationToken, Task<ImportSourceBundle>> discover,
         CancellationToken cancellationToken)
@@ -31,7 +33,7 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
         ArgumentNullException.ThrowIfNull(discover);
         cancellationToken.ThrowIfCancellationRequested();
         coordinator.VerifyWriter(operation);
-        var destination = ResolveDestination(operation.Project, bundleName);
+        var destination = ResolveDestination(operation.Project, folder, bundleName);
         EnsureAvailable(destination);
         string? primary = null;
         var capture = new CookInputSnapshotCapture(documents, coordinator);
@@ -65,32 +67,41 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
         return new(retained, [], []);
     }
 
-    /// <summary>Resolves a retained-source directory within the declared Content authoring mount.</summary>
+    /// <summary>Resolves the bundle folder a model is imported into: <paramref name="bundleName"/> in the chosen folder.</summary>
     /// <param name="project">The project owning the source bundle.</param>
-    /// <param name="bundleName">One directory name beneath SourceMedia/DCC.</param>
-    /// <returns>The contained absolute source directory.</returns>
-    internal static string ResolveDestination(ProjectContext project, string bundleName)
+    /// <param name="folder">The authoring folder the user chose.</param>
+    /// <param name="bundleName">The bundle folder's name.</param>
+    /// <returns>The contained absolute bundle directory.</returns>
+    public static string ResolveDestination(ProjectContext project, AssetPath folder, string bundleName)
     {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(folder);
         ValidateBundleName(bundleName);
-        var content = project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal))
-            ?? throw new InvalidOperationException("Source retention requires the project's Content authoring mount.");
-        var projectRoot = project.ProjectRoot.FullPath;
-        var contentRoot = project.ProjectRoot.Combine(content.RelativePath).FullPath;
-        var relative = Path.GetRelativePath(projectRoot, contentRoot).Replace('\\', '/');
-        if (Path.IsPathRooted(relative) || string.Equals(relative, "..", StringComparison.Ordinal) || relative.StartsWith("../", StringComparison.Ordinal)
-            || ProjectOutputFolders.Contains(relative))
+        var mount = project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal))
+            ?? throw new ArgumentException("Choose an authoring folder, not built-in or cooked content.", nameof(folder));
+        var segments = folder.RelativePath.Length == 0 ? [] : folder.RelativePath.Split('/');
+        return Path.Combine(ResolveInsideMount(project, mount, segments), bundleName);
+    }
+
+    /// <summary>Resolves the folder of an existing retained bundle from its project-relative path.</summary>
+    /// <param name="project">The project owning the source bundle.</param>
+    /// <param name="bundleRoot">The bundle's project-relative folder, as its import settings record it.</param>
+    /// <returns>The contained absolute bundle directory.</returns>
+    internal static string ResolveBundleRoot(ProjectContext project, string bundleRoot)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentException.ThrowIfNullOrWhiteSpace(bundleRoot);
+        var path = project.ProjectRoot.Combine(bundleRoot);
+        foreach (var mount in project.AuthoringMounts)
         {
-            throw new InvalidOperationException("The Content authoring mount must remain inside the project and outside derived output.");
+            var root = project.ProjectRoot.Combine(mount.RelativePath);
+            if (path != root && path.IsSameOrInside(root))
+            {
+                return ResolveInsideMount(project, mount, path.GetPathBelow(root).Split('/'));
+            }
         }
 
-        var sourceRoot = projectRoot;
-        foreach (var segment in relative.Split('/').Where(static segment => !string.Equals(segment, ".", StringComparison.Ordinal)).Concat(["SourceMedia", "DCC"]))
-        {
-            sourceRoot = Path.Combine(sourceRoot, segment);
-            CookOutputLease.RejectReparsePoint(sourceRoot);
-        }
-
-        return Path.Combine(sourceRoot, bundleName);
+        throw new InvalidDataException("A retained source bundle must be inside an authoring mount.");
     }
 
     internal static void ValidateBundleName(string bundleName)
@@ -100,8 +111,35 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
             || bundleName.Contains('/', StringComparison.Ordinal) || bundleName.Contains('\\', StringComparison.Ordinal)
             || bundleName.EndsWith('.') || bundleName.EndsWith(' '))
         {
-            throw new ArgumentException("A source bundle needs one valid directory name beneath Content/SourceMedia/DCC.", nameof(bundleName));
+            throw new ArgumentException("A source bundle needs one valid directory name.", nameof(bundleName));
         }
+    }
+
+    // Walks a mount's folders, refusing derived content (SourceMedia, .cooked) and reparse points.
+    private static string ResolveInsideMount(ProjectContext project, ProjectMountPoint mount, IEnumerable<string> segments)
+    {
+        var root = project.ProjectRoot.Combine(mount.RelativePath).FullPath;
+        var relative = Path.GetRelativePath(project.ProjectRoot.FullPath, root).Replace('\\', '/');
+        if (Path.IsPathRooted(relative) || string.Equals(relative, "..", StringComparison.Ordinal) || relative.StartsWith("../", StringComparison.Ordinal)
+            || ProjectOutputFolders.Contains(relative))
+        {
+            throw new InvalidOperationException("The authoring mount must remain inside the project and outside derived output.");
+        }
+
+        var path = root;
+        CookOutputLease.RejectReparsePoint(path);
+        foreach (var segment in segments.Where(static segment => segment.Length != 0))
+        {
+            if (VirtualPath.IsDerivedContent(segment))
+            {
+                throw new ArgumentException("Choose a content destination outside source-media and generated folders.");
+            }
+
+            path = Path.Combine(path, segment);
+            CookOutputLease.RejectReparsePoint(path);
+        }
+
+        return path;
     }
 
     private static string ValidateBundle(ImportSourceBundle bundle)

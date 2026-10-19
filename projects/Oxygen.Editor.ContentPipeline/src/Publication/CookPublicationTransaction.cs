@@ -92,7 +92,7 @@ internal sealed partial class CookPublicationTransaction
         foreach (var update in producedSourceFiles)
         {
             var path = ProducedSourcePath(this.project, update);
-            if (sourceReplacement is not null && IsWithinSourceBundle(this.project, sourceReplacement.BundleName, update.RelativePath))
+            if (sourceReplacement is not null && IsWithinSourceBundle(this.project, sourceReplacement.BundleRoot, update.RelativePath))
             {
                 continue;
             }

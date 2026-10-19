@@ -52,7 +52,7 @@ internal sealed partial class RetentionWorkspace : IDisposable
     }
 
     public Task<ImportSourceRetentionResult> RetainAsync(string name, IReadOnlyList<CookSnapshotInput> inputs, CancellationToken cancellationToken)
-        => this.Coordinator.RunAsync((owner, token) => this.Retention.RetainAsync(owner, name, _ => Task.FromResult(new ImportSourceBundle(inputs[0].RelativePath, inputs.ToImmutableArray())), token), cancellationToken);
+        => this.Coordinator.RunAsync((owner, token) => this.Retention.RetainAsync(owner, AssetPath.Parse("/Content/Models"), name, _ => Task.FromResult(new ImportSourceBundle(inputs[0].RelativePath, inputs.ToImmutableArray())), token), cancellationToken);
 
     public void Dispose()
     {

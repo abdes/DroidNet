@@ -170,8 +170,8 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     {
         var actions = new Mock<ICookingWorkspaceActions>();
         _ = actions.Setup(value => value.ShowImportedAssetsAsync(It.IsAny<CookRunSnapshot>())).ReturnsAsync(value: true);
-        var source = AssetPath.Parse("/Content/SourceMedia/DCC/Model/model.gltf");
-        var output = AssetPath.Parse("/Content/Models/Model/Geometry/Mesh.ogeo");
+        var source = AssetPath.Parse("/Content/Models/Model/model.gltf");
+        var output = AssetPath.Parse("/Content/Models/Model/model.gltf/Mesh.ogeo");
         using var model = CreateModel(actions.Object, configure: snapshot => snapshot with
         {
             DisplayName = "Model",

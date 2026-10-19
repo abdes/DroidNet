@@ -391,7 +391,7 @@ public sealed class CookOrchestrationTests
 
     private sealed class InvalidManifestBuilder : IContentImportManifestBuilder
     {
-        public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, ContentImportLayout layout, ContentPipeline.Import.NativeMaterialSlotProvenance provenance) => new ContentImportManifestBuilder().BuildModelJob(sourceRelativePath, dependsOn, name, layout, provenance);
+        public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity, ContentPipeline.Import.NativeMaterialSlotProvenance provenance) => new ContentImportManifestBuilder().BuildModelJob(sourceRelativePath, dependsOn, name, identity, provenance);
 
         public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, ContentPipeline.Import.NativeSceneImportSettings? modelSettings = null) => new ContentImportManifestBuilder().BuildJob(input, dependsOn, modelSettings);
 

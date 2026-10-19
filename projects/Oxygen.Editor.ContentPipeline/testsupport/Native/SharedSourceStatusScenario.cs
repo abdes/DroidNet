@@ -19,7 +19,7 @@ internal static class SharedSourceStatusScenario
     {
         using var workspace = new CookWorkspace();
         var source = await WriteRetainedModelAsync(workspace, "Many", "gltf", testContext.CancellationToken).ConfigureAwait(false);
-        var path = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Many/model.gltf");
+        var path = Path.Combine(workspace.Root, "Content/Models/Many/model.gltf");
         var model = JsonNode.Parse(await File.ReadAllTextAsync(path, testContext.CancellationToken).ConfigureAwait(false))!;
         var prototype = model["meshes"]![0]!.DeepClone();
         var meshes = new JsonArray();

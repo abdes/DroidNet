@@ -70,7 +70,7 @@ public sealed partial class AssetRelocationWorkflow(
         try
         {
             var applied = await relocation.RelocateAsync(request, title, this.history, CancellationToken.None).ConfigureAwait(true);
-            if (applied.Moves.Count == 0 && applied.GroupFolders.Count == 0 && applied.RewrittenFiles.Count == 0)
+            if (applied.Moves.Count == 0 && applied.RewrittenFiles.Count == 0)
             {
                 this.LogNothingToDo(title);
                 return null;
@@ -188,7 +188,7 @@ public sealed partial class AssetRelocationWorkflow(
 
     /// <inheritdoc/>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1508:Avoid dead conditional code", Justification = "the validator callback assigns the accepted name while the dialog is open")]
-    public async Task<string?> PromptNameAsync(string title, string initial, bool allowSeparators = false)
+    public async Task<string?> PromptNameAsync(string title, string initial)
     {
         ArgumentNullException.ThrowIfNull(initial);
         var input = new TextBox { Text = initial, SelectionStart = 0, SelectionLength = initial.Length, MinWidth = 320 };
@@ -205,11 +205,10 @@ public sealed partial class AssetRelocationWorkflow(
             PrimaryAction = () =>
             {
                 var value = VirtualPath.NormalizeTypedName(input.Text);
-                var segments = allowSeparators ? value.Replace('\\', '/').Split('/') : [value];
-                var invalid = segments.Select(static segment => VirtualPath.ValidateSegment(segment, VirtualPathRuleSet.Authored)?.ToMessage()).FirstOrDefault(static reason => reason is not null);
+                var invalid = VirtualPath.ValidateSegment(value, VirtualPathRuleSet.Authored)?.ToMessage();
                 error.Text = invalid ?? string.Empty;
                 error.Visibility = invalid is null ? Visibility.Collapsed : Visibility.Visible;
-                accepted = invalid is null ? string.Join('/', segments) : null;
+                accepted = invalid is null ? value : null;
                 return Task.FromResult(invalid is null);
             },
         };
@@ -221,15 +220,13 @@ public sealed partial class AssetRelocationWorkflow(
 
     private static string DescribeResult(AssetRelocationPlan plan)
     {
-        var moved = plan.Request.Moves.Count + plan.Request.GroupMoves.Count;
-        var subject = plan.Request.Moves.Count == 1 && plan.Request.GroupMoves.Count == 0
+        var moved = plan.Request.Moves.Count;
+        var subject = moved == 1
             ? $"'{plan.Request.Moves[0].Source.Name}' is now '{plan.Request.Moves[0].Target.Name}'"
             : string.Create(CultureInfo.CurrentCulture, $"Moved {moved} {(moved == 1 ? "item" : "items")}");
-        var groups = plan.GroupFolders.Count == 0 ? string.Empty
-            : string.Create(CultureInfo.CurrentCulture, $" The model's output group moved in {plan.GroupFolders.Count} type folders.");
-        return (plan.Referrers.Count == 0
+        return plan.Referrers.Count == 0
             ? subject + "."
-            : string.Create(CultureInfo.CurrentCulture, $"{subject}; updated {plan.Referrers.Count} {(plan.Referrers.Count == 1 ? "file that uses it" : "files that use it")}.")) + groups;
+            : string.Create(CultureInfo.CurrentCulture, $"{subject}; updated {plan.Referrers.Count} {(plan.Referrers.Count == 1 ? "file that uses it" : "files that use it")}.");
     }
 
     private static string Describe(IReadOnlyList<AssetPath> sources)

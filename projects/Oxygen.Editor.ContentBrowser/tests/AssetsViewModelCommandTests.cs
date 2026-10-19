@@ -62,7 +62,7 @@ public sealed class AssetsViewModelCommandTests
         _ = Directory.CreateDirectory(Path.GetDirectoryName(clayPath)!);
         await File.WriteAllTextAsync(clayPath, "{}").ConfigureAwait(false);
         var workflow = new Mock<IAssetRelocationWorkflow>();
-        _ = workflow.Setup(value => value.PromptNameAsync("Rename", "Clay", false)).ReturnsAsync("Brick");
+        _ = workflow.Setup(value => value.PromptNameAsync("Rename", "Clay")).ReturnsAsync("Brick");
         var (browser, state, _) = await CreateBrowserAsync(root, workflow.Object).ConfigureAwait(false);
         try
         {
@@ -89,10 +89,10 @@ public sealed class AssetsViewModelCommandTests
                         && request.Moves.Single().Target == AssetPath.Parse("/Content/Materials/Brick.omat.json")),
                     "Rename"));
 
-                var output = CreateAsset("/Content/Geometry/Robot/Body.ogeo", AssetKind.Geometry, descriptor: null) with { ImportSource = AssetPath.Parse("/Content/SourceMedia/Robot/robot.gltf") };
+                var output = CreateAsset("/Content/Models/Robot/robot.gltf/Body.ogeo", AssetKind.Geometry, descriptor: null) with { ImportSource = AssetPath.Parse("/Content/Models/Robot/robot.gltf") };
                 state.PublishSelection([output]);
                 _ = browser.RenameSelectedCommand.CanExecute(parameter: null).Should().BeFalse();
-                _ = browser.RenameToolTip.Should().Contain("Rename output group");
+                _ = browser.RenameToolTip.Should().Contain("imported model");
                 _ = browser.DeleteToolTip.Should().Contain("Delete the model");
 
                 var cooked = CreateAsset("/Cooked/Content/Materials/Clay.omat", AssetKind.Material, descriptor: null);

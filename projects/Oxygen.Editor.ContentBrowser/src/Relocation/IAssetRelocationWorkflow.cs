@@ -76,9 +76,8 @@ public interface IAssetRelocationWorkflow
     /// <summary>Asks for a new name.</summary>
     /// <param name="title">The dialog title.</param>
     /// <param name="initial">The current name.</param>
-    /// <param name="allowSeparators">Whether a nested path such as <c>Vehicles/Car</c> is allowed.</param>
     /// <returns>The accepted name, or null when cancelled or unchanged.</returns>
-    public Task<string?> PromptNameAsync(string title, string initial, bool allowSeparators = false);
+    public Task<string?> PromptNameAsync(string title, string initial);
 }
 
 /// <summary>The result of a Content Browser change.</summary>

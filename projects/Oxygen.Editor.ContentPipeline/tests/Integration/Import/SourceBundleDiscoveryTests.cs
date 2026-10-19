@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -133,7 +134,7 @@ public sealed class SourceBundleDiscoveryTests
         _ = inspector.Executions.Should().HaveCount(2);
         _ = result.Source!.PrimaryRelativePath.Should().Be("Models/model.gltf");
         _ = result.Source.Files.Select(static file => file.RelativePath).Should().BeEquivalentTo("Models/model.gltf", "Shared/data.bin");
-        _ = (await File.ReadAllTextAsync(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model/Models/model.gltf"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("new source");
+        _ = (await File.ReadAllTextAsync(Path.Combine(workspace.ProjectRoot, "Content/Models/Model/Models/model.gltf"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("new source");
         _ = inspector.Executions.Should().OnlyContain(execution => !Directory.Exists(execution.OperationRoot));
     }
 
@@ -149,7 +150,7 @@ public sealed class SourceBundleDiscoveryTests
         var failure = await retain.Should().ThrowAsync<CookInputDiscoveryException>().ConfigureAwait(false);
         _ = failure.Which.Diagnostics.Should().ContainSingle(issue => issue.Code == AssetImportDiagnosticCodes.SourceMissing
             && issue.AffectedPath == Path.Combine(Path.GetDirectoryName(primary.SourcePath.FullPath)!, "missing.bin"));
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/Models/Model")).Should().BeFalse();
         _ = inspector.Executions.Should().OnlyContain(execution => !Directory.Exists(execution.OperationRoot));
     }
 
@@ -181,7 +182,7 @@ public sealed class SourceBundleDiscoveryTests
         Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
         var failure = await retain.Should().ThrowAsync<CookInputDiscoveryException>().ConfigureAwait(false);
         _ = failure.Which.Diagnostics.Should().ContainSingle(issue => issue.AffectedPath == primary.SourcePath.FullPath && issue.OperationId != Guid.Empty);
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/Models/Model")).Should().BeFalse();
     }
 
     /// <summary>Dirty sources block before any native query and preserve the established Save requirement.</summary>
@@ -197,7 +198,7 @@ public sealed class SourceBundleDiscoveryTests
         Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await retain.Should().ThrowAsync<CookInputsNeedSaveException>().ConfigureAwait(false);
         _ = inspector.Executions.Should().BeEmpty();
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/Models/Model")).Should().BeFalse();
     }
 
     /// <summary>Cancellation or project closure during native discovery cannot retain a bundle.</summary>
@@ -229,7 +230,7 @@ public sealed class SourceBundleDiscoveryTests
         _ = await retain.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         _ = inspector.Executions.Should().ContainSingle();
         _ = inspector.Executions.Should().OnlyContain(execution => !Directory.Exists(execution.OperationRoot));
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/Models/Model")).Should().BeFalse();
     }
 
     /// <summary>Unacknowledged external source edits require reload before native inspection.</summary>
@@ -319,10 +320,10 @@ public sealed class SourceBundleDiscoveryTests
 
     private static Task<ImportSourceRetentionResult> RetainDiscoveredAsync(RetentionWorkspace workspace, string sourcePath, IEngineContentPipelineApi native, CancellationToken cancellationToken)
     {
-        var recipe = new ContentImportManifestBuilder().BuildModelJob(Path.GetFileName(sourcePath), [], "Model", new SceneImportTarget("Content", "Model").CreateLayout(sourcePath), NativeMaterialSlotProvenance.Create());
+        var recipe = new ContentImportManifestBuilder().BuildModelJob(Path.GetFileName(sourcePath), [], "Model", AssetPath.Parse("/Content/Models/Model/" + Path.GetFileName(sourcePath)), NativeMaterialSlotProvenance.Create());
         var discovery = new SceneImportSourceDiscovery(workspace.Documents, workspace.Coordinator, native);
         return workspace.Coordinator.RunAsync(
-            (operation, token) => workspace.Retention.RetainAsync(operation, "Model", captureToken => discovery.DiscoverAsync(operation, sourcePath, recipe, captureToken), token),
+            (operation, token) => workspace.Retention.RetainAsync(operation, AssetPath.Parse("/Content/Models"), "Model", captureToken => discovery.DiscoverAsync(operation, sourcePath, recipe, captureToken), token),
             cancellationToken);
     }
 

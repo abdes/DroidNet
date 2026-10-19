@@ -40,17 +40,14 @@ public sealed class ImportWorkflowTests
             using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
-            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", AssetPath.Parse("/Content")), this.TestContext.CancellationToken).ConfigureAwait(false);
+            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
             _ = workspace.CookCoordinator.Runs.Should().ContainSingle();
-            _ = result.CookedAssets.Select(static asset => asset.VirtualPath).Should().BeEquivalentTo(TypedImportOutputPaths);
+            _ = result.CookedAssets.Select(static asset => asset.VirtualPath).Should().BeEquivalentTo(FlatImportOutputPaths);
 
-            foreach (var folder in new[] { "Materials", "Geometry", "Scenes" })
-            {
-                _ = (await service.CookFolderAsync(AssetPath.Parse("/Content/" + folder + "/Model"), this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
-            }
+            _ = (await service.CookFolderAsync(AssetPath.Parse("/Content/Models/Model"), this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
 
-            _ = result.RetainedSourceUri.Should().Be(AssetPath.Parse("/Content/SourceMedia/DCC/Model/Model.gltf"));
+            _ = result.RetainedSourceUri.Should().Be(AssetPath.Parse("/Content/Models/Model/Model.gltf"));
             var run = workspace.CookCoordinator.Runs[0];
             _ = run.Request.Import.Should().BeNull();
             _ = run.Request.IsReimport.Should().BeTrue();
@@ -76,7 +73,7 @@ public sealed class ImportWorkflowTests
     public async Task ImportWorkflowKeepsProjectSourceIdentity()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        var path = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/model.fbx");
+        var path = Path.Combine(workspace.Root, "Content/Models/model.fbx");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.fbx"), path);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
@@ -84,8 +81,8 @@ public sealed class ImportWorkflowTests
         var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
-        _ = result.RetainedSourceUri.Should().Be(AssetPath.Parse("/Content/SourceMedia/DCC/model.fbx"));
-        _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, "Content/SourceMedia"), "*.fbx", SearchOption.AllDirectories).Should().ContainSingle();
+        _ = result.RetainedSourceUri.Should().Be(AssetPath.Parse("/Content/Models/model.fbx"));
+        _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, "Content"), "*.fbx", SearchOption.AllDirectories).Should().ContainSingle();
     }
 
     /// <summary>A failed cook retains its source and changes Retry to the retained identity, even after the original disappears.</summary>
@@ -145,7 +142,7 @@ public sealed class ImportWorkflowTests
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Triangle", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.Status.Should().Be(OperationStatus.Failed);
             _ = result.RetainedSourceUri.Should().NotBeNull();
-            var retained = Path.Combine(workspace.Root, "Content", "SourceMedia", "DCC", "Triangle");
+            var retained = Path.Combine(workspace.Root, "Content", "Models", "Triangle");
             _ = File.Exists(Path.Combine(retained, "Triangle." + format)).Should().BeTrue();
             _ = File.Exists(Path.Combine(retained, "static_textured_checker.png")).Should().BeTrue();
             using (var selected = await workspace.Publication.AcquireReadAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false))
@@ -248,7 +245,7 @@ public sealed class ImportWorkflowTests
         {
             var source = Path.Combine(external.FullName, "model.gltf");
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), source);
-            var settingsPath = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf.import.json");
+            var settingsPath = Path.Combine(workspace.Root, "Content/Models/Model/model.gltf.import.json");
             var state = new CookDocumentState(FileSystemPath.From(settingsPath), "Model import settings", IsDirty: true, string.Empty);
             var dirty = true;
             using var registration = workspace.Documents.Register(FileSystemPath.From(settingsPath), _ => Task.FromResult<CookDocumentReadLease?>(dirty ? new(state, static () => { }) : null));
@@ -279,8 +276,8 @@ public sealed class ImportWorkflowTests
         }
     }
 
-    private static readonly string[] TypedImportOutputPaths =
-        ["/Content/Materials/Model/Scalar.omat", "/Content/Geometry/Model/Triangle.ogeo", "/Content/Scenes/Model/Model.oscene"];
+    private static readonly string[] FlatImportOutputPaths =
+        ["/Content/Models/Model/Model.gltf/Scalar.omat", "/Content/Models/Model/Model.gltf/Triangle.ogeo", "/Content/Models/Model/Model.gltf/Model.oscene"];
 
     private sealed class FailSettingsStore : IAtomicFileStore
     {

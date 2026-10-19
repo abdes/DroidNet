@@ -210,7 +210,6 @@ internal sealed partial class CookSourceAnalyzer(
             if (input.Kind == ContentCookAssetKind.ForeignSource)
             {
                 settings = NativeSceneImportSettings.Parse(bytes);
-                input = input with { MountName = settings.MountPoint, OutputNamespaces = settings.OutputPrefixes };
             }
         }
         else

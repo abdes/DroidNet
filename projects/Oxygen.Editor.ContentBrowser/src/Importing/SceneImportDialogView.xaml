@@ -35,7 +35,7 @@
         </Grid>
         <TextBlock
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-            Text="{x:Bind ViewModel.OutputLocations, Mode=OneWay}"
+            Text="{x:Bind ViewModel.ModelLocation, Mode=OneWay}"
             TextWrapping="Wrap" />
         <TextBlock
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"

@@ -49,6 +49,31 @@ internal sealed class MaterialSlotsTests : DroidNet.Tests.VisualUserInterfaceTes
         _ = model.SelectedMaterialName.Should().Be("Geometry default");
     });
 
+    /// <summary>
+    /// A model's material is not listed in the Content Browser, and is still offered by the material picker: it is
+    /// reached by its identity under the model.
+    /// </summary>
+    /// <returns>The asynchronous picker test.</returns>
+    [TestMethod]
+    public Task MaterialPickerListsModelMaterials() => EnqueueAsync(async () =>
+    {
+        using var fixture = new GeometryFixture();
+        var paint = AssetPath.Parse("/Content/Models/Ship/Ship.glb/Paint.omat");
+        var material = await fixture.Assets.Object.ResolveAsync(fixture.MaterialAsset, CancellationToken.None).ConfigureAwait(true);
+        var geometry = await fixture.Assets.Object.ResolveAsync(fixture.GeometryAsset, CancellationToken.None).ConfigureAwait(true);
+        var product = material! with { Identity = paint, DisplayName = "Paint", CookStatus = material.CookStatus! with { AssetUri = paint } };
+        _ = fixture.Assets.SetupGet(value => value.Items).Returns(System.Reactive.Linq.Observable.Return<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>>([geometry!, material, product]));
+        var target = SceneAuthoringFixture.TargetFor(fixture.Geometry.Geometry);
+        _ = fixture.Authoring.Slots.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), fixture.Geometry.Geometry, It.IsAny<CancellationToken>())).ReturnsAsync(new GeometryMaterialSlotMetadata(fixture.Geometry.Geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), target.LayoutRevision, [new(target.SlotId, "Surface", [new(0, 0, Guid.Empty)])]));
+        using var host = fixture.Authoring.CreateInspectorHost("Geometry", assetProvider: fixture.Assets.Object);
+        var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
+        await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
+
+        await model.RefreshMaterialPickerAsync().ConfigureAwait(true);
+
+        _ = model.MaterialChoices.Groups.SelectMany(static group => group.Rows).Select(static row => row.Choice.Asset).Should().Contain(paint);
+    });
+
     /// <summary>Unavailable metadata keeps the material control disabled instead of manufacturing a slot.</summary>
     /// <returns>The asynchronous unavailable-state regression.</returns>
     [TestMethod]

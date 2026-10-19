@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 
@@ -27,7 +28,7 @@ public sealed class SourceRetentionTests
         var operation = () => workspace.Coordinator.RunAsync<int>(
             async (owner, token) =>
             {
-                retained = (await workspace.Retention.RetainAsync(owner, "Model", _ => Task.FromResult(new ImportSourceBundle(primary.RelativePath, [primary, buffer])), token).ConfigureAwait(false)).Source;
+                retained = (await workspace.Retention.RetainAsync(owner, AssetPath.Parse("/Content/Models"), "Model", _ => Task.FromResult(new ImportSourceBundle(primary.RelativePath, [primary, buffer])), token).ConfigureAwait(false)).Source;
                 throw new InvalidDataException("Subsequent native cook failed.");
             },
             this.TestContext.CancellationToken);
@@ -35,7 +36,7 @@ public sealed class SourceRetentionTests
         File.Delete(primary.SourcePath.FullPath);
         File.Delete(buffer.SourcePath.FullPath);
         _ = retained.Should().NotBeNull();
-        _ = retained!.DirectoryRelativePath.Should().Be("Content/SourceMedia/DCC/Model");
+        _ = retained!.DirectoryRelativePath.Should().Be("Content/Models/Model");
         _ = retained.PrimaryRelativePath.Should().Be("model.gltf");
         _ = retained.Files.Should().Contain(new RetainedImportSourceFile("buffers/data.bin", buffer.DiscoveryHash));
         var retainedBuffer = Path.Combine(workspace.ProjectRoot, retained.DirectoryRelativePath, "buffers/data.bin");
@@ -54,10 +55,10 @@ public sealed class SourceRetentionTests
         var replacement = workspace.Write("model.glb", "replacement");
         var retry = () => workspace.RetainAsync("Model", [replacement], this.TestContext.CancellationToken);
         _ = await retry.Should().ThrowAsync<IOException>().WithMessage("*already exists*").ConfigureAwait(false);
-        _ = (await File.ReadAllTextAsync(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model/model.glb"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("original");
+        _ = (await File.ReadAllTextAsync(Path.Combine(workspace.ProjectRoot, "Content/Models/Model/model.glb"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("original");
     }
 
-    /// <summary>Source placement follows the declared Content mount while retaining its canonical source-media location.</summary>
+    /// <summary>Source placement follows the declared Content mount while placing the bundle in the chosen folder.</summary>
     /// <returns>The asynchronous authoring-mount test.</returns>
     [TestMethod]
     public async Task RetentionUsesDeclaredContentMountRoot()
@@ -66,7 +67,7 @@ public sealed class SourceRetentionTests
         workspace.Projects.Activate(workspace.Projects.ActiveProject! with { AuthoringMounts = [new("Content", "Authoring")] });
         var input = workspace.Write("model.glb", "source");
         var result = await workspace.RetainAsync("Model", [input], this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = result.Source!.DirectoryRelativePath.Should().Be("Authoring/SourceMedia/DCC/Model");
+        _ = result.Source!.DirectoryRelativePath.Should().Be("Authoring/Models/Model");
         _ = File.Exists(Path.Combine(workspace.ProjectRoot, result.Source.DirectoryRelativePath, "model.glb")).Should().BeTrue();
     }
 
@@ -92,7 +93,7 @@ public sealed class SourceRetentionTests
 
         var retain = () => workspace.RetainAsync("Model", [primary, dependency], this.TestContext.CancellationToken);
         _ = await retain.Should().ThrowAsync<IOException>().ConfigureAwait(false);
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/Models/Model")).Should().BeFalse();
         _ = File.Exists(primary.SourcePath.FullPath).Should().BeTrue();
     }
 
@@ -106,6 +107,7 @@ public sealed class SourceRetentionTests
         var retain = () => workspace.Coordinator.RunAsync(
             (owner, token) => workspace.Retention.RetainAsync(
                 owner,
+                AssetPath.Parse("/Content/Models"),
                 "Model",
                 _ =>
                 {
@@ -115,7 +117,7 @@ public sealed class SourceRetentionTests
                 token),
             this.TestContext.CancellationToken);
         _ = await retain.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/Models/Model")).Should().BeFalse();
     }
 
     /// <summary>Unsafe bundle destinations are rejected before exposure.</summary>
@@ -132,7 +134,7 @@ public sealed class SourceRetentionTests
         var input = workspace.Write("model.glb", "source");
         var retain = () => workspace.RetainAsync(bundleName, [input], this.TestContext.CancellationToken);
         _ = await retain.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/Models")).Should().BeFalse();
     }
 
     /// <summary>Dirty participating source documents retain their existing save workflow and do not copy transient state.</summary>
@@ -147,7 +149,7 @@ public sealed class SourceRetentionTests
         var result = await workspace.RetainAsync("Model", [input], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Source.Should().BeNull();
         _ = result.NeedsSave.Should().ContainSingle().Which.Should().Be(document);
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/Models")).Should().BeFalse();
     }
 
     /// <summary>A missing primary source or an ambiguous destination cannot become a retained bundle.</summary>
@@ -162,7 +164,7 @@ public sealed class SourceRetentionTests
         var input = workspace.Write("model.glb", "source");
         IReadOnlyList<CookSnapshotInput> files = missingPrimary ? [input] : [input, input with { RelativePath = "MODEL.glb" }];
         var retain = () => workspace.Coordinator.RunAsync(
-            (owner, token) => workspace.Retention.RetainAsync(owner, "Model", _ => Task.FromResult(new ImportSourceBundle(missingPrimary ? "missing.glb" : input.RelativePath, [.. files])), token),
+            (owner, token) => workspace.Retention.RetainAsync(owner, AssetPath.Parse("/Content/Models"), "Model", _ => Task.FromResult(new ImportSourceBundle(missingPrimary ? "missing.glb" : input.RelativePath, [.. files])), token),
             this.TestContext.CancellationToken);
         if (missingPrimary)
         {
@@ -173,6 +175,6 @@ public sealed class SourceRetentionTests
             _ = await retain.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
         }
 
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/Models/Model")).Should().BeFalse();
     }
 }

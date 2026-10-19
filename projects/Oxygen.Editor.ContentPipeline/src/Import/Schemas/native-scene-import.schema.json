@@ -4,14 +4,10 @@
   "type": "object",
   "properties": {
     "SchemaVersion": {
-      "const": 4
+      "const": 5
     },
     "Importer": {
       "const": "Oxygen.Cooker.Scene/v1"
-    },
-    "MountPoint": {
-      "type": "string",
-      "minLength": 1
     },
     "Name": {
       "type": "string",
@@ -38,10 +34,6 @@
         "minLength": 1
       }
     },
-    "OutputDirectory": {
-      "type": "string",
-      "minLength": 1
-    },
     "ContentPolicy": {
       "const": "static"
     },
@@ -64,13 +56,11 @@
   "required": [
     "SchemaVersion",
     "Importer",
-    "MountPoint",
     "Name",
     "BundleRoot",
     "PrimaryRelativePath",
     "SourceHash",
     "Files",
-    "OutputDirectory",
     "ContentPolicy",
     "UnitPolicy",
     "BakeTransforms",

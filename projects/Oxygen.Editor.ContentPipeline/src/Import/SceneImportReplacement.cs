@@ -11,21 +11,17 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <summary>The existing retained source and byte baseline explicitly reviewed for replacement.</summary>
 public sealed class SceneImportReplacement
 {
-    private SceneImportReplacement(string bundleName, AssetPath sourceUri, NativeSceneImportSettings settings, CookRootImage before)
+    private SceneImportReplacement(AssetPath sourceUri, NativeSceneImportSettings settings, CookRootImage before)
     {
-        this.BundleName = bundleName;
         this.SourceUri = sourceUri;
         this.Settings = settings;
         this.Before = before;
     }
 
-    /// <summary>Gets the retained-source directory name.</summary>
-    public string BundleName { get; }
-
     /// <summary>Gets the stable source identity preserved by replacement.</summary>
     public AssetPath SourceUri { get; }
 
-    /// <summary>Gets the existing import policies and output namespace.</summary>
+    /// <summary>Gets the existing import settings, which name the bundle.</summary>
     public NativeSceneImportSettings Settings { get; }
 
     /// <summary>Gets the reviewed source and settings byte identities.</summary>
@@ -33,13 +29,14 @@ public sealed class SceneImportReplacement
 
     /// <summary>Identifies one exclusively owned retained model without changing any source or output.</summary>
     /// <param name="project">The reviewed project.</param>
-    /// <param name="bundleName">The colliding retained-source directory name.</param>
+    /// <param name="folder">The authoring folder holding the bundle.</param>
+    /// <param name="bundleName">The colliding bundle folder's name.</param>
     /// <param name="cancellationToken">Cancels read-only review.</param>
     /// <returns>The exact replacement target.</returns>
-    public static async Task<SceneImportReplacement> ReviewAsync(ProjectContext project, string bundleName, CancellationToken cancellationToken)
+    public static async Task<SceneImportReplacement> ReviewAsync(ProjectContext project, AssetPath folder, string bundleName, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(project);
-        var root = ImportSourceRetention.ResolveDestination(project, bundleName);
+        var root = ImportSourceRetention.ResolveDestination(project, folder, bundleName);
         var before = await CookRootImage.CaptureAsync(root, copyTo: null, cancellationToken).ConfigureAwait(false);
         var sidecars = before.Files.Keys.Where(static path => path.EndsWith(NativeSceneImportSettings.SidecarSuffix, StringComparison.Ordinal)).ToArray();
         if (!before.Exists || sidecars.Length != 1)
@@ -49,8 +46,7 @@ public sealed class SceneImportReplacement
 
         var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(Path.Combine(root, sidecars[0]), cancellationToken).ConfigureAwait(false));
         if (FileSystemPath.From(root) != project.ProjectRoot.Combine(settings.BundleRoot)
-            || !string.Equals(sidecars[0], settings.PrimaryRelativePath + NativeSceneImportSettings.SidecarSuffix, FileSystemPath.NameComparison)
-            || !project.AuthoringMounts.Any(mount => string.Equals(mount.Name, settings.MountPoint, StringComparison.Ordinal)))
+            || !string.Equals(sidecars[0], settings.PrimaryRelativePath + NativeSceneImportSettings.SidecarSuffix, FileSystemPath.NameComparison))
         {
             throw new InvalidDataException("The existing import settings do not own this retained source and destination.");
         }
@@ -68,7 +64,7 @@ public sealed class SceneImportReplacement
             throw new IOException("The retained source changed during review. Review it again.");
         }
 
-        var mountName = project.AuthoringMounts.Single(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal)).Name;
-        return new(bundleName, AssetPath.Create(mountName, "SourceMedia/DCC/" + bundleName + "/" + settings.PrimaryRelativePath), settings, before);
+        var primary = folder.Combine(bundleName + "/" + settings.PrimaryRelativePath);
+        return new(primary, settings, before);
     }
 }

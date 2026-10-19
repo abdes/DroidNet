@@ -85,22 +85,19 @@ internal sealed class RelocationWorkspace : IDisposable
     /// <summary>Writes a retained model bundle with its import sidecar.</summary>
     /// <param name="bundle">The bundle folder, relative to the project.</param>
     /// <param name="primary">The primary source file inside the bundle.</param>
-    /// <param name="group">The output group the sidecar records.</param>
     /// <returns>The import settings written to the sidecar.</returns>
-    public NativeSceneImportSettings WriteModel(string bundle, string primary, string group)
+    public NativeSceneImportSettings WriteModel(string bundle, string primary)
     {
         _ = this.Write(bundle + "/" + primary, "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[{\"uri\":\"mesh.bin\"}]}");
         _ = this.Write(bundle + "/mesh.bin", "bin");
         var settings = new NativeSceneImportSettings(
-            4,
+            NativeSceneImportSettings.CurrentSchemaVersion,
             NativeSceneImportSettings.ImporterIdentity,
-            "Content",
             Path.GetFileNameWithoutExtension(primary),
             bundle,
             primary,
             new string('A', 64),
-            ImmutableArray.Create(primary, "mesh.bin"),
-            group)
+            ImmutableArray.Create(primary, "mesh.bin"))
         {
             MaterialSlotProvenance = NativeMaterialSlotProvenance.Create(),
         };

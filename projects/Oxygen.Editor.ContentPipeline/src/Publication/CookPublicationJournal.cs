@@ -30,7 +30,7 @@ internal sealed record CookPublicationJournal(
     FileSnapshot PreviousHead,
     FileSnapshot? CandidateHead)
 {
-    internal const int CurrentVersion = 3;
+    internal const int CurrentVersion = 4;
 
     public SourceBundle? SourceReplacement { get; init; }
 
@@ -39,7 +39,7 @@ internal sealed record CookPublicationJournal(
     public ProjectConfiguration? ProjectChange { get; init; }
 
     /// <summary>A source-directory replacement retains its authored before/after identities.</summary>
-    public sealed record SourceBundle(string BundleName, CookRootImage Before, CookRootImage After);
+    public sealed record SourceBundle(string BundleRoot, CookRootImage Before, CookRootImage After);
 
     /// <summary>Project-manager representations used for the owner's configuration CAS and recovery.</summary>
     public sealed record ProjectConfiguration(string BeforeJson, string AfterJson);

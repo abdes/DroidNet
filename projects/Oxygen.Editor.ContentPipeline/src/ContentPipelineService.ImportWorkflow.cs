@@ -58,8 +58,7 @@ public sealed partial class ContentPipelineService
                 return await this.CookReplacementAsync(operation, request, retainRecovery, cancellationToken).ConfigureAwait(false);
             }
 
-            var target = SceneImportTarget.Resolve(operation.Project, request.DestinationFolder, request.Name);
-            var retained = request.RetainedSource ?? await this.RetainRequestedSourceAsync(operation, request, target, cancellationToken).ConfigureAwait(false);
+            var retained = request.RetainedSource ?? await this.RetainRequestedSourceAsync(operation, request, cancellationToken).ConfigureAwait(false);
             var primary = operation.Project.ProjectRoot.Combine(Path.Combine(retained.DirectoryRelativePath, retained.PrimaryRelativePath));
             retainedUri = CookInputResolver.FindAuthoringSourceUri(operation.Project, primary)
                 ?? throw new InvalidDataException("The retained source is outside the project's authoring mounts.");
@@ -69,7 +68,7 @@ public sealed partial class ContentPipelineService
             {
                 RecoveryRequest = new(CookTargetKind.Asset, retainedUri) { Import = recovery, OriginContext = operation.Project },
             });
-            await this.CreateImportSettingsAsync(operation, retained, target, request.Name, request.Provenance, cancellationToken).ConfigureAwait(false);
+            await this.CreateImportSettingsAsync(operation, retained, request.Name, request.Provenance, cancellationToken).ConfigureAwait(false);
             CookRunContext.Report(new(Message: "Import settings saved. Cooking retained source.")
             {
                 RecoveryRequest = new(CookTargetKind.Asset, retainedUri) { IsReimport = true, OriginContext = operation.Project },
@@ -91,12 +90,16 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private async Task<RetainedImportSource> RetainRequestedSourceAsync(ContentCookOperation operation, SceneImportRequest request, SceneImportTarget target, CancellationToken cancellationToken)
+    private async Task<RetainedImportSource> RetainRequestedSourceAsync(ContentCookOperation operation, SceneImportRequest request, CancellationToken cancellationToken)
     {
+        // A model already under an authoring mount is used where it is; one from outside is copied, with its bundle,
+        // into a folder of the chosen destination. Either way its identity is its file's virtual path.
         var source = Path.GetFullPath(request.SourcePath);
-        var recipe = this.manifestBuilder.BuildModelJob(Path.GetFileName(source), [], request.Name, target.CreateLayout(source), request.Provenance);
+        var inProject = CookInputResolver.FindAuthoringSourceUri(operation.Project, FileSystemPath.From(source));
+        var identity = inProject ?? request.DestinationFolder.Combine(request.Name + "/" + Path.GetFileName(source));
+        var recipe = this.manifestBuilder.BuildModelJob(Path.GetFileName(source), [], request.Name, identity, request.Provenance);
         var discovery = new SceneImportSourceDiscovery(cookDocuments, this.cookCoordinator, this.engineContentPipelineApi);
-        if (CookInputResolver.FindAuthoringSourceUri(operation.Project, FileSystemPath.From(source)) is not null)
+        if (inProject is not null)
         {
             var discovered = await discovery.DiscoverAsync(operation, source, recipe, cancellationToken).ConfigureAwait(false);
             var primary = discovered.Files.Single(file => file.SourcePath == FileSystemPath.From(source));
@@ -108,16 +111,16 @@ public sealed partial class ContentPipelineService
         }
 
         var result = await new ImportSourceRetention(cookDocuments, this.cookCoordinator).RetainAsync(
-            operation, request.Name, token => discovery.DiscoverAsync(operation, source, recipe, token), cancellationToken).ConfigureAwait(false);
+            operation, request.DestinationFolder, request.Name, token => discovery.DiscoverAsync(operation, source, recipe, token), cancellationToken).ConfigureAwait(false);
         return result.Source ?? (result.NeedsSave.IsEmpty
             ? throw new IOException("Reload changed source before importing.")
             : throw new CookInputsNeedSaveException(result.NeedsSave));
     }
 
-    private async Task CreateImportSettingsAsync(ContentCookOperation operation, RetainedImportSource source, SceneImportTarget target, string name, NativeMaterialSlotProvenance provenance, CancellationToken cancellationToken)
+    private async Task CreateImportSettingsAsync(ContentCookOperation operation, RetainedImportSource source, string name, NativeMaterialSlotProvenance provenance, CancellationToken cancellationToken)
     {
         this.cookCoordinator.VerifyWriter(operation);
-        var settings = NativeSceneImportSettings.Create(source, target.MountName, name, target.OutputDirectory) with { MaterialSlotProvenance = provenance };
+        var settings = NativeSceneImportSettings.Create(source, name) with { MaterialSlotProvenance = provenance };
         var path = settings.ResolveFile(operation.Project.ProjectRoot.FullPath, settings.PrimaryRelativePath) + NativeSceneImportSettings.SidecarSuffix;
         using var reads = await cookDocuments.AcquireAsync([FileSystemPath.From(path)], cancellationToken).ConfigureAwait(false);
         if (reads.Documents.Any(static document => document.IsDirty))

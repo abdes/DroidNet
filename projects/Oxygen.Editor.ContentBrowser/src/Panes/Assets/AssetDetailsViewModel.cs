@@ -25,7 +25,6 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     private readonly IAssetShell shell;
     private readonly Relocation.IAssetRelocationWorkflow? relocation;
     private readonly Scripts.IScriptAnalysisService? scripts;
-    private readonly Oxygen.Editor.Projects.IProjectContextService? projects;
     private readonly IDisposable? scriptChanges;
     private int referrersRequest;
     private bool disposed;
@@ -35,19 +34,16 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     /// <param name="shell">The clipboard and File Explorer actions.</param>
     /// <param name="relocation">Finds the content that uses the selected asset; without it no referrers are shown.</param>
     /// <param name="scripts">The script analysis, which supplies a script's parameters and problems.</param>
-    /// <param name="projects">The active project, which locates the input file that declares an input asset.</param>
     public AssetDetailsViewModel(
         ContentBrowserState state,
         IAssetShell shell,
         Relocation.IAssetRelocationWorkflow? relocation = null,
-        Scripts.IScriptAnalysisService? scripts = null,
-        Oxygen.Editor.Projects.IProjectContextService? projects = null)
+        Scripts.IScriptAnalysisService? scripts = null)
     {
         this.state = state;
         this.shell = shell;
         this.relocation = relocation;
         this.scripts = scripts;
-        this.projects = projects;
         state.PropertyChanged += this.OnStateChanged;
         this.scriptChanges = scripts?.Changes.Subscribe(this.OnScriptAnalyzed);
         this.Refresh();

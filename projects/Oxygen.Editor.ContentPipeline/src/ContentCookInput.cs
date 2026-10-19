@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -24,14 +24,11 @@ public sealed record ContentCookInput(
     FileSystemPath SourceAbsolutePath,
     ContentCookInputRole Role)
 {
-    /// <summary>Gets the disjoint output folders owned by an imported source.</summary>
-    public ImmutableArray<string> OutputNamespaces { get; init; } = [];
-
     /// <summary>Tests, before cooking, whether this input will produce an asset.</summary>
     /// <remarks>An input file's actions and contexts are known only from the provenance of its last cook.</remarks>
     /// <param name="virtualPath">The native output identity.</param>
-    /// <returns>Whether this input is the asset or owns the model output folder that holds it.</returns>
+    /// <returns>Whether this input is the asset, or the model the asset is named under.</returns>
     public bool OwnsOutput(string virtualPath) => this.Kind == ContentCookAssetKind.ForeignSource
-        ? this.OutputNamespaces.Any(prefix => virtualPath.StartsWith(prefix, StringComparison.Ordinal))
+        ? AssetPath.TryParse(virtualPath, out var output) && AssetFileTypes.ContainerOf(output) == this.AssetUri
         : string.Equals(this.AssetUri.VirtualPath, virtualPath, StringComparison.Ordinal);
 }

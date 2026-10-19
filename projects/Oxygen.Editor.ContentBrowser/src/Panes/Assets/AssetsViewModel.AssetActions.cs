@@ -57,12 +57,6 @@ public partial class AssetsViewModel
     /// <summary>Gets what Rename does, or why it is unavailable.</summary>
     public string RenameToolTip => Explain("Rename (F2)", this.GetRenameBlocker(), "Content that uses it is updated.");
 
-    /// <summary>Gets what Rename output group does, or why it is unavailable.</summary>
-    public string RenameOutputGroupToolTip => Explain(
-        "Rename output group",
-        this.CanRenameOutputGroup() ? null : "Select one imported model, or an asset imported from one.",
-        "Moves the model's Materials, Geometry and Scenes folders together.");
-
     /// <summary>Gets what Cut does, or why it is unavailable.</summary>
     public string CutToolTip => Explain("Cut (Ctrl+X)", this.GetTransferBlocker(), "Paste moves the items and updates the content that uses them.");
 
@@ -145,7 +139,6 @@ public partial class AssetsViewModel
         this.CopyPathCommand.NotifyCanExecuteChanged();
         this.ShowInFileExplorerCommand.NotifyCanExecuteChanged();
         this.RenameSelectedCommand.NotifyCanExecuteChanged();
-        this.RenameOutputGroupCommand.NotifyCanExecuteChanged();
         this.CutSelectedCommand.NotifyCanExecuteChanged();
         this.CopySelectedCommand.NotifyCanExecuteChanged();
         this.PasteCommand.NotifyCanExecuteChanged();
@@ -164,7 +157,6 @@ public partial class AssetsViewModel
             nameof(this.CopyPathToolTip),
             nameof(this.ShowInFileExplorerToolTip),
             nameof(this.RenameToolTip),
-            nameof(this.RenameOutputGroupToolTip),
             nameof(this.CutToolTip),
             nameof(this.CopyToolTip),
             nameof(this.PasteToolTip),
@@ -216,7 +208,7 @@ public partial class AssetsViewModel
         }
 
         var target = this.DescribeSelection()[0];
-        return target.IsImportedOutput ? "This asset belongs to its imported model. Use Rename output group."
+        return target.IsImportedOutput ? "This asset belongs to its imported model. Rename the model instead."
             : target.VirtualPath is null ? ReadOnlyReason : null;
     }
 
@@ -224,7 +216,7 @@ public partial class AssetsViewModel
     {
         var targets = this.DescribeSelection();
         return relocation is null ? UnavailableReason : targets.Count == 0 ? "Select items to move or copy."
-            : targets.Any(static target => target.IsImportedOutput) ? "Imported assets belong to their model. Use Rename output group."
+            : targets.Any(static target => target.IsImportedOutput) ? "Imported assets belong to their model. Move the model instead."
             : targets.Any(static target => target.VirtualPath is null) ? ReadOnlyReason
             : null;
     }
@@ -300,37 +292,6 @@ public partial class AssetsViewModel
         {
             var request = new AssetRelocationRequest { Moves = [new(target.VirtualPath!, RelocationPaths.Rename(target.VirtualPath!, newName, target.IsFolder))] };
             _ = await relocation.RelocateAsync(request, "Rename").ConfigureAwait(true);
-        }
-    }
-
-    private bool CanRenameOutputGroup()
-        => relocation is not null && this.DescribeSelection() is [{ ModelSourcePath: { } model }]
-            && File.Exists(model.FullPath + NativeSceneImportSettings.SidecarSuffix);
-
-    [RelayCommand(CanExecute = nameof(CanRenameOutputGroup))]
-    private async Task RenameOutputGroupAsync()
-    {
-        if (relocation is null || !this.CanRenameOutputGroup() || projectContextService.ActiveProject is not { } project)
-        {
-            return;
-        }
-
-        var model = this.DescribeSelection()[0].ModelSourcePath!;
-        NativeSceneImportSettings settings;
-        try
-        {
-            settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(model.FullPath + NativeSceneImportSettings.SidecarSuffix).ConfigureAwait(true));
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
-        {
-            this.OnRelocationCompleted(this, new(new(Succeeded: false, "Rename output group", error.Message)));
-            return;
-        }
-
-        if (RelocationPaths.ToVirtual(project, model) is { } source
-            && await relocation.PromptNameAsync("Rename output group", settings.OutputDirectory, allowSeparators: true).ConfigureAwait(true) is { } group)
-        {
-            _ = await relocation.RelocateAsync(new AssetRelocationRequest { GroupMoves = [new(source, group)] }, "Rename output group").ConfigureAwait(true);
         }
     }
 

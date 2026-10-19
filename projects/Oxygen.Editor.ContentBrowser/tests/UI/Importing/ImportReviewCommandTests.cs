@@ -130,6 +130,6 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
     private static void AssertImportPlacement(SceneImportDialogViewModel model)
     {
         _ = model.DestinationFolder.Should().Be("/Content");
-        _ = model.OutputLocations.Should().Contain("/Content/Materials/Crate").And.Contain("/Content/Geometry/Crate").And.Contain("/Content/Scenes/Crate");
+        _ = model.ModelLocation.Should().Be("Model: /Content/Crate/Crate.gltf");
     }
 }

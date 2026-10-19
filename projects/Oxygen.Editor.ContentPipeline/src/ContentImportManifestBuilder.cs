@@ -112,7 +112,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         if (input.Kind == ContentCookAssetKind.ForeignSource)
         {
             ArgumentNullException.ThrowIfNull(modelSettings);
-            return this.BuildModelJob(input.SourceRelativePath, dependsOn, modelSettings.Name, modelSettings.CreateLayout(), modelSettings.MaterialSlotProvenance) with
+            return this.BuildModelJob(input.SourceRelativePath, dependsOn, modelSettings.Name, input.AssetUri, modelSettings.MaterialSlotProvenance) with
             {
                 ContentPolicy = modelSettings.ContentPolicy,
                 UnitPolicy = modelSettings.UnitPolicy,
@@ -151,7 +151,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
     }
 
     /// <inheritdoc />
-    public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, ContentImportLayout layout, Import.NativeMaterialSlotProvenance provenance)
+    public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity, Import.NativeMaterialSlotProvenance provenance)
         => new(
             BuildJobId(ContentCookAssetKind.ForeignSource, sourceRelativePath),
             Path.GetExtension(sourceRelativePath).Equals(".fbx", StringComparison.OrdinalIgnoreCase) ? "fbx" : "gltf",
@@ -160,7 +160,9 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             Output: null,
             name)
         {
-            Layout = layout,
+            // The model names its products under its identity, the virtual path of its source file.
+            Layout = new ContentImportLayout(AssetPath.Create(identity.Mount).VirtualPath),
+            VirtualPath = identity.VirtualPath,
             ContentPolicy = Import.NativeSceneImportSettings.DefaultContentPolicy,
             UnitPolicy = Import.NativeSceneImportSettings.DefaultUnitPolicy,
             BakeTransforms = false,

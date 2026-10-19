@@ -74,19 +74,18 @@ public sealed partial class AssetCookStatusReader(
         const bool metadataUnavailable = false;
 
         var requested = assetUris.Distinct().ToArray();
-        var imports = await ImportedSourceIndex.ReadAsync(project, CookSavedSourceReader.ReadFileAsync, prior, cancellationToken).ConfigureAwait(false);
         var resolved = requested
-            .Select(uri => (Requested: uri, Resolution: imports.ResolveOutputFacts(project, uri, ContentCookInputRole.Primary)))
-            .Select(item => (item.Requested, item.Resolution, Input: ResolveInput(project, item.Requested, item.Resolution)))
+            .Select(uri => (Requested: uri, Model: ImportedOutputs.ResolveOutput(project, uri, ContentCookInputRole.Primary)))
+            .Select(item => (item.Requested, item.Model, Input: ResolveInput(project, item.Requested, item.Model)))
             .ToArray();
 
         // An asset that cannot be a cook input, such as one outside the project, is invalid on its own; the others
         // are read as usual.
         var unresolved = resolved.Select(static item => item.Input.Unresolved).OfType<AssetCookStatus>().ToArray();
-        var mapped = resolved.Where(static item => item.Input.Input is not null).Select(static item => (item.Requested, item.Resolution)).ToArray();
+        var mapped = resolved.Where(static item => item.Input.Input is not null).Select(static item => (item.Requested, item.Model)).ToArray();
         var inputs = resolved.Select(static item => item.Input.Input).OfType<ContentCookInput>().ToArray();
-        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, engineContent, cancellationToken, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), [.. prior.ProducedAssets]).ConfigureAwait(false);
-        var graph = await CreateDependencyDiscovery(project, prior, imports, libraries).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
+        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, engineContent, cancellationToken, uri => ImportedOutputs.ResolveOutput(project, uri, ContentCookInputRole.Dependency), [.. prior.ProducedAssets]).ConfigureAwait(false);
+        var graph = await CreateDependencyDiscovery(project, prior, libraries).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
         graph = libraries.Apply(graph);
         var validGraph = WithCompleteAssets(graph);
         var producer = prior.Products.IsEmpty ? NativeProducerObservation.Unknown : nativeCompatibility.Observation;
@@ -104,7 +103,7 @@ public sealed partial class AssetCookStatusReader(
             producer.Diagnostics,
             metadataUnavailable,
             changed));
-        var states = inputs.Select((input, index) => MapImportedStatus(mapped[index].Requested, mapped[index].Resolution, sourceStatuses[input.AssetUri]))
+        var states = inputs.Select((input, index) => MapImportedStatus(mapped[index].Requested, mapped[index].Model, sourceStatuses[input.AssetUri]))
             .Concat(unresolved)
             .Select(state => state with { OutputRoots = snapshot.ProjectRoots }).ToArray();
         return prior.Products.IsEmpty || producer.Revision == nativeCompatibility.Observation.Revision ? states
@@ -112,11 +111,11 @@ public sealed partial class AssetCookStatusReader(
     }
 
     // The cook input of a requested asset, or, when it cannot be one, the asset's invalid status.
-    private static (ContentCookInput? Input, AssetCookStatus? Unresolved) ResolveInput(ProjectContext project, AssetPath requested, ImportedSourceIndex.Resolution resolution)
+    private static (ContentCookInput? Input, AssetCookStatus? Unresolved) ResolveInput(ProjectContext project, AssetPath requested, ContentCookInput? model)
     {
-        if (resolution.Source is { } source)
+        if (model is not null)
         {
-            return (source, null);
+            return (model, null);
         }
 
         try
@@ -235,20 +234,10 @@ public sealed partial class AssetCookStatusReader(
         AffectedVirtualPath = input.AssetUri.VirtualPath,
     };
 
-    private static AssetCookStatus MapImportedStatus(AssetPath requested, ImportedSourceIndex.Resolution resolution, AssetCookStatus status)
+    // A model's product reads its model's status, and is available when the model published it.
+    private static AssetCookStatus MapImportedStatus(AssetPath requested, ContentCookInput? model, AssetCookStatus status)
     {
-        if (resolution.Error is { } error)
-        {
-            return status with
-            {
-                AssetUri = requested,
-                Freshness = AssetCookFreshness.InvalidSource,
-                OutputAvailability = CookedOutputAvailability.Unknown,
-                Diagnostics = [new DiagnosticRecord { OperationId = Guid.Empty, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error, Code = "asset_status.import_conflict", Message = error, AffectedVirtualPath = requested.VirtualPath }],
-            };
-        }
-
-        if (resolution.Source is null)
+        if (model is null)
         {
             return status with { AssetUri = requested };
         }
@@ -321,10 +310,10 @@ public sealed partial class AssetCookStatusReader(
         return changed;
     }
 
-    private static CookDependencyDiscovery CreateDependencyDiscovery(ProjectContext project, CookProvenance prior, ImportedSourceIndex imports, CookedLibraryReadSet libraries)
+    private static CookDependencyDiscovery CreateDependencyDiscovery(ProjectContext project, CookProvenance prior, CookedLibraryReadSet libraries)
         => new(
             new AcceptedCookSourceFacts(project, prior, CookSavedSourceReader.HashFileAsync),
-            resolveImported: uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency),
+            resolveImported: uri => ImportedOutputs.ResolveOutput(project, uri, ContentCookInputRole.Dependency),
             resolveBufferOwner: path => prior.FindBufferOwner(project, path),
             preferCookedReference: libraries.IsLibraryPreferred,
             expandCookedReferences: (input, references, token) => libraries.ExpandReferencesAsync(input, references, inspector: null, operationRoot: string.Empty, artifacts: null, token));

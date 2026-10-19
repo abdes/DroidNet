@@ -57,7 +57,7 @@ public sealed partial class ContentPipelineService
     {
         var request = scope.ImportReplacement!;
         var replacement = request.Replacement!;
-        var candidate = Path.Combine(snapshot.Operation.Project.ProjectRoot.FullPath, ".build", "cook", snapshot.Operation.OperationId.ToString("N"), "discarded-source", replacement.BundleName, replacement.Settings.PrimaryRelativePath);
+        var candidate = Path.Combine(snapshot.Operation.Project.ProjectRoot.FullPath, ".build", "cook", snapshot.Operation.OperationId.ToString("N"), "discarded-source", Path.GetFileName(replacement.Settings.BundleRoot), replacement.Settings.PrimaryRelativePath);
         if (File.Exists(candidate))
         {
             var recovery = request with { ReplacementCandidatePath = candidate };
@@ -152,19 +152,14 @@ public sealed partial class ContentPipelineService
         Func<IReadOnlyList<ContentCookScope>> resolveScopes,
         NativeArtifactLease artifacts,
         CookProvenance previous,
-        ImportedSourceIndex imports,
         CookedLibraryReadSet libraries,
         CancellationToken cancellationToken)
     {
         var request = scope.ImportReplacement!;
         var replacement = request.Replacement!;
         var original = replacement.Settings;
-        await this.VerifyReplacementTargetAsync(operation, replacement, imports, cancellationToken).ConfigureAwait(false);
-        var source = scope.Inputs.Single() with
-        {
-            MountName = original.MountPoint,
-            OutputNamespaces = original.OutputPrefixes,
-        };
+        await this.VerifyReplacementTargetAsync(operation, replacement, cancellationToken).ConfigureAwait(false);
+        var source = scope.Inputs.Single();
         var incoming = request.ReplacementCandidatePath ?? request.SourcePath;
         if (!string.Equals(Path.GetExtension(incoming), Path.GetExtension(source.SourceAbsolutePath.Name), StringComparison.OrdinalIgnoreCase))
         {
@@ -172,7 +167,7 @@ public sealed partial class ContentPipelineService
         }
 
         var settingsRelative = source.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix;
-        var discovery = new ReplacementDiscovery(source, original, incoming, settingsRelative, resolveScopes, previous, imports, libraries);
+        var discovery = new ReplacementDiscovery(source, original, incoming, settingsRelative, resolveScopes, previous, libraries);
         var (snapshot, graph, replacementFiles) = await this.CaptureIncomingAsync(operation, discovery, artifacts, cancellationToken).ConfigureAwait(false);
         var replacementPaths = replacementFiles.Select(static file => file.RelativePath).ToHashSet(StringComparer.Ordinal);
         var (settings, inputs) = await RewriteReplacementSettingsAsync(operation, discovery, snapshot, replacementPaths, cancellationToken).ConfigureAwait(false);
@@ -186,7 +181,7 @@ public sealed partial class ContentPipelineService
         {
             Inputs = inputs,
             InputIdentity = CookInputSnapshotCapture.ComputeIdentity(snapshot.BuildFingerprint, inputs),
-            SourceReplacement = new(replacement.BundleName, replacement.Before),
+            SourceReplacement = new(replacement.Settings.BundleRoot, replacement.Before),
         };
         var replacementGraph = CreateReplacementGraph(
             source,
@@ -203,9 +198,9 @@ public sealed partial class ContentPipelineService
         return (snapshot, await this.AnalyzeReplacementAsync(operation, source, settings, snapshot, graph, artifacts, cancellationToken).ConfigureAwait(false));
     }
 
-    private async Task VerifyReplacementTargetAsync(ContentCookOperation operation, SceneImportReplacement replacement, ImportedSourceIndex imports, CancellationToken cancellationToken)
+    private async Task VerifyReplacementTargetAsync(ContentCookOperation operation, SceneImportReplacement replacement, CancellationToken cancellationToken)
     {
-        var root = ImportSourceRetention.ResolveDestination(operation.Project, replacement.BundleName);
+        var root = operation.Project.ProjectRoot.Combine(replacement.Settings.BundleRoot).FullPath;
         using var owners = await cookDocuments.AcquireAsync(replacement.Settings.Files.Append(replacement.Settings.PrimaryRelativePath + NativeSceneImportSettings.SidecarSuffix).Select(path => FileSystemPath.From(Path.Combine(root, path))), cancellationToken).ConfigureAwait(false);
         var dirty = owners.Documents.Where(static document => document.IsDirty).ToArray();
         if (dirty.Length != 0)
@@ -216,21 +211,6 @@ public sealed partial class ContentPipelineService
         if (!replacement.Before.Matches(await CookRootImage.CaptureAsync(root, copyTo: null, cancellationToken).ConfigureAwait(false)))
         {
             throw new IOException("The retained source changed after review. Review the replacement again.");
-        }
-
-        var settings = replacement.Settings;
-        if (settings.OutputPrefixes.Any(prefix => imports.ResolveFolder(operation.Project, AssetPath.Parse(prefix.TrimEnd('/'))).Any(input => input.AssetUri != replacement.SourceUri)))
-        {
-            throw new InvalidDataException("The replacement destination overlaps another retained source. Resolve its ownership before replacing this model.");
-        }
-
-        var mount = operation.Project.AuthoringMounts.Single(mount => string.Equals(mount.Name, settings.MountPoint, StringComparison.Ordinal));
-        var conflict = settings.OutputDirectories.Select(directory => Path.Combine(operation.Project.ProjectRoot.FullPath, mount.RelativePath, directory))
-            .Where(Directory.Exists).SelectMany(static directory => Directory.EnumerateFiles(directory, "*.json", SearchOption.AllDirectories))
-            .FirstOrDefault(static path => AssetFileTypes.ToCookedPath(Path.GetFileName(path)) is { } cooked && AssetFileTypes.IsProductOf(cooked, AssetFileCategory.Model));
-        if (conflict is not null)
-        {
-            throw new InvalidDataException($"The replacement destination contains authored asset '{conflict}'. Keep it in a separate destination before replacing the model.");
         }
     }
 
@@ -256,7 +236,7 @@ public sealed partial class ContentPipelineService
                 };
                 var prepared = CreateReplacementGraph(source, incomingSettings, replacementFiles, discovery.SettingsRelative, discovery.Previous);
                 var scopes = discovery.ResolveScopes();
-                graph = await this.CreateDependencyDiscovery(operation, artifacts, discovery.Previous, discovery.Imports, discovery.Libraries)
+                graph = await this.CreateDependencyDiscovery(operation, artifacts, discovery.Previous, discovery.Libraries)
                     .DiscoverAsync(operation.Project, scopes.SelectMany(static value => value.Inputs).ToArray(), prepared, token).ConfigureAwait(false);
                 graph = graph with { ImportedReferences = [.. graph.ImportedReferences.Union(scopes.SelectMany(static value => value.RequiredImportedOutputs))] };
                 RequireCompleteReplacementBundle(operation, original, replacementFiles, graph);
@@ -308,13 +288,12 @@ public sealed partial class ContentPipelineService
     }
 
     /// <summary>What discovering a replacement needs, beside the operation and the artifacts.</summary>
-    /// <param name="Source">The retained source, in its own mount and output namespaces.</param>
+    /// <param name="Source">The retained source.</param>
     /// <param name="Original">The import settings the replacement starts from.</param>
     /// <param name="Incoming">The incoming source file.</param>
     /// <param name="SettingsRelative">The import settings' project-relative path.</param>
     /// <param name="ResolveScopes">Resolves the cook scopes at discovery time.</param>
     /// <param name="Previous">The previous cook provenance.</param>
-    /// <param name="Imports">The retained imported sources.</param>
     /// <param name="Libraries">The cooked libraries read by the cook.</param>
     private sealed record ReplacementDiscovery(
         ContentCookInput Source,
@@ -323,6 +302,5 @@ public sealed partial class ContentPipelineService
         string SettingsRelative,
         Func<IReadOnlyList<ContentCookScope>> ResolveScopes,
         CookProvenance Previous,
-        ImportedSourceIndex Imports,
         CookedLibraryReadSet Libraries);
 }

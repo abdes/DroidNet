@@ -14,10 +14,10 @@ namespace Oxygen.Editor.ContentPipeline.Incremental;
 
 /// <summary>Identifies source-owned repair work before capturing inputs or inheriting cooked bytes.</summary>
 /// <param name="EmptyRoots">The roots reconstructed from nothing, because their cooked content is missing or damaged.</param>
-/// <param name="Sources">The sources cooked again: products of reconstructed roots, relocated imports and the users of removed products.</param>
+/// <param name="Sources">The sources cooked again: products of reconstructed roots and the users of removed products.</param>
 internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, ImmutableHashSet<AssetPath> Sources)
 {
-    /// <summary>Gets the sources whose prior products leave the cooked content: moved, renamed or deleted sources, and imports whose outputs moved to another group.</summary>
+    /// <summary>Gets the sources whose prior products leave the cooked content: moved, renamed or deleted sources.</summary>
     public ImmutableHashSet<AssetPath> RemovedSources { get; init; } = [];
 
     /// <summary>Gets the outputs removed from each inherited root, by mount.</summary>
@@ -31,14 +31,12 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
     /// <param name="previous">The provenance of the previous cook.</param>
     /// <param name="mounts">The mounts being cooked.</param>
     /// <param name="inventories">The cooked inventory of each mount.</param>
-    /// <param name="isRelocatedImport">Tells whether an imported product's outputs left its sidecar's current group.</param>
     /// <returns>The repair work.</returns>
     public static CookRootRepair Create(
         CookPublicationReadLease publication,
         CookProvenance previous,
         IReadOnlyCollection<string> mounts,
-        ImmutableDictionary<string, CookedInventoryReport> inventories,
-        Func<CookProvenance.Product, bool> isRelocatedImport)
+        ImmutableDictionary<string, CookedInventoryReport> inventories)
     {
         var empty = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
         var sources = ImmutableHashSet.CreateBuilder<AssetPath>();
@@ -46,12 +44,9 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
         var vacated = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
         var diagnostics = new List<DiagnosticRecord>();
 
-        // A moved, renamed or deleted source retires its product; a relocated import group cooks its product again
-        // into the new group. Either way the prior outputs leave their roots.
+        // A moved, renamed or deleted source retires its product, and its prior outputs leave their roots.
         var retired = previous.Products.Where(product => IsRetired(publication.ProjectRoot.FullPath, product)).ToHashSet();
-        var removed = previous.Products.Where(product => retired.Contains(product) || isRelocatedImport(product)).ToHashSet();
-        sources.UnionWith(removed.Where(product => !retired.Contains(product)).Select(static product => product.SourceUri));
-        sources.UnionWith(FindUsers(previous, removed));
+        sources.UnionWith(FindUsers(previous, retired));
         foreach (var mount in mounts)
         {
             var path = publication.FindProjectRoot(mount)?.FullPath;
@@ -74,7 +69,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
                 continue;
             }
 
-            var leaving = owners.Where(removed.Contains).ToArray();
+            var leaving = owners.Where(retired.Contains).ToArray();
             if (leaving.Length != 0)
             {
                 RemoveOutputs(mount, path, owners, leaving, inventory, removals, vacated, diagnostics);
@@ -88,7 +83,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
 
         return new(empty.ToImmutable(), sources.ToImmutable())
         {
-            RemovedSources = [.. removed.Select(static product => product.SourceUri)],
+            RemovedSources = [.. retired.Select(static product => product.SourceUri)],
             Removals = removals.ToImmutable(),
             VacatedRoots = vacated.ToImmutable(),
         };

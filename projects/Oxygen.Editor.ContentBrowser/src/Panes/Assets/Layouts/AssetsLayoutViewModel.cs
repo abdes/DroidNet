@@ -11,6 +11,7 @@ using DroidNet.Routing;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
@@ -382,7 +383,10 @@ public abstract partial class AssetsLayoutViewModel(
         var existing = this.Assets.ToDictionary(static row => row.Item.Identity);
         var scopedItems = this.projectContextService.ActiveProject is { } project
             ? CookedLibraryFolders.ForFolders(items, project, this.contentBrowserState.SelectedFolders) : items;
-        var inScope = scopedItems.Where(this.IsInSelectedFolders).ToArray();
+        // A container is one asset, its source file: its products (a model's materials, an input source's
+        // actions) are not listed, and pickers and references reach them by identity.
+        var inScope = scopedItems.Where(static item => AssetFileTypes.ContainerOf(item.Identity) is null)
+            .Where(this.IsInSelectedFolders).ToArray();
         this.scopeCount = inScope.Length;
         var visible = this.Presentation.Sort(inScope.Where(this.Query.Matches));
         this.isReplacingRows = true;

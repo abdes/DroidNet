@@ -15,7 +15,6 @@ namespace Oxygen.Editor.ContentBrowser.Importing;
 /// <summary>Reviews a model's name and authoring destination before import begins.</summary>
 public sealed partial class SceneImportDialogViewModel : ObservableObject
 {
-    private static readonly string[] ImportedAssetFolders = ["Materials", "Geometry", "Scenes"];
     private readonly ProjectContext project;
     private readonly IDialogService dialogs;
     private int reviewGeneration;
@@ -64,7 +63,7 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
 
     /// <summary>Gets or sets the existing source explicitly selected for replacement.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ReplacementChoiceVisibility), nameof(ReplacementTitle), nameof(ReplacementMessage), nameof(PrimaryButtonText), nameof(OutputLocations))]
+    [NotifyPropertyChangedFor(nameof(ReplacementChoiceVisibility), nameof(ReplacementTitle), nameof(ReplacementMessage), nameof(PrimaryButtonText), nameof(ModelLocation))]
     public partial SceneImportReplacement? Replacement { get; set; }
 
     /// <summary>Gets the explicit replacement choice visibility.</summary>
@@ -75,7 +74,7 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
 
     /// <summary>Gets the existing identity and destination being replaced.</summary>
     public string ReplacementMessage => this.Replacement is { } replacement
-        ? replacement.SourceUri.VirtualPath + "\nDestinations: " + string.Join(", ", replacement.Settings.OutputPrefixes.Select(static prefix => prefix.TrimEnd('/')))
+        ? replacement.SourceUri.VirtualPath
         : "Choose another name, or review the existing source for replacement.";
 
     /// <summary>Gets the action matching the reviewed import intent.</summary>
@@ -84,27 +83,25 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
     /// <summary>Gets the retained source location shown before import.</summary>
     public string SourceLocation => this.IsProjectSource()
         ? "Source files stay in their current project folder."
-        : "Source files: /Content/SourceMedia/DCC/" + this.Name.Trim();
+        : "Source files: " + this.BundleFolder();
 
-    /// <summary>Gets the exact type folders shown before the user accepts import.</summary>
-    public string OutputLocations
+    /// <summary>Gets the model's identity shown before the user accepts import; its assets are named under it.</summary>
+    public string ModelLocation
     {
         get
         {
             if (this.Replacement is { } replacement)
             {
-                return string.Join(Environment.NewLine, replacement.Settings.OutputPrefixes.Select(static prefix => prefix.TrimEnd('/')));
+                return "Model: " + replacement.SourceUri.VirtualPath;
             }
 
-            try
-            {
-                var target = SceneImportTarget.Resolve(this.project, ImportDestination.Parse(this.DestinationFolder ?? string.Empty), this.Name?.Trim() ?? string.Empty);
-                return string.Join(Environment.NewLine, ImportedAssetFolders.Select(kind => "/" + target.MountName + "/" + kind + "/" + target.OutputDirectory));
-            }
-            catch (ArgumentException)
+            if (this.IsProjectSource())
             {
                 return string.Empty;
             }
+
+            var folder = this.BundleFolder();
+            return folder.Length == 0 ? string.Empty : "Model: " + folder + "/" + Path.GetFileName(this.SourcePath);
         }
     }
 
@@ -125,14 +122,15 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
         this.Revalidate();
         this.OnPropertyChanged(nameof(this.SourceLocation));
         this.OnPropertyChanged(nameof(this.ReplacementTitle));
-        this.OnPropertyChanged(nameof(this.OutputLocations));
+        this.OnPropertyChanged(nameof(this.ModelLocation));
     }
 
     partial void OnDestinationFolderChanged(string value)
     {
         this.ClearReplacement();
         this.Revalidate();
-        this.OnPropertyChanged(nameof(this.OutputLocations));
+        this.OnPropertyChanged(nameof(this.SourceLocation));
+        this.OnPropertyChanged(nameof(this.ModelLocation));
     }
 
     [RelayCommand]
@@ -142,17 +140,15 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
         try
         {
             this.Error = string.Empty;
-            var replacement = await SceneImportReplacement.ReviewAsync(this.project, this.Name.Trim(), cancellationToken).ConfigureAwait(true);
+            var replacement = await SceneImportReplacement.ReviewAsync(this.project, ImportDestination.Parse(this.DestinationFolder), this.Name.Trim(), cancellationToken).ConfigureAwait(true);
             if (generation != this.reviewGeneration)
             {
                 return;
             }
 
-            var directory = Path.GetDirectoryName(replacement.Settings.OutputDirectory)?.Replace('\\', '/');
-            this.DestinationFolder = "/" + replacement.Settings.MountPoint + (string.IsNullOrEmpty(directory) ? string.Empty : "/" + directory);
             this.Replacement = replacement;
             this.Revalidate();
-            this.OnPropertyChanged(nameof(this.OutputLocations));
+            this.OnPropertyChanged(nameof(this.ModelLocation));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -214,6 +210,19 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
         }
     }
 
+    // The bundle folder a model from outside the project is copied into: its name in the chosen folder.
+    private string BundleFolder()
+    {
+        try
+        {
+            return ImportDestination.Parse(this.DestinationFolder ?? string.Empty).Combine(VirtualPath.NormalizeTypedName(this.Name?.Trim() ?? string.Empty)).VirtualPath;
+        }
+        catch (ArgumentException)
+        {
+            return string.Empty;
+        }
+    }
+
     private bool IsProjectSource()
     {
         var source = FileSystemPath.From(this.SourcePath);
@@ -227,9 +236,8 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
         try
         {
             var name = this.Name?.Trim() ?? string.Empty;
-            _ = SceneImportTarget.Resolve(this.project, ImportDestination.Parse(this.DestinationFolder ?? string.Empty), name);
-            var content = this.project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal));
-            if (!this.IsProjectSource() && content is not null && Directory.Exists(Path.Combine(this.project.ProjectRoot.FullPath, content.RelativePath, "SourceMedia", "DCC", name)))
+            var bundle = ImportSourceRetention.ResolveDestination(this.project, ImportDestination.Parse(this.DestinationFolder ?? string.Empty), name);
+            if (!this.IsProjectSource() && Directory.Exists(bundle))
             {
                 this.HasCollision = true;
                 this.Error = string.Empty;

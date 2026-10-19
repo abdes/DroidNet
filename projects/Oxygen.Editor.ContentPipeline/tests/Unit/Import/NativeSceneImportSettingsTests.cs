@@ -25,19 +25,9 @@ public sealed class NativeSceneImportSettingsTests
         var settings = CreateSettings();
         var parsed = NativeSceneImportSettings.Parse(settings.ToBytes());
         _ = parsed.Importer.Should().Be(NativeSceneImportSettings.ImporterIdentity);
-        _ = parsed.SchemaVersion.Should().Be(4);
-        _ = parsed.OutputPrefixes.Should().Equal("/Content/Materials/Model/", "/Content/Geometry/Model/", "/Content/Scenes/Model/");
-        _ = parsed.CreateLayout().Should().Be(new ContentImportLayout("/Content")
-        {
-            DescriptorsDirectory = string.Empty,
-            MaterialsDirectory = "Materials/Model",
-            GeometryDirectory = "Geometry/Model",
-            ScenesDirectory = "Scenes/Model",
-        });
-        var matchingName = parsed with { OutputDirectory = "model" };
-        _ = matchingName.CreateLayout().MaterialsDirectory.Should().Be("Materials");
-        _ = matchingName.CreateLayout().GeometryDirectory.Should().Be("Geometry");
-        _ = matchingName.OutputPrefixes.Should().Contain("/Content/Materials/model/");
+        _ = parsed.SchemaVersion.Should().Be(NativeSceneImportSettings.CurrentSchemaVersion);
+        _ = parsed.Name.Should().Be("Model");
+        _ = parsed.BundleRoot.Should().Be("Content/Models/Model");
         _ = parsed.Files.Should().Equal("model.gltf");
         _ = parsed.ContentPolicy.Should().Be("static");
         _ = parsed.UnitPolicy.Should().Be("normalize");
@@ -55,12 +45,24 @@ public sealed class NativeSceneImportSettingsTests
     public void InvalidNativeSettingsAreRejected(string field)
     {
         var json = JsonNode.Parse(CreateSettings().ToBytes())!;
-        json[field] = string.Equals(field, "SchemaVersion", StringComparison.Ordinal) ? JsonValue.Create(1) : JsonValue.Create("legacy");
+        json[field] = string.Equals(field, "SchemaVersion", StringComparison.Ordinal) ? JsonValue.Create(4) : JsonValue.Create("legacy");
         Action parse = () => _ = NativeSceneImportSettings.Parse(System.Text.Encoding.UTF8.GetBytes(json.ToJsonString()));
         _ = parse.Should().Throw<InvalidDataException>();
     }
 
-    /// <summary>Unsafe output and source paths cannot escape their retained namespace.</summary>
+    /// <summary>A version 4 sidecar, which named the model's output folders, is refused, not migrated.</summary>
+    [TestMethod]
+    public void OutputFolderSettingsAreRefused()
+    {
+        var json = JsonNode.Parse(CreateSettings().ToBytes())!;
+        json["SchemaVersion"] = 4;
+        json["MountPoint"] = "Content";
+        json["OutputDirectory"] = "Model";
+        Action parse = () => _ = NativeSceneImportSettings.Parse(System.Text.Encoding.UTF8.GetBytes(json.ToJsonString()));
+        _ = parse.Should().Throw<InvalidDataException>();
+    }
+
+    /// <summary>Unsafe source paths cannot escape their retained bundle.</summary>
     /// <param name="path">The invalid relative path.</param>
     [TestMethod]
     [DataRow("../escape")]
@@ -68,7 +70,7 @@ public sealed class NativeSceneImportSettingsTests
     [DataRow("Model/../Elsewhere")]
     public void EscapingPathsAreRejected(string path)
     {
-        Action write = () => _ = (CreateSettings() with { OutputDirectory = path }).ToBytes();
+        Action write = () => _ = (CreateSettings() with { BundleRoot = path }).ToBytes();
         _ = write.Should().Throw<InvalidDataException>();
     }
 
@@ -96,5 +98,5 @@ public sealed class NativeSceneImportSettingsTests
     }
 
     private static NativeSceneImportSettings CreateSettings()
-        => NativeSceneImportSettings.Create(new("Content/SourceMedia/DCC/Model", "model.gltf", [new("model.gltf", Convert.ToHexString(SHA256.HashData("source"u8)))]), "Content", "Model", "Model");
+        => NativeSceneImportSettings.Create(new("Content/Models/Model", "model.gltf", [new("model.gltf", Convert.ToHexString(SHA256.HashData("source"u8)))]), "Model");
 }

@@ -198,7 +198,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
             return new CookProvenance.Product(sourceUri, digest, [], [new(new(sourceUri, item.Identity, kind, "Content", path) { DescriptorRelativePath = descriptor }, "Content")])
             {
                 ReuseFingerprint = digest,
-                SourceInput = new(sourceUri, kind, "Content", sourceRelativePath, sourcePath, path, ContentCookInputRole.Primary),
+                SourceInput = new(sourceUri, kind, "Content", sourceRelativePath, sourcePath, ContentCookInputRole.Primary),
                 SourceFiles = [new(sourceUri, sourcePath, sourceRelativePath, digest)],
                 DeclaredOutputs = [new(path, kind == ContentCookAssetKind.Geometry ? "geometry" : "material", string.Empty, Required: true)],
             };

@@ -19,8 +19,6 @@ public sealed partial class AssetRelocationService
     [LoggerMessage(Level = LogLevel.Information, Message = "Relocation requested: '{Source}' -> '{Target}'.")]
     private partial void LogRelocationRequested(string source, string target);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Output group relocation requested: model '{Model}' -> group '{Group}'.")]
-    private partial void LogGroupRelocationRequested(string model, string group);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Input product rename requested: '{Product}' -> '{Name}'.")]
     private partial void LogProductRenameRequested(string product, string name);
@@ -35,12 +33,12 @@ public sealed partial class AssetRelocationService
     private void LogNothingToRelocate()
         => LogNothingToRelocate(this.logger);
 
-    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Relocation planned: {Moves} moves, {Edits} rewritten files, {Referrers} referrers, {GroupFolders} output group folders.")]
-    private static partial void LogRelocationPlanned(ILogger logger, int moves, int edits, int referrers, int groupFolders);
+    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Relocation planned: {Moves} moves, {Edits} rewritten files, {Referrers} referrers.")]
+    private static partial void LogRelocationPlanned(ILogger logger, int moves, int edits, int referrers);
 
     [System.Diagnostics.Conditional("DEBUG")]
-    private void LogRelocationPlanned(int moves, int edits, int referrers, int groupFolders)
-        => LogRelocationPlanned(this.logger, moves, edits, referrers, groupFolders);
+    private void LogRelocationPlanned(int moves, int edits, int referrers)
+        => LogRelocationPlanned(this.logger, moves, edits, referrers);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Relocation committed: {Moves} moves and {Edits} rewritten files.")]
     private partial void LogRelocationCommitted(int moves, int edits);

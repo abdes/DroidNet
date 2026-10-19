@@ -137,17 +137,14 @@ internal static class AuthoredReferenceFormat
 
         var files = settings.Files.Select(Remap).ToArray();
         var primary = Remap(settings.PrimaryRelativePath);
-        var typeFolder = AssetPath.Create(settings.MountPoint, RelocationPaths.ImportTypeFolders[0]);
-        var output = map.MapIdentity(typeFolder.Combine(settings.OutputDirectory)) is { } mappedGroup ? mappedGroup.GetPathBelow(typeFolder) : settings.OutputDirectory;
         var bundleRoot = string.Equals(newBundle.FullPath, bundle.FullPath, StringComparison.Ordinal)
             ? settings.BundleRoot
             : newBundle.GetPathBelow(root);
         return string.Equals(bundleRoot, settings.BundleRoot, StringComparison.Ordinal)
             && string.Equals(primary, settings.PrimaryRelativePath, StringComparison.Ordinal)
-            && string.Equals(output, settings.OutputDirectory, StringComparison.Ordinal)
             && files.SequenceEqual(settings.Files, StringComparer.Ordinal)
             ? settings
-            : settings with { BundleRoot = bundleRoot, PrimaryRelativePath = primary, Files = [.. files], OutputDirectory = output };
+            : settings with { BundleRoot = bundleRoot, PrimaryRelativePath = primary, Files = [.. files] };
     }
 
     /// <summary>Reads the images a texture descriptor reads, resolved against its folder.</summary>

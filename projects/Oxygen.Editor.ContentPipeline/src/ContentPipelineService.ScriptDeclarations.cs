@@ -36,8 +36,7 @@ public sealed partial class ContentPipelineService : IScriptDeclarationProvider
         });
         var token = cancellation.Token;
         using var publicationRead = await this.publication.AcquireReadAsync(project, token).ConfigureAwait(false);
-        var imports = await ImportedSourceIndex.ReadAsync(project, cookDocuments, publicationRead.ProductState, token).ConfigureAwait(false);
-        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, this.engineContent, token, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), [.. publicationRead.ProductState.ProducedAssets]).ConfigureAwait(false);
+        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, this.engineContent, token, uri => ImportedOutputs.ResolveOutput(project, uri, ContentCookInputRole.Dependency), [.. publicationRead.ProductState.ProducedAssets]).ConfigureAwait(false);
         if (libraries.FindPreferredAsset(scriptUri) is not { } library)
         {
             return null;

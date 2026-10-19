@@ -28,7 +28,7 @@ public sealed class SceneImportDialogViewModelTests
         _ = model.CanAccept.Should().BeTrue();
         _ = model.Request!.Name.Should().Be("Crate");
         _ = model.Request.DestinationFolder.Should().Be(AssetPath.Parse("/Content/Models"));
-        _ = model.SourceLocation.Should().Contain("/Content/SourceMedia/DCC/Crate");
+        _ = model.SourceLocation.Should().Contain("/Content/Models/Crate");
     }
 
     /// <summary>Generated and source-media folders are not advertised as import output destinations.</summary>
@@ -57,7 +57,7 @@ public sealed class SceneImportDialogViewModelTests
         try
         {
             var project = CreateProject() with { ProjectRoot = FileSystemPath.From(root.FullName) };
-            _ = Directory.CreateDirectory(Path.Combine(root.FullName, "Content/SourceMedia/DCC/Crate"));
+            _ = Directory.CreateDirectory(Path.Combine(root.FullName, "Content/Models/Crate"));
             var model = new SceneImportDialogViewModel(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "/Content/Models", Mock.Of<IDialogService>());
             _ = model.CanAccept.Should().BeFalse();
             _ = model.HasCollision.Should().BeTrue();
@@ -76,7 +76,7 @@ public sealed class SceneImportDialogViewModelTests
     public void ProjectSourceIsKeptInPlace()
     {
         var project = CreateProject();
-        var model = new SceneImportDialogViewModel(project, Path.Combine(project.ProjectRoot.FullPath, "Content/SourceMedia/DCC/Crate.fbx"), "/Content/Models", Mock.Of<IDialogService>());
+        var model = new SceneImportDialogViewModel(project, Path.Combine(project.ProjectRoot.FullPath, "Content/Models/Crate/Crate.fbx"), "/Content/Models", Mock.Of<IDialogService>());
         _ = model.CanAccept.Should().BeTrue();
         _ = model.SourceLocation.Should().Contain("stay");
     }
@@ -121,25 +121,24 @@ public sealed class SceneImportDialogViewModelTests
         try
         {
             var project = CreateProject() with { ProjectRoot = FileSystemPath.From(directory.FullName) };
-            var root = Path.Combine(project.ProjectRoot.FullPath, "Content/SourceMedia/DCC/Crate");
+            var root = Path.Combine(project.ProjectRoot.FullPath, "Content/Models/Crate");
             _ = Directory.CreateDirectory(root);
             var bytes = System.Text.Encoding.UTF8.GetBytes("original source");
             await File.WriteAllBytesAsync(Path.Combine(root, "model.gltf"), bytes, this.TestContext.CancellationToken).ConfigureAwait(false);
             var settings = Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.Create(
-                new("Content/SourceMedia/DCC/Crate", "model.gltf", [new("model.gltf", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)))]),
-                "Content",
-                "Crate",
-                "Models/Crate");
+                new("Content/Models/Crate", "model.gltf", [new("model.gltf", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)))]),
+                "Crate");
             await File.WriteAllBytesAsync(Path.Combine(root, "model.gltf.import.json"), settings.ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
-            var model = new SceneImportDialogViewModel(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "/Content/Other", Mock.Of<IDialogService>());
+            var model = new SceneImportDialogViewModel(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "/Content/Models", Mock.Of<IDialogService>());
             _ = model.CanAccept.Should().BeFalse();
             _ = model.Request.Should().BeNull();
             await model.ReviewReplacementCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
             _ = model.CanAccept.Should().BeTrue();
             _ = model.PrimaryButtonText.Should().Be("Replace and import");
-            _ = model.Request!.Replacement!.SourceUri.Should().Be(AssetPath.Parse("/Content/SourceMedia/DCC/Crate/model.gltf"));
+            _ = model.Request!.Replacement!.SourceUri.Should().Be(AssetPath.Parse("/Content/Models/Crate/model.gltf"));
             _ = model.DestinationFolder.Should().Be("/Content/Models");
-            _ = model.ReplacementMessage.Should().Contain("/Content/Materials/Models/Crate").And.Contain("/Content/Geometry/Models/Crate").And.Contain("/Content/Scenes/Models/Crate");
+            _ = model.ReplacementMessage.Should().Be("/Content/Models/Crate/model.gltf");
+            _ = model.ModelLocation.Should().Be("Model: /Content/Models/Crate/model.gltf");
             model.Name = "Another";
             _ = model.Replacement.Should().BeNull();
             _ = model.PrimaryButtonText.Should().Be("Import");

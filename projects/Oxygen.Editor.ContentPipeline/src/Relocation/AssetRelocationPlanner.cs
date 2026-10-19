@@ -35,29 +35,10 @@ internal static class AssetRelocationPlanner
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(index);
         var map = new RelocationMap();
-        var previousGroups = new Dictionary<AssetPath, string>();
-        var groupFolders = new List<string>();
-        var moving = new List<AuthoredReferenceIndex.ImportSource>();
         foreach (var move in request.Moves.Where(static move => move.Source != move.Target))
         {
             AddMove(project, index, map, move);
         }
-
-        foreach (var move in request.GroupMoves)
-        {
-            var import = index.Imports.FirstOrDefault(item => item.PrimaryVirtualPath == move.Source)
-                ?? throw new AssetRelocationException($"'{move.Source}' is not an imported model with saved import settings.");
-            ValidateGroup(move.Group);
-            previousGroups[move.Source] = import.Settings.OutputDirectory;
-            moving.Add(import);
-            foreach (var type in RelocationPaths.ImportTypeFolders)
-            {
-                AddGroupFolder(project, map, groupFolders, import.GetGroupFolder(type), AssetPath.Create(import.Settings.MountPoint, type + "/" + move.Group));
-            }
-        }
-
-        ExpandImportGroups(project, index, map, groupFolders, moving);
-        CheckGroupOverlaps(index, map, moving);
 
         // A file's references name the asset it stands for; a script source's name the script it cooks to. A
         // container's products are named under it, so they move with it as a folder's files do.
@@ -80,7 +61,7 @@ internal static class AssetRelocationPlanner
         var referrers = edits.Where(edit => !map.IsMoved(edit.OriginalPath) && !renames.ContainsKey(edit.OriginalPath))
             .Select(edit => RelocationPaths.ToVirtual(project, edit.OriginalPath)!)
             .Order().ToArray();
-        return new(request, map, edits, referrers, [.. groupFolders.Distinct(StringComparer.Ordinal)], previousGroups);
+        return new(request, map, edits, referrers);
     }
 
     private static void AddMove(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map, AssetRelocationMove move)
@@ -154,6 +135,11 @@ internal static class AssetRelocationPlanner
 
     private static void RequireMovable(ProjectContext project, AssetRelocationMove move)
     {
+        if (ModelOf(move.Source) is { } model)
+        {
+            throw AssetRelocationException.ModelProduct(move.Source, model);
+        }
+
         if (RelocationPaths.FindWritableMount(project, move.Source) is null)
         {
             throw new AssetRelocationException($"'{move.Source}' is read-only. Only project content can be renamed or moved.");
@@ -176,11 +162,6 @@ internal static class AssetRelocationPlanner
         if (VirtualPath.ValidateSegment(name, VirtualPathRuleSet.Authored) is { } invalid)
         {
             throw new AssetRelocationException(invalid.ToMessage());
-        }
-
-        if (isDirectory && move.Source.Parent!.IsMount && RelocationPaths.ImportTypeFolders.Contains(move.Source.Name, StringComparer.Ordinal))
-        {
-            throw new AssetRelocationException($"'{move.Source.Name}' is one of the importer's fixed folders and cannot be renamed or moved.");
         }
 
         if (isDirectory && move.Target.IsSameOrInside(move.Source))
@@ -264,6 +245,11 @@ internal static class AssetRelocationPlanner
         Dictionary<FileSystemPath, List<InputProductRename>> renames,
         InputProductRename rename)
     {
+        if (ModelOf(rename.Product) is { } model)
+        {
+            throw AssetRelocationException.ModelProduct(rename.Product, model);
+        }
+
         if (AssetFileTypes.ContainerOf(rename.Product) is null || RelocationPaths.FindWritableMount(project, rename.Product) is null)
         {
             throw new AssetRelocationException($"'{rename.Product}' is not an action or a mapping context of the project's input sources.");
@@ -296,94 +282,11 @@ internal static class AssetRelocationPlanner
         map.AddIdentity(rename.Product, rename.Target, isFolder: false);
     }
 
-    private static void ValidateGroup(string group)
-    {
-        var segments = group.Replace('\\', '/').Split('/');
-        if (segments.Length == 0 || segments.Any(static segment => VirtualPath.ValidateSegment(segment, VirtualPathRuleSet.Authored) is not null))
-        {
-            throw new AssetRelocationException("Enter an output group such as 'Robot' or 'Vehicles/Car', without reserved characters.");
-        }
-    }
-
-    private static void AddGroupFolder(ProjectContext project, RelocationMap map, List<string> folders, AssetPath from, AssetPath to)
-    {
-        if (from == to || map.Identities.Any(entry => entry.Source == from))
-        {
-            return;
-        }
-
-        var source = RelocationPaths.ToPhysical(project, from)!;
-        var target = RelocationPaths.ToPhysical(project, to)!;
-        if (source != target && (Directory.Exists(target.FullPath) || File.Exists(target.FullPath)))
-        {
-            throw new AssetRelocationException($"'{to}' already exists. Choose an output group that is not in use.");
-        }
-
-        if (Directory.Exists(source.FullPath) && !map.IsMoved(source))
-        {
-            map.AddMove(new(source, target, IsDirectory: true));
-        }
-
-        map.AddIdentity(from, to, isFolder: true);
-        folders.Add(from + " → " + to);
-    }
-
-    // A real folder inside a type folder that is, or holds, an import's output group moves the matching
-    // folder under the other two type folders too, so the group stays one unit.
-    private static void ExpandImportGroups(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map, List<string> folders, List<AuthoredReferenceIndex.ImportSource> moving)
-    {
-        foreach (var move in map.Moves.Where(static move => move.IsDirectory).ToArray())
-        {
-            var from = RelocationPaths.ToVirtual(project, move.Source)!;
-            var to = RelocationPaths.ToVirtual(project, move.Target)!;
-            foreach (var import in index.Imports.Where(import => !moving.Contains(import)))
-            {
-                foreach (var type in RelocationPaths.ImportTypeFolders)
-                {
-                    var typeFolder = AssetPath.Create(import.Settings.MountPoint, type);
-                    if (!import.GetGroupFolder(type).IsSameOrInside(from) || from == typeFolder || !from.IsSameOrInside(typeFolder))
-                    {
-                        continue;
-                    }
-
-                    if (to == typeFolder || !to.IsSameOrInside(typeFolder))
-                    {
-                        throw new AssetRelocationException($"'{from}' holds the output group of '{import.PrimaryVirtualPath.Name}'. Output groups stay in '{typeFolder}'.");
-                    }
-
-                    var oldPart = from.GetPathBelow(typeFolder);
-                    var newPart = to.GetPathBelow(typeFolder);
-                    moving.Add(import);
-                    folders.Add(from + " → " + to);
-                    map.AddIdentity(from, to, isFolder: true);
-                    foreach (var sibling in RelocationPaths.ImportTypeFolders.Where(sibling => !string.Equals(sibling, type, StringComparison.Ordinal)))
-                    {
-                        var siblingFolder = AssetPath.Create(import.Settings.MountPoint, sibling);
-                        AddGroupFolder(project, map, folders, siblingFolder.Combine(oldPart), siblingFolder.Combine(newPart));
-                    }
-
-                    break;
-                }
-            }
-        }
-    }
-
-    private static void CheckGroupOverlaps(AuthoredReferenceIndex index, RelocationMap map, List<AuthoredReferenceIndex.ImportSource> moving)
-    {
-        foreach (var import in moving)
-        {
-            var group = import.GetGroupFolder(RelocationPaths.ImportTypeFolders[0]);
-            var mapped = map.MapIdentity(group) ?? group;
-            foreach (var other in index.Imports.Where(other => !moving.Contains(other)))
-            {
-                var existing = other.GetGroupFolder(RelocationPaths.ImportTypeFolders[0]);
-                if (mapped.IsSameOrInside(existing) || existing.IsSameOrInside(mapped))
-                {
-                    throw new AssetRelocationException($"The output group would overlap the group of '{other.PrimaryVirtualPath.Name}'. Choose a separate group.");
-                }
-            }
-        }
-    }
+    /// <summary>Finds the imported model a product is named under.</summary>
+    /// <param name="product">The identity.</param>
+    /// <returns>The model, or null when the identity is not a model's product.</returns>
+    internal static AssetPath? ModelOf(AssetPath product)
+        => AssetFileTypes.ContainerOf(product) is { } container && AssetFileTypes.Is(container.Name, AssetFileCategory.Model) ? container : null;
 
     private static async Task<IReadOnlyList<RelocationEdit>> PlanEditsAsync(
         ProjectContext project,

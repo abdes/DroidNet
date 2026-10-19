@@ -46,8 +46,7 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
         using var publicationRead = await this.publication.AcquireReadAsync(project, token).ConfigureAwait(false);
         var prior = publicationRead.ProductState;
 
-        var imports = await ImportedSourceIndex.ReadAsync(project, cookDocuments, prior, token).ConfigureAwait(false);
-        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, this.engineContent, token, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), [.. prior.ProducedAssets]).ConfigureAwait(false);
+        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, this.engineContent, token, uri => ImportedOutputs.ResolveOutput(project, uri, ContentCookInputRole.Dependency), [.. prior.ProducedAssets]).ConfigureAwait(false);
         var operationRoot = Path.Combine(project.ProjectRoot.FullPath, ".build", "inspection");
         try
         {

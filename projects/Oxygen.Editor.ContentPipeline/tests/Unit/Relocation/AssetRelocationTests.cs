@@ -31,7 +31,8 @@ public sealed class AssetRelocationTests
             "GeometryUri": "asset:///Content/Geometry/Box.ogeo",
             "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Geometry/Box.ogeo", "MaterialUri": "asset:///Content/Materials/Red.omat" } ],
             "TargetedOverrides": [ { "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Geometry/Box.ogeo", "MaterialUri": "asset:///Content/Materials/Red.omat" } ] } ] } ] },
-            { "Name": "Robot", "Components": [ { "$type": "GeometryComponent", "GeometryUri": "asset:///Content/Geometry/Robot/robot_Body.ogeo" } ] } ],
+            { "Name": "Robot", "Components": [ { "$type": "GeometryComponent", "GeometryUri": "asset:///Content/Models/Robot/robot.gltf/Body.ogeo",
+              "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Models/Robot/robot.gltf/Body.ogeo", "MaterialUri": "asset:///Content/Models/Robot/robot.gltf/Paint.omat" } ] } ] } ],
           "Environment": { "PostProcess": { "AutoExposureMeteringMask": "asset:///Content/Textures/Wood.otex" } } }
         """;
 
@@ -161,57 +162,68 @@ public sealed class AssetRelocationTests
         _ = moved["virtual_path"]!.GetValue<string>().Should().Be("/Content/Textures/Shared/layers.otex");
     }
 
-    /// <summary>Renaming an output group rewrites the sidecar, moves real group folders and rewrites output references.</summary>
-    /// <returns>The asynchronous test.</returns>
-    [TestMethod]
-    public async Task RenamingImportGroupRewritesSidecarFoldersAndReferences()
-    {
-        using var workspace = CreateContent();
-        _ = workspace.WriteModel("Content/SourceMedia/DCC/Robot", "robot.gltf", "Robot");
-        _ = workspace.Write("Content/Materials/Robot/Paint.omat.json", """{ "name": "Paint" }""");
-        var request = new AssetRelocationRequest { GroupMoves = [new(AssetPath.Parse("/Content/SourceMedia/DCC/Robot/robot.gltf"), "Hero")] };
-
-        var plan = await workspace.Service.RelocateAsync(request, "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        _ = workspace.ReadSettings("Content/SourceMedia/DCC/Robot/robot.gltf.import.json").OutputDirectory.Should().Be("Hero");
-        _ = workspace.Exists("Content/Materials/Hero/Paint.omat.json").Should().BeTrue();
-        _ = workspace.Read("Content/Scenes/Main.oscene.json").Should().Contain("asset:///Content/Geometry/Hero/robot_Body.ogeo");
-        _ = plan.GroupFolders.Should().HaveCount(3);
-        _ = plan.Reverse.GroupMoves.Should().ContainSingle().Which.Group.Should().Be("Robot");
-    }
-
-    /// <summary>A real folder that holds an output group moves the matching folder under the other type folders.</summary>
-    /// <returns>The asynchronous test.</returns>
-    [TestMethod]
-    public async Task RenamingFolderHoldingGroupExpandsToAllTypeFolders()
-    {
-        using var workspace = CreateContent();
-        _ = workspace.WriteModel("Content/SourceMedia/DCC/Robot", "robot.gltf", "Vehicles/Robot");
-        _ = workspace.Write("Content/Geometry/Vehicles/readme.txt", "notes");
-        _ = workspace.Write("Content/Scenes/Vehicles/keep.txt", "notes");
-
-        _ = await workspace.Service.RelocateAsync(Move("/Content/Geometry/Vehicles", "/Content/Geometry/Cars"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        _ = workspace.ReadSettings("Content/SourceMedia/DCC/Robot/robot.gltf.import.json").OutputDirectory.Should().Be("Cars/Robot");
-        _ = workspace.Exists("Content/Scenes/Cars/keep.txt").Should().BeTrue();
-    }
-
     /// <summary>Moving a model's folder rewrites the bundle root; renaming the model renames its sidecar.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task MovingAndRenamingModelKeepsItsSidecarValid()
     {
         using var workspace = CreateContent();
-        _ = workspace.WriteModel("Content/SourceMedia/DCC/Robot", "robot.gltf", "Robot");
+        _ = workspace.WriteModel("Content/Models/Robot", "robot.gltf");
 
-        _ = await workspace.Service.RelocateAsync(Move("/Content/SourceMedia/DCC/Robot", "/Content/SourceMedia/Bot"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = workspace.ReadSettings("Content/SourceMedia/Bot/robot.gltf.import.json").BundleRoot.Should().Be("Content/SourceMedia/Bot");
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Models/Robot", "/Content/Models/Bot"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = workspace.ReadSettings("Content/Models/Bot/robot.gltf.import.json").BundleRoot.Should().Be("Content/Models/Bot");
 
-        _ = await workspace.Service.RelocateAsync(Move("/Content/SourceMedia/Bot/robot.gltf", "/Content/SourceMedia/Bot/hero.gltf"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
-        var settings = workspace.ReadSettings("Content/SourceMedia/Bot/hero.gltf.import.json");
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Models/Bot/robot.gltf", "/Content/Models/Bot/hero.gltf"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var settings = workspace.ReadSettings("Content/Models/Bot/hero.gltf.import.json");
         _ = settings.PrimaryRelativePath.Should().Be("hero.gltf");
         _ = settings.Files.Should().BeEquivalentTo("hero.gltf", "mesh.bin");
-        _ = workspace.Exists("Content/SourceMedia/Bot/robot.gltf.import.json").Should().BeFalse();
+        _ = workspace.Exists("Content/Models/Bot/robot.gltf.import.json").Should().BeFalse();
+    }
+
+    /// <summary>
+    /// A model's products are named under it, so moving or renaming the model retargets every reference to them,
+    /// material slot overrides included.
+    /// </summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task MovingModelRewritesReferencesToItsProducts()
+    {
+        using var workspace = CreateContent();
+        _ = workspace.WriteModel("Content/Models/Robot", "robot.gltf");
+
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Models/Robot", "/Content/Models/Bot"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var robot = workspace.ReadJson("Content/Scenes/Main.oscene.json")["RootNodes"]![1]!["Components"]![0]!;
+        _ = robot["GeometryUri"]!.GetValue<string>().Should().Be("asset:///Content/Models/Bot/robot.gltf/Body.ogeo");
+        var slot = robot["OverrideSlots"]![0]!;
+        _ = slot["GeometryUri"]!.GetValue<string>().Should().Be("asset:///Content/Models/Bot/robot.gltf/Body.ogeo");
+        _ = slot["MaterialUri"]!.GetValue<string>().Should().Be("asset:///Content/Models/Bot/robot.gltf/Paint.omat");
+    }
+
+    /// <summary>
+    /// One product of a model is regenerated from it and has no authored place: moving, renaming or deleting it is
+    /// refused with a code, without changing any file.
+    /// </summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task ModelProductOperationsAreRefused()
+    {
+        using var workspace = CreateContent();
+        _ = workspace.WriteModel("Content/Models/Robot", "robot.gltf");
+        var product = AssetPath.Parse("/Content/Models/Robot/robot.gltf/Body.ogeo");
+        var before = Snapshot(workspace.Root);
+
+        Func<Task> move = () => workspace.Service.RelocateAsync(Move(product.VirtualPath, "/Content/Models/Body.ogeo"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
+        Func<Task> rename = () => workspace.Service.RelocateAsync(new AssetRelocationRequest { ProductRenames = [new(product, "Hull")] }, "Rename", new HistoryKeeper(this), this.TestContext.CancellationToken);
+        Func<Task> delete = () => workspace.Service.DeleteAsync([product], static _ => Task.CompletedTask, this.TestContext.CancellationToken);
+
+        foreach (var operation in new[] { move, rename, delete })
+        {
+            _ = (await operation.Should().ThrowAsync<AssetRelocationException>().ConfigureAwait(false))
+                .Which.Code.Should().Be(AssetRelocationException.ModelProductCode);
+        }
+
+        _ = Snapshot(workspace.Root).Should().BeEquivalentTo(before);
     }
 
     /// <summary>Each forbidden request is rejected before any file changes.</summary>
@@ -219,22 +231,20 @@ public sealed class AssetRelocationTests
     /// <param name="target">The destination.</param>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
-    [DataRow("/Content/Materials", "/Content/Mats", DisplayName = "Importer type folder")]
     [DataRow("/Content", "/Stuff", DisplayName = "Mount root")]
     [DataRow("/Content/Materials/Red.omat.json", "/Content/Materials/Other.omat.json", DisplayName = "Name collision")]
     [DataRow("/Content/Materials/Red.omat.json", "/Content/Materials/Red.otex.json", DisplayName = "Type change")]
     [DataRow("/Content/Shared", "/Content/Shared/Inner", DisplayName = "Folder into itself")]
-    [DataRow("/Content/SourceMedia/DCC/Robot/mesh.bin", "/Content/SourceMedia/DCC/Robot/body.bin", DisplayName = "Model bundle file")]
-    [DataRow("/Content/SourceMedia/DCC/Robot/robot.gltf.import.json", "/Content/SourceMedia/DCC/Robot/x.gltf.import.json", DisplayName = "Import sidecar")]
-    [DataRow("/Content/SourceMedia/DCC/Robot/robot.gltf", "/Content/Shared/robot.gltf", DisplayName = "Model out of its bundle")]
-    [DataRow("/Content/Geometry/Robot/robot_Body.ogeo", "/Content/Geometry/X.ogeo", DisplayName = "Cooked-only output")]
+    [DataRow("/Content/Models/Robot/mesh.bin", "/Content/Models/Robot/body.bin", DisplayName = "Model bundle file")]
+    [DataRow("/Content/Models/Robot/robot.gltf.import.json", "/Content/Models/Robot/x.gltf.import.json", DisplayName = "Import sidecar")]
+    [DataRow("/Content/Models/Robot/robot.gltf", "/Content/Shared/robot.gltf", DisplayName = "Model out of its bundle")]
     [DataRow("/Cooked/Content/Materials/Red.omat", "/Cooked/Content/Materials/Blue.omat", DisplayName = "Derived mount")]
     public async Task ForbiddenRequestsAreRejectedWithoutChanges(string source, string target)
     {
         using var workspace = CreateContent();
         _ = workspace.Write("Content/Materials/Other.omat.json", """{ "name": "Other" }""");
         _ = workspace.Write("Content/Shared/a.txt", "a");
-        _ = workspace.WriteModel("Content/SourceMedia/DCC/Robot", "robot.gltf", "Robot");
+        _ = workspace.WriteModel("Content/Models/Robot", "robot.gltf");
         var before = Snapshot(workspace.Root);
 
         Func<Task> work = () => workspace.Service.RelocateAsync(Move(source, target), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
@@ -377,21 +387,6 @@ public sealed class AssetRelocationTests
         _ = slot["Overrides"]!["follow"]!["Value"]!.GetValue<string>().Should().Be("asset:///Content/Scripts/walk.oscript");
     }
 
-    /// <summary>An output group cannot overlap another import's group.</summary>
-    /// <returns>The asynchronous test.</returns>
-    [TestMethod]
-    public async Task GroupOverlappingAnotherImportIsRejected()
-    {
-        using var workspace = CreateContent();
-        _ = workspace.WriteModel("Content/SourceMedia/DCC/Robot", "robot.gltf", "Robot");
-        _ = workspace.WriteModel("Content/SourceMedia/DCC/Car", "car.gltf", "Car");
-        var request = new AssetRelocationRequest { GroupMoves = [new(AssetPath.Parse("/Content/SourceMedia/DCC/Robot/robot.gltf"), "Car/Robot")] };
-
-        Func<Task> work = () => workspace.Service.RelocateAsync(request, "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
-
-        _ = await work.Should().ThrowAsync<AssetRelocationException>().WithMessage("*overlap*").ConfigureAwait(false);
-    }
-
     /// <summary>A failure part-way through restores every moved and rewritten file and leaves no journal.</summary>
     /// <param name="failAfterStep">The number of steps applied before the failure.</param>
     /// <returns>The asynchronous test.</returns>
@@ -479,11 +474,11 @@ public sealed class AssetRelocationTests
     public async Task DeleteRecyclesCompanionsAndModelBundles()
     {
         using var workspace = CreateContent();
-        _ = workspace.WriteModel("Content/SourceMedia/DCC/Robot", "robot.gltf", "Robot");
+        _ = workspace.WriteModel("Content/Models/Robot", "robot.gltf");
         var recycled = new List<string>();
 
         await workspace.Service.DeleteAsync(
-            [AssetPath.Parse("/Content/Textures/Wood.otex.json"), AssetPath.Parse("/Content/SourceMedia/DCC/Robot/robot.gltf")],
+            [AssetPath.Parse("/Content/Textures/Wood.otex.json"), AssetPath.Parse("/Content/Models/Robot/robot.gltf")],
             paths =>
             {
                 recycled.AddRange(paths);
@@ -494,7 +489,7 @@ public sealed class AssetRelocationTests
         _ = recycled.Should().BeEquivalentTo(
             workspace.PathOf("Content/Textures/Wood.otex.json"),
             workspace.PathOf("Content/Textures/Wood.png"),
-            workspace.PathOf("Content/SourceMedia/DCC/Robot"));
+            workspace.PathOf("Content/Models/Robot"));
     }
 
     /// <summary>A committed relocation reports the folder it moved and the files whose references it rewrote.</summary>
@@ -540,13 +535,13 @@ public sealed class AssetRelocationTests
     public async Task DeleteReportsTheRecycledFiles()
     {
         using var workspace = CreateContent();
-        _ = workspace.WriteModel("Content/SourceMedia/DCC/Robot", "robot.gltf", "Robot");
+        _ = workspace.WriteModel("Content/Models/Robot", "robot.gltf");
         var recycled = new List<string>();
         var reports = new List<AssetFilesChangedEventArgs>();
         workspace.Service.FilesChanged += (_, args) => reports.Add(args);
 
         await workspace.Service.DeleteAsync(
-            [AssetPath.Parse("/Content/Textures/Wood.otex.json"), AssetPath.Parse("/Content/SourceMedia/DCC/Robot/robot.gltf")],
+            [AssetPath.Parse("/Content/Textures/Wood.otex.json"), AssetPath.Parse("/Content/Models/Robot/robot.gltf")],
             paths =>
             {
                 recycled.AddRange(paths);

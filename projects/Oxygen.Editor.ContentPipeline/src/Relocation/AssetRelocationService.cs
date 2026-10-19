@@ -199,12 +199,13 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 var paths = new List<FileSystemPath>();
                 foreach (var source in sources)
                 {
+                    if (AssetRelocationPlanner.ModelOf(source) is { } model)
+                    {
+                        throw AssetRelocationException.ModelProduct(source, model);
+                    }
+
                     var path = ResolveExisting(project, source);
                     var isDirectory = Directory.Exists(path.FullPath);
-                    if (isDirectory && source.Parent!.IsMount && RelocationPaths.ImportTypeFolders.Contains(source.Name, StringComparer.Ordinal))
-                    {
-                        throw new AssetRelocationException($"'{source.Name}' is one of the importer's fixed folders and cannot be deleted.");
-                    }
 
                     RejectStartSceneDelete(project, path, isDirectory);
                     paths.AddRange(GetDeletedFiles(project, index, path, isDirectory));
@@ -488,11 +489,6 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                     this.LogRelocationRequested(move.Source.VirtualPath, move.Target.VirtualPath);
                 }
 
-                foreach (var move in request.GroupMoves)
-                {
-                    this.LogGroupRelocationRequested(move.Source.VirtualPath, move.Group);
-                }
-
                 foreach (var rename in request.ProductRenames)
                 {
                     this.LogProductRenameRequested(rename.Product.VirtualPath, rename.Name);
@@ -506,7 +502,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                     return plan;
                 }
 
-                this.LogRelocationPlanned(plan.Moves.Count, plan.Edits.Count, plan.Referrers.Count, plan.GroupFolders.Count);
+                this.LogRelocationPlanned(plan.Moves.Count, plan.Edits.Count, plan.Referrers.Count);
                 this.RejectUnsavedDocuments();
 
                 coordinator.VerifyWriter(operation);

@@ -54,7 +54,7 @@ public sealed class ImportReplacementSyncTests : DroidNet.Tests.VisualUserInterf
         var path = fixture.ProjectRoot.Combine("Incoming").Combine("Triangle." + format).FullPath;
         await File.WriteAllTextAsync(path, Recolor(await File.ReadAllTextAsync(path, timeout.Token).ConfigureAwait(true), format), timeout.Token).ConfigureAwait(true);
         var project = services.Projects.ActiveProject!;
-        var review = await SceneImportReplacement.ReviewAsync(project, "Triangle", timeout.Token).ConfigureAwait(true);
+        var review = await SceneImportReplacement.ReviewAsync(project, AssetPath.Parse("/Content/Models"), "Triangle", timeout.Token).ConfigureAwait(true);
         var replaced = await services.Pipeline.ImportSourceAsync(new(project, path, "Triangle", AssetPath.Parse("/Content/Models")) { Replacement = review }, timeout.Token).ConfigureAwait(true);
         _ = replaced.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, replaced.Diagnostics.Select(static issue => issue.Message)));
         _ = replaced.CookedAssets.Select(static asset => asset.CookedAssetUri).Should().BeEquivalentTo(first.CookedAssets.Select(static asset => asset.CookedAssetUri));

@@ -55,11 +55,11 @@ public sealed class ImportReplacementTests
             {
                 workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
                 WriteAuthoredGeometry(workspace, withBuffer: true);
-                const string retainedPath = "Content/SourceMedia/DCC/Model/model.gltf";
+                const string retainedPath = "Content/Models/Model/model.gltf";
                 var retained = System.Text.Json.Nodes.JsonNode.Parse(workspace.ReadText(retainedPath))!;
                 var uri = retained["buffers"]![0]!["uri"]!.GetValue<string>();
                 var buffer = Convert.FromBase64String(uri[(uri.IndexOf(',', StringComparison.Ordinal) + 1)..]);
-                await File.WriteAllBytesAsync(Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/retired.bin"), buffer, this.TestContext.CancellationToken).ConfigureAwait(false);
+                await File.WriteAllBytesAsync(Path.Combine(workspace.Root, "Content/Models/Model/retired.bin"), buffer, this.TestContext.CancellationToken).ConfigureAwait(false);
                 retained["buffers"]![0]!["uri"] = "retired.bin";
                 workspace.WriteText(retainedPath, retained.ToJsonString());
                 var settingsPath = Path.Combine(workspace.Root, retainedPath + NativeSceneImportSettings.SidecarSuffix);
@@ -70,7 +70,7 @@ public sealed class ImportReplacementTests
                 };
                 await File.WriteAllBytesAsync(settingsPath, settings.ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
                 var geometry = System.Text.Json.Nodes.JsonNode.Parse(workspace.ReadText("Content/Geometry/AuthoredCube.ogeo.json"))!;
-                geometry["buffers"]![0]!["uri"] = "../SourceMedia/DCC/Model/retired.bin";
+                geometry["buffers"]![0]!["uri"] = "../Models/Model/retired.bin";
                 workspace.WriteText("Content/Geometry/AuthoredCube.ogeo.json", geometry.ToJsonString());
             }
 
@@ -91,7 +91,7 @@ public sealed class ImportReplacementTests
                 await File.WriteAllBytesAsync(payload, damaged, this.TestContext.CancellationToken).ConfigureAwait(false);
             }
 
-            var primary = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf");
+            var primary = Path.Combine(workspace.Root, "Content/Models/Model/model.gltf");
             var originalBytes = await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false);
             var incoming = Path.Combine(external.FullName, "replacement.gltf");
             var json = System.Text.Json.Nodes.JsonNode.Parse(originalBytes)!;
@@ -108,7 +108,7 @@ public sealed class ImportReplacementTests
                 File.Delete(primary);
             }
 
-            var review = await SceneImportReplacement.ReviewAsync(workspace.ProjectContext, "Model", this.TestContext.CancellationToken).ConfigureAwait(false);
+            var review = await SceneImportReplacement.ReviewAsync(workspace.ProjectContext, AssetPath.Parse("/Content/Models"), "Model", this.TestContext.CancellationToken).ConfigureAwait(false);
             var request = new SceneImportRequest(workspace.ProjectContext, incoming, "Model", AssetPath.Parse("/Content/Models")) { Replacement = review };
             var preview = new FailingPublicationPreview();
             await using var previewLifetime = preview.ConfigureAwait(false);
@@ -154,7 +154,6 @@ public sealed class ImportReplacementTests
     [TestMethod]
     [TestCategory("NativeContent")]
     [DataRow("source changed")]
-    [DataRow("authored output")]
     [DataRow("renamed output")]
     [DataRow("dirty during cook")]
     public async Task ReplacementConflictsPreserveSourceAndOutput(string conflict)
@@ -170,9 +169,9 @@ public sealed class ImportReplacementTests
             var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
             _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
             var before = ReadOutputIdentities(workspace.Root).ToDictionary(static item => item.Key, static item => item.Value.hash, StringComparer.Ordinal);
-            var primary = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf");
+            var primary = Path.Combine(workspace.Root, "Content/Models/Model/model.gltf");
 
-            var review = await SceneImportReplacement.ReviewAsync(workspace.ProjectContext, "Model", this.TestContext.CancellationToken).ConfigureAwait(false);
+            var review = await SceneImportReplacement.ReviewAsync(workspace.ProjectContext, AssetPath.Parse("/Content/Models"), "Model", this.TestContext.CancellationToken).ConfigureAwait(false);
             var incoming = Path.Combine(external.FullName, "model.gltf");
             var json = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false))!;
             json["materials"]![0]!["pbrMetallicRoughness"]!["roughnessFactor"] = 0.1;
@@ -185,11 +184,6 @@ public sealed class ImportReplacementTests
             if (string.Equals(conflict, "source changed", StringComparison.Ordinal))
             {
                 await File.AppendAllTextAsync(primary, " ", this.TestContext.CancellationToken).ConfigureAwait(false);
-            }
-
-            if (string.Equals(conflict, "authored output", StringComparison.Ordinal))
-            {
-                workspace.WriteMaterial("Content/Materials/Models/Model/Custom.omat.json", "Custom");
             }
 
             var original = await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -231,13 +225,13 @@ public sealed class ImportReplacementTests
             var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = first.IsPublished.Should().BeTrue();
 
-            var primary = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.fbx");
+            var primary = Path.Combine(workspace.Root, "Content/Models/Model/model.fbx");
             var original = await File.ReadAllTextAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false);
             var replacement = original.Replace("a: 0,0,0,1,0,0,0,1,0", "a: 0,0,0,2,0,0,0,2,0", StringComparison.Ordinal);
             _ = replacement.Should().NotBe(original, "the replacement must change the geometry");
             var incoming = Path.Combine(external.FullName, "model.fbx");
             await File.WriteAllTextAsync(incoming, replacement, this.TestContext.CancellationToken).ConfigureAwait(false);
-            var review = await SceneImportReplacement.ReviewAsync(workspace.ProjectContext, "Model", this.TestContext.CancellationToken).ConfigureAwait(false);
+            var review = await SceneImportReplacement.ReviewAsync(workspace.ProjectContext, AssetPath.Parse("/Content/Models"), "Model", this.TestContext.CancellationToken).ConfigureAwait(false);
             var result = await service.ImportSourceAsync(new SceneImportRequest(workspace.ProjectContext, incoming, "Model", AssetPath.Parse("/Content/Models")) { Replacement = review }, this.TestContext.CancellationToken).ConfigureAwait(false);
             await this.AssertReplacementReadyAsync(workspace, service, source, first, result, primary, replacement).ConfigureAwait(false);
         }
@@ -254,9 +248,9 @@ public sealed class ImportReplacementTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         _ = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var notes = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/notes.txt");
+        var notes = Path.Combine(workspace.Root, "Content/Models/Model/notes.txt");
         await File.WriteAllTextAsync(notes, "unrelated work", this.TestContext.CancellationToken).ConfigureAwait(false);
-        Func<Task> review = () => SceneImportReplacement.ReviewAsync(workspace.ProjectContext, "Model", this.TestContext.CancellationToken);
+        Func<Task> review = () => SceneImportReplacement.ReviewAsync(workspace.ProjectContext, AssetPath.Parse("/Content/Models"), "Model", this.TestContext.CancellationToken);
         _ = await review.Should().ThrowAsync<InvalidDataException>().WithMessage("*notes.txt*").ConfigureAwait(false);
         _ = (await File.ReadAllTextAsync(notes, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("unrelated work");
     }

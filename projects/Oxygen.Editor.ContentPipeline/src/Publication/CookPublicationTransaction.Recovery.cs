@@ -35,7 +35,7 @@ internal sealed partial class CookPublicationTransaction
             if (MayHaveMutated(journal.Phase))
             {
                 _ = ProducedSourcePath(project, file);
-                if (journal.SourceReplacement is { } replacement && IsWithinSourceBundle(project, replacement.BundleName, file.RelativePath))
+                if (journal.SourceReplacement is { } replacement && IsWithinSourceBundle(project, replacement.BundleRoot, file.RelativePath))
                 {
                     throw new InvalidDataException("A source update overlaps a source-directory replacement.");
                 }
@@ -46,13 +46,9 @@ internal sealed partial class CookPublicationTransaction
         {
             try
             {
-                Import.ImportSourceRetention.ValidateBundleName(source.BundleName);
-                if (MayHaveMutated(journal.Phase))
-                {
-                    _ = Import.ImportSourceRetention.ResolveDestination(project, source.BundleName);
-                }
+                _ = Import.ImportSourceRetention.ResolveBundleRoot(project, source.BundleRoot);
             }
-            catch (ArgumentException invalid)
+            catch (Exception invalid) when (invalid is ArgumentException or InvalidDataException or InvalidOperationException)
             {
                 throw new InvalidDataException("The recovery journal contains an invalid source bundle.", invalid);
             }

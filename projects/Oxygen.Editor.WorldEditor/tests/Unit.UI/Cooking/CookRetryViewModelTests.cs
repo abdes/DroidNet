@@ -39,7 +39,7 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
             LocalFolderMounts = [],
         };
         projects.Activate(project);
-        var source = AssetPath.Parse("/Content/SourceMedia/DCC/Crate/Crate.gltf");
+        var source = AssetPath.Parse("/Content/Models/Crate/Crate.gltf");
         var request = new SceneImportRequest(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "Crate", AssetPath.Parse("/Content/Models"));
         var snapshot = new CookRunSnapshot
         {
