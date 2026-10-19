@@ -4,7 +4,8 @@
 Packages this Content directory's loose-cooked output with Oxygen PakTool.
 
 .DESCRIPTION
-This script packages `.cooked/main` into `pak`, both beside the script. An installed
+This script packages `.cooked/main` and the generation each retained import
+record under `imports` publishes into `pak`, all beside the script. An installed
 SDK uses its bundled PakTool; a source checkout builds PakTool in the
 selected tree first, so a stale tool is rebuilt before packaging.
 
@@ -21,7 +22,8 @@ explicit replacement is intended.
 Base filename for emitted artifacts in the pak output directory.
 
 .PARAMETER CookedRoot
-Loose-cooked root to package. Defaults to `ContentRoot/.cooked/main`.
+Loose-cooked root to package with the published retained imports. Defaults to
+`ContentRoot/.cooked/main`.
 
 .PARAMETER ContentRoot
 Authored Content root for external script sources and default input/output paths.
@@ -151,6 +153,21 @@ $PakPath = Join-Path $OutputDir ($BaseName + ".pak")
 $CatalogPath = Join-Path $OutputDir ($BaseName + ".catalog.json")
 $ManifestPath = Join-Path $OutputDir ($BaseName + ".manifest.json")
 
+# Each imports/*.import.json record names the generation it publishes under
+# .cooked/imports/<source>/<generation>; older generations stay until reclaimed.
+$ImportRoots = @()
+$Records = Join-Path $ContentRoot 'imports'
+if (Test-Path -LiteralPath $Records -PathType Container) {
+    $ImportRoots = @(Get-ChildItem -LiteralPath $Records -Filter '*.import.json' -File | Sort-Object Name | ForEach-Object {
+        $published = (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).published_generation
+        if ($published) {
+            $root = @(Get-ChildItem -LiteralPath (Join-Path $ContentRoot '.cooked/imports') -Directory -Filter $published.id -Recurse -Depth 1)
+            if ($root.Count -ne 1) { throw "Published generation $($published.id) of $($_.Name) not found." }
+            $root[0].FullName
+        }
+    })
+}
+
 $Arguments = @(
     "build",
     "--loose-source", $CookedRoot,
@@ -162,6 +179,10 @@ $Arguments = @(
     "--source-key", $SourceKey
 )
 
+foreach ($ImportRoot in $ImportRoots) {
+    $Arguments += @("--loose-source", $ImportRoot)
+}
+
 if (-not $NoManifest) {
     $Arguments += @("--manifest-out", $ManifestPath)
 }
@@ -172,6 +193,7 @@ if (-not [string]::IsNullOrWhiteSpace($DiagnosticsFile)) {
 }
 
 Write-Host "Cooked root : $CookedRoot" -ForegroundColor DarkGray
+foreach ($ImportRoot in $ImportRoots) { Write-Host "Import root : $ImportRoot" -ForegroundColor DarkGray }
 Write-Host "Output dir  : $OutputDir" -ForegroundColor DarkGray
 Write-Host "Base name   : $BaseName" -ForegroundColor DarkGray
 Write-Host "Source key  : $SourceKey" -ForegroundColor DarkGray

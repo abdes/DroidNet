@@ -178,12 +178,13 @@ Require successful exit codes **and an empty `issues` array** in the inventory.
 owned file's size and SHA-256 and rejects unexpected files. Use the same
 commands with a selected retained generation when inspecting it directly.
 
-Packaging reads `.cooked/main` and resolves external script sources against
-Content. Default outputs are `pak/all.pak`, `all.catalog.json` and
-`all.manifest.json`. `-ContentRoot` selects another authored Content directory
-and its default cooked/PAK paths. Keep the stable PAK source key when rebuilding
-the same content line. Close readers before replacing a mounted PAK; compare one
-representation of the assets at a time.
+Packaging reads `.cooked/main` and the generation each retained import record
+publishes, so one PAK holds the scenes and every imported model, and resolves
+external script sources against Content. Default outputs are `pak/all.pak`,
+`all.catalog.json` and `all.manifest.json`. `-ContentRoot` selects another
+authored Content directory and its default cooked/PAK paths. Keep the stable PAK
+source key when rebuilding the same content line. Close readers before replacing
+a mounted PAK; compare one representation of the assets at a time.
 
 ## Cleanup and format changes
 
