@@ -758,10 +758,14 @@ payload relocation request.
 
 Stable key references need no relocation. Keyed physics references participate
 in resource closure/digests through the resource table's existing key inventory.
-Logical references appear in inspection but do not force inclusion or ownership.
-The source's typed validation establishes descriptor/inventory agreement before
-publication; packaging performs generic graph/table checks rather than
-introducing another descriptor decoder.
+External texture bindings name a texture key: a texture a source of the build
+holds joins the asset's closure and digest; otherwise a base or dependency pak
+must hold it (PakTool collects their texture keys from their browse indexes), or
+planning reports `pak.plan.texture_reference_missing`. Logical references appear
+in inspection but do not force inclusion or ownership. The source's typed
+validation establishes descriptor/inventory agreement before publication;
+packaging performs generic graph/table checks rather than introducing another
+descriptor decoder.
 
 ### Ordered layers and patch baselines
 

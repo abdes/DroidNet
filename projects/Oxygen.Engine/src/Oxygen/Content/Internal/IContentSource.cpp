@@ -8,16 +8,34 @@
 #include <mutex>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <utility>
 
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 
 namespace oxygen::content::internal {
+
+auto IContentSource::FindTextureIndexByKey(const data::AssetKey& key) const
+  -> std::optional<data::pak::core::ResourceIndexT>
+{
+  std::call_once(texture_key_once_, [this] -> void {
+    for (auto& path : TextureVirtualPaths()) {
+      const auto texture_key = data::TextureKeyFromVirtualPath(path);
+      texture_paths_by_key_.emplace(texture_key, std::move(path));
+    }
+  });
+  const auto found = texture_paths_by_key_.find(key);
+  if (found == texture_paths_by_key_.end()) {
+    return std::nullopt;
+  }
+  return FindTextureIndexByVirtualPath(found->second);
+}
 
 auto IContentSource::FindPhysicsResource(const data::AssetKey& key) const
   -> std::optional<data::pak::core::ResourceIndexT>

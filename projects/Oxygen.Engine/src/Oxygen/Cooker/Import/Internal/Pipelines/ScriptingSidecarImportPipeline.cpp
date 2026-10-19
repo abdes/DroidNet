@@ -1411,17 +1411,13 @@ namespace {
 
     try {
       const auto previous_param_keys = CollectScriptOnlyParamKeys(scene);
-      AssetReferenceBuilder references(scene_state.references.Resources());
-      for (const auto& reference : scene_state.references.Keys()) {
-        const auto from_scripts
-          = reference.kind == data::KeyReferenceKind::kAsset
-          && (reference.expected_type == data::AssetType::kScript
-            || previous_param_keys.contains(reference.key));
-        if (!from_scripts) {
-          references.AddKey(
-            reference.kind, reference.key, reference.expected_type);
-        }
-      }
+      // Script keys are derived again from the slots below.
+      AssetReferenceBuilder references(scene_state.references,
+        [&previous_param_keys](const data::KeyReference& reference) -> bool {
+          return reference.kind != data::KeyReferenceKind::kAsset
+            || (reference.expected_type != data::AssetType::kScript
+              && !previous_param_keys.contains(reference.key));
+        });
       for (const auto& slot : scripts.slots) {
         references.AddAsset(slot.script_asset_key, data::AssetType::kScript);
       }

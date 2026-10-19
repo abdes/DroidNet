@@ -1,103 +1,121 @@
 # Oxygen Content System
 
-> Canonical feature status & index for the Content (PAK) subsystem. Individual deep-dive docs are under `Docs/` and intentionally avoid duplicating the status tables below.
+> Canonical feature status & index for the Content (PAK) subsystem. Individual
+> deep-dive docs are under `Docs/` and intentionally avoid duplicating the
+> status tables below.
 
 ## Non-Negotiable Runtime Invariants (AssetLoader)
 
 This section is normative. "MUST" and "MUST NOT" are strict requirements.
 
-1. Single owning-thread execution for `AssetLoader` public API:
-   `AssetLoader` public methods MUST run on the owning thread only. Ownership is bound on `ActivateAsync`.
-   References: `AssetLoader.h:995-1003`, `AssetLoader.cpp:262-275`.
+1. Single owning-thread execution for `AssetLoader` public API: `AssetLoader`
+   public methods MUST run on the owning thread only. Ownership is bound on
+   `ActivateAsync`. References: `AssetLoader.h:995-1003`,
+   `AssetLoader.cpp:262-275`.
 
-2. Async preconditions:
-   Any async load path MUST fail fast if `nursery_` is not active or `thread_pool_` is null.
-   References: `AssetLoader.cpp:1727-1734`, `AssetLoader.cpp:3115-3122`, `AssetLoader.cpp:987-995`.
+2. Async preconditions: Any async load path MUST fail fast if `nursery_` is not
+   active or `thread_pool_` is null. References: `AssetLoader.cpp:1727-1734`,
+   `AssetLoader.cpp:3115-3122`, `AssetLoader.cpp:987-995`.
 
-3. Decode/publish split:
-   Worker decode MUST be pure decode plus identity collection only.
-   Owning-thread publish MUST perform cache insertion, dependency-edge publication, and refcount mutations.
-   References: `AssetLoader.cpp:1721-1835`, `DependencyCollector.h:18-25`.
+3. Decode/publish split: Worker decode MUST be pure decode plus identity
+   collection only. Owning-thread publish MUST perform cache insertion,
+   dependency-edge publication, and refcount mutations. References:
+   `AssetLoader.cpp:1721-1835`, `DependencyCollector.h:18-25`.
 
-4. Identity-only dependency handoff:
-   `DependencyCollector` MUST contain only `AssetKey`, `ResourceKey`, `ResourceRef`.
-   It MUST NOT store paths, locators, readers, or stream handles.
-   References: `DependencyCollector.h:18-25`, `AssetLoader.h:935-939`.
+4. Identity-only dependency handoff: `DependencyCollector` MUST contain only
+   `AssetKey`, `ResourceKey`, `ResourceRef`. It MUST NOT store paths, locators,
+   readers, or stream handles. References: `DependencyCollector.h:18-25`,
+   `AssetLoader.h:935-939`.
 
-5. Source-aware identity:
-   Cache identity includes the exact runtime source instance. Full typed equality
-   selects opaque IDs; hashes only select interning buckets.
-   Owner: [identity contract](Docs/deps_and_cache.md#identities).
+5. Source-aware identity: Cache identity includes the exact runtime source
+   instance. Full typed equality selects opaque IDs; hashes only select
+   interning buckets. Owner:
+   [identity contract](Docs/deps_and_cache.md#identities).
 
-6. Resource key construction boundary:
-   `AssetLoader` interns keys on its owning thread. Workers hand off `ResourceRef`
-   with a `SourceInstanceId`; existing-ID lookup remains allocation-free.
+6. Resource key construction boundary: `AssetLoader` interns keys on its owning
+   thread. Workers hand off `ResourceRef` with a `SourceInstanceId`; existing-ID
+   lookup remains allocation-free.
 
-7. Deterministic mount resolution:
-   Source lookup for assets MUST preserve deterministic precedence (newest mount wins unless explicitly overridden).
-   References: `AssetLoader.cpp:1782-1787`, per-type `resolve_source_id` lambdas.
+7. Deterministic mount resolution: Source lookup for assets MUST preserve
+   deterministic precedence (newest mount wins unless explicitly overridden).
+   References: `AssetLoader.cpp:1782-1787`, per-type `resolve_source_id`
+   lambdas.
 
-8. Baseline cache retention model:
-   After first store, loader keeps one baseline retain (`Touch`); dependency edges add retains; releases and trim remove retains symmetrically.
-   References: `AssetLoader.cpp:544-550`, `AssetLoader.cpp:2007-2012`, `AssetLoader.cpp:2257-2263`.
+8. Baseline cache retention model: After first store, loader keeps one baseline
+   retain (`Touch`); dependency edges add retains; releases and trim remove
+   retains symmetrically. References: `AssetLoader.cpp:544-550`,
+   `AssetLoader.cpp:2007-2012`, `AssetLoader.cpp:2257-2263`.
 
-9. Dependency release order:
-   Asset release MUST process resource dependencies before asset dependencies, then the asset itself.
-   References: `AssetLoader.cpp:1591-1637`.
+9. Dependency release order: Asset release MUST process resource dependencies
+   before asset dependencies, then the asset itself. References:
+   `AssetLoader.cpp:1591-1637`.
 
-10. Mount invalidation correctness:
-    Refreshing or clearing mounts MUST leave no stale dependency graph edges. Old opaque IDs must never address replacement bytes.
-    References: `AssetLoader.cpp:323-364`, `AssetLoader.cpp:408-433`, `AssetLoader.cpp:492-528`.
+10. Mount invalidation correctness: Refreshing or clearing mounts MUST leave no
+    stale dependency graph edges. Old opaque IDs must never address replacement
+    bytes. References: `AssetLoader.cpp:323-364`, `AssetLoader.cpp:408-433`,
+    `AssetLoader.cpp:492-528`.
 
-11. Source capability parity:
-    If a source claims script table/data availability, generic script resource loading MUST work for that source.
-    References: `LooseCookedSource.h:161-222`, `AssetLoader.cpp:3443-3463`.
+11. Source capability parity: If a source claims script table/data availability,
+    generic script resource loading MUST work for that source. References:
+    `LooseCookedSource.h:161-222`, `AssetLoader.cpp:3443-3463`.
 
-12. Debug-only structural guards:
-    Graph cycle detection and recursive-release visit guards are diagnostics only and MAY remain debug-only.
-    Release runtime assumes acyclicity is guaranteed by import/authoring validation and CI checks.
-    References: `AssetLoader.cpp:4131-4156`, `AssetLoader.cpp:1569-1589`.
+12. Debug-only structural guards: Graph cycle detection and recursive-release
+    visit guards are diagnostics only and MAY remain debug-only. Release runtime
+    assumes acyclicity is guaranteed by import/authoring validation and CI
+    checks. References: `AssetLoader.cpp:4131-4156`,
+    `AssetLoader.cpp:1569-1589`.
 
 ## Non-Negotiable Runtime Invariants (Residency + Dedup Diagnostics)
 
 This section is normative. "MUST" and "MUST NOT" are strict requirements.
 
-1. Residency budget enforcement:
-   Content residency MUST be governed by explicit configurable budgets; unbounded default residency is forbidden for production runtime modes.
-   References: `AssetLoader.h:944`, `AnyCache.h:282-283`.
+1. Residency budget enforcement: Content residency MUST be governed by explicit
+   configurable budgets; unbounded default residency is forbidden for production
+   runtime modes. References: `AssetLoader.h:944`, `AnyCache.h:282-283`.
 
-2. Residency control API:
-   Public runtime surfaces MUST provide explicit residency control points (at minimum: budget configuration, pin/retain, unpin/release, and query/telemetry). Implicit checkout-only retention is insufficient.
-   References: `IAssetLoader.h:419`, `IAssetLoader.h:415-419`, `AnyCache.h:381`.
+2. Residency control API: Public runtime surfaces MUST provide explicit
+   residency control points (at minimum: budget configuration, pin/retain,
+   unpin/release, and query/telemetry). Implicit checkout-only retention is
+   insufficient. References: `IAssetLoader.h:419`, `IAssetLoader.h:415-419`,
+   `AnyCache.h:381`.
 
-3. Priority-aware scheduling:
-   Resource load orchestration MUST accept explicit priority/urgency metadata; key-only scheduling is forbidden for gameplay-critical paths.
-   References: `AssetLoader.cpp:853`, `ResourceLoadPipeline.h:35-47`.
+3. Priority-aware scheduling: Resource load orchestration MUST accept explicit
+   priority/urgency metadata; key-only scheduling is forbidden for
+   gameplay-critical paths. References: `AssetLoader.cpp:853`,
+   `ResourceLoadPipeline.h:35-47`.
 
-4. Automatic reclamation:
-   Residency maintenance MUST support automatic reclaim under budget pressure; manual-only trim operations are diagnostics/tools, not the primary control loop.
-   References: `AssetLoader.cpp:530-577`, `DependencyReleaseEngine.cpp:83-166`.
+4. Automatic reclamation: Residency maintenance MUST support automatic reclaim
+   under budget pressure; manual-only trim operations are diagnostics/tools, not
+   the primary control loop. References: `AssetLoader.cpp:530-577`,
+   `DependencyReleaseEngine.cpp:83-166`.
 
-5. Stable dedup identity by build configuration:
-   Release builds MUST always hash content for dedup identity, even if caller/options request hashing disabled. Release runtime/import paths MUST ignore disable-hashing flags.
-   Debug builds MAY allow non-hash fast paths for iteration speed, but MUST surface collision risk through diagnostics when weaker identity is used.
-   References: `BufferEmitter.cpp:21-46`, `TextureEmitter.cpp:76-84`.
+5. Stable dedup identity by build configuration: Release builds MUST always hash
+   content for dedup identity, even if caller/options request hashing disabled.
+   Release runtime/import paths MUST ignore disable-hashing flags. Debug builds
+   MAY allow non-hash fast paths for iteration speed, but MUST surface collision
+   risk through diagnostics when weaker identity is used. References:
+   `BufferEmitter.cpp:21-46`, `TextureEmitter.cpp:76-84`.
 
-6. No silent dedup collisions:
-   When dedup falls back to weaker identity, collision risk MUST be surfaced through explicit import diagnostics.
-   References: `ResourceTableAggregator.h:155-182`, `TextureEmitter.cpp:199-208`, `BufferEmitter.cpp:77-90`.
+6. No silent dedup collisions: When dedup falls back to weaker identity,
+   collision risk MUST be surfaced through explicit import diagnostics.
+   References: `ResourceTableAggregator.h:155-182`,
+   `TextureEmitter.cpp:199-208`, `BufferEmitter.cpp:77-90`.
 
-7. No silent record overwrite in cooked outputs:
-   Loose-cooked asset/file registration collisions MUST emit explicit diagnostics (and policy-driven behavior), never silent `insert_or_assign` replacement.
-   References: `LooseCookedWriter.cpp:302-303`, `LooseCookedWriter.cpp:320`, `LooseCookedWriter.cpp:430-435`.
+7. No silent record overwrite in cooked outputs: Loose-cooked asset/file
+   registration collisions MUST emit explicit diagnostics (and policy-driven
+   behavior), never silent `insert_or_assign` replacement. References:
+   `LooseCookedWriter.cpp:302-303`, `LooseCookedWriter.cpp:320`,
+   `LooseCookedWriter.cpp:430-435`.
 
-8. Deterministic diagnostics:
-   Packaging diagnostics MUST be deterministic and machine-readable (counts, keys, signatures, collision classes) to support CI quality gates.
-   References: `ResourceTableAggregator.h:201-209`, `LooseCookedWriter.cpp:430-435`.
+8. Deterministic diagnostics: Packaging diagnostics MUST be deterministic and
+   machine-readable (counts, keys, signatures, collision classes) to support CI
+   quality gates. References: `ResourceTableAggregator.h:201-209`,
+   `LooseCookedWriter.cpp:430-435`.
 
 ## AssetLoader Decomposed Architecture
 
-`AssetLoader` is a facade and orchestration boundary. It MUST keep API, lifecycle, and delegation responsibilities only.
+`AssetLoader` is a facade and orchestration boundary. It MUST keep API,
+lifecycle, and delegation responsibilities only.
 
 ### Responsibility Map
 
@@ -118,28 +136,44 @@ This section is normative. "MUST" and "MUST NOT" are strict requirements.
 
 ### Boundary Rules
 
-- Asset/resource loading internals MUST pass explicit source context; hidden thread-local source context is forbidden.
+- Asset/resource loading internals MUST pass explicit source context; hidden
+  thread-local source context is forbidden.
 - Script and physics query concerns MUST remain split in separate services.
-- Subsystem debug invariants MUST live with subsystem-owned state (not centralized in facade-only state).
-- `AssetLoader` private fields MUST not duplicate state already owned by extracted subsystems.
+- Subsystem debug invariants MUST live with subsystem-owned state (not
+  centralized in facade-only state).
+- `AssetLoader` private fields MUST not duplicate state already owned by
+  extracted subsystems.
 
 ## Runtime Refactor Guard Checklist
 
-This checklist is mandatory for Content runtime refactors and is intended to be objectively verifiable.
+This checklist is mandatory for Content runtime refactors and is intended to be
+objectively verifiable.
 
 ### Dependency Boundary Gates
 
-- `AssetLoader.cpp` MUST NOT directly include or call `PakFile`/`LooseCooked` format internals for read operations; reads must go through `IContentSource` and internal services.
-- `ResourceLoadPipeline`/query services MUST consume source resolution via callbacks or `ContentSourceRegistry`; no hidden globals or thread-local source context.
-- Script and physics query APIs MUST remain separate (`ScriptQueryService` and `PhysicsQueryService`); no merged multi-domain query surface.
-- New runtime services under `Internal/` MUST be `final`, non-copyable where ownership-sensitive, and have explicit callback contracts instead of reaching back into `AssetLoader` state.
+- `AssetLoader.cpp` MUST NOT directly include or call `PakFile`/`LooseCooked`
+  format internals for read operations; reads must go through `IContentSource`
+  and internal services.
+- `ResourceLoadPipeline`/query services MUST consume source resolution via
+  callbacks or `ContentSourceRegistry`; no hidden globals or thread-local source
+  context.
+- Script and physics query APIs MUST remain separate (`ScriptQueryService` and
+  `PhysicsQueryService`); no merged multi-domain query surface.
+- New runtime services under `Internal/` MUST be `final`, non-copyable where
+  ownership-sensitive, and have explicit callback contracts instead of reaching
+  back into `AssetLoader` state.
 
 ### Complexity and Ownership Gates
 
-- `AssetLoader` changes MUST reduce or keep stable facade-owned mutable state; new persistent maps/sets/vectors belong in dedicated internal stores/services.
-- Dependency-graph mutations MUST be mediated by `DependencyGraphStore` and releases by `DependencyReleaseEngine`; direct graph container mutation in `AssetLoader` is forbidden.
-- In-flight load dedup MUST be mediated by `InFlightOperationTable`; no additional ad-hoc in-flight maps in `AssetLoader`.
-- Eviction subscription and dispatch MUST remain centralized in `EvictionRegistry`.
+- `AssetLoader` changes MUST reduce or keep stable facade-owned mutable state;
+  new persistent maps/sets/vectors belong in dedicated internal stores/services.
+- Dependency-graph mutations MUST be mediated by `DependencyGraphStore` and
+  releases by `DependencyReleaseEngine`; direct graph container mutation in
+  `AssetLoader` is forbidden.
+- In-flight load dedup MUST be mediated by `InFlightOperationTable`; no
+  additional ad-hoc in-flight maps in `AssetLoader`.
+- Eviction subscription and dispatch MUST remain centralized in
+  `EvictionRegistry`.
 
 ### Verification Gates
 
@@ -147,18 +181,25 @@ This checklist is mandatory for Content runtime refactors and is intended to be 
   - exact files touched,
   - targeted tests executed (`ctest -R ...`), and
   - observed pass/fail outcome.
-- Any API surface change in `Internal/*.h` MUST include or update tests in `src/Oxygen/Content/test` covering both nominal and failure-path behavior.
-- No RTTI-based branching (`dynamic_cast`, `typeid`) is allowed in runtime content code; use Oxygen typed interfaces/contracts.
-- Regressions in mount/source persistence, scene catalog enumeration, cache trim semantics, or dependency release order block task closure.
+- Any API surface change in `Internal/*.h` MUST include or update tests in
+  `src/Oxygen/Content/test` covering both nominal and failure-path behavior.
+- No RTTI-based branching (`dynamic_cast`, `typeid`) is allowed in runtime
+  content code; use Oxygen typed interfaces/contracts.
+- Regressions in mount/source persistence, scene catalog enumeration, cache trim
+  semantics, or dependency release order block task closure.
 
 ### End-to-End Load Flow (Current)
 
-1. `AssetLoader` receives API call and enforces owning-thread and async preconditions.
-2. `ContentSourceRegistry` and `AssetIdentityIndex` resolve the effective source and identity.
+1. `AssetLoader` receives API call and enforces owning-thread and async
+   preconditions.
+2. `ContentSourceRegistry` and `AssetIdentityIndex` resolve the effective source
+   and identity.
 3. `InFlightOperationTable` deduplicates concurrent work.
 4. Decode executes with `LoaderContext` and identity-only dependency handoff.
-5. Publish/store updates caches, dependency graph, and baseline retains on owning thread.
-6. Release/trim routes through `DependencyReleaseEngine` and graph/store registries.
+5. Publish/store updates caches, dependency graph, and baseline retains on
+   owning thread.
+6. Release/trim routes through `DependencyReleaseEngine` and graph/store
+   registries.
 
 ## Documentation Index
 
@@ -173,7 +214,8 @@ This checklist is mandatory for Content runtime refactors and is intended to be 
 
 ## Implementation Status & Roadmap
 
-All status tables and roadmap details have moved to `Docs/implementation_plan.md`. This README stays lightweight for orientation.
+All status tables and roadmap details have moved to
+`Docs/implementation_plan.md`. This README stays lightweight for orientation.
 
 ## Roadmap
 
@@ -190,14 +232,17 @@ The authoritative definition is in `LoaderContext.h`.
 ### Key fields
 
 - `current_asset_key`: the asset currently being loaded (empty for resources)
-- `source_token`: identity-safe handle to the mounted source (used for `internal::ResourceRef`)
+- `source_token`: identity-safe handle to the mounted source (used for
+  `internal::ResourceRef`)
 - `desc_reader`: positioned at the start of the descriptor to decode
 - `data_readers`: per-resource-type readers positioned at the start of each
   resource data region (do not use `desc_reader` for data regions)
 - `work_offline`: CPU-only mode flag (no renderer/GPU side effects)
-- `dependency_collector`: optional identity-only dependency handoff for async decode
+- `dependency_collector`: optional identity-only dependency handoff for async
+  decode
 - `source_pak`: the `PakFile` the descriptor originates from
-- `source_content`: source-agnostic content view for auxiliary reads (for example, scripting tables)
+- `source_content`: source-agnostic content view for auxiliary reads (for
+  example, scripting tables)
 - `parse_only`: skip dependency collection (tooling/unit tests)
 
 ### Loader function shape
@@ -317,8 +362,10 @@ Analyzes and inspects PAK file contents.
 
 ### Asset vs Resource Data
 
-- **Asset Descriptors**: Metadata describing how to interpret assets (shown with `--hex-dump-assets`)
-- **Resource Data**: Raw buffer/texture binary content (shown with `--show-data`)
+- **Asset Descriptors**: Metadata describing how to interpret assets (shown with
+  `--hex-dump-assets`)
+- **Resource Data**: Raw buffer/texture binary content (shown with
+  `--show-data`)
 
 ### Supported Resource Types
 
@@ -336,7 +383,8 @@ Analyzes and inspects PAK file contents.
 
 - `Simple.yaml` → `Simple.pak`: Basic single-asset test
 - `Empty.yaml` → `Empty.pak`: Empty PAK validation
-- `ComplexGeometry.yaml` → `ComplexGeometry.pak`: Multi-resource test with buffers and textures
+- `ComplexGeometry.yaml` → `ComplexGeometry.pak`: Multi-resource test with
+  buffers and textures
 
 All test files are located in `src/Oxygen/Content/test/TestData/`.
 
@@ -344,7 +392,8 @@ All test files are located in `src/Oxygen/Content/test/TestData/`.
 
 ### Embedded vs Referenced Hierarchy
 
-The Oxygen asset system uses a hybrid approach that optimizes for both sharing and performance:
+The Oxygen asset system uses a hybrid approach that optimizes for both sharing
+and performance:
 
 #### Embedded Components (Always Co-loaded)
 
@@ -363,7 +412,7 @@ GeometryAsset
 ```text
 Scene → GeometryAsset (AssetKey reference)
 SubMesh → MaterialAsset (AssetKey reference)
-MaterialAsset → TextureResource (resource table index)
+MaterialAsset → TextureResource (resource table index, or texture key in another mount)
 MaterialAsset → ShaderResource (resource table index)
 Mesh → BufferResource (resource table index - vertex/index buffers)
 AudioAsset → AudioResource (resource table index)
@@ -371,13 +420,19 @@ AudioAsset → AudioResource (resource table index)
 
 ### Key Design Benefits
 
-1. **Memory Efficiency**: Mesh/SubMesh/MeshView are embedded as contiguous binary data within GeometryAsset descriptors
-2. **Resource Sharing**: All resources (buffers, textures, shaders, audio) are referenced by index, enabling deduplication
-3. **Simplified Dependencies**: Only asset-to-asset and asset-to-resource references need tracking
+1. **Memory Efficiency**: Mesh/SubMesh/MeshView are embedded as contiguous
+   binary data within GeometryAsset descriptors
+2. **Resource Sharing**: All resources (buffers, textures, shaders, audio) are
+   referenced by index, enabling deduplication
+3. **Simplified Dependencies**: Only asset-to-asset and asset-to-resource
+   references need tracking
 4. **Cache Coherency**: Embedded hierarchies load in a single read operation
 
 ### Reference Counting Need
 
-Reference counting and cache eviction are implemented for both assets and resources. Assets and resources are only unloaded when their reference count reaches zero and no dependents remain. This ensures safe sharing and unloading of MaterialAssets, GeometryAssets, and all resource types.
-needs reference counting to safely unload materials without breaking geometry
-that depends on them.
+Reference counting and cache eviction are implemented for both assets and
+resources. Assets and resources are only unloaded when their reference count
+reaches zero and no dependents remain. This ensures safe sharing and unloading
+of MaterialAssets, GeometryAssets, and all resource types. needs reference
+counting to safely unload materials without breaking geometry that depends on
+them.

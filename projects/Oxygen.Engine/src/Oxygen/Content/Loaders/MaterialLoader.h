@@ -11,6 +11,7 @@
 #include <bit>
 #include <cmath>
 #include <memory>
+#include <variant>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
@@ -394,9 +395,10 @@ inline auto LoadMaterialAsset(LoaderContext context)
 
     auto collect_texture_ref
       = [&](const ResourceReferenceIndex reference) -> void {
-      const auto texture_index
-        = context.ResolveResource(reference, data::ResourceKind::kTexture);
-      if (!texture_index || *texture_index == kNoResourceIndex
+      // Another source's texture is bound by key when the material publishes.
+      const auto target = context.ResolveTexture(reference);
+      const auto* texture_index = std::get_if<ResourceIndexT>(&target);
+      if (texture_index == nullptr || *texture_index == kNoResourceIndex
         || *texture_index == data::pak::core::kErrorTextureResourceIndex) {
         return;
       }

@@ -1,8 +1,8 @@
 # Async Import Planner + Readiness Tracking (LLD)
 
-**Status:** Design Clarification (PakFormat‑aligned)
-**Date:** 2026-01-16
-**Authoritative source:** [src/Oxygen/Data/PakFormat.h](src/Oxygen/Data/PakFormat.h)
+**Status:** Design Clarification (PakFormat‑aligned) **Date:** 2026-01-16
+**Authoritative source:**
+[src/Oxygen/Data/PakFormat.h](src/Oxygen/Data/PakFormat.h)
 
 ---
 
@@ -35,8 +35,8 @@ after emission.
 
 Format adapters create job-owned `WorkItem` storage directly from ufbx/cgltf
 structures and register plan items with `WorkPayloadHandle` values pointing to
-that storage. The planner uses these handles as opaque references only; it
-never inspects or copies the payloads.
+that storage. The planner uses these handles as opaque references only; it never
+inspects or copies the payloads.
 
 ### Non‑Goals
 
@@ -53,16 +53,16 @@ never inspects or copies the payloads.
 - **Asset**: A descriptor blob referenced by an **AssetKey** (128‑bit GUID).
   Types currently defined: **Material**, **Geometry**, **Scene**.
 
-> **Out of scope:** Animation and morph assets are **not** defined in
-> PakFormat v2–v4 and therefore are **not** part of this planner LLD.
+> **Out of scope:** Animation and morph assets are **not** defined in PakFormat
+> v2–v4 and therefore are **not** part of this planner LLD.
 
 ---
 
 ## 3. Dependency Map (Authoritative)
 
 Dependencies must match the **exact** fields defined in
-[src/Oxygen/Data/PakFormat.h](src/Oxygen/Data/PakFormat.h). The planner must
-not infer additional dependency types.
+[src/Oxygen/Data/PakFormat.h](src/Oxygen/Data/PakFormat.h). The planner must not
+infer additional dependency types.
 
 | Consumer           | Depends on        | Source field(s)                                                                                                                 | Notes                                                                                                                                              |
 | ------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -70,15 +70,15 @@ not infer additional dependency types.
 | Geometry asset     | Buffer resources  | `MeshDesc::info.standard.vertex_buffer`, `index_buffer`                                                                         | Applies only to **standard** meshes. Procedural meshes have no buffer dependencies.                                                                |
 | Geometry asset     | Material assets   | `SubMeshDesc::material_asset_key`                                                                                               | One dependency per referenced material asset.                                                                                                      |
 | Scene asset        | Geometry assets   | `RenderableRecord::geometry_key`                                                                                                | v2–v4 scenes.                                                                                                                                      |
-| Scene asset (v12+) | Texture resources | `FogEnvironmentRecord::inscattering_color_cubemap`, `SkyLightEnvironmentRecord::cubemap`, `SkySphereEnvironmentRecord::cubemap` | Texture bindings in the scene's own resource reference table, like the exposure metering mask.                                                     |
+| Scene asset (v12+) | Texture resources | `FogEnvironmentRecord::inscattering_color_cubemap`, `SkyLightEnvironmentRecord::cubemap`, `SkySphereEnvironmentRecord::cubemap` | Texture bindings in the scene's resource reference table, like the exposure metering mask: local, or external by key into a cooked context root.   |
 
 No other cross‑record dependencies are defined in PakFormat v2–v4.
 
 Dependency management is step-centric: a dependency only requires that the
-producer step has completed. The planner does not need to reason about whether
-a step is a resource or asset pipeline; the pipeline type is derived from the
-plan item kind when retrieving results. Produced results are stored by the job
-in a result cache keyed by `PlanItemId`.
+producer step has completed. The planner does not need to reason about whether a
+step is a resource or asset pipeline; the pipeline type is derived from the plan
+item kind when retrieving results. Produced results are stored by the job in a
+result cache keyed by `PlanItemId`.
 
 ---
 
@@ -173,9 +173,9 @@ The set of plan item kinds includes `kMeshBuild`, which represents mesh-building
 / cooking work performed by a `MeshBuildPipeline` and may be consumed by the
 `GeometryPipeline` when present (see `geometry_work_pipeline_v2.md`).
 
-Pipeline selection is an internal detail of the planner. Callers ask the
-planner for a pipeline type given a `PlanItemId`, and the planner resolves it
-based on the item's kind.
+Pipeline selection is an internal detail of the planner. Callers ask the planner
+for a pipeline type given a `PlanItemId`, and the planner resolves it based on
+the item's kind.
 
 ### 4.3 Planner Storage and ID Mapping
 
@@ -296,8 +296,8 @@ auto ImportPlanner::PipelineTypeFor(PlanItemId item) const noexcept
 
 - Each `Add*` method must be called only for its corresponding item kind.
 - Each `PlanItemKind` used in a plan must have a registered pipeline type.
-- `RegisterPipeline<Pipeline>()` requires `Pipeline` to satisfy
-  `ImportPipeline` (see
+- `RegisterPipeline<Pipeline>()` requires `Pipeline` to satisfy `ImportPipeline`
+  (see
   [src/Oxygen/Cooker/Import/Internal/ImportPipeline.h](src/Oxygen/Cooker/Import/Internal/ImportPipeline.h)).
 - `AddDependency(consumer, producer)` must represent a valid PakFormat
   dependency (see Section 3).
@@ -310,7 +310,9 @@ auto ImportPlanner::PipelineTypeFor(PlanItemId item) const noexcept
 `MakePlan()` performs:
 
 1. Build in‑degree for each **item** from dependency edges.
-2. Insert all zero‑in‑degree items into a ready set and process them in deterministic order; `MakePlan()` collects ready items in batches and sorts indices to preserve registration order as the tie‑breaker.
+2. Insert all zero‑in‑degree items into a ready set and process them in
+   deterministic order; `MakePlan()` collects ready items in batches and sorts
+   indices to preserve registration order as the tie‑breaker.
 3. Pop items to build the **step sequence**.
 4. Decrement in‑degree of dependents; when 0, enqueue.
 5. If items remain, report a **cycle** (blocking diagnostic).
@@ -321,11 +323,13 @@ using events.
 ### Sealing Rules
 
 - `MakePlan()` sets `sealed_ = true` and initializes readiness trackers.
-- After sealing, `Add*` and `AddDependency` must reject calls
-  (debug assertion + error return).
+- After sealing, `Add*` and `AddDependency` must reject calls (debug assertion +
+  error return).
 - `MakePlan()` validates that all item kinds in the plan have registered
   pipeline types; missing registrations are blocking diagnostics.
-- `MakePlan()` copies each consumer's dependency list into `PlanStep.prerequisites` (a `std::vector<PlanItemId>`) and initializes per‑item readiness trackers and events.
+- `MakePlan()` copies each consumer's dependency list into
+  `PlanStep.prerequisites` (a `std::vector<PlanItemId>`) and initializes
+  per‑item readiness trackers and events.
 - The plan is immutable after construction. Only readiness state mutates.
 
 ---
@@ -334,18 +338,18 @@ using events.
 
 ### 7.1 Required Dependencies
 
-For each consumer step, `ReadinessTracker.required` contains a list of
-producer step IDs (one per **unique producer** item). The tracker only tracks
-completion of those producer steps.
+For each consumer step, `ReadinessTracker.required` contains a list of producer
+step IDs (one per **unique producer** item). The tracker only tracks completion
+of those producer steps.
 
 Dependencies are strictly between plan steps. They do not depend on whether a
 step represents a resource or asset pipeline; only completion matters.
 
-`PlanStep.prerequisites` is a per-step copy of the producer `PlanItemId`s
-(from the planner's `dependencies_` table). The importer loop must resolve
-each prerequisite `PlanItemId` to a `ReadinessEvent&` by calling
-`planner.ReadyEvent(producer_item_id)` and await that event (checking
-`ready` first to avoid waiting when already satisfied).
+`PlanStep.prerequisites` is a per-step copy of the producer `PlanItemId`s (from
+the planner's `dependencies_` table). The importer loop must resolve each
+prerequisite `PlanItemId` to a `ReadinessEvent&` by calling
+`planner.ReadyEvent(producer_item_id)` and await that event (checking `ready`
+first to avoid waiting when already satisfied).
 
 ### 7.2 MarkReady Contract
 
@@ -353,8 +357,8 @@ each prerequisite `PlanItemId` to a `ReadinessEvent&` by calling
 
 - Locate the slot matching `token.producer`.
 - Set `satisfied[i] = true`.
-- If all entries are satisfied and `ready_event.ready == false`, set it true
-  and signal `ready_event.event`.
+- If all entries are satisfied and `ready_event.ready == false`, set it true and
+  signal `ready_event.event`.
 
 Duplicate `MarkReady` calls for the same producer are ignored.
 
@@ -399,8 +403,8 @@ producer steps for that dependency complete.
 Each `SubmitWork`:
 
 1. Submits to the pipeline (bounded backpressure).
-2. Collects a `WorkResult` and records it in the job-level result cache
-   (keyed by `PlanItemId`).
+2. Collects a `WorkResult` and records it in the job-level result cache (keyed
+   by `PlanItemId`).
 3. Emits payloads via emitters (assigning stable indices or asset keys).
 4. Calls `MarkReady(...)` on dependent trackers.
 
@@ -455,8 +459,8 @@ planner.Tracker(geometry_item)
 
 - Job nursery cancellation stops all pipeline workers.
 - Awaiting readiness events must be cancellation‑safe.
-- On cancellation, the importer aborts traversal and finalizes the session
-  with `success=false` and diagnostic code `import.canceled`.
+- On cancellation, the importer aborts traversal and finalizes the session with
+  `success=false` and diagnostic code `import.canceled`.
 
 ---
 
@@ -475,4 +479,5 @@ planner.Tracker(geometry_item)
 - [design/material_work_pipeline_v2.md](material_work_pipeline_v2.md)
 - [design/geometry_work_pipeline_v2.md](geometry_work_pipeline_v2.md)
 - [design/scene_work_pipeline_v2.md](scene_work_pipeline_v2.md)
-- [src/Oxygen/Data/PakFormat.h](src/Oxygen/Data/PakFormat.h)# Async Import Planner + Readiness Tracking (LLD)
+- [src/Oxygen/Data/PakFormat.h](src/Oxygen/Data/PakFormat.h)# Async Import
+  Planner + Readiness Tracking (LLD)

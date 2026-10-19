@@ -217,6 +217,39 @@ auto Inspection::ReadAssetDescriptor(const data::AssetKey& key) const
   return std::move(bytes).value();
 }
 
+auto Inspection::FindTexture(const std::string_view virtual_path) const
+  -> std::optional<data::pak::core::TextureResourceDesc>
+{
+  if (impl_->pak) {
+    const auto index
+      = impl_->pak->ResolveTextureIndexByVirtualPath(virtual_path);
+    if (!index) {
+      return std::nullopt;
+    }
+    const auto offset = impl_->pak->TexturesTable().GetResourceOffset(*index);
+    if (!offset) {
+      throw std::runtime_error(
+        "Pak texture entry is outside its resource table");
+    }
+    serio::FileStream<> stream(impl_->pak->FilePath(), std::ios::in);
+    serio::Reader reader(stream);
+    auto descriptor = data::pak::core::TextureResourceDesc {};
+    if (!reader.Seek(*offset)
+      || !reader.ReadBlobInto(
+        std::as_writable_bytes(std::span(&descriptor, 1)))) {
+      throw std::runtime_error("Cannot read the pak texture descriptor");
+    }
+    return descriptor;
+  }
+  const auto file
+    = std::ranges::find(impl_->files, virtual_path, &FileEntry::virtual_path);
+  if (file == impl_->files.end()
+    || file->kind != FileKind::kTextureDescriptor) {
+    return std::nullopt;
+  }
+  return ReadTextureDescriptor(file->relpath).descriptor;
+}
+
 auto Inspection::ReadTextureDescriptor(
   const std::string_view relative_path) const -> data::TextureResourceDescriptor
 {

@@ -180,6 +180,7 @@
                 "layout",
                 "name",
                 "content_hashing",
+                "cooked_context_roots",
                 "source_key"
               ]
             }
@@ -763,6 +764,9 @@
         },
         "content_hashing": {
           "type": "boolean"
+        },
+        "cooked_context_roots": {
+          "$ref": "#/definitions/cooked_context_roots"
         }
       },
       "additionalProperties": false

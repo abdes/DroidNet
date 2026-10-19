@@ -37,6 +37,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/TextureReferenceResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
@@ -67,17 +68,12 @@ namespace {
 
   namespace lc = oxygen::content::lc;
 
-  struct MountedInspection final {
-    std::filesystem::path root;
-    std::optional<lc::Inspection> inspection;
-  };
-
   struct SceneDescriptorExecutionContext final {
     // NOLINTBEGIN(*-avoid-const-or-ref-data-members)
     ImportSession& session;
     const ImportRequest& request;
     // NOLINTEND(*-avoid-const-or-ref-data-members)
-    std::vector<MountedInspection> mounts;
+    std::vector<internal::MountedCookedSource> mounts;
     std::unordered_map<std::string, std::pair<data::AssetKey, data::AssetType>>
       index_cache;
     std::unordered_map<std::string, std::unique_ptr<data::GeometryAsset>>
@@ -198,32 +194,6 @@ namespace {
       return data::AssetType::kScene;
     }
     return std::nullopt;
-  }
-
-  auto LoadMountedInspections(SceneDescriptorExecutionContext& context) -> void
-  {
-    for (const auto& root :
-      internal::BuildUniqueMountedCookedRoots(context.request)) {
-      auto mount = MountedInspection {
-        .root = root,
-        .inspection = std::nullopt,
-      };
-
-      if (lc::Inspection::IsCookedSource(mount.root)) {
-        try {
-          auto inspection = lc::Inspection {};
-          inspection.Load(mount.root);
-          mount.inspection = std::move(inspection);
-        } catch (const std::exception& ex) {
-          AddDiagnostic(context.session, context.request,
-            ImportSeverity::kError, "scene.descriptor.index_load_failed",
-            "Failed loading cooked index: " + std::string(ex.what()),
-            mount.root.string());
-        }
-      }
-
-      context.mounts.push_back(std::move(mount));
-    }
   }
 
   template <typename RecordT>
@@ -456,28 +426,14 @@ namespace {
     kCubemap,
   };
 
-  //! Source texture indices resolved for the scene's environment records.
+  //! Textures resolved for the scene's environment records: the scene's own
+  //! texture-table entries or other sources' textures by key.
   struct EnvironmentTextureIndices final {
-    data::pak::core::ResourceIndexT metering_mask {
-      data::pak::core::kNoResourceIndex
-    };
-    data::pak::core::ResourceIndexT fog_cubemap {
-      data::pak::core::kNoResourceIndex
-    };
-    data::pak::core::ResourceIndexT sky_light_cubemap {
-      data::pak::core::kNoResourceIndex
-    };
-    data::pak::core::ResourceIndexT sky_sphere_cubemap {
-      data::pak::core::kNoResourceIndex
-    };
+    data::TextureTarget metering_mask;
+    data::TextureTarget fog_cubemap;
+    data::TextureTarget sky_light_cubemap;
+    data::TextureTarget sky_sphere_cubemap;
   };
-
-  auto EnvironmentTextureLabel(const EnvironmentTextureUse use)
-    -> std::string_view
-  {
-    return use == EnvironmentTextureUse::kCubemap ? "Sky cubemap"
-                                                  : "Metering mask";
-  }
 
   auto EnvironmentTextureDiagnosticPrefix(const EnvironmentTextureUse use)
     -> std::string_view
@@ -523,42 +479,32 @@ namespace {
   //! return nothing.
   auto ResolveEnvironmentTexture(observer_ptr<ImportSession> session,
     observer_ptr<const ImportRequest> request,
-    observer_ptr<IAsyncFileReader> reader, std::string virtual_path,
-    std::string object_path, const EnvironmentTextureUse use)
-    -> co::Co<std::optional<data::pak::core::ResourceIndexT>>
+    observer_ptr<IAsyncFileReader> reader,
+    const std::span<const internal::MountedCookedSource> mounts,
+    std::string virtual_path, std::string object_path,
+    const EnvironmentTextureUse use)
+    -> co::Co<std::optional<data::TextureTarget>>
   {
     const auto prefix = std::string(EnvironmentTextureDiagnosticPrefix(use));
-    const auto label = std::string(EnvironmentTextureLabel(use));
     if (!reader) {
       AddDiagnostic(*session, *request, ImportSeverity::kError,
         prefix + "reader_unavailable",
         "Texture descriptor reader is unavailable", object_path);
       co_return std::nullopt;
     }
-    const auto reference
-      = co_await internal::ResolveTextureReference(session, request, reader,
-        {
-          .virtual_path = std::move(virtual_path),
-          .object_path = object_path,
-          .diagnostic_prefix = "scene.descriptor.",
-          .allow_missing = true,
-        });
+    const auto reference = co_await internal::ResolveTextureReference(session,
+      request, reader, mounts,
+      {
+        .virtual_path = std::move(virtual_path),
+        .object_path = object_path,
+        .diagnostic_prefix = "scene.descriptor.",
+        .allow_missing = true,
+      });
     if (!reference) {
       co_return std::nullopt;
     }
     if (reference->missing) {
-      co_return data::pak::core::kNoResourceIndex;
-    }
-    auto source_error = std::error_code {};
-    const bool local_source = std::filesystem::equivalent(
-      reference->cooked_root, session->CookedRoot(), source_error);
-    if (source_error || !local_source
-      || reference->index == data::pak::core::kNoResourceIndex) {
-      AddDiagnostic(*session, *request, ImportSeverity::kError,
-        prefix + "source_invalid",
-        label + " must reference a texture cooked into the scene's own source",
-        object_path);
-      co_return std::nullopt;
+      co_return data::TextureTarget {};
     }
     if (const auto error
       = EnvironmentTextureFormatError(reference->descriptor, use)) {
@@ -566,7 +512,7 @@ namespace {
         prefix + "format_invalid", std::string(*error), object_path);
       co_return std::nullopt;
     }
-    co_return reference->index;
+    co_return reference->target;
   }
 
   auto BuildPostProcessSystemRecord(SceneDescriptorExecutionContext& context,
@@ -769,13 +715,8 @@ namespace {
     }
 
     AssetReferenceBuilder references;
-    const auto bind_texture
-      = [&references](const data::pak::core::ResourceIndexT index)
-      -> data::ResourceReferenceIndex {
-      return index == data::pak::core::kNoResourceIndex
-        ? data::kNoResourceReference
-        : references.AddResource(data::ResourceKind::kTexture, index);
-    };
+    const auto bind_texture = [&references](const data::TextureTarget& target)
+      -> data::ResourceReferenceIndex { return references.AddTexture(target); };
     if (source.post_process.has_value()) {
       auto system = BuildPostProcessSystemRecord(
         context, *source.post_process, bind_texture(textures.metering_mask));
@@ -901,7 +842,8 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     .index_cache = {},
     .geometries = {},
   };
-  LoadMountedInspections(context);
+  context.mounts = internal::LoadMountedCookedSources(
+    session, Request(), "scene.descriptor.");
 
   if (!CookedReader()
     || !co_await LoadSlotInventories(context, *source, *CookedReader())) {
@@ -913,17 +855,17 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto resolve_texture
     = [&](const std::optional<std::string>& path, std::string object_path,
         const EnvironmentTextureUse use,
-        data::pak::core::ResourceIndexT& index) -> co::Co<bool> {
+        data::TextureTarget& target) -> co::Co<bool> {
     if (!path.has_value()) {
       co_return true;
     }
     const auto resolved = co_await ResolveEnvironmentTexture(
       observer_ptr { &session }, observer_ptr { &Request() }, CookedReader(),
-      *path, std::move(object_path), use);
+      context.mounts, *path, std::move(object_path), use);
     if (!resolved.has_value()) {
       co_return false;
     }
-    index = *resolved;
+    target = *resolved;
     co_return true;
   };
   if (source->post_process.has_value()

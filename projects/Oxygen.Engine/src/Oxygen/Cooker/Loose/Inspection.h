@@ -96,6 +96,16 @@ public:
   OXGN_COOK_NDAPI auto ReadAssetDescriptor(const data::AssetKey& key) const
     -> std::vector<std::byte>;
 
+  //! The resource descriptor of the texture the source records under
+  //! `virtual_path`: a loose root's indexed texture descriptor, or a pak's
+  //! browse-indexed texture. Nullopt when the source records none.
+  /*!
+   @throw std::runtime_error If the recorded texture cannot be read or
+     disagrees with its resource table.
+  */
+  OXGN_COOK_NDAPI auto FindTexture(std::string_view virtual_path) const
+    -> std::optional<data::pak::core::TextureResourceDesc>;
+
   //! Read an indexed texture sidecar and verify agreement with its resource
   //! table.
   OXGN_COOK_NDAPI auto ReadTextureDescriptor(

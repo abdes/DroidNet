@@ -261,6 +261,8 @@ set(
   "Import/Internal/Utils/DescriptorDocument.h"
   "Import/Internal/Utils/ImportSettingsUtils.h"
   "Import/Internal/Utils/JsonSchemaValidation.h"
+  "Import/Internal/Utils/MountedCookedSources.cpp"
+  "Import/Internal/Utils/MountedCookedSources.h"
   "Import/Internal/Utils/TextureReferenceResolver.cpp"
   "Import/Internal/Utils/TextureReferenceResolver.h"
   "Import/Internal/Utils/VirtualPathResolution.h"

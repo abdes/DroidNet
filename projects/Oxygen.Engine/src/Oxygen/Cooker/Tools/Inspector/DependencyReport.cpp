@@ -83,7 +83,9 @@ auto RunDependencyReport(const DependencyReportOptions& options) -> int
       }
       for (const auto& binding : entry.references.Resources()) {
         const char* state = "resource";
-        if (binding.kind == data::ResourceKind::kTexture) {
+        if (binding.kind == data::ResourceKind::kExternalTexture) {
+          state = "external";
+        } else if (binding.kind == data::ResourceKind::kTexture) {
           if (binding.index == data::pak::core::kErrorTextureResourceIndex) {
             state = "error";
           } else if (binding.index == data::pak::core::kFallbackResourceIndex) {
@@ -99,7 +101,7 @@ auto RunDependencyReport(const DependencyReportOptions& options) -> int
       assets.push_back(std::move(row));
     }
     const nlohmann::json report = {
-      { "schema", "oxygen.cooked-dependencies.v2" },
+      { "schema", "oxygen.cooked-dependencies.v3" },
       { "source_key", nostd::to_string(inspection.Guid()) },
       { "assets", std::move(assets) },
     };

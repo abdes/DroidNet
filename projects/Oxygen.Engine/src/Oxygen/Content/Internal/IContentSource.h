@@ -157,7 +157,20 @@ public:
     std::string_view virtual_path) const
     -> std::optional<data::pak::core::ResourceIndexT> = 0;
 
+  //! Texture table index of the texture whose key
+  //! (`data::TextureKeyFromVirtualPath`) is `key`, or nullopt when this source
+  //! holds no such texture.
+  [[nodiscard]] auto FindTextureIndexByKey(const data::AssetKey& key) const
+    -> std::optional<data::pak::core::ResourceIndexT>;
+
+  //! Virtual paths of the texture descriptors this source records.
+  [[nodiscard]] virtual auto TextureVirtualPaths() const
+    -> std::vector<std::string> = 0;
+
 private:
+  mutable std::once_flag texture_key_once_ {};
+  mutable std::unordered_map<data::AssetKey, std::string>
+    texture_paths_by_key_ {};
   mutable std::once_flag physics_index_once_ {};
   mutable std::unordered_map<data::AssetKey, data::pak::core::ResourceIndexT>
     physics_index_ {};

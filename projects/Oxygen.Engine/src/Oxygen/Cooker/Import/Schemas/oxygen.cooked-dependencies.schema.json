@@ -5,7 +5,7 @@
   "required": ["schema", "source_key", "assets"],
   "additionalProperties": false,
   "properties": {
-    "schema": { "const": "oxygen.cooked-dependencies.v2" },
+    "schema": { "const": "oxygen.cooked-dependencies.v3" },
     "source_key": { "$ref": "#/definitions/key" },
     "assets": {
       "type": "array",
@@ -39,7 +39,7 @@
               "additionalProperties": false,
               "properties": {
                 "asset_key": { "$ref": "#/definitions/key" },
-                "target_kind": { "type": "integer", "enum": [1, 2, 3] },
+                "target_kind": { "type": "integer", "enum": [1, 2, 3, 4] },
                 "expected_asset_type": {
                   "type": "integer",
                   "minimum": 0,
@@ -55,7 +55,7 @@
               "required": ["kind", "index", "state"],
               "additionalProperties": false,
               "properties": {
-                "kind": { "type": "integer", "enum": [1, 2, 3, 4] },
+                "kind": { "type": "integer", "enum": [1, 2, 3, 4, 5] },
                 "index": {
                   "type": "integer",
                   "minimum": 0,
@@ -63,7 +63,7 @@
                 },
                 "state": {
                   "type": "string",
-                  "enum": ["resource", "error", "fallback"]
+                  "enum": ["resource", "error", "fallback", "external"]
                 }
               }
             }

@@ -10,6 +10,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
@@ -366,6 +367,44 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, RejectsMalformedJobLayout)
     EXPECT_FALSE(ImportManifest::Load(path, std::nullopt, errors).has_value());
     EXPECT_FALSE(errors.str().empty());
   }
+}
+
+//! Material jobs read textures from the job's context roots, beneath which the
+//! batch-wide roots, such as the engine content pak, are placed.
+NOLINT_TEST(ImportManifestMaterialDescriptorTest, CarriesCookedContextRoots)
+{
+  // Arrange
+  const ScopedTempDir temp;
+  const auto manifest_path
+    = temp.Path() / "material_context_roots" / "import_manifest.json";
+  const auto root = manifest_path.parent_path();
+  WriteText(root / "Materials" / "tiles.material.json",
+    R"({"name": "Tiles", "domain": "opaque"})");
+  WriteText(manifest_path, R"({
+      "version": 1,
+      "output": "out",
+      "jobs": [
+        {
+          "type": "material-descriptor",
+          "source": "Materials/tiles.material.json",
+          "cooked_context_roots": ["Libraries/Textures"]
+        }
+      ]
+    })");
+  auto errors = std::ostringstream {};
+  auto manifest = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  ASSERT_HAS_VALUE(manifest) << errors.str();
+  const auto engine = temp.Path() / "engine.pak";
+
+  // Act
+  manifest->AddBaseCookedContextRoots(std::vector { engine });
+  const auto request = manifest->jobs.at(0).BuildRequest(errors);
+
+  // Assert
+  ASSERT_HAS_VALUE(request) << errors.str();
+  EXPECT_EQ(request->cooked_context_roots,
+    (std::vector<std::filesystem::path> {
+      engine, root / "Libraries/Textures" }));
 }
 
 } // namespace

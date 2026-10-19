@@ -798,6 +798,20 @@ auto LooseCookedIndexImpl::FindTextureDescriptorRelPath(
   }
 }
 
+auto LooseCookedIndexImpl::TextureDescriptorVirtualPaths() const
+  -> std::vector<std::string>
+{
+  const auto table
+    = std::string_view(string_storage_.data(), string_storage_.size());
+  std::vector<std::string> paths;
+  paths.reserve(texture_descriptors_.size());
+  for (const auto& file : texture_descriptors_) {
+    paths.emplace_back(
+      ExtractNullTerminatedString(table, file.virtual_path_offset));
+  }
+  return paths;
+}
+
 auto LooseCookedIndexImpl::FindFileRelPath(FileKind kind) const noexcept
   -> std::optional<std::string_view>
 {

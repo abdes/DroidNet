@@ -39,6 +39,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -69,17 +70,12 @@ namespace {
     std::unordered_map<std::string, internal::BufferDescriptorView> views;
   };
 
-  struct MountedInspection final {
-    std::filesystem::path root;
-    std::optional<lc::Inspection> inspection;
-  };
-
   //! Borrowed for the duration of one job execution, which owns both.
   struct GeometryExecutionContext final {
     ImportSession& session; // NOLINT(*-avoid-const-or-ref-data-members)
     const ImportRequest& request; // NOLINT(*-avoid-const-or-ref-data-members)
     observer_ptr<IAsyncFileReader> reader;
-    std::vector<MountedInspection> mounts;
+    std::vector<internal::MountedCookedSource> mounts;
     std::unordered_map<std::string, ResolvedBufferSidecar> buffer_cache;
     std::unordered_map<std::string, data::AssetKey> material_cache;
   };
@@ -102,32 +98,6 @@ namespace {
   {
     for (auto& diagnostic : diagnostics) {
       session.AddDiagnostic(std::move(diagnostic));
-    }
-  }
-
-  auto LoadMountedInspections(GeometryExecutionContext& context) -> void
-  {
-    for (const auto& root :
-      internal::BuildUniqueMountedCookedRoots(context.request)) {
-      auto mount = MountedInspection {
-        .root = root,
-        .inspection = std::nullopt,
-      };
-
-      if (lc::Inspection::IsCookedSource(mount.root)) {
-        try {
-          auto inspection = lc::Inspection {};
-          inspection.Load(mount.root);
-          mount.inspection = std::move(inspection);
-        } catch (const std::exception& ex) {
-          AddDiagnostic(context.session, context.request,
-            ImportSeverity::kError, "geometry.descriptor.index_load_failed",
-            "Failed loading cooked index: " + std::string(ex.what()),
-            mount.root.string());
-        }
-      }
-
-      context.mounts.push_back(std::move(mount));
     }
   }
 
@@ -213,7 +183,8 @@ namespace {
       co_return std::nullopt;
     }
 
-    auto matches = std::vector<observer_ptr<const MountedInspection>> {};
+    auto matches
+      = std::vector<observer_ptr<const internal::MountedCookedSource>> {};
     for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
       const auto descriptor_path = it->root / std::filesystem::path(relpath);
       auto ec = std::error_code {};
@@ -869,7 +840,8 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     .buffer_cache = {},
     .material_cache = {},
   };
-  LoadMountedInspections(context);
+  context.mounts = internal::LoadMountedCookedSources(
+    session, Request(), "geometry.descriptor.");
 
   if (!source->buffers.empty()) {
     auto& pipeline = CreatePipeline<BufferPipeline>(*ThreadPool(),

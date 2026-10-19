@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <functional>
 #include <ios>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -401,6 +402,8 @@ struct SourceResourceDigestState final {
   std::unordered_map<uint32_t, oxygen::base::Sha256Digest> script_digests;
   std::unordered_map<uint32_t, oxygen::base::Sha256Digest> physics_digests;
   std::unordered_map<data::AssetKey, uint32_t> physics_index_by_asset_key;
+  //! Texture-table index by texture key, for references by key.
+  std::unordered_map<data::AssetKey, uint32_t> texture_index_by_key;
   std::unordered_map<uint32_t, size_t> texture_pending_positions;
   std::unordered_map<uint32_t, size_t> buffer_pending_positions;
   std::unordered_map<uint32_t, size_t> script_pending_positions;
@@ -1127,12 +1130,15 @@ auto LoadSourceMetadata(PlanningState& state, SourceCollection& context) -> void
     source_files.assign(inspection.Files().begin(), inspection.Files().end());
     for (const auto& file : inspection.Files()) {
       if (file.kind == lc::FileKind::kTextureDescriptor) {
-        state.browse_textures.insert_or_assign(
-          ToCanonicalVirtualPath(file.virtual_path),
+        const auto path = ToCanonicalVirtualPath(file.virtual_path);
+        const auto index
+          = inspection.ReadTextureDescriptor(file.relpath).index.get();
+        context.digests.texture_index_by_key.insert_or_assign(
+          data::TextureKeyFromVirtualPath(path), index);
+        state.browse_textures.insert_or_assign(path,
           SourceTextureRef {
             .source_order = context.order,
-            .texture_index
-            = inspection.ReadTextureDescriptor(file.relpath).index.get(),
+            .texture_index = index,
           });
       }
     }
@@ -1185,8 +1191,10 @@ auto LoadSourceMetadata(PlanningState& state, SourceCollection& context) -> void
         = entry.asset_key;
     }
     for (const auto& entry : pak_file->BrowseTextures()) {
-      state.browse_textures.insert_or_assign(
-        ToCanonicalVirtualPath(entry.virtual_path),
+      const auto path = ToCanonicalVirtualPath(entry.virtual_path);
+      context.digests.texture_index_by_key.insert_or_assign(
+        data::TextureKeyFromVirtualPath(path), entry.texture_index.get());
+      state.browse_textures.insert_or_assign(path,
         SourceTextureRef {
           .source_order = context.order,
           .texture_index = entry.texture_index.get(),
@@ -1632,10 +1640,15 @@ struct AssetDependencyDigest {
   std::vector<size_t> resources {};
 };
 
+//! `lower_layer_textures` holds the texture keys of the base and dependency
+//! paks; null skips checking that external textures exist, for re-measuring a
+//! source pak's own catalog.
 auto ComputeAssetDependencyDigest(std::vector<pak::PakDiagnostic>& diagnostics,
   const SourceResourceDigestState& resources,
   std::span<const SourceResourceDigestState> sources,
-  const AggregatedAsset& asset) -> AssetDependencyDigest
+  const AggregatedAsset& asset,
+  const std::unordered_set<data::AssetKey>* lower_layer_textures)
+  -> AssetDependencyDigest
 {
   AssetDependencyDigest result;
   std::vector<std::pair<uint16_t, oxygen::base::Sha256Digest>> inputs;
@@ -1652,6 +1665,9 @@ auto ComputeAssetDependencyDigest(std::vector<pak::PakDiagnostic>& diagnostics,
     result.resources.push_back(positions.at(index));
   };
   for (const auto& binding : asset.references.Resources()) {
+    if (binding.kind == data::ResourceKind::kExternalTexture) {
+      continue;
+    }
     if (binding.kind == data::ResourceKind::kTexture
       && (binding.index == core::kFallbackResourceIndex
         || binding.index == core::kErrorTextureResourceIndex)) {
@@ -1681,9 +1697,36 @@ auto ComputeAssetDependencyDigest(std::vector<pak::PakDiagnostic>& diagnostics,
       append_resource(resources.physics_digests,
         resources.physics_pending_positions, binding.index.get(), tag);
       break;
+    case data::ResourceKind::kExternalTexture:
+      break;
     }
   }
   for (const auto& reference : asset.references.Keys()) {
+    if (reference.kind == data::KeyReferenceKind::kTexture) {
+      // A texture this pak holds is packed with the asset; one a lower layer
+      // holds is pinned by that layer's identity.
+      const auto newest_first = std::views::reverse(sources);
+      const auto holder = std::ranges::find_if(newest_first,
+        [&reference](const SourceResourceDigestState& candidate) -> bool {
+          return candidate.texture_index_by_key.contains(reference.key);
+        });
+      if (holder != newest_first.end()) {
+        append_resource(holder->texture_digests,
+          holder->texture_pending_positions,
+          holder->texture_index_by_key.at(reference.key),
+          static_cast<uint16_t>(data::ResourceKind::kTexture));
+      } else if (lower_layer_textures != nullptr
+        && !lower_layer_textures->contains(reference.key)) {
+        AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+          pak::PakBuildPhase::kPlanning, "pak.plan.texture_reference_missing",
+          "Asset " + data::to_string(asset.key)
+            + " references a texture neither this pak nor its base and "
+              "dependency paks hold: "
+            + data::to_string(reference.key),
+          asset.descriptor_path);
+      }
+      continue;
+    }
     if (reference.kind != data::KeyReferenceKind::kPhysicsResource) {
       continue;
     }
@@ -1710,9 +1753,18 @@ auto ComputeAssetDependencyDigest(std::vector<pak::PakDiagnostic>& diagnostics,
       static_cast<uint16_t>(data::ResourceKind::kPhysics));
   }
   if (!asset.references.Keys().empty()) {
-    const auto key_metadata = data::AssetReferences::Create({},
-      std::vector<data::KeyReference>(
-        asset.references.Keys().begin(), asset.references.Keys().end()));
+    // External texture bindings stay with the keys they name; local bindings
+    // are covered by their resources' digests.
+    auto external_textures = std::vector<data::ResourceBinding> {};
+    std::ranges::copy_if(asset.references.Resources(),
+      std::back_inserter(external_textures),
+      [](const data::ResourceBinding& binding) -> bool {
+        return binding.kind == data::ResourceKind::kExternalTexture;
+      });
+    const auto key_metadata
+      = data::AssetReferences::Create(std::move(external_textures),
+        std::vector<data::KeyReference>(
+          asset.references.Keys().begin(), asset.references.Keys().end()));
     if (!key_metadata) {
       throw std::runtime_error(key_metadata.error());
     }
@@ -1745,7 +1797,7 @@ auto ValidatePhysicalCatalog(
       continue;
     }
     const auto measured = ComputeAssetDependencyDigest(state.output.diagnostics,
-      context.digests, std::span { &context.digests, 1U }, asset);
+      context.digests, std::span { &context.digests, 1U }, asset, nullptr);
     if (asset.descriptor_digest != entry.descriptor_digest
       || measured.digest != entry.transitive_resource_digest) {
       AddDiagnostic(state.output.diagnostics,
@@ -1814,9 +1866,9 @@ auto CollectSourceData(PlanningState& state) -> void
     return state.tombstones.contains(entry.second);
   });
   for (auto& asset : state.assets) {
-    const auto dependency
-      = ComputeAssetDependencyDigest(state.output.diagnostics,
-        resource_states.at(asset.source_order), resource_states, asset);
+    const auto dependency = ComputeAssetDependencyDigest(
+      state.output.diagnostics, resource_states.at(asset.source_order),
+      resource_states, asset, &state.request->lower_layer_texture_keys);
     asset.transitive_resource_digest = dependency.digest;
     for (const auto index : dependency.resources) {
       AddDependentAssetKey(state.pending_resources.at(index), asset.key);
@@ -2432,9 +2484,11 @@ auto RelocateResourceBindings(
   std::vector<data::ResourceBinding> bindings(
     asset.references.Resources().begin(), asset.references.Resources().end());
   for (auto& binding : bindings) {
-    if (binding.kind == data::ResourceKind::kTexture
-      && (binding.index == core::kFallbackResourceIndex
-        || binding.index == core::kErrorTextureResourceIndex)) {
+    // An external texture binding names a key, which does not move.
+    if (binding.kind == data::ResourceKind::kExternalTexture
+      || (binding.kind == data::ResourceKind::kTexture
+        && (binding.index == core::kFallbackResourceIndex
+          || binding.index == core::kErrorTextureResourceIndex))) {
       continue;
     }
     std::string kind;
@@ -2450,6 +2504,8 @@ auto RelocateResourceBindings(
       break;
     case data::ResourceKind::kPhysics:
       kind = "physics";
+      break;
+    case data::ResourceKind::kExternalTexture:
       break;
     }
     const auto domain = remaps.find(kind);

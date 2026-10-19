@@ -11,7 +11,9 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <string_view>
 #include <type_traits>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
@@ -33,6 +35,8 @@ using oxygen::data::kNoResourceReference;
 using oxygen::data::ResourceBinding;
 using oxygen::data::ResourceKind;
 using oxygen::data::ResourceReferenceIndex;
+using oxygen::data::ResourceReferenceUse;
+using oxygen::data::TextureKeyFromVirtualPath;
 
 static_assert(!std::is_convertible_v<ResourceReferenceIndex, ResourceIndexT>);
 static_assert(sizeof(ResourceReferenceIndex) == sizeof(uint32_t));
@@ -360,6 +364,103 @@ NOLINT_TEST(AssetReferencesTest, UsageRequiresExactKeyKindsAndTypes)
   const AssetReferences empty;
   EXPECT_FALSE(empty.ValidateUsage({}, std::span(&expected, 1U)).has_value());
   EXPECT_TRUE(empty.ValidateUsage({}, {}).has_value());
+}
+
+//! An external texture binding names a key of the key table; Create keeps it
+//! naming that key when it puts the keys in canonical order.
+NOLINT_TEST(
+  AssetReferencesTest, ExternalTextureBindingFollowsItsKeyIntoCanonicalOrder)
+{
+  // Arrange: the texture key is given first and sorts after the asset key.
+  const auto texture = TextureKeyFromVirtualPath("/Engine/Textures/Grid.otex");
+  const auto asset = KeyReference {
+    .key = TestKey(),
+    .kind = KeyReferenceKind::kAsset,
+    .expected_type = AssetType::kGeometry,
+  };
+
+  // Act
+  const auto references = AssetReferences::Create(
+    {
+      { .kind = ResourceKind::kExternalTexture,
+        .index = ResourceIndexT { 0U } },
+      { .kind = ResourceKind::kTexture, .index = ResourceIndexT { 3U } },
+    },
+    {
+      { .key = texture, .kind = KeyReferenceKind::kTexture },
+      asset,
+    });
+
+  // Assert
+  ASSERT_TRUE(references.has_value());
+  const auto external
+    = references->ResolveTexture(ResourceReferenceIndex { 0U });
+  ASSERT_TRUE(external.has_value());
+  EXPECT_EQ(std::get<AssetKey>(*external), texture);
+  const auto local = references->ResolveTexture(ResourceReferenceIndex { 1U });
+  ASSERT_TRUE(local.has_value());
+  EXPECT_EQ(std::get<ResourceIndexT>(*local), ResourceIndexT { 3U });
+  const auto absent = references->ResolveTexture(kNoResourceReference);
+  ASSERT_TRUE(absent.has_value());
+  EXPECT_TRUE(std::holds_alternative<std::monostate>(*absent));
+  const auto encoded = references->Encode();
+  ASSERT_TRUE(encoded.has_value());
+  const auto decoded = AssetReferences::Decode(*encoded, 2U, 2U);
+  ASSERT_TRUE(decoded.has_value());
+  EXPECT_EQ(*decoded, *references);
+}
+
+NOLINT_TEST(AssetReferencesTest, ExternalTextureBindingsAndTextureKeysPair)
+{
+  const auto texture = TextureKeyFromVirtualPath("/Engine/Textures/Grid.otex");
+  const auto external = ResourceBinding {
+    .kind = ResourceKind::kExternalTexture,
+    .index = ResourceIndexT { 0U },
+  };
+  const auto texture_key = KeyReference {
+    .key = texture,
+    .kind = KeyReferenceKind::kTexture,
+  };
+  EXPECT_FALSE(AssetReferences::Create({ external },
+    { { .key = TestKey(),
+      .kind = KeyReferenceKind::kAsset,
+      .expected_type = AssetType::kMaterial } })
+      .has_value());
+  EXPECT_FALSE(
+    AssetReferences::Create({ { .kind = ResourceKind::kExternalTexture,
+                              .index = ResourceIndexT { 1U } } },
+      { texture_key })
+      .has_value());
+  EXPECT_FALSE(AssetReferences::Create({}, { texture_key }).has_value());
+  auto typed = texture_key;
+  typed.expected_type = AssetType::kMaterial;
+  EXPECT_FALSE(AssetReferences::Create({ external }, { typed }).has_value());
+
+  const auto references
+    = AssetReferences::Create({ external }, { texture_key });
+  ASSERT_TRUE(references.has_value());
+  EXPECT_FALSE(references
+      ->ResolveResource(ResourceReferenceIndex { 0U }, ResourceKind::kTexture)
+      .has_value());
+}
+
+//! A texture field may use an external binding; the texture key it names is
+//! not a descriptor field, and no table bounds apply to it.
+NOLINT_TEST(
+  AssetReferencesTest, TextureUsesAcceptExternalBindingsWithoutDeclaringKeys)
+{
+  const auto references
+    = AssetReferences::Create({ { .kind = ResourceKind::kExternalTexture,
+                                .index = ResourceIndexT { 0U } } },
+      { { .key = TextureKeyFromVirtualPath("/Engine/Textures/Grid.otex"),
+        .kind = KeyReferenceKind::kTexture } });
+  ASSERT_TRUE(references.has_value());
+  const auto uses = std::array { ResourceReferenceUse {
+    .reference = ResourceReferenceIndex { 0U },
+    .kind = ResourceKind::kTexture,
+  } };
+  EXPECT_TRUE(references->ValidateUsage(uses, {}).has_value());
+  EXPECT_TRUE(references->ValidateResourceBounds({}).has_value());
 }
 
 } // namespace

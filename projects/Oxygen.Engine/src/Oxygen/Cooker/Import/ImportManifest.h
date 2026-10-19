@@ -101,8 +101,8 @@ struct ImportManifest {
   //! Places cooked context sources beneath every job's own context roots.
   /*!
    Batch-wide sources, such as the engine content pak, resolve references for
-   scene, geometry and scripting sidecar jobs with lower priority than the
-   sources the manifest names.
+   material, scene, geometry and scripting sidecar jobs with lower priority
+   than the sources the manifest names.
 
    @param roots Loose cooked roots or pak files, lowest priority first;
      relative paths resolve against the current directory.

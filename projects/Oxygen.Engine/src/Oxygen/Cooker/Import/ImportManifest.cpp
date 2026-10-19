@@ -234,6 +234,8 @@ namespace {
     ResolveCookedRootRelativeToManifest(
       manifest_dir, defaults.scene_descriptor);
     ResolveContextRootsRelativeToManifest(
+      manifest_dir, defaults.material_descriptor.cooked_context_roots);
+    ResolveContextRootsRelativeToManifest(
       manifest_dir, defaults.scene_descriptor.cooked_context_roots);
     ResolveContextRootsRelativeToManifest(
       manifest_dir, defaults.geometry_descriptor.cooked_context_roots);
@@ -259,6 +261,8 @@ namespace {
       manifest_dir, job.collision_shape_descriptor);
     ResolveCookedRootRelativeToManifest(manifest_dir, job.geometry_descriptor);
     ResolveCookedRootRelativeToManifest(manifest_dir, job.scene_descriptor);
+    ResolveContextRootsRelativeToManifest(
+      manifest_dir, job.material_descriptor.cooked_context_roots);
     ResolveContextRootsRelativeToManifest(
       manifest_dir, job.scene_descriptor.cooked_context_roots);
     ResolveContextRootsRelativeToManifest(
@@ -971,7 +975,9 @@ namespace {
     MaterialDescriptorImportSettings& settings, std::ostream& errors) -> bool
   {
     return ReadBoolField(
-      obj, "content_hashing", settings.with_content_hashing, errors);
+             obj, "content_hashing", settings.with_content_hashing, errors)
+      && ReadStringArrayField(
+        obj, "cooked_context_roots", settings.cooked_context_roots, errors);
   }
 
   auto ApplyCommonPhysicsMaterialDescriptorOverrides(const json& obj,
@@ -1920,6 +1926,7 @@ auto ImportManifest::AddBaseCookedContextRoots(
     job_roots.insert(job_roots.begin(), base.begin(), base.end());
   };
   for (auto& job : jobs) {
+    prepend(job.material_descriptor.cooked_context_roots);
     prepend(job.scene_descriptor.cooked_context_roots);
     prepend(job.geometry_descriptor.cooked_context_roots);
     prepend(job.scripting_sidecar.cooked_context_roots);

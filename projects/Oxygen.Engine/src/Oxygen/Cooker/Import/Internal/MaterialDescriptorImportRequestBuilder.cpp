@@ -72,6 +72,15 @@ auto BuildMaterialDescriptorRequest(
   }
   request.cooked_root = std::move(cooked_root);
 
+  for (const auto& root : settings.cooked_context_roots) {
+    const auto path = std::filesystem::path(root);
+    if (!path.is_absolute()) {
+      error_stream << "ERROR: cooked context roots must be absolute paths\n";
+      return std::nullopt;
+    }
+    request.cooked_context_roots.push_back(path.lexically_normal());
+  }
+
   request.job_name = prepared->name;
   request.options.with_content_hashing = EffectiveContentHashingEnabled(
     prepared->content_hashing.value_or(settings.with_content_hashing));

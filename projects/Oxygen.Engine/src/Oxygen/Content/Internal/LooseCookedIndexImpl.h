@@ -104,6 +104,10 @@ public:
     std::string_view virtual_path) const noexcept
     -> std::optional<std::string_view>;
 
+  //! Virtual paths of every texture descriptor the index records.
+  OXGN_CNTT_NDAPI auto TextureDescriptorVirtualPaths() const
+    -> std::vector<std::string>;
+
   [[nodiscard]] auto GetAllAssetKeys() const noexcept
     -> std::span<const data::AssetKey>
   {

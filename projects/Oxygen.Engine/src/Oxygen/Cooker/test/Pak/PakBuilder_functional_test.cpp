@@ -12,6 +12,9 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 #include "PakTestSupport.h"
 
@@ -22,6 +25,7 @@
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
+#include <Oxygen/Cooker/test/Support/TextureLibraryFixture.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
@@ -311,6 +315,100 @@ NOLINT_TEST_F(PakBuilderDependencyTest, ReferenceTypesAreChecked)
   // Assert
   EXPECT_TRUE(HasDiagnosticCode(
     layer.diagnostics, "pak.plan.asset_reference_type_mismatch"));
+  EXPECT_FALSE(std::filesystem::exists(Path("layer.pak")));
+}
+
+//! A material that names a texture by key, built beside a library holding that
+//! texture, on top of a lower layer holding it, or with nothing holding it.
+class PakBuilderExternalTextureTest : public PakBuilderTest {
+protected:
+  static constexpr auto kGrid
+    = std::string_view { "/Engine/Textures/Grid.otex" };
+
+  auto Build(std::vector<data::CookedSource> sources,
+    std::unordered_set<data::AssetKey> lower_layer_textures = {})
+    -> pak::PakBuildResult
+  {
+    auto descriptor = data::pak::render::MaterialAssetDesc {};
+    descriptor.header.asset_type
+      = static_cast<uint8_t>(data::AssetType::kMaterial);
+    descriptor.header.version = data::pak::render::kMaterialAssetVersion;
+    descriptor.base_color_texture = data::ResourceReferenceIndex { 0U };
+    const auto references = data::AssetReferences::Create(
+      { {
+        .kind = data::ResourceKind::kExternalTexture,
+        .index = data::pak::core::ResourceIndexT { 0U },
+      } },
+      { {
+        .key = data::TextureKeyFromVirtualPath(kGrid),
+        .kind = data::KeyReferenceKind::kTexture,
+      } });
+    if (!references.has_value()) {
+      ADD_FAILURE() << "Expected the reference table to encode";
+      return {};
+    }
+    const auto layer_root = Path("layer");
+    auto writer = oxygen::content::testing::LooseCookedTestWriter(layer_root);
+    writer.WriteAssetDescriptor(owner_key_, data::AssetType::kMaterial,
+      "/Game/Owner.omat", "Owner.omat", data::MakeDescriptorBytes(descriptor),
+      *references);
+    static_cast<void>(writer.Finish());
+    sources.push_back(
+      { .kind = data::CookedSourceKind::kLooseCooked, .path = layer_root });
+    auto request = pak::PakBuildRequest {};
+    request.sources = std::move(sources);
+    request.output_pak_path = Path("layer.pak");
+    request.content_version = 1U;
+    request.source_key = MakeSourceKey(6U);
+    request.lower_layer_texture_keys = std::move(lower_layer_textures);
+    request.options.embed_browse_index = true;
+    auto layer = pak::PakBuilder {}.Build(request);
+    if (!layer.has_value()) {
+      ADD_FAILURE() << "Expected the layer build to report";
+      return {};
+    }
+    return std::move(*layer);
+  }
+
+  data::AssetKey owner_key_ = MakeAssetKey(43U);
+};
+
+//! A texture a source of the pak holds is packed with the material; one a
+//! lower layer holds is left to it.
+NOLINT_TEST_F(PakBuilderExternalTextureTest, HeldTexturesResolve)
+{
+  // Arrange
+  const auto library = Path("library");
+  oxygen::cooker::test::WriteTextureLibrary(library, kGrid,
+    { .size_bytes = 4U,
+      .width = 1U,
+      .height = 1U,
+      .depth = 1U,
+      .array_layers = 1U,
+      .mip_levels = 1U });
+
+  // Act
+  const auto alongside = Build(
+    { { .kind = data::CookedSourceKind::kLooseCooked, .path = library } });
+  const auto packed = oxygen::content::PakFile(Path("layer.pak"))
+                        .ResolveTextureIndexByVirtualPath(kGrid);
+  const auto below = Build({}, { data::TextureKeyFromVirtualPath(kGrid) });
+
+  // Assert
+  EXPECT_EQ(alongside.summary.diagnostics_error, 0U);
+  EXPECT_TRUE(packed.has_value());
+  EXPECT_EQ(below.summary.diagnostics_error, 0U);
+}
+
+//! A texture neither the pak nor its lower layers hold refuses the build.
+NOLINT_TEST_F(PakBuilderExternalTextureTest, UnheldTextureIsRefused)
+{
+  // Act
+  const auto layer = Build({});
+
+  // Assert
+  EXPECT_TRUE(
+    HasDiagnosticCode(layer.diagnostics, "pak.plan.texture_reference_missing"));
   EXPECT_FALSE(std::filesystem::exists(Path("layer.pak")));
 }
 

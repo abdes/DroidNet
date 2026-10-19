@@ -153,12 +153,27 @@ order:
 | Key reference    | `AssetKey`, target kind:`uint8`, expected `AssetType:uint8` | 18 bytes |
 
 Wire resource kinds are explicitly numbered Buffer=1, Texture=2, Script=3,
-Physics=4. They are independent of C++ `TypeId` and typelist order. Audio has no
-current descriptor/runtime consumer and is not assigned a supported binding
-kind. Key target kinds are Asset=1, PhysicsResource=2 and Logical=3. Asset
-references require a concrete expected asset type; PhysicsResource requires
-Unknown; Logical may carry a known expected asset type or Unknown when no asset
-type exists.
+Physics=4 and ExternalTexture=5. They are independent of C++ `TypeId` and
+typelist order. Audio has no current descriptor/runtime consumer and is not
+assigned a supported binding kind. Key target kinds are Asset=1,
+PhysicsResource=2, Logical=3 and Texture=4. Asset references require a concrete
+expected asset type; PhysicsResource and Texture require Unknown; Logical may
+carry a known expected asset type or Unknown when no asset type exists.
+
+A texture field binds either a texture of the asset's own container (Texture,
+its container index) or a texture another mounted container holds
+(ExternalTexture). An external binding's index selects the key reference of kind
+Texture that names the texture; a texture's key is `AssetKey::FromVirtualPath`
+of its descriptor's virtual path (`data::TextureKeyFromVirtualPath`), the same
+rule as asset keys. Every Texture key is the target of at least one external
+binding, and an external binding names only a Texture key; canonical key
+ordering moves each binding with its key. External bindings carry no container
+index, so packaging does not relocate them. The runtime resolves one in the
+newest mount holding the key, and shows the error texture when no mount does. A
+cook binds a texture the job's own output holds locally and one a cooked context
+root (a loose root or a pak) holds externally, without copying it. A pak build
+packs an external texture one of its sources holds and otherwise requires a base
+or dependency pak to hold it (`pak.plan.texture_reference_missing`).
 
 An absent field creates no binding. A texture binding with index zero selects
 Oxygen's existing neutral white fallback; it is a built-in marker, not a
@@ -194,12 +209,12 @@ publication.
 
 | Descriptor/record     | Local resource bindings                                                        | Key references                                                                                                                                                |
 | --------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Material              | All 12 texture fields, including AO and extension textures                     | None                                                                                                                                                          |
+| Material              | All 12 texture fields, including AO and extension textures, local or external  | The texture keys of external texture fields                                                                                                                   |
 | Standard mesh         | Vertex and index buffers                                                       | Submesh default materials                                                                                                                                     |
 | Skinned mesh          | Vertex, index, joint-index, joint-weight, inverse-bind and joint-remap buffers | Submesh materials; skeleton key is logical while no skeleton asset type is supported                                                                          |
 | Procedural mesh       | None                                                                           | Submesh default materials                                                                                                                                     |
-| Scene                 | Exposure metering mask                                                         | Renderable geometry, material overrides and embedded script-slot assets                                                                                       |
-| Scene environment     | None beyond the exposure mask                                                  | Existing fog/sky cubemap keys are logical: current cooked decoding does not resolve them to a texture asset type                                              |
+| Scene                 | Exposure metering mask, local or external                                      | Renderable geometry, material overrides and embedded script-slot assets                                                                                       |
+| Scene environment     | Fog, sky light and sky sphere cubemaps, local or external                      | The texture keys of external environment textures                                                                                                             |
 | Script                | Embedded bytecode and source resources                                         | None; external source paths remain paths, not asset dependencies                                                                                              |
 | Input action          | None                                                                           | None                                                                                                                                                          |
 | Input mapping context | None                                                                           | Mapping actions, linked trigger actions and auxiliary trigger actions                                                                                         |

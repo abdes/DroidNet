@@ -320,23 +320,25 @@ namespace {
   }
 
   auto AssignTextureReferences(const MaterialTextureBindings& textures,
-    const std::optional<data::pak::core::ResourceIndexT> orm_index,
-    data::pak::render::MaterialAssetDesc& desc,
+    const bool orm_packed, data::pak::render::MaterialAssetDesc& desc,
     AssetReferenceBuilder& references) -> void
   {
     const auto bind =
       [&references](
         const MaterialTextureBinding& texture) -> data::ResourceReferenceIndex {
-      return texture.assigned
-        ? references.AddResource(
-            data::ResourceKind::kTexture, ResourceIndexT { texture.index })
-        : data::kNoResourceReference;
+      if (!texture.assigned) {
+        return data::kNoResourceReference;
+      }
+      return texture.external_key
+        ? references.AddExternalTexture(*texture.external_key)
+        : references.AddResource(
+            data::ResourceKind::kTexture, ResourceIndexT { texture.index });
     };
     desc.base_color_texture = bind(textures.base_color);
     desc.normal_texture = bind(textures.normal);
-    if (orm_index) {
-      const auto orm
-        = references.AddResource(data::ResourceKind::kTexture, *orm_index);
+    if (orm_packed) {
+      // One texture packs both channels; metallic names it.
+      const auto orm = bind(textures.metallic);
       desc.metallic_texture = orm;
       desc.roughness_texture = orm;
     } else {
@@ -353,16 +355,10 @@ namespace {
     desc.thickness_texture = bind(textures.thickness);
   }
 
-  [[nodiscard]] auto ResolveOrmPacked(const MaterialSource& material)
-    -> std::optional<data::pak::core::ResourceIndexT>
+  [[nodiscard]] auto IsOrmPacked(const MaterialSource& material) -> bool
   {
-    if (material.orm_policy != OrmPolicy::kForceSeparate
-      && material.CanPackOrm()) {
-      return data::pak::core::ResourceIndexT {
-        material.textures.metallic.index
-      };
-    }
-    return std::nullopt;
+    return material.orm_policy != OrmPolicy::kForceSeparate
+      && material.CanPackOrm();
   }
 
   [[nodiscard]] auto SerializeMaterialDescriptor(
@@ -468,8 +464,7 @@ namespace {
     ApplyMaterialInputs(material.inputs, material.alpha_mode, source_id,
       object_path, outcome.diagnostics, desc);
 
-    const auto orm_index = ResolveOrmPacked(material);
-    const bool orm_packed = orm_index.has_value();
+    const bool orm_packed = IsOrmPacked(material);
 
     if (HasErrorDiagnostic(outcome.diagnostics)) {
       outcome.has_error = true;
@@ -490,7 +485,7 @@ namespace {
     }
 
     AssetReferenceBuilder references;
-    AssignTextureReferences(material.textures, orm_index, desc, references);
+    AssignTextureReferences(material.textures, orm_packed, desc, references);
 
     const auto uv_desc = BuildMaterialUvTransformDesc(material.textures);
     desc.uv_scale[0] = uv_desc.uv_scale[0];

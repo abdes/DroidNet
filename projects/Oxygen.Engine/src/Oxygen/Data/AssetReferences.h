@@ -12,6 +12,8 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/NamedType.h>
@@ -36,6 +38,9 @@ enum class ResourceKind : uint8_t {
   kTexture = 2,
   kScript = 3,
   kPhysics = 4,
+  //! A texture of another mounted source. The binding's index selects the
+  //! `KeyReferenceKind::kTexture` entry of the key table naming it.
+  kExternalTexture = 5,
 };
 
 struct ResourceBinding final {
@@ -63,7 +68,23 @@ enum class KeyReferenceKind : uint8_t {
   kAsset = 1,
   kPhysicsResource = 2,
   kLogical = 3,
+  //! A texture another source holds, the target of a
+  //! `ResourceKind::kExternalTexture` binding.
+  kTexture = 4,
 };
+
+//! The key of a cooked texture: derived from its descriptor's virtual path,
+//! like an asset's key, so a reference to it survives recooking and resolves
+//! in whichever mounted source holds that path.
+[[nodiscard]] inline auto TextureKeyFromVirtualPath(
+  const std::string_view virtual_path) -> AssetKey
+{
+  return AssetKey::FromVirtualPath(virtual_path);
+}
+
+//! What a texture binding names: nothing, an entry of the asset's own texture
+//! table, or the key of a texture another mounted source holds.
+using TextureTarget = std::variant<std::monostate, ResourceIndexT, AssetKey>;
 
 struct KeyReference final {
   AssetKey key;
@@ -124,7 +145,15 @@ public:
     ResourceReferenceIndex reference, ResourceKind expected_kind) const
     -> Result<std::optional<ResourceIndexT>, std::string>;
 
+  //! Resolve a texture field, which may name a local texture-table entry or
+  //! another source's texture. Absence returns `std::monostate`; local
+  //! fallback and error markers are returned as indices.
+  OXGN_DATA_NDAPI auto ResolveTexture(ResourceReferenceIndex reference) const
+    -> Result<TextureTarget, std::string>;
+
   //! Check exact agreement with fields observed by the typed decoder.
+  //! A texture use accepts a local or an external texture binding; the texture
+  //! keys external bindings name are not descriptor fields.
   //! Repeated uses and relocated aliases are valid; unused slots, undeclared
   //! keys and conflicting kinds/types are not. Nil optional keys are omitted.
   OXGN_DATA_NDAPI auto ValidateUsage(

@@ -9,9 +9,11 @@
 #include <cstdint>
 #include <filesystem>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -47,6 +49,9 @@ struct PakBuildRequest {
   //! Catalogs of the paks this pak references without containing them, lowest
   //! first; full builds and patches alike.
   std::vector<data::PakCatalog> dependency_catalogs {};
+  //! Keys of the textures the base and dependency paks hold, which assets of
+  //! this pak may reference by key without containing them.
+  std::unordered_set<data::AssetKey> lower_layer_texture_keys {};
   PakBuildOptions options {};
 };
 

@@ -8,7 +8,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <numeric>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <tuple>
@@ -37,6 +39,7 @@ namespace {
     case ResourceKind::kTexture:
     case ResourceKind::kScript:
     case ResourceKind::kPhysics:
+    case ResourceKind::kExternalTexture:
       return true;
     }
     return false;
@@ -53,6 +56,7 @@ namespace {
     case KeyReferenceKind::kAsset:
       return valid_asset_type;
     case KeyReferenceKind::kPhysicsResource:
+    case KeyReferenceKind::kTexture:
       return reference.expected_type == AssetType::kUnknown;
     case KeyReferenceKind::kLogical:
       return valid_asset_type || reference.expected_type == AssetType::kUnknown;
@@ -63,6 +67,48 @@ namespace {
   auto KeyOrder(const KeyReference& reference) noexcept
   {
     return std::tie(reference.kind, reference.key, reference.expected_type);
+  }
+
+  // Sorts the keys canonically and moves every external texture binding to
+  // its key's new position, so the encoded table is canonical and decoding it
+  // again is the identity.
+  auto SortKeys(std::vector<ResourceBinding>& resources,
+    std::vector<KeyReference>& keys) -> Result<void, std::string>
+  {
+    std::vector<size_t> order(keys.size());
+    std::iota(order.begin(), order.end(), size_t { 0U });
+    std::ranges::sort(order, {},
+      [&keys](const size_t index) -> auto { return KeyOrder(keys.at(index)); });
+    std::vector<uint32_t> position(keys.size());
+    std::vector<KeyReference> sorted;
+    sorted.reserve(keys.size());
+    for (const auto index : order) {
+      position.at(index) = static_cast<uint32_t>(sorted.size());
+      sorted.push_back(keys.at(index));
+    }
+    std::vector<bool> targeted(keys.size(), false);
+    for (auto& binding : resources) {
+      if (binding.kind != ResourceKind::kExternalTexture) {
+        continue;
+      }
+      const auto index = binding.index.get();
+      if (index >= keys.size()
+        || keys.at(index).kind != KeyReferenceKind::kTexture) {
+        return Err(std::string(
+          "External texture binding does not name a texture key reference"));
+      }
+      targeted.at(position.at(index)) = true;
+      binding.index = ResourceIndexT { position.at(index) };
+    }
+    for (size_t index = 0U; index < sorted.size(); ++index) {
+      if (sorted.at(index).kind == KeyReferenceKind::kTexture
+        && !targeted.at(index)) {
+        return Err(std::string(
+          "Texture key reference is not the target of a texture binding"));
+      }
+    }
+    keys = std::move(sorted);
+    return Result<void, std::string>::Ok();
   }
 
 } // namespace
@@ -78,7 +124,8 @@ auto AssetReferences::Create(std::vector<ResourceBinding> resources,
     if (!IsValidKind(binding.kind)) {
       return Err(std::string("Unknown asset resource binding kind"));
     }
-    if (binding.index.get() == 0U && binding.kind != ResourceKind::kTexture) {
+    if (binding.index.get() == 0U && binding.kind != ResourceKind::kTexture
+      && binding.kind != ResourceKind::kExternalTexture) {
       return Err(
         std::string("Only texture bindings support entry-zero fallback"));
     }
@@ -92,7 +139,9 @@ auto AssetReferences::Create(std::vector<ResourceBinding> resources,
       return Err(std::string("Invalid asset key reference or expected type"));
     }
   }
-  std::ranges::sort(keys, {}, KeyOrder);
+  if (const auto sorted = SortKeys(resources, keys); !sorted) {
+    return Err(sorted.error());
+  }
   const auto duplicate = std::ranges::adjacent_find(
     keys, [](const KeyReference& lhs, const KeyReference& rhs) -> bool {
       return lhs.kind == rhs.kind && lhs.key == rhs.key;
@@ -183,14 +232,42 @@ auto AssetReferences::ResolveResource(const ResourceReferenceIndex reference,
   return Ok(std::optional<ResourceIndexT> { binding.index });
 }
 
+auto AssetReferences::ResolveTexture(
+  const ResourceReferenceIndex reference) const
+  -> Result<TextureTarget, std::string>
+{
+  if (reference == kNoResourceReference) {
+    return Ok(TextureTarget {});
+  }
+  if (reference.get() >= resources_.size()) {
+    return Err(
+      fmt::format("Local resource reference {} exceeds binding count {}",
+        reference.get(), resources_.size()));
+  }
+  const auto& binding = resources_.at(reference.get());
+  switch (binding.kind) {
+  case ResourceKind::kTexture:
+    return Ok(TextureTarget { binding.index });
+  case ResourceKind::kExternalTexture:
+    return Ok(TextureTarget { keys_.at(binding.index.get()).key });
+  default:
+    return Err(fmt::format(
+      "Local resource reference {} is not a texture", reference.get()));
+  }
+}
+
 auto AssetReferences::ValidateUsage(
   const std::span<const ResourceReferenceUse> resources,
   const std::span<const KeyReference> keys) const -> Result<void, std::string>
 {
   std::vector<bool> used(resources_.size(), false);
   for (const auto& use : resources) {
-    const auto resolved = ResolveResource(use.reference, use.kind);
-    if (!resolved) {
+    if (use.kind == ResourceKind::kTexture) {
+      if (const auto resolved = ResolveTexture(use.reference); !resolved) {
+        return Err(resolved.error());
+      }
+    } else if (const auto resolved = ResolveResource(use.reference, use.kind);
+      !resolved) {
       return Err(resolved.error());
     }
     if (use.reference != kNoResourceReference) {
@@ -217,7 +294,10 @@ auto AssetReferences::ValidateUsage(
   std::ranges::sort(observed, {}, KeyOrder);
   const auto duplicates = std::ranges::unique(observed);
   observed.erase(duplicates.begin(), duplicates.end());
-  if (!std::ranges::equal(observed, keys_)) {
+  auto declared = keys_ | std::views::filter([](const KeyReference& key) {
+    return key.kind != KeyReferenceKind::kTexture;
+  });
+  if (!std::ranges::equal(observed, declared)) {
     return Err(
       std::string("Asset key inventory does not match its descriptor"));
   }
@@ -228,9 +308,10 @@ auto AssetReferences::ValidateResourceBounds(
   const ResourceTableCounts& counts) const -> Result<void, std::string>
 {
   for (const auto& binding : resources_) {
-    if (binding.kind == ResourceKind::kTexture
-      && (binding.index == pak::core::kFallbackResourceIndex
-        || binding.index == pak::core::kErrorTextureResourceIndex)) {
+    if (binding.kind == ResourceKind::kExternalTexture
+      || (binding.kind == ResourceKind::kTexture
+        && (binding.index == pak::core::kFallbackResourceIndex
+          || binding.index == pak::core::kErrorTextureResourceIndex))) {
       continue;
     }
     const auto count = [&counts, &binding] -> uint64_t {
@@ -243,6 +324,8 @@ auto AssetReferences::ValidateResourceBounds(
         return counts.scripts;
       case ResourceKind::kPhysics:
         return counts.physics;
+      case ResourceKind::kExternalTexture:
+        break;
       }
       return 0U;
     }();

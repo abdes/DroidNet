@@ -16,6 +16,7 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/MaterialDomain.h>
 
 namespace oxygen::content::import {
@@ -46,6 +47,9 @@ struct ShaderRequest {
 //! Texture binding for a single material slot.
 struct MaterialTextureBinding {
   uint32_t index = 0;
+  //! Set when another cooked source holds the texture: the material binds it
+  //! by this key instead of `index`.
+  std::optional<data::AssetKey> external_key;
   bool assigned = false;
   std::string source_id;
   uint8_t uv_set = 0;

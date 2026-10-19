@@ -38,6 +38,7 @@ add_library(
   "TestPaths.cpp"
   "TestPaths.h"
   "TestValues.h"
+  "TextureLibraryFixture.h"
 )
 set_target_properties(
   Oxygen.Cooker.TestSupport

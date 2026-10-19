@@ -7,6 +7,7 @@
 #include <chrono>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
@@ -20,6 +21,7 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/TextureReferenceResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Data/AssetType.h>
@@ -133,6 +135,8 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       "Async file reader is not available");
     parse_failed = true;
   } else {
+    const auto mounts = internal::LoadMountedCookedSources(
+      session, Request(), "material.descriptor.");
     for (const auto& slot : MaterialSource::TextureSlots()) {
       auto& binding = item.material.textures.*slot.binding;
       if (!binding.assigned) {
@@ -140,7 +144,7 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       }
       const auto index
         = co_await internal::ResolveTextureReference(observer_ptr { &session },
-          observer_ptr { &Request() }, observer_ptr { reader },
+          observer_ptr { &Request() }, observer_ptr { reader }, mounts,
           {
             .virtual_path = binding.source_id,
             .object_path = "textures." + std::string(slot.name),
@@ -157,7 +161,11 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
         binding.assigned = false;
         continue;
       }
-      binding.index = index->index.get();
+      if (const auto* key = std::get_if<data::AssetKey>(&index->target)) {
+        binding.external_key = *key;
+      } else {
+        binding.index = std::get<ResourceIndexT>(index->target).get();
+      }
     }
   }
 

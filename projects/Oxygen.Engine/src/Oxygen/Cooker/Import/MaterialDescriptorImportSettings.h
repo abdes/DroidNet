@@ -7,6 +7,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace oxygen::content::import {
 
@@ -23,6 +24,10 @@ struct MaterialDescriptorImportSettings final {
 
   //! Requested content-hashing policy.
   bool with_content_hashing = true;
+
+  //! Cooked roots (loose roots or paks) whose textures the material may
+  //! reference by key without copying them, lowest precedence first.
+  std::vector<std::string> cooked_context_roots;
 };
 
 } // namespace oxygen::content::import

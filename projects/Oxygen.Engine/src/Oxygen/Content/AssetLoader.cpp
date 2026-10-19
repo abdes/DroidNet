@@ -27,6 +27,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <fmt/format.h>
@@ -2301,17 +2302,28 @@ auto AssetLoader::BindMaterialTextureKeys(
   constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
     IndexOf<data::TextureResource, ResourceTypeList>::value);
   for (const auto reference : indices) {
-    const auto resolved = material.GetReferences().ResolveResource(
-      reference, data::ResourceKind::kTexture);
+    const auto resolved = material.GetReferences().ResolveTexture(reference);
     if (!resolved) {
       throw std::runtime_error(resolved.error());
     }
-    const auto& index = *resolved;
-    if (index && *index == data::pak::core::kErrorTextureResourceIndex) {
+    if (const auto* texture_key = std::get_if<data::AssetKey>(&*resolved)) {
+      // A texture of another source resolves in the newest mount holding it;
+      // when none does, the slot shows the error texture.
+      const auto key = ResolveTextureResourceKey(*texture_key);
+      LOG_IF_F(WARNING, !key,
+        "Material '{}' references texture {}, which no mounted source holds",
+        material.GetAssetName(), nostd::to_string(*texture_key));
+      keys.push_back(key.value_or(ResourceKey::kError));
+      continue;
+    }
+    const auto* index = std::get_if<ResourceIndexT>(&*resolved);
+    if (index != nullptr
+      && *index == data::pak::core::kErrorTextureResourceIndex) {
       keys.push_back(ResourceKey::kError);
       continue;
     }
-    keys.push_back(!index || *index == data::pak::core::kFallbackResourceIndex
+    keys.push_back(
+      index == nullptr || *index == data::pak::core::kFallbackResourceIndex
         ? ResourceKey {}
         : InternResourceKey(source, kTextureTypeIndex, *index));
   }
@@ -2691,11 +2703,17 @@ auto AssetLoader::ResolveTextureResourceKey(const std::string_view virtual_path)
     throw std::invalid_argument(std::string("Virtual path is not canonical: ")
       + nostd::to_string(*error));
   }
+  return ResolveTextureResourceKey(
+    data::TextureKeyFromVirtualPath(virtual_path));
+}
+
+auto AssetLoader::ResolveTextureResourceKey(const data::AssetKey& texture_key)
+  -> std::optional<ResourceKey>
+{
   // The newest mount wins, as it does for assets.
   const auto& sources = impl_->source_registry.Sources();
   for (auto i = sources.size(); i-- > 0;) {
-    const auto index
-      = sources.at(i)->FindTextureIndexByVirtualPath(virtual_path);
+    const auto index = sources.at(i)->FindTextureIndexByKey(texture_key);
     if (!index) {
       continue;
     }
@@ -2712,13 +2730,15 @@ auto AssetLoader::MakeTextureResourceKeyForAsset(
   const data::ResourceReferenceIndex reference) -> std::optional<ResourceKey>
 {
   AssertOwningThread();
-  const auto resolved = context_asset.GetReferences().ResolveResource(
-    reference, data::ResourceKind::kTexture);
+  const auto resolved = context_asset.GetReferences().ResolveTexture(reference);
   if (!resolved) {
     return {};
   }
-  const auto& index = *resolved;
-  if (!index) {
+  if (const auto* texture_key = std::get_if<data::AssetKey>(&*resolved)) {
+    return ResolveTextureResourceKey(*texture_key);
+  }
+  const auto* index = std::get_if<ResourceIndexT>(&*resolved);
+  if (index == nullptr) {
     return {};
   }
   const auto resource_index = *index;

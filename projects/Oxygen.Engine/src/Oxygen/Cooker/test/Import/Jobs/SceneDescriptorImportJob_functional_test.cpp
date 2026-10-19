@@ -20,6 +20,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -39,6 +40,7 @@
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
+#include <Oxygen/Cooker/test/Support/TextureLibraryFixture.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -403,18 +405,7 @@ namespace {
     ASSERT_HAS_VALUE(absent);
     EXPECT_FALSE(absent->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      absent->diagnostics, "scene.descriptor.mask_source_invalid"));
-
-    const auto external = TempDir() / "external_mask_reference";
-    std::filesystem::create_directories(external);
-    WriteMeteringMaskSidecar(external, Format::kRGBA8UNorm, 1U);
-    auto request = MakeRequest(root, kDescriptor);
-    request.cooked_context_roots.push_back(external);
-    const auto foreign = Import(std::move(request));
-    ASSERT_HAS_VALUE(foreign);
-    EXPECT_FALSE(foreign->success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      foreign->diagnostics, "scene.descriptor.mask_source_invalid"));
+      absent->diagnostics, "scene.descriptor.texture_descriptor_invalid"));
 
     // A deleted mask leaves the scene without one, with a warning.
     std::filesystem::remove(root / "Textures/Meter.otex");
@@ -430,6 +421,54 @@ namespace {
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
     EXPECT_EQ(
       unmasked->auto_exposure_metering_mask, data::kNoResourceReference);
+  }
+
+  //! A mask a cooked context root holds binds by key, and its format is still
+  //! checked.
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, MeteringMaskFromAContextRootBindsByKey)
+  {
+    // Arrange
+    constexpr auto kMask = std::string_view { "/Library/Textures/Meter.otex" };
+    const auto root = TempDir() / "context_mask_reference";
+    const auto library = TempDir() / "mask_library";
+    std::filesystem::create_directories(root);
+    oxygen::cooker::test::WriteTextureLibrary(library, kMask,
+      { .size_bytes = 4U,
+        .texture_type = static_cast<uint8_t>(TextureType::kTexture2D),
+        .width = 1U,
+        .height = 1U,
+        .depth = 1U,
+        .array_layers = 1U,
+        .mip_levels = 1U,
+        .format = static_cast<uint8_t>(Format::kRGBA8UNorm) });
+    auto request = MakeRequest(root, R"({"name":"MaskScene","nodes":[{}],
+      "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/Library/Textures/Meter.otex"}}})");
+    request.cooked_context_roots = { library };
+
+    // Act
+    const auto report = Import(std::move(request));
+
+    // Assert
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success);
+    const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
+    const auto scene_key
+      = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/MaskScene.oscene");
+    ASSERT_HAS_VALUE(scene_key);
+    // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
+    const auto references = index.FindAssetReferences(scene_key.value());
+    ASSERT_HAS_VALUE(references);
+    const auto exposure = data::SceneAsset(
+      data::AssetKey {}, ReadBytes(root / "Scenes/MaskScene.oscene"))
+                            .TryGetPostProcessVolumeEnvironment();
+    ASSERT_HAS_VALUE(exposure);
+    const auto target = references.value().ResolveTexture(
+      exposure->auto_exposure_metering_mask);
+    // NOLINTEND(bugprone-unchecked-optional-access)
+    ASSERT_TRUE(target.has_value());
+    EXPECT_EQ(std::get<data::AssetKey>(*target),
+      data::TextureKeyFromVirtualPath(kMask));
   }
 
   NOLINT_TEST_F(SceneDescriptorImportJobTest,

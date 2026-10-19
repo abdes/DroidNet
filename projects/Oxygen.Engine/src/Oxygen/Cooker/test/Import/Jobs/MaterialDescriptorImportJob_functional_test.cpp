@@ -17,6 +17,7 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Content/LooseCookedIndex.h>
@@ -26,6 +27,7 @@
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
+#include <Oxygen/Cooker/test/Support/TextureLibraryFixture.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Testing/GTest.h>
@@ -199,6 +201,65 @@ namespace {
     ASSERT_GE(bytes.size(), sizeof(data::pak::render::MaterialAssetDesc));
     EXPECT_EQ(
       ReadMaterialDesc(bytes).base_color_texture, data::kNoResourceReference);
+  }
+
+  //! A texture a cooked context root holds, loose or packed, binds by key: the
+  //! material references it without the texture being copied into its root.
+  NOLINT_TEST_F(
+    MaterialDescriptorImportJobTest, ContextRootTextureBindsByKeyWithoutCopying)
+  {
+    // Arrange
+    constexpr auto kGrid = std::string_view { "/Library/Textures/Grid.otex" };
+    const auto library = TempDir() / "library";
+    oxygen::cooker::test::WriteTextureLibrary(library, kGrid,
+      { .size_bytes = 4U,
+        .width = 1U,
+        .height = 1U,
+        .depth = 1U,
+        .array_layers = 1U,
+        .mip_levels = 1U });
+    const auto pak
+      = oxygen::cooker::test::PackLibrary(library, TempDir() / "library.pak");
+    constexpr auto kDescriptor = R"({
+      "name": "Tiles",
+      "domain": "opaque",
+      "textures": {
+        "base_color": { "virtual_path": "/Library/Textures/Grid.otex" },
+        "normal": { "virtual_path": "/Library/Textures/Grid.otex" }
+      }
+    })";
+
+    for (const auto& context : { library, pak }) {
+      const auto cooked_root
+        = TempDir() / ("tiles_" + context.filename().string());
+      std::filesystem::create_directories(cooked_root);
+      auto request = MakeRequest(cooked_root, kDescriptor, "Tiles");
+      request.cooked_context_roots = { context };
+
+      // Act
+      const auto report = Import(std::move(request));
+
+      // Assert
+      ASSERT_HAS_VALUE(report);
+      EXPECT_TRUE(report->success) << context;
+      const auto desc
+        = ReadMaterialDesc(ReadBytes(cooked_root / "Materials" / "Tiles.omat"));
+      EXPECT_EQ(desc.base_color_texture.get(), 0U);
+      EXPECT_EQ(desc.normal_texture.get(), 0U);
+      const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
+      const auto key
+        = index.FindAssetKeyByVirtualPath("/.cooked/Materials/Tiles.omat");
+      ASSERT_HAS_VALUE(key);
+      // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
+      const auto references = index.FindAssetReferences(key.value());
+      ASSERT_HAS_VALUE(references);
+      const auto target
+        = references.value().ResolveTexture(desc.base_color_texture);
+      ASSERT_TRUE(target.has_value());
+      EXPECT_EQ(std::get<data::AssetKey>(*target),
+        data::TextureKeyFromVirtualPath(kGrid));
+      // NOLINTEND(bugprone-unchecked-optional-access)
+    }
   }
 
 } // namespace

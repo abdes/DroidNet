@@ -236,7 +236,9 @@ public:
     data::SourceKey source_key, data::pak::core::ResourceIndexT resource_index)
     -> std::optional<ResourceKey> = 0;
 
-  //! Resolve a nonzero texture index in a loaded asset's owning source.
+  //! Resolve a loaded asset's texture field: an entry of its owning source's
+  //! texture table, or a texture of another mounted source named by key, which
+  //! resolves in the newest mount holding it.
   [[nodiscard]] virtual auto MakeTextureResourceKeyForAsset(
     const data::Asset& context_asset,
     data::ResourceReferenceIndex resource_index)

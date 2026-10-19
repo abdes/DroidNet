@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -20,6 +21,8 @@
 #include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/test/Support/TextureLibraryFixture.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Testing/GTest.h>
@@ -275,6 +278,35 @@ NOLINT_TEST_F(
   ASSERT_EQ(prepared->request_snapshot.base_pak_paths.size(), 2U);
   EXPECT_EQ(prepared->request_snapshot.base_pak_paths.at(0), base_a);
   EXPECT_EQ(prepared->request_snapshot.base_pak_paths.at(1), base_b);
+}
+
+//! The textures a dependency pak holds are offered to references by key.
+NOLINT_TEST_F(
+  PakToolRequestPreparationTest, PrepareRequestCollectsDependencyTextureKeys)
+{
+  // Arrange
+  constexpr auto kGrid = std::string_view { "/Engine/Textures/Grid.otex" };
+  auto options = MakeOptions();
+  const auto library = TempDir() / "engine_loose";
+  oxygen::cooker::test::WriteTextureLibrary(library, kGrid,
+    { .size_bytes = 4U,
+      .width = 1U,
+      .height = 1U,
+      .depth = 1U,
+      .array_layers = 1U,
+      .mip_levels = 1U });
+  options.request.dependency_paks
+    = { oxygen::cooker::test::PackLibrary(library, TempDir() / "engine.pak") };
+  auto fs = RealRequestPreparationFileSystem {};
+
+  // Act
+  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+
+  // Assert
+  ASSERT_HAS_VALUE(prepared)
+    << prepared.error().error_code << ": " << prepared.error().error_message;
+  EXPECT_TRUE(prepared->build_request.lower_layer_texture_keys.contains(
+    oxygen::data::TextureKeyFromVirtualPath(kGrid)));
 }
 
 NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsConflictingToolPaths)

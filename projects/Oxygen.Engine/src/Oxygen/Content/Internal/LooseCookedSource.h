@@ -176,6 +176,12 @@ public:
     std::string_view virtual_path) const
     -> std::optional<data::pak::core::ResourceIndexT> override;
 
+  [[nodiscard]] auto TextureVirtualPaths() const
+    -> std::vector<std::string> override
+  {
+    return index_.TextureDescriptorVirtualPaths();
+  }
+
   [[nodiscard]] auto ReadAssetReferenceMetadata(const data::AssetKey& key) const
     -> data::AssetReferences override
   {

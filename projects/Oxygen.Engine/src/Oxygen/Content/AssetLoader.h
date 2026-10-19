@@ -1442,6 +1442,10 @@ private:
   auto BindMaterialTextureKeys(
     data::MaterialAsset& material, data::SourceInstanceId source) -> void;
 
+  //! The texture whose key is `texture_key`, in the newest mount holding it.
+  auto ResolveTextureResourceKey(const data::AssetKey& texture_key)
+    -> std::optional<ResourceKey>;
+
   auto BindGeometryRuntimePointers(data::GeometryAsset& asset,
     const LoadedGeometryBuffersByIndex& buffers_by_index,
     const LoadedGeometryMaterialsByKey& materials_by_key) -> void;

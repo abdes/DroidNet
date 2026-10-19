@@ -63,6 +63,25 @@ struct LoaderContext {
     return *resolved;
   }
 
+  //! Resolve a texture field: absent, a local texture-table entry, or the key
+  //! of another source's texture, which the loader binds when it publishes.
+  [[nodiscard]] auto ResolveTexture(
+    const data::ResourceReferenceIndex reference) const -> data::TextureTarget
+  {
+    if (reference == data::kNoResourceReference) {
+      return {};
+    }
+    if (!asset_references) {
+      throw std::runtime_error(
+        "Asset reference metadata is required for resource resolution");
+    }
+    auto resolved = asset_references->ResolveTexture(reference);
+    if (!resolved) {
+      throw std::runtime_error(resolved.error());
+    }
+    return *resolved;
+  }
+
   //! Key of the current asset being loaded (for dependency registration)
   data::AssetKey current_asset_key;
 

@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -23,6 +24,7 @@
 #include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestSnapshot.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -80,8 +82,11 @@ namespace {
   }
 
   //! Reads the catalogs of the base or dependency paks a request names.
+  //! Read the catalogs of lower-layer paks and add the keys of the textures
+  //! they hold to `texture_keys`.
   auto ReadLayerCatalogs(const std::span<const std::filesystem::path> paths,
-    const std::string_view role, IRequestPreparationFileSystem& fs)
+    const std::string_view role, IRequestPreparationFileSystem& fs,
+    std::unordered_set<data::AssetKey>& texture_keys)
     -> Result<std::vector<data::PakCatalog>, RequestPreparationError>
   {
     using ReadResult
@@ -97,6 +102,10 @@ namespace {
       try {
         const content::PakFile archive(path);
         catalogs.push_back(archive.Catalog());
+        for (const auto& texture : archive.BrowseTextures()) {
+          texture_keys.insert(
+            data::TextureKeyFromVirtualPath(texture.virtual_path));
+        }
       } catch (const std::exception& error) {
         return ReadResult::Err(RequestPreparationError {
           .error_code = prefix + "_invalid",
@@ -376,14 +385,16 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
     return MakeError("paktool.prepare.base_pak_required",
       "Patch mode requires at least one --base-pak.");
   }
-  auto base_catalogs = ReadLayerCatalogs(base_pak_paths, "base_pak", fs);
+  auto lower_layer_texture_keys = std::unordered_set<data::AssetKey> {};
+  auto base_catalogs = ReadLayerCatalogs(
+    base_pak_paths, "base_pak", fs, lower_layer_texture_keys);
   if (!base_catalogs) {
     return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
       base_catalogs.error());
   }
   const auto& dependency_pak_paths = options.request.dependency_paks;
-  auto dependency_catalogs
-    = ReadLayerCatalogs(dependency_pak_paths, "dependency_pak", fs);
+  auto dependency_catalogs = ReadLayerCatalogs(
+    dependency_pak_paths, "dependency_pak", fs, lower_layer_texture_keys);
   if (!dependency_catalogs) {
     return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
       dependency_catalogs.error());
@@ -502,6 +513,7 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
   build_request.source_key = source_key.value();
   build_request.base_catalogs = std::move(*base_catalogs);
   build_request.dependency_catalogs = std::move(*dependency_catalogs);
+  build_request.lower_layer_texture_keys = std::move(lower_layer_texture_keys);
   build_request.options.deterministic = options.request.deterministic;
   build_request.options.embed_browse_index = options.request.embed_browse_index;
   build_request.options.compute_crc32 = options.request.compute_crc32;

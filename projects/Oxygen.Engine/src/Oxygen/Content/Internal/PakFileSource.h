@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/Internal/ContentFileReader.h>
@@ -235,6 +238,17 @@ public:
     -> std::optional<data::pak::core::ResourceIndexT> override
   {
     return pak_.ResolveTextureIndexByVirtualPath(virtual_path);
+  }
+
+  [[nodiscard]] auto TextureVirtualPaths() const
+    -> std::vector<std::string> override
+  {
+    std::vector<std::string> paths;
+    paths.reserve(pak_.BrowseTextures().size());
+    for (const auto& texture : pak_.BrowseTextures()) {
+      paths.push_back(texture.virtual_path);
+    }
+    return paths;
   }
 
   [[nodiscard]] auto Pak() const noexcept -> const PakFile& { return pak_; }
